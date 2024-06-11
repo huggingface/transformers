@@ -1,6 +1,5 @@
 # coding=utf-8
 # Copyright 2023 Mistral AI and the HuggingFace Inc. team. All rights reserved.
-# Copyright 2024 SJTU-IPADS AI and the HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
 # and OPT implementations in this library. It has been modified from its
@@ -18,15 +17,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Bamboo model."""
-import torch
+"""PyTorch Mixtral model."""
+
 import inspect
 import math
-import warnings
 from typing import List, Optional, Tuple, Union
-from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
-
 
 import torch
 import torch.nn.functional as F
@@ -34,495 +29,31 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from transformers.activations import ACT2FN
-
-from transformers.cache_utils import Cache, DynamicCache
-from transformers.activations import ACT2FN
-# from .modeling_attn_mask_utils import AttentionMaskConverter, _prepare_4d_causal_attention_mask, _prepare_4d_causal_attention_mask_for_sdpa
-from transformers.modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast,MoeModelOutputWithPast,MoeCausalLMOutputWithPast,TokenClassifierOutput
-from transformers.modeling_utils import PreTrainedModel
-from transformers.pytorch_utils import (
-    is_torch_greater_or_equal_than_1_13
+from ...activations import ACT2FN
+from ...cache_utils import Cache, DynamicCache
+from ...modeling_attn_mask_utils import (
+    _prepare_4d_causal_attention_mask,
+    _prepare_4d_causal_attention_mask_for_sdpa,
 )
-
-from transformers.utils import (
+from ...modeling_outputs import (
+    MoeCausalLMOutputWithPast,
+    MoeModelOutputWithPast,
+    SequenceClassifierOutputWithPast,
+    TokenClassifierOutput,
+)
+from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import is_torch_greater_or_equal_than_1_13
+from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
     logging,
     replace_return_docstrings,
-    is_torch_fx_available,
 )
+from ...utils.import_utils import is_torch_fx_available
 from .configuration_turbosparsemixtral import TurboSparseMixtralConfig
-@dataclass
-class AttentionMaskConverter:
-    """
-    A utility attention mask class that allows one to:
-        - Create a causal 4d mask
-        - Create a causal 4d mask with slided window
-        - Convert a 2d attention mask (batch_size, query_length) to a 4d attention mask (batch_size, 1, query_length,
-          key_value_length) that can be multiplied with attention scores
-    Examples:
-    ```python
-    >>> import torch
-    >>> from transformers.modeling_attn_mask_utils import AttentionMaskConverter
-    >>> converter = AttentionMaskConverter(True)
-    >>> converter.to_4d(torch.tensor([[0, 0, 0, 1, 1]]), 5, key_value_length=5, dtype=torch.float32)
-    tensor([[[[-3.4028e+38, -3.4028e+38, -3.4028e+38, -3.4028e+38, -3.4028e+38],
-            [-3.4028e+38, -3.4028e+38, -3.4028e+38, -3.4028e+38, -3.4028e+38],
-            [-3.4028e+38, -3.4028e+38, -3.4028e+38, -3.4028e+38, -3.4028e+38],
-            [-3.4028e+38, -3.4028e+38, -3.4028e+38,  0.0000e+00, -3.4028e+38],
-            [-3.4028e+38, -3.4028e+38, -3.4028e+38,  0.0000e+00,  0.0000e+00]]]])
-    ```
-    Parameters:
-        is_causal (`bool`):
-            Whether the attention mask should be a uni-directional (causal) or bi-directional mask.
-        sliding_window (`int`, *optional*):
-            Optionally, the sliding window masks can be created if `sliding_window` is defined to a positive integer.
-    """
 
-    is_causal: bool
-    sliding_window: int
-
-    def __init__(self, is_causal: bool, sliding_window: Optional[int] = None):
-        self.is_causal = is_causal
-        self.sliding_window = sliding_window
-
-        if self.sliding_window is not None and self.sliding_window <= 0:
-            raise ValueError(
-                f"Make sure that when passing `sliding_window` that its value is a strictly positive integer, not `{self.sliding_window}`"
-            )
-
-    def to_causal_4d(
-        self,
-        batch_size: int,
-        query_length: int,
-        key_value_length: int,
-        dtype: torch.dtype,
-        device: Union[torch.device, "str"] = "cpu",
-    ) -> Optional[torch.Tensor]:
-        """
-        Creates a causal 4D mask of (bsz, head_dim=1, query_length, key_value_length) shape and adds large negative
-        bias to upper right hand triangular matrix (causal mask).
-        """
-        if not self.is_causal:
-            raise ValueError(f"Please use `to_causal_4d` only if {self.__class__} has `is_causal` set to True.")
-
-        # If shape is not cached, create a new causal mask and cache it
-        input_shape = (batch_size, query_length)
-        past_key_values_length = key_value_length - query_length
-
-        # create causal mask
-        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        causal_4d_mask = None
-        if input_shape[-1] > 1 or self.sliding_window is not None:
-            causal_4d_mask = self._make_causal_mask(
-                input_shape,
-                dtype,
-                device=device,
-                past_key_values_length=past_key_values_length,
-                sliding_window=self.sliding_window,
-            )
-
-        return causal_4d_mask
-
-    def to_4d(
-        self,
-        attention_mask_2d: torch.Tensor,
-        query_length: int,
-        dtype: torch.dtype,
-        key_value_length: Optional[int] = None,
-    ) -> torch.Tensor:
-        """
-        Converts 2D attention mask to 4D attention mask by expanding mask to (bsz, head_dim=1, query_length,
-        key_value_length) shape and by adding a large negative bias to not-attended positions. If attention_mask is
-        causal, a causal mask will be added.
-        """
-        input_shape = (attention_mask_2d.shape[0], query_length)
-
-        # create causal mask
-        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        causal_4d_mask = None
-        if (input_shape[-1] > 1 or self.sliding_window is not None) and self.is_causal:
-            if key_value_length is None:
-                raise ValueError(
-                    "This attention mask converter is causal. Make sure to pass `key_value_length` to correctly create a causal mask."
-                )
-
-            past_key_values_length = key_value_length - query_length
-            causal_4d_mask = self._make_causal_mask(
-                input_shape,
-                dtype,
-                device=attention_mask_2d.device,
-                past_key_values_length=past_key_values_length,
-                sliding_window=self.sliding_window,
-            )
-        elif self.sliding_window is not None:
-            raise NotImplementedError("Sliding window is currently only implemented for causal masking")
-
-        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        expanded_attn_mask = self._expand_mask(attention_mask_2d, dtype, tgt_len=input_shape[-1]).to(
-            attention_mask_2d.device
-        )
-
-        if causal_4d_mask is not None:
-            expanded_attn_mask = causal_4d_mask.masked_fill(expanded_attn_mask.bool(), torch.finfo(dtype).min)
-
-        # expanded_attn_mask + causal_4d_mask can cause some overflow
-        expanded_4d_mask = expanded_attn_mask
-
-        return expanded_4d_mask
-
-    @staticmethod
-    def _make_causal_mask(
-        input_ids_shape: torch.Size,
-        dtype: torch.dtype,
-        device: torch.device,
-        past_key_values_length: int = 0,
-        sliding_window: Optional[int] = None,
-    ):
-        """
-        Make causal mask used for bi-directional self-attention.
-        """
-        bsz, tgt_len = input_ids_shape
-        mask = torch.full((tgt_len, tgt_len), torch.finfo(dtype).min, device=device)
-        mask_cond = torch.arange(mask.size(-1), device=device)
-        mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
-
-        mask = mask.to(dtype)
-
-        if past_key_values_length > 0:
-            mask = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype, device=device), mask], dim=-1)
-
-        # add lower triangular sliding window mask if necessary
-        if sliding_window is not None:
-            diagonal = past_key_values_length - sliding_window + 1
-
-            context_mask = 1 - torch.triu(torch.ones_like(mask, dtype=torch.int), diagonal=diagonal)
-            mask.masked_fill_(context_mask.bool(), torch.finfo(dtype).min)
-
-        return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
-
-    @staticmethod
-    def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
-        """
-        Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
-        """
-        bsz, src_len = mask.size()
-        tgt_len = tgt_len if tgt_len is not None else src_len
-
-        expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
-
-        inverted_mask = 1.0 - expanded_mask
-
-        return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
-
-    @staticmethod
-    def _unmask_unattended(
-        expanded_mask: torch.Tensor, attention_mask: torch.Tensor, unmasked_value: Union[bool, float]
-    ):
-        # fmt: off
-        """
-        Attend to all tokens in masked rows from the expanded attention mask, for example the relevant first rows when
-        using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
-        Details: https://github.com/pytorch/pytorch/issues/110213
-        `expanded_mask` is [bsz, num_masks, tgt_seq_len, src_seq_len] or [bsz, tgt_seq_len, src_seq_len].
-        `attention_mask` is [bsz, src_seq_len].
-        The dimension num_masks of `expanded_mask` is most often 1, but it can also be the number of heads in the case of alibi attention bias.
-        For example, if `attention_mask` is
-        ```
-        [[0, 0, 1],
-         [1, 1, 1],
-         [0, 1, 1]]
-        ```
-        and `expanded_mask` is (e.g. here left-padding case)
-        ```
-        [[[[0, 0, 0],
-           [0, 0, 0],
-           [0, 0, 1]]],
-         [[[1, 0, 0],
-           [1, 1, 0],
-           [1, 1, 1]]],
-         [[[0, 0, 0],
-           [0, 1, 0],
-           [0, 1, 1]]]]
-        ```
-        then the modified `expanded_mask` will be
-        ```
-        [[[[1, 1, 1],   <-- modified
-           [1, 1, 1],   <-- modified
-           [0, 0, 1]]],
-         [[[1, 0, 0],
-           [1, 1, 0],
-           [1, 1, 1]]],
-         [[[1, 1, 1],   <-- modified
-           [0, 1, 0],
-           [0, 1, 1]]]]
-        ```
-        """
-        # fmt: on
-
-        # Get the index of the first non-zero value for every sample in the batch.
-        # In the above example, indices = [[2], [0], [1]]]
-        tmp = torch.arange(attention_mask.shape[1], 0, -1)
-        indices = torch.argmax(attention_mask.cpu() * tmp, 1, keepdim=True)
-
-        # Find the batch indexes that have unattended tokens on the leftmost side (e.g. [0, 0, 1, 1, 1]), for which the first rows of the
-        # expanded mask will be completely unattended.
-        left_masked_rows = torch.where(indices > 0)[0]
-
-        if left_masked_rows.shape[0] == 0:
-            return expanded_mask
-        indices = indices[left_masked_rows]
-
-        max_len = torch.max(indices)
-        range_tensor = torch.arange(max_len).unsqueeze(0)
-        range_tensor = range_tensor.repeat(indices.size(0), 1)
-
-        # Avoid unmasking tokens at relevant target positions (on the row axis), by rather unmasking possibly several times the first row that should always be unmasked as we filtered out the batch above.
-        range_tensor[range_tensor >= indices] = 0
-
-        # TODO: we may drop support for 3D attention mask as the refactor from Patrick maybe dropped this case
-        if expanded_mask.dim() == 4:
-            num_masks = expanded_mask.shape[1]
-            if num_masks == 1:
-                # Broadcast [left_masked_rows, 1], [left_masked_rows, max_len]
-                mask_slice = (left_masked_rows[:, None], 0, range_tensor)
-            else:
-                # Broadcast [left_masked_rows, 1, 1], [1, num_masks, 1], [left_masked_rows, 1, max_len]
-                mask_slice = (
-                    left_masked_rows[:, None, None],
-                    torch.arange(num_masks)[None, :, None],
-                    range_tensor[:, None, :],
-                )
-        else:
-            # Broadcast [left_masked_rows, 1], [left_masked_rows, max_len]
-            mask_slice = (left_masked_rows[:, None], range_tensor)
-
-        expanded_mask[mask_slice] = unmasked_value
-
-        return expanded_mask
-
-
-def _prepare_4d_causal_attention_mask(
-    attention_mask: Optional[torch.Tensor],
-    input_shape: Union[torch.Size, Tuple, List],
-    inputs_embeds: torch.Tensor,
-    past_key_values_length: int,
-    sliding_window: Optional[int] = None,
-):
-    """
-    Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
-    `(batch_size, key_value_length)`
-    Args:
-        attention_mask (`torch.Tensor` or `None`):
-            A 2D attention mask of shape `(batch_size, key_value_length)`
-        input_shape (`tuple(int)` or `list(int)` or `torch.Size`):
-            The input shape should be a tuple that defines `(batch_size, query_length)`.
-        inputs_embeds (`torch.Tensor`):
-            The embedded inputs as a torch Tensor.
-        past_key_values_length (`int`):
-            The length of the key value cache.
-        sliding_window (`int`, *optional*):
-            If the model uses windowed attention, a sliding window should be passed.
-    """
-    attn_mask_converter = AttentionMaskConverter(is_causal=True, sliding_window=sliding_window)
-
-    key_value_length = input_shape[-1] + past_key_values_length
-
-    # 4d mask is passed through the layers
-    if attention_mask is not None and len(attention_mask.shape) == 2:
-        attention_mask = attn_mask_converter.to_4d(
-            attention_mask, input_shape[-1], key_value_length=key_value_length, dtype=inputs_embeds.dtype
-        )
-    elif attention_mask is not None and len(attention_mask.shape) == 4:
-        expected_shape = (input_shape[0], 1, input_shape[1], key_value_length)
-        if tuple(attention_mask.shape) != expected_shape:
-            raise ValueError(
-                f"Incorrect 4D attention_mask shape: {tuple(attention_mask.shape)}; expected: {expected_shape}."
-            )
-        else:
-            # if the 4D mask has correct shape - invert it and fill with negative infinity
-            inverted_mask = 1.0 - attention_mask
-            attention_mask = inverted_mask.masked_fill(
-                inverted_mask.to(torch.bool), torch.finfo(inputs_embeds.dtype).min
-            )
-    else:
-        attention_mask = attn_mask_converter.to_causal_4d(
-            input_shape[0], input_shape[-1], key_value_length, dtype=inputs_embeds.dtype, device=inputs_embeds.device
-        )
-
-    return attention_mask
-
-
-# Adapted from _prepare_4d_causal_attention_mask
-def _prepare_4d_causal_attention_mask_for_sdpa(
-    attention_mask: Optional[torch.Tensor],
-    input_shape: Union[torch.Size, Tuple, List],
-    inputs_embeds: torch.Tensor,
-    past_key_values_length: int,
-    sliding_window: Optional[int] = None,
-):
-    """
-    Prepares the correct `attn_mask` argument to be used by `torch.nn.functional.scaled_dot_product_attention`.
-    In case no token is masked in the `attention_mask` argument, we simply set it to `None` for the cases `query_length == 1` and
-    `key_value_length == query_length`, and rely instead on SDPA `is_causal` argument to use causal/non-causal masks,
-    allowing to dispatch to the flash attention kernel (that can otherwise not be used if a custom `attn_mask` is passed).
-    """
-    attn_mask_converter = AttentionMaskConverter(is_causal=True, sliding_window=sliding_window)
-
-    key_value_length = input_shape[-1] + past_key_values_length
-    batch_size, query_length = input_shape
-
-    # torch.jit.trace, symbolic_trace and torchdynamo with fullgraph=True are unable to capture the controlflow `is_causal=attention_mask is None and q_len > 1`
-    # used as an SDPA argument. We keep compatibility with these tracing tools by always using SDPA's `attn_mask` argument in case we are tracing.
-    # TODO: Fix this as well when using torchdynamo with fullgraph=True.
-    is_tracing = torch.jit.is_tracing() or isinstance(inputs_embeds, torch.fx.Proxy)
-
-    if attention_mask is not None:
-        # 4d mask is passed through
-        if len(attention_mask.shape) == 4:
-            expected_shape = (input_shape[0], 1, input_shape[1], key_value_length)
-            if tuple(attention_mask.shape) != expected_shape:
-                raise ValueError(
-                    f"Incorrect 4D attention_mask shape: {tuple(attention_mask.shape)}; expected: {expected_shape}."
-                )
-            else:
-                # if the 4D mask has correct shape - invert it and fill with negative infinity
-                inverted_mask = 1.0 - attention_mask.to(inputs_embeds.dtype)
-                attention_mask = inverted_mask.masked_fill(
-                    inverted_mask.to(torch.bool), torch.finfo(inputs_embeds.dtype).min
-                )
-                return attention_mask
-
-        elif not is_tracing and torch.all(attention_mask == 1):
-            if query_length == 1:
-                # For query_length == 1, causal attention and bi-directional attention are the same.
-                attention_mask = None
-            elif key_value_length == query_length:
-                attention_mask = None
-            else:
-                # Unfortunately, for query_length > 1 and key_value_length != query_length, we cannot generally ignore the attention mask, as SDPA causal mask generation
-                # may be wrong. We will set `is_causal=False` in SDPA and rely on Transformers attention_mask instead, hence not setting it to None here.
-                # Reference: https://github.com/pytorch/pytorch/issues/108108
-                pass
-    elif query_length > 1 and key_value_length != query_length:
-        # See the comment above (https://github.com/pytorch/pytorch/issues/108108).
-        # Ugly: we set it to True here to dispatch in the following controlflow to `to_causal_4d`.
-        attention_mask = True
-    elif is_tracing:
-        raise ValueError(
-            'Attention using SDPA can not be traced with torch.jit.trace when no attention_mask is provided. To solve this issue, please either load your model with the argument `attn_implementation="eager"` or pass an attention_mask input when tracing the model.'
-        )
-
-    if attention_mask is None:
-        expanded_4d_mask = None
-    elif attention_mask is True:
-        expanded_4d_mask = attn_mask_converter.to_causal_4d(
-            input_shape[0], input_shape[-1], key_value_length, dtype=inputs_embeds.dtype, device=inputs_embeds.device
-        )
-    else:
-        expanded_4d_mask = attn_mask_converter.to_4d(
-            attention_mask,
-            input_shape[-1],
-            dtype=inputs_embeds.dtype,
-            key_value_length=key_value_length,
-        )
-
-        # From PyTorch 2.1 onwards, F.scaled_dot_product_attention with the memory-efficient attention backend
-        # produces nans if sequences are completely unattended in the attention mask. Details: https://github.com/pytorch/pytorch/issues/110213
-        #
-        # This fix is not applied in case we are tracing with torch.jit.trace or symbolic_trace, as _unmask_unattended has a data-dependent
-        # controlflow that can not be captured properly.
-        # TODO: _unmask_unattended does not work either with torch.compile when using fullgraph=True. We should find a way to detect this case.
-        if query_length > 1 and not is_tracing:
-            expanded_4d_mask = AttentionMaskConverter._unmask_unattended(
-                expanded_4d_mask, attention_mask, unmasked_value=0.0
-            )
-
-    return expanded_4d_mask
-
-
-def _prepare_4d_attention_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
-    """
-    Creates a non-causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
-    `(batch_size, key_value_length)`
-    Args:
-        mask (`torch.Tensor` or `None`):
-            A 2D attention mask of shape `(batch_size, key_value_length)`
-        dtype (`torch.dtype`):
-            The torch dtype the created mask shall have.
-        tgt_len (`int`):
-            The target length or query length the created mask shall have.
-    """
-    return AttentionMaskConverter._expand_mask(mask=mask, dtype=dtype, tgt_len=tgt_len)
-
-
-def _prepare_4d_attention_mask_for_sdpa(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
-    """
-    Creates a non-causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
-    `(batch_size, key_value_length)`
-    Args:
-        mask (`torch.Tensor` or `None`):
-            A 2D attention mask of shape `(batch_size, key_value_length)`
-        dtype (`torch.dtype`):
-            The torch dtype the created mask shall have.
-        tgt_len (`int`):
-            The target length or query length the created mask shall have.
-    """
-    batch_size, key_value_length = mask.shape
-    tgt_len = tgt_len if tgt_len is not None else key_value_length
-
-    # torch.jit.trace and torchdynamo with fullgraph=True are unable to capture the controlflow `is_causal=attention_mask is None and q_len > 1`
-    # used as an SDPA argument. We keep compatibility with these tracing tools by always using SDPA's `attn_mask` argument in case we are tracing.
-    # TODO: Fix this as well when using torchdynamo with fullgraph=True.
-    is_tracing = torch.jit.is_tracing()
-
-    if torch.all(mask == 1):
-        if is_tracing:
-            pass
-        elif tgt_len == 1:
-            # For query_length == 1, causal attention and bi-directional attention are the same.
-            return None
-        elif key_value_length == tgt_len:
-            return None
-        else:
-            # Unfortunately, for query_length > 1 and key_value_length != query_length, we can not generally ignore the attention mask, as SDPA causal mask generation
-            # may be wrong. We will set is_causal=False in SDPA and rely on Transformers attention_mask instead, hence not setting it to None here.
-            # Reference: https://github.com/pytorch/pytorch/issues/108108
-            return AttentionMaskConverter._expand_mask(mask=mask, dtype=dtype, tgt_len=tgt_len)
-    else:
-        return AttentionMaskConverter._expand_mask(mask=mask, dtype=dtype, tgt_len=tgt_len)
-
-
-def _create_4d_causal_attention_mask(
-    input_shape: Union[torch.Size, Tuple, List],
-    dtype: torch.dtype,
-    device: torch.device,
-    past_key_values_length: int = 0,
-    sliding_window: Optional[int] = None,
-) -> Optional[torch.Tensor]:
-    """
-    Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)`
-    Args:
-        input_shape (`tuple(int)` or `list(int)` or `torch.Size`):
-            The input shape should be a tuple that defines `(batch_size, query_length)`.
-        dtype (`torch.dtype`):
-            The torch dtype the created mask shall have.
-        device (`int`):
-            The torch device the created mask shall have.
-        sliding_window (`int`, *optional*):
-            If the model uses windowed attention, a sliding window should be passed.
-    """
-    attn_mask_converter = AttentionMaskConverter(is_causal=True, sliding_window=sliding_window)
-
-    key_value_length = past_key_values_length + input_shape[-1]
-    attention_mask = attn_mask_converter.to_causal_4d(
-        input_shape[0], input_shape[-1], key_value_length, dtype=dtype, device=device
-    )
-
-    return attention_mask
 
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
@@ -634,7 +165,7 @@ def _get_unpad_data(attention_mask):
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Mixtral
-class TurboSparseMixtralRMSNorm(nn.Module):
+class MixtralRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
         MixtralRMSNorm is equivalent to T5LayerNorm
@@ -653,7 +184,7 @@ class TurboSparseMixtralRMSNorm(nn.Module):
 
 # copied from transformers.models.mistral.modeling_mistral.MistralRotaryEmbedding with Mistral->Mixtral
 # TODO @longjie no longer copied from Mistral after static cache
-class TurboSparseMixtralRotaryEmbedding(nn.Module):
+class MixtralRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
 
@@ -742,7 +273,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 
 # copied from transformers.models.mistral.modeling_mistral.MistralAttention with Mistral->Mixtral
 # TODO @longjie no longer copied from Mistral after static cache
-class TurboSparseMixtralAttention(nn.Module):
+class MixtralAttention(nn.Module):
     """
     Multi-headed attention from 'Attention Is All You Need' paper. Modified to use sliding window attention: Longformer
     and "Generating Long Sequences with Sparse Transformers".
@@ -779,7 +310,7 @@ class TurboSparseMixtralAttention(nn.Module):
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
 
-        self.rotary_emb = TurboSparseMixtralRotaryEmbedding(
+        self.rotary_emb = MixtralRotaryEmbedding(
             self.head_dim,
             max_position_embeddings=self.max_position_embeddings,
             base=self.rope_theta,
@@ -867,7 +398,7 @@ class TurboSparseMixtralAttention(nn.Module):
 
 # copied from transformers.models.mistral.modeling_mistral.MistralFlashAttention2 with Mistral->Mixtral
 # TODO @longjie no longer copied from Mistral after static cache
-class TurboSparseMixtralFlashAttention2(TurboSparseMixtralAttention):
+class MixtralFlashAttention2(MixtralAttention):
     """
     Mixtral flash attention module. This module inherits from `MixtralAttention` as the weights of the module stays
     untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
@@ -1039,7 +570,7 @@ class TurboSparseMixtralFlashAttention2(TurboSparseMixtralAttention):
                 Attention dropout
             softmax_scale (`float`, *optional*):
                 The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
-            use_sliding_windows (`bool *optional*):
+            use_sliding_windows (`bool`, *optional*):
                 Whether to activate sliding window attention.
         """
         if not self._flash_attn_uses_top_left_mask:
@@ -1132,7 +663,8 @@ class TurboSparseMixtralFlashAttention2(TurboSparseMixtralAttention):
             max_seqlen_in_batch_q = max_seqlen_in_batch_k
             indices_q = indices_k
         elif query_length == 1:
-            macu_seqlens_q = torch.arange(
+            max_seqlen_in_batch_q = 1
+            cu_seqlens_q = torch.arange(
                 batch_size + 1, dtype=torch.int32, device=query_layer.device
             )  # There is a memcpy here, that is very bad.
             indices_q = cu_seqlens_q[:-1]
@@ -1154,7 +686,7 @@ class TurboSparseMixtralFlashAttention2(TurboSparseMixtralAttention):
 
 # copied from transformers.models.mistral.modeling_mistral.MistralSdpaAttention with Mistral->Mixtral
 # TODO @longjie no longer copied from Mistral after static cache
-class TurboSparseMixtralSdpaAttention(TurboSparseMixtralAttention):
+class MixtralSdpaAttention(MixtralAttention):
     """
     Mixtral attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
     `MixtralAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
@@ -1246,9 +778,9 @@ class TurboSparseMixtralSdpaAttention(TurboSparseMixtralAttention):
 
 
 MIXTRAL_ATTENTION_CLASSES = {
-    "eager": TurboSparseMixtralAttention,
-    "flash_attention_2": TurboSparseMixtralFlashAttention2,
-    "sdpa": TurboSparseMixtralSdpaAttention,
+    "eager": MixtralAttention,
+    "flash_attention_2": MixtralFlashAttention2,
+    "sdpa": MixtralSdpaAttention,
 }
 
 class MLP(nn.Module):                                                                                                                                                                                      
@@ -1264,11 +796,13 @@ class MLP(nn.Module):
         x = self.fc2(x)                                                                                                                                                                                    
         x = x.sigmoid()                                                                                                                                                                                    
         return x
-class TurboSparseMixtralBlockSparseTop2MLP(nn.Module):
+
+class MixtralBlockSparseTop2MLP(nn.Module):
     def __init__(self, config: TurboSparseMixtralConfig, layer_id):
         super().__init__()
         self.ffn_dim = config.intermediate_size
         self.hidden_dim = config.hidden_size
+        self.layer_id = layer_id
 
         self.w1 = nn.Linear(self.hidden_dim, self.ffn_dim, bias=False)
         self.w2 = nn.Linear(self.ffn_dim, self.hidden_dim, bias=False)
@@ -1287,8 +821,7 @@ class TurboSparseMixtralBlockSparseTop2MLP(nn.Module):
         current_hidden_states = self.w2(current_hidden_states)
         return current_hidden_states
 
-
-class TurboSparseMixtralSparseMoeBlock(nn.Module):
+class MixtralSparseMoeBlock(nn.Module):
     """
     This implementation is
     strictly equivalent to standard MoE with full capacity (no
@@ -1310,7 +843,7 @@ class TurboSparseMixtralSparseMoeBlock(nn.Module):
         # gating
         self.gate = nn.Linear(self.hidden_dim, self.num_experts, bias=False)
 
-        self.experts = nn.ModuleList([TurboSparseMixtralBlockSparseTop2MLP(config, layer_id) for _ in range(self.num_experts)])
+        self.experts = nn.ModuleList([MixtralBlockSparseTop2MLP(config, layer_id) for _ in range(self.num_experts)])
 
         # Jitter parameters
         self.jitter_noise = config.router_jitter_noise
@@ -1356,16 +889,16 @@ class TurboSparseMixtralSparseMoeBlock(nn.Module):
         return final_hidden_states, router_logits
 
 
-class TurboSparseMixtralDecoderLayer(nn.Module):
+class MixtralDecoderLayer(nn.Module):
     def __init__(self, config: TurboSparseMixtralConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
 
         self.self_attn = MIXTRAL_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
 
-        self.block_sparse_moe = TurboSparseMixtralSparseMoeBlock(config, layer_idx)
-        self.input_layernorm = TurboSparseMixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = TurboSparseMixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.block_sparse_moe = MixtralSparseMoeBlock(config, layer_idx)
+        self.input_layernorm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -1439,7 +972,7 @@ MIXTRAL_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`MixtralConfig`]):
+        config ([`TurboSparseMixtral`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -1455,7 +988,7 @@ class TurboSparseMixtralPreTrainedModel(PreTrainedModel):
     config_class = TurboSparseMixtralConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["TurboSparseMixtralDecoderLayer"]
+    _no_split_modules = ["MixtralDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
     _supports_sdpa = True
@@ -1551,7 +1084,7 @@ class TurboSparseMixtralModel(TurboSparseMixtralPreTrainedModel):
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`MixtralDecoderLayer`]
 
     Args:
-        config: MixtralConfig
+        config: TurboSparseMixtralConfig
     """
 
     def __init__(self, config: TurboSparseMixtralConfig):
@@ -1561,10 +1094,10 @@ class TurboSparseMixtralModel(TurboSparseMixtralPreTrainedModel):
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
-            [TurboSparseMixtralDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [MixtralDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self._attn_implementation = config._attn_implementation
-        self.norm = TurboSparseMixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.norm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -1893,15 +1426,13 @@ class TurboSparseMixtralForCausalLM(TurboSparseMixtralPreTrainedModel):
         output_router_logits=False,
         **kwargs,
     ):
+        past_length = 0
         # Omit tokens covered by past_key_values
         if past_key_values is not None:
-            if isinstance(past_key_values, Cache):
-                cache_length = past_key_values.get_seq_length()
-                past_length = past_key_values.seen_tokens
-                max_cache_length = past_key_values.get_max_length()
-            else:
-                cache_length = past_length = past_key_values[0][0].shape[2]
-                max_cache_length = None
+            # Past key values are always initialized with a `Cache` object -> no need for if-else anymore
+            cache_length = past_key_values.get_seq_length()
+            past_length = past_key_values.seen_tokens
+            max_cache_length = past_key_values.get_max_length()
 
             # Keep only the unprocessed tokens:
             # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
@@ -1932,7 +1463,7 @@ class TurboSparseMixtralForCausalLM(TurboSparseMixtralPreTrainedModel):
                 position_ids = position_ids[:, -input_ids.shape[1] :]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and past_key_values is None:
+        if inputs_embeds is not None and past_length == 0:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids}
