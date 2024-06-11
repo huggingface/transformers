@@ -1274,7 +1274,7 @@ class HieraForPreTraining(HieraPreTrainedModel):
 
     def forward_loss(self, pixel_values: torch.Tensor, logits: torch.Tensor, bool_masked_pos: torch.BoolTensor):
         if len(self.config.query_stride) != 2:
-            raise NotImplementedError("Only images are supported")    
+            raise NotImplementedError("Only images are supported")
         # We invert the bool_masked_pos such that 1.0 is *masked*
         bool_masked_pos = ~bool_masked_pos
         label = self.get_pixel_label_2d(pixel_values, bool_masked_pos)
