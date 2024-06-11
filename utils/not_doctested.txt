@@ -235,7 +235,7 @@ docs/source/en/model_doc/timesformer.md
 docs/source/en/model_doc/trajectory_transformer.md
 docs/source/en/model_doc/transfo-xl.md
 docs/source/en/model_doc/trocr.md
-docs/source/en/model_doc/turbosparse-mixtral.md
+docs/source/en/model_doc/turbosparsemixtral.md
 docs/source/en/model_doc/tvlt.md
 docs/source/en/model_doc/ul2.md
 docs/source/en/model_doc/umt5.md
