@@ -1,6 +1,6 @@
 from typing import Dict
 
-from ..utils import add_end_docstrings, is_vision_available, is_torch_available
+from ..utils import add_end_docstrings, is_torch_available, is_vision_available
 from .base import GenericTensor, Pipeline, build_pipeline_init_args
 
 
