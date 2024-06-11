@@ -809,7 +809,7 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
             expected_arg_names = ["codebook_idx", "input_ids"]
             self.assertListEqual(arg_names[:2], expected_arg_names)
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         # one embedding layer per codebook
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
