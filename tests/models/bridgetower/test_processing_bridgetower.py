@@ -16,22 +16,26 @@ import tempfile
 import unittest
 
 import numpy as np
-import pytest
 
-from transformers.testing_utils import require_vision, require_torch
+from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
+
 if is_vision_available():
     from PIL import Image
 
-    from transformers import AutoProcessor, BridgeTowerProcessor, BridgeTowerImageProcessor, RobertaTokenizer, RobertaTokenizerFast
+    from transformers import (
+        AutoProcessor,
+        BridgeTowerImageProcessor,
+        BridgeTowerProcessor,
+        RobertaTokenizerFast,
+    )
 
 
 @require_vision
 class Blip2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
-
     processor_class = BridgeTowerProcessor
 
     def setUp(self):
@@ -63,7 +67,7 @@ class Blip2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
 
         return image_inputs
-    
+
     # Some kwargs tests are overriden from common tests to handle shortest_edge
     # and size_divisor behaviour
 
@@ -131,7 +135,9 @@ class Blip2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component(
-            "image_processor", size={"shortest_edge": 234, "longest_edge": 234}, size_divisor=1,
+            "image_processor",
+            size={"shortest_edge": 234, "longest_edge": 234},
+            size_divisor=1,
         )
         tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
 
