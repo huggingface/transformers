@@ -752,6 +752,7 @@ def infer_framework(model_class):
     else:
         raise TypeError(f"Could not infer framework from class {model_class}.")
 
+
 def safe_int(x):
     if not is_torch_available():
         return int(x)
@@ -769,7 +770,7 @@ def safe_float(x):
 
     return x.to(torch.float32) if torch.jit.is_tracing() else int(x)
 
-  
+
 def filter_out_non_signature_kwargs(extra: Optional[list] = None):
     """
     Decorator to filter out named arguments that are not in the function signature.
