@@ -304,12 +304,11 @@ class HieraPatchEmbeddings(nn.Module):
                 f" Expected {self.num_channels} but got {num_channels}."
             )
 
-        if not interpolate_pos_encoding:
-            if height != self.image_size[0] or width != self.image_size[1]:
-                raise ValueError(
-                    f"Input image size ({height}*{width}) doesn't match model"
-                    f" ({self.image_size[0]}*{self.image_size[1]})."
-                )
+        if not interpolate_pos_encoding and (height != self.image_size[0] or width != self.image_size[1]):
+            raise ValueError(
+                f"Input image size ({height}*{width}) doesn't match model"
+                f" ({self.image_size[0]}*{self.image_size[1]})."
+            )
 
         (bool_masked_pos, ids_restore) = (
             self.random_masking(pixel_values, noise=noise) if self.is_mae else (None, None)
