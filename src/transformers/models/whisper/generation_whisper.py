@@ -719,6 +719,7 @@ class WhisperGenerationMixin:
             return {"sequences": sequences, "segments": final_segments}
 
         if is_shortform:
+            # add eos token:
             if generation_config.max_new_tokens is None and generation_config.max_length is None:
                 sequences = torch.cat(
                     [
@@ -847,6 +848,7 @@ class WhisperGenerationMixin:
                 # remove all padding tokens
                 if seek_sequence[-1] == generation_config.pad_token_id:
                     num_paddings = (seek_sequence == generation_config.pad_token_id).sum()
+                    seek_sequence = seek_sequence[:-num_paddings]
                     if return_token_timestamps and not is_shortform:
                         seek_outputs[i]["token_timestamps"] = seek_outputs[i]["token_timestamps"][:-num_paddings]
 
