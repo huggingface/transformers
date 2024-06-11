@@ -56,7 +56,6 @@ if _has_comet:
     try:
         import comet_ml  # noqa: F401
 
-        # TODO: It's likely to avoid crashing if NO API Key is set. Is it the right API to call?
         if hasattr(comet_ml, "config") and comet_ml.config.get_config("comet.api_key"):
             _has_comet = True
         else:
@@ -937,7 +936,7 @@ class WandbCallback(TrainerCallback):
 
 class CometCallback(TrainerCallback):
     """
-    A [`TrainerCallback`] that sends the logs to [Comet ML](https://www.comet.ml/site/).
+    A [`TrainerCallback`] that sends the logs to [Comet ML](https://www.comet.com/site/).
     """
 
     def __init__(self):
@@ -964,7 +963,7 @@ class CometCallback(TrainerCallback):
             `FALSE`.
 
         For a number of configurable items in the environment, see
-        [here](https://www.comet.ml/docs/python-sdk/advanced/#comet-configuration-variables).
+        [here](https://www.comet.com/docs/v2/guides/experiment-management/configure-sdk/#explore-comet-configuration-options).
         """
         self._initialized = True
         log_assets = os.getenv("COMET_LOG_ASSETS", "FALSE").upper()
