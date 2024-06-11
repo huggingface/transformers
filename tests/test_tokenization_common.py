@@ -26,6 +26,7 @@ import unittest
 from collections import OrderedDict
 from itertools import takewhile
 from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Union
+from unittest import mock
 
 from parameterized import parameterized
 
@@ -4319,3 +4320,14 @@ class TokenizerTesterMixin:
                         replace_additional_special_tokens=False,
                     )
                     self.assertEqual(tokenizer_2.additional_special_tokens, ["<other>", "<another>", "<tok>"])
+
+    def test_tokenize_without_sentencepiece(self):
+        with mock.patch.dict("sys.modules", {"sentencepiece": None}):
+            for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
+                with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+                    tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                    tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs, from_slow=True)
+                    tokens_p = tokenizer_p.tokenize("hello how are you?")
+                    tokens_r = tokenizer_r.tokenize("hello how are you?")
+                    self.assertTrue(len(tokens_p) > 0)
+                    self.assertTrue(len(tokens_r) > 0)
