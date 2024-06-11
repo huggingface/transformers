@@ -111,6 +111,7 @@ from . import (
     imagegpt,
     informer,
     instructblip,
+    instructblipvideo,
     jamba,
     jetmoe,
     kosmos2,

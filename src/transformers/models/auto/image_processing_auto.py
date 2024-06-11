@@ -75,6 +75,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("idefics2", "Idefics2ImageProcessor"),
         ("imagegpt", "ImageGPTImageProcessor"),
         ("instructblip", "BlipImageProcessor"),
+        ("instructblipvideo", "InstructBlipVideoImageProcessor"),
         ("kosmos-2", "CLIPImageProcessor"),
         ("layoutlmv2", "LayoutLMv2ImageProcessor"),
         ("layoutlmv3", "LayoutLMv3ImageProcessor"),
