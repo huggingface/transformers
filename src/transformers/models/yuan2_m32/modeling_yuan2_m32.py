@@ -32,7 +32,6 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 
 from .configuration_yuan2_m32 import Yuan2M32Config
-from einops import rearrange
 
 
 import copy
@@ -292,7 +291,6 @@ class FlashSelfAttention(torch.nn.Module):
         super().__init__()
         assert flash_attn_unpadded_func is not None, ('Please install FlashAttention first, '
                                                       'e.g., with pip install flash-attn')
-        assert rearrange is not None, 'Please install einops first, e.g., with pip install einops'
         self.causal = causal
         self.softmax_scale = softmax_scale
         self.dropout_p = attention_dropout
@@ -310,7 +308,10 @@ class FlashSelfAttention(torch.nn.Module):
         batch_size, seqlen_q = q.shape[0], q.shape[1]
         seqlen_k = k.shape[1]
 
-        q, k, v = [rearrange(x, 'b s ... -> (b s) ...') for x in [q, k, v]]
+        q = query_states.view(query_states.size(0)*query_states.size(1), query_states.size(2), query_states.size(3))
+        k = key_states.view(key_states.size(0)*key_states.size(1), key_states.size(2), key_states.size(3))
+        v = value_states.view(value_states.size(0)*value_states.size(1), value_states.size(2), value_states.size(3))
+        
         cu_seqlens_q = torch.arange(0, (batch_size + 1) * seqlen_q, step=seqlen_q, dtype=torch.int32,
                                     device=q.device)
 
@@ -335,7 +336,7 @@ class FlashSelfAttention(torch.nn.Module):
             softmax_scale=self.softmax_scale, causal=is_causal
         )
 
-        output = rearrange(output, '(b s) ... -> b s ...', b=batch_size)
+        output = output.view(batch_size,-1,output.size(1),output.size(2))
         return output
 
 
@@ -554,7 +555,9 @@ class YuanAttention(nn.Module):
             batch_size, seqlen_q = query_states.shape[0], query_states.shape[1]
             seqlen_k = key_states.shape[1]
 
-            q, k, v = [rearrange(x, 'b s ... -> (b s) ...') for x in [query_states, key_states, value_states]]
+            q = query_states.view(query_states.size(0)*query_states.size(1), query_states.size(2), query_states.size(3))
+            k = key_states.view(key_states.size(0)*key_states.size(1), key_states.size(2), key_states.size(3))
+            v = value_states.view(value_states.size(0)*value_states.size(1), value_states.size(2), value_states.size(3))
 
             cu_seqlens_q = torch.arange(0, (batch_size + 1) * seqlen_q, step=seqlen_q, dtype=torch.int,
                                     device=q.device)
@@ -573,7 +576,7 @@ class YuanAttention(nn.Module):
                 q, k, v, cu_seqlens_q, cu_seqlens_k, seqlen_q, seqlen_k, self.dropout, causal=is_causal
             )
 
-            attn_output = rearrange(output, '(b s) ... -> b s ...', b=batch_size)
+            attn_output = output.view(batch_size,-1,output.size(1),output.size(2))
         else:
             attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
