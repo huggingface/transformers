@@ -87,6 +87,7 @@ else:
             ("groupvit", ("CLIPImageProcessor",)),
             ("idefics", ("IdeficsImageProcessor",)),
             ("idefics2", ("Idefics2ImageProcessor",)),
+            ("imagebind", ("ImageBindImageProcessor",)),
             ("imagegpt", ("ImageGPTImageProcessor",)),
             ("instructblip", ("BlipImageProcessor",)),
             ("kosmos-2", ("CLIPImageProcessor",)),
