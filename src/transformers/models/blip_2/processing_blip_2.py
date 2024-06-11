@@ -70,7 +70,6 @@ class Blip2Processor(ProcessorMixin):
         super().__init__(image_processor, tokenizer)
         self.current_processor = self.image_processor
 
-    # Copied from transformers.models.blip.processing_blip.BlipProcessor.__call__
     def __call__(
         self,
         images: ImageInput = None,
