@@ -225,7 +225,7 @@ class NemotronAttention(nn.Module):
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.max_position_embeddings = config.max_position_embeddings
         self.rope_theta = config.rope_theta
-        self.rotary_percent = config.rope_percent
+        self.rotary_percent = config.rope_percentage
         self.is_causal = True
 
         if (self.head_dim * self.num_heads) != self.hidden_size:

@@ -978,6 +978,7 @@ else:
     _import_structure["models.mbart50"].append("MBart50Tokenizer")
     _import_structure["models.mluke"].append("MLukeTokenizer")
     _import_structure["models.mt5"].append("MT5Tokenizer")
+    _import_structure["models.nemotron"].append("NemotronTokenizer")
     _import_structure["models.nllb"].append("NllbTokenizer")
     _import_structure["models.pegasus"].append("PegasusTokenizer")
     _import_structure["models.plbart"].append("PLBartTokenizer")
@@ -2750,6 +2751,7 @@ else:
     )
     _import_structure["models.nemotron"].extend(
         [
+            "NemotronForCausalLM",
             "NemotronForPreTraining",
             "NemotronForQuestionAnswering",
             "NemotronForSequenceClassification",
@@ -5740,6 +5742,7 @@ if TYPE_CHECKING:
         from .models.mluke import MLukeTokenizer
         from .models.mt5 import MT5Tokenizer
         from .models.nllb import NllbTokenizer
+        from .models.nemotron import NemotronTokenizer
         from .models.pegasus import PegasusTokenizer
         from .models.plbart import PLBartTokenizer
         from .models.reformer import ReformerTokenizer
