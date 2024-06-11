@@ -340,7 +340,7 @@ Now, let's set up a conversation for our bot:
 
 ```python
 messages = [
-  {"role": "system", "content": "You are a bot that responds to temperature queries. You should choose the unit used in the queried location."},
+  {"role": "system", "content": "You are a bot that responds to weather queries. You should reply with the unit used in the queried location."},
   {"role": "user", "content": "Hey, what's the temperature in Paris right now?"}
 ]
 ```
@@ -397,7 +397,7 @@ print(tokenizer.decode(out[0][len(inputs["input_ids"][0]):]))
 And we get:
 
 ```text
-The current temperature in Paris, France is 22.0°C (71.6°F).
+The current temperature in Paris, France is 22.0 degrees Celsius.<|im_end|>
 ```
 
 Although this was a simple demo with only a single call, the same technique works with 
