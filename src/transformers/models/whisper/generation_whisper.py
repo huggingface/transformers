@@ -1150,6 +1150,8 @@ class WhisperGenerationMixin:
         if hasattr(generation_config, "no_timestamps_token_id"):
             timestamp_begin = generation_config.no_timestamps_token_id + 1
         else:
+            # BC for models missing the `no_timestamps_token_id` in the generation config when generating short-form with no timestamps
+            # We set the timestamp begin token larger than the vocab size, such that the timestamp condition is never met in the decoding loop
             timestamp_begin = self.config.vocab_size + 1
 
         return timestamp_begin
