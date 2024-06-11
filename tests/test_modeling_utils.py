@@ -686,7 +686,7 @@ class ModelUtilsTest(TestCasePlus):
 
                 # Check a file is bigger than max_size only when it has a single weight
                 for shard_file, size in shard_to_size.items():
-                        max_size_int = int(max_size[:-2]) * 10**3
+                    max_size_int = int(max_size[:-2]) * 10**3
                     # Note: pickle adds some junk so the weight of the file can end up being slightly bigger than
                     # the size asked for (since we count parameters)
                     if size >= max_size_int + 50000:
