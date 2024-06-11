@@ -14,6 +14,7 @@
 """
 Integrations with other Python libraries.
 """
+
 import functools
 import importlib.metadata
 import importlib.util
@@ -991,7 +992,10 @@ class CometCallback(TrainerCallback):
             # For HPO, we always create a new experiment for each trial
             if state.is_hyper_param_search:
                 if mode is not None:
-                    logger.warning("Hyperparameter Search is enabled, forcing the creation of new experimetns, COMET_MODE value %r  is ignored", comet_old_mode)
+                    logger.warning(
+                        "Hyperparameter Search is enabled, forcing the creation of new experimetns, COMET_MODE value %r  is ignored",
+                        comet_old_mode,
+                    )
                 mode = "create"
 
             import comet_ml
