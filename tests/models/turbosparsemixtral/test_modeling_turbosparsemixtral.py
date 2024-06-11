@@ -527,7 +527,7 @@ class TurboSparseMixtralIntegrationTest(unittest.TestCase):
         gc.collect()
 
     @slow
-    def test_model_7b_logits(self):
+    def test_model_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
         model = TurboSparseMixtralForCausalLM.from_pretrained(
             "PowerInfer/TurboSparse-Mixtral", device_map="auto", torch_dtype=torch.float16
@@ -555,7 +555,7 @@ class TurboSparseMixtralIntegrationTest(unittest.TestCase):
 
     @slow
     @require_bitsandbytes
-    def test_model_7b_generation(self):
+    def test_model_generation(self):
         EXPECTED_TEXT_COMPLETION = {
             7: "My favourite condiment is 100% ketchup. I’m not a fan of mustard, mayo,",
             8: "My favourite condiment is 100% ketchup. I’m not a fan of mustard, mayo,",
@@ -576,7 +576,7 @@ class TurboSparseMixtralIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     @slow
     @require_flash_attn
-    def test_model_7b_long_prompt(self):
+    def test_model_long_prompt(self):
         EXPECTED_OUTPUT_TOKEN_IDS = [306, 338]
         # An input with 4097 tokens that is above the size of the sliding window
         input_ids = [1] + [306, 338] * 2048
@@ -599,7 +599,7 @@ class TurboSparseMixtralIntegrationTest(unittest.TestCase):
 
     @slow
     @require_torch_sdpa
-    def test_model_7b_long_prompt_sdpa(self):
+    def test_model_long_prompt_sdpa(self):
         EXPECTED_OUTPUT_TOKEN_IDS = [306, 338]
         # An input with 4097 tokens that is above the size of the sliding window
         input_ids = [1] + [306, 338] * 2048
