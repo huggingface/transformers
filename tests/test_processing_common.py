@@ -173,6 +173,7 @@ class ProcessorTesterMixin:
             "crop_size": {"height": 214, "width": 214},
             "padding": "max_length",
             "max_length": 76,
+            "model_max_length": 76,
         }
 
         inputs = processor(text=input_str, images=image_input, **all_kwargs)

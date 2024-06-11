@@ -54,25 +54,13 @@ class AlignProcessor(ProcessorMixin):
         model_id = "kakaobrain/align-base"
         processor = AlignProcessor.from_pretrained(model_id)
 
-        # Define the kwargs for each modality
-        common_kwargs = {"return_tensors": "pt"}
-        images_kwargs = {"crop_size": {"height": 224, "width": 224}}
-        text_kwargs = {"padding": "do_not_pad"}
-
-        # Combine them into a single dictionary
-
-        all_kwargs = {
-        "images_kwargs": images_kwargs,
-        "text_kwargs": text_kwargs,
-        "common_kwargs": common_kwargs
-        }
-
-        processor(images=your_pil_image, text=["What is that?"], **all_kwargs)
-
-        # passing directly any number of kwargs flattened is also supported
-
-        all_kwargs = {"return_tensors": "pt", "crop_size": {"height": 214, "width": 214}, "padding": "max_length", "max_length": 76}
-        processor(images=your_pil_image, text=["What is that?"], **all_kwargs)
+        processor(
+            images=your_pil_image,
+            text=["What is that?"],
+            images_kwargs = {"crop_size": {"height": 224, "width": 224}},
+            text_kwargs = {"padding": "do_not_pad"},
+            common_kwargs = {"return_tensors": "pt"},
+        )
         ```
 
     Args:
