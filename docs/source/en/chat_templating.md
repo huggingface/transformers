@@ -401,7 +401,7 @@ The current temperature in Paris, France is 22.0°C (71.6°F).
 ```
 
 Although this was a simple demo with only a single call, the same technique works with 
-multiple tools and longer conversations. This can be a powerful ways to extend the capabilities of conversational
+multiple tools and longer conversations. This can be a powerful way to extend the capabilities of conversational
 agents with real-time information, computational tools like calculators, or access to large databases.
 
 <Tip>
@@ -447,22 +447,25 @@ This will yield:
 
 ```json
 {
+  "type": "function", 
+  "function": {
     "name": "multiply", 
-    "description": "Multiply two numbers together.", 
+    "description": "A function that multiplies two numbers", 
     "parameters": {
-        "type": "object", 
-        "properties": {
-            "a": {
-                "type": "number", 
-                "description": "The first number to multiply."
-            }, 
-            "b": {
-                "type": "number",
-                "description": "The second number to multiply."
-            }
+      "type": "object", 
+      "properties": {
+        "a": {
+          "type": "number", 
+          "description": "The first number to multiply"
         }, 
-        "required": ["a", "b"]
+        "b": {
+          "type": "number",
+          "description": "The second number to multiply"
+        }
+      }, 
+      "required": ["a", "b"]
     }
+  }
 }
 ```
 
@@ -478,27 +481,38 @@ Here is an example of defining schemas by hand, and passing them directly to `ap
 ```python
 # A simple function that takes no arguments
 current_time = {
+  "type": "function", 
+  "function": {
     "name": "current_time",
     "description": "Get the current local time as a string.",
     "parameters": {
-                'type': 'object',
-                'properties': {}
-            },
+      'type': 'object',
+      'properties': {}
     }
+  }
+}
 
 # A more complete function that takes two numerical arguments
 multiply = {
-    "name": "multiply",
-    "description": "Multiply two numbers together.",
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "a": {"type": "number", "description": "The first number to multiply."},
-            "b": {"type": "number", "description": "The second number to multiply."},
-        },
-        "required": ["a", "b"],
+  'type': 'function',
+  'function': {
+    'name': 'multiply',
+    'description': 'A function that multiplies two numbers', 
+    'parameters': {
+      'type': 'object', 
+      'properties': {
+        'a': {
+          'type': 'number',
+          'description': 'The first number to multiply'
+        }, 
+        'b': {
+          'type': 'number', 'description': 'The second number to multiply'
         }
+      }, 
+      'required': ['a', 'b']
     }
+  }
+}
 
 model_input = tokenizer.apply_chat_template(
     messages,
