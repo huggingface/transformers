@@ -178,7 +178,7 @@ class DepthAnythingModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         pass
 
     @unittest.skip(reason="Depth Anything with AutoBackbone does not have a base model and hence no input_embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip(reason="Depth Anything with AutoBackbone does not have a base model")

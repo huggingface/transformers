@@ -90,6 +90,7 @@ class Owlv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = Owlv2ImageProcessor if is_vision_available() else None
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = Owlv2ImageProcessingTester(self)
 
     @property
