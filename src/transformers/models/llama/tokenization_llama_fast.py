@@ -13,11 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import os
-
 from shutil import copyfile
 from typing import Optional, Tuple
 
-from tokenizers import pre_tokenizers, normalizers, processors
+from tokenizers import processors
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import is_sentencepiece_available, logging
