@@ -37,7 +37,9 @@ from functools import partial
 
 from .language_modeling_mplugdocowl import MPLUGDocOwlForCausalLM
 from .vision_mplugdocowl import MPLUGDocOwlVisionModel
+from .constants import IMAGE_TOKEN_INDEX, IGNORE_INDEX
 logger = logging.get_logger(__name__)
+
 _CONFIG_FOR_DOC = "MPLUGDocOwlConfig"
 
 @dataclass
@@ -132,7 +134,7 @@ class MPLUGDocOwlHReducer(nn.Module):
         H = int(torch.sqrt(torch.tensor(L)))
         ## feature interaction with a conv layer
         #encoder_hidden_states = rearrange(encoder_hidden_states, 'B (H W) D -> B D H W', H=int(math.sqrt(L)))
-        encoder_hidden_states = encoder_hidden_states.view(B, H, H, C)
+        encoder_hidden_states = encoder_hidden_states.view(B, C, H, H) #(BCHH)
         hidden_states = self.reducer_before(encoder_hidden_states)  # B 4D H W/4
         ## reduce seq length with a conv layer
         B, XD, H, W_div_X = hidden_states.shape
@@ -338,7 +340,131 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
         self.config.text_config.vocab_size = model_embeds.num_embeddings
         self.vocab_size = model_embeds.num_embeddings
         return model_embeds
+    '''
+    def _merge_input_ids_with_image_features(
+        self, input_ids, image_features, attention_mask, past_key_values, labels):
+     
+        #if images is None or input_ids.shape[1] == 1:
+        #    if past_key_values is not None and images is not None and input_ids.shape[1] == 1:
+        #        attention_mask = torch.ones((attention_mask.shape[0], past_key_values[-1][-1].shape[-2] + 1), dtype=attention_mask.dtype, device=attention_mask.device)
+        #    multiway_indices = torch.zeros_like(input_ids).long().to(self.device)
+        #    return input_ids, multiway_indices, attention_mask, past_key_values, None, labels
+    
+        print(f"Initial input_ids shape: {input_ids.shape}") #[1,95]
+        print(f"Initial attention_mask shape: {attention_mask.shape}") #[1,95]
+        print(f"Initial labels shape: {labels.shape if labels is not None else None}") #[None]
+       # print(f"Initial images shape: {images.shape if images is not None else None}") #[6,3,448,448]
+  
+        new_input_embeds = []
+        new_modality_indicators = []
+        new_labels = [] if labels is not None else None
+        cur_image_idx = 0
 
+        breakpoint()
+        for batch_idx, cur_input_ids in enumerate(input_ids):
+            print(f"Processing batch index {batch_idx}")
+            #breakpoint()
+        
+            breakpoint()
+            
+            #cur_input_ids = cur_input_ids.to(device)
+            image_token_indices = torch.where(cur_input_ids == IMAGE_TOKEN_INDEX)[0]
+            cur_new_input_embeds = []
+            cur_modality_indicators = []
+            if labels is not None:
+                cur_labels = labels[batch_idx]
+                cur_new_labels = []
+                assert cur_labels.shape == cur_input_ids.shape
+            while image_token_indices.numel() > 0:
+                cur_image_features = image_features[cur_image_idx]
+                image_token_start = image_token_indices[0]
+                cur_new_input_embeds.append(cur_input_ids[:image_token_start])
+                cur_new_input_embeds.append(cur_image_features)
+                
+                # Add modality indicator
+                assert image_token_start == len(cur_input_ids[:image_token_start])
+                cur_modality_indicators.append(torch.zeros(len(cur_input_ids[:image_token_start])).long())
+                cur_modality_indicators.append(torch.ones(len(cur_image_features)).long())
+                
+                if labels is not None:
+                    cur_new_labels.append(cur_labels[:image_token_start])
+                    cur_new_labels.append(torch.full((cur_image_features.shape[0],), IGNORE_INDEX, device=labels.device, dtype=labels.dtype))
+                    cur_labels = cur_labels[image_token_start+1:]
+                cur_image_idx += 1
+                cur_input_ids = cur_input_ids[image_token_start+1:]
+                image_token_indices = torch.where(cur_input_ids == IMAGE_TOKEN_INDEX)[0]
+            if cur_input_ids.numel() > 0:
+                cur_new_input_embeds.append(cur_input_ids)
+                cur_modality_indicators.append(torch.zeros(len(cur_input_ids)).long())
+                if labels is not None:
+                    cur_new_labels.append(cur_labels)
+            cur_new_input_embeds = [x.to(device=self.device) for x in cur_new_input_embeds]
+            cur_new_input_embeds = torch.cat(cur_new_input_embeds, dim=0)
+            new_input_embeds.append(cur_new_input_embeds)
+            
+            # Modality
+            cur_modality_indicators = [x.to(device=self.device) for x in cur_modality_indicators]
+            cur_modality_indicators = torch.cat(cur_modality_indicators, dim=0)
+            new_modality_indicators.append(cur_modality_indicators)
+            
+            if labels is not None:
+                cur_new_labels = torch.cat(cur_new_labels, dim=0)
+                new_labels.append(cur_new_labels)
+
+        if any(x.shape != new_input_embeds[0].shape for x in new_input_embeds):
+            max_len = max(x.shape[0] for x in new_input_embeds)
+            print(f"Aligning embeddings to max length: {max_len}")
+            
+            # Embedding
+            new_input_embeds_align = []
+            for cur_new_embed in new_input_embeds:
+                cur_new_embed = torch.cat((cur_new_embed, torch.zeros((max_len - cur_new_embed.shape[0], cur_new_embed.shape[1]), dtype=cur_new_embed.dtype, device=cur_new_embed.device)), dim=0)
+                new_input_embeds_align.append(cur_new_embed)
+            new_input_embeds = torch.stack(new_input_embeds_align, dim=0)
+            print(f"New input embeds shape: {new_input_embeds.shape}")
+            
+            # Modality
+            new_modality_indicators_align = []
+            for cur_modality_indicator in new_modality_indicators:
+                cur_new_embed = torch.cat((cur_modality_indicator, torch.zeros(max_len - cur_modality_indicator.shape[0], dtype=cur_modality_indicator.dtype, device=cur_modality_indicator.device)), dim=0)
+                new_modality_indicators_align.append(cur_new_embed)
+            new_modality_indicators = torch.stack(new_modality_indicators_align, dim=0)
+            print(f"New modality indicators shape: {new_modality_indicators.shape}")
+            
+            # Label
+            if labels is not None:
+                new_labels_align = []
+                _new_labels = new_labels
+                for cur_new_label in new_labels:
+                    cur_new_label = torch.cat((cur_new_label, torch.full((max_len - cur_new_label.shape[0],), IGNORE_INDEX, dtype=cur_new_label.dtype, device=cur_new_label.device)), dim=0)
+                    new_labels_align.append(cur_new_label)
+                new_labels = torch.stack(new_labels_align, dim=0)
+                print(f"New labels shape: {new_labels.shape}")
+            
+            # Attention Mask
+            if attention_mask is not None:
+                new_attention_mask = []
+                for cur_attention_mask, cur_new_labels, cur_new_labels_align in zip(attention_mask, _new_labels, new_labels):
+                    new_attn_mask_pad_left = torch.full((cur_new_labels.shape[0] - labels.shape[1],), True, dtype=attention_mask.dtype, device=attention_mask.device)
+                    new_attn_mask_pad_right = torch.full((cur_new_labels_align.shape[0] - cur_new_labels.shape[0],), False, dtype=attention_mask.dtype, device=attention_mask.device)
+                    cur_new_attention_mask = torch.cat((new_attn_mask_pad_left, cur_attention_mask, new_attn_mask_pad_right), dim=0)
+                    new_attention_mask.append(cur_new_attention_mask)
+                attention_mask = torch.stack(new_attention_mask, dim=0)
+                print(f"New attention mask shape: {attention_mask.shape}")
+                assert attention_mask.shape == new_labels.shape
+        else:
+            new_input_embeds = torch.stack(new_input_embeds, dim=0)
+            new_modality_indicators = torch.stack(new_modality_indicators, dim=0)
+            if labels is not None:
+                new_labels = torch.stack(new_labels, dim=0)
+
+            if attention_mask is not None:
+                new_attn_mask_pad_left = torch.full((attention_mask.shape[0], new_input_embeds.shape[1] - input_ids.shape[1]), True, dtype=attention_mask.dtype, device=attention_mask.device)
+                attention_mask = torch.cat((new_attn_mask_pad_left, attention_mask), dim=1)
+                print(f"Final attention mask shape: {attention_mask.shape}") #[1,1631]
+                assert attention_mask.shape == new_input_embeds.shape[:2]
+        return None, new_modality_indicators, attention_mask, past_key_values, new_input_embeds, new_labels
+    '''
     def _merge_input_ids_with_image_features(self, image_features, inputs_embeds, input_ids, attention_mask, labels):
         num_images, num_image_patches, embed_dim = image_features.shape
         batch_size, sequence_length = input_ids.shape
@@ -487,11 +613,17 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
 
             # 2. Merge text and images
             if pixel_values is not None and input_ids.shape[1] != 1:
-                image_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
-                image_outputs = self.multi_modal_projector(encoder_hidden_states=image_outputs)
+                image_outputs = self.vision_tower(pixel_values, output_hidden_states=True).last_hidden_state
+                #try:
+                image_features = self.multi_modal_projector(encoder_hidden_states=image_outputs)
+                #except RuntimeError as e:
+                    #raise(e)
                 # this is not memory efficient at all (output_hidden_states=True) will save all the hidden stated.
-                selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
-
+               # breakpoint()
+                #selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
+                #FIXME can I do this?
+                '''
+                selected_image_feature = image_outputs[vision_feature_layer]
                 if vision_feature_select_strategy == "default":
                     selected_image_feature = selected_image_feature[:, 1:]
                 elif vision_feature_select_strategy == "full":
@@ -500,12 +632,18 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
                     raise ValueError(
                         f"Unexpected select feature strategy: {self.config.vision_feature_select_strategy}"
                     )
-
+#input_ids, image_features, attention_mask, past_key_values, labels, images
                 image_features = self.multi_modal_projector(selected_image_feature)
+
+                '''
                 inputs_embeds = inputs_embeds.to(image_features.dtype)
-                inputs_embeds, attention_mask, labels, position_ids = self._merge_input_ids_with_image_features(
-                    image_features, inputs_embeds, input_ids, attention_mask, labels
+                input_ids, modality_indicators, attention_mask, past_key_values, inputs_embeds, labels  = self._merge_input_ids_with_image_features(
+                     input_ids, image_features, attention_mask, past_key_values, labels
                 )
+                #FIXME old call is commented below
+                #inputs_embeds, attention_mask, labels, position_ids = self._merge_input_ids_with_image_features(
+                    #image_features, inputs_embeds, input_ids, attention_mask, labels
+               # )
 
             # In case input_ids.shape[1] == 1 & pixel_values==None & past_key_values != None, we are in the case of
             # generation with cache
@@ -542,6 +680,7 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
 
         outputs = self.language_model(
             attention_mask=attention_mask,
+            #modality_indicators=modality_indicators,
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
@@ -630,6 +769,7 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
                 "use_cache": kwargs.get("use_cache"),
                 "attention_mask": attention_mask,
                 "pixel_values": pixel_values,
+                "patch_positions": kwargs.get("patch_positions", None),
             }
         )
         return model_inputs
@@ -637,3 +777,4 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
     def _reorder_cache(self, *args, **kwargs):
         return self.language_model._reorder_cache(*args, **kwargs)
 
+#model.forward(input_ids=output['input_ids'], pixel_values = output['pixel_values'],attention_mask=output['attention_mask'], patch_positions=output['patch_positions'])

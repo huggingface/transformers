@@ -297,7 +297,7 @@ class MPLUGDocOwlAttention(nn.Module):
         context_layer = torch.matmul(attention_probs, value_states).permute(0, 2, 1, 3)
 
         new_context_layer_shape = context_layer.size()[:-2] + (self.embed_dim,)
-        print(new_context_layer_shape)
+
         context_layer = context_layer.reshape(new_context_layer_shape)
 
         output = self.out_proj(context_layer)

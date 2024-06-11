@@ -174,7 +174,6 @@ def shape_adaptive_cropping(image_patches: ImageInput,
         image_input = image_patches.reshape(3, num_h, size, num_w, size)
         # Step 2: Transpose to get the correct order
         image_input = image_input.transpose(1, 3, 2, 4, 0)
-        breakpoint()
         image_input = image_input.reshape((-1,size,size,3))
         #image_input = image_input.transpose(0,2,3,1)
         image_patches_list = [image_input[i] for i in range(image_input.shape[0])]
@@ -502,9 +501,10 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
         if do_shape_adaptive_cropping:
             output = [self.adaptive_crop(image_patches=image, size=size, selected_anchor = selected_anchor) for image in images[1:]][0]
             patch_images, patch_positions, num_patches, anchor_max = output[0], output[1], output[2], output[3]
-            breakpoint()
+
             del images[1:]
             images.extend(patch_images)
+        
         images = [
             to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
         ]
