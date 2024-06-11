@@ -506,6 +506,10 @@ _import_structure = {
         "LlavaConfig",
         "LlavaProcessor",
     ],
+    "models.mplugdocowl": [
+        "MPLUGDocOwlConfig",
+        "MPLUGDocOwlProcessor",
+    ],
     "models.llava_next": [
         "LlavaNextConfig",
         "LlavaNextProcessor",
@@ -1144,6 +1148,7 @@ else:
     _import_structure["models.mobilenet_v1"].extend(["MobileNetV1FeatureExtractor", "MobileNetV1ImageProcessor"])
     _import_structure["models.mobilenet_v2"].extend(["MobileNetV2FeatureExtractor", "MobileNetV2ImageProcessor"])
     _import_structure["models.mobilevit"].extend(["MobileViTFeatureExtractor", "MobileViTImageProcessor"])
+    _import_structure["models.mplugdocowl"].extend(["MPLUGDocOwlImageProcessor"])
     _import_structure["models.nougat"].append("NougatImageProcessor")
     _import_structure["models.oneformer"].extend(["OneFormerImageProcessor"])
     _import_structure["models.owlv2"].append("Owlv2ImageProcessor")
@@ -2394,6 +2399,12 @@ else:
         [
             "LlavaForConditionalGeneration",
             "LlavaPreTrainedModel",
+        ]
+    )
+    _import_structure["models.mplugdocowl"].extend(
+        [
+            "MPLUGDocOwlForConditionalGeneration",
+            "MPLUGDocOwlPreTrainedModel",
         ]
     )
     _import_structure["models.llava_next"].extend(
@@ -5088,6 +5099,10 @@ if TYPE_CHECKING:
         LlavaConfig,
         LlavaProcessor,
     )
+    from .models.mplugdocowl import (
+        MPLUGDocOwlConfig,
+        MPLUGDocOwlProcessor,
+    )
     from .models.llava_next import (
         LlavaNextConfig,
         LlavaNextProcessor,
@@ -6802,6 +6817,10 @@ if TYPE_CHECKING:
         from .models.llava import (
             LlavaForConditionalGeneration,
             LlavaPreTrainedModel,
+        )
+        from .models.mplugdocowl import (
+            MPLUGDocOwlForConditionalGeneration,
+            MPLUGDocOwlPreTrainedModel,
         )
         from .models.llava_next import (
             LlavaNextForConditionalGeneration,
