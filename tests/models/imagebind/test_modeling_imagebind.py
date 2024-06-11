@@ -393,6 +393,15 @@ class ImageBindVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_save_load_fast_init_to_base(self):
         pass
 
+    def test_model_get_set_embeddings(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
+            x = model.get_output_embeddings()
+            self.assertTrue(x is None or isinstance(x, nn.Linear))
+
     @slow
     def test_model_from_pretrained(self):
         model_name = "EduardoPacheco/imagebind-huge"
@@ -580,6 +589,15 @@ class ImageBindAudioModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="ImageBindAudioModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
+
+    def test_model_get_set_embeddings(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
+            x = model.get_output_embeddings()
+            self.assertTrue(x is None or isinstance(x, nn.Linear))
 
     @slow
     def test_model_from_pretrained(self):
@@ -790,6 +808,10 @@ class ImageBindModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
             config.save_pretrained(tmp_dir_name)
             text_config = ImageBindTextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
+
+    @unittest.skip(reason="ImageBindModel does not have input/output embeddings")
+    def test_model_get_set_embeddings(self):
+        pass
 
     @slow
     def test_model_from_pretrained(self):
