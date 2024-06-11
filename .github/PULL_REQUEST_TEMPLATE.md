@@ -47,15 +47,15 @@ Models:
 Library:
 
 - flax: @sanchit-gandhi
-- generate: @gante
+- generate: @zucchini-nlp (visual-language models) or @gante (all others)
 - pipelines: @Narsil
 - tensorflow: @gante and @Rocketknight1
 - tokenizers: @ArthurZucker
-- trainer: @muellerzr and @pacman100
+- trainer: @muellerzr and @SunMarc
 
 Integrations:
 
-- deepspeed: HF Trainer/Accelerate: @pacman100
+- deepspeed: HF Trainer/Accelerate: @muellerzr
 - ray/raytune: @richardliaw, @amogkam
 - Big Model Inference: @SunMarc
 - quantization (bitsandbytes, autogpt): @SunMarc and @younesbelkada
