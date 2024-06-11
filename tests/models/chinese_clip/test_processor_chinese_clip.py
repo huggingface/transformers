@@ -23,8 +23,10 @@ import pytest
 
 from transformers import BertTokenizer, BertTokenizerFast
 from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES
-from transformers.testing_utils import require_vision
+from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import FEATURE_EXTRACTOR_NAME, is_vision_available
+
+from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
@@ -34,7 +36,9 @@ if is_vision_available():
 
 
 @require_vision
-class ChineseCLIPProcessorTest(unittest.TestCase):
+class ChineseCLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = ChineseCLIPProcessor
+
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 
@@ -211,3 +215,38 @@ class ChineseCLIPProcessorTest(unittest.TestCase):
         inputs = processor(text=input_str, images=image_input)
 
         self.assertListEqual(list(inputs.keys()), processor.model_input_names)
+
+    def test_defaults_preserved(self):
+        image_processor = self.get_image_processor()
+        tokenizer = self.get_tokenizer(max_length=117)
+        processor = ChineseCLIPProcessor(tokenizer=tokenizer, image_processor=image_processor)
+
+        input_str = "lower newer"
+        image_input = self.prepare_image_inputs()
+
+        inputs = processor(text=input_str, images=image_input, padding="max_length")
+
+        self.assertEqual(len(inputs["input_ids"]), 117)
+
+    @require_torch
+    def test_structured_kwargs(self):
+        image_processor = self.get_image_processor()
+        tokenizer = self.get_tokenizer()
+
+        processor = ChineseCLIPProcessor(tokenizer=tokenizer, image_processor=image_processor)
+
+        input_str = "lower newer"
+        image_input = self.prepare_image_inputs()
+
+        # Define the kwargs for each modality
+        common_kwargs = {"return_tensors": "pt"}
+        images_kwargs = {"crop_size": {"height": 214, "width": 214}}
+        text_kwargs = {"padding": "max_length", "max_length": 76}
+
+        # Combine them into a single dictionary
+        all_kwargs = {"images_kwargs": images_kwargs, "text_kwargs": text_kwargs, "common_kwargs": common_kwargs}
+
+        inputs = processor(text=input_str, images=image_input, **all_kwargs)
+        self.assertEquals(inputs["pixel_values"].shape[2], 214)
+
+        self.assertEqual(len(inputs["input_ids"][0]), 76)
