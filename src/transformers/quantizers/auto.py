@@ -59,7 +59,7 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "aqlm": AqlmConfig,
     "quanto": QuantoConfig,
     "hqq": HqqConfig,
-    "compressed_tensors": CompressedTensorsConfig,
+    "compressed-tensors": CompressedTensorsConfig,
 }
 
 

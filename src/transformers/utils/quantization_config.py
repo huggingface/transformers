@@ -18,13 +18,14 @@ import copy
 import importlib.metadata
 import json
 import os
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, is_dataclass
 from enum import Enum
 from typing import Any, Dict, List, Optional, Union
 
 from compressed_tensors.quantization.quant_config import QuantizationStatus
 from compressed_tensors.quantization.quant_scheme import QuantizationScheme
 from packaging import version
+from pydantic import BaseModel
 
 from ..utils import is_auto_awq_available, is_hqq_available, is_torch_available, logging
 
@@ -68,6 +69,23 @@ class AWQLinearVersion(str, Enum):
 class AwqBackendPackingMethod(str, Enum):
     AUTOAWQ = "autoawq"
     LLMAWQ = "llm-awq"
+
+
+def convert_to_dict(obj):
+    if is_dataclass(obj):
+        return asdict(obj)
+    elif isinstance(obj, BaseModel):
+        return obj.dict()
+    elif isinstance(obj, Enum):
+        return obj.value
+    elif isinstance(obj, dict):
+        return {k: convert_to_dict(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_to_dict(i) for i in obj]
+    elif isinstance(obj, tuple):
+        return tuple(convert_to_dict(i) for i in obj)
+    else:
+        return obj
 
 
 @dataclass
@@ -133,7 +151,7 @@ class QuantizationConfigMixin:
         Serializes this instance to a Python dictionary. Returns:
             `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
         """
-        return copy.deepcopy(self.__dict__)
+        return convert_to_dict(copy.deepcopy(self.__dict__))
 
     def __iter__(self):
         """allows `dict(obj)` for situations where obj may be a dict or QuantizationConfigMixin"""
