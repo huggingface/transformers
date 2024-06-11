@@ -810,6 +810,8 @@
         title: Perceiver
       - local: model_doc/pix2struct
         title: Pix2Struct
+      - local: model_doc/sam-hq
+        title: SAM-HQ
       - local: model_doc/sam
         title: Segment Anything
       - local: model_doc/siglip
