@@ -66,6 +66,8 @@ The original code can be found [here](https://github.com/salesforce/BLIP).
 
 ## BlipModel
 
+`BlipModel` is going to be deprecated in future versions, please use `BlipForConditionalGeneration`, `BlipForImageTextRetrieval` or `BlipForQuestionAnswering` depending on your usecase.
+
 [[autodoc]] BlipModel
     - forward
     - get_text_features

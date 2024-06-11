@@ -362,14 +362,6 @@ my_pipeline = pipeline(model="xxxx", pipeline_class=MyPipeline)
 
 可用于自然语言处理任务的pipeline包括以下几种。
 
-### ConversationalPipeline
-
-[[autodoc]] Conversation
-
-[[autodoc]] ConversationalPipeline
-    - __call__
-    - all
-
 ### FillMaskPipeline
 
 [[autodoc]] FillMaskPipeline

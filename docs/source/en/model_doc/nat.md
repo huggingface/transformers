@@ -16,6 +16,14 @@ rendered properly in your Markdown viewer.
 
 # Neighborhood Attention Transformer
 
+<Tip warning={true}>
+
+This model is in maintenance mode only, we don't accept any new PRs changing its code.
+If you run into any issues running this model, please reinstall the last version that supported this model: v4.40.2.
+You can do so by running the following command: `pip install -U transformers==4.40.2`.
+
+</Tip>
+
 ## Overview
 
 NAT was proposed in [Neighborhood Attention Transformer](https://arxiv.org/abs/2204.07143)
