@@ -18,19 +18,29 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The DAB-DETR model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+The DAB-DETR model was proposed in [DAB-DETR: Dynamic Anchor Boxes are Better Queries for DETR](https://arxiv.org/abs/2201.12329) by Shilong Liu, Feng Li, Hao Zhang, Xiao Yang, Xianbiao Qi, Hang Su, Jun Zhu, Lei Zhang.
+DAB-DETR is an enhanced variant of Conditional DETR. It utilizes dynamically updated anchor boxes to provide both a reference query point (x, y) and a reference anchor size (w, h), improving cross-attention computation. This new approach achieves 45.7% AP when trained for 50 epochs with a single ResNet-50 model as the backbone.
+
+<img src="https://github.com/conditionedstimulus/hf_media/blob/main/dab_detr_convergence_plot.png"
+alt="drawing" width="600"/>
 
 The abstract from the paper is the following:
 
-*<INSERT PAPER ABSTRACT HERE>*
+*We present in this paper a novel query formulation using dynamic anchor boxes
+for DETR (DEtection TRansformer) and offer a deeper understanding of the role
+of queries in DETR. This new formulation directly uses box coordinates as queries
+in Transformer decoders and dynamically updates them layer-by-layer. Using box
+coordinates not only helps using explicit positional priors to improve the queryto-feature similarity and eliminate the slow training convergence issue in DETR,
+but also allows us to modulate the positional attention map using the box width
+and height information. Such a design makes it clear that queries in DETR can be
+implemented as performing soft ROI pooling layer-by-layer in a cascade manner.
+As a result, it leads to the best performance on MS-COCO benchmark among
+the DETR-like detection models under the same setting, e.g., AP 45.7% using
+ResNet50-DC5 as backbone trained in 50 epochs. We also conducted extensive
+experiments to confirm our analysis and verify the effectiveness of our methods.*
 
-Tips:
-
-<INSERT TIPS ABOUT MODEL HERE>
-
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+This model was contributed by [davidhajdu](https://huggingface.co/davidhajdu).
+The original code can be found [here](https://github.com/IDEA-Research/DAB-DETR).
 
 
 ## DABDETRConfig
@@ -45,9 +55,4 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 ## DABDETRForObjectDetection
 
 [[autodoc]] DABDETRForObjectDetection
-    - forward
-
-## DABDETRForSegmentation
-
-[[autodoc]] DABDETRForSegmentation
     - forward
