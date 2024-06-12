@@ -159,6 +159,7 @@ class OneFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = image_processing_class
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = OneFormerImageProcessorTester(self)
 
     @property
