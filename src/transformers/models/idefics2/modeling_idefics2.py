@@ -1593,10 +1593,11 @@ class Idefics2Model(Idefics2PreTrainedModel):
 
         past_seen_tokens = 0
         return_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache):  # kept for BC (non `Cache` `past_key_values` inputs)
-            return_legacy_cache = True
-            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-        past_seen_tokens = past_key_values.get_seq_length()
+        if use_cache:
+            if not isinstance(past_key_values, Cache):  # kept for BC (non `Cache` `past_key_values` inputs)
+                return_legacy_cache = True
+                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+            past_seen_tokens = past_key_values.get_seq_length()
 
         if inputs_embeds is not None and input_ids is None and past_seen_tokens == 0:
             raise ValueError("When first calling the model, if input_embeds are passed, input_ids should not be None.")
@@ -1669,7 +1670,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
             return_dict=return_dict,
         )
 
-        if return_legacy_cache:
+        if return_legacy_cache and use_cache:
             outputs.past_key_values = outputs.past_key_values.to_legacy_cache()
 
         if not return_dict:
