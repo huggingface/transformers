@@ -403,7 +403,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("imagegpt", "ImageGPT"),
         ("informer", "Informer"),
         ("instructblip", "InstructBLIP"),
-        ("instructblipvideo", "InstructBlipVideoVideo"),
+        ("instructblipvideo", "InstructBlipVideo"),
         ("jamba", "Jamba"),
         ("jetmoe", "JetMoe"),
         ("jukebox", "Jukebox"),
