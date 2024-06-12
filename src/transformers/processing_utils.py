@@ -74,17 +74,17 @@ class TextKwargs(TypedDict, total=False):
     docstrings associated.
 
     Attributes:
-        add_special_tokens (`bool`, *optional*, defaults to `True`):
+        add_special_tokens (`bool`, *optional*)
             Whether or not to add special tokens when encoding the sequences.
-        padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
+        padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*)
             Activates and controls padding.
-        truncation (`bool`, `str` or [`~tokenization_utils_base.TruncationStrategy`], *optional*, defaults to `False`):
+        truncation (`bool`, `str` or [`~tokenization_utils_base.TruncationStrategy`], *optional*):
             Activates and controls truncation.
         max_length (`int`, *optional*):
             Controls the maximum length to use by one of the truncation/padding parameters.
-        stride (`int`, *optional*, defaults to 0):
+        stride (`int`, *optional*):
             If set, the overflowing tokens will contain some tokens from the end of the truncated sequence.
-        is_split_into_words (`bool`, *optional*, defaults to `False`):
+        is_split_into_words (`bool`, *optional*):
             Whether or not the input is already pre-tokenized.
         pad_to_multiple_of (`int`, *optional*):
             If set, will pad the sequence to a multiple of the provided value.
@@ -92,15 +92,15 @@ class TextKwargs(TypedDict, total=False):
             Whether to return token type IDs.
         return_attention_mask (`bool`, *optional*):
             Whether to return the attention mask.
-        return_overflowing_tokens (`bool`, *optional*, defaults to `False`):
+        return_overflowing_tokens (`bool`, *optional*):
             Whether or not to return overflowing token sequences.
-        return_special_tokens_mask (`bool`, *optional*, defaults to `False`):
+        return_special_tokens_mask (`bool`, *optional*):
             Whether or not to return special tokens mask information.
-        return_offsets_mapping (`bool`, *optional*, defaults to `False`):
+        return_offsets_mapping (`bool`, *optional*):
             Whether or not to return `(char_start, char_end)` for each token.
-        return_length (`bool`, *optional*, defaults to `False`):
+        return_length (`bool`, *optional*):
             Whether or not to return the lengths of the encoded inputs.
-        verbose (`bool`, *optional*, defaults to `True`):
+        verbose (`bool`, *optional*):
             Whether or not to print more information and warnings.
         padding_side (`str`, *optional*):
             The side on which padding will be applied.
@@ -129,31 +129,31 @@ class ImagesKwargs(TypedDict, total=False):
     class methods and docstrings.
 
     Attributes:
-        do_resize (`bool`, *optional*, defaults to `True`):
+        do_resize (`bool`, *optional*):
             Whether to resize the image.
-        size (`Dict[str, int]`, *optional*, defaults to `{'shortest_edge': 288}`):
+        size (`Dict[str, int]`, *optional*):
             Resize the shorter side of the input to `size["shortest_edge"]`.
-        size_divisor (`int`, *optional*, defaults to 32):
+        size_divisor (`int`, *optional*):
             The size by which to make sure both the height and width can be divided.
         crop_size (`Dict[str, int]`, *optional*):
             Desired output size when applying center-cropping.
-        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
+        resample (`PILImageResampling`, *optional*):
             Resampling filter to use if resizing the image.
-        do_rescale (`bool`, *optional*, defaults to `True`):
+        do_rescale (`bool`, *optional*):
             Whether to rescale the image by the specified scale `rescale_factor`.
-        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
+        rescale_factor (`int` or `float`, *optional*):
             Scale factor to use if rescaling the image.
-        do_normalize (`bool`, *optional*, defaults to `True`):
+        do_normalize (`bool`, *optional*):
             Whether to normalize the image.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
+        image_mean (`float` or `List[float]`, *optional*):
             Mean to use if normalizing the image.
-        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
+        image_std (`float` or `List[float]`, *optional*):
             Standard deviation to use if normalizing the image.
-        do_pad (`bool`, *optional*, defaults to `True`):
+        do_pad (`bool`, *optional*):
             Whether to pad the image to the `(max_height, max_width)` of the images in the batch.
-        do_center_crop (`bool`, *optional*, defaults to `True`):
+        do_center_crop (`bool`, *optional*):
             Whether to center crop the image.
-        data_format (`ChannelDimension` or `str`, *optional*, defaults to `"channels_first"`):
+        data_format (`ChannelDimension` or `str`, *optional*):
             The channel dimension format for the output image.
         input_data_format (`ChannelDimension` or `str`, *optional*):
             The channel dimension format for the input image.
@@ -180,9 +180,32 @@ class VideosKwargs(TypedDict, total=False):
     Keyword arguments for video processing.
 
     Attributes:
-        do_resize (`bool`, *optional*, defaults to `True`):
+        do_resize (`bool`):
             Whether to resize the image.
-        # ... (Add docstrings for other videos_kwargs)
+        size (`Dict[str, int]`, *optional*):
+            Resize the shorter side of the input to `size["shortest_edge"]`.
+        size_divisor (`int`, *optional*):
+            The size by which to make sure both the height and width can be divided.
+        resample (`PILImageResampling`, *optional*):
+            Resampling filter to use if resizing the image.
+        do_rescale (`bool`, *optional*):
+            Whether to rescale the image by the specified scale `rescale_factor`.
+        rescale_factor (`int` or `float`, *optional*):
+            Scale factor to use if rescaling the image.
+        do_normalize (`bool`, *optional*):
+            Whether to normalize the image.
+        image_mean (`float` or `List[float]`, *optional*):
+            Mean to use if normalizing the image.
+        image_std (`float` or `List[float]`, *optional*):
+            Standard deviation to use if normalizing the image.
+        do_pad (`bool`, *optional*):
+            Whether to pad the image to the `(max_height, max_width)` of the images in the batch.
+        do_center_crop (`bool`, *optional*):
+            Whether to center crop the image.
+        data_format (`ChannelDimension` or `str`, *optional*):
+            The channel dimension format for the output image.
+        input_data_format (`ChannelDimension` or `str`, *optional*):
+            The channel dimension format for the input image.
     """
 
     do_resize: Optional[bool]
@@ -219,15 +242,14 @@ class AudioKwargs(TypedDict, total=False):
                 sequence if provided).
             - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
                 acceptable input length for the model if that argument is not provided.
-            - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
-                lengths).
+            - `False` or `'do_not_pad'`
         max_length (`int`, *optional*):
             Maximum length of the returned list and optionally padding length (see above).
-        truncation (`bool`):
+        truncation (`bool`, *optional*):
             Activates truncation to cut input sequences longer than *max_length* to *max_length*.
         pad_to_multiple_of (`int`, *optional*):
             If set, will pad the sequence to a multiple of the provided value.
-        return_attention_mask (`bool`, *optional*, defaults to `False`):
+        return_attention_mask (`bool`, *optional*):
             Whether or not [`~ASTFeatureExtractor.__call__`] should return `attention_mask`.
     """
 
