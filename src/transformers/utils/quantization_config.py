@@ -1078,7 +1078,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
     def __init__(
         self,
         config_groups: Dict[str, Union["QuantizationScheme", List[str]]] = None,
-        quant_method: str = "sparseml",
+        quant_method: str = "compressed-tensors",
         format: str = "dense",  # "fakequant" not in CompressionFormat
         quantization_status: "QuantizationStatus" = "initialized",
         global_compression_ratio: Optional[float] = None,
