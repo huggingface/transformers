@@ -22,7 +22,6 @@ import json
 import math
 from typing import Dict, Tuple
 
-import numpy as np
 import requests
 import torch
 from huggingface_hub import hf_hub_download
@@ -285,9 +284,8 @@ def convert_hiera_checkpoint(args):
         i // s // ms for i, s, ms in zip(config.image_size, config.patch_stride, config.masked_unit_size)
     ]
     num_windows = math.prod(mask_spatial_shape)
-    np.random.seed(2)
-    noise = np.random.uniform(size=(1, num_windows))
-    noise = torch.from_numpy(noise)
+    torch.manual_seed(2)
+    noise = torch.rand(1, num_windows)
     outputs = model(**inputs) if not mae_model else model(noise=noise, **inputs)
     # original implementation returns logits.softmax(dim=-1)
 

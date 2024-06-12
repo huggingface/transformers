@@ -18,8 +18,6 @@ import math
 import unittest
 from typing import Dict, List, Tuple
 
-import numpy as np
-
 from transformers import HieraConfig
 from transformers.testing_utils import (
     require_accelerate,
@@ -593,7 +591,7 @@ class HieraModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_for_pretraining(self):
         # make random mask reproducible
-        np.random.seed(2)
+        torch.manual_seed(2)
 
         model = HieraForPreTraining.from_pretrained("EduardoPacheco/hiera-tiny-224-mae").to(torch_device)
         image_processor = self.default_image_processor
@@ -606,11 +604,11 @@ class HieraModelIntegrationTest(unittest.TestCase):
             i // s // ms for i, s, ms in zip(config.image_size, config.patch_stride, config.masked_unit_size)
         ]
         num_windows = math.prod(mask_spatial_shape)
-        noise = np.random.uniform(size=(1, num_windows))
+        noise = torch.rand(1, num_windows, device=torch_device)
 
         # forward pass
         with torch.no_grad():
-            outputs = model(**inputs, noise=torch.from_numpy(noise).to(device=torch_device))
+            outputs = model(**inputs, noise=noise)
 
         # verify the logits
         expected_shape = torch.Size((1, 196, 768))
@@ -618,11 +616,11 @@ class HieraModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor(
             [
-                [1.5719, 1.5743, 1.5732, 1.5791, 1.5958],
-                [1.9311, 1.9409, 1.9440, 1.9545, 1.9605],
-                [1.6149, 1.8555, 1.2720, 1.5385, 1.5067],
-                [1.2804, 1.8411, 0.8342, 1.5867, 1.5384],
-                [2.1131, 2.0876, 2.0349, 1.9921, 1.9496],
+                [1.6407, 1.6506, 1.6541, 1.6617, 1.6703],
+                [1.9730, 1.9842, 1.9848, 1.9896, 1.9947],
+                [1.5949, 1.8262, 1.2602, 1.4801, 1.4448],
+                [1.2341, 1.7907, 0.8618, 1.5202, 1.4523],
+                [2.0140, 1.9846, 1.9434, 1.9019, 1.8648],
             ]
         )
 
