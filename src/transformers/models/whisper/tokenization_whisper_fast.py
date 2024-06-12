@@ -617,3 +617,13 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
                 return []
 
         return token_ids
+
+    @staticmethod
+    def _convert_to_list(token_ids):
+        # convert type to ndarray if necessary
+        if "torch" in str(type(token_ids)) or "tensorflow" in str(type(token_ids)) and hasattr(token_ids, "numpy"):
+            token_ids = token_ids.numpy()
+        # now the token ids are either a numpy array, or a list of lists
+        if isinstance(token_ids, np.ndarray):
+            token_ids = token_ids.tolist()
+        return token_ids
