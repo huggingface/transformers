@@ -1311,12 +1311,12 @@ class HieraForPreTraining(HieraPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=True,
             interpolate_pos_encoding=interpolate_pos_encoding,
-            return_dict=True,
+            return_dict=return_dict,
         )
 
-        feature_maps = outputs.reshaped_hidden_states
-        bool_masked_pos = outputs.bool_masked_pos
-        ids_to_restore = outputs.ids_restore
+        feature_maps = outputs[-1]
+        bool_masked_pos = outputs[1]
+        ids_to_restore = outputs[2]
         # Take only the query pooled and last hidden states
         feature_maps = feature_maps[1 : self.hiera.config.num_query_pool + 1] + (feature_maps[-1],)
         fused_hidden_states = self.multiscale_fusion(feature_maps)
@@ -1335,11 +1335,11 @@ class HieraForPreTraining(HieraPreTrainedModel):
         if not return_dict:
             output = (logits, bool_masked_pos, ids_to_restore)
             if output_hidden_states:
-                output = output + (outputs.hidden_states,)
+                output = output + (outputs[3],)
             if output_attentions:
-                output = output + (outputs.attentions,)
+                output = output + (outputs[4],)
             if output_hidden_states:
-                output = output + (outputs.reshaped_hidden_states,)
+                output = output + (outputs[-1],)
             return ((loss,) + output) if loss is not None else output
 
         return HieraForPreTrainingOutput(
@@ -1537,10 +1537,10 @@ class HieraBackbone(HieraPreTrainedModel, BackboneMixin):
             head_mask=None,
             output_attentions=output_attentions,
             output_hidden_states=True,
-            return_dict=True,
+            return_dict=return_dict,
         )
 
-        hidden_states = outputs.reshaped_hidden_states
+        hidden_states = outputs[-1]
 
         feature_maps = ()
         for stage, hidden_state in zip(self.stage_names, hidden_states):
@@ -1555,11 +1555,13 @@ class HieraBackbone(HieraPreTrainedModel, BackboneMixin):
         if not return_dict:
             output = (feature_maps,)
             if output_hidden_states:
-                output += (outputs.hidden_states,)
+                output += (outputs[1],)
+            if output_attentions:
+                output += (outputs[2],)
             return output
 
         return BackboneOutput(
             feature_maps=feature_maps,
-            hidden_states=outputs.hidden_states if output_hidden_states else None,
-            attentions=outputs.attentions,
+            hidden_states=outputs[1] if output_hidden_states else None,
+            attentions=outputs[2] if output_attentions else None,
         )
