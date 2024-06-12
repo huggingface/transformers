@@ -1047,9 +1047,9 @@ class HieraDecoder(nn.Module):
     def __init__(self, config: HieraConfig):
         super().__init__()
         num_features = int(config.embed_dim * config.embed_dim_multiplier ** (len(config.depths) - 1))
-        self.tokens_spatial_shape = [i // s for i, s in zip(config.image_size, config.patch_stride)]
+        tokens_spatial_shape = [i // s for i, s in zip(config.image_size, config.patch_stride)]
         self.tokens_spatial_shape_final = [
-            i // s ** (config.num_query_pool) for i, s in zip(self.tokens_spatial_shape, config.query_stride)
+            i // s ** (config.num_query_pool) for i, s in zip(tokens_spatial_shape, config.query_stride)
         ]
         self.mask_unit_spatial_shape_final = [
             i // s ** (config.num_query_pool) for i, s in zip(config.masked_unit_size, config.query_stride)
