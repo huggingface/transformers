@@ -13,16 +13,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
 from torch.nn import CrossEntropyLoss
 
-from transformers.models.blip.image_processing_blip import BlipImageProcessor
-from transformers.models.instructblip.configuration_instructblip import InstructBlipConfig, InstructBlipVisionConfig, InstructBlipQFormerConfig
+from transformers.models.instructblip.configuration_instructblip import (
+    InstructBlipConfig,
+    InstructBlipQFormerConfig,
+    InstructBlipVisionConfig,
+)
 from transformers.models.instructblip.modeling_instructblip import (
     InstructBlipAttention,
     InstructBlipEncoder,
@@ -43,10 +45,7 @@ from transformers.models.instructblip.modeling_instructblip import (
     InstructBlipVisionModel,
 )
 
-from ...models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
-from ...configuration_utils import PretrainedConfig
-from ..auto import CONFIG_MAPPING
-from ...utils import TensorType, logging
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -55,8 +54,10 @@ logger = logging.get_logger(__name__)
 class InstructBlipVideoVisionConfig(InstructBlipVisionConfig):
     pass
 
+
 class InstructBlipVideoQFormerConfig(InstructBlipQFormerConfig):
     pass
+
 
 class InstructBlipVideoConfig(InstructBlipConfig):
     pass
@@ -70,44 +71,58 @@ class InstructBlipVideoForConditionalGenerationModelOutput(InstructBlipForCondit
 class InstructBlipVideoVisionEmbeddings(InstructBlipVisionEmbeddings):
     pass
 
+
 class InstructBlipVideoAttention(InstructBlipAttention):
     pass
+
 
 class InstructBlipVideoMLP(InstructBlipMLP):
     pass
 
+
 class InstructBlipVideoEncoderLayer(InstructBlipEncoderLayer):
     pass
+
 
 class InstructBlipVideoPreTrainedModel(InstructBlipPreTrainedModel):
     pass
 
+
 class InstructBlipVideoEncoder(InstructBlipEncoder):
     pass
+
 
 class InstructBlipVideoVisionModel(InstructBlipVisionModel):
     pass
 
+
 class InstructBlipVideoQFormerSelfOutput(InstructBlipQFormerSelfOutput):
     pass
+
 
 class InstructBlipVideoQFormerAttention(InstructBlipQFormerAttention):
     pass
 
+
 class InstructBlipVideoQFormerIntermediate(InstructBlipQFormerIntermediate):
     pass
+
 
 class InstructBlipVideoQFormerOutput(InstructBlipQFormerOutput):
     pass
 
+
 class InstructBlipVideoQFormerLayer(InstructBlipQFormerLayer):
     pass
+
 
 class InstructBlipVideoQFormerEncoder(InstructBlipQFormerEncoder):
     pass
 
+
 class InstructBlipVideoQFormerEmbeddings(InstructBlipQFormerEmbeddings):
     pass
+
 
 class InstructBlipVideoQFormerModel(InstructBlipQFormerModel):
     pass
@@ -396,4 +411,3 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
                 outputs = torch.cat([bos_tokens, outputs], dim=-1)
 
         return outputs
-
