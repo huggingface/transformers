@@ -114,16 +114,8 @@ class MambaCache:
         self.conv_states[layer_idx] += conv_state
         return self.conv_states[layer_idx]
 
-    def get_conv_sate(self, layer_idx):
-        return self.conv_states[layer_idx]
-
     def update_ssm_state(self, layer_idx: int, new_ssm_state: torch.Tensor):
-        ssm_state = self.ssm_states[layer_idx]
-        ssm_state.zero_()
-        ssm_state += new_ssm_state.to(ssm_state.device)
-        return ssm_state
-
-    def get_ssm_sate(self, layer_idx):
+        self.ssm_states[layer_idx] = new_ssm_state.to(self.ssm_states.device)
         return self.ssm_states[layer_idx]
 
     def reset(self):
@@ -218,7 +210,7 @@ class MambaMixer(nn.Module):
             if cache_params is not None and cache_position[0] > 0:
                 hidden_states = causal_conv1d_update(
                     hidden_states.squeeze(-1),
-                    cache_params.get_conv_sate(self.layer_idx),
+                    cache_params.conv_states[self.layer_idx],
                     conv_weights,
                     self.conv1d.bias,
                     self.activation,
@@ -247,7 +239,7 @@ class MambaMixer(nn.Module):
             time_proj_bias = self.dt_proj.bias.float() if hasattr(self.dt_proj, "bias") else None
             if cache_params is not None and cache_position[0] > 0:
                 scan_outputs = selective_state_update(
-                    cache_params.get_ssm_sate(self.layer_idx),
+                    cache_params.ssm_states[self.layer_idx],
                     hidden_states[..., 0],
                     discrete_time_step[..., 0],
                     A,
@@ -288,7 +280,7 @@ class MambaMixer(nn.Module):
 
         # 2. Convolution sequence transformation
         if cache_params is not None:
-            ssm_state = cache_params.get_ssm_sate(self.layer_idx).clone()
+            ssm_state = cache_params.ssm_states[self.layer_idx].clone()
             ssm_state = ssm_state.to(hidden_states.device)
 
             if cache_position.shape[0] == self.conv_kernel_size:
@@ -553,7 +545,9 @@ MAMBA_INPUTS_DOCSTRING = r"""
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-            Indices depicting the position of the input sequence tokens in the sequence.
+            Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
+            this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
+            the complete sequence length.
 """
 
 
@@ -627,8 +621,9 @@ class MambaModel(MambaPreTrainedModel):
                 )
                 cache_position = torch.arange(0, self.config.conv_kernel, device=inputs_embeds.device)
             elif cache_position is None:
-                # cases when we do manual forward instead of using `model.generate`
-                # throw error instead of doing some hack to conjecture the current cache position
+                # cases when we do manual forward instead of using `model.generate` which will initiate
+                # `cache_position` and makes sure it is not None, throw error here instead of doing some
+                # hack to conjecture the current cache position
                 raise RuntimeError(
                     "You have to specify the `cache_position` manually when `use_cache=True` and `cache_params` is passed, "
                     "you don't have to pass a `cache_params` if you are in prefilling stage, otherwise please pass "
@@ -729,7 +724,7 @@ class MambaForCausalLM(MambaPreTrainedModel):
                     dtype=self.backbone.embeddings.weight.dtype,
                     device=input_ids.device,
                 )
-                cache_position = torch.arange(0, self.config.conv_kernel, device=input_ids.device)
+            cache_position = torch.arange(0, self.config.conv_kernel, device=input_ids.device)
             cache_params = self._cache
         # only last token for inputs_ids if the state is passed along.
         elif cache_params is not None and cache_position[0] > 0:
