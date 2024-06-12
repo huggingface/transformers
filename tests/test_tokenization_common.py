@@ -4222,6 +4222,7 @@ class TokenizerTesterMixin:
                 self.assertTrue(special_token in output_tokens_reloaded_unsplit)
 
     import pytest
+
     @pytest.mark.tt
     def test_added_tokens_serialization(self):
         # Utility to test the added vocab
@@ -4284,7 +4285,11 @@ class TokenizerTesterMixin:
                         with self.subTest("Hub -> Fast == Hub -> Slow: make sure slow and fast tokenizer match"):
                             # Fast tokenizer may have user_defined_symbols and control_symbols added, unlike slow
                             self.assertTrue(
-                                all(item in tokenizer.added_tokens_decoder.items() for item in EXPECTED_ADDED_TOKENS_DECODER.items()))
+                                all(
+                                    item in tokenizer.added_tokens_decoder.items()
+                                    for item in EXPECTED_ADDED_TOKENS_DECODER.items()
+                                )
+                            )
 
                         EXPECTED_ADDED_TOKENS_DECODER = tokenizer_fast.added_tokens_decoder
                         with tempfile.TemporaryDirectory() as tmp_dir_4:
