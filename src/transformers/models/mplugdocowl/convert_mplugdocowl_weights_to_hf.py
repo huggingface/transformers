@@ -99,7 +99,7 @@ def convert_mplugdocowl_llama_to_hf(text_model_id, vision_model_id, output_hub_p
     config = MPLUGDocOwlConfig(text_config=text_config)
     config.pad_token_id = 32001
 
-    with torch.device("cuda"):
+    with torch.device("cuda:1"):
         model = MPLUGDocOwlForConditionalGeneration(config)
 
     # Pad to 64 for performance reasons
@@ -135,10 +135,11 @@ def convert_mplugdocowl_llama_to_hf(text_model_id, vision_model_id, output_hub_p
     )
  
     from PIL import Image
-    image = Image.open("/home/dana_aubakirova/test_image.tif")
-    query = "<|image|>Recognize text in the image."
+    image = Image.open("/raid/dana/test_image.tif")
+    query = "<image>Recognize text in the image."
     output = processor(images=image, text=query)
-    device = torch.device("cpu")
+    breakpoint()
+    device = torch.device("cuda:1")
     output.to(device)
     model.to(device)
     try:

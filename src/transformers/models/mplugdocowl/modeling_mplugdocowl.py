@@ -466,6 +466,7 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
         return None, new_modality_indicators, attention_mask, past_key_values, new_input_embeds, new_labels
     '''
     def _merge_input_ids_with_image_features(self, image_features, inputs_embeds, input_ids, attention_mask, labels):
+        breakpoint()
         num_images, num_image_patches, embed_dim = image_features.shape
         batch_size, sequence_length = input_ids.shape
         left_padding = not torch.sum(input_ids[:, -1] == torch.tensor(self.pad_token_id))
@@ -637,13 +638,13 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
 
                 '''
                 inputs_embeds = inputs_embeds.to(image_features.dtype)
-                input_ids, modality_indicators, attention_mask, past_key_values, inputs_embeds, labels  = self._merge_input_ids_with_image_features(
-                     input_ids, image_features, attention_mask, past_key_values, labels
-                )
+                #input_ids, modality_indicators, attention_mask, past_key_values, inputs_embeds, labels  = self._merge_input_ids_with_image_features(
+                 #    input_ids, image_features, attention_mask, past_key_values, labels
+                #)
                 #FIXME old call is commented below
-                #inputs_embeds, attention_mask, labels, position_ids = self._merge_input_ids_with_image_features(
-                    #image_features, inputs_embeds, input_ids, attention_mask, labels
-               # )
+                inputs_embeds, attention_mask, labels, position_ids = self._merge_input_ids_with_image_features(
+                    image_features, inputs_embeds, input_ids, attention_mask, labels
+                )
 
             # In case input_ids.shape[1] == 1 & pixel_values==None & past_key_values != None, we are in the case of
             # generation with cache

@@ -18,14 +18,14 @@ from typing import Dict, List, Optional, Union, Tuple
 from einops import rearrange
 import numpy as np
 #FIXME change the import from transformers to import from ...
-from transformers.image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from transformers.image_transforms import (
+from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
+from ...image_transforms import (
     convert_to_rgb,
     get_resize_output_image_size,
     resize,
     to_channel_dimension_format,
 )
-from transformers.image_utils import (
+from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
     ChannelDimension,
@@ -39,7 +39,7 @@ from transformers.image_utils import (
     validate_kwargs,
     validate_preprocess_arguments,
 )
-from transformers.utils import TensorType, is_vision_available, logging
+from ...utils import TensorType, is_vision_available, logging
 from PIL import Image
 
 logger = logging.get_logger(__name__)

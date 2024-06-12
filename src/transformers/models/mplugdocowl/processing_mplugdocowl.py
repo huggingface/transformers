@@ -136,7 +136,7 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
         else:
             pixel_values = None
         #text prpeocessing
-        media_token = '<|image|>'
+        media_token = '<image>'
         assert media_token in text
         patch_positions = pixel_values['patch_positions']
         num_patches = pixel_values['num_patches']
@@ -151,13 +151,13 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
                 for patch_pos in patch_positions.tolist():
                     # global non-crop image
                     if patch_pos[0] == anchor_max and patch_pos[1] == anchor_max:
-                        text += '<global_img><|image|>'
+                        text += '<global_img><image>'
                     else:
                         row_col = 'row'+str(patch_pos[0])+'_col'+str(patch_pos[1])
-                        text += '<crop_img_'+row_col+'><|image|>'
+                        text += '<crop_img_'+row_col+'><image>'
             else: 
                 # generate successive image placeholders for a image, 1 crop img == 1 <|image|>
-                text += '<|image|>'*num_patches
+                text += '<image>'*num_patches
             text += next_text
             image_token_ptr += 1
         print(text)
@@ -166,6 +166,7 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
         text_inputs = self.tokenizer(
             text, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length
         )
+        breakpoint()
         print(text_inputs)
 
         return BatchFeature(data={**text_inputs, "pixel_values": pixel_values['pixel_values'], "patch_positions": patch_positions})
