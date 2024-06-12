@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch ALIGN model. """
-
+"""Testing suite for the PyTorch ALIGN model."""
 
 import inspect
 import os
@@ -172,7 +171,7 @@ class AlignVisionModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="AlignVisionModel does not support input and output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     def test_forward_signature(self):
@@ -490,7 +489,7 @@ class AlignModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="AlignModel does not have input/output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     # override as the `temperature` parameter initilization is different for ALIGN

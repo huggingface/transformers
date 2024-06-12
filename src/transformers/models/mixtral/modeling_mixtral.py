@@ -17,7 +17,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Mixtral model."""
+"""PyTorch Mixtral model."""
+
 import inspect
 import math
 from typing import List, Optional, Tuple, Union
@@ -181,7 +182,8 @@ class MixtralRMSNorm(nn.Module):
         return self.weight * hidden_states.to(input_dtype)
 
 
-# Copied from transformers.models.mistral.modeling_mistral.MistralRotaryEmbedding with Mistral->Mixtral
+# copied from transformers.models.mistral.modeling_mistral.MistralRotaryEmbedding with Mistral->Mixtral
+# TODO @longjie no longer copied from Mistral after static cache
 class MixtralRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
@@ -226,7 +228,8 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-# Copied from transformers.models.mistral.modeling_mistral.apply_rotary_pos_emb
+# copied from transformers.models.mistral.modeling_mistral.apply_rotary_pos_emb
+# TODO @longjie no longer copied from Mistral after static cache
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -268,7 +271,8 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-# Copied from transformers.models.mistral.modeling_mistral.MistralAttention with Mistral->Mixtral
+# copied from transformers.models.mistral.modeling_mistral.MistralAttention with Mistral->Mixtral
+# TODO @longjie no longer copied from Mistral after static cache
 class MixtralAttention(nn.Module):
     """
     Multi-headed attention from 'Attention Is All You Need' paper. Modified to use sliding window attention: Longformer
@@ -392,7 +396,8 @@ class MixtralAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-# Copied from transformers.models.mistral.modeling_mistral.MistralFlashAttention2 with Mistral->Mixtral
+# copied from transformers.models.mistral.modeling_mistral.MistralFlashAttention2 with Mistral->Mixtral
+# TODO @longjie no longer copied from Mistral after static cache
 class MixtralFlashAttention2(MixtralAttention):
     """
     Mixtral flash attention module. This module inherits from `MixtralAttention` as the weights of the module stays
@@ -679,7 +684,8 @@ class MixtralFlashAttention2(MixtralAttention):
         )
 
 
-# Copied from transformers.models.mistral.modeling_mistral.MistralSdpaAttention with Mistral->Mixtral
+# copied from transformers.models.mistral.modeling_mistral.MistralSdpaAttention with Mistral->Mixtral
+# TODO @longjie no longer copied from Mistral after static cache
 class MixtralSdpaAttention(MixtralAttention):
     """
     Mixtral attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
@@ -958,7 +964,7 @@ MIXTRAL_START_DOCSTRING = r"""
     "The bare Mixtral Model outputting raw hidden-states without any specific head on top.",
     MIXTRAL_START_DOCSTRING,
 )
-# Copied from transformers.models.mistral.modeling_mistral.MistralPreTrainedModel with Mistral->Mixtral
+# Copied from transformers.models.qwen2.modeling_qwen2.Qwen2PreTrainedModel with Qwen2->Mixtral
 class MixtralPreTrainedModel(PreTrainedModel):
     config_class = MixtralConfig
     base_model_prefix = "model"
@@ -1052,7 +1058,8 @@ MIXTRAL_INPUTS_DOCSTRING = r"""
     "The bare Mixtral Model outputting raw hidden-states without any specific head on top.",
     MIXTRAL_START_DOCSTRING,
 )
-# Copied from transformers.models.mistral.modeling_mistral.MistralModel with MISTRAL->MIXTRAL,Mistral->Mixtral
+# copied from transformers.models.mistral.modeling_mistral.MistralModel with MISTRAL->MIXTRAL,Mistral->Mixtral
+# TODO @longjie no longer copied from Mistral after static cache
 class MixtralModel(MixtralPreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`MixtralDecoderLayer`]
@@ -1400,15 +1407,13 @@ class MixtralForCausalLM(MixtralPreTrainedModel):
         output_router_logits=False,
         **kwargs,
     ):
+        past_length = 0
         # Omit tokens covered by past_key_values
         if past_key_values is not None:
-            if isinstance(past_key_values, Cache):
-                cache_length = past_key_values.get_seq_length()
-                past_length = past_key_values.seen_tokens
-                max_cache_length = past_key_values.get_max_length()
-            else:
-                cache_length = past_length = past_key_values[0][0].shape[2]
-                max_cache_length = None
+            # Past key values are always initialized with a `Cache` object -> no need for if-else anymore
+            cache_length = past_key_values.get_seq_length()
+            past_length = past_key_values.seen_tokens
+            max_cache_length = past_key_values.get_max_length()
 
             # Keep only the unprocessed tokens:
             # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
@@ -1439,7 +1444,7 @@ class MixtralForCausalLM(MixtralPreTrainedModel):
                 position_ids = position_ids[:, -input_ids.shape[1] :]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and past_key_values is None:
+        if inputs_embeds is not None and past_length == 0:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids}

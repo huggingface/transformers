@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch SeamlessM4T model. """
-
+"""Testing suite for the PyTorch SeamlessM4T model."""
 
 import copy
 import tempfile
@@ -646,7 +645,6 @@ class SeamlessM4TModelWithTextInputTest(
     pipeline_model_mapping = (
         {
             "automatic-speech-recognition": SeamlessM4TForSpeechToText,
-            "conversational": SeamlessM4TForTextToText,
             "feature-extraction": SeamlessM4TModel,
             "summarization": SeamlessM4TForTextToText,
             "text-to-audio": SeamlessM4TForTextToSpeech,

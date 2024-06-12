@@ -16,7 +16,6 @@
 Processor class for Llava.
 """
 
-
 from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature

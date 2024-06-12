@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Swin2SR Transformer model."""
-
+"""PyTorch Swin2SR Transformer model."""
 
 import collections.abc
 import math
@@ -1129,6 +1128,10 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
          ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        loss = None
+        if labels is not None:
+            raise NotImplementedError("Training is not supported at the moment")
+
         height, width = pixel_values.shape[2:]
 
         if self.config.upsampler == "pixelshuffle_aux":
@@ -1159,10 +1162,6 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
 
         reconstruction = reconstruction / self.swin2sr.img_range + self.swin2sr.mean
         reconstruction = reconstruction[:, :, : height * self.upscale, : width * self.upscale]
-
-        loss = None
-        if labels is not None:
-            raise NotImplementedError("Training is not supported at the moment")
 
         if not return_dict:
             output = (reconstruction,) + outputs[1:]

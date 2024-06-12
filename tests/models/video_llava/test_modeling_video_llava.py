@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch VideoLlava model. """
+"""Testing suite for the PyTorch VideoLlava model."""
 
 import gc
 import unittest
@@ -487,6 +487,9 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             repo_id="raushan-testing-hf/videos-test", filename="video_demo.npy", repo_type="dataset"
         )
         video_file = np.load(video_file)
+
+        # let's expand it for 16 frames, to check model can handle any number of frames
+        video_file = video_file.repeat(2, 0)
         inputs = self.processor(prompt, videos=video_file, return_tensors="pt").to(torch_device, torch.float16)
 
         # Make sure that `generate` works

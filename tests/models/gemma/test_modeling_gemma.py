@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Gemma model. """
+"""Testing suite for the PyTorch Gemma model."""
+
 import tempfile
 import unittest
 
@@ -601,12 +602,21 @@ class GemmaIntegrationTest(unittest.TestCase):
     @require_read_token
     def test_model_2b_bf16(self):
         model_id = "google/gemma-2b"
+
+        # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
+        #
+        # Note: Key 9 is currently set for MI300, but may need potential future adjustments for H100s,
+        # considering differences in hardware processing and potential deviations in generated text.
         EXPECTED_TEXTS = {
             7: [
                 "Hello I am doing a project on the 1990s and I need to know what the most popular music",
                 "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Khichdi",
             ],
             8: [
+                "Hello I am doing a project on the 1990s and I need to know what the most popular music",
+                "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
+            ],
+            9: [
                 "Hello I am doing a project on the 1990s and I need to know what the most popular music",
                 "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
             ],
@@ -627,12 +637,21 @@ class GemmaIntegrationTest(unittest.TestCase):
     @require_read_token
     def test_model_2b_eager(self):
         model_id = "google/gemma-2b"
+
+        # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
+        #
+        # Note: Key 9 is currently set for MI300, but may need potential future adjustments for H100s,
+        # considering differences in hardware processing and potential deviations in generated text.
         EXPECTED_TEXTS = {
             7: [
                 "Hello I am doing a project on the 1990s and I am looking for some information on the ",
                 "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
             ],
             8: [
+                "Hello I am doing a project on the 1990s and I need to know what the most popular music",
+                "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
+            ],
+            9: [
                 "Hello I am doing a project on the 1990s and I need to know what the most popular music",
                 "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
             ],
@@ -655,12 +674,21 @@ class GemmaIntegrationTest(unittest.TestCase):
     @require_read_token
     def test_model_2b_sdpa(self):
         model_id = "google/gemma-2b"
+
+        # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
+        #
+        # Note: Key 9 is currently set for MI300, but may need potential future adjustments for H100s,
+        # considering differences in hardware processing and potential deviations in generated text.
         EXPECTED_TEXTS = {
             7: [
                 "Hello I am doing a project on the 1990s and I need to know what the most popular music",
                 "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Khichdi",
             ],
             8: [
+                "Hello I am doing a project on the 1990s and I need to know what the most popular music",
+                "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
+            ],
+            9: [
                 "Hello I am doing a project on the 1990s and I need to know what the most popular music",
                 "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
             ],
@@ -763,6 +791,11 @@ class GemmaIntegrationTest(unittest.TestCase):
     @require_read_token
     def test_model_7b_bf16(self):
         model_id = "google/gemma-7b"
+
+        # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
+        #
+        # Note: Key 9 is currently set for MI300, but may need potential future adjustments for H100s,
+        # considering differences in hardware processing and potential deviations in generated text.
         EXPECTED_TEXTS = {
             7: [
                 """Hello I am doing a project on a 1991 240sx and I am trying to find""",
@@ -771,6 +804,10 @@ class GemmaIntegrationTest(unittest.TestCase):
             8: [
                 "Hello I am doing a project for my school and I am trying to make a program that will read a .txt file",
                 "Hi today I am going to show you how to make a very simple and easy to make a very simple and",
+            ],
+            9: [
+                "Hello I am doing a project for my school and I am trying to get a servo to move a certain amount of degrees",
+                "Hi today I am going to show you how to make a very simple and easy to make DIY light up sign",
             ],
         }
 
@@ -845,12 +882,21 @@ class GemmaIntegrationTest(unittest.TestCase):
         NUM_TOKENS_TO_GENERATE = 40
         # Note on `EXPECTED_TEXT_COMPLETION`'s diff: the current value matches the original test if the original test
         # was changed to have a cache of 53 tokens (as opposed to 4096), on Ampere GPUs.
+        #
+        # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
+        #
+        # Note: Key 9 is currently set for MI300, but may need potential future adjustments for H100s,
+        # considering differences in hardware processing and potential deviations in generated text.
         EXPECTED_TEXT_COMPLETION = {
             8: [
                 "Hello I am doing a project on the 1990s and I need to know what the most popular music was in the 1990s. I have looked on the internet and I have found",
                 "Hi today\nI have a problem with my 2007 1.9 tdi 105bhp.\nI have a problem with the engine management light on.\nI have checked the",
             ],
             7: [
+                "Hello I am doing a project on the 1990s and I need to know what the most popular music was in the 1990s. I have looked on the internet and I have found",
+                "Hi today\nI have a problem with my 2007 1.9 tdi 105bhp.\nI have a problem with the engine management light on.\nI have checked the",
+            ],
+            9: [
                 "Hello I am doing a project on the 1990s and I need to know what the most popular music was in the 1990s. I have looked on the internet and I have found",
                 "Hi today\nI have a problem with my 2007 1.9 tdi 105bhp.\nI have a problem with the engine management light on.\nI have checked the",
             ],

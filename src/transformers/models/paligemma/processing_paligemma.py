@@ -16,20 +16,26 @@
 Processor class for PaliGemma.
 """
 
-
 import logging
 from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import AddedToken, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
+from ...tokenization_utils_base import (
+    AddedToken,
+    PaddingStrategy,
+    PreTokenizedInput,
+    TextInput,
+    TruncationStrategy,
+)
 from ...utils import TensorType
 
 
 logger = logging.getLogger(__name__)
 
 IMAGE_TOKEN = "<image>"
+EXTRA_TOKENS = [f"<loc{i:0>4}>" for i in range(1024)] + [f"<seg{i:0>3}>" for i in range(128)]
 
 
 # Copied from transformers.models.idefics2.processing_idefics2.is_url
@@ -64,7 +70,7 @@ def build_string_from_input(prompt, bos_token, image_seq_len, image_token):
         image_seq_len (`int`): The length of the image sequence.
         image_token (`str`): The image token.
     """
-    return f"{image_token * image_seq_len}{bos_token}{prompt}"
+    return f"{image_token * image_seq_len}{bos_token}{prompt}\n"
 
 
 class PaliGemmaProcessor(ProcessorMixin):
@@ -85,7 +91,11 @@ class PaliGemmaProcessor(ProcessorMixin):
     image_processor_class = "SiglipImageProcessor"
     tokenizer_class = ("GemmaTokenizer", "GemmaTokenizerFast")
 
-    def __init__(self, image_processor=None, tokenizer=None):
+    def __init__(
+        self,
+        image_processor=None,
+        tokenizer=None,
+    ):
         if image_processor is None:
             raise ValueError("You need to specify an `image_processor`.")
         if tokenizer is None:
@@ -98,7 +108,10 @@ class PaliGemmaProcessor(ProcessorMixin):
         image_token = AddedToken(IMAGE_TOKEN, normalized=False, special=True)
         tokens_to_add = {"additional_special_tokens": [image_token]}
         tokenizer.add_special_tokens(tokens_to_add)
+        tokenizer.add_tokens(EXTRA_TOKENS)
         self.image_token_id = tokenizer.convert_tokens_to_ids(IMAGE_TOKEN)
+        tokenizer.add_bos_token = False
+        tokenizer.add_eos_token = False
 
         super().__init__(image_processor, tokenizer)
 
@@ -116,12 +129,15 @@ class PaliGemmaProcessor(ProcessorMixin):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         data_format: Optional["ChannelDimension"] = "channels_first",  # noqa: F821
-        input_data_format: Optional[Union[str, "ChannelDimension"]] = None,  # noqa: F821
+        input_data_format: Optional[
+            Union[str, "ChannelDimension"]  # noqa: F821
+        ] = None,
         resample: "PILImageResampling" = None,  # noqa: F821
         do_convert_rgb: bool = None,
         do_thumbnail: bool = None,
         do_align_long_axis: bool = None,
         do_rescale: bool = None,
+        suffix: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
@@ -129,6 +145,25 @@ class PaliGemmaProcessor(ProcessorMixin):
         the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
         SiglipImageProcessor's [`~SiglipImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
         of the above two methods for more information.
+
+        The usage for PaliGemma fine-tuning preparation is slightly different than usual. suffix passed are suffixes to
+        the prompt in `text`, and will be placed after the prompt. This is because attention is handled differently for
+        the prefix and the suffix. For instance,
+        ```python
+        image = PIL_cow_image
+        prompt = "answer en Where is the cow standing?"
+        suffix = "on the beach"
+        inputs = processor(text=prompt, images=image, suffix=suffix)
+        ```
+        Here `inputs` will contain the `input_ids` and `token_type_ids` that follow
+        ```python
+        inputs["input_ids"][:, 256:]
+        # tensor([[     2,   6006,    603,    573,  13910,   9980, 235336,    108,    477,   573,   8318]])
+        inputs["token_type_ids"][:, 256:]
+        tensor([[0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1]])
+        ```
+        Meaning the last three tokens are of "label" ("suffix") type while the other ones are of "prefix" type.
+
 
         Args:
             text (`str`, `List[str]`, `List[List[str]]`):
@@ -161,22 +196,31 @@ class PaliGemmaProcessor(ProcessorMixin):
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
                 - `'jax'`: Return JAX `jnp.ndarray` objects.
+            suffix (`str`, `List[str]`, `List[List[str]]`):
+                The suffixes or batch of suffixes to be encoded. Only necessary for finetuning. See https://github.com/google-research/big_vision/blob/main/big_vision/configs/proj/paligemma/README.md
+                for more information. If your prompt is "<image> What is on the image", the suffix corresponds to the expected prediction "a cow sitting on a bench".
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
-            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
+            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`. If `suffix`
+              is provided, the `input_ids` will also contain the suffix input ids.
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
               `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
+            - **labels** -- Labels compatible with training if `suffix` is not None
         """
+
+        return_token_type_ids = True if suffix is not None else False
+
         if images is None:
             raise ValueError("`images` are expected as arguments to a `PaliGemmaProcessor` instance.")
         if text is None:
             logger.warning_once(
                 "You are using PaliGemma without a text prefix. It will perform as a picture-captioning model."
             )
+            text = ""
 
         if isinstance(text, List) and isinstance(images, List):
             if len(images) < len(text):
@@ -187,6 +231,11 @@ class PaliGemmaProcessor(ProcessorMixin):
             text = [text]
         elif isinstance(text, list) and _is_str_or_image(text[0]):
             pass
+        if suffix is not None and _is_str_or_image(suffix):
+            suffix = [suffix]
+        if suffix is not None:
+            suffix = [sfx + self.tokenizer.eos_token for sfx in suffix]
+
         input_strings = [
             build_string_from_input(
                 prompt=prompt,
@@ -213,36 +262,22 @@ class PaliGemmaProcessor(ProcessorMixin):
         if max_length is not None:
             max_length += self.image_seq_length  # max_length has to account for the image tokens
 
-        if tokenize_newline_separately:
-            inputs = self.tokenizer(
-                input_strings,
-                add_special_tokens=False,
-                return_tensors=None,
-                padding="do_not_pad",
-                max_length=max_length,
-                truncation=truncation,
-            )
-            newline_token = self.tokenizer.convert_tokens_to_ids("\n")
-            concatenated_ids = [ids + [newline_token] for ids in inputs["input_ids"]]
-            concatenated_attention_masks = [mask + [1] for mask in inputs["attention_mask"]]
+        inputs = self.tokenizer(
+            input_strings,
+            text_pair=suffix,
+            return_tensors=return_tensors,
+            padding=padding,
+            max_length=max_length,
+            truncation=truncation,
+            return_token_type_ids=return_token_type_ids,
+        )
 
-            text_inputs = self.tokenizer.pad(
-                {"input_ids": concatenated_ids, "attention_mask": concatenated_attention_masks},
-                max_length=max_length,
-                padding=padding,
-                return_tensors=return_tensors,
-            )
-        else:
-            text_inputs = self.tokenizer(
-                input_strings,
-                add_special_tokens=False,
-                return_tensors=return_tensors,
-                padding=padding,
-                max_length=max_length,
-                truncation=truncation,
-            )
+        return_data = {**inputs, "pixel_values": pixel_values}
 
-        return BatchFeature(data={**text_inputs, "pixel_values": pixel_values})
+        if return_token_type_ids:
+            labels = inputs["input_ids"].masked_fill(inputs["token_type_ids"] == 0, -100)
+            return_data.update({"labels": labels})
+        return BatchFeature(data=return_data)
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Gemma
     def batch_decode(self, *args, **kwargs):

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TensorFlow Hubert model."""
+"""TensorFlow Hubert model."""
 
 from __future__ import annotations
 
@@ -1600,6 +1600,8 @@ class TFHubertForCTC(TFHubertPreTrainedModel):
 
         >>> loss = model(input_values, labels=labels).loss
         ```"""
+        if labels is not None and tf.reduce_max(labels) >= self.config.vocab_size:
+            raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
 
         outputs = self.hubert(
             input_values=input_values,
@@ -1619,9 +1621,6 @@ class TFHubertForCTC(TFHubertPreTrainedModel):
         logits = self.lm_head(hidden_states)
 
         if labels is not None:
-            if tf.reduce_max(labels) >= self.config.vocab_size:
-                raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
-
             attention_mask = (
                 attention_mask if attention_mask is not None else tf.ones_like(input_values, dtype=tf.float32)
             )

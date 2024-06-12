@@ -29,6 +29,7 @@ To only check if the mappings are properly sorted (as used in `make quality`), d
 python utils/sort_auto_mappings.py --check_only
 ```
 """
+
 import argparse
 import os
 import re

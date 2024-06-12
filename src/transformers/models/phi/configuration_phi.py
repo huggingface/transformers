@@ -13,8 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-""" Phi model configuration"""
-
+"""Phi model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging

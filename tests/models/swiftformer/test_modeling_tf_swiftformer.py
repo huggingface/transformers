@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the TensorFlow SwiftFormer model. """
-
+"""Testing suite for the TensorFlow SwiftFormer model."""
 
 import inspect
 import unittest

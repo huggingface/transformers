@@ -102,7 +102,7 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer.save_pretrained(self.tmpdirname)
 
     def get_input_output_texts(self, tokenizer):
-        input_text = "UNwant\u00E9d,running"
+        input_text = "UNwant\u00e9d,running"
         output_text = "unwanted, running"
         return input_text, output_text
 
@@ -1921,3 +1921,48 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         excepted_decoding = "<pad> paragraph<loc_58><loc_34><loc_446><loc_449></s>"
         assert decoding == excepted_decoding
+
+    def test_split_special_tokens(self):
+        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
+            special_token = "<my_new_token>"
+            special_sentence = f"Hey this is a {special_token} token"
+            _, _, boxes = self.get_question_words_and_boxes()
+
+            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+                tokenizer_rust = self.rust_tokenizer_class.from_pretrained(
+                    pretrained_name, additional_special_tokens=[special_token], split_special_tokens=True, **kwargs
+                )
+                tokenizer_py = self.tokenizer_class.from_pretrained(
+                    pretrained_name, additional_special_tokens=[special_token], split_special_tokens=True, **kwargs
+                )
+
+                special_token_id = tokenizer_py.convert_tokens_to_ids(special_token)
+                encoded_special_token_unsplit = tokenizer_py.encode(
+                    special_token, add_special_tokens=False, split_special_tokens=False
+                )
+                self.assertTrue(special_token_id in encoded_special_token_unsplit)
+
+                encoded_special_token_split = tokenizer_py.encode(special_token, add_special_tokens=False)
+                self.assertTrue(special_token_id not in encoded_special_token_split)
+
+                py_tokens_output = tokenizer_py.tokenize(special_sentence)
+                rust_tokens_output = tokenizer_rust.tokenize(special_sentence)
+
+                self.assertTrue(special_token not in py_tokens_output)
+                self.assertTrue(special_token not in rust_tokens_output)
+
+                py_tokens_output_unsplit = tokenizer_py.tokenize(special_sentence, split_special_tokens=False)
+                rust_tokens_output_unsplit = tokenizer_rust.tokenize(special_sentence, split_special_tokens=False)
+
+                self.assertTrue(special_token in py_tokens_output_unsplit)
+                self.assertTrue(special_token in rust_tokens_output_unsplit)
+
+                tmpdirname = tempfile.mkdtemp()
+                tokenizer_py.save_pretrained(tmpdirname)
+                fast_from_saved = self.tokenizer_class.from_pretrained(tmpdirname)
+
+                output_tokens_reloaded_split = fast_from_saved.tokenize(special_sentence)
+                self.assertTrue(special_token not in output_tokens_reloaded_split)
+
+                output_tokens_reloaded_unsplit = fast_from_saved.tokenize(special_sentence, split_special_tokens=False)
+                self.assertTrue(special_token in output_tokens_reloaded_unsplit)

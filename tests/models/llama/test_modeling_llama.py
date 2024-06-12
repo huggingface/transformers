@@ -749,6 +749,11 @@ class LlamaIntegrationTest(unittest.TestCase):
         NUM_TOKENS_TO_GENERATE = 40
         # Note on `EXPECTED_TEXT_COMPLETION`'s diff: the current value matches the original test if the original test
         # was changed to have a cache of 53 tokens (as opposed to 4096), on Ampere GPUs.
+        #
+        # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
+        #
+        # Note: Key 9 is currently set for MI300, but may need potential future adjustments for H100s,
+        # considering differences in hardware processing and potential deviations in generated text.
         EXPECTED_TEXT_COMPLETION = {
             8: [
                 "Simply put, the theory of relativity states that 1) the speed of light is constant in all inertial "
@@ -758,13 +763,18 @@ class LlamaIntegrationTest(unittest.TestCase):
                 "my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p",
             ],
             7: [
-                "Simply put, the theory of relativity states that 1. surely nothing is faster than light.\nThe theory "
-                "goes that nothing travels faster than light, but the faster you go, the slower everything else will "
-                "be.\nThe theory of relativity",
-                "My favorite all time favorite condiment is ketchup. I love it on hamburgers, hot dogs, fries, eggs, "
-                "and even on a good old fashioned cheeseburger. I love it on everything. I love it so",
+                "Simply put, the theory of relativity states that 1) the speed of light is constant in all inertial reference frames, and 2) the laws of physics are the same for all inertial reference frames.\nThe theory of relativ",
+                "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p",
+            ],
+            9: [
+                "Simply put, the theory of relativity states that 1) the speed of light is constant in all inertial"
+                " reference frames, and 2) the laws of physics are the same for all inertial reference frames.\nThe "
+                "theory of relativ",
+                "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs,"
+                " my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p",
             ],
         }
+        expected_text_completion_idx = 8
 
         prompts = [
             "Simply put, the theory of relativity states that ",
@@ -779,7 +789,9 @@ class LlamaIntegrationTest(unittest.TestCase):
         # Dynamic Cache
         generated_ids = model.generate(**inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False)
         dynamic_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION[8], dynamic_text)  # Both GPU architectures have the same output
+        self.assertEqual(
+            EXPECTED_TEXT_COMPLETION[expected_text_completion_idx], dynamic_text
+        )  # Both GPU architectures have the same output
 
         # Static Cache
         generated_ids = model.generate(

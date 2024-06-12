@@ -14,8 +14,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Finetuning multi-lingual models on XNLI (e.g. Bert, DistilBERT, XLM).
-    Adapted from `examples/text-classification/run_glue.py`"""
+"""Finetuning multi-lingual models on XNLI (e.g. Bert, DistilBERT, XLM).
+Adapted from `examples/text-classification/run_glue.py`"""
 
 import logging
 import os

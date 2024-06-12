@@ -387,9 +387,9 @@ class StopStringCriteria(StoppingCriteria):
             # Since this is lots of very small assignments of lists, we build it with numpy rather
             # than torch for speed + simplicity, then convert to torch at the end
             for token_idx, valid_positions in positions.items():
-                gather_vec[
-                    token_idx, max_valid_positions * i : max_valid_positions * i + len(valid_positions)
-                ] = valid_positions
+                gather_vec[token_idx, max_valid_positions * i : max_valid_positions * i + len(valid_positions)] = (
+                    valid_positions
+                )
             for token_idx, possible_end_lens in end_lens.items():
                 gather_vec[
                     token_idx,
@@ -502,7 +502,7 @@ class EosTokenCriteria(StoppingCriteria):
 class StoppingCriteriaList(list):
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
-        is_done = torch.full((input_ids.shape[0],), False, device=input_ids.device)
+        is_done = torch.full((input_ids.shape[0],), False, device=input_ids.device, dtype=torch.bool)
         for criteria in self:
             is_done = is_done | criteria(input_ids, scores, **kwargs)
         return is_done

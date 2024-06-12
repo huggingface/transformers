@@ -15,6 +15,7 @@
 """
 Image/Text processor class for GIT
 """
+
 import re
 from typing import Dict, List, Optional, Tuple, Union
 

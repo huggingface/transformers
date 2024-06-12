@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Auto Model class."""
-
+"""Auto Model class."""
 
 import warnings
 from collections import OrderedDict
@@ -66,6 +65,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("lxmert", "TFLxmertModel"),
         ("marian", "TFMarianModel"),
         ("mbart", "TFMBartModel"),
+        ("mistral", "TFMistralModel"),
         ("mobilebert", "TFMobileBertModel"),
         ("mobilevit", "TFMobileViTModel"),
         ("mpnet", "TFMPNetModel"),
@@ -179,6 +179,7 @@ TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("gpt-sw3", "TFGPT2LMHeadModel"),
         ("gpt2", "TFGPT2LMHeadModel"),
         ("gptj", "TFGPTJForCausalLM"),
+        ("mistral", "TFMistralForCausalLM"),
         ("openai-gpt", "TFOpenAIGPTLMHeadModel"),
         ("opt", "TFOPTForCausalLM"),
         ("rembert", "TFRemBertForCausalLM"),
@@ -321,6 +322,7 @@ TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("layoutlm", "TFLayoutLMForSequenceClassification"),
         ("layoutlmv3", "TFLayoutLMv3ForSequenceClassification"),
         ("longformer", "TFLongformerForSequenceClassification"),
+        ("mistral", "TFMistralForSequenceClassification"),
         ("mobilebert", "TFMobileBertForSequenceClassification"),
         ("mpnet", "TFMPNetForSequenceClassification"),
         ("openai-gpt", "TFOpenAIGPTForSequenceClassification"),

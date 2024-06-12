@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Hubert model. """
-
+"""Testing suite for the PyTorch Hubert model."""
 
 import math
 import os
@@ -367,7 +366,7 @@ class HubertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     # Hubert has no inputs_embeds
     # and thus the `get_input_embeddings` fn
     # is not implemented
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     def test_retain_grad_hidden_states_attentions(self):
@@ -632,7 +631,7 @@ class HubertRobustModelTest(ModelTesterMixin, unittest.TestCase):
     # Hubert has no inputs_embeds
     # and thus the `get_input_embeddings` fn
     # is not implemented
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     def test_retain_grad_hidden_states_attentions(self):

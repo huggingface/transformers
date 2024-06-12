@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Table Transformer model configuration"""
+"""Table Transformer model configuration"""
+
 from collections import OrderedDict
 from typing import Mapping
 
@@ -21,6 +22,7 @@ from packaging import version
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
+from ...utils.backbone_utils import verify_backbone_config_arguments
 from ..auto import CONFIG_MAPPING
 
 
@@ -176,20 +178,6 @@ class TableTransformerConfig(PretrainedConfig):
         eos_coefficient=0.1,
         **kwargs,
     ):
-        if not use_timm_backbone and use_pretrained_backbone:
-            raise ValueError(
-                "Loading pretrained backbone weights from the transformers library is not supported yet. `use_timm_backbone` must be set to `True` when `use_pretrained_backbone=True`"
-            )
-
-        if backbone_config is not None and backbone is not None:
-            raise ValueError("You can't specify both `backbone` and `backbone_config`.")
-
-        if backbone_config is not None and use_timm_backbone:
-            raise ValueError("You can't specify both `backbone_config` and `use_timm_backbone`.")
-
-        if backbone_kwargs is not None and backbone_kwargs and backbone_config is not None:
-            raise ValueError("You can't specify both `backbone_kwargs` and `backbone_config`.")
-
         # We default to values which were previously hard-coded in the model. This enables configurability of the config
         # while keeping the default behavior the same.
         if use_timm_backbone and backbone_kwargs is None:
@@ -210,6 +198,14 @@ class TableTransformerConfig(PretrainedConfig):
             backbone = None
             # set timm attributes to None
             dilation = None
+
+        verify_backbone_config_arguments(
+            use_timm_backbone=use_timm_backbone,
+            use_pretrained_backbone=use_pretrained_backbone,
+            backbone=backbone,
+            backbone_config=backbone_config,
+            backbone_kwargs=backbone_kwargs,
+        )
 
         self.use_timm_backbone = use_timm_backbone
         self.backbone_config = backbone_config

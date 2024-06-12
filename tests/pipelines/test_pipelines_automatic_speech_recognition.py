@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import time
 import unittest
 
 import numpy as np
@@ -23,6 +24,8 @@ from transformers import (
     MODEL_FOR_CTC_MAPPING,
     MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
     AutoFeatureExtractor,
+    AutoModelForCausalLM,
+    AutoModelForSpeechSeq2Seq,
     AutoProcessor,
     AutoTokenizer,
     Speech2TextForConditionalGeneration,
@@ -1139,6 +1142,94 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         )
 
     @slow
+    def test_speculative_decoding_whisper_non_distil(self):
+        # Load data:
+        dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:1]")
+        sample = dataset[0]["audio"]
+
+        # Load model:
+        model_id = "openai/whisper-large-v2"
+        processor = AutoProcessor.from_pretrained(model_id)
+        model = AutoModelForSpeechSeq2Seq.from_pretrained(
+            model_id,
+            use_safetensors=True,
+        )
+
+        # Load assistant:
+        assistant_model_id = "openai/whisper-tiny"
+        assistant_model = AutoModelForSpeechSeq2Seq.from_pretrained(
+            assistant_model_id,
+            use_safetensors=True,
+        )
+
+        # Load pipeline:
+        pipe = AutomaticSpeechRecognitionPipeline(
+            model=model,
+            tokenizer=processor.tokenizer,
+            feature_extractor=processor.feature_extractor,
+            generate_kwargs={"language": "en"},
+        )
+
+        start_time = time.time()
+        transcription_non_ass = pipe(sample.copy(), generate_kwargs={"assistant_model": assistant_model})["text"]
+        total_time_assist = time.time() - start_time
+
+        start_time = time.time()
+        transcription_ass = pipe(sample)["text"]
+        total_time_non_assist = time.time() - start_time
+
+        self.assertEqual(transcription_ass, transcription_non_ass)
+        self.assertEqual(
+            transcription_ass,
+            " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
+        )
+        self.assertTrue(total_time_non_assist > total_time_assist, "Make sure that assistant decoding is faster")
+
+    @slow
+    def test_speculative_decoding_whisper_distil(self):
+        # Load data:
+        dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:1]")
+        sample = dataset[0]["audio"]
+
+        # Load model:
+        model_id = "openai/whisper-large-v2"
+        processor = AutoProcessor.from_pretrained(model_id)
+        model = AutoModelForSpeechSeq2Seq.from_pretrained(
+            model_id,
+            use_safetensors=True,
+        )
+
+        # Load assistant:
+        assistant_model_id = "distil-whisper/distil-large-v2"
+        assistant_model = AutoModelForCausalLM.from_pretrained(
+            assistant_model_id,
+            use_safetensors=True,
+        )
+
+        # Load pipeline:
+        pipe = AutomaticSpeechRecognitionPipeline(
+            model=model,
+            tokenizer=processor.tokenizer,
+            feature_extractor=processor.feature_extractor,
+            generate_kwargs={"language": "en"},
+        )
+
+        start_time = time.time()
+        transcription_non_ass = pipe(sample.copy(), generate_kwargs={"assistant_model": assistant_model})["text"]
+        total_time_assist = time.time() - start_time
+
+        start_time = time.time()
+        transcription_ass = pipe(sample)["text"]
+        total_time_non_assist = time.time() - start_time
+
+        self.assertEqual(transcription_ass, transcription_non_ass)
+        self.assertEqual(
+            transcription_ass,
+            " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
+        )
+        self.assertEqual(total_time_non_assist > total_time_assist, "Make sure that assistant decoding is faster")
+
+    @slow
     @require_torch
     @require_torchaudio
     def test_xls_r_to_en(self):
@@ -1342,6 +1433,42 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
 
         self.assertEqual(output, [{"text": ANY(str)}])
         self.assertEqual(output[0]["text"][:6], "<s> <s")
+
+    @require_torch
+    @slow
+    def test_whisper_prompted(self):
+        processor = AutoProcessor.from_pretrained("openai/whisper-tiny")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
+        model = model.to("cuda")
+
+        pipe = pipeline(
+            "automatic-speech-recognition",
+            model=model,
+            tokenizer=processor.tokenizer,
+            feature_extractor=processor.feature_extractor,
+            max_new_tokens=128,
+            chunk_length_s=30,
+            batch_size=16,
+            device="cuda:0",
+        )
+
+        dataset = load_dataset("distil-whisper/librispeech_long", "clean", split="validation")
+        sample = dataset[0]["audio"]
+
+        # prompt the model to misspell "Mr Quilter" as "Mr Quillter"
+        whisper_prompt = "Mr. Quillter."
+        prompt_ids = pipe.tokenizer.get_prompt_ids(whisper_prompt, return_tensors="pt")
+
+        unprompted_result = pipe(sample.copy())["text"]
+        prompted_result = pipe(sample, generate_kwargs={"prompt_ids": prompt_ids})["text"]
+
+        # fmt: off
+        EXPECTED_UNPROMPTED_RESULT = " Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel. Nor is Mr. Quilter's manner less interesting than his matter. He tells us that at this festive season of the year, with Christmas and roast beef looming before us, similarly drawn from eating and its results occur most readily to the mind. He has grave doubts whether Sir Frederick Latins work is really Greek after all and can discover in it but little of rocky Ithaca. Lennils, pictures are a sort of upguards and atom paintings and Mason's exquisite itals are as national as a jingo poem. Mr. Birkut Foster's landscapes smile at one much in the same way that Mr. Carker used to flash his teeth. And Mr. John Collier gives his sitter a cheerful slap on the back before he says like a shampoo or a Turkish bath. Next man"
+        EXPECTED_PROMPTED_RESULT = " Mr. Quillter is the apostle of the middle classes, and we are glad to welcome his gospel. Nor is Mr. Quillter's manner less interesting than his matter. He tells us that at this festive season of the year, with Christmas and roast beef looming before us, similarly drawn from eating and its results occur most readily to the mind. He has grave doubts whether Sir Frederick Latins work is really great after all, and can discover in it but little of rocky Ithaca. Lennils, pictures are a sort of upguards and atom paintings, and Mason's exquisite itals are as national as a jingo poem. Mr. Birkut Foster's landscapes smile at one much in the same way that Mr. Carker used to flash his teeth. Mr. John Collier gives his sitter a cheerful slap on the back before he says like a shampoo or a Turkish bath. Next man."
+        # fmt: on
+
+        self.assertEqual(unprompted_result, EXPECTED_UNPROMPTED_RESULT)
+        self.assertEqual(prompted_result, EXPECTED_PROMPTED_RESULT)
 
     @require_torch
     @slow
@@ -1569,10 +1696,10 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             "input_values"
         ]
         outs = list(chunk_iter(inputs, feature_extractor, 100, 20, 10))
-        self.assertEqual(len(outs), 2)
-        self.assertEqual([o["stride"] for o in outs], [(100, 0, 10), (30, 20, 0)])
-        self.assertEqual([o["input_values"].shape for o in outs], [(1, 100), (1, 30)])
-        self.assertEqual([o["is_last"] for o in outs], [False, True])
+        self.assertEqual(len(outs), 1)
+        self.assertEqual([o["stride"] for o in outs], [(100, 0, 0)])
+        self.assertEqual([o["input_values"].shape for o in outs], [(1, 100)])
+        self.assertEqual([o["is_last"] for o in outs], [True])
 
         outs = list(chunk_iter(inputs, feature_extractor, 80, 20, 10))
         self.assertEqual(len(outs), 2)

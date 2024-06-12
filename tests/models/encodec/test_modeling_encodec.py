@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Encodec model. """
+"""Testing suite for the PyTorch Encodec model."""
 
 import copy
 import inspect
@@ -183,7 +183,7 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         pass
 
     @unittest.skip("The EncodecModel is not transformers based, thus it does not have `inputs_embeds` logics")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip("The EncodecModel is not transformers based, thus it does not have the usual `attention` logic")

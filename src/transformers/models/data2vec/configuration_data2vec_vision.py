@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Data2VecVision model configuration"""
+"""Data2VecVision model configuration"""
+
 from collections import OrderedDict
 from typing import Mapping
 

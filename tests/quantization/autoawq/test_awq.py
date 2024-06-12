@@ -288,7 +288,7 @@ class AwqFusedTest(unittest.TestCase):
         "You end up exactly where you started. Where are you?"
     )
 
-    EXPECTED_GENERATION = prompt + "\n\nYou are at the starting point.\n\nIf"
+    EXPECTED_GENERATION = prompt + "\n\nThis is a classic puzzle that has been around for"
     EXPECTED_GENERATION_CUSTOM_MODEL = "Hello,\n\nI have a problem with my 20"
     EXPECTED_GENERATION_MIXTRAL = prompt + " You're on the North Pole.\n\nThe"
 

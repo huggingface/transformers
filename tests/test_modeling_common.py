@@ -21,7 +21,6 @@ import os.path
 import random
 import re
 import tempfile
-import unittest
 import warnings
 from collections import defaultdict
 from typing import Dict, List, Tuple
@@ -77,6 +76,7 @@ from transformers.testing_utils import (
     require_safetensors,
     require_torch,
     require_torch_gpu,
+    require_torch_multi_accelerator,
     require_torch_multi_gpu,
     require_torch_sdpa,
     slow,
@@ -444,7 +444,6 @@ class ModelTesterMixin:
     @slow
     @require_accelerate
     @mark.accelerate_tests
-    @unittest.skip("Need to fix since we have a device mismatch")
     def test_save_load_low_cpu_mem_usage(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         with tempfile.TemporaryDirectory() as saved_model_path:
@@ -457,7 +456,6 @@ class ModelTesterMixin:
     @slow
     @require_accelerate
     @mark.accelerate_tests
-    @unittest.skip("Need to fix since we have a device mismatch")
     def test_save_load_low_cpu_mem_usage_checkpoints(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         with tempfile.TemporaryDirectory() as saved_model_path:
@@ -471,7 +469,6 @@ class ModelTesterMixin:
     @slow
     @require_accelerate
     @mark.accelerate_tests
-    @unittest.skip("Need to fix since we have a device mismatch")
     def test_save_load_low_cpu_mem_usage_no_safetensors(self):
         with tempfile.TemporaryDirectory() as saved_model_path:
             for model_class in self.all_model_classes:
@@ -482,6 +479,8 @@ class ModelTesterMixin:
                 self._check_save_load_low_cpu_mem_usage(model_class, saved_model_path)
 
     def _check_save_load_low_cpu_mem_usage(self, model_class, saved_model_path):
+        from accelerate.utils.modeling import named_module_tensors
+
         # Load the low usage and the normal models.
         model_low_usage, loading_info = model_class.from_pretrained(
             saved_model_path,
@@ -496,15 +495,12 @@ class ModelTesterMixin:
         # The low_cpu_mem_usage=True causes the model params to be initialized with device=meta, and then
         # subsequently loaded with the correct values and onto the correct device. We check if there are any
         # remaining params that were not properly loaded.
-        for name, param in model_low_usage.named_parameters():
+        for name, tensor in named_module_tensors(model_low_usage, recurse=True):
             self.assertNotEqual(
-                param.device,
+                tensor.device,
                 torch.device("meta"),
-                "Parameter '" + name + "' has not been properly loaded and has device=meta.",
+                "Tensor '" + name + "' has not been properly loaded and has device=meta.",
             )
-
-        # Tests moving the model to a device other than meta.
-        model_low_usage.to(torch_device)
 
         # Check that the parameters are equal.
         for p1, p2 in zip(model_low_usage.parameters(), model_non_low_usage.parameters()):
@@ -1975,13 +1971,17 @@ class ModelTesterMixin:
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             model(**self._prepare_for_class(inputs_dict, model_class))
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
             model = model_class(config)
             self.assertIsInstance(model.get_input_embeddings(), (nn.Embedding, AdaptiveEmbedding))
-            model.set_input_embeddings(nn.Embedding(10, 10))
+
+            new_input_embedding_layer = nn.Embedding(10, 10)
+            model.set_input_embeddings(new_input_embedding_layer)
+            self.assertEqual(model.get_input_embeddings(), new_input_embedding_layer)
+
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
 
@@ -3014,8 +3014,11 @@ class ModelTesterMixin:
             param_device = device_map[param_name]
             if param_device in ["cpu", "disk"]:
                 self.assertEqual(param.device, torch.device("meta"))
+            elif param_device in ["mps"]:
+                self.assertEqual(param.device, torch.device("mps"))
             else:
-                self.assertEqual(param.device, torch.device(param_device))
+                # when loaded with device_map, `param_device` are integer values for cuda/xpu/npu/mlu
+                self.assertEqual(param.device, torch.device(f"{torch_device}:{param_device}"))
 
     @require_accelerate
     @mark.accelerate_tests
@@ -3134,7 +3137,7 @@ class ModelTesterMixin:
 
     @require_accelerate
     @mark.accelerate_tests
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     def test_model_parallelism(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -3160,7 +3163,6 @@ class ModelTesterMixin:
                     new_model = model_class.from_pretrained(tmp_dir, device_map="auto", max_memory=max_memory)
                     # Making sure part of the model will actually end up offloaded
                     self.assertSetEqual(set(new_model.hf_device_map.values()), {0, 1})
-
                     self.check_device_map_is_respected(new_model, new_model.hf_device_map)
 
                     torch.manual_seed(0)
@@ -4412,6 +4414,8 @@ class ModelTesterMixin:
             if not model_class._supports_static_cache:
                 self.skipTest(f"{model_class.__name__} is not guaranteed to work with custom 4D attention masks")
             config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            if getattr(config, "sliding_window", 0) > 0:
+                self.skipTest(f"{model_class.__name__} with sliding window attention is not supported by this test")
             model = model_class(config).to(device=torch_device, dtype=torch.float32)
 
             (

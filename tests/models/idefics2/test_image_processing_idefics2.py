@@ -185,6 +185,7 @@ class Idefics2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = Idefics2ImageProcessor if is_vision_available() else None
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = Idefics2ImageProcessingTester(self)
 
     @property

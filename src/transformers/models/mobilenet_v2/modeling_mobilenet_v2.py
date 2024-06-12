@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch MobileNetV2 model."""
-
+"""PyTorch MobileNetV2 model."""
 
 from typing import Optional, Union
 
@@ -134,29 +133,29 @@ def _build_tf_to_pytorch_map(model, config, tf_weights=None):
         tf_to_pt_map[prefix + "BatchNorm/beta"] = model.segmentation_head.conv_pool.normalization.bias
         tf_to_pt_map[prefix + "BatchNorm/gamma"] = model.segmentation_head.conv_pool.normalization.weight
         tf_to_pt_map[prefix + "BatchNorm/moving_mean"] = model.segmentation_head.conv_pool.normalization.running_mean
-        tf_to_pt_map[
-            prefix + "BatchNorm/moving_variance"
-        ] = model.segmentation_head.conv_pool.normalization.running_var
+        tf_to_pt_map[prefix + "BatchNorm/moving_variance"] = (
+            model.segmentation_head.conv_pool.normalization.running_var
+        )
 
         prefix = "aspp0/"
         tf_to_pt_map[prefix + "weights"] = model.segmentation_head.conv_aspp.convolution.weight
         tf_to_pt_map[prefix + "BatchNorm/beta"] = model.segmentation_head.conv_aspp.normalization.bias
         tf_to_pt_map[prefix + "BatchNorm/gamma"] = model.segmentation_head.conv_aspp.normalization.weight
         tf_to_pt_map[prefix + "BatchNorm/moving_mean"] = model.segmentation_head.conv_aspp.normalization.running_mean
-        tf_to_pt_map[
-            prefix + "BatchNorm/moving_variance"
-        ] = model.segmentation_head.conv_aspp.normalization.running_var
+        tf_to_pt_map[prefix + "BatchNorm/moving_variance"] = (
+            model.segmentation_head.conv_aspp.normalization.running_var
+        )
 
         prefix = "concat_projection/"
         tf_to_pt_map[prefix + "weights"] = model.segmentation_head.conv_projection.convolution.weight
         tf_to_pt_map[prefix + "BatchNorm/beta"] = model.segmentation_head.conv_projection.normalization.bias
         tf_to_pt_map[prefix + "BatchNorm/gamma"] = model.segmentation_head.conv_projection.normalization.weight
-        tf_to_pt_map[
-            prefix + "BatchNorm/moving_mean"
-        ] = model.segmentation_head.conv_projection.normalization.running_mean
-        tf_to_pt_map[
-            prefix + "BatchNorm/moving_variance"
-        ] = model.segmentation_head.conv_projection.normalization.running_var
+        tf_to_pt_map[prefix + "BatchNorm/moving_mean"] = (
+            model.segmentation_head.conv_projection.normalization.running_mean
+        )
+        tf_to_pt_map[prefix + "BatchNorm/moving_variance"] = (
+            model.segmentation_head.conv_projection.normalization.running_var
+        )
 
         prefix = "logits/semantic/"
         tf_to_pt_map[ema(prefix + "weights")] = model.segmentation_head.classifier.convolution.weight
@@ -823,6 +822,9 @@ class MobileNetV2ForSemanticSegmentation(MobileNetV2PreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        if labels is not None and self.config.num_labels == 1:
+            raise ValueError("The number of labels should be greater than one")
+
         outputs = self.mobilenet_v2(
             pixel_values,
             output_hidden_states=True,  # we need the intermediate hidden states
@@ -835,15 +837,12 @@ class MobileNetV2ForSemanticSegmentation(MobileNetV2PreTrainedModel):
 
         loss = None
         if labels is not None:
-            if self.config.num_labels == 1:
-                raise ValueError("The number of labels should be greater than one")
-            else:
-                # upsample logits to the images' original size
-                upsampled_logits = nn.functional.interpolate(
-                    logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
-                )
-                loss_fct = CrossEntropyLoss(ignore_index=self.config.semantic_loss_ignore_index)
-                loss = loss_fct(upsampled_logits, labels)
+            # upsample logits to the images' original size
+            upsampled_logits = nn.functional.interpolate(
+                logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
+            )
+            loss_fct = CrossEntropyLoss(ignore_index=self.config.semantic_loss_ignore_index)
+            loss = loss_fct(upsampled_logits, labels)
 
         if not return_dict:
             if output_hidden_states:

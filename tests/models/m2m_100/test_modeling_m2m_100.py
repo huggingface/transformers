@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch M2M100 model. """
-
+"""Testing suite for the PyTorch M2M100 model."""
 
 import copy
 import tempfile
@@ -244,7 +243,6 @@ class M2M100ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     all_generative_model_classes = (M2M100ForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "conversational": M2M100ForConditionalGeneration,
             "feature-extraction": M2M100Model,
             "summarization": M2M100ForConditionalGeneration,
             "text2text-generation": M2M100ForConditionalGeneration,

@@ -76,6 +76,7 @@ class LayoutLMv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
     image_processing_class = LayoutLMv2ImageProcessor if is_pytesseract_available() else None
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = LayoutLMv2ImageProcessingTester(self)
 
     @property

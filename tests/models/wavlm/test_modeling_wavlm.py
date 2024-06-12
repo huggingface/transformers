@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch WavLM model. """
+"""Testing suite for the PyTorch WavLM model."""
 
 import math
 import unittest
@@ -387,7 +387,7 @@ class WavLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     # WavLM has no inputs_embeds
     # and thus the `get_input_embeddings` fn
     # is not implemented
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     # WavLM uses PyTorch's multi-head-attention class

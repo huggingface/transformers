@@ -17,7 +17,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Starcoder2 model."""
+"""PyTorch Starcoder2 model."""
+
 import inspect
 import math
 from typing import List, Optional, Tuple, Union
@@ -74,7 +75,7 @@ def _get_unpad_data(attention_mask):
     )
 
 
-# Copied from transformers.models.mistral.modeling_mistral.MistralRotaryEmbedding with Mistral->Starcoder2
+# Copied from transformers.models.mixtral.modeling_mixtral.MixtralRotaryEmbedding with Mixtral->Starcoder2
 class Starcoder2RotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
@@ -119,7 +120,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-# Copied from transformers.models.mistral.modeling_mistral.apply_rotary_pos_emb
+# Copied from transformers.models.mixtral.modeling_mixtral.apply_rotary_pos_emb
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -590,7 +591,7 @@ class Starcoder2FlashAttention2(Starcoder2Attention):
         )
 
 
-# Copied from transformers.models.mistral.modeling_mistral.MistralSdpaAttention with Mistral->Starcoder2
+# Copied from transformers.models.mixtral.modeling_mixtral.MixtralSdpaAttention with Mixtral->Starcoder2
 class Starcoder2SdpaAttention(Starcoder2Attention):
     """
     Starcoder2 attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
@@ -703,7 +704,7 @@ class Starcoder2DecoderLayer(nn.Module):
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.norm_epsilon)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.norm_epsilon)
 
-    # Copied from transformers.models.mistral.modeling_mistral.MistralDecoderLayer.forward
+    # Copied from transformers.models.qwen2.modeling_qwen2.Qwen2DecoderLayer.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -780,7 +781,7 @@ STARCODER2_START_DOCSTRING = r"""
     "The bare Starcoder2 Model outputting raw hidden-states without any specific head on top.",
     STARCODER2_START_DOCSTRING,
 )
-# Copied from transformers.models.mistral.modeling_mistral.MistralPreTrainedModel with Mistral->Starcoder2
+# Copied from transformers.models.qwen2.modeling_qwen2.Qwen2PreTrainedModel with Qwen2->Starcoder2
 class Starcoder2PreTrainedModel(PreTrainedModel):
     config_class = Starcoder2Config
     base_model_prefix = "model"
@@ -1057,7 +1058,7 @@ class Starcoder2Model(Starcoder2PreTrainedModel):
         )
 
 
-# Copied from transformers.models.mistral.modeling_mistral.MistralForCausalLM with MISTRAL->STARCODER2,Mistral-7B-v0.1->starcoder2-7b_16k,Mistral->Starcoder2,mistralai->bigcode
+# Copied from transformers.models.qwen2.modeling_qwen2.Qwen2ForCausalLM with QWEN2->STARCODER2,Qwen2->Starcoder2
 class Starcoder2ForCausalLM(Starcoder2PreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1090,6 +1091,7 @@ class Starcoder2ForCausalLM(Starcoder2PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(STARCODER2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    # Ignore copy
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1180,15 +1182,13 @@ class Starcoder2ForCausalLM(Starcoder2PreTrainedModel):
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
     ):
+        past_length = 0
         # Omit tokens covered by past_key_values
         if past_key_values is not None:
-            if isinstance(past_key_values, Cache):
-                cache_length = past_key_values.get_seq_length()
-                past_length = past_key_values.seen_tokens
-                max_cache_length = past_key_values.get_max_length()
-            else:
-                cache_length = past_length = past_key_values[0][0].shape[2]
-                max_cache_length = None
+            # Past key values are always initialized with a `Cache` object -> no need for if-else anymore
+            cache_length = past_key_values.get_seq_length()
+            past_length = past_key_values.seen_tokens
+            max_cache_length = past_key_values.get_max_length()
 
             # Keep only the unprocessed tokens:
             # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
@@ -1219,7 +1219,7 @@ class Starcoder2ForCausalLM(Starcoder2PreTrainedModel):
                 position_ids = position_ids[:, -input_ids.shape[1] :]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and past_key_values is None:
+        if inputs_embeds is not None and past_length == 0:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids}

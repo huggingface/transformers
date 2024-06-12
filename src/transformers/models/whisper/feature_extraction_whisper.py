@@ -15,6 +15,7 @@
 """
 Feature extractor class for Whisper
 """
+
 from typing import List, Optional, Union
 
 import numpy as np
