@@ -871,9 +871,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         """Updates the underlying normalizer with the current `add_prefix_space` and `legacy` settings."""
         sequence = json.loads(normalizers.Sequence([]).__getstate__())
         final_sequence = normalizers.Sequence([])
-        if not getattr(self, "legacy", True):
-            self._tokenizer.normalizer = final_sequence
-            return
         if self._tokenizer.normalizer is not None and type(self._tokenizer.normalizer) in (
             normalizers.Prepend,
             normalizers.Precompiled,
@@ -896,6 +893,9 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             final_sequence.__setstate__(json.dumps(sequence).encode("utf-8"))
             self._tokenizer.normalizer = final_sequence
             return False
+        if not getattr(self, "legacy", True):
+            self._tokenizer.normalizer = final_sequence
+            return
 
     def _update_pre_tokenizer(self):
         """Updates the underlying pre-tokenizer with the current `add_prefix_space` setting."""
@@ -952,7 +952,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
         elif self._tokenizer.pre_tokenizer is None:
             update_pre_tokenizer = self._update_normalizer()
-            if update_pre_tokenizer is not False and prepend_scheme not in ["always", "first"]:
+            # If the pre-tokenizer is not set, set it to Metaspace with the desired prepend_scheme (check llama2-7b)
+            if self._tokenizer.pre_tokenizer is None or (update_pre_tokenizer is not False and prepend_scheme not in ["always", "first"]):
                 self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(
                     replacement="▁", prepend_scheme=prepend_scheme, split=False
                 )
