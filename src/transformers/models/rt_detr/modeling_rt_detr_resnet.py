@@ -12,7 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch ResNet model."""
+"""
+PyTorch RTDetr specific ResNet model. The main difference between hugginface ResNet model is that this RTDetrResNet model forces to use shortcut at the first layer in the resnet-18/34 models.
+See https://github.com/lyuwenyu/RT-DETR/blob/5b628eaa0a2fc25bdafec7e6148d5296b144af85/rtdetr_pytorch/src/nn/backbone/presnet.py#L126 for details.
+"""
 
 from typing import Optional
 
@@ -356,9 +359,7 @@ RTDETR_RESNET_INPUTS_DOCSTRING = r"""
 
 @add_start_docstrings(
     """
-    ResNet backbone, to be used with frameworks like DETR and MaskFormer.
-    The main difference between hugginface ResNet model is that this RTDetrResNet model forces to use shortcut at the first layer in the resnet-18/34 models.
-    See https://github.com/lyuwenyu/RT-DETR/blob/5b628eaa0a2fc25bdafec7e6148d5296b144af85/rtdetr_pytorch/src/nn/backbone/presnet.py#L126 for details.
+    ResNet backbone, to be used with frameworks like RTDETR.
     """,
     RTDETR_RESNET_START_DOCSTRING,
 )
