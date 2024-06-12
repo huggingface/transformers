@@ -19,12 +19,12 @@ import tempfile
 import unittest
 
 import numpy as np
-import requests
+from huggingface_hub import hf_hub_download
 
 from transformers import (
     CONFIG_MAPPING,
-    InstructBlipProcessor,
     InstructBlipVideoConfig,
+    InstructBlipVideoProcessor,
     InstructBlipVideoQFormerConfig,
     InstructBlipVideoVisionConfig,
 )
@@ -56,7 +56,7 @@ if is_torch_available():
 
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
 
 class InstructBlipVideoVisionModelTester:
@@ -65,6 +65,7 @@ class InstructBlipVideoVisionModelTester:
         parent,
         batch_size=12,
         image_size=30,
+        frames=4,
         patch_size=2,
         num_channels=3,
         is_training=True,
@@ -81,6 +82,7 @@ class InstructBlipVideoVisionModelTester:
         self.parent = parent
         self.batch_size = batch_size
         self.image_size = image_size
+        self.frames = frames
         self.patch_size = patch_size
         self.num_channels = num_channels
         self.is_training = is_training
@@ -99,7 +101,9 @@ class InstructBlipVideoVisionModelTester:
         self.seq_length = num_patches + 1
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size * self.frames, self.num_channels, self.image_size, self.image_size]
+        )
         config = self.get_config()
 
         return config, pixel_values
@@ -129,8 +133,10 @@ class InstructBlipVideoVisionModelTester:
         image_size = (self.image_size, self.image_size)
         patch_size = (self.patch_size, self.patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape, (self.batch_size * self.frames, num_patches + 1, self.hidden_size)
+        )
+        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size * self.frames, self.hidden_size))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -163,6 +169,10 @@ class InstructBlipVideoVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="InstructBlipVideo's vision encoder does not use inputs_embeds")
     def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(reason="InstructBlipVideo's vision encoder is an nn.Embeddings layer")
+    def test_model_get_set_embeddings(self):
         pass
 
     def test_model_common_attributes(self):
@@ -323,7 +333,7 @@ class InstructBlipVideoTextModelDecoderOnlyTester:
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        max_position_embeddings=20,
+        max_position_embeddings=100,
         eos_token_id=2,
         pad_token_id=1,
         bos_token_id=0,
@@ -409,6 +419,9 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyModelTester:
         _, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
         _, _, _, qformer_input_ids, qformer_attention_mask = self.qformer_model_tester.prepare_config_and_inputs()
         _, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
+        frames = self.vision_model_tester.frames
+        _, c, h, w = pixel_values.shape
+        pixel_values = pixel_values.reshape(-1, frames, c, h, w)
 
         config = self.get_config()
 
@@ -435,7 +448,9 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyModelTester:
                 qformer_attention_mask=qformer_attention_mask,
             )
 
-        expected_seq_length = self.num_query_tokens + self.text_model_tester.seq_length
+        expected_seq_length = (
+            self.num_query_tokens * self.vision_model_tester.frames
+        ) + self.text_model_tester.seq_length
         self.parent.assertEqual(
             result.logits.shape,
             (self.vision_model_tester.batch_size, expected_seq_length, self.text_model_tester.vocab_size),
@@ -537,109 +552,44 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
 
 
 # We will verify our results on an image of cute cats
-def prepare_img():
-    url = "https://huggingface.co/hf-internal-testing/blip-test-image/resolve/main/demo.jpg"
-    image = Image.open(requests.get(url, stream=True).raw)
-    return image
+def prepare_video():
+    video_file = hf_hub_download(
+        repo_id="raushan-testing-hf/videos-test", filename="video_demo.npy", repo_type="dataset"
+    )
+    video = np.load(video_file)[::2]  # sample every 2nd frame to get 4 frames total
+    return video
 
 
 @require_vision
 @require_torch
+@require_bitsandbytes
+@require_accelerate
 @slow
 class InstructBlipVideoModelIntegrationTest(unittest.TestCase):
-    @require_bitsandbytes
-    @require_accelerate
     def test_inference_vicuna_7b(self):
-        processor = InstructBlipProcessor.from_pretrained("Salesforce/instructblipvideo-vicuna-7b")
+        processor = InstructBlipVideoProcessor.from_pretrained("Salesforce/instructblip-vicuna-7b")
         model = InstructBlipVideoForConditionalGeneration.from_pretrained(
-            "Salesforce/instructblipvideo-vicuna-7b", load_in_8bit=True, low_cpu_mem_usage=True
+            "Salesforce/instructblip-vicuna-7b", load_in_8bit=True, low_cpu_mem_usage=True
         )
 
-        url = "https://raw.githubusercontent.com/salesforce/LAVIS/main/docs/_static/Confusing-Pictures.jpg"
-        image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
-        prompt = "What is unusual about this image?"
-        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device, torch.float16)
+        clip = prepare_video()
+        prompt = "Explain what is happening in this short video."
+        inputs = processor(images=clip, text=prompt, return_tensors="pt").to(torch_device, torch.float16)
 
         # verify logits
         with torch.no_grad():
             logits = model(**inputs).logits
 
         expected_slice = torch.tensor(
-            [[-3.3926, -12.2969, 8.4922], [-5.0195, -11.9531, 8.1406], [-4.0039, -13.3594, 9.2578]],
+            [[-3.3203, -11.7266, 9.7266], [-5.3242, -12.8125, 10.6328], [-3.7109, -13.2422, 10.3516]],
             device=torch_device,
         )
-
         self.assertTrue(torch.allclose(logits[0, :3, :3].float(), expected_slice, atol=1e-3))
 
         # verify generation
         outputs = model.generate(**inputs, max_new_tokens=30)
         generated_text = processor.batch_decode(outputs, skip_special_tokens=True)[0].strip()
-
-        expected_outputs = [2, 450, 22910, 9565, 310, 445, 1967, 338, 393, 263, 767, 338, 13977, 292, 22095, 373, 278, 1250, 310, 263, 13328, 20134, 29963, 1550, 372, 338, 19500, 1623, 263, 19587, 4272]  # fmt: off
-
-        self.assertEqual(outputs[0].tolist(), expected_outputs)
         self.assertEqual(
             generated_text,
-            "The unusual aspect of this image is that a man is ironing clothes on the back of a yellow SUV while it is driving down a busy city",
+            "a baby girl wearing glasses is reading a book on the bed 1080p",
         )
-
-    def test_inference_flant5_xl(self):
-        processor = InstructBlipProcessor.from_pretrained("Salesforce")
-        model = InstructBlipVideoForConditionalGeneration.from_pretrained(
-            "Salesforce",
-            torch_dtype=torch.bfloat16,
-            low_cpu_mem_usage=True,
-        ).to(torch_device)
-
-        url = "https://raw.githubusercontent.com/salesforce/LAVIS/main/docs/_static/Confusing-Pictures.jpg"
-        image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
-        prompt = "What is unusual about this image?"
-        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device)
-
-        for k, v in inputs.items():
-            if torch.is_floating_point(v):
-                inputs[k] = v.to(torch.bfloat16)
-
-        outputs = model.generate(
-            **inputs,
-            do_sample=False,
-            num_beams=5,
-            max_length=256,
-            min_length=1,
-            top_p=0.9,
-            repetition_penalty=1.5,
-            length_penalty=1.0,
-            temperature=1,
-        )
-        generated_text = processor.batch_decode(outputs, skip_special_tokens=True)[0]
-
-        expected_outputs = [0, 37, 1023, 9850, 7, 3, 9, 388, 3575, 53, 4954, 30, 8, 223, 13, 3, 9, 4459, 4049, 16, 8, 2214, 13, 3, 9, 3164, 690, 2815, 5, 37, 388, 19, 5119, 3, 9, 4459, 8677, 28, 3, 9, 2756, 4459, 6177, 6, 11, 3, 88, 19, 338, 46, 3575, 53, 1476, 12, 743, 112, 2491, 5, 37, 1023, 19, 7225, 788, 12, 8, 685, 24, 34, 1267, 3, 9, 388, 3575, 53, 4954, 30, 8, 223, 13, 3, 9, 4049, 16, 8, 2214, 13, 3, 9, 3164, 690, 2815, 5, 94, 19, 487, 24, 8, 388, 19, 1119, 12, 1097, 540, 57, 692, 112, 10428, 30, 8, 223, 13, 8, 4049, 6, 68, 34, 19, 92, 487, 24, 3, 88, 19, 1119, 12, 1097, 97, 57, 692, 112, 10428, 30, 8, 223, 13, 8, 4049, 16, 8, 2214, 13, 3, 9, 3164, 690, 2815, 5, 3, 13865, 13, 8, 1053, 21, 8, 388, 31, 7, 2874, 6, 34, 19, 964, 24, 3, 88, 19, 1119, 12, 1097, 97, 57, 692, 112, 10428, 30, 8, 223, 13, 8, 4049, 16, 8, 2214, 13, 3, 9, 3164, 690, 2815, 5, 1]  # fmt: skip
-
-        expected_outputs = [0, 37, 7225, 1023, 9850, 7, 3, 9, 388, 3575, 53, 4954, 30, 8, 223, 13, 3, 9, 4459, 4049, 16, 8, 2214, 13, 3, 9, 3164, 690, 2815, 5, 37, 388, 19, 5119, 3, 9, 4459, 8677, 28, 46, 3575, 53, 1476, 5223, 12, 34, 6, 15495, 24, 3, 88, 19, 692, 112, 293, 10428, 44, 234, 1066, 145, 338, 3, 9, 50, 1106, 3522, 144, 42, 2192, 7919, 31, 7, 5, 37, 1023, 92, 1267, 3, 9, 381, 13, 119, 3203, 16, 8, 2458, 6, 379, 14264, 6, 9256, 7, 6, 11, 11718, 7, 5, 1]  # fmt: skip
-
-        self.assertEqual(outputs[0].tolist(), expected_outputs)
-        self.assertEqual(
-            generated_text,
-            "The unusual image depicts a man ironing clothes on the back of a yellow van in the middle of a busy city street. The man is wearing a yellow shirt with an ironing board attached to it, suggesting that he is doing his own laundry at home rather than using a laundromat or dry cleaner's. The image also shows a number of other vehicles in the background, including buses, taxis, and motorcycles.",
-        )
-
-    def test_inference_interpolate_pos_encoding(self):
-        processor = InstructBlipProcessor.from_pretrained("Salesforce")
-        model = InstructBlipVideoForConditionalGeneration.from_pretrained(
-            "Salesforce",
-            torch_dtype=torch.bfloat16,
-            low_cpu_mem_usage=True,
-        ).to(torch_device)
-        processor.image_processor.size = {"height": 500, "width": 500}
-
-        image = prepare_img()
-        prompt = "What's in the image?"
-        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device)
-
-        predictions = model.generate(**inputs, interpolate_pos_encoding=True)
-        generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
-
-        self.assertEqual(
-            predictions[0].tolist(), [0, 37, 1023, 753, 3, 9, 2335, 3823, 30, 8, 2608, 28, 3, 9, 1782, 5, 1]
-        )
-        self.assertEqual(generated_text, "The image features a woman sitting on the beach with a dog.")
