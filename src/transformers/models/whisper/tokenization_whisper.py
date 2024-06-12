@@ -839,9 +839,9 @@ class WhisperTokenizer(PreTrainedTokenizer):
         return batch_encoding["input_ids"]
 
     def _strip_prompt(self, token_ids: List[int], prompt_token_id: int, decoder_start_token_id: int):
-        has_prompt = isinstance(token_ids, list) and token_ids and token_ids[0] == prompt_token_id
         if not isinstance(token_ids, list):
             token_ids = self._convert_to_list(token_ids)
+        has_prompt = token_ids[0] == prompt_token_id
         if has_prompt:
             if decoder_start_token_id in token_ids:
                 return token_ids[token_ids.index(decoder_start_token_id) :]
