@@ -48,13 +48,13 @@ The original code can be found [here](https://github.com/salesforce/LAVIS/tree/m
 
 [[autodoc]] InstructBlipVideoQFormerConfig
 
-## InstructBlipProcessor
+## InstructBlipVideoProcessor
 
-[[autodoc]] InstructBlipProcessor
+[[autodoc]] InstructBlipVideoProcessor
 
-## InstructBlipImageProcessor
+## InstructBlipVideoImageProcessor
 
-[[autodoc]] InstructBlipImageProcessor
+[[autodoc]] InstructBlipVideoImageProcessor
     - preprocess
 
 ## InstructBlipVideoVisionModel
