@@ -136,7 +136,7 @@ The same [`MusicgenProcessor`] can be used to pre-process an audio prompt that i
 following example, we load an audio file using the 🤗 Datasets library, which can be pip installed through the command
 below:
 
-```
+```bash
 pip install --upgrade pip
 pip install datasets[audio]
 ```

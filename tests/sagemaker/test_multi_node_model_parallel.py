@@ -25,14 +25,14 @@ if is_sagemaker_available():
         {
             "framework": "pytorch",
             "script": "run_glue_model_parallelism.py",
-            "model_name_or_path": "roberta-large",
+            "model_name_or_path": "FacebookAI/roberta-large",
             "instance_type": "ml.p3dn.24xlarge",
             "results": {"train_runtime": 1600, "eval_accuracy": 0.3, "eval_loss": 1.2},
         },
         {
             "framework": "pytorch",
             "script": "run_glue.py",
-            "model_name_or_path": "roberta-large",
+            "model_name_or_path": "FacebookAI/roberta-large",
             "instance_type": "ml.p3dn.24xlarge",
             "results": {"train_runtime": 1600, "eval_accuracy": 0.3, "eval_loss": 1.2},
         },

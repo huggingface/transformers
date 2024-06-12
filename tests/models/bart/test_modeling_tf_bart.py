@@ -198,7 +198,6 @@ class TFBartModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTester
     all_generative_model_classes = (TFBartForConditionalGeneration,) if is_tf_available() else ()
     pipeline_model_mapping = (
         {
-            "conversational": TFBartForConditionalGeneration,
             "feature-extraction": TFBartModel,
             "summarization": TFBartForConditionalGeneration,
             "text-classification": TFBartForSequenceClassification,
@@ -304,7 +303,7 @@ class TFBartModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTester
             old_total_size = config.vocab_size
             new_total_size = old_total_size + new_tokens_size
             model = model_class(config=copy.deepcopy(config))  # `resize_token_embeddings` mutates `config`
-            model.build()
+            model.build_in_name_scope()
             model.resize_token_embeddings(new_total_size)
 
             # fetch the output for an input exclusively made of new members of the vocabulary
@@ -342,10 +341,6 @@ class TFBartModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTester
 
                 # check that the output for the restored model is the same
                 self.assert_outputs_same(restored_model_outputs, outputs)
-
-    @unittest.skip("Does not support conversations.")
-    def test_pipeline_conversational(self):
-        pass
 
 
 def _long_tensor(tok_lst):

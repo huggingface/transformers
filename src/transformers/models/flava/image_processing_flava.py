@@ -34,6 +34,8 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
+    validate_kwargs,
+    validate_preprocess_arguments,
 )
 from ...utils import TensorType, is_vision_available, logging
 
@@ -300,6 +302,41 @@ class FlavaImageProcessor(BaseImageProcessor):
         self.codebook_image_mean = codebook_image_mean
         self.codebook_image_mean = codebook_image_mean if codebook_image_mean is not None else FLAVA_CODEBOOK_MEAN
         self.codebook_image_std = codebook_image_std if codebook_image_std is not None else FLAVA_CODEBOOK_STD
+        self._valid_processor_keys = [
+            "images",
+            "do_resize",
+            "size",
+            "resample",
+            "do_center_crop",
+            "crop_size",
+            "do_rescale",
+            "rescale_factor",
+            "do_normalize",
+            "image_mean",
+            "image_std",
+            "return_image_mask",
+            "input_size_patches",
+            "total_mask_patches",
+            "mask_group_min_patches",
+            "mask_group_max_patches",
+            "mask_group_min_aspect_ratio",
+            "mask_group_max_aspect_ratio",
+            "return_codebook_pixels",
+            "codebook_do_resize",
+            "codebook_size",
+            "codebook_resample",
+            "codebook_do_center_crop",
+            "codebook_crop_size",
+            "codebook_do_rescale",
+            "codebook_rescale_factor",
+            "codebook_do_map_pixels",
+            "codebook_do_normalize",
+            "codebook_image_mean",
+            "codebook_image_std",
+            "return_tensors",
+            "data_format",
+            "input_data_format",
+        ]
 
     @classmethod
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
@@ -403,14 +440,19 @@ class FlavaImageProcessor(BaseImageProcessor):
         input_data_format: Optional[ChannelDimension] = None,
     ) -> np.ndarray:
         """Preprocesses a single image."""
-        if do_resize and size is None or resample is None:
-            raise ValueError("Size and resample must be specified if do_resize is True.")
 
-        if do_rescale and rescale_factor is None:
-            raise ValueError("Rescale factor must be specified if do_rescale is True.")
-
-        if do_normalize and (image_mean is None or image_std is None):
-            raise ValueError("Image mean and std must be specified if do_normalize is True.")
+        validate_preprocess_arguments(
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_center_crop=do_center_crop,
+            crop_size=crop_size,
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+        )
 
         # All transformations expect numpy arrays.
         image = to_numpy_array(image)
@@ -629,6 +671,8 @@ class FlavaImageProcessor(BaseImageProcessor):
         codebook_image_std = codebook_image_std if codebook_image_std is not None else self.codebook_image_std
 
         images = make_list_of_images(images)
+
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
         if not valid_images(images):
             raise ValueError(

@@ -8,7 +8,7 @@ The model is loaded with the pre-trained weights for the abstractive summarizati
 
 ## Setup
 
-```
+```bash
 git clone https://github.com/huggingface/transformers && cd transformers
 pip install .
 pip install nltk py-rouge

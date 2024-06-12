@@ -410,5 +410,5 @@ def generic_train(
         trainer.fit(model)
 
     else:
-        print("RAG modeling tests with new set functions successfuly executed!")
+        print("RAG modeling tests with new set functions successfully executed!")
     return trainer

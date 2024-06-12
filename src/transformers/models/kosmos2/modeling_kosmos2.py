@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch KOSMOS-2 model."""
-
+"""PyTorch KOSMOS-2 model."""
 
 import math
 from dataclasses import dataclass
@@ -45,11 +44,6 @@ from .configuration_kosmos2 import Kosmos2Config, Kosmos2TextConfig, Kosmos2Visi
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = Kosmos2Config
-
-KOSMOS2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/kosmos-2-patch14-224",
-    # See all KOSMOS-2 models at https://huggingface.co/models?filter=kosmos-2
-]
 
 
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
@@ -774,8 +768,8 @@ class Kosmos2TextSinusoidalPositionalEmbedding(nn.Module):
         """
         half_dim = embedding_dim // 2
         emb = math.log(10000) / (half_dim - 1)
-        emb = torch.exp(torch.arange(half_dim, dtype=torch.float) * -emb)
-        emb = torch.arange(num_embeddings, dtype=torch.float).unsqueeze(1) * emb.unsqueeze(0)
+        emb = torch.exp(torch.arange(half_dim, dtype=torch.int64).float() * -emb)
+        emb = torch.arange(num_embeddings, dtype=torch.int64).float().unsqueeze(1) * emb.unsqueeze(0)
         emb = torch.cat([torch.sin(emb), torch.cos(emb)], dim=1).view(num_embeddings, -1)
         if embedding_dim % 2 == 1:
             # zero pad

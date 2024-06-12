@@ -15,7 +15,7 @@ export TASK_NAME=MRPC
 
 python ./run_glue_with_pabee.py \
   --model_type albert \
-  --model_name_or_path bert-base-uncased/albert-base-v2 \
+  --model_name_or_path google-bert/bert-base-uncased/albert/albert-base-v2 \
   --task_name $TASK_NAME \
   --do_train \
   --do_eval \

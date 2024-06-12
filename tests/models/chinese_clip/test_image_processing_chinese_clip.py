@@ -98,6 +98,7 @@ class ChineseCLIPImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
     image_processing_class = ChineseCLIPImageProcessor if is_vision_available() else None
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = ChineseCLIPImageProcessingTester(self, do_center_crop=True)
 
     @property
@@ -135,6 +136,7 @@ class ChineseCLIPImageProcessingTestFourChannels(ImageProcessingTestMixin, unitt
     image_processing_class = ChineseCLIPImageProcessor if is_vision_available() else None
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = ChineseCLIPImageProcessingTester(self, num_channels=4, do_center_crop=True)
         self.expected_encoded_image_num_channels = 3
 

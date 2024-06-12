@@ -74,7 +74,7 @@ def pack_data_dir(tok, data_dir: Path, max_tokens, save_path):
 
 def packer_cli():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--tok_name", type=str, help="like facebook/bart-large-cnn,t5-base, etc.")
+    parser.add_argument("--tok_name", type=str, help="like facebook/bart-large-cnn,google-t5/t5-base, etc.")
     parser.add_argument("--max_seq_len", type=int, default=128)
     parser.add_argument("--data_dir", type=str)
     parser.add_argument("--save_path", type=str)

@@ -12,9 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" The distiller to distil the student.
-    Adapted in part from Facebook, Inc XLM model (https://github.com/facebookresearch/XLM)
+"""The distiller to distil the student.
+Adapted in part from Facebook, Inc XLM model (https://github.com/facebookresearch/XLM)
 """
+
 import math
 import os
 import time

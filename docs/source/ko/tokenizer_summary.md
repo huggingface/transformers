@@ -97,7 +97,7 @@ rendered properly in your Markdown viewer.
 ```py
 >>> from transformers import BertTokenizer
 
->>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+>>> tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-uncased")
 >>> tokenizer.tokenize("I have a new GPU!")
 ["i", "have", "a", "new", "gp", "##u", "!"]
 ```
@@ -111,7 +111,7 @@ rendered properly in your Markdown viewer.
 ```py
 >>> from transformers import XLNetTokenizer
 
->>> tokenizer = XLNetTokenizer.from_pretrained("xlnet-base-cased")
+>>> tokenizer = XLNetTokenizer.from_pretrained("xlnet/xlnet-base-cased")
 >>> tokenizer.tokenize("Don't you love 🤗 Transformers? We sure do.")
 ["▁Don", "'", "t", "▁you", "▁love", "▁", "🤗", "▁", "Transform", "ers", "?", "▁We", "▁sure", "▁do", "."]
 ```

@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Owlv2 model. """
-
+"""Testing suite for the PyTorch Owlv2 model."""
 
 import inspect
 import os
@@ -50,7 +49,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import Owlv2ForObjectDetection, Owlv2Model, Owlv2TextModel, Owlv2VisionModel
-    from transformers.models.owlv2.modeling_owlv2 import OWLV2_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -138,7 +136,7 @@ class Owlv2VisionModelTester:
 
 
 @require_torch
-# Copied from tests.models.owlvit.test_modeling_owlvit.OwlViTVisionModelTest with OwlViT->Owlv2, OWL-ViT->OwlV2, OWLVIT->OWLV2
+# Copied from tests.models.owlvit.test_modeling_owlvit.OwlViTVisionModelTest with OwlViT->Owlv2, OWL-ViT->OwlV2, OWLVIT->OWLV2, owlvit-base-patch32->owlv2-base-patch16-ensemble
 class Owlv2VisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as OWLV2 does not use input_ids, inputs_embeds,
@@ -164,7 +162,7 @@ class Owlv2VisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -219,9 +217,9 @@ class Owlv2VisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in OWLV2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = Owlv2VisionModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/owlv2-base-patch16-ensemble"
+        model = Owlv2VisionModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # Copied from tests.models.owlvit.test_modeling_owlvit.OwlViTTextModelTester with OwlViT->Owlv2
@@ -315,7 +313,7 @@ class Owlv2TextModelTester:
 
 
 @require_torch
-# Copied from tests.models.owlvit.test_modeling_owlvit.OwlViTTextModelTest with OwlViT->Owlv2, OWL-ViT->OwlV2, OWLVIT->OWLV2
+# Copied from tests.models.owlvit.test_modeling_owlvit.OwlViTTextModelTest with OwlViT->Owlv2, OWL-ViT->OwlV2, OWLVIT->OWLV2, owlvit-base-patch32->owlv2-base-patch16-ensemble
 class Owlv2TextModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Owlv2TextModel,) if is_torch_available() else ()
     fx_compatible = False
@@ -367,9 +365,9 @@ class Owlv2TextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in OWLV2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = Owlv2TextModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/owlv2-base-patch16-ensemble"
+        model = Owlv2TextModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class Owlv2ModelTester:
@@ -385,6 +383,7 @@ class Owlv2ModelTester:
         self.is_training = is_training
         self.text_config = self.text_model_tester.get_config().to_dict()
         self.vision_config = self.vision_model_tester.get_config().to_dict()
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
 
     def prepare_config_and_inputs(self):
         text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
@@ -429,11 +428,14 @@ class Owlv2ModelTester:
 
 
 @require_torch
-# Copied from tests.models.owlvit.test_modeling_owlvit.OwlViTModelTest with OwlViT->Owlv2, OWL-ViT->OwlV2, OWLVIT->OWLV2
+# Copied from tests.models.owlvit.test_modeling_owlvit.OwlViTModelTest with OwlViT->Owlv2, OWL-ViT->OwlV2, OWLVIT->OWLV2, owlvit-base-patch32->owlv2-base-patch16-ensemble
 class Owlv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Owlv2Model,) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": Owlv2Model, "zero-shot-object-detection": Owlv2ForObjectDetection}
+        {
+            "feature-extraction": Owlv2Model,
+            "zero-shot-object-detection": Owlv2ForObjectDetection,
+        }
         if is_torch_available()
         else {}
     )
@@ -463,7 +465,7 @@ class Owlv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="Owlv2Model does not have input/output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     # override as the `logit_scale` parameter initilization is different for OWLV2
@@ -574,9 +576,9 @@ class Owlv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in OWLV2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = Owlv2Model.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/owlv2-base-patch16-ensemble"
+        model = Owlv2Model.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # Copied from tests.models.owlvit.test_modeling_owlvit.OwlViTForObjectDetectionTester with OwlViT->Owlv2, OWL-ViT->OwlV2, OWLVIT->OWLV2
@@ -588,6 +590,7 @@ class Owlv2ForObjectDetectionTester:
         self.is_training = is_training
         self.text_config = self.text_model_tester.get_config().to_dict()
         self.vision_config = self.vision_model_tester.get_config().to_dict()
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
 
     def prepare_config_and_inputs(self):
         text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
@@ -639,7 +642,7 @@ class Owlv2ForObjectDetectionTester:
 
 
 @require_torch
-# Copied from tests.models.owlvit.test_modeling_owlvit.OwlViTForObjectDetectionTest with OwlViT->Owlv2, OWL-ViT->OwlV2, OWLVIT->OWLV2
+# Copied from tests.models.owlvit.test_modeling_owlvit.OwlViTForObjectDetectionTest with OwlViT->Owlv2, OWL-ViT->OwlV2, OWLVIT->OWLV2, owlvit-base-patch32->owlv2-base-patch16-ensemble
 class Owlv2ForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Owlv2ForObjectDetection,) if is_torch_available() else ()
     fx_compatible = False
@@ -668,7 +671,7 @@ class Owlv2ForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="Owlv2Model does not have input/output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip(reason="Test_initialization is tested in individual model tests")
@@ -772,9 +775,9 @@ class Owlv2ForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in OWLV2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = Owlv2ForObjectDetection.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/owlv2-base-patch16-ensemble"
+        model = Owlv2ForObjectDetection.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
@@ -840,10 +843,12 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
         num_queries = int((model.config.vision_config.image_size / model.config.vision_config.patch_size) ** 2)
         self.assertEqual(outputs.pred_boxes.shape, torch.Size((1, num_queries, 4)))
 
-        expected_slice_logits = torch.tensor([[-21.4139, -21.6130], [-19.0084, -19.5491], [-20.9592, -21.3830]])
+        expected_slice_logits = torch.tensor(
+            [[-21.413497, -21.612638], [-19.008193, -19.548841], [-20.958896, -21.382694]]
+        ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice_logits, atol=1e-4))
         expected_slice_boxes = torch.tensor(
-            [[0.2413, 0.0519, 0.4533], [0.1395, 0.0457, 0.2507], [0.2330, 0.0505, 0.4277]],
+            [[0.241309, 0.051896, 0.453267], [0.139474, 0.045701, 0.250660], [0.233022, 0.050479, 0.427671]],
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4))
 

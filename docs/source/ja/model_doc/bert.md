@@ -115,7 +115,7 @@ BERT を始めるのに役立つ公式 Hugging Face およびコミュニティ 
 - 方法に関するブログ投稿 [GPU 上の DeepSpeed-Inference を使用して BERT 推論を高速化する](https://www.philschmid.de/bert-deepspeed-inference)。
 
 ⚙️ **事前トレーニング**
-- [Hugging Face Transformers と Habana Gaudi を使用した BERT の事前トレーニング] に関するブログ投稿 (https://www.philschmid.de/pre-training-bert-habana)。
+- [Hugging Face Transformers と Habana Gaudi を使用した BERT の事前トレーニング に関するブログ投稿](https://www.philschmid.de/pre-training-bert-habana)。
 
 🚀 **デプロイ**
 - 方法に関するブログ投稿  [ハグフェイス最適化でトランスフォーマーを ONNX に変換する](https://www.philschmid.de/convert-transformers-to-onnx)。

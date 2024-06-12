@@ -15,15 +15,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        version: ["1.13", "1.12", "1.11", "1.10"]
-    runs-on: ubuntu-22.04
+        version: ["1.13", "1.12", "1.11"]
+    runs-on: [intel-cpu, 8-cpu, ci]
     steps:
       -
         name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
       -
         name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       -
         id: get-base-image
         name: Get Base Image
@@ -60,14 +60,14 @@ jobs:
       fail-fast: false
       matrix:
         version: ["2.11", "2.10", "2.9", "2.8", "2.7", "2.6", "2.5"]
-    runs-on: ubuntu-22.04
+    runs-on: [intel-cpu, 8-cpu, ci]
     steps:
       -
         name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
       -
         name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       -
         id: get-base-image
         name: Get Base Image

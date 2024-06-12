@@ -12,13 +12,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch MobileNetV1 model. """
-
+"""Testing suite for the PyTorch MobileNetV1 model."""
 
 import unittest
 
 from transformers import MobileNetV1Config
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import is_flaky, require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -30,7 +29,6 @@ if is_torch_available():
     import torch
 
     from transformers import MobileNetV1ForImageClassification, MobileNetV1Model
-    from transformers.models.mobilenet_v1.modeling_mobilenet_v1 import MOBILENET_V1_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -147,7 +145,7 @@ class MobileNetV1ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     all_model_classes = (MobileNetV1Model, MobileNetV1ForImageClassification) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": MobileNetV1Model, "image-classification": MobileNetV1ForImageClassification}
+        {"image-feature-extraction": MobileNetV1Model, "image-classification": MobileNetV1ForImageClassification}
         if is_torch_available()
         else {}
     )
@@ -169,7 +167,7 @@ class MobileNetV1ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         pass
 
     @unittest.skip(reason="MobileNetV1 does not support input and output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip(reason="MobileNetV1 does not output attentions")
@@ -212,9 +210,13 @@ class MobileNetV1ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in MOBILENET_V1_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = MobileNetV1Model.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/mobilenet_v1_1.0_224"
+        model = MobileNetV1Model.from_pretrained(model_name)
+        self.assertIsNotNone(model)
+
+    @is_flaky(description="is_flaky https://github.com/huggingface/transformers/pull/31258")
+    def test_batching_equivalence(self):
+        super().test_batching_equivalence()
 
 
 # We will verify our results on an image of cute cats

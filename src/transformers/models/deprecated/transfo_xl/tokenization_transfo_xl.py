@@ -14,9 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
- Tokenization classes for Transformer XL model. Adapted from https://github.com/kimiyoung/transformer-xl.
+Tokenization classes for Transformer XL model. Adapted from https://github.com/kimiyoung/transformer-xl.
 """
-
 
 import glob
 import os
@@ -34,6 +33,7 @@ from ....utils import (
     is_torch_available,
     logging,
     requires_backends,
+    strtobool,
     torch_only_method,
 )
 
@@ -54,18 +54,9 @@ VOCAB_FILES_NAMES = {
     "vocab_file": "vocab.txt",
 }
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "pretrained_vocab_file": {
-        "transfo-xl-wt103": "https://huggingface.co/transfo-xl-wt103/resolve/main/vocab.pkl",
-    }
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "transfo-xl-wt103": None,
-}
 
 PRETRAINED_CORPUS_ARCHIVE_MAP = {
-    "transfo-xl-wt103": "https://huggingface.co/transfo-xl-wt103/resolve/main/corpus.bin",
+    "transfo-xl/transfo-xl-wt103": "https://huggingface.co/transfo-xl/transfo-xl-wt103/resolve/main/corpus.bin",
 }
 CORPUS_NAME = "corpus.bin"
 
@@ -161,8 +152,6 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids"]
 
     def __init__(
@@ -212,6 +201,14 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
             vocab_dict = None
             if pretrained_vocab_file is not None:
                 # Priority on pickle files (support PyTorch and TF)
+                if not strtobool(os.environ.get("TRUST_REMOTE_CODE", "False")):
+                    raise ValueError(
+                        "This part uses `pickle.load` which is insecure and will execute arbitrary code that is "
+                        "potentially malicious. It's recommended to never unpickle data that could have come from an "
+                        "untrusted source, or that could have been tampered with. If you already verified the pickle "
+                        "data and decided to use it, you can set the environment variable "
+                        "`TRUST_REMOTE_CODE` to `True` to allow it."
+                    )
                 with open(pretrained_vocab_file, "rb") as f:
                     vocab_dict = pickle.load(f)
 
@@ -442,7 +439,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         Example:
 
         ```python
-        >>> tokenizer = TransfoXLTokenizer.from_pretrained("transfo-xl-wt103")
+        >>> tokenizer = TransfoXLTokenizer.from_pretrained("transfo-xl/transfo-xl-wt103")
         >>> tokenizer.moses_pipeline("23,000 people are 1.80 m tall")
         ['23', '@,@', '000', 'people', 'are', '1', '@.@', '80', 'm', 'tall']
         ```"""
@@ -790,6 +787,13 @@ def get_lm_corpus(datadir, dataset):
         corpus = torch.load(fn_pickle)
     elif os.path.exists(fn):
         logger.info("Loading cached dataset from pickle...")
+        if not strtobool(os.environ.get("TRUST_REMOTE_CODE", "False")):
+            raise ValueError(
+                "This part uses `pickle.load` which is insecure and will execute arbitrary code that is potentially "
+                "malicious. It's recommended to never unpickle data that could have come from an untrusted source, or "
+                "that could have been tampered with. If you already verified the pickle data and decided to use it, "
+                "you can set the environment variable `TRUST_REMOTE_CODE` to `True` to allow it."
+            )
         with open(fn, "rb") as fp:
             corpus = pickle.load(fp)
     else:

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch PatchTST model. """
+"""Testing suite for the PyTorch PatchTST model."""
 
 import inspect
 import random
@@ -165,7 +165,6 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     test_missing_keys = True
     test_torchscript = False
     test_inputs_embeds = False
-    test_model_common_attributes = False
 
     test_resize_embeddings = True
     test_resize_position_embeddings = False
@@ -297,6 +296,10 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_retain_grad_hidden_states_attentions(self):
         super().test_retain_grad_hidden_states_attentions()
 
+    @unittest.skip(reason="Model does not have input embeddings")
+    def test_model_get_set_embeddings(self):
+        pass
+
 
 def prepare_batch(repo_id="hf-internal-testing/etth1-hourly-batch", file="train-batch.pt"):
     file = hf_hub_download(repo_id=repo_id, filename=file, repo_type="dataset")
@@ -367,19 +370,19 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(mean_prediction[0, -1:], expected_slice, atol=TOLERANCE))
 
     def test_regression_generation(self):
-        model = PatchTSTForRegression.from_pretrained("namctin/patchtst_etth1_regression").to(torch_device)
-        batch = prepare_batch(file="test-batch.pt")
+        model = PatchTSTForRegression.from_pretrained("ibm/patchtst-etth1-regression-distribution").to(torch_device)
+        batch = prepare_batch(repo_id="ibm/patchtst-etth1-test-data", file="regression_distribution_batch.pt")
 
         torch.manual_seed(0)
+        model.eval()
         with torch.no_grad():
             outputs = model.generate(past_values=batch["past_values"].to(torch_device))
         expected_shape = torch.Size((64, model.config.num_parallel_samples, model.config.num_targets))
         self.assertEqual(outputs.sequences.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[0.3228, 0.4320, 0.4591, 0.4066, -0.3461, 0.3094, -0.8426]],
+            [[-0.08046409], [-0.06570087], [-0.28218266], [-0.20636195], [-0.11787311]],
             device=torch_device,
         )
         mean_prediction = outputs.sequences.mean(dim=1)
-
-        self.assertTrue(torch.allclose(mean_prediction[0, -1:], expected_slice, rtol=TOLERANCE))
+        self.assertTrue(torch.allclose(mean_prediction[-5:], expected_slice, rtol=TOLERANCE))

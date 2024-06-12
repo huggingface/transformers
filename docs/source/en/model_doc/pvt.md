@@ -38,7 +38,7 @@ object detection, instance and semantic segmentation. For example, with a compar
 achieves 40.4 AP on the COCO dataset, surpassing ResNet50+RetinNet (36.3 AP) by 4.1 absolute AP (see Figure 2). We hope 
 that PVT could serve as an alternative and useful backbone for pixel-level predictions and facilitate future research.*
 
-This model was contributed by [Xrenya](<https://huggingface.co/Xrenya). The original code can be found [here](https://github.com/whai362/PVT).
+This model was contributed by [Xrenya](https://huggingface.co/Xrenya). The original code can be found [here](https://github.com/whai362/PVT).
 
 
 - PVTv1 on ImageNet-1K

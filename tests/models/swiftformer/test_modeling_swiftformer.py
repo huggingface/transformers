@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch SwiftFormer model. """
-
+"""Testing suite for the PyTorch SwiftFormer model."""
 
 import copy
 import unittest
@@ -37,7 +36,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import SwiftFormerForImageClassification, SwiftFormerModel
-    from transformers.models.swiftformer.modeling_swiftformer import SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -139,7 +137,7 @@ class SwiftFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     all_model_classes = (SwiftFormerModel, SwiftFormerForImageClassification) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": SwiftFormerModel, "image-classification": SwiftFormerForImageClassification}
+        {"image-feature-extraction": SwiftFormerModel, "image-classification": SwiftFormerForImageClassification}
         if is_torch_available()
         else {}
     )
@@ -168,7 +166,7 @@ class SwiftFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def test_inputs_embeds(self):
         pass
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -186,9 +184,9 @@ class SwiftFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = SwiftFormerModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "MBZUAI/swiftformer-xs"
+        model = SwiftFormerModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @unittest.skip(reason="SwiftFormer does not output attentions")
     def test_attention_outputs(self):

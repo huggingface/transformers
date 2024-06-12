@@ -21,7 +21,7 @@ import sys
 from time import time
 from unittest.mock import patch
 
-from transformers.testing_utils import TestCasePlus, require_torch_tpu
+from transformers.testing_utils import TestCasePlus, require_torch_xla
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -44,7 +44,7 @@ stream_handler = logging.StreamHandler(sys.stdout)
 logger.addHandler(stream_handler)
 
 
-@require_torch_tpu
+@require_torch_xla
 class TorchXLAExamplesTests(TestCasePlus):
     def test_run_glue(self):
         import xla_spawn
@@ -54,7 +54,7 @@ class TorchXLAExamplesTests(TestCasePlus):
             ./examples/pytorch/text-classification/run_glue.py
             --num_cores=8
             ./examples/pytorch/text-classification/run_glue.py
-            --model_name_or_path distilbert-base-uncased
+            --model_name_or_path distilbert/distilbert-base-uncased
             --output_dir {tmp_dir}
             --overwrite_output_dir
             --train_file ./tests/fixtures/tests_samples/MRPC/train.csv

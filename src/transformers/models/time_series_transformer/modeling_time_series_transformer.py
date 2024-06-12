@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Time Series Transformer model."""
+"""PyTorch Time Series Transformer model."""
 
 from typing import List, Optional, Tuple, Union
 
@@ -32,19 +32,18 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...time_series_utils import NegativeBinomialOutput, NormalOutput, StudentTOutput
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils import (
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
 from .configuration_time_series_transformer import TimeSeriesTransformerConfig
 
 
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "TimeSeriesTransformerConfig"
-
-
-TIME_SERIES_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "huggingface/time-series-transformer-tourism-monthly",
-    # See all TimeSeriesTransformer models at https://huggingface.co/models?filter=time_series_transformer
-]
 
 
 class TimeSeriesFeatureEmbedder(nn.Module):
@@ -436,9 +435,8 @@ class TimeSeriesTransformerEncoderLayer(nn.Module):
     def __init__(self, config: TimeSeriesTransformerConfig):
         super().__init__()
         self.embed_dim = config.d_model
-        attn_type = "flash_attention_2" if getattr(config, "_flash_attn_2_enabled", False) else "default"
 
-        self.self_attn = TIME_SERIES_TRANSFORMER_ATTENTION_CLASSES[attn_type](
+        self.self_attn = TIME_SERIES_TRANSFORMER_ATTENTION_CLASSES[config._attn_implementation](
             embed_dim=self.embed_dim,
             num_heads=config.encoder_attention_heads,
             dropout=config.attention_dropout,
@@ -503,7 +501,10 @@ class TimeSeriesTransformerEncoderLayer(nn.Module):
         return outputs
 
 
-TIME_SERIES_TRANSFORMER_ATTENTION_CLASSES = {"default": TimeSeriesTransformerAttention}
+# TODO: Implement attention with SDPA for TimeSeriesTransformer.
+TIME_SERIES_TRANSFORMER_ATTENTION_CLASSES = {
+    "eager": TimeSeriesTransformerAttention,
+}
 
 
 # Copied from transformers.models.bart.modeling_bart.BartDecoderLayer with Bart->TimeSeriesTransformer, with BART->TIME_SERIES_TRANSFORMER
@@ -512,8 +513,7 @@ class TimeSeriesTransformerDecoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
 
-        attn_type = "flash_attention_2" if getattr(config, "_flash_attn_2_enabled", False) else "default"
-        self.self_attn = TIME_SERIES_TRANSFORMER_ATTENTION_CLASSES[attn_type](
+        self.self_attn = TIME_SERIES_TRANSFORMER_ATTENTION_CLASSES[config._attn_implementation](
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -526,7 +526,7 @@ class TimeSeriesTransformerDecoderLayer(nn.Module):
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.encoder_attn = TIME_SERIES_TRANSFORMER_ATTENTION_CLASSES[attn_type](
+        self.encoder_attn = TIME_SERIES_TRANSFORMER_ATTENTION_CLASSES[config._attn_implementation](
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,

@@ -45,7 +45,7 @@ Carga un tokenizador pre-entrenado con [`AutoTokenizer.from_pretrained`]:
 ```py
 >>> from transformers import AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+>>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
 ```
 
 A continuación, pasa tu frase al tokenizador:
@@ -461,7 +461,7 @@ Recuerda la sección anterior sobre el procesamiento de datos de audio, siempre 
 
 ### Processor
 
-Un processor combina un extractor de características y un tokenizador. Cargue un procesador con [`AutoProcessor.from_pretrained]:
+Un processor combina un extractor de características y un tokenizador. Cargue un procesador con [`AutoProcessor.from_pretrained`]:
 
 ```py
 >>> from transformers import AutoProcessor

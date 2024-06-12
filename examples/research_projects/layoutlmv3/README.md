@@ -32,7 +32,7 @@ python run_funsd_cord.py \
   --do_train \
   --do_eval \
   --max_steps 1000 \
-  --evaluation_strategy steps \
+  --eval_strategy steps \
   --eval_steps 100 \
   --learning_rate 1e-5 \
   --load_best_model_at_end \
@@ -57,7 +57,7 @@ python run_funsd_cord.py \
   --do_train \
   --do_eval \
   --max_steps 1000 \
-  --evaluation_strategy steps \
+  --eval_strategy steps \
   --eval_steps 100 \
   --learning_rate 5e-5 \
   --load_best_model_at_end \

@@ -19,6 +19,7 @@ import os
 import os.path
 import sys
 import tempfile
+import threading
 import unittest
 import unittest.mock as mock
 import uuid
@@ -26,13 +27,15 @@ from pathlib import Path
 
 import requests
 from huggingface_hub import HfApi, HfFolder, delete_repo
-from huggingface_hub.file_download import http_get
 from pytest import mark
 from requests.exceptions import HTTPError
 
 from transformers import (
     AutoConfig,
     AutoModel,
+    AutoModelForImageClassification,
+    AutoModelForSequenceClassification,
+    OwlViTForObjectDetection,
     PretrainedConfig,
     is_torch_available,
     logging,
@@ -41,6 +44,7 @@ from transformers.testing_utils import (
     TOKEN,
     USER,
     CaptureLogger,
+    LoggingLevel,
     TestCasePlus,
     is_staging_test,
     require_accelerate,
@@ -60,13 +64,18 @@ from transformers.utils import (
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
 )
-from transformers.utils.import_utils import is_flax_available, is_tf_available, is_torchdynamo_available
+from transformers.utils.import_utils import (
+    is_flash_attn_2_available,
+    is_flax_available,
+    is_tf_available,
+    is_torch_sdpa_available,
+    is_torchdynamo_available,
+)
 
 
 sys.path.append(str(Path(__file__).parent.parent / "utils"))
 
 from test_module.custom_configuration import CustomConfig, NoSuperInitConfig  # noqa E402
-
 
 if is_torch_available():
     import torch
@@ -75,7 +84,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import (
-        BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         AutoModelForCausalLM,
         AutoTokenizer,
         BertConfig,
@@ -85,8 +93,18 @@ if is_torch_available():
         T5Config,
         T5ForConditionalGeneration,
     )
-    from transformers.modeling_attn_mask_utils import AttentionMaskConverter
-    from transformers.modeling_utils import shard_checkpoint
+    from transformers.modeling_attn_mask_utils import (
+        AttentionMaskConverter,
+        _create_4d_causal_attention_mask,
+        _prepare_4d_attention_mask,
+        _prepare_4d_causal_attention_mask,
+    )
+    from transformers.modeling_utils import (
+        _find_disjoint,
+        _find_identical,
+        dtype_byte_size,
+        shard_checkpoint,
+    )
 
     # Fake pretrained models for tests
     class BaseModel(PreTrainedModel):
@@ -150,6 +168,123 @@ if is_torch_available():
         def tie_weights(self):
             self.decoder.weight = self.base.linear.weight
 
+    class Prepare4dCausalAttentionMaskModel(nn.Module):
+        def forward(self, inputs_embeds):
+            batch_size, seq_length, _ = inputs_embeds.shape
+            past_key_values_length = 4
+            attention_mask = _prepare_4d_causal_attention_mask(
+                None, (batch_size, seq_length), inputs_embeds, past_key_values_length
+            )
+            return attention_mask
+
+    class Create4dCausalAttentionMaskModel(nn.Module):
+        def forward(self, inputs_embeds):
+            batch_size, seq_length, _ = inputs_embeds.shape
+            past_key_values_length = 4
+            attention_mask = _create_4d_causal_attention_mask(
+                (batch_size, seq_length),
+                dtype=inputs_embeds.dtype,
+                device=inputs_embeds.device,
+                past_key_values_length=past_key_values_length,
+            )
+            return attention_mask
+
+    class Prepare4dAttentionMaskModel(nn.Module):
+        def forward(self, mask, inputs_embeds):
+            attention_mask = _prepare_4d_attention_mask(mask, dtype=inputs_embeds.dtype)
+            return attention_mask
+
+    class TestOffline(unittest.TestCase):
+        def test_offline(self):
+            # Ugly setup with monkeypatches, amending env vars here is too late as libs have already been imported
+            from huggingface_hub import constants
+
+            from transformers.utils import hub
+
+            offlfine_env = hub._is_offline_mode
+            hub_cache_env = constants.HF_HUB_CACHE
+            hub_cache_env1 = constants.HUGGINGFACE_HUB_CACHE
+            default_cache = constants.default_cache_path
+            transformers_cache = hub.TRANSFORMERS_CACHE
+
+            try:
+                hub._is_offline_mode = True
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    LOG.info("Temporary cache dir %s", tmpdir)
+                    constants.HF_HUB_CACHE = tmpdir
+                    constants.HUGGINGFACE_HUB_CACHE = tmpdir
+                    constants.default_cache_path = tmpdir
+                    hub.TRANSFORMERS_CACHE = tmpdir
+                    # First offline load should fail
+                    try:
+                        AutoModelForImageClassification.from_pretrained(
+                            TINY_IMAGE_CLASSIF, revision="main", use_auth_token=None
+                        )
+                    except OSError:
+                        LOG.info("Loading model %s in offline mode failed as expected", TINY_IMAGE_CLASSIF)
+                    else:
+                        self.fail("Loading model {} in offline mode should fail".format(TINY_IMAGE_CLASSIF))
+
+                    # Download model -> Huggingface Hub not concerned by our offline mode
+                    LOG.info("Downloading %s for offline tests", TINY_IMAGE_CLASSIF)
+                    hub_api = HfApi()
+                    local_dir = hub_api.snapshot_download(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
+
+                    LOG.info("Model %s downloaded in %s", TINY_IMAGE_CLASSIF, local_dir)
+
+                    AutoModelForImageClassification.from_pretrained(
+                        TINY_IMAGE_CLASSIF, revision="main", use_auth_token=None
+                    )
+            finally:
+                # Tear down: reset env as it was before calling this test
+                hub._is_offline_mode = offlfine_env
+                constants.HF_HUB_CACHE = hub_cache_env
+                constants.HUGGINGFACE_HUB_CACHE = hub_cache_env1
+                constants.default_cache_path = default_cache
+                hub.TRANSFORMERS_CACHE = transformers_cache
+
+        def test_local_files_only(self):
+            # Ugly setup with monkeypatches, amending env vars here is too late as libs have already been imported
+            from huggingface_hub import constants
+
+            from transformers.utils import hub
+
+            hub_cache_env = constants.HF_HUB_CACHE
+            hub_cache_env1 = constants.HUGGINGFACE_HUB_CACHE
+            default_cache = constants.default_cache_path
+            transformers_cache = hub.TRANSFORMERS_CACHE
+            try:
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    LOG.info("Temporary cache dir %s", tmpdir)
+                    constants.HF_HUB_CACHE = tmpdir
+                    constants.HUGGINGFACE_HUB_CACHE = tmpdir
+                    constants.default_cache_path = tmpdir
+                    hub.TRANSFORMERS_CACHE = tmpdir
+                    try:
+                        AutoModelForImageClassification.from_pretrained(
+                            TINY_IMAGE_CLASSIF, revision="main", use_auth_token=None, local_files_only=True
+                        )
+                    except OSError:
+                        LOG.info("Loading model %s in offline mode failed as expected", TINY_IMAGE_CLASSIF)
+                    else:
+                        self.fail("Loading model {} in offline mode should fail".format(TINY_IMAGE_CLASSIF))
+
+                    LOG.info("Downloading %s for offline tests", TINY_IMAGE_CLASSIF)
+                    hub_api = HfApi()
+                    local_dir = hub_api.snapshot_download(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
+
+                    LOG.info("Model %s downloaded in %s", TINY_IMAGE_CLASSIF, local_dir)
+
+                    AutoModelForImageClassification.from_pretrained(
+                        TINY_IMAGE_CLASSIF, revision="main", use_auth_token=None, local_files_only=True
+                    )
+            finally:
+                # Tear down: reset env as it was before calling this test
+                constants.HF_HUB_CACHE = hub_cache_env
+                constants.HUGGINGFACE_HUB_CACHE = hub_cache_env1
+                constants.default_cache_path = default_cache
+                hub.TRANSFORMERS_CACHE = transformers_cache
+
 
 if is_flax_available():
     from transformers import FlaxBertModel
@@ -160,6 +295,10 @@ if is_tf_available():
 
 TINY_T5 = "patrickvonplaten/t5-tiny-random"
 TINY_BERT_FOR_TOKEN_CLASSIFICATION = "hf-internal-testing/tiny-bert-for-token-classification"
+TINY_MISTRAL = "hf-internal-testing/tiny-random-MistralForCausalLM"
+TINY_IMAGE_CLASSIF = "hf-internal-testing/tiny-random-SiglipForImageClassification"
+
+LOG = logging.get_logger(__name__)
 
 
 def check_models_equal(model1, model2):
@@ -175,29 +314,29 @@ def check_models_equal(model1, model2):
 class ModelUtilsTest(TestCasePlus):
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            config = BertConfig.from_pretrained(model_name)
-            self.assertIsNotNone(config)
-            self.assertIsInstance(config, PretrainedConfig)
+        model_name = "google-bert/bert-base-uncased"
+        config = BertConfig.from_pretrained(model_name)
+        self.assertIsNotNone(config)
+        self.assertIsInstance(config, PretrainedConfig)
 
-            model = BertModel.from_pretrained(model_name)
-            model, loading_info = BertModel.from_pretrained(model_name, output_loading_info=True)
-            self.assertIsNotNone(model)
-            self.assertIsInstance(model, PreTrainedModel)
+        model = BertModel.from_pretrained(model_name)
+        model, loading_info = BertModel.from_pretrained(model_name, output_loading_info=True)
+        self.assertIsNotNone(model)
+        self.assertIsInstance(model, PreTrainedModel)
 
-            self.assertEqual(len(loading_info["missing_keys"]), 0)
-            self.assertEqual(len(loading_info["unexpected_keys"]), 8)
-            self.assertEqual(len(loading_info["mismatched_keys"]), 0)
-            self.assertEqual(len(loading_info["error_msgs"]), 0)
+        self.assertEqual(len(loading_info["missing_keys"]), 0)
+        self.assertEqual(len(loading_info["unexpected_keys"]), 8)
+        self.assertEqual(len(loading_info["mismatched_keys"]), 0)
+        self.assertEqual(len(loading_info["error_msgs"]), 0)
 
-            config = BertConfig.from_pretrained(model_name, output_attentions=True, output_hidden_states=True)
+        config = BertConfig.from_pretrained(model_name, output_attentions=True, output_hidden_states=True)
 
-            # Not sure this is the intended behavior. TODO fix Lysandre & Thom
-            config.name_or_path = model_name
+        # Not sure this is the intended behavior. TODO fix Lysandre & Thom
+        config.name_or_path = model_name
 
-            model = BertModel.from_pretrained(model_name, output_attentions=True, output_hidden_states=True)
-            self.assertEqual(model.config.output_hidden_states, True)
-            self.assertEqual(model.config, config)
+        model = BertModel.from_pretrained(model_name, output_attentions=True, output_hidden_states=True)
+        self.assertEqual(model.config.output_hidden_states, True)
+        self.assertEqual(model.config, config)
 
     def test_model_from_pretrained_subfolder(self):
         config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
@@ -211,6 +350,26 @@ class ModelUtilsTest(TestCasePlus):
                 _ = BertModel.from_pretrained(tmp_dir)
 
             model_loaded = BertModel.from_pretrained(tmp_dir, subfolder=subfolder)
+
+        self.assertTrue(check_models_equal(model, model_loaded))
+
+    def test_model_manually_shared_disjointed_tensors_optimum(self):
+        config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
+        model = BertModel(config)
+
+        # Let's fuse qkv
+        attn = model.encoder.layer[0].attention.self
+        q = attn.query.weight
+        k = attn.key.weight
+        v = attn.value.weight
+        # Force some shared storage
+        qkv = torch.stack([q, k, v], dim=0)
+        attn.query.weight = torch.nn.Parameter(qkv[0])
+        attn.key.weight = torch.nn.Parameter(qkv[1])
+        attn.value.weight = torch.nn.Parameter(qkv[2])
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            model_loaded = BertModel.from_pretrained(tmp_dir)
 
         self.assertTrue(check_models_equal(model, model_loaded))
 
@@ -254,9 +413,19 @@ class ModelUtilsTest(TestCasePlus):
         self.assertIsNotNone(model)
 
         logger = logging.get_logger("transformers.configuration_utils")
-        with CaptureLogger(logger) as cl:
-            BertModel.from_pretrained(TINY_T5)
+        with LoggingLevel(logging.WARNING):
+            with CaptureLogger(logger) as cl:
+                BertModel.from_pretrained(TINY_T5)
         self.assertTrue("You are using a model of type t5 to instantiate a model of type bert" in cl.out)
+
+    @require_accelerate
+    def test_model_from_pretrained_with_none_quantization_config(self):
+        # Needs a device_map for to enter the low_cpu_mem branch. We also load AutoModelForSequenceClassification
+        # deliberately to enter the missing keys branch.
+        model = AutoModelForSequenceClassification.from_pretrained(
+            TINY_MISTRAL, device_map="auto", quantization_config=None
+        )
+        self.assertIsNotNone(model)
 
     def test_model_from_config_torch_dtype(self):
         # test that the model can be instantiated with dtype of user's choice - as long as it's a
@@ -355,6 +524,69 @@ class ModelUtilsTest(TestCasePlus):
         model = AutoModel.from_pretrained(TINY_BERT_FOR_TOKEN_CLASSIFICATION, torch_dtype="auto")
         self.assertEqual(model.dtype, torch.float32)
 
+    def test_model_from_pretrained_attn_implementation(self):
+        # test that the model can be instantiated with attn_implementation of either
+        # 1. explicit from_pretrained's attn_implementation argument
+        # 2. explicit from_pretrained's attn_implementation argument with a config argument
+        attn_implementation_available = ["eager"]
+        if is_torch_sdpa_available():
+            attn_implementation_available.append("sdpa")
+
+        if is_flash_attn_2_available():
+            attn_implementation_available.append("flash_attention_2")
+
+        mistral_attention_classes = {
+            "eager": "MistralAttention",
+            "sdpa": "MistralSdpaAttention",
+            "flash_attention_2": "MistralFlashAttention2",
+        }
+        for requested_attn_implementation in attn_implementation_available:
+            model = AutoModelForCausalLM.from_pretrained(
+                TINY_MISTRAL, attn_implementation=requested_attn_implementation
+            )
+            self.assertEqual(model.config._attn_implementation, requested_attn_implementation)
+            for module in model.modules():
+                if "Attention" in module.__class__.__name__:
+                    self.assertEqual(
+                        module.__class__.__name__, mistral_attention_classes[requested_attn_implementation]
+                    )
+
+            config = AutoConfig.from_pretrained(TINY_MISTRAL)
+            model = AutoModelForCausalLM.from_pretrained(
+                TINY_MISTRAL, config=config, attn_implementation=requested_attn_implementation
+            )
+            self.assertEqual(model.config._attn_implementation, requested_attn_implementation)
+            for module in model.modules():
+                if "Attention" in module.__class__.__name__:
+                    self.assertEqual(
+                        module.__class__.__name__, mistral_attention_classes[requested_attn_implementation]
+                    )
+
+    def test_torch_dtype_byte_sizes(self):
+        torch_dtypes_and_bytes = [
+            (torch.double, 8),
+            (torch.float64, 8),
+            (torch.float, 4),
+            (torch.float32, 4),
+            (torch.half, 2),
+            (torch.float16, 2),
+            (torch.bfloat16, 2),
+            (torch.long, 8),
+            (torch.int64, 8),
+            (torch.int, 4),
+            (torch.int32, 4),
+            (torch.short, 2),
+            (torch.int16, 2),
+            (torch.uint8, 1),
+            (torch.int8, 1),
+            (torch.float8_e4m3fn, 1),
+            (torch.float8_e5m2, 1),
+            (torch.bool, 0.125),
+        ]
+
+        for torch_dtype, bytes_per_element in torch_dtypes_and_bytes:
+            self.assertEqual(dtype_byte_size(torch_dtype), bytes_per_element)
+
     def test_no_super_init_config_and_model(self):
         config = NoSuperInitConfig(attribute=32)
         model = NoSuperInitModel(config)
@@ -437,7 +669,7 @@ class ModelUtilsTest(TestCasePlus):
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             # We use the same folder for various sizes to make sure a new save erases the old checkpoint.
-            for max_size in ["50kB", "50kiB", "100kB", "100kiB", "200kB", "200kiB"]:
+            for max_size in ["50kB", "100kB", "200kB"]:
                 model.save_pretrained(tmp_dir, max_shard_size=max_size, safe_serialization=False)
 
                 # Get each shard file and its size
@@ -454,10 +686,7 @@ class ModelUtilsTest(TestCasePlus):
 
                 # Check a file is bigger than max_size only when it has a single weight
                 for shard_file, size in shard_to_size.items():
-                    if max_size.endswith("kiB"):
-                        max_size_int = int(max_size[:-3]) * 2**10
-                    else:
-                        max_size_int = int(max_size[:-2]) * 10**3
+                    max_size_int = int(max_size[:-2]) * 10**3
                     # Note: pickle adds some junk so the weight of the file can end up being slightly bigger than
                     # the size asked for (since we count parameters)
                     if size >= max_size_int + 50000:
@@ -656,7 +885,7 @@ class ModelUtilsTest(TestCasePlus):
     def test_from_pretrained_low_cpu_mem_usage_measured(self):
         # test that `from_pretrained(..., low_cpu_mem_usage=True)` uses less cpu memory than default
 
-        mname = "bert-base-cased"
+        mname = "google-bert/bert-base-cased"
 
         preamble = "from transformers import AutoModel"
         one_liner_str = f'{preamble}; AutoModel.from_pretrained("{mname}", low_cpu_mem_usage=False)'
@@ -700,11 +929,11 @@ class ModelUtilsTest(TestCasePlus):
         for i in range(12):
             device_map[f"transformer.h.{i}"] = 0 if i <= 5 else 1
 
-        model = AutoModelForCausalLM.from_pretrained("gpt2", device_map=device_map)
+        model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2", device_map=device_map)
 
-        tokenizer = AutoTokenizer.from_pretrained("gpt2")
+        tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
         inputs = tokenizer("Hello, my name is", return_tensors="pt")
-        output = model.generate(inputs["input_ids"].to(0))
+        output = model.generate(inputs["input_ids"].to(f"{torch_device}:0"))
 
         text_output = tokenizer.decode(output[0].tolist())
         self.assertEqual(text_output, "Hello, my name is John. I'm a writer, and I'm a writer. I'm")
@@ -715,22 +944,22 @@ class ModelUtilsTest(TestCasePlus):
     def test_from_pretrained_disk_offload_task_model(self):
         model = AutoModel.from_pretrained("hf-internal-testing/tiny-random-gpt2")
         device_map = {
-            "transformer.wte": 0,
-            "transformer.wpe": 0,
+            "transformer.wte": f"{torch_device}:0",
+            "transformer.wpe": f"{torch_device}:0",
             "transformer.h.0": "cpu",
             "transformer.h.1": "cpu",
             "transformer.h.2": "cpu",
             "transformer.h.3": "disk",
             "transformer.h.4": "disk",
-            "transformer.ln_f": 0,
-            "lm_head": 0,
+            "transformer.ln_f": f"{torch_device}:0",
+            "lm_head": f"{torch_device}:0",
         }
         with tempfile.TemporaryDirectory() as tmp_dir:
-            inputs = torch.tensor([[1, 2, 3]]).to(0)
+            inputs = torch.tensor([[1, 2, 3]]).to(f"{torch_device}:0")
 
             model.save_pretrained(tmp_dir)
-            new_model = AutoModelForCausalLM.from_pretrained(tmp_dir).to(0)
-            outputs1 = new_model.to(0)(inputs)
+            new_model = AutoModelForCausalLM.from_pretrained(tmp_dir).to(f"{torch_device}:0")
+            outputs1 = new_model.to(f"{torch_device}:0")(inputs)
 
             offload_folder = os.path.join(tmp_dir, "offload")
             new_model_with_offload = AutoModelForCausalLM.from_pretrained(
@@ -741,7 +970,6 @@ class ModelUtilsTest(TestCasePlus):
             self.assertTrue(torch.allclose(outputs1.logits.cpu(), outputs2.logits.cpu()))
 
             # With state dict temp offload
-            offload_folder = os.path.join(tmp_dir, "offload")
             new_model_with_offload = AutoModelForCausalLM.from_pretrained(
                 tmp_dir,
                 device_map=device_map,
@@ -749,7 +977,6 @@ class ModelUtilsTest(TestCasePlus):
                 offload_state_dict=True,
             )
             outputs2 = new_model_with_offload(inputs)
-
             self.assertTrue(torch.allclose(outputs1.logits.cpu(), outputs2.logits.cpu()))
 
     @require_accelerate
@@ -759,20 +986,20 @@ class ModelUtilsTest(TestCasePlus):
         derived_model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2")
 
         device_map = {
-            "wte": 0,
-            "wpe": 0,
+            "wte": f"{torch_device}:0",
+            "wpe": f"{torch_device}:0",
             "h.0": "cpu",
             "h.1": "cpu",
             "h.2": "cpu",
             "h.3": "disk",
             "h.4": "disk",
-            "ln_f": 0,
+            "ln_f": f"{torch_device}:0",
         }
         with tempfile.TemporaryDirectory() as tmp_dir:
-            inputs = torch.tensor([[1, 2, 3]]).to(0)
+            inputs = torch.tensor([[1, 2, 3]]).to(f"{torch_device}:0")
             derived_model.save_pretrained(tmp_dir, use_safetensors=True)
             base_model = AutoModel.from_pretrained(tmp_dir)
-            outputs1 = base_model.to(0)(inputs)
+            outputs1 = base_model.to(f"{torch_device}:0")(inputs)
 
             # with disk offload
             offload_folder = os.path.join(tmp_dir, "offload")
@@ -792,6 +1019,23 @@ class ModelUtilsTest(TestCasePlus):
             outputs2 = new_model_with_offload(inputs)
             self.assertTrue(torch.allclose(outputs1[0].cpu(), outputs2[0].cpu()))
 
+    @slow
+    @require_torch
+    def test_from_pretrained_non_contiguous_checkpoint(self):
+        # See: https://github.com/huggingface/transformers/pull/28414
+        # Tiny models on the Hub have contiguous weights, contrarily to google/owlvit
+        model = OwlViTForObjectDetection.from_pretrained("fxmarty/owlvit-tiny-non-contiguous-weight")
+        self.assertTrue(model.owlvit.visual_projection.weight.is_contiguous())
+
+        model = OwlViTForObjectDetection.from_pretrained(
+            "fxmarty/owlvit-tiny-non-contiguous-weight", device_map="auto"
+        )
+        self.assertTrue(model.owlvit.visual_projection.weight.is_contiguous())
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, safe_serialization=False)
+            model.save_pretrained(tmp_dir, safe_serialization=True)
+
     def test_cached_files_are_used_when_internet_is_down(self):
         # A mock response for an HTTP head request to emulate server down
         response_mock = mock.Mock()
@@ -809,25 +1053,42 @@ class ModelUtilsTest(TestCasePlus):
             # This check we did call the fake head request
             mock_head.assert_called()
 
-    def test_load_from_one_file(self):
-        try:
-            tmp_file = tempfile.mktemp()
-            with open(tmp_file, "wb") as f:
-                http_get(
-                    "https://huggingface.co/hf-internal-testing/tiny-random-bert/resolve/main/pytorch_model.bin", f
-                )
+    @require_accelerate
+    @mark.accelerate_tests
+    @require_torch_accelerator
+    def test_save_offloaded_model(self):
+        device_map = {
+            "transformer.wte": f"{torch_device}:0",
+            "transformer.wpe": f"{torch_device}:0",
+            "transformer.h.0": "cpu",
+            "transformer.h.1": "cpu",
+            "transformer.h.2": "cpu",
+            "transformer.h.3": "disk",
+            "transformer.h.4": "disk",
+            "transformer.ln_f": f"{torch_device}:0",
+            "lm_head": f"{torch_device}:0",
+        }
 
-            config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
-            _ = BertModel.from_pretrained(tmp_file, config=config)
-        finally:
-            os.remove(tmp_file)
+        # check_models_equal requires onloaded tensors
+        model_id = "hf-internal-testing/tiny-random-gpt2"
+        onloaded_model = AutoModelForCausalLM.from_pretrained(model_id, device_map="cpu")
+        inputs = torch.tensor([[1, 2, 3]]).to(f"{torch_device}:0")
+        cpu_output = onloaded_model(inputs)[0]
 
-    def test_legacy_load_from_url(self):
-        # This test is for deprecated behavior and can be removed in v5
-        config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
-        _ = BertModel.from_pretrained(
-            "https://huggingface.co/hf-internal-testing/tiny-random-bert/resolve/main/pytorch_model.bin", config=config
-        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            offload_folder = os.path.join(tmp_dir, "offload")
+            offloaded_model = AutoModelForCausalLM.from_pretrained(
+                model_id, device_map=device_map, offload_folder=offload_folder
+            )
+            presaved_output = offloaded_model(inputs)[0]
+            offloaded_model.save_pretrained(
+                tmp_dir, max_shard_size="200KB"
+            )  # model is 1.6MB, max shard size is allocated to cpu by default
+            saved_model = AutoModelForCausalLM.from_pretrained(tmp_dir, device_map=device_map)
+            postsaved_output = saved_model(inputs)[0]
+
+        self.assertTrue(torch.allclose(cpu_output, presaved_output, atol=1e-4))
+        self.assertTrue(torch.allclose(presaved_output, postsaved_output))
 
     @require_safetensors
     def test_use_safetensors(self):
@@ -865,6 +1126,26 @@ class ModelUtilsTest(TestCasePlus):
             all_downloaded_files = glob.glob(os.path.join(tmp_dir, "*", "snapshots", "*", "*", "*"))
             self.assertTrue(any(f.endswith("safetensors") for f in all_downloaded_files))
             self.assertFalse(any(f.endswith("bin") for f in all_downloaded_files))
+
+        # test no model file found when use_safetensors=None (default when safetensors package available)
+        with self.assertRaises(OSError) as missing_model_file_error:
+            BertModel.from_pretrained("hf-internal-testing/config-no-model")
+
+        self.assertTrue(
+            "does not appear to have a file named pytorch_model.bin, model.safetensors,"
+            in str(missing_model_file_error.exception)
+        )
+
+        with self.assertRaises(OSError) as missing_model_file_error:
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                with open(os.path.join(tmp_dir, "config.json"), "w") as f:
+                    f.write("{}")
+                f.close()
+                BertModel.from_pretrained(tmp_dir)
+
+        self.assertTrue(
+            "Error no file named pytorch_model.bin, model.safetensors" in str(missing_model_file_error.exception)
+        )
 
     @require_safetensors
     def test_safetensors_save_and_load(self):
@@ -970,8 +1251,9 @@ class ModelUtilsTest(TestCasePlus):
             model.save_pretrained(tmp_dir)
 
             # Loading the model with a new class, we don't get a warning for unexpected weights, just an info
-            with CaptureLogger(logger) as cl:
-                _, loading_info = BaseModel.from_pretrained(tmp_dir, output_loading_info=True)
+            with LoggingLevel(logging.WARNING):
+                with CaptureLogger(logger) as cl:
+                    _, loading_info = BaseModel.from_pretrained(tmp_dir, output_loading_info=True)
             self.assertNotIn("were not used when initializing ModelWithHead", cl.out)
             self.assertEqual(
                 set(loading_info["unexpected_keys"]),
@@ -982,8 +1264,9 @@ class ModelUtilsTest(TestCasePlus):
             state_dict = model.state_dict()
             state_dict["added_key"] = copy.deepcopy(state_dict["linear.weight"])
             safe_save_file(state_dict, os.path.join(tmp_dir, SAFE_WEIGHTS_NAME), metadata={"format": "pt"})
-            with CaptureLogger(logger) as cl:
-                _, loading_info = ModelWithHead.from_pretrained(tmp_dir, output_loading_info=True)
+            with LoggingLevel(logging.WARNING):
+                with CaptureLogger(logger) as cl:
+                    _, loading_info = ModelWithHead.from_pretrained(tmp_dir, output_loading_info=True)
             self.assertIn("were not used when initializing ModelWithHead: ['added_key']", cl.out)
             self.assertEqual(loading_info["unexpected_keys"], ["added_key"])
 
@@ -992,75 +1275,82 @@ class ModelUtilsTest(TestCasePlus):
 
         with self.subTest("Ensure no warnings when pad_token_id is None."):
             logger.warning_once.cache_clear()
-            with CaptureLogger(logger) as cl:
-                config_no_pad_token = PretrainedConfig()
-                config_no_pad_token.pad_token_id = None
-                model = ModelWithHead(config_no_pad_token)
-                input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 0, 0]])
-                model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
+            with LoggingLevel(logging.WARNING):
+                with CaptureLogger(logger) as cl:
+                    config_no_pad_token = PretrainedConfig()
+                    config_no_pad_token.pad_token_id = None
+                    model = ModelWithHead(config_no_pad_token)
+                    input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 0, 0]])
+                    model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
             self.assertNotIn("We strongly recommend passing in an `attention_mask`", cl.out)
 
         with self.subTest("Ensure no warnings when there is an attention_mask."):
             logger.warning_once.cache_clear()
-            with CaptureLogger(logger) as cl:
-                config = PretrainedConfig()
-                config.pad_token_id = 0
-                model = ModelWithHead(config)
-                input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 0, 0]])
-                attention_mask = torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0]])
-                model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
+            with LoggingLevel(logging.WARNING):
+                with CaptureLogger(logger) as cl:
+                    config = PretrainedConfig()
+                    config.pad_token_id = 0
+                    model = ModelWithHead(config)
+                    input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 0, 0]])
+                    attention_mask = torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0]])
+                    model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             self.assertNotIn("We strongly recommend passing in an `attention_mask`", cl.out)
 
         with self.subTest("Ensure no warnings when there are no pad_token_ids in the input_ids."):
             logger.warning_once.cache_clear()
-            with CaptureLogger(logger) as cl:
-                config = PretrainedConfig()
-                config.pad_token_id = 0
-                model = ModelWithHead(config)
-                input_ids = torch.tensor([[1, 345, 232, 328, 740, 140, 1695, 69, 6078, 2341, 25]])
-                model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
+            with LoggingLevel(logging.WARNING):
+                with CaptureLogger(logger) as cl:
+                    config = PretrainedConfig()
+                    config.pad_token_id = 0
+                    model = ModelWithHead(config)
+                    input_ids = torch.tensor([[1, 345, 232, 328, 740, 140, 1695, 69, 6078, 2341, 25]])
+                    model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
             self.assertNotIn("We strongly recommend passing in an `attention_mask`", cl.out)
 
         with self.subTest("Ensure a warning is shown when the input_ids start with a pad_token_id."):
             logger.warning_once.cache_clear()
-            with CaptureLogger(logger) as cl:
-                config = PretrainedConfig()
-                config.pad_token_id = 0
-                model = ModelWithHead(config)
-                input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 432, 5232]])
-                model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
+            with LoggingLevel(logging.WARNING):
+                with CaptureLogger(logger) as cl:
+                    config = PretrainedConfig()
+                    config.pad_token_id = 0
+                    model = ModelWithHead(config)
+                    input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 432, 5232]])
+                    model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
             self.assertIn("We strongly recommend passing in an `attention_mask`", cl.out)
 
         with self.subTest("Ensure a warning is shown when the input_ids end with a pad_token_id."):
             logger.warning_once.cache_clear()
-            with CaptureLogger(logger) as cl:
-                config = PretrainedConfig()
-                config.pad_token_id = 0
-                model = ModelWithHead(config)
-                input_ids = torch.tensor([[432, 345, 232, 328, 740, 140, 1695, 69, 6078, 0, 0]])
-                model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
+            with LoggingLevel(logging.WARNING):
+                with CaptureLogger(logger) as cl:
+                    config = PretrainedConfig()
+                    config.pad_token_id = 0
+                    model = ModelWithHead(config)
+                    input_ids = torch.tensor([[432, 345, 232, 328, 740, 140, 1695, 69, 6078, 0, 0]])
+                    model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
             self.assertIn("We strongly recommend passing in an `attention_mask`", cl.out)
 
         with self.subTest("Ensure that the warning is shown at most once."):
             logger.warning_once.cache_clear()
-            with CaptureLogger(logger) as cl:
-                config = PretrainedConfig()
-                config.pad_token_id = 0
-                model = ModelWithHead(config)
-                input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 0, 0]])
-                model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
-                model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
+            with LoggingLevel(logging.WARNING):
+                with CaptureLogger(logger) as cl:
+                    config = PretrainedConfig()
+                    config.pad_token_id = 0
+                    model = ModelWithHead(config)
+                    input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 0, 0]])
+                    model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
+                    model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
             self.assertEqual(cl.out.count("We strongly recommend passing in an `attention_mask`"), 1)
 
         with self.subTest("Ensure a different warning is shown when the pad_token_id is equal to the bos_token_id."):
             logger.warning_once.cache_clear()
-            with CaptureLogger(logger) as cl:
-                config = PretrainedConfig()
-                config.pad_token_id = 0
-                config.bos_token_id = config.pad_token_id
-                model = ModelWithHead(config)
-                input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 0, 0]])
-                model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
+            with LoggingLevel(logging.WARNING):
+                with CaptureLogger(logger) as cl:
+                    config = PretrainedConfig()
+                    config.pad_token_id = 0
+                    config.bos_token_id = config.pad_token_id
+                    model = ModelWithHead(config)
+                    input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 0, 0]])
+                    model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
             self.assertIn("You may ignore this warning if your `pad_token_id`", cl.out)
 
         if not is_torchdynamo_available():
@@ -1086,7 +1376,7 @@ class ModelUtilsTest(TestCasePlus):
     @slow
     def test_pretrained_low_mem_new_config(self):
         # Checking for 1 model(the same one which was described in the issue) .
-        model_ids = ["gpt2"]
+        model_ids = ["openai-community/gpt2"]
 
         for model_id in model_ids:
             model_config = AutoConfig.from_pretrained(pretrained_model_name_or_path=model_id)
@@ -1109,12 +1399,14 @@ class ModelUtilsTest(TestCasePlus):
         # `transformers_version` field set to `foo`. If loading the file fails, this test also fails.
 
         # 1. Load without further parameters
-        model = AutoModelForCausalLM.from_pretrained("joaogante/tiny-random-gpt2-with-generation-config")
+        model = AutoModelForCausalLM.from_pretrained(
+            "joaogante/tiny-random-gpt2-with-generation-config", use_safetensors=False
+        )
         self.assertEqual(model.generation_config.transformers_version, "foo")
 
         # 2. Load with `device_map`
         model = AutoModelForCausalLM.from_pretrained(
-            "joaogante/tiny-random-gpt2-with-generation-config", device_map="auto"
+            "joaogante/tiny-random-gpt2-with-generation-config", device_map="auto", use_safetensors=False
         )
         self.assertEqual(model.generation_config.transformers_version, "foo")
 
@@ -1166,7 +1458,37 @@ class ModelUtilsTest(TestCasePlus):
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
             self.assertTrue(torch.equal(p1, p2))
 
+    def test_modifying_model_config_causes_warning_saving_generation_config(self):
+        model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
+        model.config.top_k = 1
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with self.assertLogs("transformers.modeling_utils", level="WARNING") as logs:
+                model.save_pretrained(tmp_dir)
+            self.assertEqual(len(logs.output), 1)
+            self.assertIn("Your generation config was originally created from the model config", logs.output[0])
 
+    @require_safetensors
+    def test_model_from_pretrained_from_mlx(self):
+        from safetensors import safe_open
+
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-mistral-mlx")
+        self.assertIsNotNone(model)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, safe_serialization=True)
+            with safe_open(os.path.join(tmp_dir, "model.safetensors"), framework="pt") as f:
+                metadata = f.metadata()
+                self.assertEqual(metadata.get("format"), "pt")
+            new_model = AutoModelForCausalLM.from_pretrained(tmp_dir)
+
+        input_ids = torch.randint(100, 1000, (1, 10))
+        with torch.no_grad():
+            outputs = model(input_ids)
+            outputs_from_saved = new_model(input_ids)
+            self.assertTrue(torch.allclose(outputs_from_saved["logits"], outputs["logits"]))
+
+
+@slow
 @require_torch
 class ModelOnTheFlyConversionTester(unittest.TestCase):
     @classmethod
@@ -1339,7 +1661,7 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
             bot_opened_pr_title = None
 
             for discussion in discussions:
-                if discussion.author == "SFconvertBot":
+                if discussion.author == "SFconvertbot":
                     bot_opened_pr = True
                     bot_opened_pr_title = discussion.title
 
@@ -1361,6 +1683,51 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
         # Try to convert the model on that revision should raise
         with self.assertRaises(EnvironmentError):
             BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self.token, revision="new-branch")
+
+    def test_absence_of_safetensors_triggers_conversion(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        initial_model = BertModel(config)
+
+        # Push a model on `main`
+        initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False)
+
+        # Download the model that doesn't have safetensors
+        BertModel.from_pretrained(self.repo_name, token=self.token)
+
+        for thread in threading.enumerate():
+            if thread.name == "Thread-autoconversion":
+                thread.join(timeout=10)
+
+        with self.subTest("PR was open with the safetensors account"):
+            discussions = self.api.get_repo_discussions(self.repo_name)
+
+            bot_opened_pr = None
+            bot_opened_pr_title = None
+
+            for discussion in discussions:
+                if discussion.author == "SFconvertbot":
+                    bot_opened_pr = True
+                    bot_opened_pr_title = discussion.title
+
+            self.assertTrue(bot_opened_pr)
+            self.assertEqual(bot_opened_pr_title, "Adding `safetensors` variant of this model")
+
+    @mock.patch("transformers.safetensors_conversion.spawn_conversion")
+    def test_absence_of_safetensors_triggers_conversion_failed(self, spawn_conversion_mock):
+        spawn_conversion_mock.side_effect = HTTPError()
+
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        initial_model = BertModel(config)
+
+        # Push a model on `main`
+        initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False)
+
+        # The auto conversion is mocked to always raise; ensure that it doesn't raise in the main thread
+        BertModel.from_pretrained(self.repo_name, token=self.token)
 
 
 @require_torch
@@ -1385,6 +1752,11 @@ class ModelPushToHubTester(unittest.TestCase):
 
         try:
             delete_repo(token=cls._token, repo_id="test-dynamic-model")
+        except HTTPError:
+            pass
+
+        try:
+            delete_repo(token=cls._token, repo_id="test-dynamic-model-with-tags")
         except HTTPError:
             pass
 
@@ -1420,7 +1792,7 @@ class ModelPushToHubTester(unittest.TestCase):
 The commit description supports markdown synthax see:
 ```python
 >>> form transformers import AutoConfig
->>> config = AutoConfig.from_pretrained("bert-base-uncased")
+>>> config = AutoConfig.from_pretrained("google-bert/bert-base-uncased")
 ```
 """
         commit_details = model.push_to_hub(
@@ -1475,6 +1847,28 @@ The commit description supports markdown synthax see:
         new_model = AutoModel.from_config(config, trust_remote_code=True)
         self.assertEqual(new_model.__class__.__name__, "CustomModel")
 
+    def test_push_to_hub_with_tags(self):
+        from huggingface_hub import ModelCard
+
+        new_tags = ["tag-1", "tag-2"]
+
+        CustomConfig.register_for_auto_class()
+        CustomModel.register_for_auto_class()
+
+        config = CustomConfig(hidden_size=32)
+        model = CustomModel(config)
+
+        self.assertTrue(model.model_tags is None)
+
+        model.add_model_tags(new_tags)
+
+        self.assertTrue(model.model_tags == new_tags)
+
+        model.push_to_hub("test-dynamic-model-with-tags", token=self._token)
+
+        loaded_model_card = ModelCard.load(f"{USER}/test-dynamic-model-with-tags")
+        self.assertEqual(loaded_model_card.data.tags, new_tags)
+
 
 @require_torch
 class AttentionMaskTester(unittest.TestCase):
@@ -1492,7 +1886,7 @@ class AttentionMaskTester(unittest.TestCase):
             for bsz_idx, seq_idx in additional_mask:
                 mask_2d[bsz_idx, seq_idx] = 0
 
-        mask_4d = mask_converter.to_4d(mask_2d, query_length=q_len, key_value_length=kv_len)
+        mask_4d = mask_converter.to_4d(mask_2d, query_length=q_len, key_value_length=kv_len, dtype=torch.float32)
 
         assert mask_4d.shape == (bsz, 1, q_len, kv_len)
 
@@ -1528,7 +1922,9 @@ class AttentionMaskTester(unittest.TestCase):
                 self.check_non_causal(bsz, q_len, kv_len, mask_2d, mask_4d)
 
     def check_to_causal(self, mask_converter, q_len, kv_len, bsz=3):
-        mask_4d = mask_converter.to_causal_4d(bsz, query_length=q_len, key_value_length=kv_len, device=torch_device)
+        mask_4d = mask_converter.to_causal_4d(
+            bsz, query_length=q_len, key_value_length=kv_len, device=torch_device, dtype=torch.float32
+        )
 
         if q_len == 1 and mask_converter.sliding_window is None:
             # no causal mask if q_len is 1
@@ -1553,7 +1949,7 @@ class AttentionMaskTester(unittest.TestCase):
     def compute_num_context_mask(self, kv_len, context, q_len):
         # This function computes the # of attention tokens that are added for
         # the sliding window
-        c_mask_len = kv_len - context
+        c_mask_len = kv_len - context - 1
         num_mask_triangle = c_mask_len * (c_mask_len + 1) // 2
         cut_mask_len = max(c_mask_len - q_len, 0)
         num_cut_mask = cut_mask_len * (cut_mask_len + 1) // 2
@@ -1620,3 +2016,255 @@ class AttentionMaskTester(unittest.TestCase):
         self.check_to_causal(mask_converter, q_len=3, kv_len=7)
         # non auto-regressive case
         self.check_to_causal(mask_converter, q_len=7, kv_len=7)
+
+    def test_torch_compile_fullgraph(self):
+        model = Prepare4dCausalAttentionMaskModel()
+
+        inputs_embeds = torch.rand([1, 3, 32])
+        res_non_compiled = model(inputs_embeds)
+
+        compiled_model = torch.compile(model, fullgraph=True)
+
+        res_compiled = compiled_model(inputs_embeds)
+
+        self.assertTrue(torch.equal(res_non_compiled, res_compiled))
+
+        model = Create4dCausalAttentionMaskModel()
+
+        inputs_embeds = torch.rand(2, 4, 16)
+        res_non_compiled = model(inputs_embeds)
+
+        compiled_model = torch.compile(model, fullgraph=True)
+        res_compiled = compiled_model(inputs_embeds)
+
+        self.assertTrue(torch.equal(res_non_compiled, res_compiled))
+
+        model = Prepare4dAttentionMaskModel()
+
+        mask = torch.ones(2, 4)
+        mask[0, :2] = 0
+        inputs_embeds = torch.rand(2, 4, 16)
+
+        res_non_compiled = model(mask, inputs_embeds)
+
+        compiled_model = torch.compile(model, fullgraph=True)
+        res_compiled = compiled_model(mask, inputs_embeds)
+
+        self.assertTrue(torch.equal(res_non_compiled, res_compiled))
+
+    @require_torch
+    @slow
+    def test_unmask_unattended_left_padding(self):
+        attention_mask = torch.Tensor([[0, 0, 1], [1, 1, 1], [0, 1, 1]]).to(torch.int64)
+
+        expanded_mask = torch.Tensor(
+            [
+                [[[0, 0, 0], [0, 0, 0], [0, 0, 1]]],
+                [[[1, 0, 0], [1, 1, 0], [1, 1, 1]]],
+                [[[0, 0, 0], [0, 1, 0], [0, 1, 1]]],
+            ]
+        ).to(torch.int64)
+
+        reference_output = torch.Tensor(
+            [
+                [[[1, 1, 1], [1, 1, 1], [0, 0, 1]]],
+                [[[1, 0, 0], [1, 1, 0], [1, 1, 1]]],
+                [[[1, 1, 1], [0, 1, 0], [0, 1, 1]]],
+            ]
+        ).to(torch.int64)
+
+        result = AttentionMaskConverter._unmask_unattended(expanded_mask, attention_mask, unmasked_value=1)
+
+        self.assertTrue(torch.equal(result, reference_output))
+
+        attention_mask = torch.Tensor([[0, 0, 1, 1, 1], [1, 1, 1, 1, 1], [0, 1, 1, 1, 1]]).to(torch.int64)
+
+        attn_mask_converter = AttentionMaskConverter(is_causal=True)
+        past_key_values_length = 0
+        key_value_length = attention_mask.shape[-1] + past_key_values_length
+
+        expanded_mask = attn_mask_converter.to_4d(
+            attention_mask, attention_mask.shape[-1], key_value_length=key_value_length, dtype=torch.float32
+        )
+
+        result = AttentionMaskConverter._unmask_unattended(expanded_mask, attention_mask, unmasked_value=0)
+        min_inf = torch.finfo(torch.float32).min
+        reference_output = torch.Tensor(
+            [
+                [
+                    [
+                        [0, 0, 0, 0, 0],
+                        [0, 0, 0, 0, 0],
+                        [min_inf, min_inf, 0, min_inf, min_inf],
+                        [min_inf, min_inf, 0, 0, min_inf],
+                        [min_inf, min_inf, 0, 0, 0],
+                    ]
+                ],
+                [
+                    [
+                        [0, min_inf, min_inf, min_inf, min_inf],
+                        [0, 0, min_inf, min_inf, min_inf],
+                        [0, 0, 0, min_inf, min_inf],
+                        [0, 0, 0, 0, min_inf],
+                        [0, 0, 0, 0, 0],
+                    ]
+                ],
+                [
+                    [
+                        [0, 0, 0, 0, 0],
+                        [min_inf, 0, min_inf, min_inf, min_inf],
+                        [min_inf, 0, 0, min_inf, min_inf],
+                        [min_inf, 0, 0, 0, min_inf],
+                        [min_inf, 0, 0, 0, 0],
+                    ]
+                ],
+            ]
+        )
+
+        self.assertTrue(torch.equal(reference_output, result))
+
+    @require_torch
+    @slow
+    def test_unmask_unattended_right_padding(self):
+        attention_mask = torch.Tensor([[1, 1, 1, 0], [1, 1, 1, 1], [1, 1, 0, 0]]).to(torch.int64)
+
+        attn_mask_converter = AttentionMaskConverter(is_causal=True)
+        past_key_values_length = 0
+        key_value_length = attention_mask.shape[-1] + past_key_values_length
+
+        expanded_mask = attn_mask_converter.to_4d(
+            attention_mask, attention_mask.shape[-1], key_value_length=key_value_length, dtype=torch.float32
+        )
+
+        result = AttentionMaskConverter._unmask_unattended(expanded_mask, attention_mask, unmasked_value=0)
+
+        self.assertTrue(torch.equal(expanded_mask, result))
+
+    @require_torch
+    @slow
+    def test_unmask_unattended_random_mask(self):
+        attention_mask = torch.Tensor([[1, 0, 1, 0], [1, 0, 1, 1], [1, 1, 0, 1]]).to(torch.int64)
+
+        attn_mask_converter = AttentionMaskConverter(is_causal=True)
+        past_key_values_length = 0
+        key_value_length = attention_mask.shape[-1] + past_key_values_length
+
+        expanded_mask = attn_mask_converter.to_4d(
+            attention_mask, attention_mask.shape[-1], key_value_length=key_value_length, dtype=torch.float32
+        )
+
+        result = AttentionMaskConverter._unmask_unattended(expanded_mask, attention_mask, unmasked_value=0)
+
+        self.assertTrue(torch.equal(expanded_mask, result))
+
+
+@require_torch
+class TestAttentionImplementation(unittest.TestCase):
+    def test_error_no_sdpa_available(self):
+        with self.assertRaises(ValueError) as cm:
+            _ = AutoModel.from_pretrained("hf-tiny-model-private/tiny-random-MCTCTModel", attn_implementation="sdpa")
+
+        self.assertTrue(
+            "does not support an attention implementation through torch.nn.functional.scaled_dot_product_attention"
+            in str(cm.exception)
+        )
+
+        _ = AutoModel.from_pretrained("hf-tiny-model-private/tiny-random-MCTCTModel")
+
+    def test_error_no_flash_available(self):
+        with self.assertRaises(ValueError) as cm:
+            _ = AutoModel.from_pretrained(
+                "hf-tiny-model-private/tiny-random-MCTCTModel", attn_implementation="flash_attention_2"
+            )
+
+        self.assertTrue("does not support Flash Attention 2.0" in str(cm.exception))
+
+    def test_error_no_flash_available_with_config(self):
+        with self.assertRaises(ValueError) as cm:
+            config = AutoConfig.from_pretrained("hf-tiny-model-private/tiny-random-MCTCTModel")
+
+            _ = AutoModel.from_pretrained(
+                "hf-tiny-model-private/tiny-random-MCTCTModel", config=config, attn_implementation="flash_attention_2"
+            )
+
+        self.assertTrue("does not support Flash Attention 2.0" in str(cm.exception))
+
+    def test_error_wrong_attn_implementation(self):
+        with self.assertRaises(ValueError) as cm:
+            _ = AutoModel.from_pretrained("hf-tiny-model-private/tiny-random-MCTCTModel", attn_implementation="foo")
+
+        self.assertTrue('The only possible arguments are `attn_implementation="eager"' in str(cm.exception))
+
+    def test_not_available_flash(self):
+        if is_flash_attn_2_available():
+            self.skipTest("Please uninstall flash-attn package to run test_not_available_flash")
+
+        with self.assertRaises(ImportError) as cm:
+            _ = AutoModel.from_pretrained(
+                "hf-internal-testing/tiny-random-GPTBigCodeModel", attn_implementation="flash_attention_2"
+            )
+
+        self.assertTrue("the package flash_attn seems to be not installed" in str(cm.exception))
+
+    def test_not_available_flash_with_config(self):
+        if is_flash_attn_2_available():
+            self.skipTest("Please uninstall flash-attn package to run test_not_available_flash")
+
+        config = AutoConfig.from_pretrained("hf-internal-testing/tiny-random-GPTBigCodeModel")
+
+        with self.assertRaises(ImportError) as cm:
+            _ = AutoModel.from_pretrained(
+                "hf-internal-testing/tiny-random-GPTBigCodeModel",
+                config=config,
+                attn_implementation="flash_attention_2",
+            )
+
+        self.assertTrue("the package flash_attn seems to be not installed" in str(cm.exception))
+
+    def test_not_available_sdpa(self):
+        if is_torch_sdpa_available():
+            self.skipTest("This test requires torch<=2.0")
+
+        with self.assertRaises(ImportError) as cm:
+            _ = AutoModel.from_pretrained(
+                "hf-internal-testing/tiny-random-GPTBigCodeModel", attn_implementation="sdpa"
+            )
+
+        self.assertTrue("PyTorch SDPA requirements in Transformers are not met" in str(cm.exception))
+
+
+@require_torch
+class TestTensorSharing(TestCasePlus):
+    def test_disjoint(self):
+        main = torch.zeros(10)
+        a = main[:5]
+        b = main[5:]
+        state_dict = {"a": a, "b": b}
+
+        shared_names, disjoint_names = _find_disjoint([{"a", "b"}], state_dict)
+        self.assertEqual(shared_names, [])
+        self.assertEqual(disjoint_names, ["a", "b"])
+
+        a = main[::2]
+        b = main[1::2]
+        state_dict = {"a": a, "b": b}
+
+        shared_names, disjoint_names = _find_disjoint([{"a", "b"}], state_dict)
+        self.assertEqual(shared_names, [{"a", "b"}])
+        self.assertEqual(disjoint_names, [])
+
+    def test_identical(self):
+        a = torch.zeros(10)
+        b = a
+        state_dict = {"a": a, "b": b}
+
+        shared_names, identical_names = _find_identical([{"a", "b"}], state_dict)
+        self.assertEqual(shared_names, [])
+        self.assertEqual(identical_names, [{"a", "b"}])
+
+        b = a[:5]
+        state_dict = {"a": a, "b": b}
+
+        shared_names, identical_names = _find_identical([{"a", "b"}], state_dict)
+        self.assertEqual(shared_names, [{"a", "b"}])
+        self.assertEqual(identical_names, [])

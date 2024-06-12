@@ -49,7 +49,7 @@ Hugging Faceのベンチマークツールは非推奨であり、Transformerモ
 ```py
 >>> from transformers import PyTorchBenchmark, PyTorchBenchmarkArguments
 
->>> args = PyTorchBenchmarkArguments(models=["bert-base-uncased"], batch_sizes=[8], sequence_lengths=[8, 32, 128, 512])
+>>> args = PyTorchBenchmarkArguments(models=["google-bert/bert-base-uncased"], batch_sizes=[8], sequence_lengths=[8, 32, 128, 512])
 >>> benchmark = PyTorchBenchmark(args)
 ```
 </pt>
@@ -58,7 +58,7 @@ Hugging Faceのベンチマークツールは非推奨であり、Transformerモ
 >>> from transformers import TensorFlowBenchmark, TensorFlowBenchmarkArguments
 
 >>> args = TensorFlowBenchmarkArguments(
-...     models=["bert-base-uncased"], batch_sizes=[8], sequence_lengths=[8, 32, 128, 512]
+...     models=["google-bert/bert-base-uncased"], batch_sizes=[8], sequence_lengths=[8, 32, 128, 512]
 ... )
 >>> benchmark = TensorFlowBenchmark(args)
 ```
@@ -92,20 +92,20 @@ python examples/pytorch/benchmarking/run_benchmark.py --help
 --------------------------------------------------------------------------------
 Model Name             Batch Size     Seq Length     Time in s                  
 --------------------------------------------------------------------------------
-bert-base-uncased          8               8             0.006     
-bert-base-uncased          8               32            0.006     
-bert-base-uncased          8              128            0.018     
-bert-base-uncased          8              512            0.088     
+google-bert/bert-base-uncased          8               8             0.006     
+google-bert/bert-base-uncased          8               32            0.006     
+google-bert/bert-base-uncased          8              128            0.018     
+google-bert/bert-base-uncased          8              512            0.088     
 --------------------------------------------------------------------------------
 
 ====================      INFERENCE - MEMORY - RESULT       ====================
 --------------------------------------------------------------------------------
 Model Name             Batch Size     Seq Length    Memory in MB 
 --------------------------------------------------------------------------------
-bert-base-uncased          8               8             1227
-bert-base-uncased          8               32            1281
-bert-base-uncased          8              128            1307
-bert-base-uncased          8              512            1539
+google-bert/bert-base-uncased          8               8             1227
+google-bert/bert-base-uncased          8               32            1281
+google-bert/bert-base-uncased          8              128            1307
+google-bert/bert-base-uncased          8              512            1539
 --------------------------------------------------------------------------------
 
 ====================        ENVIRONMENT INFORMATION         ====================
@@ -151,20 +151,20 @@ python examples/tensorflow/benchmarking/run_benchmark_tf.py --help
 --------------------------------------------------------------------------------
 Model Name             Batch Size     Seq Length     Time in s                  
 --------------------------------------------------------------------------------
-bert-base-uncased          8               8             0.005
-bert-base-uncased          8               32            0.008
-bert-base-uncased          8              128            0.022
-bert-base-uncased          8              512            0.105
+google-bert/bert-base-uncased          8               8             0.005
+google-bert/bert-base-uncased          8               32            0.008
+google-bert/bert-base-uncased          8              128            0.022
+google-bert/bert-base-uncased          8              512            0.105
 --------------------------------------------------------------------------------
 
 ====================      INFERENCE - MEMORY - RESULT       ====================
 --------------------------------------------------------------------------------
 Model Name             Batch Size     Seq Length    Memory in MB 
 --------------------------------------------------------------------------------
-bert-base-uncased          8               8             1330
-bert-base-uncased          8               32            1330
-bert-base-uncased          8              128            1330
-bert-base-uncased          8              512            1770
+google-bert/bert-base-uncased          8               8             1330
+google-bert/bert-base-uncased          8               32            1330
+google-bert/bert-base-uncased          8              128            1330
+google-bert/bert-base-uncased          8              512            1770
 --------------------------------------------------------------------------------
 
 ====================        ENVIRONMENT INFORMATION         ====================
@@ -202,7 +202,7 @@ bert-base-uncased          8              512            1770
 を追加することで、オプションで _.csv_ ファイルに保存することができます。この場合、各セクションは別々の _.csv_ ファイルに保存されます。_.csv_ 
 ファイルへのパスは、データクラスの引数を使用してオプションで定義できます。
 
-モデル識別子、例えば `bert-base-uncased` を使用して事前学習済みモデルをベンチマークする代わりに、利用可能な任意のモデルクラスの任意の設定をベンチマークすることもできます。この場合、ベンチマーク引数と共に設定の `list` を挿入する必要があります。
+モデル識別子、例えば `google-bert/bert-base-uncased` を使用して事前学習済みモデルをベンチマークする代わりに、利用可能な任意のモデルクラスの任意の設定をベンチマークすることもできます。この場合、ベンチマーク引数と共に設定の `list` を挿入する必要があります。
 
 
 <frameworkcontent>

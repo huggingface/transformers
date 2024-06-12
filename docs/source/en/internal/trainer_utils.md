@@ -40,7 +40,7 @@ Most of those are only useful if you are studying the code of the Trainer in the
 
 [[autodoc]] trainer_pt_utils.DistributedTensorGatherer
 
-## Distributed Evaluation
+## Trainer Argument Parser
 
 [[autodoc]] HfArgumentParser
 

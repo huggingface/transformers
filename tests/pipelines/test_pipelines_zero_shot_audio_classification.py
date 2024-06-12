@@ -32,7 +32,7 @@ class ZeroShotAudioClassificationPipelineTests(unittest.TestCase):
         audio_classifier = pipeline(
             task="zero-shot-audio-classification", model="hf-internal-testing/tiny-clap-htsat-unfused"
         )
-        dataset = load_dataset("ashraq/esc50")
+        dataset = load_dataset("hf-internal-testing/ashraq-esc50-1-dog-example")
         audio = dataset["train"]["audio"][-1]["array"]
         output = audio_classifier(audio, candidate_labels=["Sound of a dog", "Sound of vaccum cleaner"])
         self.assertEqual(
@@ -52,15 +52,15 @@ class ZeroShotAudioClassificationPipelineTests(unittest.TestCase):
             model="laion/clap-htsat-unfused",
         )
         # This is an audio of a dog
-        dataset = load_dataset("ashraq/esc50")
+        dataset = load_dataset("hf-internal-testing/ashraq-esc50-1-dog-example")
         audio = dataset["train"]["audio"][-1]["array"]
         output = audio_classifier(audio, candidate_labels=["Sound of a dog", "Sound of vaccum cleaner"])
 
         self.assertEqual(
             nested_simplify(output),
             [
-                {"score": 0.999, "label": "Sound of a dog"},
-                {"score": 0.001, "label": "Sound of vaccum cleaner"},
+                {"score": 1.0, "label": "Sound of a dog"},
+                {"score": 0.0, "label": "Sound of vaccum cleaner"},
             ],
         )
 
@@ -69,8 +69,8 @@ class ZeroShotAudioClassificationPipelineTests(unittest.TestCase):
             nested_simplify(output),
             [
                 [
-                    {"score": 0.999, "label": "Sound of a dog"},
-                    {"score": 0.001, "label": "Sound of vaccum cleaner"},
+                    {"score": 1.0, "label": "Sound of a dog"},
+                    {"score": 0.0, "label": "Sound of vaccum cleaner"},
                 ],
             ]
             * 5,
@@ -82,8 +82,8 @@ class ZeroShotAudioClassificationPipelineTests(unittest.TestCase):
             nested_simplify(output),
             [
                 [
-                    {"score": 0.999, "label": "Sound of a dog"},
-                    {"score": 0.001, "label": "Sound of vaccum cleaner"},
+                    {"score": 1.0, "label": "Sound of a dog"},
+                    {"score": 0.0, "label": "Sound of vaccum cleaner"},
                 ],
             ]
             * 5,

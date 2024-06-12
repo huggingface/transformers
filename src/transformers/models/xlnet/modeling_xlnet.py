@@ -14,8 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
- PyTorch XLNet model.
+PyTorch XLNet model.
 """
+
 import warnings
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
@@ -40,14 +41,8 @@ from .configuration_xlnet import XLNetConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "xlnet-base-cased"
+_CHECKPOINT_FOR_DOC = "xlnet/xlnet-base-cased"
 _CONFIG_FOR_DOC = "XLNetConfig"
-
-XLNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "xlnet-base-cased",
-    "xlnet-large-cased",
-    # See all XLNet models at https://huggingface.co/models?filter=xlnet
-]
 
 
 def build_tf_xlnet_to_pytorch_map(model, config, tf_weights=None):
@@ -605,8 +600,8 @@ class XLNetModelOutput(ModelOutput):
 
     last_hidden_state: torch.FloatTensor
     mems: Optional[List[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -642,8 +637,8 @@ class XLNetLMHeadModelOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
     mems: Optional[List[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -676,8 +671,8 @@ class XLNetForSequenceClassificationOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
     mems: Optional[List[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -710,8 +705,8 @@ class XLNetForTokenClassificationOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
     mems: Optional[List[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -746,8 +741,8 @@ class XLNetForMultipleChoiceOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
     mems: Optional[List[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -783,8 +778,8 @@ class XLNetForQuestionAnsweringSimpleOutput(ModelOutput):
     start_logits: torch.FloatTensor = None
     end_logits: torch.FloatTensor = None
     mems: Optional[List[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -831,8 +826,8 @@ class XLNetForQuestionAnsweringOutput(ModelOutput):
     end_top_index: Optional[torch.LongTensor] = None
     cls_logits: Optional[torch.FloatTensor] = None
     mems: Optional[List[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 XLNET_START_DOCSTRING = r"""
@@ -976,7 +971,7 @@ class XLNetModel(XLNetPreTrainedModel):
                v [0 0 0 0 0 0 0 0 0] [1 1 1 1 0 0 0 0 0]
 
         """
-        mask = torch.ones(qlen, qlen + mlen, self.device)
+        mask = torch.ones((qlen, qlen + mlen), device=self.device)
         if self.same_length:
             mask_lo = mask[:, :qlen].tril(-1)
             mask.triu_(mlen + 1)
@@ -1020,7 +1015,7 @@ class XLNetModel(XLNetPreTrainedModel):
 
     def relative_positional_encoding(self, qlen, klen, bsz=None):
         # create relative positional encoding.
-        freq_seq = torch.arange(0, self.d_model, 2.0, dtype=torch.float)
+        freq_seq = torch.arange(0, self.d_model, 2.0, dtype=torch.int64).float()
         inv_freq = 1 / torch.pow(10000, (freq_seq / self.d_model))
 
         if self.attn_type == "bi":
@@ -1033,8 +1028,8 @@ class XLNetModel(XLNetPreTrainedModel):
             raise ValueError(f"Unknown `attn_type` {self.attn_type}.")
 
         if self.bi_data:
-            fwd_pos_seq = torch.arange(beg, end, -1.0, dtype=torch.float)
-            bwd_pos_seq = torch.arange(-beg, -end, 1.0, dtype=torch.float)
+            fwd_pos_seq = torch.arange(beg, end, -1.0, dtype=torch.int64).float()
+            bwd_pos_seq = torch.arange(-beg, -end, 1.0, dtype=torch.int64).float()
 
             if self.clamp_len > 0:
                 fwd_pos_seq = fwd_pos_seq.clamp(-self.clamp_len, self.clamp_len)
@@ -1049,7 +1044,7 @@ class XLNetModel(XLNetPreTrainedModel):
 
             pos_emb = torch.cat([fwd_pos_emb, bwd_pos_emb], dim=1)
         else:
-            fwd_pos_seq = torch.arange(beg, end, -1.0)
+            fwd_pos_seq = torch.arange(beg, end, -1.0, dtype=torch.int64).float()
             if self.clamp_len > 0:
                 fwd_pos_seq = fwd_pos_seq.clamp(-self.clamp_len, self.clamp_len)
             pos_emb = self.positional_embedding(fwd_pos_seq, inv_freq, bsz)
@@ -1393,8 +1388,8 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
         >>> from transformers import AutoTokenizer, XLNetLMHeadModel
         >>> import torch
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("xlnet-large-cased")
-        >>> model = XLNetLMHeadModel.from_pretrained("xlnet-large-cased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("xlnet/xlnet-large-cased")
+        >>> model = XLNetLMHeadModel.from_pretrained("xlnet/xlnet-large-cased")
 
         >>> # We show how to setup inputs to predict a next token using a bi-directional context.
         >>> input_ids = torch.tensor(
@@ -1970,8 +1965,8 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
         >>> from transformers import AutoTokenizer, XLNetForQuestionAnswering
         >>> import torch
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("xlnet-base-cased")
-        >>> model = XLNetForQuestionAnswering.from_pretrained("xlnet-base-cased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("xlnet/xlnet-base-cased")
+        >>> model = XLNetForQuestionAnswering.from_pretrained("xlnet/xlnet-base-cased")
 
         >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(
         ...     0

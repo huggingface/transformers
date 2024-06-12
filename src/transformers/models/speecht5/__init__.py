@@ -23,8 +23,6 @@ from ...utils import (
 
 _import_structure = {
     "configuration_speecht5": [
-        "SPEECHT5_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "SPEECHT5_PRETRAINED_HIFIGAN_CONFIG_ARCHIVE_MAP",
         "SpeechT5Config",
         "SpeechT5HifiGanConfig",
     ],
@@ -47,7 +45,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_speecht5"] = [
-        "SPEECHT5_PRETRAINED_MODEL_ARCHIVE_LIST",
         "SpeechT5ForSpeechToText",
         "SpeechT5ForSpeechToSpeech",
         "SpeechT5ForTextToSpeech",
@@ -58,8 +55,6 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_speecht5 import (
-        SPEECHT5_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        SPEECHT5_PRETRAINED_HIFIGAN_CONFIG_ARCHIVE_MAP,
         SpeechT5Config,
         SpeechT5HifiGanConfig,
     )
@@ -81,7 +76,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_speecht5 import (
-            SPEECHT5_PRETRAINED_MODEL_ARCHIVE_LIST,
             SpeechT5ForSpeechToSpeech,
             SpeechT5ForSpeechToText,
             SpeechT5ForTextToSpeech,

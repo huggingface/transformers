@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" OWL-ViT model configuration"""
+"""OWL-ViT model configuration"""
 
 import os
 from collections import OrderedDict
@@ -29,12 +29,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-OWLVIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/owlvit-base-patch32": "https://huggingface.co/google/owlvit-base-patch32/resolve/main/config.json",
-    "google/owlvit-base-patch16": "https://huggingface.co/google/owlvit-base-patch16/resolve/main/config.json",
-    "google/owlvit-large-patch14": "https://huggingface.co/google/owlvit-large-patch14/resolve/main/config.json",
-}
 
 
 class OwlViTTextConfig(PretrainedConfig):

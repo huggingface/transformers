@@ -36,7 +36,7 @@ IPEX 릴리스는 PyTorch를 따라갑니다. pip를 통해 설치하려면:
 | 1.11              |  1.11.200+cpu  |
 | 1.10              |  1.10.100+cpu  |
 
-```
+```bash
 pip install intel_extension_for_pytorch==<version_name> -f https://developer.intel.com/ipex-whl-stable-cpu
 ```
 
@@ -49,7 +49,7 @@ Trainer에서 IPEX의 자동 혼합 정밀도를 활성화하려면 사용자는
 
 - CPU에서 BF16 자동 혼합 정밀도를 사용하여 IPEX로 훈련하기:
 <pre> python run_qa.py \
---model_name_or_path bert-base-uncased \
+--model_name_or_path google-bert/bert-base-uncased \
 --dataset_name squad \
 --do_train \
 --do_eval \

@@ -51,7 +51,7 @@ Vedi un sempio di un caso d'uso [Transformers question-answering](https://github
 - Training with IPEX using BF16 auto mixed precision on CPU:
 
 <pre> python run_qa.py \
---model_name_or_path bert-base-uncased \
+--model_name_or_path google-bert/bert-base-uncased \
 --dataset_name squad \
 --do_train \
 --do_eval \

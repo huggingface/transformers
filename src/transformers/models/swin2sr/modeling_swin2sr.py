@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Swin2SR Transformer model."""
-
+"""PyTorch Swin2SR Transformer model."""
 
 import collections.abc
 import math
@@ -47,12 +46,6 @@ _CONFIG_FOR_DOC = "Swin2SRConfig"
 # Base docstring
 _CHECKPOINT_FOR_DOC = "caidas/swin2SR-classical-sr-x2-64"
 _EXPECTED_OUTPUT_SHAPE = [1, 180, 488, 648]
-
-
-SWIN2SR_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "caidas/swin2SR-classical-sr-x2-64",
-    # See all Swin2SR models at https://huggingface.co/models?filter=swin2sr
-]
 
 
 @dataclass
@@ -290,8 +283,8 @@ class Swin2SRSelfAttention(nn.Module):
         )
 
         # get relative_coords_table
-        relative_coords_h = torch.arange(-(self.window_size[0] - 1), self.window_size[0], dtype=torch.float32)
-        relative_coords_w = torch.arange(-(self.window_size[1] - 1), self.window_size[1], dtype=torch.float32)
+        relative_coords_h = torch.arange(-(self.window_size[0] - 1), self.window_size[0], dtype=torch.int64).float()
+        relative_coords_w = torch.arange(-(self.window_size[1] - 1), self.window_size[1], dtype=torch.int64).float()
         relative_coords_table = (
             torch.stack(meshgrid([relative_coords_h, relative_coords_w], indexing="ij"))
             .permute(1, 2, 0)
@@ -301,7 +294,7 @@ class Swin2SRSelfAttention(nn.Module):
         if pretrained_window_size[0] > 0:
             relative_coords_table[:, :, :, 0] /= pretrained_window_size[0] - 1
             relative_coords_table[:, :, :, 1] /= pretrained_window_size[1] - 1
-        else:
+        elif window_size > 1:
             relative_coords_table[:, :, :, 0] /= self.window_size[0] - 1
             relative_coords_table[:, :, :, 1] /= self.window_size[1] - 1
         relative_coords_table *= 8  # normalize to -8, 8
@@ -489,11 +482,12 @@ class Swin2SROutput(nn.Module):
 class Swin2SRLayer(nn.Module):
     def __init__(self, config, dim, input_resolution, num_heads, shift_size=0, pretrained_window_size=0):
         super().__init__()
-        self.chunk_size_feed_forward = config.chunk_size_feed_forward
-        self.shift_size = shift_size
-        self.window_size = config.window_size
         self.input_resolution = input_resolution
-        self.set_shift_and_window_size(input_resolution)
+        window_size, shift_size = self._compute_window_shift(
+            (config.window_size, config.window_size), (shift_size, shift_size)
+        )
+        self.window_size = window_size[0]
+        self.shift_size = shift_size[0]
         self.attention = Swin2SRAttention(
             config=config,
             dim=dim,
@@ -509,29 +503,10 @@ class Swin2SRLayer(nn.Module):
         self.output = Swin2SROutput(config, dim)
         self.layernorm_after = nn.LayerNorm(dim, eps=config.layer_norm_eps)
 
-    def set_shift_and_window_size(self, input_resolution):
-        target_window_size = (
-            self.window_size
-            if isinstance(self.window_size, collections.abc.Iterable)
-            else (self.window_size, self.window_size)
-        )
-        target_shift_size = (
-            self.shift_size
-            if isinstance(self.shift_size, collections.abc.Iterable)
-            else (self.shift_size, self.shift_size)
-        )
-        window_dim = input_resolution[0].item() if torch.is_tensor(input_resolution[0]) else input_resolution[0]
-        self.window_size = window_dim if window_dim <= target_window_size[0] else target_window_size[0]
-        self.shift_size = (
-            0
-            if input_resolution
-            <= (
-                self.window_size
-                if isinstance(self.window_size, collections.abc.Iterable)
-                else (self.window_size, self.window_size)
-            )
-            else target_shift_size[0]
-        )
+    def _compute_window_shift(self, target_window_size, target_shift_size) -> Tuple[Tuple[int, int], Tuple[int, int]]:
+        window_size = [r if r <= w else w for r, w in zip(self.input_resolution, target_window_size)]
+        shift_size = [0 if r <= w else s for r, w, s in zip(self.input_resolution, window_size, target_shift_size)]
+        return window_size, shift_size
 
     def get_attn_mask(self, height, width, dtype):
         if self.shift_size > 0:
@@ -574,12 +549,7 @@ class Swin2SRLayer(nn.Module):
         input_dimensions: Tuple[int, int],
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
-        always_partition: Optional[bool] = False,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        if not always_partition:
-            self.set_shift_and_window_size(input_dimensions)
-        else:
-            pass
         height, width = input_dimensions
         batch_size, _, channels = hidden_states.size()
         shortcut = hidden_states
@@ -1158,6 +1128,10 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
          ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        loss = None
+        if labels is not None:
+            raise NotImplementedError("Training is not supported at the moment")
+
         height, width = pixel_values.shape[2:]
 
         if self.config.upsampler == "pixelshuffle_aux":
@@ -1188,10 +1162,6 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
 
         reconstruction = reconstruction / self.swin2sr.img_range + self.swin2sr.mean
         reconstruction = reconstruction[:, :, : height * self.upscale, : width * self.upscale]
-
-        loss = None
-        if labels is not None:
-            raise NotImplementedError("Training is not supported at the moment")
 
         if not return_dict:
             output = (reconstruction,) + outputs[1:]

@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Logging utilities."""
-
+"""Logging utilities."""
 
 import functools
 import logging
@@ -51,7 +50,7 @@ log_levels = {
 
 _default_log_level = logging.WARNING
 
-_tqdm_active = True
+_tqdm_active = not hf_hub_utils.are_progress_bars_disabled()
 
 
 def _get_default_logging_level():
