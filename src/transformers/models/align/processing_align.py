@@ -33,6 +33,7 @@ from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInp
 
 
 class AlignProcessorKwargs(ProcessingKwargs, total=False):
+    # see processing_utils.ProcessingKwargs documentation for usage.
     _defaults = {
         "text_kwargs": {
             "padding": "max_length",
