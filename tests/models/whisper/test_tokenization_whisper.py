@@ -14,12 +14,13 @@
 
 import unittest
 
+import numpy as np
+
 from transformers.models.whisper import WhisperTokenizer, WhisperTokenizerFast
 from transformers.models.whisper.tokenization_whisper import _combine_tokens_into_words, _find_longest_common_sequence
 from transformers.testing_utils import require_jinja, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
-
 
 ES_CODE = 50262
 EN_CODE = 50259
@@ -77,7 +78,8 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         tokens = tokenizer.tokenize("I was born in 92000, and this is falsé.")
         self.assertListEqual(
             tokens,
-            ["I", "Ġwas", "Ġborn", "Ġin", "Ġ9", "2000", ",", "Ġand", "Ġ", "this", "Ġis", "Ġfals", "Ã©", "."],  # fmt: skip
+            ["I", "Ġwas", "Ġborn", "Ġin", "Ġ9", "2000", ",", "Ġand", "Ġ", "this", "Ġis", "Ġfals", "Ã©", "."],
+            # fmt: skip
         )  # fmt: skip
         ids = tokenizer.convert_tokens_to_ids(tokens)
         self.assertListEqual(ids, [40, 390, 4232, 294, 1722, 25743, 11, 293, 220, 11176, 307, 16720, 526, 13])
@@ -85,7 +87,8 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         back_tokens = tokenizer.convert_ids_to_tokens(ids)
         self.assertListEqual(
             back_tokens,
-            ["I", "Ġwas", "Ġborn", "Ġin", "Ġ9", "2000", ",", "Ġand", "Ġ", "this", "Ġis", "Ġfals", "Ã©", "."],  # fmt: skip
+            ["I", "Ġwas", "Ġborn", "Ġin", "Ġ9", "2000", ",", "Ġand", "Ġ", "this", "Ġis", "Ġfals", "Ã©", "."],
+            # fmt: skip
         )  # fmt: skip
 
     def test_tokenizer_slow_store_full_signature(self):
@@ -104,7 +107,21 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
     @slow
     def test_tokenizer_integration(self):
-        expected_encoding = {'input_ids': [[50257, 50362, 41762, 364, 357, 36234, 1900, 355, 12972, 13165, 354, 12, 35636, 364, 290, 12972, 13165, 354, 12, 5310, 13363, 12, 4835, 8, 3769, 2276, 12, 29983, 45619, 357, 13246, 51, 11, 402, 11571, 12, 17, 11, 5564, 13246, 38586, 11, 16276, 44, 11, 4307, 346, 33, 861, 11, 16276, 7934, 23029, 329, 12068, 15417, 28491, 357, 32572, 52, 8, 290, 12068, 15417, 16588, 357, 32572, 38, 8, 351, 625, 3933, 10, 2181, 13363, 4981, 287, 1802, 10, 8950, 290, 2769, 48817, 1799, 1022, 449, 897, 11, 9485, 15884, 354, 290, 309, 22854, 37535, 13, 50256], [50257, 50362, 13246, 51, 318, 3562, 284, 662, 12, 27432, 2769, 8406, 4154, 282, 24612, 422, 9642, 9608, 276, 2420, 416, 26913, 21143, 319, 1111, 1364, 290, 826, 4732, 287, 477, 11685, 13, 50256], [50257, 50362, 464, 2068, 7586, 21831, 18045, 625, 262, 16931, 3290, 13, 50256]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]}  # fmt: skip
+        expected_encoding = {'input_ids': [
+            [50257, 50362, 41762, 364, 357, 36234, 1900, 355, 12972, 13165, 354, 12, 35636, 364, 290, 12972, 13165, 354,
+             12, 5310, 13363, 12, 4835, 8, 3769, 2276, 12, 29983, 45619, 357, 13246, 51, 11, 402, 11571, 12, 17, 11,
+             5564, 13246, 38586, 11, 16276, 44, 11, 4307, 346, 33, 861, 11, 16276, 7934, 23029, 329, 12068, 15417,
+             28491, 357, 32572, 52, 8, 290, 12068, 15417, 16588, 357, 32572, 38, 8, 351, 625, 3933, 10, 2181, 13363,
+             4981, 287, 1802, 10, 8950, 290, 2769, 48817, 1799, 1022, 449, 897, 11, 9485, 15884, 354, 290, 309, 22854,
+             37535, 13, 50256],
+            [50257, 50362, 13246, 51, 318, 3562, 284, 662, 12, 27432, 2769, 8406, 4154, 282, 24612, 422, 9642, 9608,
+             276, 2420, 416, 26913, 21143, 319, 1111, 1364, 290, 826, 4732, 287, 477, 11685, 13, 50256],
+            [50257, 50362, 464, 2068, 7586, 21831, 18045, 625, 262, 16931, 3290, 13, 50256]], 'attention_mask': [
+            [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+             1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+             1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]}  # fmt: skip
 
         self.tokenizer_integration_test_util(
             expected_encoding=expected_encoding, model_name="openai/whisper-tiny.en", padding=False
@@ -122,7 +139,9 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         )
 
         # Merge when the previous sequence is a suffix of the next sequence
-        next_sequences_1 = [50364, 295, 6177, 3391, 11, 19817, 3337, 507, 307, 406, 3163, 1953, 466, 13, 50614, 50614, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 50834, 50257]  # fmt: skip
+        next_sequences_1 = [50364, 295, 6177, 3391, 11, 19817, 3337, 507, 307, 406, 3163, 1953, 466, 13, 50614, 50614,
+                            2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13,
+                            50834, 50257]  # fmt: skip
         self.assertEqual(
             tokenizer.decode(next_sequences_1, output_offsets=True),
             {
@@ -246,6 +265,39 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         fast_tokenizer_prompt_ids = rust_tokenizer.get_prompt_ids(prompt)
 
         self.assertListEqual(tokenizer_prompt_ids.tolist(), fast_tokenizer_prompt_ids.tolist())
+
+    def test_tokenizer_decode_prompt(self):
+        prompt_text = "What does the fox say?"
+        input_text = "Hatee hatee hatee ho"
+
+        tokenizer = self.get_tokenizer()
+        rust_tokenizer = self.get_rust_tokenizer()
+
+        # encode prompt and input text using tokenizer
+        prompt_ids = tokenizer.get_prompt_ids(prompt_text, return_tensors="np")
+        input_ids = tokenizer(input_text, return_tensors="np").input_ids[0]
+        input_ids = np.hstack([prompt_ids, input_ids])
+
+        # encode using fast tokenizer
+        rust_prompt_ids = rust_tokenizer.get_prompt_ids(prompt_text, return_tensors="np")
+        rust_input_ids = rust_tokenizer(input_text, return_tensors="np").input_ids[0]
+        rust_input_ids = np.hstack([rust_prompt_ids, rust_input_ids])
+
+        # check with prompt in output
+        pred_text = tokenizer.decode(input_ids, skip_special_tokens=False)
+        rust_pred_text = rust_tokenizer.decode(rust_input_ids, skip_special_tokens=False)
+
+        # check correctness for both tokenizers
+        expected_text = f"<|startofprev|> {prompt_text}<|startoftranscript|><|notimestamps|>{input_text}<|endoftext|>"
+        self.assertEqual(pred_text.strip(), expected_text)
+        self.assertEqual(rust_pred_text.strip(), expected_text)
+
+        # check stripping prompt from output
+        pred_text = tokenizer.decode(input_ids, skip_special_tokens=True)
+        rust_pred_text = tokenizer.decode(input_ids, skip_special_tokens=True)
+
+        self.assertEqual(pred_text.strip(), input_text)
+        self.assertEqual(rust_pred_text.strip(), input_text)
 
     def test_combine_tokens_into_words(self):
         tokenizer = self.get_tokenizer()
