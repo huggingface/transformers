@@ -18,12 +18,14 @@ import gc
 import json
 import math
 import os
+import io
 import random
 import re
 import subprocess
 import sys
 import tempfile
 import unittest
+import threading
 from functools import partial
 from itertools import product
 from pathlib import Path
@@ -560,7 +562,17 @@ class TrainerIntegrationCommon:
 
         for param_name, shard_file in zip(keys, shard_files):
             saver({param_name: state_dict[param_name]}, os.path.join(folder, shard_file))
-
+    
+    def interrupt_thread_when_sdout_matches(self, output_to_match, thread, valid_checkpoint):
+        info_readed = ""
+        logger = logging.get_logger()
+        with LoggingLevel(logging.INFO):
+            while thread.is_alive():
+                with CaptureLogger(logger) as cl:
+                    info_readed += cl.io.getvalue()
+                    if info_readed.count(output_to_match) > valid_checkpoint:
+                        thread._stop()
+                        break
 
 @require_torch
 @require_sentencepiece
@@ -2066,6 +2078,36 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             )
             for k, v in model_state.items():
                 assert torch.allclose(v, final_model_weights[k]), f"{k} is not the same"
+
+    def test_load_checkpoint_with_corrupted_checkpoint(self):
+        # test that we can still load a valid checkpoint if the last one is a corrupted one
+        with tempfile.TemporaryDirectory() as tmpdir:
+            trainer = get_regression_trainer(
+                output_dir=tmpdir,
+                save_steps=5,
+                eval_strategy="steps",
+                eval_steps=5,
+                max_steps=9,
+            )
+            trainer_thread = threading.Thread(target=trainer.train)
+            trainer_thread.start()
+            interrupted_thread = threading.Thread(
+                target=self.interrupt_thread_when_sdout_matches(output_to_match="Saving model checkpoint to", thread=trainer_thread, valid_checkpoint=1)
+            )
+            interrupted_thread.start()
+
+            trainer_thread.join()
+            interrupted_thread.join()
+
+            trainer = get_regression_trainer(
+                output_dir=tmpdir,
+                save_steps=5,
+                evaluation_strategy="steps",
+                eval_steps=5,
+                max_steps=9,
+            )
+            trainer.train(resume_from_checkpoint=True)
+            
 
     @require_torch_multi_accelerator
     def test_run_seq2seq_double_train_wrap_once(self):
