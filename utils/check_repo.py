@@ -246,6 +246,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "GPTSw3DoubleHeadsModel",
     "InstructBlipVisionModel",
     "InstructBlipQFormerModel",
+    "InstructBlipVideoVisionModel",
+    "InstructBlipVideoQFormerModel",
     "LayoutLMForQuestionAnswering",
     "LukeForMaskedLM",
     "LukeForEntityClassification",
