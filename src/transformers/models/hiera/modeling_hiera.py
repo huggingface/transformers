@@ -246,13 +246,7 @@ class HieraPatchEmbeddings(nn.Module):
         # Reshape bool_masked_pos to (batch_size, 1, mask_unit_height, mask_unit_width)
         bool_masked_pos = bool_masked_pos.view(pixel_values.shape[0], 1, *self.mask_spatial_shape)
 
-        if len(bool_masked_pos.shape[2:]) != len(target_size):
-            raise ValueError(
-                f"The length of the spatial dimensions of the bool_masked_pos should match the one from input image, but got {len(bool_masked_pos.shape[2:])} and {len(target_size)}."
-            )
-
-        if bool_masked_pos.shape[2:] != target_size:
-            bool_masked_pos = nn.functional.interpolate(bool_masked_pos.float(), size=target_size)
+        bool_masked_pos = nn.functional.interpolate(bool_masked_pos.float(), size=target_size)
 
         return self.projection(pixel_values * bool_masked_pos)
 
@@ -635,7 +629,6 @@ def undo_windowing(hidden_states: torch.Tensor, shape: List[int], mask_unit_shap
     Returns:
         torch.Tensor: The restored hidden states tensor of shape [batch_size, num_mask_unit_height*mask_unit_height, num_mask_unit_width*mask_unit_width, hidden_size].
     """
-    num_dims = len(shape)
     batch_size, hidden_size = hidden_states.shape[0], hidden_states.shape[-1]
     # From: [batch_size, num_mask_unit_height*num_mask_unit_width, hidden_size]
     # To: [batch_size, num_mask_unit_height, num_mask_unit_width, mask_unit_height, mask_unit_width, hidden_size]
@@ -644,12 +637,8 @@ def undo_windowing(hidden_states: torch.Tensor, shape: List[int], mask_unit_shap
 
     # From: [batch_size, num_mask_unit_height, num_mask_unit_width, mask_unit_height, mask_unit_width, hidden_size]
     # To: [batch_size, num_mask_unit_height*mask_unit_height, num_mask_unit_width*mask_unit_width, hidden_size]
-    permute = (
-        [0]
-        + [item for pair in zip(range(1, 1 + num_dims), range(1 + num_dims, 1 + 2 * num_dims)) for item in pair]
-        + [len(hidden_states.shape) - 1]
-    )
-    hidden_states = hidden_states.permute(permute).reshape(batch_size, *shape, hidden_size)
+    hidden_states = hidden_states.permute(0, 1, 3, 2, 4, 5)
+    hidden_states = hidden_states.reshape(batch_size, *shape, hidden_size)
 
     return hidden_states
 
@@ -713,9 +702,9 @@ class HieraEncoder(nn.Module):
         Roll the given tensor back up to spatial order assuming it's from the given block.
 
         If no bool_masked_pos is provided returns:
-            - [batch_size, height, width, hidden_size] for 2d
+            - [batch_size, height, width, hidden_size]
         If a bool_masked_pos is provided returns:
-            - [batch_size, num_mask_units, mask_unit_height, mask_unit_width, hidden_size] for 2d
+            - [batch_size, num_mask_units, mask_unit_height, mask_unit_width, hidden_size]
         """
         schedule, size = self.schedule[stage_idx]
         batch_size, seq_len, hidden_size = hidden_states.shape
@@ -730,20 +719,9 @@ class HieraEncoder(nn.Module):
             )
 
             # Move that patch into the current MU
-            # Example in 2d:
             # Input: [batch_size, stride, stride, seq_len//(stride*stride), mask_unit_height, mask_unit_width, hidden_size]
             # Output: [batch_size, seq_len//(stride*stride), stride, mask_unit_height, stride, mask_unit_width, hidden_size]
-            hidden_state_dims = len(hidden_states.shape)
-            permute = (
-                [0, 1 + num_dim]
-                + [
-                    item
-                    for pair in zip(range(1, 1 + num_dim), range(1 + num_dim + 1, hidden_state_dims - 1))
-                    for item in pair
-                ]
-                + [hidden_state_dims - 1]
-            )
-            hidden_states = hidden_states.permute(permute)
+            hidden_states = hidden_states.permute(0, 3, 1, 4, 2, 5, 6)
 
             # Reshape to [batch_size, seq_len//(stride*stride), *mask_units, hidden_size]
             for i in range(num_dim):
@@ -837,6 +815,7 @@ def unroll(
     The last block of the network is fine though, since by then the strides are all consumed.
     """
     batch_size, _, hidden_size = hidden_states.shape
+
     size = [i // s for i, s in zip(image_shape, patch_stride)]
 
     current_size = size
@@ -1030,9 +1009,10 @@ class HieraModel(HieraPreTrainedModel):
             pixel_values, interpolate_pos_encoding=interpolate_pos_encoding, noise=noise
         )
 
+        image_shape = (pixel_values.shape[-2], pixel_values.shape[-1])
         hidden_states = unroll(
             embedding_output,
-            image_shape=pixel_values.shape[-2:],
+            image_shape=image_shape,
             patch_stride=self.config.patch_stride,
             schedule=self.unroll_schedule,
         )
@@ -1130,16 +1110,21 @@ class HieraDecoder(nn.Module):
 
         # hidden_states : [batch_size, num_mask_units_visible, *mask_unit_spatial_shape_final, decoder_hidden_size]
         # bool_masked_pos: [batch_size, num_mask_units]
+        mask_unit_height, mask_unit_width, decoder_hidden_size = hidden_states.shape[2:]
+        batch_size, num_mask_units = bool_masked_pos.shape
+
         decoder_hidden_states = torch.zeros(
-            *bool_masked_pos.shape, *hidden_states.shape[2:], device=hidden_states.device, dtype=hidden_states.dtype
+            batch_size,
+            num_mask_units,
+            mask_unit_height,
+            mask_unit_width,
+            decoder_hidden_size,
+            device=hidden_states.device,
+            dtype=hidden_states.dtype,
         )
-        mask_tokens = self.mask_token.view(
-            (1,) * (len(bool_masked_pos.shape) + len(hidden_states.shape[2:-1])) + (-1,)
-        )
-        new_mask_shape = bool_masked_pos.shape + (1,) * len(hidden_states.shape[2:])
-        bool_masked_pos = bool_masked_pos.reshape(new_mask_shape)
-        expand_shape = (-1,) * 2 + hidden_states.shape[2:]
-        bool_masked_pos = bool_masked_pos.expand(expand_shape)
+        mask_tokens = self.mask_token.view(1, 1, 1, 1, -1)
+        bool_masked_pos = bool_masked_pos.reshape(batch_size, num_mask_units, 1, 1, 1)
+        bool_masked_pos = bool_masked_pos.expand(-1, -1, mask_unit_height, mask_unit_width, decoder_hidden_size)
         decoder_hidden_states[bool_masked_pos] = hidden_states.flatten()
         decoder_hidden_states = (
             1 - bool_masked_pos.float()
@@ -1205,20 +1190,23 @@ class HieraMultiScaleHead(nn.Module):
         if isinstance(head, nn.Identity):
             return hidden_states
 
-        batch_size, num_mask_units = hidden_states.shape[0:2]
+        # Doing explicit to avoid problems with torch.fx
+        batch_size, num_mask_units, mask_unit_height, mask_unit_width, hidden_size = hidden_states.shape
         # From: [batch_size, num_mask_units, mask_unit_height, mask_unit_width, hidden_size]
         # To: head([batch_size * num_mask_units, hidden_size, mask_unit_height, mask_unit_width])
-        permute = [0] + [len(hidden_states.shape) - 2] + list(range(1, len(hidden_states.shape) - 2))
-        hidden_states = hidden_states.reshape(batch_size * num_mask_units, *hidden_states.shape[2:])
-        hidden_states = hidden_states.permute(permute)
+        hidden_states = hidden_states.reshape(
+            batch_size * num_mask_units, mask_unit_height, mask_unit_width, hidden_size
+        )
+        hidden_states = hidden_states.permute(0, 3, 1, 2)
         hidden_states = head(hidden_states)
 
         # Restore original layout
-        permute = [0] + list(range(2, len(hidden_states.shape))) + [1]
-        hidden_states = hidden_states.permute(permute)
+        hidden_states = hidden_states.permute(0, 2, 3, 1)
+        mask_unit_height_final, mask_unit_width_final, hidden_size = hidden_states.shape[1:]
         hidden_states = hidden_states.reshape(
-            batch_size, num_mask_units, *hidden_states.shape[1:-1], hidden_states.shape[-1]
+            batch_size, num_mask_units, mask_unit_height_final, mask_unit_width_final, hidden_size
         )
+
         return hidden_states
 
     def forward(self, feature_maps: List[torch.Tensor]) -> torch.Tensor:

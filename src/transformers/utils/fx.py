@@ -138,6 +138,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "gpt2",
     "gpt_neo",
     "gptj",
+    "hiera",
     "hubert",
     "layoutlm",
     "llama",

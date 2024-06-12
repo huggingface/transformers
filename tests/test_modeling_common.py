@@ -1285,6 +1285,7 @@ class ModelTesterMixin:
                     "token_type_ids",
                     "visual_feats",
                     "visual_pos",
+                    "noise",
                 ]
 
                 labels = inputs.get("labels", None)
