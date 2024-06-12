@@ -81,7 +81,7 @@ ImageInput = Union[
 ]  # noqa
 
 
-VideoInput = Union[List["PIL.Image.Image"], np.ndarray, "torch.Tensor", List[np.ndarray], List["torch.Tensor"]], List[List["PIL.Image.Image"]], List[List[np.ndarrray]], List[List["torch.Tensor"]]  # noqa
+VideoInput = Union[List["PIL.Image.Image"], np.ndarray, "torch.Tensor", List[np.ndarray], List["torch.Tensor"]], List[List["PIL.Image.Image"]], List[List[np.ndarrray]], List[List["torch.Tensor"]]]  # noqa
 
 class ChannelDimension(ExplicitEnum):
     FIRST = "channels_first"
