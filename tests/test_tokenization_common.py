@@ -26,7 +26,6 @@ import unittest
 from collections import OrderedDict
 from itertools import takewhile
 from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Union
-from unittest import mock
 
 from parameterized import parameterized
 
