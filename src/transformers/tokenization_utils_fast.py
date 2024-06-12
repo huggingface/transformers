@@ -107,7 +107,9 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
         if tokenizer_object is not None:
             fast_tokenizer = copy.deepcopy(tokenizer_object)
-        elif (fast_tokenizer_file is not None and not from_slow) or (fast_tokenizer_file and not is_sentencepiece_available()):
+        elif (fast_tokenizer_file is not None and not from_slow) or (
+            fast_tokenizer_file and not is_sentencepiece_available()
+        ):
             # We have a serialization from tokenizers which let us directly build the backend
             fast_tokenizer = TokenizerFast.from_file(fast_tokenizer_file)
         elif slow_tokenizer is not None and is_sentencepiece_available():
