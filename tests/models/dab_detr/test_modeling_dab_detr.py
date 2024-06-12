@@ -597,41 +597,42 @@ class DABDETRModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             )
 
     def test_retain_grad_hidden_states_attentions(self):
-        pass
+        
         # removed retain_grad and grad on decoder_hidden_states, as queries don't require grad
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        # config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        # no need to test all models as different heads yield the same functionality
+        model_class = self.all_model_classes[0]
+        model = model_class(config)
+        model.to(torch_device)
 
-        # # no need to test all models as different heads yield the same functionality
-        # model_class = self.all_model_classes[0]
-        # model = model_class(config)
-        # model.to(torch_device)
+        inputs = self._prepare_for_class(inputs_dict, model_class)
 
-        # inputs = self._prepare_for_class(inputs_dict, model_class)
+        outputs = model(**inputs, output_attentions=True, output_hidden_states=True)
 
-        # outputs = model(**inputs, output_attentions=True, output_hidden_states=True)
+        # logits
+        output = outputs[0]
 
-        # # logits
-        # output = outputs[0]
+        encoder_hidden_states = outputs.encoder_hidden_states[0]
+        encoder_hidden_states.retain_grad()
 
-        # encoder_hidden_states = outputs.encoder_hidden_states[0]
-        # encoder_hidden_states.retain_grad()
+        encoder_attentions = outputs.encoder_attentions[0]
+        encoder_attentions.retain_grad()
 
-        # encoder_attentions = outputs.encoder_attentions[0]
-        # encoder_attentions.retain_grad()
+        decoder_attentions = outputs.decoder_attentions[0]
+        decoder_attentions.retain_grad()
 
-        # decoder_attentions = outputs.decoder_attentions[0]
-        # decoder_attentions.retain_grad()
+        cross_attentions = outputs.cross_attentions[0]
+        cross_attentions.retain_grad()
 
-        # cross_attentions = outputs.cross_attentions[0]
-        # cross_attentions.retain_grad()
+        output.flatten()[0].backward(retain_graph=True)
 
-        # output.flatten()[0].backward(retain_graph=True)
-
-        # self.assertIsNotNone(encoder_hidden_states.grad)
-        # self.assertIsNotNone(decoder_attentions.grad)
-        # self.assertIsNotNone(cross_attentions.grad)
-        # self.assertIsNotNone(encoder_attentions.grad)
+        self.assertIsNotNone(encoder_hidden_states.grad)
+        self.assertIsNotNone(decoder_attentions.grad)
+        self.assertIsNotNone(cross_attentions.grad)
+        # Because in nn.MultiHeadAttention Module attention is not a leaf module.
+        # self.assertIsNone(encoder_attentions.grad)
+        
 
     def test_forward_auxiliary_loss(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -794,14 +795,14 @@ class DABDETRModelIntegrationTests(unittest.TestCase):
         expected_shape_logits = torch.Size((1, model.config.num_queries, model.config.num_labels))
         self.assertEqual(outputs.logits.shape, expected_shape_logits)
         expected_slice_logits = torch.tensor(
-            [[-10.1765,  -5.5243,  -8.9324],[ -9.8138,  -5.6721,  -7.5161],[-10.3054,  -5.6081,  -8.5931]]
+            [[-10.1765,  -5.5243,  -8.9324], [ -9.8138,  -5.6721,  -7.5161], [-10.3054,  -5.6081,  -8.5931]]
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice_logits, atol=3e-4))
 
         expected_shape_boxes = torch.Size((1, model.config.num_queries, 4))
         self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
         expected_slice_boxes = torch.tensor(
-            [[0.3708, 0.3000, 0.2753],[0.5211, 0.6125, 0.9495],[0.2897, 0.6730, 0.5459]]
+            [[0.3708, 0.3000, 0.2753], [0.5211, 0.6125, 0.9495], [0.2897, 0.6730, 0.5459]]
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4))
 
@@ -816,4 +817,4 @@ class DABDETRModelIntegrationTests(unittest.TestCase):
         self.assertEqual(len(results["scores"]), 5)
         self.assertTrue(torch.allclose(results["scores"], expected_scores, atol=1e-4))
         self.assertSequenceEqual(results["labels"].tolist(), expected_labels)
-        # self.assertTrue(torch.allclose(results["boxes"][0, :], expected_slice_boxes))
+        # self.assertTrue(torch.allclose(results["boxes"][0, :], expected_slice_boxes, atol=1e-4))
