@@ -1892,8 +1892,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         def raise_exception(message):
             raise TemplateError(message)
 
+        def tojson(x, ensure_ascii=False, indent=None, separators=None, sort_keys=False):
+            # We override the built-in tojson filter because Jinja's default filter escapes HTML characters
+            # We also expose some options like custom indents and separators
+            return json.dumps(x, ensure_ascii=ensure_ascii, indent=indent, separators=separators, sort_keys=sort_keys)
+
         jinja_env = ImmutableSandboxedEnvironment(trim_blocks=True, lstrip_blocks=True)
-        jinja_env.policies["json.dumps_kwargs"]["ensure_ascii"] = False
+        jinja_env.filters["tojson"] = tojson
         jinja_env.globals["raise_exception"] = raise_exception
         return jinja_env.from_string(chat_template)
 
