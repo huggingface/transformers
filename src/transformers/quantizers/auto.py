@@ -47,7 +47,7 @@ AUTO_QUANTIZER_MAPPING = {
     "quanto": QuantoHfQuantizer,
     "eetq": EetqHfQuantizer,
     "hqq": HqqHfQuantizer,
-    "compressed_tensors": CompressedTensorsHfQuantizer,
+    "compressed-tensors": CompressedTensorsHfQuantizer,
 }
 
 AUTO_QUANTIZATION_CONFIG_MAPPING = {
