@@ -415,7 +415,7 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
     def unk_token_length(self):
         return len(self.sp_model.encode(str(self.unk_token)))
 
-    # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.get_spm_processor
+    # Modified from transformers.models.t5.tokenization_t5.T5Tokenizer.get_spm_processor
     def get_spm_processor(self, from_slow=False):
         tokenizer = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         if self.legacy or from_slow:  # no dependency on protobuf
@@ -427,9 +427,6 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
             model_pb2 = import_protobuf(f"The new behaviour of {self.__class__.__name__} (with `self.legacy = False`)")
             model = model_pb2.ModelProto.FromString(sp_model)
             normalizer_spec = model_pb2.NormalizerSpec()
-            self.add_prefix_space = (
-                normalizer_spec.add_dummy_prefix if self.add_prefix_space is None else self.add_prefix_space
-            )
             normalizer_spec.add_dummy_prefix = False
             model.normalizer_spec.MergeFrom(normalizer_spec)
             sp_model = model.SerializeToString()
