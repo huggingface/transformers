@@ -1883,7 +1883,7 @@ class Trainer:
         else:
             checkpoints = [resume_from_checkpoint] if resume_from_checkpoint else []
 
-        if checkpoints:
+        if len(checkpoints) > 0:
             if not is_sagemaker_mp_enabled() and not self.is_deepspeed_enabled and not self.is_fsdp_enabled:
                 for i, checkpoint in enumerate(checkpoints):
                     try:
