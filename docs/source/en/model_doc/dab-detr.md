@@ -47,6 +47,18 @@ The original code can be found [here](https://github.com/IDEA-Research/DAB-DETR)
 
 [[autodoc]] DABDETRConfig
 
+## DABDETRImageProcessor
+
+[[autodoc]] DABDETRImageProcessor
+    - preprocess
+    - post_process_object_detection
+
+## DABDETRFeatureExtractor
+
+[[autodoc]] DABDETRFeatureExtractor
+    - __call__
+    - post_process_object_detection
+
 ## DABDETRModel
 
 [[autodoc]] DABDETRModel
