@@ -38,8 +38,7 @@ Bien que chaque tâche ait son propre [`pipeline`], il est plus simple d'utilise
 Pas le résultat que vous aviez en tête ? Consultez certains des [modèles de reconnaissance vocale automatique les plus téléchargés](https://huggingface.co/models?pipeline_tag=automatic-speech-recognition&sort=trending) 
 sur le Hub pour voir si vous pouvez obtenir une meilleure transcription.
 
-Essayons le modèle [Whisper large-v2](https://huggingface.co/openai/whisper-large) de OpenAI. Whisper a été publié 
-2 ans après Wav2Vec2 et a été entraîné sur près de 10 fois plus de données. En tant que tel, il surpasse Wav2Vec2 sur la plupart des benchmarks en aval. Il a également l'avantage supplémentaire de prédire la ponctuation et la casse, ce qui n'est pas possible avec Wav2Vec2.
+Essayons le modèle [Whisper large-v2](https://huggingface.co/openai/whisper-large) de OpenAI. Whisper a été publié 2 ans après Wav2Vec2 et a été entraîné sur près de 10 fois plus de données. En tant que tel, il surpasse Wav2Vec2 sur la plupart des benchmarks en aval. Il a également l'avantage supplémentaire de prédire la ponctuation et la casse, ce qui n'est pas possible avec Wav2Vec2.
 
 Essayons-le ici pour voir comment il fonctionne :
 
