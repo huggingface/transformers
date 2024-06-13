@@ -206,7 +206,7 @@ PREFIX_CHECKPOINT_DIR = "checkpoint"
 _re_checkpoint = re.compile(r"^" + PREFIX_CHECKPOINT_DIR + r"\-(\d+)$")
 
 
-def get_checkpoints(folder, reverse=False):
+def get_checkpoints(folder: str, reverse: bool = False):
     content = os.listdir(folder)
     checkpoints = [
         path
