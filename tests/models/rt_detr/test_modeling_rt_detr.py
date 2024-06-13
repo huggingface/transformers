@@ -42,7 +42,7 @@ if is_vision_available():
     from PIL import Image
 
 
-CHECKPOINT = "sbchoi/rtdetr_r50vd"  # TODO: replace
+CHECKPOINT = "PekingU/rtdetr_r50vd"  # TODO: replace
 
 
 class RTDetrModelTester:

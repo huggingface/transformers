@@ -111,7 +111,7 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         params = {"image_id": 39769, "annotations": target}
 
         # encode them
-        image_processing = RTDetrImageProcessor.from_pretrained("sbchoi/rtdetr_r50vd")
+        image_processing = RTDetrImageProcessor.from_pretrained("PekingU/rtdetr_r50vd")
 
         # legal encodings (single image)
         _ = image_processing(images=image, annotations=params, return_tensors="pt")
@@ -147,7 +147,7 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         target = {"image_id": 39769, "annotations": target}
 
         # encode them
-        image_processing = RTDetrImageProcessor.from_pretrained("sbchoi/rtdetr_r50vd")
+        image_processing = RTDetrImageProcessor.from_pretrained("PekingU/rtdetr_r50vd")
         encoding = image_processing(images=image, annotations=target, return_tensors="pt")
 
         # verify pixel values

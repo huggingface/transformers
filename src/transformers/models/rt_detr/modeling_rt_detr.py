@@ -139,7 +139,7 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "RTDetrConfig"
 # TODO: Replace all occurrences of the checkpoint with the final one
-_CHECKPOINT_FOR_DOC = "sbchoi/rtdetr_r50vd"
+_CHECKPOINT_FOR_DOC = "PekingU/rtdetr_r50vd"
 
 
 @dataclass
@@ -1707,8 +1707,8 @@ class RTDetrModel(RTDetrPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("sbchoi/rtdetr_r50vd")
-        >>> model = RTDetrModel.from_pretrained("sbchoi/rtdetr_r50vd")
+        >>> image_processor = AutoImageProcessor.from_pretrained("PekingU/rtdetr_r50vd")
+        >>> model = RTDetrModel.from_pretrained("PekingU/rtdetr_r50vd")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
 
@@ -2547,8 +2547,8 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = RTDetrImageProcessor.from_pretrained("sbchoi/rtdetr_r50vd")
-        >>> model = RTDetrForObjectDetection.from_pretrained("sbchoi/rtdetr_r50vd")
+        >>> image_processor = RTDetrImageProcessor.from_pretrained("PekingU/rtdetr_r50vd")
+        >>> model = RTDetrForObjectDetection.from_pretrained("PekingU/rtdetr_r50vd")
 
         >>> # prepare image for the model
         >>> inputs = image_processor(images=image, return_tensors="pt")
