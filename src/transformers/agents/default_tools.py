@@ -34,11 +34,16 @@ def custom_print(*args):
 
 BASE_PYTHON_TOOLS = {
     "print": custom_print,
+    "isinstance": isinstance,
     "range": range,
     "float": float,
     "int": int,
     "bool": bool,
     "str": str,
+    "set": set,
+    "list": list,
+    "dict": dict,
+    "tuple": tuple,
     "round": round,
     "ceil": math.ceil,
     "floor": math.floor,
@@ -60,10 +65,6 @@ BASE_PYTHON_TOOLS = {
     "max": max,
     "min": min,
     "abs": abs,
-    "list": list,
-    "dict": dict,
-    "tuple": tuple,
-    "set": set,
     "enumerate": enumerate,
     "zip": zip,
     "reversed": reversed,
@@ -74,6 +75,8 @@ BASE_PYTHON_TOOLS = {
     "filter": filter,
     "ord": ord,
     "chr": chr,
+    "next": next,
+    "iter": iter,
 }
 
 

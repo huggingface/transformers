@@ -30,9 +30,11 @@ class SpeechToTextTool(PipelineTool):
     output_type = "text"
 
     def encode(self, audio):
+        print("Entering encode")
         return self.pre_processor(audio, return_tensors="pt")
 
     def forward(self, inputs):
+        print("Entering forward")
         return self.model.generate(inputs["input_features"])
 
     def decode(self, outputs):

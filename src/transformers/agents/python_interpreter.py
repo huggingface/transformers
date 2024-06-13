@@ -155,7 +155,10 @@ def evaluate_class_def(class_def, state, tools):
             class_dict[stmt.name] = evaluate_function_def(stmt, state, tools)
         elif isinstance(stmt, ast.Assign):
             for target in stmt.targets:
-                class_dict[target.id] = evaluate_ast(stmt.value, state, tools)
+                if isinstance(target, ast.Name):
+                    class_dict[target.id] = evaluate_ast(stmt.value, state, tools)
+                elif isinstance(target, ast.Attribute):
+                    class_dict[target.attr] = evaluate_ast(stmt.value, state, tools)
         else:
             raise InterpretorError(f"Unsupported statement in class body: {stmt.__class__.__name__}")
 
@@ -165,28 +168,83 @@ def evaluate_class_def(class_def, state, tools):
 
 
 def evaluate_augassign(expression: ast.AugAssign, state: Dict[str, Any], tools: Dict[str, Callable]):
-    # Extract the target variable name and the operation
-    if isinstance(expression.target, ast.Name):
-        var_name = expression.target.id
-        current_value = state.get(var_name, 0)  # Assuming default of 0 if not in state
-        value_to_add = evaluate_ast(expression.value, state, tools)
+    # Helper function to get current value and set new value based on the target type
+    def get_current_value(target):
+        if isinstance(target, ast.Name):
+            return state.get(target.id, 0)
+        elif isinstance(target, ast.Subscript):
+            obj = evaluate_ast(target.value, state, tools)
+            key = evaluate_ast(target.slice, state, tools)
+            return obj[key]
+        elif isinstance(target, ast.Attribute):
+            obj = evaluate_ast(target.value, state, tools)
+            return getattr(obj, target.attr)
+        elif isinstance(target, ast.Tuple):
+            return tuple(get_current_value(elt) for elt in target.elts)
+        elif isinstance(target, ast.List):
+            return [get_current_value(elt) for elt in target.elts]
+        else:
+            raise InterpretorError("AugAssign not supported for {type(target)} targets.")
 
-        # Determine the operation and apply it
-        if isinstance(expression.op, ast.Add):
+    def set_new_value(target, value):
+        if isinstance(target, ast.Name):
+            state[target.id] = value
+        elif isinstance(target, ast.Subscript):
+            obj = evaluate_ast(target.value, state, tools)
+            key = evaluate_ast(target.slice, state, tools)
+            obj[key] = value
+        elif isinstance(target, ast.Attribute):
+            obj = evaluate_ast(target.value, state, tools)
+            setattr(obj, target.attr, value)
+        elif isinstance(target, ast.Tuple):
+            for elt, val in zip(target.elts, value):
+                set_new_value(elt, val)
+        elif isinstance(target, ast.List):
+            for elt, val in zip(target.elts, value):
+                set_new_value(elt, val)
+        else:
+            raise InterpretorError(f"AugAssign not supported for {type(target)} targets.")
+
+    current_value = get_current_value(expression.target)
+    value_to_add = evaluate_ast(expression.value, state, tools)
+
+    # Determine the operation and apply it
+    if isinstance(expression.op, ast.Add):
+        if isinstance(current_value, list):
+            if not isinstance(value_to_add, list):
+                raise InterpretorError(f"Cannot add non-list value {value_to_add} to a list.")
             updated_value = current_value + value_to_add
-        elif isinstance(expression.op, ast.Sub):
-            updated_value = current_value - value_to_add
-        elif isinstance(expression.op, ast.Mult):
-            updated_value = current_value * value_to_add
-        elif isinstance(expression.op, ast.Div):
-            updated_value = current_value / value_to_add
-        # Add other operations as needed
-
-        # Update the state
-        state[var_name] = updated_value
-        return updated_value
+        else:
+            updated_value = current_value + value_to_add
+    elif isinstance(expression.op, ast.Sub):
+        updated_value = current_value - value_to_add
+    elif isinstance(expression.op, ast.Mult):
+        updated_value = current_value * value_to_add
+    elif isinstance(expression.op, ast.Div):
+        updated_value = current_value / value_to_add
+    elif isinstance(expression.op, ast.Mod):
+        updated_value = current_value % value_to_add
+    elif isinstance(expression.op, ast.Pow):
+        updated_value = current_value ** value_to_add
+    elif isinstance(expression.op, ast.FloorDiv):
+        updated_value = current_value // value_to_add
+    elif isinstance(expression.op, ast.BitAnd):
+        updated_value = current_value & value_to_add
+    elif isinstance(expression.op, ast.BitOr):
+        updated_value = current_value | value_to_add
+    elif isinstance(expression.op, ast.BitXor):
+        updated_value = current_value ^ value_to_add
+    elif isinstance(expression.op, ast.LShift):
+        updated_value = current_value << value_to_add
+    elif isinstance(expression.op, ast.RShift):
+        updated_value = current_value >> value_to_add
     else:
-        raise InterpretorError("AugAssign not supported for non-simple variable targets.")
+        raise InterpretorError(f"Operation {type(expression.op).__name__} is not supported.")
+
+    # Update the state
+    set_new_value(expression.target, updated_value)
+
+    return updated_value
 
 
 def evaluate_boolop(boolop, state, tools):
@@ -425,15 +483,17 @@ def evaluate_for(for_loop, state, tools):
 
 def evaluate_listcomp(listcomp, state, tools):
     result = []
-    vars = {}
     for generator in listcomp.generators:
-        var_name = generator.target.id
         iter_value = evaluate_ast(generator.iter, state, tools)
         for value in iter_value:
-            vars[var_name] = value
-            if all(evaluate_ast(if_clause, {**state, **vars}, tools) for if_clause in generator.ifs):
-                elem = evaluate_ast(listcomp.elt, {**state, **vars}, tools)
-                result.append(elem)
+            new_state = state.copy()
+            if isinstance(generator.target, ast.Tuple):
+                for idx, elem in enumerate(generator.target.elts):
+                    new_state[elem.id] = value[idx]
+            else:
+                new_state[generator.target.id] = value
+            if all(evaluate_ast(if_clause, new_state, tools) for if_clause in generator.ifs):
+                result.append(evaluate_ast(listcomp.elt, new_state, tools))
     return result
 
 
@@ -666,14 +726,13 @@ def evaluate_python_code(
         state = {}
     result = None
     state["print_outputs"] = ""
-
-    for idx, node in enumerate(expression.body):
+    for node in expression.body:
         try:
             line_result = evaluate_ast(node, state, tools, authorized_imports)
         except InterpretorError as e:
-            msg = f"You tried to execute the following code:\n{code}\n"
-            msg += f"You got these outputs:\n{state['print_outputs']}\n"
-            msg += f"Evaluation stopped at line '{node}' because of the following error:\n{e}"
+            msg = f"Evaluation stopped at line '{ast.get_source_segment(code, node)}' because of the following error:\n{e}"
+            if len(state["print_outputs"]) > 0:
+                msg += f"Executing code yielded these outputs:\n{state['print_outputs']}\n====\n"
             raise InterpretorError(msg)
         if line_result is not None:
             result = line_result
