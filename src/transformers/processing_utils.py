@@ -665,15 +665,6 @@ class ProcessorMixin(PushToHubMixin):
         else:
             return processor
 
-    def update_kwargs(self, kwarg_dict, modality, key, value):
-        """Helper function to update kwargs and handle conflicts."""
-        if key in kwarg_dict[modality]:
-            raise ValueError(
-                f"Keyword argument {key} was passed two times: in a dictionary for {modality} and as a **kwarg."
-            )
-        kwarg_dict[modality][key] = value
-        return kwarg_dict
-
     def _merge_kwargs(
         self,
         ModelProcessorKwargs: ProcessingKwargs,
@@ -745,7 +736,9 @@ class ProcessorMixin(PushToHubMixin):
                 if modality_key in tokenizer_init_kwargs:
                     default_kwargs[modality][modality_key] = tokenizer_init_kwargs[modality_key]
         # now defaults kwargs are updated with the tokenizers defaults.
+        # pass defaults to output dictionary
         output_kwargs.update(default_kwargs)
+
         # update modality kwargs with passed kwargs
         non_modality_kwargs = set(kwargs) - set(output_kwargs)
         for modality in output_kwargs:
