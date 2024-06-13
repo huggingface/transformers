@@ -18,7 +18,6 @@
 import math
 import os
 import warnings
-from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
 import torch
@@ -37,15 +36,13 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel, SequenceSummary
+from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import Conv1D, find_pruneable_heads_and_indices, prune_conv1d_layer
 from ...utils import (
-    ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
-    replace_return_docstrings,
 )
 from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from .configuration_mot import MoTConfig
