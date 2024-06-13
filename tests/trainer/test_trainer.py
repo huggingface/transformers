@@ -18,14 +18,12 @@ import gc
 import json
 import math
 import os
-import io
 import random
 import re
 import subprocess
 import sys
 import tempfile
 import unittest
-import threading
 from functools import partial
 from itertools import product
 from pathlib import Path
@@ -563,16 +561,19 @@ class TrainerIntegrationCommon:
         for param_name, shard_file in zip(keys, shard_files):
             saver({param_name: state_dict[param_name]}, os.path.join(folder, shard_file))
     
-    def interrupt_thread_when_sdout_matches(self, output_to_match, thread, valid_checkpoint):
-        info_readed = ""
-        logger = logging.get_logger()
-        with LoggingLevel(logging.INFO):
-            while thread.is_alive():
-                with CaptureLogger(logger) as cl:
-                    info_readed += cl.io.getvalue()
-                    if info_readed.count(output_to_match) > valid_checkpoint:
-                        thread._stop()
-                        break
+    def corrupt_file(self, pathfile, corruption_rate=0.1, seed=31287):
+        np.random.seed(seed)
+        with open(pathfile, 'r+b') as f:
+            content = f.read()
+            num_bytes_to_corrupt = int(len(content) * corruption_rate)
+            f.seek(0)
+
+            for _ in range(num_bytes_to_corrupt):
+                idx = np.random.randint(len(content))
+                f.seek(idx)
+                f.write(bytes(np.random.randint(256)))#.to_bytes(1, byteorder='big'))
+            
+
 
 @require_torch
 @require_sentencepiece
@@ -2079,25 +2080,37 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             for k, v in model_state.items():
                 assert torch.allclose(v, final_model_weights[k]), f"{k} is not the same"
 
-    def test_load_checkpoint_with_corrupted_checkpoint(self):
+    def test_load_checkpoint_with_corrupted_checkpoints(self):
         # test that we can still load a valid checkpoint if the last one is a corrupted one
-        with tempfile.TemporaryDirectory() as tmpdir:
+        logger = logging.get_logger()
+
+        with tempfile.TemporaryDirectory() as tmpdir, CaptureLogger(logger) as cl:
+            checkpoint_files = (
+                "config.json",
+                "model.safetensors",
+                "optimizer.pt",
+                "rng_state.pth",
+                "scheduler.pt",
+                "trainer_state.json",
+                "training_args.bin",
+            )
+            
+            max_steps = (len(checkpoint_files) + 1) * 5
             trainer = get_regression_trainer(
                 output_dir=tmpdir,
                 save_steps=5,
                 eval_strategy="steps",
                 eval_steps=5,
-                max_steps=9,
+                max_steps= max_steps,
             )
-            trainer_thread = threading.Thread(target=trainer.train)
-            trainer_thread.start()
-            interrupted_thread = threading.Thread(
-                target=self.interrupt_thread_when_sdout_matches(output_to_match="Saving model checkpoint to", thread=trainer_thread, valid_checkpoint=1)
-            )
-            interrupted_thread.start()
+            trainer.train()
 
-            trainer_thread.join()
-            interrupted_thread.join()
+            checkpoint_num = max_steps
+            for i, filename in enumerate(checkpoint_files):
+                checkpoint_name = os.path.join(tmpdir, f"checkpoint-{checkpoint_num}")
+                file = os.path.join(checkpoint_name, filename)
+                self.corrupt_file(file)
+                checkpoint_num -= 5
 
             trainer = get_regression_trainer(
                 output_dir=tmpdir,
@@ -2107,7 +2120,12 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 max_steps=9,
             )
             trainer.train(resume_from_checkpoint=True)
-            
+
+        self.assertIn("Error loading checkpoint", cl.out)
+        for i in range(45, 0, -5):
+            self.assertIn(f"checkpoint-{i}", cl.out)
+        self.assertNotIn("checkpoint-5", cl.out)
+
 
     @require_torch_multi_accelerator
     def test_run_seq2seq_double_train_wrap_once(self):
