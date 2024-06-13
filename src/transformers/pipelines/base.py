@@ -842,7 +842,16 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
                 # Take the first device used by `accelerate`.
                 device = next(iter(hf_device_map.values()))
             else:
-                device = -1
+                if (
+                    is_torch_mlu_available()
+                    or is_torch_cuda_available()
+                    or is_torch_npu_available()
+                    or is_torch_xpu_available(check_device=True)
+                    or is_torch_mps_available()
+                ):
+                    device = 0
+                else:
+                    device = -1
 
         if is_torch_available() and self.framework == "pt":
             if device == -1 and self.model.device is not None:
