@@ -541,6 +541,41 @@ def evaluate_raise(raise_node, state, tools):
         raise InterpretorError("Re-raise is not supported without an active exception")
 
 
+def evaluate_assert(assert_node, state, tools):
+    test_result = evaluate_ast(assert_node.test, state, tools)
+    if not test_result:
+        if assert_node.msg:
+            msg = evaluate_ast(assert_node.msg, state, tools)
+            raise AssertionError(msg)
+        else:
+            # Include the failing condition in the assertion message
+            test_code = ast.unparse(assert_node.test)
+            raise AssertionError(f"Assertion failed: {test_code}")
+
+
+def evaluate_with(with_node, state, tools):
+    contexts = []
+    for item in with_node.items:
+        context_expr = evaluate_ast(item.context_expr, state, tools)
+        if item.optional_vars:
+            state[item.optional_vars.id] = context_expr.__enter__()
+            contexts.append(state[item.optional_vars.id])
+        else:
+            context_var = context_expr.__enter__()
+            contexts.append(context_var)
+    
+    try:
+        for stmt in with_node.body:
+            evaluate_ast(stmt, state, tools)
+    except Exception as e:
+        for context in reversed(contexts):
+            context.__exit__(type(e), e, e.__traceback__)
+        raise
+    else:
+        for context in reversed(contexts):
+            context.__exit__(None, None, None)
+
+
 def evaluate_ast(
     expression: ast.AST,
     state: Dict[str, Any],
@@ -693,6 +728,10 @@ def evaluate_ast(
         return evaluate_try(expression, state, tools)
     elif isinstance(expression, ast.Raise):
         return evaluate_raise(expression, state, tools)
+    elif isinstance(expression, ast.Assert):
+        return evaluate_assert(expression, state, tools)
+    elif isinstance(expression, ast.With):
+        return evaluate_with(expression, state, tools)
     else:
         # For now we refuse anything else. Let's add things as we need them.
         raise InterpretorError(f"{expression.__class__.__name__} is not supported.")

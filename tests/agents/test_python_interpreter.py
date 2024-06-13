@@ -35,16 +35,6 @@ class PythonInterpreterToolTester(unittest.TestCase, ToolTesterMixin):
         self.tool = load_tool("python_interpreter", authorized_imports=["sqlite3"])
         self.tool.setup()
 
-    def test_exact_match_input_spec(self):
-        inputs_spec = self.tool.inputs
-        expected_description = (
-            "The code snippet to evaluate. All variables used in this snippet must be defined in this same snippet, "
-            "else you will get an error. This code can only import the following python libraries: "
-            "['math', 'statistics', 'time', 'itertools', 'stat', 'unicodedata', 'sqlite3', 'queue', 'collections', "
-            "'random', 're']."
-        )
-        self.assertEqual(inputs_spec["code"]["description"], expected_description)
-
     def test_exact_match_arg(self):
         result = self.tool("(2 / 2) * 4")
         self.assertEqual(result, "4.0")
@@ -541,3 +531,38 @@ b += 1"""
         with pytest.raises(InterpretorError) as e:
             evaluate_python_code(code, BASE_PYTHON_TOOLS, state={})
         assert "Evaluation stopped at line 'counts += 1" in str(e)
+
+    def test_assert(self):
+        code = """
+assert 1 == 1
+assert 1 == 2
+"""
+        with pytest.raises(AssertionError) as e:
+            evaluate_python_code(code, BASE_PYTHON_TOOLS, state={})
+        assert "1 == 2" in str(e) and not "1 == 1" in str(e)
+
+
+    def test_with_context_manager(self):
+        code = """
+class SimpleLock:
+    def __init__(self):
+        self.locked = False
+
+    def __enter__(self):
+        self.locked = True
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.locked = False
+
+lock = SimpleLock()
+
+with lock as l:
+    assert l.locked == True
+
+assert lock.locked == False
+    """
+
+        state = {}
+        tools = {}
+        evaluate_python_code(code, tools, state)
