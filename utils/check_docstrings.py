@@ -832,7 +832,7 @@ def find_indent(line: str) -> int:
 def stringify_default(default: Any) -> str:
     """
     Returns the string representation of a default value, as used in docstring: numbers are left as is, all other
-    objects are in backtiks.
+    objects are in backticks.
 
     Args:
         default (`Any`): The default value to process
@@ -862,7 +862,7 @@ def stringify_default(default: Any) -> str:
 def eval_math_expression(expression: str) -> Optional[Union[float, int]]:
     # Mainly taken from the excellent https://stackoverflow.com/a/9558001
     """
-    Evaluate (safely) a mathematial expression and returns its value.
+    Evaluate (safely) a mathematical expression and returns its value.
 
     Args:
         expression (`str`): The expression to evaluate.

@@ -20,7 +20,7 @@ import re
 import warnings
 from contextlib import contextmanager
 
-from ...processing_utils import ProcessorMixin
+from ...processing_utils import ProcessingKwargs, ProcessorMixin
 
 
 class DonutProcessor(ProcessorMixin):
@@ -37,21 +37,21 @@ class DonutProcessor(ProcessorMixin):
             An instance of [`DonutImageProcessor`]. The image processor is a required input.
         tokenizer ([`XLMRobertaTokenizer`/`XLMRobertaTokenizerFast`], *optional*):
             An instance of [`XLMRobertaTokenizer`/`XLMRobertaTokenizerFast`]. The tokenizer is a required input.
+        feature_extractor ([`CLIPFeatureExtractor`], *optional*):
+            The feature extractor is a deprecated input.
     """
 
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
-    def __init__(self, image_processor=None, tokenizer=None, **kwargs):
-        feature_extractor = None
-        if "feature_extractor" in kwargs:
+    def __init__(self, image_processor=None, tokenizer=None, feature_extractor=None):
+        if "feature_extractor":
             warnings.warn(
                 "The `feature_extractor` argument is deprecated and will be removed in v5, use `image_processor`"
                 " instead.",
                 FutureWarning,
             )
-            feature_extractor = kwargs.pop("feature_extractor")
 
         image_processor = image_processor if image_processor is not None else feature_extractor
         if image_processor is None:
@@ -61,32 +61,106 @@ class DonutProcessor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer)
         self.current_processor = self.image_processor
+
+        self.processing_kwargs: ProcessingKwargs = {
+            "common_kwargs": {"return_tensors": "pt"},
+            "text_kwargs": {
+                "text_pair": None,
+                "text_target": None,
+                "text_pair_target": None,
+                "add_special_tokens": True,
+                "padding": "max_length",
+                "truncation": True,
+                "max_length": 512,
+                "stride": 0,
+                "is_split_into_words": False,
+                "pad_to_multiple_of": None,
+                "return_token_type_ids": True,
+                "return_attention_mask": True,
+                "return_overflowing_tokens": False,
+                "return_special_tokens_mask": False,
+                "return_offsets_mapping": False,
+                "return_length": False,
+                "verbose": True,
+            },
+            "images_kwargs": {
+                "do_crop_margin": False,
+                "do_resize": True,
+                "size": {"height": 256, "width": 256},
+                "resample": "bilinear",
+                "do_thumbnail": False,
+                "do_align_long_axis": False,
+                "do_pad": False,
+                "do_rescale": False,
+                "rescale_factor": 1.0,
+                "do_normalize": True,
+                "image_mean": [0.485, 0.456, 0.406],
+                "image_std": [0.229, 0.224, 0.225],
+                "data_format": "channels_first",
+                "input_data_format": None,
+            },
+            "audio_kwargs": {},
+            "videos_kwargs": {},
+        }
+
         self._in_target_context_manager = False
 
-    def __call__(self, *args, **kwargs):
+    def __call__(
+        self,
+        text=None,
+        images=None,
+        audio=None,
+        videos=None,  # end of supported modalities in call
+        **kwargs,
+    ):
         """
         When used in normal mode, this method forwards all its arguments to AutoImageProcessor's
         [`~AutoImageProcessor.__call__`] and returns its output. If used in the context
         [`~DonutProcessor.as_target_processor`] this method forwards all its arguments to DonutTokenizer's
-        [`~DonutTokenizer.__call__`]. Please refer to the doctsring of the above two methods for more information.
+        [`~DonutTokenizer.__call__`]. Please refer to the docstring of the above two methods for more information.
+        Args:
+            text (`str`, `List[str]`):
+                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
+                tensor. Both channels-first and channels-last formats are supported.
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
+                If set, will return tensors of a particular framework. Acceptable values are:
+                    - `'tf'`: Return TensorFlow `tf.constant` objects.
+                    - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                    - `'np'`: Return NumPy `np.ndarray` objects.
+                    - `'jax'`: Return JAX `jnp.ndarray` objects.
+
         """
+        text_kwargs = {**self.processing_kwargs["text_kwargs"], **self.processing_kwargs["common_kwargs"], **kwargs}
+        images_kwargs = {
+            **self.processing_kwargs["images_kwargs"],
+            **self.processing_kwargs["common_kwargs"],
+            **kwargs,
+        }
+
         # For backward compatibility
         if self._in_target_context_manager:
-            return self.current_processor(*args, **kwargs)
-
-        images = kwargs.pop("images", None)
-        text = kwargs.pop("text", None)
-        if len(args) > 0:
-            images = args[0]
-            args = args[1:]
+            return self.current_processor(
+                images,
+                **images_kwargs,
+            )
 
         if images is None and text is None:
             raise ValueError("You need to specify either an `images` or `text` input to process.")
 
         if images is not None:
-            inputs = self.image_processor(images, *args, **kwargs)
+            inputs = self.image_processor(
+                images,
+                **images_kwargs,
+            )
         if text is not None:
-            encodings = self.tokenizer(text, **kwargs)
+            encodings = self.tokenizer(
+                text,
+                **text_kwargs,
+            )
 
         if text is None:
             return inputs

@@ -538,7 +538,6 @@ class BridgeTowerModelIntegrationTest(unittest.TestCase):
         image = prepare_img()
         text = "a bunch of cats laying on a tower."
         inputs = processor(image, text, return_tensors="pt").to(torch_device)
-
         # forward pass
         with torch.no_grad():
             outputs = model(**inputs)

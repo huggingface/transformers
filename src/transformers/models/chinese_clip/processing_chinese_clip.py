@@ -17,9 +17,11 @@ Image/Text processor class for Chinese-CLIP
 """
 
 import warnings
+from typing import List, Union
 
-from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding
+from ...image_utils import ImageInput
+from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
 
 
 class ChineseCLIPProcessor(ProcessorMixin):
@@ -59,8 +61,57 @@ class ChineseCLIPProcessor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer)
         self.current_processor = self.image_processor
+        self.processing_kwargs: ProcessingKwargs = {
+            "common_kwargs": {"return_tensors": None},
+            "text_kwargs": {
+                "text_pair": None,
+                "text_target": None,
+                "text_pair_target": None,
+                "add_special_tokens": True,
+                "truncation": True,
+                "max_length": 64,
+                "stride": 0,
+                "is_split_into_words": False,
+                "pad_to_multiple_of": None,
+                "return_token_type_ids": None,
+                "return_attention_mask": None,
+                "return_overflowing_tokens": False,
+                "return_special_tokens_mask": False,
+                "return_offsets_mapping": False,
+                "return_length": False,
+                "verbose": True,
+            },
+            "images_kwargs": {
+                "do_thumbnail": None,
+                "do_center_crop": None,
+                "do_convert_rgb": None,
+                "do_crop_margin": None,
+                "do_resize": None,
+                "size": None,
+                "crop_size": None,
+                "resample": None,
+                "do_align_long_axis": None,
+                "do_pad": None,
+                "do_rescale": None,
+                "rescale_factor": None,
+                "do_normalize": None,
+                "image_mean": None,
+                "image_std": None,
+                "data_format": "channels_first",
+                "input_data_format": None,
+            },
+            "audio_kwargs": {},
+            "videos_kwargs": {},
+        }
 
-    def __call__(self, text=None, images=None, return_tensors=None, **kwargs):
+    def __call__(
+        self,
+        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        images: ImageInput = None,
+        audio=None,
+        videos=None,
+        **kwargs,
+    ) -> BatchEncoding:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to BertTokenizerFast's [`~BertTokenizerFast.__call__`] if `text` is not `None` to encode
@@ -79,12 +130,10 @@ class ChineseCLIPProcessor(ProcessorMixin):
 
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
-
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
-
+                    - `'tf'`: Return TensorFlow `tf.constant` objects.
+                    - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                    - `'np'`: Return NumPy `np.ndarray` objects.
+                    - `'jax'`: Return JAX `jnp.ndarray` objects.
         Returns:
             [`BatchEncoding`]: A [`BatchEncoding`] with the following fields:
 
@@ -97,12 +146,27 @@ class ChineseCLIPProcessor(ProcessorMixin):
 
         if text is None and images is None:
             raise ValueError("You have to specify either text or images. Both cannot be none.")
-
         if text is not None:
-            encoding = self.tokenizer(text, return_tensors=return_tensors, **kwargs)
+            text_kwargs = {
+                **self.processing_kwargs["text_kwargs"],
+                **self.processing_kwargs["common_kwargs"],
+                **kwargs,
+            }
+            encoding = self.tokenizer(text, **text_kwargs)
 
         if images is not None:
-            image_features = self.image_processor(images, return_tensors=return_tensors, **kwargs)
+            images_kwargs = {
+                **self.processing_kwargs["images_kwargs"],
+                **self.processing_kwargs["common_kwargs"],
+                **kwargs,
+            }
+            image_features = self.image_processor(images, **images_kwargs)
+
+        # BC for explicit return_tensors
+        common_kwargs = {**self.processing_kwargs["common_kwargs"], **kwargs}
+
+        if "return_tensors" in common_kwargs:
+            return_tensors = kwargs.pop("return_tensors", None)
 
         if text is not None and images is not None:
             encoding["pixel_values"] = image_features.pixel_values
