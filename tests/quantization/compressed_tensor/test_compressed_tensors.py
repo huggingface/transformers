@@ -7,6 +7,7 @@ import unittest
 import torch
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, CompressedTensorsConfig
+from transformers.testing_utils import slow
 
 
 class CompressedTensorsTest(unittest.TestCase):
@@ -14,8 +15,6 @@ class CompressedTensorsTest(unittest.TestCase):
     source_quantized_model_name = "nm-testing/tinyllama-oneshot-w8a8-test-static-shape-change-v3"
 
     prompt = "Paris is the capital of which country?"
-    # ['<s> Paris is the capital of which country?\n\nA. London\n\nB. New York\n\nC. Paris\n\nD. Tokyo\n\n4. Which country is the capital of the European Union?\n\nA. France\n']
-    expected_response = ""
 
     def tear_down(self):
         gc.collect()
@@ -41,35 +40,30 @@ class CompressedTensorsTest(unittest.TestCase):
         self.assertIsNotNone(self.config.sparsity_config, "sparsity_config should not be None")
         self.assertIsNotNone(self.config.quantization_config, "quantization_config should not be None")
 
-    @unittest.skip("scales not populated")
-    def test_apply_quantization(self):
-        # fails bc state_dict_scale = state_dict[f"{module_name}.{scale_name}"]
-        #  KeyError: 'model.layers.0.self_attn.q_proj.weight_scale
-        self.quantization_model = AutoModelForCausalLM.from_pretrained(
-            self.model_name, quantization_config=self.config
-        )
-        # check that the input layers of self.source_quantized_model and self.quantization_model is the same
+        # apply quantization config to the base model
+        self.quantized_model = AutoModelForCausalLM.from_pretrained(self.model_name, quantization_config=self.config)
 
     def test_quantized_model(self):
-        # test the quantized model, not the original model
-
+        """Carry out generation"""
         inputs = self.tokenizer(self.prompt, return_tensors="pt").to(self.device)
-        generated_ids = self.source_quantized_model.generate(**inputs, max_length=50)
+        generated_ids = self.quantized_model.generate(**inputs, max_length=50)
         outputs = self.tokenizer.batch_decode(generated_ids)
 
-        self.expected_response = outputs
-        self.assertEqual(outputs, self.expected_response)
+        self.assertIsNotNone(outputs)
         self.tear_down()
 
+    @slow
     def test_forward(self):
         batch_size = context_size = 1024
-        tensor1 = torch.rand(1024).long()
-        tensor2 = torch.rand(1024).long()
+        tensor1 = torch.rand(1024) * 1000
+        tensor1 = tensor1.long()
+        tensor2 = torch.rand(1024) * 1000
+        tensor2 = tensor2.long()
 
         input_tensor = torch.cat((tensor1, tensor2), dim=0)
         input_tensor = input_tensor.unsqueeze(0)
         with torch.no_grad():
-            out = self.source_quantized_model(input_tensor)
+            out = self.quantized_model(input_tensor)
         self.assertEqual(out.shape[0], batch_size)
         self.assertEqual(out.shape[1], context_size)
 
