@@ -24,9 +24,8 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-from transformers import Cache, DynamicCache, StaticCache
-
 from ...activations import ACT2FN
+from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache, StaticCache
 from ...modeling_attn_mask_utils import (
     AttentionMaskConverter,
 )
@@ -771,7 +770,7 @@ class WhisperDecoderLayer(nn.Module):
         encoder_attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         cross_attn_layer_head_mask: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Tuple[Cache]] = None,
+        past_key_value: Optional[EncoderDecoderCache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = True,
         cache_position: Optional[torch.LongTensor] = None,
@@ -798,8 +797,7 @@ class WhisperDecoderLayer(nn.Module):
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Self Attention
-        # decoder uni-directional self-attention cached key/values states are at position 0
-        self_attn_past_key_value = past_key_value[0] if past_key_value is not None else None
+        self_attn_past_key_value = past_key_value.self_attention_cache if past_key_value is not None else None
         # add present self-attn cache to positions 0 of present_key_value tuple
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
@@ -813,14 +811,11 @@ class WhisperDecoderLayer(nn.Module):
         hidden_states = residual + hidden_states
 
         # Cross-Attention Block
-        cross_attn_present_key_value = None
         cross_attn_weights = None
         if encoder_hidden_states is not None:
             residual = hidden_states
             hidden_states = self.encoder_attn_layer_norm(hidden_states)
-
-            # cross_attn cached key/values tuple is at position 1 of present_key_value tuple
-            cross_attn_past_key_value = past_key_value[1] if past_key_value is not None else None
+            cross_attn_past_key_value = past_key_value.cross_attention_cache if past_key_value is not None else None
             hidden_states, cross_attn_weights, cross_attn_present_key_value = self.encoder_attn(
                 hidden_states=hidden_states,
                 key_value_states=encoder_hidden_states,
@@ -1308,23 +1303,27 @@ class WhisperDecoder(WhisperPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         return_legacy_cache = False
-        if use_cache and past_key_values is not None and not isinstance(past_key_values[0], Cache):
-            return_legacy_cache = True
-            if past_key_values is None:
-                self_attn = cross_attn = None
-            else:
-                self_attn = [key_values[:2] for key_values in past_key_values]
-                cross_attn = [key_values[2:] for key_values in past_key_values]
-            past_key_values = (
-                DynamicCache.from_legacy_cache(self_attn),
-                DynamicCache.from_legacy_cache(cross_attn),
-            )
+        if use_cache and past_key_values is not None:
+            if not isinstance(past_key_values[0], Cache):
+                return_legacy_cache = True
+                if past_key_values is None:
+                    self_attn = cross_attn = None
+                else:
+                    self_attn = [key_values[:2] for key_values in past_key_values]
+                    cross_attn = [key_values[2:] for key_values in past_key_values]
+                past_key_values = EncoderDecoderCache(
+                    DynamicCache.from_legacy_cache(self_attn),
+                    DynamicCache.from_legacy_cache(cross_attn),
+                )
+            elif not isinstance(past_key_values, EncoderDecoderCache):
+                past_key_values = EncoderDecoderCache(past_key_values[0], past_key_values[1])
 
         past_key_values_length = 0
+        self_attention_cache = past_key_values.self_attention_cache if past_key_values is not None else None
         if cache_position is not None:
             past_key_values_length = cache_position[0]
         elif past_key_values is not None:
-            past_key_values_length = past_key_values[0].get_seq_length()
+            past_key_values_length = self_attention_cache.get_seq_length()
 
         if cache_position is None:
             cache_position = torch.arange(
@@ -1348,7 +1347,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         causal_mask = self._update_causal_mask(
-            attention_mask, inputs_embeds, cache_position, past_key_values[0] if past_key_values else None, output_attentions
+            attention_mask, inputs_embeds, cache_position, self_attention_cache, output_attentions
         )
 
         if self.gradient_checkpointing and self.training:
@@ -1361,7 +1360,6 @@ class WhisperDecoder(WhisperPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
         all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
-        next_decoder_cache = None
 
         # check if head_mask/cross_attn_head_mask has a correct number of layers specified if desired
         for attn_mask, mask_name in zip([head_mask, cross_attn_head_mask], ["head_mask", "cross_attn_head_mask"]):

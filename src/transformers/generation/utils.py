@@ -27,6 +27,7 @@ from torch import nn
 from ..cache_utils import (
     Cache,
     DynamicCache,
+    EncoderDecoderCache,
     HQQQuantizedCache,
     QuantizedCacheConfig,
     QuantoQuantizedCache,
@@ -1371,7 +1372,7 @@ class GenerationMixin:
         """
         cache_cls: Cache = NEED_SETUP_CACHE_CLASSES_MAPPING[cache_implementation]
         if hasattr(self, "_cache"):
-            cache_to_check = self._cache[0] if self.config.is_encoder_decoder else self._cache
+            cache_to_check = self._cache.self_attention_cache if self.config.is_encoder_decoder else self._cache
         need_new_cache = (
             not hasattr(self, "_cache")
             or (not isinstance(cache_to_check, cache_cls))
@@ -1385,7 +1386,7 @@ class GenerationMixin:
         elif cache_implementation == "static":
             need_new_cache = need_new_cache or cache_to_check.max_cache_len < max_cache_len
             if self.config.is_encoder_decoder and hasattr(self, "_cache"):
-                need_new_cache = need_new_cache or self._cache[1].max_cache_len != model_kwargs["encoder_outputs"][0].shape[1]
+                need_new_cache = need_new_cache or self._cache.cross_attention_cache.max_cache_len != model_kwargs["encoder_outputs"][0].shape[1]
 
         if need_new_cache:
             if hasattr(self.config, "_pre_quantization_dtype"):
@@ -1403,11 +1404,11 @@ class GenerationMixin:
             if self.config.is_encoder_decoder:
                 encoder_kwargs = cache_kwargs.copy()
                 encoder_kwargs["max_cache_len"] = model_kwargs["encoder_outputs"][0].shape[1]
-                self._cache = (self._cache, cache_cls(**encoder_kwargs))
+                self._cache = EncoderDecoderCache(self._cache, cache_cls(**encoder_kwargs))
         else:
             if self.config.is_encoder_decoder:
-                self._cache[0].reset()
-                self._cache[1].reset()
+                self._cache.self_attention_cache.reset()
+                self._cache.cross_attention_cache.reset()
             else:
                 self._cache.reset()
         return self._cache

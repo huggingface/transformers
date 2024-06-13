@@ -289,6 +289,13 @@ class QuantizedCacheConfig(CacheConfig):
                 ),
             )
 
+@dataclass
+class EncoderDecoderCache:
+    self_attention_cache: Cache
+    cross_attention_cache: Cache
+
+    def __getitem__(self, idx):
+        return self.self_attention_cache if idx == 0 else self.cross_attention_cache
 
 class DynamicCache(Cache):
     """
