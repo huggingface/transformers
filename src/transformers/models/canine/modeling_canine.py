@@ -608,7 +608,7 @@ class CanineAttention(nn.Module):
                 chunk_end = min(from_seq_length, chunk_start + self.attend_from_chunk_width)
                 from_chunks.append((chunk_start, chunk_end))
 
-            # Determine the chunks (windows) that will will attend *to*.
+            # Determine the chunks (windows) that will attend *to*.
             to_chunks = []
             if self.first_position_attends_to_all:
                 to_chunks.append((0, to_seq_length))

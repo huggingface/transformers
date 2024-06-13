@@ -2554,6 +2554,30 @@ class TFSpeech2TextPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
+TF_SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TFSwiftFormerForImageClassification(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFSwiftFormerModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFSwiftFormerPreTrainedModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
 TF_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 

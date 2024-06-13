@@ -167,7 +167,7 @@ Per quanto riguarda la classe `Trainer`:
 - Il metodo `is_world_master` di `Trainer` è deprecato a favore di `is_world_process_zero`.
 
 Per quanto riguarda la classe `TrainingArguments`:
-- L'argomento `evaluate_during_training` di `TrainingArguments` è deprecato a favore di `evaluation_strategy`.
+- L'argomento `evaluate_during_training` di `TrainingArguments` è deprecato a favore di `eval_strategy`.
 
 Per quanto riguarda il modello Transfo-XL:
 - L'attributo di configurazione `tie_weight` di Transfo-XL diventa `tie_words_embeddings`.

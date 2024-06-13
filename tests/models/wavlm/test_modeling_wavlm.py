@@ -288,6 +288,15 @@ class WavLMModelTester:
 
         loss.backward()
 
+    def check_output_attentions(self, config, input_values, attention_mask):
+        model = WavLMModel(config=config)
+        model.config.layerdrop = 1.0
+        model.to(torch_device)
+        model.train()
+
+        outputs = model(input_values, attention_mask=attention_mask, output_attentions=True)
+        self.parent.assertTrue(len(outputs.attentions) > 0)
+
     def check_labels_out_of_vocab(self, config, input_values, *args):
         model = WavLMForCTC(config)
         model.to(torch_device)
@@ -353,6 +362,10 @@ class WavLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_seq_classifier_train(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_seq_classifier_training(*config_and_inputs)
+
+    def test_output_attentions(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_output_attentions(*config_and_inputs)
 
     def test_labels_out_of_vocab(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

@@ -510,7 +510,7 @@ class GitModelIntegrationTest(unittest.TestCase):
 
         expected_shape = torch.Size((1, 9))
         self.assertEqual(outputs.sequences.shape, expected_shape)
-        self.assertEquals(generated_caption, "two cats laying on a pink blanket")
+        self.assertEqual(generated_caption, "two cats laying on a pink blanket")
         self.assertTrue(outputs.scores[-1].shape, expected_shape)
         expected_slice = torch.tensor([[-0.8805, -0.8803, -0.8799]], device=torch_device)
         self.assertTrue(torch.allclose(outputs.scores[-1][0, :3], expected_slice, atol=1e-4))
@@ -537,7 +537,7 @@ class GitModelIntegrationTest(unittest.TestCase):
 
         expected_shape = torch.Size((1, 15))
         self.assertEqual(generated_ids.shape, expected_shape)
-        self.assertEquals(generated_caption, "what does the front of the bus say at the top? special")
+        self.assertEqual(generated_caption, "what does the front of the bus say at the top? special")
 
     def test_batched_generation(self):
         processor = GitProcessor.from_pretrained("microsoft/git-base-coco")
@@ -555,4 +555,4 @@ class GitModelIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(pixel_values=pixel_values, input_ids=input_ids, max_length=50)
         generated_captions = processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-        self.assertEquals(generated_captions, ["two cats sleeping on a pink blanket next to remotes."] * 2)
+        self.assertEqual(generated_captions, ["two cats sleeping on a pink blanket next to remotes."] * 2)

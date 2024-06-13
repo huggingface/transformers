@@ -35,7 +35,11 @@ if is_torch_available():
     import torch
 
     from transformers import InformerConfig, InformerForPrediction, InformerModel
-    from transformers.models.informer.modeling_informer import InformerDecoder, InformerEncoder
+    from transformers.models.informer.modeling_informer import (
+        InformerDecoder,
+        InformerEncoder,
+        InformerSinusoidalPositionalEmbedding,
+    )
 
 
 @require_torch
@@ -163,6 +167,12 @@ class InformerModelTester:
         encoder_last_hidden_state_2 = encoder(inputs_embeds=enc_input)[0]
 
         self.parent.assertTrue((encoder_last_hidden_state_2 - encoder_last_hidden_state).abs().max().item() < 1e-3)
+
+        embed_positions = InformerSinusoidalPositionalEmbedding(
+            config.context_length + config.prediction_length, config.d_model
+        )
+        self.parent.assertTrue(torch.equal(model.encoder.embed_positions.weight, embed_positions.weight))
+        self.parent.assertTrue(torch.equal(model.decoder.embed_positions.weight, embed_positions.weight))
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             decoder = model.get_decoder()

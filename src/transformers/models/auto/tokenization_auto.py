@@ -157,6 +157,7 @@ else:
             ("ctrl", ("CTRLTokenizer", None)),
             ("data2vec-audio", ("Wav2Vec2CTCTokenizer", None)),
             ("data2vec-text", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
+            ("dbrx", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
             ("deberta", ("DebertaTokenizer", "DebertaTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "deberta-v2",
@@ -202,12 +203,21 @@ else:
             ("gpt_neox_japanese", ("GPTNeoXJapaneseTokenizer", None)),
             ("gptj", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
             ("gptsan-japanese", ("GPTSanJapaneseTokenizer", None)),
+            ("grounding-dino", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("groupvit", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
             ("herbert", ("HerbertTokenizer", "HerbertTokenizerFast" if is_tokenizers_available() else None)),
             ("hubert", ("Wav2Vec2CTCTokenizer", None)),
             ("ibert", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
             ("idefics", (None, "LlamaTokenizerFast" if is_tokenizers_available() else None)),
+            ("idefics2", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
             ("instructblip", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
+            (
+                "jamba",
+                (
+                    "LlamaTokenizer" if is_sentencepiece_available() else None,
+                    "LlamaTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
             ("jukebox", ("JukeboxTokenizer", None)),
             (
                 "kosmos-2",
@@ -312,6 +322,7 @@ else:
                     "AlbertTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            ("olmo", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
             ("oneformer", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "openai-gpt",
@@ -349,6 +360,7 @@ else:
                 ),
             ),
             ("phi", ("CodeGenTokenizer", "CodeGenTokenizerFast" if is_tokenizers_available() else None)),
+            ("phi3", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
             ("phobert", ("PhobertTokenizer", None)),
             ("pix2struct", ("T5Tokenizer", "T5TokenizerFast" if is_tokenizers_available() else None)),
             ("plbart", ("PLBartTokenizer" if is_sentencepiece_available() else None, None)),
@@ -370,6 +382,13 @@ else:
             ),
             ("rag", ("RagTokenizer", None)),
             ("realm", ("RealmTokenizer", "RealmTokenizerFast" if is_tokenizers_available() else None)),
+            (
+                "recurrent_gemma",
+                (
+                    "GemmaTokenizer" if is_sentencepiece_available() else None,
+                    "GemmaTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
             (
                 "reformer",
                 (
@@ -544,7 +563,7 @@ def get_tokenizer_config(
     pretrained_model_name_or_path: Union[str, os.PathLike],
     cache_dir: Optional[Union[str, os.PathLike]] = None,
     force_download: bool = False,
-    resume_download: bool = False,
+    resume_download: Optional[bool] = None,
     proxies: Optional[Dict[str, str]] = None,
     token: Optional[Union[bool, str]] = None,
     revision: Optional[str] = None,
@@ -570,8 +589,9 @@ def get_tokenizer_config(
         force_download (`bool`, *optional*, defaults to `False`):
             Whether or not to force to (re-)download the configuration files and override the cached versions if they
             exist.
-        resume_download (`bool`, *optional*, defaults to `False`):
-            Whether or not to delete incompletely received file. Attempts to resume the download if such a file exists.
+        resume_download:
+            Deprecated and ignored. All downloads are now resumed by default when possible.
+            Will be removed in v5 of Transformers.
         proxies (`Dict[str, str]`, *optional*):
             A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
@@ -696,9 +716,9 @@ class AutoTokenizer:
             force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force the (re-)download the model weights and configuration files and override the
                 cached versions if they exist.
-            resume_download (`bool`, *optional*, defaults to `False`):
-                Whether or not to delete incompletely received files. Will attempt to resume the download if such a
-                file exists.
+            resume_download:
+                Deprecated and ignored. All downloads are now resumed by default when possible.
+                Will be removed in v5 of Transformers.
             proxies (`Dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.

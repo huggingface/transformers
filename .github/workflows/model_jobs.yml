@@ -28,7 +28,7 @@ env:
   CUDA_VISIBLE_DEVICES: 0,1
 
 jobs:
-  model_job:
+  run_models_gpu:
     name: " "
     strategy:
       fail-fast: false
@@ -80,23 +80,23 @@ jobs:
 
       - name: Run all tests on GPU
         working-directory: /transformers
-        run: python3 -m pytest -v --make-reports=${{ inputs.machine_type }}_tests_gpu_${{ matrix.folders }} tests/${{ matrix.folders }}
+        run: python3 -m pytest -rs -v --make-reports=${{ inputs.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports tests/${{ matrix.folders }}
 
       - name: Failure short reports
         if: ${{ failure() }}
         continue-on-error: true
-        run: cat /transformers/reports/${{ inputs.machine_type }}_tests_gpu_${{ matrix.folders }}/failures_short.txt
+        run: cat /transformers/reports/${{ inputs.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports/failures_short.txt
 
       - name: Run test
         shell: bash
         run: |
-          mkdir -p /transformers/reports/${{ inputs.machine_type }}_tests_gpu_${{ matrix.folders }}
-          echo "hello" > /transformers/reports/${{ inputs.machine_type }}_tests_gpu_${{ matrix.folders }}/hello.txt
-          echo "${{ inputs.machine_type }}_tests_gpu_${{ matrix.folders }}"
+          mkdir -p /transformers/reports/${{ inputs.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports
+          echo "hello" > /transformers/reports/${{ inputs.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports/hello.txt
+          echo "${{ inputs.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports"
 
-      - name: "Test suite reports artifacts: ${{ inputs.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports"
+      - name: "Test suite reports artifacts: ${{ inputs.machine_type }}_run_models_gpu_${{ env.matrix_folders }}_test_reports"
         if: ${{ always() }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: ${{ inputs.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports
-          path: /transformers/reports/${{ inputs.machine_type }}_tests_gpu_${{ matrix.folders }}
+          name: ${{ inputs.machine_type }}_run_models_gpu_${{ env.matrix_folders }}_test_reports
+          path: /transformers/reports/${{ inputs.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports

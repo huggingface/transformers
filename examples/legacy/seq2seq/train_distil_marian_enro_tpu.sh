@@ -33,7 +33,7 @@ python xla_spawn.py --num_cores $TPU_NUM_CORES \
     --max_source_length $MAX_LEN --max_target_length $MAX_LEN \
     --val_max_target_length $MAX_TGT_LEN --test_max_target_length $MAX_TGT_LEN \
     --do_train --do_eval \
-    --evaluation_strategy steps \
+    --eval_strategy steps \
     --prediction_loss_only \
     --task translation --label_smoothing_factor 0.1 \
     "$@"

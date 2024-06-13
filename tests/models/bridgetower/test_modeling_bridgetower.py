@@ -506,6 +506,10 @@ class BridgeTowerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def test_inputs_embeds(self):
         pass
 
+    @unittest.skip(reason="Bridge Tower does not use inputs_embeds")
+    def test_inputs_embeds_matches_input_ids(self):
+        pass
+
 
 # We will verify our results on an image of cute cats
 def prepare_img():

@@ -247,12 +247,6 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         '<BOS_TOKEN><|START_OF_TURN_TOKEN|><|USER_TOKEN|>Hello, how are you?<|END_OF_TURN_TOKEN|><|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>'
 
         """
-        logger.warning_once(
-            "\nNo chat template is defined for this tokenizer - using the default template "
-            f"for the {self.__class__.__name__} class. If the default is not appropriate for "
-            "your model, please set `tokenizer.chat_template` to an appropriate template. "
-            "See https://huggingface.co/docs/transformers/main/chat_templating for more information.\n"
-        )
         default_template = (
             "{{ bos_token }}"
             "{% if messages[0]['role'] == 'system' %}"

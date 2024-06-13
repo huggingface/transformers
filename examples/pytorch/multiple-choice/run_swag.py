@@ -48,7 +48,7 @@ from transformers.utils import PaddingStrategy, check_min_version, send_example_
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.40.0.dev0")
+check_min_version("4.41.0.dev0")
 
 logger = logging.getLogger(__name__)
 

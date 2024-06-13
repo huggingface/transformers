@@ -29,7 +29,7 @@ python finetune_trainer.py \
     --num_train_epochs 6 \
     --save_steps 25000 --eval_steps 25000 --logging_steps 1000 \
     --do_train --do_eval --do_predict \
-    --evaluation_strategy steps \
+    --eval_strategy steps \
     --predict_with_generate --logging_first_step \
     --task translation \
     "$@"

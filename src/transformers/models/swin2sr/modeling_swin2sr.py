@@ -298,7 +298,7 @@ class Swin2SRSelfAttention(nn.Module):
         if pretrained_window_size[0] > 0:
             relative_coords_table[:, :, :, 0] /= pretrained_window_size[0] - 1
             relative_coords_table[:, :, :, 1] /= pretrained_window_size[1] - 1
-        else:
+        elif window_size > 1:
             relative_coords_table[:, :, :, 0] /= self.window_size[0] - 1
             relative_coords_table[:, :, :, 1] /= self.window_size[1] - 1
         relative_coords_table *= 8  # normalize to -8, 8

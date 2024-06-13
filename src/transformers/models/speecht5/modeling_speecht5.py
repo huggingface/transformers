@@ -517,7 +517,7 @@ class SpeechT5SpeechEncoderPrenet(nn.Module):
 
         # model only needs masking vector if mask prob is > 0.0
         if config.mask_time_prob > 0.0 or config.mask_feature_prob > 0.0:
-            self.masked_spec_embed = nn.Parameter(torch.FloatTensor(config.hidden_size).uniform_())
+            self.masked_spec_embed = nn.Parameter(torch.Tensor(config.hidden_size).uniform_())
 
         self.pos_conv_embed = SpeechT5PositionalConvEmbedding(config)
         self.pos_sinusoidal_embed = SpeechT5SinusoidalPositionalEmbedding(
@@ -2687,7 +2687,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         >>> set_seed(555)  # make deterministic
 
         >>> # generate speech
-        >>> speech = model.generate(inputs["input_ids"], speaker_embeddings, vocoder=vocoder)
+        >>> speech = model.generate(inputs["input_ids"], speaker_embeddings=speaker_embeddings, vocoder=vocoder)
         >>> speech.shape
         torch.Size([15872])
         ```

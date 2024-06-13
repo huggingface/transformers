@@ -71,7 +71,7 @@ NOT_DEVICE_TESTS = {
     "ModelTester::test_pipeline_",
     "/repo_utils/",
     "/utils/",
-    "/tools/",
+    "/agents/",
 }
 
 # allow having multiple repository checkouts and not needing to remember to rerun
@@ -94,7 +94,7 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "is_pipeline_test: mark test to run only when pipelines are tested")
     config.addinivalue_line("markers", "is_staging_test: mark test to run only in the staging environment")
     config.addinivalue_line("markers", "accelerate_tests: mark test that require accelerate")
-    config.addinivalue_line("markers", "tool_tests: mark the tool tests that are run on their specific schedule")
+    config.addinivalue_line("markers", "agent_tests: mark the agent tests that are run on their specific schedule")
     config.addinivalue_line("markers", "not_device_test: mark the tests always running on cpu")
 
 

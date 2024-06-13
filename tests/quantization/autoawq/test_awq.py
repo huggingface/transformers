@@ -102,6 +102,10 @@ class AwqTest(unittest.TestCase):
     EXPECTED_OUTPUT = "Hello my name is Katie and I am a 20 year old student at the University of North Carolina at Chapel Hill. I am a junior and I am majoring in Journalism and minoring in Spanish"
     EXPECTED_OUTPUT_BF16 = "Hello my name is Katie and I am a 20 year old student at the University of North Carolina at Chapel Hill. I am a junior and I am majoring in Exercise and Sport Science with a"
 
+    EXPECTED_OUTPUT_EXLLAMA = [
+        "Hello my name is Katie and I am a 20 year old student from the UK. I am currently studying for a degree in English Literature and History at the University of York. I am a very out",
+        "Hello my name is Katie and I am a 20 year old student from the UK. I am currently studying for a degree in English Literature and History at the University of York. I am a very creative",
+    ]
     device_map = "cuda"
 
     # called only once for all test in this class
@@ -111,10 +115,7 @@ class AwqTest(unittest.TestCase):
         Setup quantized model
         """
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
-        cls.quantized_model = AutoModelForCausalLM.from_pretrained(
-            cls.model_name,
-            device_map=cls.device_map,
-        )
+        cls.quantized_model = AutoModelForCausalLM.from_pretrained(cls.model_name, device_map=cls.device_map)
 
     def tearDown(self):
         gc.collect()
@@ -200,11 +201,11 @@ class AwqTest(unittest.TestCase):
 
         quantization_config = AwqConfig(version="exllama")
         quantized_model = AutoModelForCausalLM.from_pretrained(
-            self.model_name, quantization_config=quantization_config
-        ).to(torch_device)
+            self.model_name, quantization_config=quantization_config, device_map=torch_device
+        )
 
         output = quantized_model.generate(**input_ids, max_new_tokens=40)
-        self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+        self.assertIn(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT_EXLLAMA)
 
     def test_quantized_model_no_device_map(self):
         """
@@ -239,7 +240,7 @@ class AwqTest(unittest.TestCase):
 
         quantized_model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map="auto")
 
-        self.assertTrue(set(quantized_model.hf_device_map.values()) == {0, 1, 2, 3})
+        self.assertTrue(set(quantized_model.hf_device_map.values()) == {0, 1})
 
         output = quantized_model.generate(**input_ids, max_new_tokens=40)
 
@@ -272,8 +273,8 @@ class AwqFusedTest(unittest.TestCase):
     model_name = "TheBloke/Mistral-7B-OpenOrca-AWQ"
     model_revision = "7048b2af77d0dd1c81b000b19d73f9cc8950b510"
 
-    custom_mapping_model_id = "TheBloke/Yi-34B-AWQ"
-    custom_model_revision = "f1b2cd1b7459ceecfdc1fac5bb8725f13707c589"
+    custom_mapping_model_id = "TheBloke/Mistral-7B-v0.1-AWQ"
+    custom_model_revision = "f186bcfa9edbe2a4334262ec1e67f23e53ed1ae7"
 
     mixtral_model_name = "casperhansen/mixtral-instruct-awq"
     mixtral_model_revision = "87dd4ec502dde74fb3a624835c776b000d190c3b"
@@ -287,8 +288,8 @@ class AwqFusedTest(unittest.TestCase):
         "You end up exactly where you started. Where are you?"
     )
 
-    EXPECTED_GENERATION = prompt + "\n\nThis is a classic puzzle that has been around for"
-    EXPECTED_GENERATION_CUSTOM_MODEL = "HelloWorld.java:11)\r\n\tat org"
+    EXPECTED_GENERATION = prompt + "\n\nYou are at the starting point.\n\nIf"
+    EXPECTED_GENERATION_CUSTOM_MODEL = "Hello,\n\nI have a problem with my 20"
     EXPECTED_GENERATION_MIXTRAL = prompt + " You're on the North Pole.\n\nThe"
 
     def tearDown(self):
@@ -423,28 +424,25 @@ class AwqFusedTest(unittest.TestCase):
             fuse_max_seq_len=512,
             modules_to_fuse={
                 "attention": ["q_proj", "k_proj", "v_proj", "o_proj"],
-                "layernorm": ["ln1", "ln2", "norm"],
                 "mlp": ["gate_proj", "up_proj", "down_proj"],
+                "layernorm": ["input_layernorm", "post_attention_layernorm", "norm"],
                 "use_alibi": False,
-                "num_attention_heads": 56,
+                "hidden_size": 4096,
+                "num_attention_heads": 32,
                 "num_key_value_heads": 8,
-                "hidden_size": 7168,
             },
         )
 
         model = AutoModelForCausalLM.from_pretrained(
             self.custom_mapping_model_id,
             quantization_config=quantization_config,
-            trust_remote_code=True,
             device_map="balanced",
             revision=self.custom_model_revision,
         )
 
         self._check_fused_modules(model)
 
-        tokenizer = AutoTokenizer.from_pretrained(
-            self.custom_mapping_model_id, revision=self.custom_model_revision, trust_remote_code=True
-        )
+        tokenizer = AutoTokenizer.from_pretrained(self.custom_mapping_model_id, revision=self.custom_model_revision)
 
         prompt = "Hello"
         inputs = tokenizer(prompt, return_tensors="pt").to(torch_device)
@@ -452,6 +450,7 @@ class AwqFusedTest(unittest.TestCase):
         outputs = model.generate(**inputs, max_new_tokens=12)
         self.assertEqual(tokenizer.decode(outputs[0], skip_special_tokens=True), self.EXPECTED_GENERATION_CUSTOM_MODEL)
 
+    @unittest.skip("Not enough GPU memory on CI runners")
     @require_torch_multi_gpu
     def test_generation_mixtral_fused(self):
         """

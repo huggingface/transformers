@@ -297,8 +297,8 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         self.assertEqual(len(inputs["mask_labels"]), 2)
         self.assertEqual(inputs["mask_labels"][0].shape, (2, 512, 512))
         self.assertEqual(inputs["mask_labels"][1].shape, (4, 512, 512))
-        self.assertEquals(inputs["mask_labels"][0].sum().item(), 41527.0)
-        self.assertEquals(inputs["mask_labels"][1].sum().item(), 26259.0)
+        self.assertEqual(inputs["mask_labels"][0].sum().item(), 41527.0)
+        self.assertEqual(inputs["mask_labels"][1].sum().item(), 26259.0)
 
     def test_integration_semantic_segmentation(self):
         # load 2 images and corresponding semantic annotations from the hub
@@ -339,8 +339,8 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         self.assertEqual(len(inputs["mask_labels"]), 2)
         self.assertEqual(inputs["mask_labels"][0].shape, (3, 512, 512))
         self.assertEqual(inputs["mask_labels"][1].shape, (8, 512, 512))
-        self.assertEquals(inputs["mask_labels"][0].sum().item(), 170200.0)
-        self.assertEquals(inputs["mask_labels"][1].sum().item(), 257036.0)
+        self.assertEqual(inputs["mask_labels"][0].sum().item(), 170200.0)
+        self.assertEqual(inputs["mask_labels"][1].sum().item(), 257036.0)
 
     def test_integration_panoptic_segmentation(self):
         # load 2 images and corresponding panoptic annotations from the hub
@@ -400,8 +400,8 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         self.assertEqual(len(inputs["mask_labels"]), 2)
         self.assertEqual(inputs["mask_labels"][0].shape, (79, 512, 711))
         self.assertEqual(inputs["mask_labels"][1].shape, (61, 512, 711))
-        self.assertEquals(inputs["mask_labels"][0].sum().item(), 315193.0)
-        self.assertEquals(inputs["mask_labels"][1].sum().item(), 350747.0)
+        self.assertEqual(inputs["mask_labels"][0].sum().item(), 315193.0)
+        self.assertEqual(inputs["mask_labels"][1].sum().item(), 350747.0)
 
     def test_binary_mask_to_rle(self):
         fake_binary_mask = np.zeros((20, 50))

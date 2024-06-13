@@ -749,7 +749,6 @@ def convert_to_rgb(image: ImageInput) -> ImageInput:
     """
     Converts an image to RGB format. Only converts if the image is of type PIL.Image.Image, otherwise returns the image
     as is.
-
     Args:
         image (Image):
             The image to convert.
@@ -757,6 +756,9 @@ def convert_to_rgb(image: ImageInput) -> ImageInput:
     requires_backends(convert_to_rgb, ["vision"])
 
     if not isinstance(image, PIL.Image.Image):
+        return image
+
+    if image.mode == "RGB":
         return image
 
     image = image.convert("RGB")

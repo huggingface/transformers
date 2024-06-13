@@ -86,6 +86,7 @@ else:
         "StoppingCriteria",
         "StoppingCriteriaList",
         "validate_stopping_criteria",
+        "StopStringCriteria",
     ]
     _import_structure["utils"] = [
         "GenerationMixin",
@@ -162,6 +163,7 @@ else:
         "FlaxTopKLogitsWarper",
         "FlaxTopPLogitsWarper",
         "FlaxWhisperTimeStampLogitsProcessor",
+        "FlaxNoRepeatNGramLogitsProcessor",
     ]
     _import_structure["flax_utils"] = [
         "FlaxGenerationMixin",
@@ -223,6 +225,7 @@ if TYPE_CHECKING:
             MaxTimeCriteria,
             StoppingCriteria,
             StoppingCriteriaList,
+            StopStringCriteria,
             validate_stopping_criteria,
         )
         from .utils import (
@@ -294,6 +297,7 @@ if TYPE_CHECKING:
             FlaxLogitsProcessorList,
             FlaxLogitsWarper,
             FlaxMinLengthLogitsProcessor,
+            FlaxNoRepeatNGramLogitsProcessor,
             FlaxSuppressTokensAtBeginLogitsProcessor,
             FlaxSuppressTokensLogitsProcessor,
             FlaxTemperatureLogitsWarper,

@@ -63,6 +63,15 @@ if is_tensorflow_probability_available():
             "It seems you have `tensorflow_probability` installed with the wrong tensorflow version."
             "Please try to reinstall it following the instructions here: https://github.com/tensorflow/probability."
         )
+else:
+    try:
+        import tensorflow_probability as tfp
+
+        # On the first call, check whether a compatible version of TensorFlow is installed
+        # TensorFlow Probability depends on a recent stable release of TensorFlow
+        _ = tfp.distributions.Normal(loc=0.0, scale=1.0)
+    except ImportError:
+        pass
 
 _CHECKPOINT_FOR_DOC = "nvidia/groupvit-gcc-yfcc"
 

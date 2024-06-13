@@ -293,9 +293,9 @@ class FeatureExtractionMixin(PushToHubMixin):
             force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force to (re-)download the feature extractor files and override the cached versions
                 if they exist.
-            resume_download (`bool`, *optional*, defaults to `False`):
-                Whether or not to delete incompletely received file. Attempts to resume the download if such a file
-                exists.
+            resume_download:
+                Deprecated and ignored. All downloads are now resumed by default when possible.
+                Will be removed in v5 of Transformers.
             proxies (`Dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
@@ -451,7 +451,7 @@ class FeatureExtractionMixin(PushToHubMixin):
         """
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
-        resume_download = kwargs.pop("resume_download", False)
+        resume_download = kwargs.pop("resume_download", None)
         proxies = kwargs.pop("proxies", None)
         subfolder = kwargs.pop("subfolder", None)
         token = kwargs.pop("token", None)
@@ -566,16 +566,16 @@ class FeatureExtractionMixin(PushToHubMixin):
         """
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
 
-        feature_extractor = cls(**feature_extractor_dict)
-
         # Update feature_extractor with kwargs if needed
         to_remove = []
         for key, value in kwargs.items():
-            if hasattr(feature_extractor, key):
-                setattr(feature_extractor, key, value)
+            if key in feature_extractor_dict:
+                feature_extractor_dict[key] = value
                 to_remove.append(key)
         for key in to_remove:
             kwargs.pop(key, None)
+
+        feature_extractor = cls(**feature_extractor_dict)
 
         logger.info(f"Feature extractor {feature_extractor}")
         if return_unused_kwargs:

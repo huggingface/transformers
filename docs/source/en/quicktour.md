@@ -23,7 +23,7 @@ Get up and running with 🤗 Transformers! Whether you're a developer or an ever
 Before you begin, make sure you have all the necessary libraries installed:
 
 ```bash
-!pip install transformers datasets
+!pip install transformers datasets evaluate accelerate
 ```
 
 You'll also need to install your preferred machine learning framework:
@@ -547,7 +547,7 @@ All models are a standard [`tf.keras.Model`](https://www.tensorflow.org/api_docs
    ```py
    >>> from tensorflow.keras.optimizers import Adam
 
-   >>> model.compile(optimizer=Adam(3e-5))  # No loss argument!
+   >>> model.compile(optimizer='adam')  # No loss argument!
    >>> model.fit(tf_dataset)  # doctest: +SKIP
    ```
 

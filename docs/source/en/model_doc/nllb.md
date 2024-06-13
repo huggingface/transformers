@@ -145,3 +145,46 @@ UN-Chef sagt, es gibt keine militärische Lösung in Syrien
 ## NllbTokenizerFast
 
 [[autodoc]] NllbTokenizerFast
+
+## Using Flash Attention 2
+
+Flash Attention 2 is a faster, optimized version of the attention scores computation which relies on `cuda` kernels.
+
+### Installation 
+
+First, check whether your hardware is compatible with Flash Attention 2. The latest list of compatible hardware can be found in the [official documentation](https://github.com/Dao-AILab/flash-attention#installation-and-features).
+
+Next, [install](https://github.com/Dao-AILab/flash-attention#installation-and-features) the latest version of Flash Attention 2:
+
+```bash
+pip install -U flash-attn --no-build-isolation
+```
+
+### Usage
+
+To load a model using Flash Attention 2, we can pass the argument `attn_implementation="flash_attention_2"` to [`.from_pretrained`](https://huggingface.co/docs/transformers/main/en/main_classes/model#transformers.PreTrainedModel.from_pretrained). You can use either `torch.float16` or `torch.bfloat16` precision.
+
+```python
+>>> import torch
+>>> from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+
+>>> model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-600M", torch_dtype=torch.float16, attn_implementation="flash_attention_2").to("cuda").eval()
+>>> tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-200-distilled-600M")
+
+>>> article = "Şeful ONU spune că nu există o soluţie militară în Siria"
+>>> inputs = tokenizer(article, return_tensors="pt").to("cuda")
+
+>>> translated_tokens = model.generate(
+...     **inputs, forced_bos_token_id=tokenizer.lang_code_to_id["deu_Latn"], max_length=30
+... )
+>>> tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
+"UN-Chef sagt, es gibt keine militärische Lösung in Syrien"
+```
+
+### Expected speedups
+
+Below is an expected speedup diagram that compares pure inference time between the native implementation and the Flash Attention 2.
+
+<div style="text-align: center">
+<img src="https://huggingface.co/datasets/visheratin/documentation-images/resolve/main/nllb-speedup.webp">
+</div>

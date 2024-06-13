@@ -479,6 +479,10 @@ class SeamlessM4Tv2ModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase)
     def test_inputs_embeds(self):
         pass
 
+    @unittest.skip(reason="SeamlessM4TSpeechEncoder doesn't have an embedding layer")
+    def test_inputs_embeds_matches_input_ids(self):
+        pass
+
     @unittest.skip(
         reason="Expected missing keys serve when using SeamlessM4Tv2ForXXX.from_pretrained from a checkpoint saved by SeamlessM4Tv2Model.save_pretrained."
     )

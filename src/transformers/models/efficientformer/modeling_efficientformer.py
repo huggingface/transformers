@@ -555,6 +555,7 @@ class EfficientFormerModel(EfficientFormerPreTrainedModel):
     def __init__(self, config: EfficientFormerConfig):
         super().__init__(config)
         self.config = config
+        _no_split_modules = ["EfficientFormerMeta4D"]
 
         self.patch_embed = EfficientFormerConvStem(config, config.hidden_sizes[0])
         self.encoder = EfficientFormerEncoder(config)

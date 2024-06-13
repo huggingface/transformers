@@ -41,7 +41,7 @@ class RwkvConfig(PretrainedConfig):
             Vocabulary size of the RWKV model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`RwkvModel`].
         context_length (`int`, *optional*, defaults to 1024):
-            The maximum sequence length that this model can be be used with in a single forward (using it in RNN mode
+            The maximum sequence length that this model can be used with in a single forward (using it in RNN mode
             lets use any sequence length).
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimensionality of the embeddings and hidden states.

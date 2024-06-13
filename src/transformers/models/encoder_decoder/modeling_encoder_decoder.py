@@ -209,12 +209,12 @@ class EncoderDecoderModel(PreTrainedModel):
         if encoder is None:
             from ..auto.modeling_auto import AutoModel
 
-            encoder = AutoModel.from_config(config.encoder)
+            encoder = AutoModel.from_config(config.encoder, attn_implementation=config._attn_implementation)
 
         if decoder is None:
             from ..auto.modeling_auto import AutoModelForCausalLM
 
-            decoder = AutoModelForCausalLM.from_config(config.decoder)
+            decoder = AutoModelForCausalLM.from_config(config.decoder, attn_implementation=config._attn_implementation)
 
         self.encoder = encoder
         self.decoder = decoder
@@ -262,9 +262,16 @@ class EncoderDecoderModel(PreTrainedModel):
         if self.config.tie_encoder_decoder:
             # tie encoder and decoder base model
             decoder_base_model_prefix = self.decoder.base_model_prefix
-            self._tie_encoder_decoder_weights(
-                self.encoder, self.decoder._modules[decoder_base_model_prefix], self.decoder.base_model_prefix
+            tied_weights = self._tie_encoder_decoder_weights(
+                self.encoder,
+                self.decoder._modules[decoder_base_model_prefix],
+                self.decoder.base_model_prefix,
+                "encoder",
             )
+            # Setting a dynamic variable instead of `_tied_weights_keys` because it's a class
+            # attributed not an instance member, therefore modifying it will modify the entire class
+            # Leading to issues on subsequent calls by different tests or subsequent calls.
+            self._dynamic_tied_weights_keys = tied_weights
 
     def get_encoder(self):
         return self.encoder

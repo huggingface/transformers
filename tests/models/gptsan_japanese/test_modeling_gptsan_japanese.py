@@ -182,6 +182,14 @@ class GPTSanJapaneseTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     def test_model_parallelism(self):
         super().test_model_parallelism()
 
+    @unittest.skip(reason="Gptsan does not use inputs_embeds")
+    def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(reason="Gptsan does not use inputs_embeds")
+    def test_inputs_embeds_matches_input_ids(self):
+        pass
+
 
 @require_torch
 class GPTSanJapaneseForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
@@ -211,6 +219,14 @@ class GPTSanJapaneseForConditionalGenerationTest(ModelTesterMixin, GenerationTes
     )
     def test_model_parallelism(self):
         super().test_model_parallelism()
+
+    @unittest.skip(reason="Gptsan does not use inputs_embeds")
+    def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(reason="Gptsan does not use inputs_embeds")
+    def test_inputs_embeds_matches_input_ids(self):
+        pass
 
     @slow
     def test_logits(self):

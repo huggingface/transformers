@@ -136,7 +136,7 @@ Tue Jan 11 08:58:05 2022
 ```py
 default_args = {
     "output_dir": "tmp",
-    "evaluation_strategy": "steps",
+    "eval_strategy": "steps",
     "num_train_epochs": 1,
     "log_level": "error",
     "report_to": "none",

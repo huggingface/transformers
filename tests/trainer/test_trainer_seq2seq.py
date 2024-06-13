@@ -113,7 +113,7 @@ class Seq2seqTrainerTester(TestCasePlus):
             per_device_train_batch_size=batch_size,
             per_device_eval_batch_size=batch_size,
             predict_with_generate=True,
-            evaluation_strategy="steps",
+            eval_strategy="steps",
             do_train=True,
             do_eval=True,
             warmup_steps=0,

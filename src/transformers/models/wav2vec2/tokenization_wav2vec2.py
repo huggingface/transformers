@@ -113,7 +113,6 @@ class Wav2Vec2CTCTokenizerOutput(ModelOutput):
 
 
 class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
-
     """
     Constructs a Wav2Vec2CTC tokenizer.
 
@@ -420,7 +419,9 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
 
         result = []
         for token in filtered_tokens:
-            if skip_special_tokens and token in self.all_special_ids:
+            if skip_special_tokens and (
+                token in self.all_special_ids or (token != self.pad_token and token in self.all_special_tokens)
+            ):
                 continue
             result.append(token)
 
@@ -881,7 +882,9 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
 
         result = []
         for token in filtered_tokens:
-            if skip_special_tokens and token in self.all_special_ids:
+            if skip_special_tokens and (
+                token in self.all_special_ids or (token != self.pad_token and token in self.all_special_tokens)
+            ):
                 continue
             result.append(token)
 

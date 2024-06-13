@@ -1251,9 +1251,13 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
         self.language_projection = nn.Linear(config.qformer_config.hidden_size, config.text_config.hidden_size)
 
         if config.use_decoder_only_language_model:
-            language_model = AutoModelForCausalLM.from_config(config.text_config)
+            language_model = AutoModelForCausalLM.from_config(
+                config.text_config, attn_implementation=config._attn_implementation
+            )
         else:
-            language_model = AutoModelForSeq2SeqLM.from_config(config.text_config)
+            language_model = AutoModelForSeq2SeqLM.from_config(
+                config.text_config, attn_implementation=config._attn_implementation
+            )
 
         if language_model._no_split_modules is not None:
             self._no_split_modules.extend(language_model._no_split_modules)

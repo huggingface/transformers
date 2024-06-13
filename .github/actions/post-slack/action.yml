@@ -1,0 +1,79 @@
+name: Send message to slack
+
+description: 'Send results to slack'
+author: 'Hugging Face'
+inputs:
+  slack_channel:
+    required: true
+    type: string
+  title:
+    required: true
+    type: string
+  status:
+    required: true
+    type: string
+  slack_token:
+    required: true
+    type: string
+
+runs:
+  using: "composite"
+  steps:
+    - name: Create content to post
+      id: create-message
+      run: |
+        if [ "${{ inputs.status }}" == "success" ]; then
+          echo STATUS_MESSAGE='🟢 Tests are passing!' >> $GITHUB_ENV
+        else
+          echo STATUS_MESSAGE='🔴 Tests failed! Please check the GitHub action link below' >> $GITHUB_ENV
+        fi
+      shell: bash
+
+    - name: Post Canceled results Slack channel
+      id: post-slack
+      uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001
+      with:
+        # Slack channel id, channel name, or user id to post message.
+        # See also: https://api.slack.com/methods/chat.postMessage#channels
+        channel-id: ${{ inputs.slack_channel }}
+        # For posting a rich message using Block Kit
+        payload: |
+          {
+            "text": "${{ inputs.title }}",
+            "blocks": [
+              {
+                "type": "header",
+                "text": {
+                    "type": "plain_text",
+                    "text": "${{ inputs.title }}"
+                }
+              },
+              {
+                "type": "section",
+                "text": {
+                  "type": "mrkdwn",
+                  "text": "${{ env.STATUS_MESSAGE }}"
+                }
+              },
+              {
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": "*Click the button for more details about the commit*"},
+                "accessory": {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "Check Commit results"},
+                    "url": "${{ github.event.pull_request.html_url || github.event.head_commit.url }}"
+                }
+              },
+              {
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": "*Click here for more details about the action ran*"},
+                "accessory": {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "Check Action results"},
+                    "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                }
+              }
+            ]
+          }
+      env:
+        SLACK_BOT_TOKEN: ${{ inputs.slack_token }}

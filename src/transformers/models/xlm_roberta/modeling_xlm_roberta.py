@@ -295,11 +295,18 @@ class XLMRobertaSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaAttention with Roberta->XLMRoberta
+XLM_ROBERTA_SELF_ATTENTION_CLASSES = {
+    "eager": XLMRobertaSelfAttention,
+}
+
+
+# Copied from transformers.models.roberta.modeling_roberta.RobertaAttention with Roberta->XLMRoberta,ROBERTA->XLM_ROBERTA
 class XLMRobertaAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = XLMRobertaSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.self = XLM_ROBERTA_SELF_ATTENTION_CLASSES[config._attn_implementation](
+            config, position_embedding_type=position_embedding_type
+        )
         self.output = XLMRobertaSelfOutput(config)
         self.pruned_heads = set()
 
@@ -690,7 +697,7 @@ class XLMRobertaModel(XLMRobertaPreTrainedModel):
 
     """
 
-    # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->XLMRoberta
+    # Copied from transformers.models.clap.modeling_clap.ClapTextModel.__init__ with ClapText->XLMRoberta
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
@@ -723,7 +730,7 @@ class XLMRobertaModel(XLMRobertaPreTrainedModel):
         output_type=BaseModelOutputWithPoolingAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
-    # Copied from transformers.models.bert.modeling_bert.BertModel.forward
+    # Copied from transformers.models.clap.modeling_clap.ClapTextModel.forward
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,

@@ -30,7 +30,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import partial, wraps
 from threading import Thread
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 from zipfile import is_zipfile
 
 import torch
@@ -109,6 +109,7 @@ if is_accelerate_available():
     from accelerate.hooks import add_hook_to_module
     from accelerate.utils import (
         check_tied_parameters_on_same_device,
+        extract_model_from_parallel,
         find_tied_parameters,
         get_balanced_memory,
         get_max_memory,
@@ -323,7 +324,7 @@ def dtype_byte_size(dtype):
     """
     if dtype == torch.bool:
         return 1 / 8
-    bit_search = re.search(r"[^\d](\d+)$", str(dtype))
+    bit_search = re.search(r"[^\d](\d+)_?", str(dtype))
     if bit_search is None:
         raise ValueError(f"`dtype` is not a valid dtype: {dtype}.")
     bit_size = int(bit_search.groups()[0])
@@ -571,6 +572,79 @@ def set_initialized_submodules(model, state_dict_keys):
         else:
             not_initialized_submodules[module_name] = module
     return not_initialized_submodules
+
+
+def _end_ptr(tensor: torch.Tensor) -> int:
+    # extract the end of the pointer if the tensor is a slice of a bigger tensor
+    if tensor.nelement():
+        stop = tensor.view(-1)[-1].data_ptr() + tensor.element_size()
+    else:
+        stop = tensor.data_ptr()
+    return stop
+
+
+def _get_tied_weight_keys(module: nn.Module, prefix=""):
+    tied_weight_keys = []
+    if getattr(module, "_tied_weights_keys", None) is not None:
+        names = [f"{prefix}.{k}" if prefix else k for k in module._tied_weights_keys]
+        tied_weight_keys.extend(names)
+    if getattr(module, "_dynamic_tied_weights_keys", None) is not None:
+        names = [f"{prefix}.{k}" if prefix else k for k in module._dynamic_tied_weights_keys]
+        tied_weight_keys.extend(names)
+    for name, submodule in module.named_children():
+        local_prefix = f"{prefix}.{name}" if prefix else name
+        tied_weight_keys.extend(_get_tied_weight_keys(submodule, prefix=local_prefix))
+    return tied_weight_keys
+
+
+def _find_disjoint(tensors: List[Set[str]], state_dict: Dict[str, torch.Tensor]) -> Tuple[List[Set[str]], List[str]]:
+    filtered_tensors = []
+    for shared in tensors:
+        if len(shared) < 2:
+            filtered_tensors.append(shared)
+            continue
+
+        areas = []
+        for name in shared:
+            tensor = state_dict[name]
+            areas.append((tensor.data_ptr(), _end_ptr(tensor), name))
+        areas.sort()
+
+        _, last_stop, last_name = areas[0]
+        filtered_tensors.append({last_name})
+        for start, stop, name in areas[1:]:
+            if start >= last_stop:
+                filtered_tensors.append({name})
+            else:
+                filtered_tensors[-1].add(name)
+            last_stop = stop
+    disjoint_tensors = []
+    shared_tensors = []
+    for tensors in filtered_tensors:
+        if len(tensors) == 1:
+            disjoint_tensors.append(tensors.pop())
+        else:
+            shared_tensors.append(tensors)
+    return shared_tensors, disjoint_tensors
+
+
+def _find_identical(tensors: List[Set[str]], state_dict: Dict[str, torch.Tensor]) -> Tuple[List[Set[str]], Set[str]]:
+    shared_tensors = []
+    identical = []
+    for shared in tensors:
+        if len(shared) < 2:
+            continue
+
+        areas = collections.defaultdict(set)
+        for name in shared:
+            tensor = state_dict[name]
+            area = (tensor.device, tensor.data_ptr(), _end_ptr(tensor))
+            areas[area].add(name)
+        if len(areas) == 1:
+            identical.append(shared)
+        else:
+            shared_tensors.append(shared)
+    return shared_tensors, identical
 
 
 def _load_state_dict_into_model(model_to_load, state_dict, start_prefix):
@@ -1086,9 +1160,13 @@ class ModuleUtilsMixin:
                 # For 4bit models, we need to multiply the number of parameters by 2 as half of the parameters are
                 # used for the 4bit quantization (uint8 tensors are stored)
                 if is_loaded_in_4bit and isinstance(param, bnb.nn.Params4bit):
-                    total_numel.append(
-                        param.numel() * 2 * self.hf_quantizer.quantization_config.bnb_4bit_quant_storage.itemsize
-                    )
+                    if hasattr(param, "element_size"):
+                        num_bytes = param.element_size()
+                    elif hasattr(param, "quant_storage"):
+                        num_bytes = param.quant_storage.itemsize
+                    else:
+                        num_bytes = 1
+                    total_numel.append(param.numel() * 2 * num_bytes)
                 else:
                     total_numel.append(param.numel())
 
@@ -1646,15 +1724,24 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if getattr(self.config, "is_encoder_decoder", False) and getattr(self.config, "tie_encoder_decoder", False):
             if hasattr(self, self.base_model_prefix):
                 self = getattr(self, self.base_model_prefix)
-            self._tie_encoder_decoder_weights(self.encoder, self.decoder, self.base_model_prefix)
+            tied_weights = self._tie_encoder_decoder_weights(
+                self.encoder, self.decoder, self.base_model_prefix, "encoder"
+            )
+            # Setting a dynamic variable instead of `_tied_weights_keys` because it's a class
+            # attributed not an instance member, therefore modifying it will modify the entire class
+            # Leading to issues on subsequent calls by different tests or subsequent calls.
+            self._dynamic_tied_weights_keys = tied_weights
 
         for module in self.modules():
             if hasattr(module, "_tie_weights"):
                 module._tie_weights()
 
     @staticmethod
-    def _tie_encoder_decoder_weights(encoder: nn.Module, decoder: nn.Module, base_model_prefix: str):
+    def _tie_encoder_decoder_weights(
+        encoder: nn.Module, decoder: nn.Module, base_model_prefix: str, base_encoder_name: str
+    ):
         uninitialized_encoder_weights: List[str] = []
+        tied_weights: List[str] = []
         if decoder.__class__ != encoder.__class__:
             logger.info(
                 f"{decoder.__class__} and {encoder.__class__} are not equal. In this case make sure that all encoder"
@@ -1665,8 +1752,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             decoder_pointer: nn.Module,
             encoder_pointer: nn.Module,
             module_name: str,
+            base_encoder_name: str,
             uninitialized_encoder_weights: List[str],
             depth=0,
+            total_decoder_name="",
+            total_encoder_name="",
         ):
             assert isinstance(decoder_pointer, nn.Module) and isinstance(
                 encoder_pointer, nn.Module
@@ -1674,8 +1764,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if hasattr(decoder_pointer, "weight"):
                 assert hasattr(encoder_pointer, "weight")
                 encoder_pointer.weight = decoder_pointer.weight
+                tied_weights.append(f"{base_encoder_name}{total_encoder_name}.weight")
                 if hasattr(decoder_pointer, "bias"):
                     assert hasattr(encoder_pointer, "bias")
+                    tied_weights.append(f"{base_encoder_name}{total_encoder_name}.bias")
                     encoder_pointer.bias = decoder_pointer.bias
                 return
 
@@ -1713,19 +1805,26 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         decoder_modules[decoder_name],
                         encoder_modules[encoder_name],
                         module_name + "/" + name,
+                        base_encoder_name,
                         uninitialized_encoder_weights,
                         depth=depth + 1,
+                        total_encoder_name=f"{total_encoder_name}.{encoder_name}",
+                        total_decoder_name=f"{total_decoder_name}.{decoder_name}",
                     )
                     all_encoder_weights.remove(module_name + "/" + encoder_name)
 
                 uninitialized_encoder_weights += list(all_encoder_weights)
 
         # tie weights recursively
-        tie_encoder_to_decoder_recursively(decoder, encoder, base_model_prefix, uninitialized_encoder_weights)
+        tie_encoder_to_decoder_recursively(
+            decoder, encoder, base_model_prefix, base_encoder_name, uninitialized_encoder_weights
+        )
+
         if len(uninitialized_encoder_weights) > 0:
             logger.warning(
                 f"The following encoder weights were not tied to the decoder {uninitialized_encoder_weights}"
             )
+        return tied_weights
 
     def _tie_or_clone_weights(self, output_embeddings, input_embeddings):
         """Tie or clone module weights depending of whether we are using TorchScript or not"""
@@ -1806,6 +1905,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             return model_embeds
 
         # Update base model and current model config
+        if hasattr(self.config, "text_config"):
+            self.config.text_config.vocab_size = model_embeds.weight.shape[0]
+        # TODO: to be removed after v4.42, config.vocab_size is deprecated for models that have a config.text_config
         self.config.vocab_size = model_embeds.weight.shape[0]
         self.vocab_size = model_embeds.weight.shape[0]
 
@@ -1838,7 +1940,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # if word embeddings are not tied, make sure that lm head is resized as well
         if self.get_output_embeddings() is not None and not self.config.tie_word_embeddings:
             old_lm_head = self.get_output_embeddings()
-            new_lm_head = self._get_resized_lm_head(old_lm_head, new_num_tokens)
+            if isinstance(old_lm_head, torch.nn.Embedding):
+                new_lm_head = self._get_resized_embeddings(old_lm_head, new_num_tokens)
+            else:
+                new_lm_head = self._get_resized_lm_head(old_lm_head, new_num_tokens)
             if hasattr(old_lm_head, "_hf_hook"):
                 hook = old_lm_head._hf_hook
                 add_hook_to_module(new_lm_head, hook)
@@ -2125,7 +2230,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             self._set_gradient_checkpointing(enable=True, gradient_checkpointing_func=gradient_checkpointing_func)
         else:
             self.apply(partial(self._set_gradient_checkpointing, value=True))
-            logger.warn(
+            logger.warning(
                 "You are using an old version of the checkpointing format that is deprecated (We will also silently ignore `gradient_checkpointing_kwargs` in case you passed it)."
                 "Please update to the new format on your modeling file. To use the new format, you need to completely remove the definition of the method `_set_gradient_checkpointing` in your model."
             )
@@ -2173,7 +2278,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if not _is_using_old_format:
                 self._set_gradient_checkpointing(enable=False)
             else:
-                logger.warn(
+                logger.warning(
                     "You are using an old version of the checkpointing format that is deprecated (We will also silently ignore `gradient_checkpointing_kwargs` in case you passed it)."
                     "Please update to the new format on your modeling file. To use the new format, you need to completely remove the definition of the method `_set_gradient_checkpointing` in your model."
                 )
@@ -2402,34 +2507,49 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             # These are all the pointers of shared tensors.
             shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
-            warn_names = set()
+            error_names = []
+            to_delete_names = set()
+            # Recursively descend to find tied weight keys
+            _tied_weights_keys = _get_tied_weight_keys(self)
             for names in shared_ptrs.values():
                 # Removing the keys which are declared as known duplicates on
                 # load. This allows to make sure the name which is kept is consistent.
-                if self._tied_weights_keys is not None:
+                if _tied_weights_keys is not None:
                     found = 0
                     for name in sorted(names):
-                        matches_pattern = any(re.search(pat, name) for pat in self._tied_weights_keys)
+                        matches_pattern = any(re.search(pat, name) for pat in _tied_weights_keys)
                         if matches_pattern and name in state_dict:
                             found += 1
                             if found < len(names):
-                                del state_dict[name]
+                                to_delete_names.add(name)
+            # We are entering a place where the weights and the transformers configuration do NOT match.
+            shared_names, disjoint_names = _find_disjoint(shared_ptrs.values(), state_dict)
+            # Those are actually tensor sharing but disjoint from each other, we can safely clone them
+            # Reloaded won't have the same property, but it shouldn't matter in any meaningful way.
+            for name in disjoint_names:
+                state_dict[name] = state_dict[name].clone()
 
-                # When not all duplicates have been cleaned, still remove those keys, but put a clear warning.
-                # If the link between tensors was done at runtime then `from_pretrained` will not get
-                # the key back leading to random tensor. A proper warning will be shown
-                # during reload (if applicable), but since the file is not necessarily compatible with
-                # the config, better show a proper warning.
-                found = 0
-                for name in names:
-                    if name in state_dict:
-                        found += 1
-                        if found > 1:
-                            del state_dict[name]
-                            warn_names.add(name)
-            if len(warn_names) > 0:
-                logger.warning_once(
-                    f"Removed shared tensor {warn_names} while saving. This should be OK, but check by verifying that you don't receive any warning while reloading",
+            # When not all duplicates have been cleaned, still remove those keys, but put a clear warning.
+            # If the link between tensors was done at runtime then `from_pretrained` will not get
+            # the key back leading to random tensor. A proper warning will be shown
+            # during reload (if applicable), but since the file is not necessarily compatible with
+            # the config, better show a proper warning.
+            shared_names, identical_names = _find_identical(shared_names, state_dict)
+            # delete tensors that have identical storage
+            for inames in identical_names:
+                known = inames.intersection(to_delete_names)
+                for name in known:
+                    del state_dict[name]
+                unknown = inames.difference(to_delete_names)
+                if len(unknown) > 1:
+                    error_names.append(unknown)
+
+            if shared_names:
+                error_names.append(set(shared_names))
+
+            if len(error_names) > 0:
+                raise RuntimeError(
+                    f"The weights trying to be saved contained shared tensors {error_names} that are mismatching the transformers base configuration. Try saving using `safe_serialization=False` or remove this tensor sharing.",
                 )
 
         # Shard the model if it is too big.
@@ -2539,6 +2659,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     @wraps(torch.nn.Module.cuda)
     def cuda(self, *args, **kwargs):
+        if getattr(self, "quantization_method", None) == QuantizationMethod.HQQ:
+            raise ValueError("`.cuda` is not supported for HQQ-quantized models.")
         # Checks if the model has been loaded in 8-bit
         if getattr(self, "quantization_method", None) == QuantizationMethod.BITS_AND_BYTES:
             raise ValueError(
@@ -2550,6 +2672,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     @wraps(torch.nn.Module.to)
     def to(self, *args, **kwargs):
+        if getattr(self, "quantization_method", None) == QuantizationMethod.HQQ:
+            raise ValueError("`.to` is not supported for HQQ-quantized models.")
         # Checks if the model has been loaded in 8-bit
         if getattr(self, "quantization_method", None) == QuantizationMethod.BITS_AND_BYTES:
             raise ValueError(
@@ -2679,9 +2803,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force the (re-)download of the model weights and configuration files, overriding the
                 cached versions if they exist.
-            resume_download (`bool`, *optional*, defaults to `False`):
-                Whether or not to delete incompletely received files. Will attempt to resume the download if such a
-                file exists.
+            resume_download:
+                Deprecated and ignored. All downloads are now resumed by default when possible.
+                Will be removed in v5 of Transformers.
             proxies (`Dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
@@ -2843,7 +2967,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         state_dict = kwargs.pop("state_dict", None)
         from_tf = kwargs.pop("from_tf", False)
         from_flax = kwargs.pop("from_flax", False)
-        resume_download = kwargs.pop("resume_download", False)
+        resume_download = kwargs.pop("resume_download", None)
         proxies = kwargs.pop("proxies", None)
         output_loading_info = kwargs.pop("output_loading_info", False)
         use_auth_token = kwargs.pop("use_auth_token", None)
@@ -3030,7 +3154,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             config = copy.deepcopy(config)
 
             kwarg_attn_imp = kwargs.pop("attn_implementation", None)
-            if kwarg_attn_imp is not None and config._attn_implementation != kwarg_attn_imp:
+            if kwarg_attn_imp is not None:
                 config._attn_implementation = kwarg_attn_imp
             model_kwargs = kwargs
 
@@ -3052,6 +3176,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
             torch_dtype = hf_quantizer.update_torch_dtype(torch_dtype)
             device_map = hf_quantizer.update_device_map(device_map)
+
+            # In order to ensure popular quantization methods are supported. Can be disable with `disable_telemetry`
+            user_agent["quant"] = hf_quantizer.quantization_config.quant_method.value
 
             # Force-set to `True` for more mem efficiency
             if low_cpu_mem_usage is None:
@@ -3143,8 +3270,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     )
                 else:
                     raise EnvironmentError(
-                        f"Error no file named {_add_variant(WEIGHTS_NAME, variant)}, {TF2_WEIGHTS_NAME},"
-                        f" {TF_WEIGHTS_NAME + '.index'} or {FLAX_WEIGHTS_NAME} found in directory"
+                        f"Error no file named {_add_variant(WEIGHTS_NAME, variant)}, {_add_variant(SAFE_WEIGHTS_NAME, variant)},"
+                        f" {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME + '.index'} or {FLAX_WEIGHTS_NAME} found in directory"
                         f" {pretrained_model_name_or_path}."
                     )
             elif os.path.isfile(os.path.join(subfolder, pretrained_model_name_or_path)):
@@ -3290,8 +3417,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         else:
                             raise EnvironmentError(
                                 f"{pretrained_model_name_or_path} does not appear to have a file named"
-                                f" {_add_variant(WEIGHTS_NAME, variant)}, {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME} or"
-                                f" {FLAX_WEIGHTS_NAME}."
+                                f" {_add_variant(WEIGHTS_NAME, variant)}, {_add_variant(SAFE_WEIGHTS_NAME, variant)},"
+                                f" {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME} or {FLAX_WEIGHTS_NAME}."
                             )
                 except EnvironmentError:
                     # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted
@@ -3616,6 +3743,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             }
             if "skip_keys" in inspect.signature(dispatch_model).parameters:
                 device_map_kwargs["skip_keys"] = model._skip_keys_device_placement
+            # For HQQ method we force-set the hooks for single GPU envs
+            if (
+                "force_hooks" in inspect.signature(dispatch_model).parameters
+                and hf_quantizer is not None
+                and hf_quantizer.quantization_config.quant_method == QuantizationMethod.HQQ
+            ):
+                device_map_kwargs["force_hooks"] = True
             if not is_fsdp_enabled() and not is_deepspeed_zero3_enabled():
                 dispatch_model(model, **device_map_kwargs)
 
@@ -4690,18 +4824,34 @@ class SequenceSummary(nn.Module):
         return output
 
 
-def unwrap_model(model: nn.Module) -> nn.Module:
+def unwrap_model(model: nn.Module, recursive: bool = False) -> nn.Module:
     """
     Recursively unwraps a model from potential containers (as used in distributed training).
 
     Args:
         model (`torch.nn.Module`): The model to unwrap.
+        recursive (`bool`, *optional*, defaults to `False`):
+            Whether to recursively extract all cases of `module.module` from `model` as well as unwrap child sublayers
+            recursively, not just the top-level distributed containers.
     """
-    # since there could be multiple levels of wrapping, unwrap recursively
-    if hasattr(model, "module"):
-        return unwrap_model(model.module)
+    # Use accelerate implementation if available (should always be the case when using torch)
+    # This is for pytorch, as we also have to handle things like dynamo
+    if is_accelerate_available():
+        kwargs = {}
+        if recursive:
+            if not is_accelerate_available("0.29.0"):
+                raise RuntimeError(
+                    "Setting `recursive=True` to `unwrap_model` requires `accelerate` v0.29.0. Please upgrade your version of accelerate"
+                )
+            else:
+                kwargs["recursive"] = recursive
+        return extract_model_from_parallel(model, **kwargs)
     else:
-        return model
+        # since there could be multiple levels of wrapping, unwrap recursively
+        if hasattr(model, "module"):
+            return unwrap_model(model.module)
+        else:
+            return model
 
 
 def expand_device_map(device_map, param_names, start_prefix):

@@ -658,6 +658,7 @@ class BitPreTrainedModel(PreTrainedModel):
     config_class = BitConfig
     base_model_prefix = "bit"
     main_input_name = "pixel_values"
+    _no_split_modules = ["BitEmbeddings"]
 
     def _init_weights(self, module):
         if isinstance(module, nn.Conv2d):

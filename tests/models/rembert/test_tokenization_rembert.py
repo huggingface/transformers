@@ -88,13 +88,13 @@ class RemBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         encoded_string = tokenizer.encode(text)
         self.assertListEqual(encoded_string, [1000, 7, 0, 1001])
         decode_text = tokenizer.convert_tokens_to_string(tokens)
-        self.assertEquals(decode_text, text)
+        self.assertEqual(decode_text, text)
 
         text = "That's awesome! 🤩 #HuggingFace,  🌟 Have a great day! 🌈"
         tokens = tokenizer.tokenize(text)
         self.assertListEqual( tokens, ['▁That', "'", 's', '▁a', 'w', 'es', 'ome', '!', '▁', '🤩', '▁', '#', 'H', 'u', 'g', 'g', 'ing', 'F', 'a', 'ce', ',', '▁', '🌟', '▁H', 'a', 've', '▁a', '▁great', '▁day', '!', '▁', '🌈'])  # fmt: skip
         decode_text = tokenizer.convert_tokens_to_string(tokens)
-        self.assertEquals(decode_text, "That's awesome! 🤩 #HuggingFace, 🌟 Have a great day! 🌈")
+        self.assertEqual(decode_text, "That's awesome! 🤩 #HuggingFace, 🌟 Have a great day! 🌈")
 
         text = "In the sky up above"
         tokens = tokenizer._tokenize(text)

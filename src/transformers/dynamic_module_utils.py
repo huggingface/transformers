@@ -15,6 +15,7 @@
 """Utilities to dynamically load objects from the Hub."""
 import filecmp
 import importlib
+import importlib.util
 import os
 import re
 import shutil
@@ -196,9 +197,15 @@ def get_class_in_module(class_name: str, module_path: Union[str, os.PathLike]) -
     Returns:
         `typing.Type`: The class looked for.
     """
-    name = os.path.normpath(module_path).replace(".py", "").replace(os.path.sep, ".")
-    module_path = str(Path(HF_MODULES_CACHE) / module_path)
-    module = importlib.machinery.SourceFileLoader(name, module_path).load_module()
+    name = os.path.normpath(module_path).rstrip(".py").replace(os.path.sep, ".")
+    module_spec = importlib.util.spec_from_file_location(name, location=Path(HF_MODULES_CACHE) / module_path)
+    module = sys.modules.get(name)
+    if module is None:
+        module = importlib.util.module_from_spec(module_spec)
+        # insert it into sys.modules before any loading begins
+        sys.modules[name] = module
+    # reload in both cases
+    module_spec.loader.exec_module(module)
     return getattr(module, class_name)
 
 
@@ -207,7 +214,7 @@ def get_cached_module_file(
     module_file: str,
     cache_dir: Optional[Union[str, os.PathLike]] = None,
     force_download: bool = False,
-    resume_download: bool = False,
+    resume_download: Optional[bool] = None,
     proxies: Optional[Dict[str, str]] = None,
     token: Optional[Union[bool, str]] = None,
     revision: Optional[str] = None,
@@ -237,8 +244,9 @@ def get_cached_module_file(
         force_download (`bool`, *optional*, defaults to `False`):
             Whether or not to force to (re-)download the configuration files and override the cached versions if they
             exist.
-        resume_download (`bool`, *optional*, defaults to `False`):
-            Whether or not to delete incompletely received file. Attempts to resume the download if such a file exists.
+        resume_download:
+            Deprecated and ignored. All downloads are now resumed by default when possible.
+            Will be removed in v5 of Transformers.
         proxies (`Dict[str, str]`, *optional*):
             A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
@@ -382,7 +390,7 @@ def get_class_from_dynamic_module(
     pretrained_model_name_or_path: Union[str, os.PathLike],
     cache_dir: Optional[Union[str, os.PathLike]] = None,
     force_download: bool = False,
-    resume_download: bool = False,
+    resume_download: Optional[bool] = None,
     proxies: Optional[Dict[str, str]] = None,
     token: Optional[Union[bool, str]] = None,
     revision: Optional[str] = None,
@@ -425,8 +433,9 @@ def get_class_from_dynamic_module(
         force_download (`bool`, *optional*, defaults to `False`):
             Whether or not to force to (re-)download the configuration files and override the cached versions if they
             exist.
-        resume_download (`bool`, *optional*, defaults to `False`):
-            Whether or not to delete incompletely received file. Attempts to resume the download if such a file exists.
+        resume_download:
+            Deprecated and ignored. All downloads are now resumed by default when possible.
+            Will be removed in v5 of Transformers.
         proxies (`Dict[str, str]`, *optional*):
             A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
@@ -592,8 +601,9 @@ def resolve_trust_remote_code(trust_remote_code, model_name, has_local_code, has
         if has_local_code:
             trust_remote_code = False
         elif has_remote_code and TIME_OUT_REMOTE_CODE > 0:
+            prev_sig_handler = None
             try:
-                signal.signal(signal.SIGALRM, _raise_timeout_error)
+                prev_sig_handler = signal.signal(signal.SIGALRM, _raise_timeout_error)
                 signal.alarm(TIME_OUT_REMOTE_CODE)
                 while trust_remote_code is None:
                     answer = input(
@@ -614,6 +624,10 @@ def resolve_trust_remote_code(trust_remote_code, model_name, has_local_code, has
                     f"load the model. You can inspect the repository content at https://hf.co/{model_name}.\n"
                     f"Please pass the argument `trust_remote_code=True` to allow custom code to be run."
                 )
+            finally:
+                if prev_sig_handler is not None:
+                    signal.signal(signal.SIGALRM, prev_sig_handler)
+                    signal.alarm(0)
         elif has_remote_code:
             # For the CI which puts the timeout at 0
             _raise_timeout_error(None, None)

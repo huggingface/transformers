@@ -1746,16 +1746,27 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         if tokenizer_kwargs is None:
             tokenizer_kwargs = {}
 
+        using_default_template = False
+
         # First, handle the cases when the model has a dict of multiple templates
         if isinstance(self.chat_template, dict) or (
             self.chat_template is None and isinstance(self.default_chat_template, dict)
         ):
-            template_dict = self.chat_template or self.default_chat_template
+            if self.chat_template is not None:
+                template_dict = self.chat_template
+                using_default_dict = False
+            else:
+                template_dict = self.default_chat_template
+                using_default_dict = True
             if chat_template is not None and chat_template in template_dict:
                 # The user can pass the name of a template to the chat template argument instead of an entire template
                 chat_template = template_dict[chat_template]
+                if using_default_dict:
+                    using_default_template = True
             elif chat_template is None and "default" in template_dict:
                 chat_template = template_dict["default"]
+                if using_default_dict:
+                    using_default_template = True
             elif chat_template is None:
                 raise ValueError(
                     "This model has multiple chat templates with no default specified! Please either pass a chat "
@@ -1769,6 +1780,16 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 chat_template = self.chat_template
             else:
                 chat_template = self.default_chat_template
+                using_default_template = True
+
+        if using_default_template:
+            logger.warning_once(
+                "No chat template is set for this tokenizer, falling back to a default class-level template. This is "
+                "very error-prone, because models are often trained with templates different from the class default! "
+                "Default chat templates are a legacy feature and will be removed in Transformers v4.43, at which "
+                "point any code depending on them will stop working. We recommend setting a valid chat template before "
+                "then to ensure that this model continues working without issues."
+            )
 
         # Compilation function uses a cache to avoid recompiling the same template
         compiled_template = self._compile_jinja_template(chat_template)
@@ -1840,12 +1861,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         This template formats inputs in the standard ChatML format. See
         https://github.com/openai/openai-python/blob/main/chatml.md
         """
-        logger.warning_once(
-            "\nNo chat template is defined for this tokenizer - using a default chat template "
-            "that implements the ChatML format (without BOS/EOS tokens!). If the default is not appropriate for "
-            "your model, please set `tokenizer.chat_template` to an appropriate template. "
-            "See https://huggingface.co/docs/transformers/main/chat_templating for more information.\n"
-        )
         return (
             "{% for message in messages %}"
             "{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}"
@@ -1889,9 +1904,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force the (re-)download the vocabulary files and override the cached versions if they
                 exist.
-            resume_download (`bool`, *optional*, defaults to `False`):
-                Whether or not to delete incompletely received files. Attempt to resume the download if such a file
-                exists.
+            resume_download:
+                Deprecated and ignored. All downloads are now resumed by default when possible.
+                Will be removed in v5 of Transformers.
             proxies (`Dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
@@ -1946,7 +1961,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # Otherwise use tokenizer.add_special_tokens({'unk_token': '<unk>'}) instead)
         assert tokenizer.unk_token == "<unk>"
         ```"""
-        resume_download = kwargs.pop("resume_download", False)
+        resume_download = kwargs.pop("resume_download", None)
         proxies = kwargs.pop("proxies", None)
         use_auth_token = kwargs.pop("use_auth_token", None)
         subfolder = kwargs.pop("subfolder", None)

@@ -1235,7 +1235,7 @@ class Wav2Vec2ConformerModel(Wav2Vec2ConformerPreTrainedModel):
 
         # model only needs masking vector if mask prob is > 0.0
         if config.mask_time_prob > 0.0 or config.mask_feature_prob > 0.0:
-            self.masked_spec_embed = nn.Parameter(torch.FloatTensor(config.hidden_size).uniform_())
+            self.masked_spec_embed = nn.Parameter(torch.Tensor(config.hidden_size).uniform_())
 
         self.encoder = Wav2Vec2ConformerEncoder(config)
 
@@ -1515,6 +1515,8 @@ class Wav2Vec2ConformerForPreTraining(Wav2Vec2ConformerPreTrainedModel):
         quantized_features, codevector_perplexity = self.quantizer(
             extract_features, mask_time_indices=mask_time_indices
         )
+
+        quantized_features = quantized_features.to(self.project_q.weight.dtype)
         quantized_features = self.project_q(quantized_features)
 
         loss = contrastive_loss = diversity_loss = None

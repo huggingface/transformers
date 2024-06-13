@@ -169,6 +169,18 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
     def test_save_load(self):
         pass
 
+    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    def test_save_load_low_cpu_mem_usage(self):
+        pass
+
+    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    def test_save_load_low_cpu_mem_usage_checkpoints(self):
+        pass
+
+    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    def test_save_load_low_cpu_mem_usage_no_safetensors(self):
+        pass
+
     @unittest.skip("model weights aren't tied in TimmBackbone.")
     def test_tie_model_weights(self):
         pass

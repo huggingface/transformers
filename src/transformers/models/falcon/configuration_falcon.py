@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Falcon configuration"""
+"""Falcon configuration"""
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -87,6 +88,11 @@ class FalconConfig(PretrainedConfig):
             The id of the "beginning-of-sequence" token.
         eos_token_id (`int`, *optional*, defaults to 11):
             The id of the "end-of-sequence" token.
+        ffn_hidden_size (`int`, *optional*):
+            The hidden size of the feedforward layer in the Transformer decoder.
+            defaults to 4x hidden dim
+        activation (`str`, *optional*, defaults to `"gelu"`):
+            The activation function used in the feedforward layer.
 
     Example:
 
@@ -128,6 +134,8 @@ class FalconConfig(PretrainedConfig):
         rope_scaling=None,
         bos_token_id=11,
         eos_token_id=11,
+        ffn_hidden_size=None,
+        activation="gelu",
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -141,7 +149,6 @@ class FalconConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.hidden_dropout = hidden_dropout
         self.attention_dropout = attention_dropout
-
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
         self.num_kv_heads = num_attention_heads if num_kv_heads is None else num_kv_heads
@@ -153,6 +160,11 @@ class FalconConfig(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
+        self.activation = activation
+        if ffn_hidden_size is None:
+            self.ffn_hidden_size = hidden_size * 4
+        else:
+            self.ffn_hidden_size = ffn_hidden_size
         self._rope_scaling_validation()
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)

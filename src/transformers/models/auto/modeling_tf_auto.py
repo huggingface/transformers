@@ -81,6 +81,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("sam", "TFSamModel"),
         ("segformer", "TFSegformerModel"),
         ("speech_to_text", "TFSpeech2TextModel"),
+        ("swiftformer", "TFSwiftFormerModel"),
         ("swin", "TFSwinModel"),
         ("t5", "TFT5Model"),
         ("tapas", "TFTapasModel"),
@@ -213,6 +214,7 @@ TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("regnet", "TFRegNetForImageClassification"),
         ("resnet", "TFResNetForImageClassification"),
         ("segformer", "TFSegformerForImageClassification"),
+        ("swiftformer", "TFSwiftFormerForImageClassification"),
         ("swin", "TFSwinForImageClassification"),
         ("vit", "TFViTForImageClassification"),
     ]

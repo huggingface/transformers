@@ -36,6 +36,7 @@ if is_torch_available():
         XLMModel,
         XLMWithLMHeadModel,
     )
+    from transformers.models.xlm.modeling_xlm import create_sinusoidal_embeddings
 
 
 class XLMModelTester:
@@ -431,6 +432,14 @@ class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def test_xlm_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_xlm_model(*config_and_inputs)
+
+    # Copied from tests/models/distilbert/test_modeling_distilbert.py with Distilbert->XLM
+    def test_xlm_model_with_sinusoidal_encodings(self):
+        config = XLMConfig(sinusoidal_embeddings=True)
+        model = XLMModel(config=config)
+        sinusoidal_pos_embds = torch.empty((config.max_position_embeddings, config.emb_dim), dtype=torch.float32)
+        create_sinusoidal_embeddings(config.max_position_embeddings, config.emb_dim, sinusoidal_pos_embds)
+        self.model_tester.parent.assertTrue(torch.equal(model.position_embeddings.weight, sinusoidal_pos_embds))
 
     def test_xlm_lm_head(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

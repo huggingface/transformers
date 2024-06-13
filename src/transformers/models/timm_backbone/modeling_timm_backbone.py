@@ -63,12 +63,13 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
         # We just take the final layer by default. This matches the default for the transformers models.
         out_indices = config.out_indices if getattr(config, "out_indices", None) is not None else (-1,)
 
+        in_chans = kwargs.pop("in_chans", config.num_channels)
         self._backbone = timm.create_model(
             config.backbone,
             pretrained=pretrained,
             # This is currently not possible for transformer architectures.
             features_only=config.features_only,
-            in_chans=config.num_channels,
+            in_chans=in_chans,
             out_indices=out_indices,
             **kwargs,
         )
@@ -79,7 +80,9 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
 
         # These are used to control the output of the model when called. If output_hidden_states is True, then
         # return_layers is modified to include all layers.
-        self._return_layers = self._backbone.return_layers
+        self._return_layers = {
+            layer["module"]: str(layer["index"]) for layer in self._backbone.feature_info.get_dicts()
+        }
         self._all_layers = {layer["module"]: str(i) for i, layer in enumerate(self._backbone.feature_info.info)}
         super()._init_backbone(config)
 

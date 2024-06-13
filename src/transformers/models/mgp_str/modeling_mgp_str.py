@@ -317,6 +317,7 @@ class MgpstrPreTrainedModel(PreTrainedModel):
 
     config_class = MgpstrConfig
     base_model_prefix = "mgp_str"
+    _no_split_modules = []
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""

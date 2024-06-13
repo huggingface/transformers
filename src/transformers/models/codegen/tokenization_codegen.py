@@ -134,6 +134,8 @@ class CodeGenTokenizer(PreTrainedTokenizer):
             other word. (CodeGen tokenizer detect beginning of words by the preceding space).
         add_bos_token (`bool`, *optional*, defaults to `False`):
             Whether to add a beginning of sequence token at the start of sequences.
+        return_token_type_ids (`bool`, *optional*, defaults to `False`):
+            Whether to return token type IDs.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -150,6 +152,7 @@ class CodeGenTokenizer(PreTrainedTokenizer):
         pad_token=None,
         add_prefix_space=False,
         add_bos_token=False,
+        return_token_type_ids=False,
         **kwargs,
     ):
         bos_token = AddedToken(bos_token, special=True) if isinstance(bos_token, str) else bos_token
@@ -157,6 +160,9 @@ class CodeGenTokenizer(PreTrainedTokenizer):
         unk_token = AddedToken(unk_token, special=True) if isinstance(unk_token, str) else unk_token
         pad_token = AddedToken(pad_token, special=True) if isinstance(pad_token, str) else pad_token
         self.add_bos_token = add_bos_token
+        self.return_token_type_ids = return_token_type_ids
+        if self.return_token_type_ids:
+            self.model_input_names.append("token_type_ids")
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
@@ -181,6 +187,7 @@ class CodeGenTokenizer(PreTrainedTokenizer):
             pad_token=pad_token,
             add_prefix_space=add_prefix_space,
             add_bos_token=add_bos_token,
+            return_token_type_ids=return_token_type_ids,
             **kwargs,
         )
 
@@ -269,6 +276,35 @@ class CodeGenTokenizer(PreTrainedTokenizer):
         text = "".join(tokens)
         text = bytearray([self.byte_decoder[c] for c in text]).decode("utf-8", errors=self.errors)
         return text
+
+    def create_token_type_ids_from_sequences(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
+        """
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. A sequence
+        pair mask has the following format:
+
+        ```
+        0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
+        | first sequence    | second sequence |
+        ```
+
+        If `token_ids_1` is `None`, this method only returns the first portion of the mask (0s).
+
+        Args:
+            token_ids_0 (`List[int]`):
+                List of IDs.
+            token_ids_1 (`List[int]`, *optional*):
+                Optional second list of IDs for sequence pairs.
+
+        Returns:
+            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
+        """
+        sep = [self.sep_token_id] if self.sep_token_id is not None else []
+        cls = [self.cls_token_id] if self.sep_token_id is not None else []
+        if token_ids_1 is None:
+            return len(cls + token_ids_0 + sep) * [0]
+        return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):

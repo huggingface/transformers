@@ -22,7 +22,7 @@ from pathlib import Path
 
 import datasets
 import numpy as np
-from huggingface_hub import HfFolder, Repository, create_repo, delete_repo
+from huggingface_hub import HfFolder, delete_repo
 from requests.exceptions import HTTPError
 
 from transformers import (
@@ -541,11 +541,10 @@ class PipelineUtilsTest(unittest.TestCase):
     @slow
     @require_tf
     def test_load_default_pipelines_tf(self):
-        import tensorflow as tf
-
+        from transformers.modeling_tf_utils import keras
         from transformers.pipelines import SUPPORTED_TASKS
 
-        set_seed_fn = lambda: tf.random.set_seed(0)  # noqa: E731
+        set_seed_fn = lambda: keras.utils.set_random_seed(0)  # noqa: E731
         for task in SUPPORTED_TASKS.keys():
             if task == "table-question-answering":
                 # test table in seperate test due to more dependencies
@@ -553,7 +552,7 @@ class PipelineUtilsTest(unittest.TestCase):
 
             self.check_default_pipeline(task, "tf", set_seed_fn, self.check_models_equal_tf)
 
-            # clean-up as much as possible GPU memory occupied by PyTorch
+            # clean-up as much as possible GPU memory occupied by TF
             gc.collect()
 
     @slow
@@ -846,9 +845,6 @@ class DynamicPipelineTester(unittest.TestCase):
         model = BertForSequenceClassification(config).eval()
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-            create_repo(f"{USER}/test-dynamic-pipeline", token=self._token)
-            repo = Repository(tmp_dir, clone_from=f"{USER}/test-dynamic-pipeline", token=self._token)
-
             vocab_file = os.path.join(tmp_dir, "vocab.txt")
             with open(vocab_file, "w", encoding="utf-8") as vocab_writer:
                 vocab_writer.write("".join([x + "\n" for x in self.vocab_tokens]))
@@ -860,7 +856,7 @@ class DynamicPipelineTester(unittest.TestCase):
             del PIPELINE_REGISTRY.supported_tasks["pair-classification"]
 
             classifier.save_pretrained(tmp_dir)
-            # checks
+            # checks if the configuration has been added after calling the save_pretrained method
             self.assertDictEqual(
                 classifier.model.config.custom_pipelines,
                 {
@@ -871,8 +867,8 @@ class DynamicPipelineTester(unittest.TestCase):
                     }
                 },
             )
-
-            repo.push_to_hub()
+            # use push_to_hub method to push the pipeline
+            classifier.push_to_hub(f"{USER}/test-dynamic-pipeline", token=self._token)
 
         # Fails if the user forget to pass along `trust_remote_code=True`
         with self.assertRaises(ValueError):

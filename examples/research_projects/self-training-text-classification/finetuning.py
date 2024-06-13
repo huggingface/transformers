@@ -190,7 +190,7 @@ class FTTrainingArguments:
             )
         },
     )
-    evaluation_strategy: Optional[str] = dataclasses.field(
+    eval_strategy: Optional[str] = dataclasses.field(
         default="no",
         metadata={
             "help": 'The evaluation strategy to adopt during training. Possible values are: ["no", "step", "epoch]'
@@ -198,7 +198,7 @@ class FTTrainingArguments:
     )
     eval_steps: Optional[int] = dataclasses.field(
         default=1,
-        metadata={"help": 'Number of update steps between two evaluations if `evaluation_strategy="steps"`.'},
+        metadata={"help": 'Number of update steps between two evaluations if `eval_strategy="steps"`.'},
     )
     eval_metric: Optional[str] = dataclasses.field(
         default="accuracy", metadata={"help": "The evaluation metric used for the task."}
@@ -265,7 +265,7 @@ def train(args, accelerator, model, tokenizer, train_dataloader, optimizer, lr_s
                 # Evaluate during training
                 if (
                     eval_dataloader is not None
-                    and args.evaluation_strategy == IntervalStrategy.STEPS.value
+                    and args.eval_strategy == IntervalStrategy.STEPS.value
                     and args.eval_steps > 0
                     and completed_steps % args.eval_steps == 0
                 ):
@@ -331,7 +331,7 @@ def train(args, accelerator, model, tokenizer, train_dataloader, optimizer, lr_s
                 break
 
         # Evaluate during training
-        if eval_dataloader is not None and args.evaluation_strategy == IntervalStrategy.EPOCH.value:
+        if eval_dataloader is not None and args.eval_strategy == IntervalStrategy.EPOCH.value:
             accelerator.wait_for_everyone()
             new_checkpoint = f"checkpoint-{IntervalStrategy.EPOCH.value}-{epoch}"
             new_eval_result = evaluate(args, accelerator, eval_dataloader, "eval", model, new_checkpoint)[
@@ -571,7 +571,7 @@ def finetune(accelerator, model_name_or_path, train_file, output_dir, **kwargs):
     assert args.train_file is not None
     data_files[Split.TRAIN.value] = args.train_file
 
-    if args.do_eval or args.evaluation_strategy != IntervalStrategy.NO.value:
+    if args.do_eval or args.eval_strategy != IntervalStrategy.NO.value:
         assert args.eval_file is not None
         data_files[Split.EVAL.value] = args.eval_file
 

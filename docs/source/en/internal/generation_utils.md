@@ -310,6 +310,12 @@ A [`StoppingCriteria`] can be used to change when to stop generation (other than
 [[autodoc]] MaxTimeCriteria
     - __call__
 
+[[autodoc]] StopStringCriteria
+    - __call__
+
+[[autodoc]] EosTokenCriteria
+    - __call__
+
 ## Constraints
 
 A [`Constraint`] can be used to force the generation to include specific tokens or sequences in the output. Please note that this is exclusively available to our PyTorch implementations.
@@ -362,3 +368,4 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
 [[autodoc]] StaticCache
     - update
     - get_seq_length
+    - reorder_cache
