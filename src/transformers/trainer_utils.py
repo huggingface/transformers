@@ -213,10 +213,10 @@ def get_checkpoints(folder: str, reverse: bool = False):
         for path in content
         if _re_checkpoint.search(path) is not None and os.path.isdir(os.path.join(folder, path))
     ]
-    return map(
+    return list(map(
         lambda x: os.path.join(folder, x),
         sorted(checkpoints, key=lambda x: int(_re_checkpoint.search(x).groups()[0]), reverse=reverse)
-    )
+    ))
 
 def get_last_checkpoint(folder):
     content = os.listdir(folder)
