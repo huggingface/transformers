@@ -1334,8 +1334,6 @@ input sequence).
 """,
     MOT_START_DOCSTRING,
 )
-
-
 @add_start_docstrings(
     """
     The MOT Model transformer with a sequence classification head on top (linear layer).
