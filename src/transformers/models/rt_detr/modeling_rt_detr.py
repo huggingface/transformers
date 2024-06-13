@@ -557,7 +557,6 @@ class RTDetrConvEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        # backbone = RTDetrResNetBackbone(config.backbone_config)
         backbone = load_backbone(config)
 
         # replace batch norm by frozen batch norm
