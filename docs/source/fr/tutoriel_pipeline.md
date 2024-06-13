@@ -109,7 +109,7 @@ Notez que si `device_map="auto"` est passé, il n'est pas nécessaire d'ajouter 
 
 ### Taille de lot
 
-Par défaut, les pipelines ne feront pas de lot d'inférence pour des raisons expliquées en détail [ici](https://huggingface.co/docs/transformers/main_classes/pipelines#pipeline-batching). La raison est que le lotissement n'est pas nécessairement plus rapide, et peut en fait être beaucoup plus lent dans certains cas.
+Par défaut, les pipelines ne feront pas d'inférence en batch pour des raisons expliquées en détail [ici](https://huggingface.co/docs/transformers/main_classes/pipelines#pipeline-batching). La raison est que le batching n'est pas nécessairement plus rapide, et peut en fait être beaucoup plus lent dans certains cas.
 
 Mais si cela fonctionne dans votre cas d'utilisation, vous pouvez utiliser :
 
