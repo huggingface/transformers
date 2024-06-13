@@ -173,7 +173,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         # uses the information stored in `added_tokens_decoder`.
         # this is costly for fast tokenizers as we re-compute the regex again. But not all tokens are added tokens
         # Use hash to speed up the very slow operation `token not in added_tokens_decoder`.
-        added_tokens_decoder_hash = set(hash(token) for token in self.added_tokens_decoder)
+        added_tokens_decoder_hash = {hash(token) for token in self.added_tokens_decoder}
         tokens_to_add = [
             token
             for index, token in sorted(added_tokens_decoder.items(), key=lambda x: x[0])
