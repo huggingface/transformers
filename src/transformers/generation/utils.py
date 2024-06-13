@@ -1384,6 +1384,8 @@ class GenerationMixin:
             )
         elif cache_implementation == "static":
             need_new_cache = need_new_cache or cache_to_check.max_cache_len < max_cache_len
+            if self.config.is_encoder_decoder and hasattr(self, "_cache"):
+                need_new_cache = need_new_cache or self._cache[1].max_cache_len != model_kwargs["encoder_outputs"][0].shape[1]
 
         if need_new_cache:
             if hasattr(self.config, "_pre_quantization_dtype"):
