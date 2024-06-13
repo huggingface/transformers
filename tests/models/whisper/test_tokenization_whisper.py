@@ -22,6 +22,7 @@ from transformers.testing_utils import slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
+
 ES_CODE = 50262
 EN_CODE = 50259
 END_OF_TRANSCRIPT = 50257
