@@ -476,7 +476,7 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
         # Compute the maximum embed dimension
         max_embed_dim = (num_special_image_tokens.max() * (num_image_patches - 1)) + sequence_length
         batch_indices, non_image_indices = torch.where(input_ids != self.config.image_token_index)
-
+        modality_indicators = torch.zeros((batch_size, max_embed_dim), dtype=torch.long, device=inputs_embeds.device)
         # 2. Compute the positions where text should be written
         # Calculate new positions for text tokens in merged image-text sequence.
         # `special_image_token_mask` identifies image tokens. Each image token will be replaced by `nb_text_tokens_per_images - 1` text tokens.
@@ -487,7 +487,7 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
         if left_padding:
             new_token_positions += nb_image_pad[:, None]  # offset for left padding
         text_to_overwrite = new_token_positions[batch_indices, non_image_indices]
-
+        
         # 3. Create the full embedding, already padded to the maximum position
         final_embedding = torch.zeros(
             batch_size, max_embed_dim, embed_dim, dtype=inputs_embeds.dtype, device=inputs_embeds.device
@@ -513,10 +513,11 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
         # we need to index copy on [0, 577, 578, 579] for the text and [1:576] for the image features
         final_embedding[batch_indices, text_to_overwrite] = inputs_embeds[batch_indices, non_image_indices]
         final_attention_mask[batch_indices, text_to_overwrite] = attention_mask[batch_indices, non_image_indices]
+        #modality_indicators[batch_indices, text_to_overwrite] = 0
         if labels is not None:
             final_labels[batch_indices, text_to_overwrite] = labels[batch_indices, non_image_indices]
 
-        # 5. Fill the embeddings corresponding to the images. Anything that is not `text_positions` needs filling (#29835)
+        # 5. Fill the embeddings corresponding to the images. Anything that is n.....≥≥.≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥.≥ot `text_positions` needs filling (#29835)
         image_to_overwrite = torch.full(
             (batch_size, max_embed_dim), True, dtype=torch.bool, device=inputs_embeds.device
         )
@@ -531,6 +532,7 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
 
         final_embedding[image_to_overwrite] = image_features.contiguous().reshape(-1, embed_dim).to(target_device)
         final_attention_mask |= image_to_overwrite
+        modality_indicators[image_to_overwrite] = 1
         position_ids = (final_attention_mask.cumsum(-1) - 1).masked_fill_((final_attention_mask == 0), 1)
 
         # 6. Mask out the embedding at padding positions, as we later use the past_key_value value to determine the non-attended tokens.
@@ -541,8 +543,8 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
 
         if labels is None:
             final_labels = None
-
-        return final_embedding, final_attention_mask, final_labels, position_ids
+        breakpoint()
+        return final_embedding, final_attention_mask, final_labels, position_ids, modality_indicators
 
     @add_start_docstrings_to_model_forward(MPLUGDOCOWL_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=MPLUGDocOwlCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
@@ -642,10 +644,10 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
                  #    input_ids, image_features, attention_mask, past_key_values, labels
                 #)
                 #FIXME old call is commented below
-                inputs_embeds, attention_mask, labels, position_ids = self._merge_input_ids_with_image_features(
+                inputs_embeds, attention_mask, labels, position_ids, modality_indicators = self._merge_input_ids_with_image_features(
                     image_features, inputs_embeds, input_ids, attention_mask, labels
                 )
-
+                breakpoint()
             # In case input_ids.shape[1] == 1 & pixel_values==None & past_key_values != None, we are in the case of
             # generation with cache
             elif past_key_values is not None and pixel_values is not None and input_ids.shape[1] == 1:
@@ -681,7 +683,7 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
 
         outputs = self.language_model(
             attention_mask=attention_mask,
-            #modality_indicators=modality_indicators,
+            modality_indicators=modality_indicators,
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,

@@ -182,7 +182,11 @@ def shape_adaptive_cropping(image_patches: ImageInput,
             np.repeat(np.arange(anchor[0])[:, np.newaxis], anchor[1], axis=1)[:, :, np.newaxis],
             np.repeat(np.arange(anchor[1])[np.newaxis, :], anchor[0], axis=0)[:, :, np.newaxis]
         ], axis=2)
-        patch_position = patch_position.reshape(-1, 2)  # num_patch, (ph, pw)
+    
+        patch_position = patch_position.reshape(-1, 2)
+        if add_global_img:
+            patch_position = np.vstack((np.ones((1, 2), dtype=np.int64) * anchor_max, patch_position))
+          # num_patch, (ph, pw)
         return image_patches_list, patch_position, patch_position.shape[0], anchor_max
 
 class MPLUGDocOwlImageProcessor(BaseImageProcessor):

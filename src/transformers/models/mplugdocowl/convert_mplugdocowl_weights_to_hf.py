@@ -21,9 +21,7 @@ from transformers import (
     AddedToken,
     AutoConfig,
     AutoTokenizer,
-    CLIPImageProcessor,
     MPLUGDocOwlConfig,
-    LlamaConfig,
     MPLUGDocOwlForConditionalGeneration,
     MPLUGDocOwlProcessor,
 )
@@ -99,7 +97,7 @@ def convert_mplugdocowl_llama_to_hf(text_model_id, vision_model_id, output_hub_p
     config = MPLUGDocOwlConfig(text_config=text_config)
     config.pad_token_id = 32001
 
-    with torch.device("cuda:1"):
+    with torch.device("cuda:3"):
         model = MPLUGDocOwlForConditionalGeneration(config)
 
     # Pad to 64 for performance reasons
@@ -139,7 +137,7 @@ def convert_mplugdocowl_llama_to_hf(text_model_id, vision_model_id, output_hub_p
     query = "<image>Recognize text in the image."
     output = processor(images=image, text=query)
     breakpoint()
-    device = torch.device("cuda:1")
+    device = torch.device("cuda:3")
     output.to(device)
     model.to(device)
     try:
