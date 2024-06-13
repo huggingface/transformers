@@ -120,7 +120,7 @@ audio_filenames = [f"https://huggingface.co/datasets/Narsil/asr_dummy/resolve/ma
 texts = transcriber(audio_filenames)
 ```
 
-Cela exécute le pipeline sur les 4 fichiers audio fournis, mais les passera par lots de 2 au modèle (qui est sur un GPU, où le lotissement est plus susceptible d'aider) sans nécessiter de code supplémentaire de votre part. 
+Cela exécute le pipeline sur les 4 fichiers audio fournis, mais les passera par batch de 2 au modèle (qui est sur un GPU, où le batching est plus susceptible d'aider) sans nécessiter de code supplémentaire de votre part. 
 La sortie doit toujours correspondre à ce que vous auriez reçu sans lotissement. Il s'agit uniquement d'un moyen de vous aider à obtenir plus de vitesse avec un pipeline.
 
 Les pipelines peuvent également atténuer certaines des complexités du lotissement car, pour certains pipelines, un seul élément (comme un long fichier audio) doit être divisé en plusieurs parties pour être traité par un modèle. Le pipeline effectue ce [*lotissement par morceaux*](./main_classes/pipelines#pipeline-chunk-batching) pour vous.
