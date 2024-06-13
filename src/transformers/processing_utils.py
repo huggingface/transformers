@@ -665,6 +665,15 @@ class ProcessorMixin(PushToHubMixin):
         else:
             return processor
 
+    def update_kwargs(self, kwarg_dict, modality, key, value):
+        """Helper function to update kwargs and handle conflicts."""
+        if key in kwarg_dict[modality]:
+            raise ValueError(
+                f"Keyword argument {key} was passed two times: in a dictionary for {modality} and as a **kwarg."
+            )
+        kwarg_dict[modality][key] = value
+        return kwarg_dict
+
     def _merge_kwargs(
         self,
         ModelProcessorKwargs: ProcessingKwargs,
@@ -730,17 +739,17 @@ class ProcessorMixin(PushToHubMixin):
         # get defaults from set model processor kwargs if they exist
         for modality in default_kwargs:
             default_kwargs[modality] = ModelProcessorKwargs._defaults.get(modality, {}).copy()
-        # update modality kwargs with passed kwargs
-        non_modality_kwargs = set(kwargs) - set(output_kwargs)
-
-        for modality in set(output_kwargs):
-            output_kwargs[modality] = {
-                **default_kwargs[modality],
-            }
+            # update defaults with arguments from tokenizer init
             for modality_key in ModelProcessorKwargs.__annotations__[modality].__annotations__.keys():
                 # init with tokenizer init kwargs if necessary
                 if modality_key in tokenizer_init_kwargs:
-                    output_kwargs[modality][modality_key] = tokenizer_init_kwargs[modality_key]
+                    default_kwargs[modality][modality_key] = tokenizer_init_kwargs[modality_key]
+        # now defaults kwargs are updated with the tokenizers defaults.
+        output_kwargs.update(default_kwargs)
+        # update modality kwargs with passed kwargs
+        non_modality_kwargs = set(kwargs) - set(output_kwargs)
+        for modality in output_kwargs:
+            for modality_key in ModelProcessorKwargs.__annotations__[modality].__annotations__.keys():
                 # check if we received a structured kwarg dict or not to handle it correctly
                 if modality in kwargs:
                     kwarg_value = kwargs[modality].pop(modality_key, "__empty__")
