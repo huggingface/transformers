@@ -45,6 +45,8 @@ if is_vision_available():
 
 
 @require_torch
+@require_vision
+@require_torch
 class ProcessorTesterMixin:
     processor_class = None
 
@@ -120,7 +122,7 @@ class ProcessorTesterMixin:
 
     @require_vision
     @require_torch
-    def test_defaults_preserved_kwargs(self):
+    def test_tokenizer_defaults_preserved_by_kwargs(self):
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
@@ -136,7 +138,7 @@ class ProcessorTesterMixin:
 
     @require_torch
     @require_vision
-    def test_defaults_preserved_image_kwargs(self):
+    def test_image_processor_defaults_preserved_by_image_kwargs(self):
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor", crop_size=(234, 234))
@@ -151,9 +153,42 @@ class ProcessorTesterMixin:
         inputs = processor(text=input_str, images=image_input)
         self.assertEqual(len(inputs["pixel_values"][0][0]), 234)
 
+    @require_vision
+    @require_torch
+    def test_kwargs_overrides_default_tokenizer_kwargs(self):
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        image_processor = self.get_component("image_processor")
+        tokenizer = self.get_component("tokenizer", max_length=117)
+
+        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        self.skip_processor_without_typed_kwargs(processor)
+        input_str = "lower newer"
+        image_input = self.prepare_image_inputs()
+
+        inputs = processor(text=input_str, images=image_input, return_tensors="pt", max_length=112)
+        self.assertEqual(len(inputs["input_ids"][0]), 112)
+
     @require_torch
     @require_vision
-    def test_structured_kwargs(self):
+    def test_kwargs_overrides_default_image_processor_kwargs(self):
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        image_processor = self.get_component("image_processor", crop_size=(234, 234))
+        tokenizer = self.get_component("tokenizer", max_length=117)
+
+        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        input_str = "lower newer"
+        image_input = self.prepare_image_inputs()
+
+        inputs = processor(text=input_str, images=image_input, crop_size=[224, 224])
+        self.assertEqual(len(inputs["pixel_values"][0][0]), 224)
+
+    @require_torch
+    @require_vision
+    def test_unstructured_kwargs(self):
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
@@ -164,20 +199,64 @@ class ProcessorTesterMixin:
 
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
+        inputs = processor(
+            text=input_str,
+            images=image_input,
+            return_tensors="pt",
+            crop_size={"height": 214, "width": 214},
+            padding="max_length",
+            max_length=76,
+        )
 
-        # Define the kwargs for each modality
-        all_kwargs = {
-            "return_tensors": "pt",
-            "crop_size": {"height": 214, "width": 214},
-            "padding": "max_length",
-            "max_length": 76,
-            "model_max_length": 76,
-        }
+        self.assertEqual(inputs["pixel_values"].shape[2], 214)
+        self.assertEqual(len(inputs["input_ids"][0]), 76)
 
-        inputs = processor(text=input_str, images=image_input, **all_kwargs)
+    @require_torch
+    @require_vision
+    def test_unstructured_kwargs_batched(self):
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        image_processor = self.get_component("image_processor")
+        tokenizer = self.get_component("tokenizer")
+
+        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        input_str = ["lower newer", "upper older longer string"]
+        image_input = self.prepare_image_inputs() * 2
+        inputs = processor(
+            text=input_str,
+            images=image_input,
+            return_tensors="pt",
+            crop_size={"height": 214, "width": 214},
+            padding="longest",
+            max_length=76,
+        )
+
         self.assertEqual(inputs["pixel_values"].shape[2], 214)
 
-        self.assertEqual(len(inputs["input_ids"][0]), 76)
+        self.assertEqual(len(inputs["input_ids"][0]), 6)
+
+    @require_torch
+    @require_vision
+    def test_doubly_passed_kwargs(self):
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        image_processor = self.get_component("image_processor")
+        tokenizer = self.get_component("tokenizer")
+
+        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        input_str = ["lower newer"]
+        image_input = self.prepare_image_inputs()
+        with self.assertRaises(ValueError):
+            _ = processor(
+                text=input_str,
+                images=image_input,
+                images_kwargs={"crop_size": {"height": 222, "width": 222}},
+                crop_size={"height": 214, "width": 214},
+            )
 
     @require_torch
     @require_vision
