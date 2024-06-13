@@ -22,7 +22,7 @@ import json
 import os
 import warnings
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from .dynamic_module_utils import custom_object_save
 from .tokenization_utils_base import PreTrainedTokenizerBase
@@ -60,6 +60,7 @@ class ProcessorMixin(PushToHubMixin):
     """
 
     attributes = ["feature_extractor", "tokenizer"]
+    optional_attributes = ["chat_template"]
     # Names need to be attr_class for attr in attributes
     feature_extractor_class = None
     tokenizer_class = None
@@ -67,6 +68,10 @@ class ProcessorMixin(PushToHubMixin):
 
     # args have to match the attributes class attribute
     def __init__(self, *args, **kwargs):
+        # First, extract optional attributes from kwargs if present
+        # Optional attributes can never be positional arguments
+        for optional_attribute in self.optional_attributes:
+            setattr(self, optional_attribute, kwargs.pop(optional_attribute, None))
         # Sanitize args and kwargs
         for key in kwargs:
             if key not in self.attributes:
@@ -521,6 +526,51 @@ class ProcessorMixin(PushToHubMixin):
     def model_input_names(self):
         first_attribute = getattr(self, self.attributes[0])
         return getattr(first_attribute, "model_input_names", None)
+
+    def apply_chat_template(
+        self,
+        conversation: Union[List[Dict[str, str]]],
+        chat_template: Optional[str] = None,
+        tokenize: bool = False,
+        **kwargs,
+    ) -> str:
+        """
+        Similar to the `apply_chat_template` method on tokenizers, this method applies a Jinja template to input
+        conversations to turn them into a single tokenizable string.
+
+        Args:
+            conversation (`List[Dict, str, str]`):
+                The conversation to format.
+            chat_template (`Optional[str]`, *optional*):
+                The Jinja template to use for formatting the conversation. If not provided, the default chat template
+                is used.
+            tokenize (`bool`, *optional*, defaults to `False`):
+                Whether to tokenize the output or not.
+            **kwargs:
+                Additional keyword arguments
+        """
+
+        if chat_template is None:
+            if self.chat_template is not None:
+                chat_template = self.chat_template
+            elif getattr(self, "default_chat_template", None) is not None:
+                logger.warning_once(
+                    "No chat template is set for this processor, falling back to a default class-level template. This is "
+                    "very error-prone, because models are often trained with templates different from the class default! "
+                    "Default chat templates are a legacy feature and will be removed in Transformers v4.43, at which "
+                    "point any code depending on them will stop working. We recommend setting a valid chat template before "
+                    "then to ensure that this model continues working without issues."
+                )
+                chat_template = self.default_chat_template
+            else:
+                raise ValueError(
+                    "No chat template is set for this processor. Please either set the `chat_template` attribute, "
+                    "or provide a chat template as an argument. See "
+                    "https://huggingface.co/docs/transformers/main/en/chat_templating for more information."
+                )
+        return self.tokenizer.apply_chat_template(
+            conversation, chat_template=chat_template, tokenize=tokenize, **kwargs
+        )
 
 
 ProcessorMixin.push_to_hub = copy_func(ProcessorMixin.push_to_hub)
