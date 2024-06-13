@@ -207,6 +207,16 @@ _re_checkpoint = re.compile(r"^" + PREFIX_CHECKPOINT_DIR + r"\-(\d+)$")
 
 
 def get_checkpoints(folder: str, reverse: bool = False):
+    """
+    Get the list of checkpoints in the given folder. Checkpoints are sort in ascending order by default (e.g. ['checkpoint-1', 'checkpoint-2']).
+
+    Args:
+        folder (`str`): The path to the folder containing the checkpoints.
+        reverse (`bool`, *optional*, defaults to `False`): Whether or not to return the list of checkpoints in reverse order.
+    
+    Returns:
+        `List[str]`: The list of checkpoints in the given folder.
+    """
     content = os.listdir(folder)
     checkpoints = [
         path
