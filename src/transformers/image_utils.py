@@ -15,7 +15,6 @@
 
 import base64
 import os
-import warnings
 from io import BytesIO
 from typing import TYPE_CHECKING, Dict, Iterable, List, Optional, Tuple, Union
 
