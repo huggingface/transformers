@@ -154,7 +154,7 @@ class MinLengthLogitsProcessor(LogitsProcessor):
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
-        eos_token_mask = torch.isin(vocab_tensor, self.eos_token_id)
+        eos_token_mask = torch.isin(vocab_tensor, self.eos_token_id.to(vocab_tensor.device))
         scores_processed = scores.clone()
         if input_ids.shape[-1] < self.min_length:
             scores_processed = torch.where(eos_token_mask, -math.inf, scores)
@@ -226,7 +226,7 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
         new_tokens_length = input_ids.shape[-1] - self.prompt_length_to_skip
         scores_processed = scores.clone()
         vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
-        eos_token_mask = torch.isin(vocab_tensor, self.eos_token_id)
+        eos_token_mask = torch.isin(vocab_tensor, self.eos_token_id.to(vocab_tensor.device))
         if new_tokens_length < self.min_new_tokens:
             scores_processed = torch.where(eos_token_mask, -math.inf, scores)
 
@@ -1582,7 +1582,7 @@ class ForcedEOSTokenLogitsProcessor(LogitsProcessor):
         scores_processed = scores
         if cur_len == self.max_length - 1:
             scores_processed = torch.full_like(scores, -math.inf)
-            scores_processed[:, self.eos_token_id] = 0
+            scores_processed[:, self.eos_token_id.to(scores_processed.device)] = 0
         return scores_processed
 
 
@@ -2321,6 +2321,7 @@ class BarkEosPrioritizerLogitsProcessor(LogitsProcessor):
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         scores_processed = scores
         if self.min_eos_p:
+            self.eos_token_id = self.eos_token_id.to(scores.device)
             probs = torch.nn.functional.softmax(scores.float(), dim=-1)
             # create scores full of -inf except for the eos_token_id
             early_stop_scores = torch.ones_like(scores) * -float("inf")
