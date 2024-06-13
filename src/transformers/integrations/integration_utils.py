@@ -51,19 +51,25 @@ if is_torch_available():
     import torch
 
 # comet_ml requires to be imported before any ML frameworks
-_has_comet = importlib.util.find_spec("comet_ml") is not None and os.getenv("COMET_MODE", "").upper() != "DISABLED"
-if _has_comet:
-    try:
-        import comet_ml  # noqa: F401
+_MIN_COMET_VERSION = "3.43.1"
+try:
+    _comet_version = importlib.metadata.version("comet_ml")
+    _is_comet_installed = True
 
-        if hasattr(comet_ml, "config") and comet_ml.config.get_config("comet.api_key"):
-            _has_comet = True
-        else:
-            if os.getenv("COMET_MODE", "").upper() != "DISABLED":
-                logger.warning("comet_ml is installed but `COMET_API_KEY` is not set.")
-            _has_comet = False
-    except (ImportError, ValueError):
-        _has_comet = False
+    _is_comet_recent_enough = packaging.version.parse(_comet_version) >= packaging.version.parse(_MIN_COMET_VERSION)
+
+    # Check if the Comet API Key is set
+    import comet_ml
+
+    if comet_ml.config.get_config("comet.api_key") is not None:
+        _is_comet_configured = True
+    else:
+        _is_comet_configured = False
+except (importlib.metadata.PackageNotFoundError, ImportError, ValueError, TypeError, AttributeError, KeyError):
+    _comet_version = None
+    _is_comet_installed = False
+    _is_comet_recent_enough = False
+    _is_comet_configured = False
 
 _has_neptune = (
     importlib.util.find_spec("neptune") is not None or importlib.util.find_spec("neptune-client") is not None
@@ -103,7 +109,36 @@ def is_clearml_available():
 
 
 def is_comet_available():
-    return _has_comet
+    if os.getenv("COMET_MODE", "").upper() == "DISABLED":
+        logger.warning(
+            "Using the `COMET_MODE=DISABLED` environment variable is deprecated and will be removed in v5. Use the "
+            "--report_to flag to control the integrations used for logging result (for instance --report_to none)."
+        )
+        return False
+
+    if _is_comet_installed is False:
+        return False
+
+    if _is_comet_recent_enough is False:
+        logger.warning(
+            "comet_ml version %s is installed, but version %s or higher is required. "
+            "Please update comet_ml to the latest version to enable Comet logging with pip install 'comet-ml>=%s'.",
+            _comet_version,
+            _MIN_COMET_VERSION,
+            _MIN_COMET_VERSION,
+        )
+        return False
+
+    if _is_comet_configured is False:
+        logger.warning(
+            "comet_ml is installed but the Comet API Key is not configured. "
+            "Please set the `COMET_API_KEY` environment variable to enable Comet logging. "
+            "Check out the documentation for other ways of configuring it: "
+            "https://www.comet.com/docs/v2/guides/experiment-management/configure-sdk/#set-the-api-key"
+        )
+        return False
+
+    return True
 
 
 def is_tensorboard_available():
@@ -940,8 +975,10 @@ class CometCallback(TrainerCallback):
     """
 
     def __init__(self):
-        if not _has_comet:
-            raise RuntimeError("CometCallback requires comet-ml to be installed. Run `pip install comet-ml`.")
+        if _is_comet_installed is False or _is_comet_recent_enough is False:
+            raise RuntimeError(
+                f"CometCallback requires comet-ml>={_MIN_COMET_VERSION} to be installed. Run `pip install comet-ml>={_MIN_COMET_VERSION}`."
+            )
         self._initialized = False
         self._log_assets = False
         self._experiment = None
