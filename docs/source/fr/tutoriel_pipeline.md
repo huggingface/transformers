@@ -4,7 +4,7 @@ rendered properly in your Markdown viewer.
 
 # Pipelines pour l'inférence
 
-Le [`pipeline`] rend simple l'utilisation de n'importe quel modèle du [Hub](https://huggingface.co/models) pour l'inférence sur n'importe quelle langue, tâches de vision par ordinateur, de parole et multimodales. Même si vous n'avez pas d'expérience avec une modalité spécifique ou si vous n'êtes pas familier avec le code ci-dessous des modèles, vous pouvez toujours les utiliser pour l'inférence avec le [`pipeline`] ! Ce tutoriel vous apprendra à :
+L'objet [`pipeline`] rend simple l'utilisation de n'importe quel modèle du [Hub](https://huggingface.co/models) pour l'inférence sur n'importe quelle langue, tâches de vision par ordinateur, d'audio et multimodales. Même si vous n'avez pas d'expérience avec une modalité spécifique ou si vous n'êtes pas familier avec le code ci-dessous des modèles, vous pouvez toujours les utiliser pour l'inférence avec la [`pipeline`] ! Ce tutoriel vous apprendra à :
 
 * Utiliser un [`pipeline`] pour l'inférence.
 * Utiliser un tokenizer ou modèle spécifique.
