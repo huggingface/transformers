@@ -312,12 +312,23 @@ class BloomAttention(nn.Module):
 
         # [batch_size * num_heads, q_length, kv_length]
         # we use `torch.Tensor.baddbmm` instead of `torch.baddbmm` as the latter isn't supported by TorchScript v1.11
-        matmul_result = alibi.baddbmm(
-            batch1=query_layer,
-            batch2=key_layer,
-            beta=self.beta,
-            alpha=self.inv_norm_factor,
-        )
+        if self.is_cross_attention:
+            key_layer = key_layer.transpose(1, 2)
+            query_layer = query_layer.transpose(1, 2)
+            matmul_result = alibi.baddbmm(
+                batch1=key_layer,
+                batch2=query_layer,
+                beta=self.beta,
+                alpha=self.inv_norm_factor,
+            )
+            matmul_result = matmul_result.transpose(1, 2)
+        else:
+            matmul_result = alibi.baddbmm(
+                batch1=query_layer,
+                batch2=key_layer,
+                beta=self.beta,
+                alpha=self.inv_norm_factor,
+            )
 
         # change view to [batch_size, num_heads, q_length, kv_length]
         attention_scores = matmul_result.view(batch_size, self.num_heads, q_length, kv_length)
