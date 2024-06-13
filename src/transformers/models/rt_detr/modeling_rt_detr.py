@@ -43,8 +43,8 @@ from ...utils import (
     replace_return_docstrings,
     requires_backends,
 )
+from ...utils.backbone_utils import load_backbone
 from .configuration_rt_detr import RTDetrConfig
-from .modeling_rt_detr_resnet import RTDetrResNetBackbone
 
 
 if is_scipy_available():
@@ -557,7 +557,8 @@ class RTDetrConvEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        backbone = RTDetrResNetBackbone(config.backbone_config)
+        # backbone = RTDetrResNetBackbone(config.backbone_config)
+        backbone = load_backbone(config)
 
         # replace batch norm by frozen batch norm
         with torch.no_grad():
