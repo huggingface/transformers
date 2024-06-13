@@ -35,7 +35,6 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_mot"] = [
         "MOT_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "MoTDoubleHeadsModel",
         "MoTForQuestionAnswering",
         "MoTForSequenceClassification",
         "MoTForTokenClassification",
@@ -57,7 +56,6 @@ if TYPE_CHECKING:
     else:
         from .modeling_mot import (
             MOT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            MoTDoubleHeadsModel,
             MoTForQuestionAnswering,
             MoTForSequenceClassification,
             MoTForTokenClassification,

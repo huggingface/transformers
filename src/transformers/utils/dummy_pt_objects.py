@@ -5595,13 +5595,6 @@ class MobileViTV2PreTrainedModel(metaclass=DummyObject):
 MOT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class MoTDoubleHeadsModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class MoTForQuestionAnswering(metaclass=DummyObject):
     _backends = ["torch"]
 

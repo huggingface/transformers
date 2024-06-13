@@ -49,12 +49,6 @@ The original code can be found [here](https://github.com/llm-random/llm-random/b
 
 [[autodoc]] MoTConfig
 
-## MoT specific outputs
-
-[[autodoc]] models.mot.modeling_mot.MoTDoubleHeadsModelOutput
-
-[[autodoc]] models.mot.modeling_tf_mot.TFMoTDoubleHeadsModelOutput
-
 <frameworkcontent>
 <pt>
 
@@ -71,11 +65,6 @@ The original code can be found [here](https://github.com/llm-random/llm-random/b
 ## MoTLMHeadModel
 
 [[autodoc]] MoTLMHeadModel
-    - forward
-
-## MoTDoubleHeadsModel
-
-[[autodoc]] MoTDoubleHeadsModel
     - forward
 
 ## MoTForQuestionAnswering
