@@ -202,7 +202,9 @@ class PTtoTFCommand(BaseTransformersCLICommand):
         """
 
         def _get_audio_input():
-            ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+            ds = load_dataset(
+                "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
+            )
             speech_samples = ds.sort("id").select(range(2))[:2]["audio"]
             raw_samples = [x["array"] for x in speech_samples]
             return raw_samples

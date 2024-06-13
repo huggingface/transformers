@@ -1552,7 +1552,9 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         return WhisperProcessor.from_pretrained("openai/whisper-base")
 
     def _load_datasamples(self, num_samples):
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        ds = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
+        )
         # automatic decoding with librispeech
         speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
 
@@ -2358,7 +2360,9 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         )
         assistant_model.to(torch_device)
 
-        dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        dataset = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
+        )
         sample = dataset[0]["audio"]
 
         input_features = processor(sample["array"], return_tensors="pt", sampling_rate=16_000).input_features
@@ -2407,7 +2411,9 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         )
         assistant_model.to(torch_device)
 
-        dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        dataset = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
+        )
         sample = dataset[0]["audio"]
 
         input_features = processor(sample["array"], return_tensors="pt", sampling_rate=16_000).input_features
@@ -2448,7 +2454,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
         model = model.to(torch_device)
 
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean")
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", trust_remote_code=True)
         one_audio = np.concatenate([x["array"] for x in ds["validation"]["audio"]], dtype=np.float32)
 
         input_features = processor(
@@ -2484,7 +2490,9 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         prompt = "Mr. Kilter, Brionno."  # let's force Quilter -> Kilter, Brion -> Brionno
         prompt_ids = processor.get_prompt_ids(prompt, return_tensors="pt").to(torch_device)
 
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:-1]")
+        ds = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:-1]", trust_remote_code=True
+        )
         one_audio = np.concatenate([x["array"] for x in ds["audio"]], dtype=np.float32)
 
         first_text = ds[0]["text"].lower()
@@ -2535,7 +2543,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
         model = model.to(torch_device)
 
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean")
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", trust_remote_code=True)
         one_audio = np.concatenate([x["array"] for x in ds["validation"]["audio"]], dtype=np.float32)
 
         input_features = processor(
@@ -2568,7 +2576,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
         model = model.to(torch_device)
 
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean")
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", trust_remote_code=True)
         one_audio = np.concatenate([x["array"] for x in ds["validation"]["audio"]], dtype=np.float32)
 
         input_features = processor(
@@ -2610,7 +2618,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
         model = model.to(torch_device)
 
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean")
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", trust_remote_code=True)
         one_audio = np.concatenate([x["array"] for x in ds["validation"]["audio"]], dtype=np.float32)
         audios = []
         audios.append(one_audio[110000:])
@@ -2664,7 +2672,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
         model = model.to(torch_device)
 
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean")
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", trust_remote_code=True)
         one_audio = np.concatenate([x["array"] for x in ds["validation"]["audio"]], dtype=np.float32)
         audios = []
         audios.append(one_audio[110000:])

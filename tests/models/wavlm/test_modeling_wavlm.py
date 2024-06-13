@@ -494,7 +494,9 @@ class WavLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 @slow
 class WavLMModelIntegrationTest(unittest.TestCase):
     def _load_datasamples(self, num_samples):
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        ds = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
+        )
         # automatic decoding with librispeech
         speech_samples = ds.sort("id").filter(
             lambda x: x["id"] in [f"1272-141231-000{i}" for i in range(num_samples)]
