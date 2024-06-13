@@ -107,7 +107,7 @@ transcriber = pipeline(model="openai/whisper-large-v2", device_map="auto")
 
 Notez que si `device_map="auto"` est passé, il n'est pas nécessaire d'ajouter l'argument `device=device` lors de l'instanciation de votre `pipeline` car vous pourriez rencontrer des comportements inattendus !
 
-### Taille de lot
+### Batch size
 
 Par défaut, les pipelines ne feront pas d'inférence en batch pour des raisons expliquées en détail [ici](https://huggingface.co/docs/transformers/main_classes/pipelines#pipeline-batching). La raison est que le batching n'est pas nécessairement plus rapide, et peut en fait être beaucoup plus lent dans certains cas.
 
