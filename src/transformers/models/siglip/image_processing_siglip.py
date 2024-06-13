@@ -216,7 +216,6 @@ class SiglipImageProcessor(BaseImageProcessor):
             size=size,
             resample=resample,
         )
-
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
