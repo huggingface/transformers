@@ -162,7 +162,7 @@ class ImageClassificationPipeline(Pipeline):
         image = load_image(image, timeout=timeout)
         model_inputs = self.image_processor(images=image, return_tensors=self.framework)
         if self.framework == 'pt':
-            model_inputs = {k: v.type(self.torch_dtype) if v.dtype == torch.float32 else v for k, v in model_inputs.items()}
+            model_inputs = model_inputs.to(self.torch_dtype)
         return model_inputs
 
     def _forward(self, model_inputs):

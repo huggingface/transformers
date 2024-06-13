@@ -122,7 +122,7 @@ class ImageToImagePipeline(Pipeline):
         image = load_image(image, timeout=timeout)
         inputs = self.image_processor(images=[image], return_tensors="pt")
         if self.framework == 'pt':
-            inputs = {k: v.type(self.torch_dtype) if v.dtype == torch.float32 else v for k, v in inputs.items()}
+            inputs = inputs.to(self.torch_dtype)
         return inputs
 
     def postprocess(self, model_outputs):

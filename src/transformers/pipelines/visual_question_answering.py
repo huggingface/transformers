@@ -158,7 +158,7 @@ class VisualQuestionAnsweringPipeline(Pipeline):
         )
         image_features = self.image_processor(images=image, return_tensors=self.framework)
         if self.framework == 'pt':
-            image_features = {k: v.type(self.torch_dtype) if v.dtype == torch.float32 else v for k, v in image_features.items()}
+            image_features = image_features.to(self.torch_dtype)
         model_inputs.update(image_features)
         return model_inputs
 
