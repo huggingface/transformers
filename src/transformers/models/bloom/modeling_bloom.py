@@ -170,9 +170,10 @@ class BloomGelu(nn.Module):
 
 
 class BloomAttention(nn.Module):
-    def __init__(self, config: BloomConfig):
+    def __init__(self, config: BloomConfig, is_cross_attention=False):
         super().__init__()
 
+        self.is_cross_attention = is_cross_attention
         self.pretraining_tp = config.pretraining_tp
         self.slow_but_exact = config.slow_but_exact
 
@@ -192,7 +193,13 @@ class BloomAttention(nn.Module):
         self.inv_norm_factor = 1.0 / math.sqrt(self.head_dim)
         self.beta = 1.0
 
-        self.query_key_value = nn.Linear(self.hidden_size, 3 * self.hidden_size, bias=True)
+        if self.is_cross_attention:
+            self.query = nn.Linear(self.hidden_size, self.hidden_size, bias=True)
+            self.key = nn.Linear(self.hidden_size, self.hidden_size, bias=True)
+            self.value = nn.Linear(self.hidden_size, self.hidden_size, bias=True)
+        else:
+            self.query_key_value = nn.Linear(self.hidden_size, 3 * self.hidden_size, bias=True)
+
         self.dense = nn.Linear(self.hidden_size, self.hidden_size)
         self.attention_dropout = nn.Dropout(config.attention_dropout)
 
@@ -245,19 +252,44 @@ class BloomAttention(nn.Module):
         attention_mask: torch.Tensor,
         layer_past: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         head_mask: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.Tensor] = None,
         use_cache: bool = False,
         output_attentions: bool = False,
     ):
-        fused_qkv = self.query_key_value(hidden_states)  # [batch_size, seq_length, 3 x hidden_size]
+        if encoder_hidden_states is not None:
+            if not hasattr(self, "query"):
+                raise ValueError(
+                    "If class is used as cross attention, the weights `query` have to be defined. "
+                    "Please make sure to instantiate class with `BloomAttention(..., is_cross_attention=True)`."
+                )
+            query_layer = self.query(hidden_states)
+            key_layer = self.key(encoder_hidden_states)
+            value_layer = self.value(encoder_hidden_states)
+            attention_mask = encoder_attention_mask
 
-        # 3 x [batch_size, seq_length, num_heads, head_dim]
-        (query_layer, key_layer, value_layer) = self._split_heads(fused_qkv)
+            # Shape them as self._split_heads(fused_qkv) outputs
+            query_layer = query_layer.reshape(*query_layer.shape[:2], self.num_heads, self.head_dim)
+            key_layer = key_layer.reshape(*key_layer.shape[:2], self.num_heads, self.head_dim)
+            value_layer = value_layer.reshape(*value_layer.shape[:2], self.num_heads, self.head_dim)
 
-        batch_size, q_length, _, _ = query_layer.shape
+            batch_size, q_length, _, _ = query_layer.shape
 
-        query_layer = query_layer.transpose(1, 2).reshape(batch_size * self.num_heads, q_length, self.head_dim)
-        key_layer = key_layer.permute(0, 2, 3, 1).reshape(batch_size * self.num_heads, self.head_dim, q_length)
-        value_layer = value_layer.transpose(1, 2).reshape(batch_size * self.num_heads, q_length, self.head_dim)
+            query_layer = query_layer.transpose(1, 2).reshape(batch_size * self.num_heads, q_length, self.head_dim)
+            key_layer = key_layer.permute(0, 2, 3, 1).reshape(batch_size * self.num_heads, self.head_dim, -1)
+            value_layer = value_layer.transpose(1, 2).reshape(batch_size * self.num_heads, -1, self.head_dim)
+        else:
+            fused_qkv = self.query_key_value(hidden_states)  # [batch_size, seq_length, 3 x hidden_size]
+
+            # 3 x [batch_size, seq_length, num_heads, head_dim]
+            (query_layer, key_layer, value_layer) = self._split_heads(fused_qkv)
+
+            batch_size, q_length, _, _ = query_layer.shape
+
+            query_layer = query_layer.transpose(1, 2).reshape(batch_size * self.num_heads, q_length, self.head_dim)
+            key_layer = key_layer.permute(0, 2, 3, 1).reshape(batch_size * self.num_heads, self.head_dim, q_length)
+            value_layer = value_layer.transpose(1, 2).reshape(batch_size * self.num_heads, q_length, self.head_dim)
+
         if layer_past is not None:
             past_key, past_value = layer_past
             # concatenate along seq_length dimension:
@@ -275,12 +307,23 @@ class BloomAttention(nn.Module):
 
         # [batch_size * num_heads, q_length, kv_length]
         # we use `torch.Tensor.baddbmm` instead of `torch.baddbmm` as the latter isn't supported by TorchScript v1.11
-        matmul_result = alibi.baddbmm(
-            batch1=query_layer,
-            batch2=key_layer,
-            beta=self.beta,
-            alpha=self.inv_norm_factor,
-        )
+        if self.is_cross_attention:
+            key_layer = key_layer.transpose(1, 2)
+            query_layer = query_layer.transpose(1, 2)
+            matmul_result = alibi.baddbmm(
+                batch1=key_layer,
+                batch2=query_layer,
+                beta=self.beta,
+                alpha=self.inv_norm_factor,
+            )
+            matmul_result = matmul_result.transpose(1, 2)
+        else:
+            matmul_result = alibi.baddbmm(
+                batch1=query_layer,
+                batch2=key_layer,
+                beta=self.beta,
+                alpha=self.inv_norm_factor,
+            )
 
         # change view to [batch_size, num_heads, q_length, kv_length]
         attention_scores = matmul_result.view(batch_size, self.num_heads, q_length, kv_length)
@@ -290,7 +333,11 @@ class BloomAttention(nn.Module):
         # `float16` has a minimum value of -65504.0, whereas `bfloat16` and `float32` have a minimum value of `-3.4e+38`
         if input_dtype == torch.float16:
             attention_scores = attention_scores.to(torch.float)
-        attn_weights = torch.masked_fill(attention_scores, attention_mask, torch.finfo(attention_scores.dtype).min)
+        attn_weights = (
+            torch.masked_fill(attention_scores, attention_mask, torch.finfo(attention_scores.dtype).min)
+            if not self.is_cross_attention
+            else attention_scores
+        )
         attention_probs = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(input_dtype)
 
         # [batch_size, num_heads, q_length, kv_length]
@@ -370,6 +417,10 @@ class BloomBlock(nn.Module):
         self.self_attention = BloomAttention(config)
         self.post_attention_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
+        if config.add_cross_attention:
+            self.cross_attention = BloomAttention(config, is_cross_attention=True)
+            self.post_cross_attention_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+
         self.mlp = BloomMLP(config)
 
         self.apply_residual_connection_post_layernorm = config.apply_residual_connection_post_layernorm
@@ -382,6 +433,8 @@ class BloomBlock(nn.Module):
         attention_mask: torch.Tensor,
         layer_past: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         head_mask: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.Tensor] = None,
         use_cache: bool = False,
         output_attentions: bool = False,
     ):
@@ -419,6 +472,39 @@ class BloomBlock(nn.Module):
             residual = layernorm_output
         else:
             residual = attention_output
+
+        # Cross attention
+        if encoder_hidden_states is not None:
+            # add one self-attention block for cross-attention
+            if not hasattr(self, "crossattention"):
+                raise ValueError(
+                    f"If `encoder_hidden_states` are passed, {self} has to be instantiated with "
+                    "cross-attention layers by setting `config.add_cross_attention=True`"
+                )
+            cross_attn_outputs = self.cross_attention(
+                hidden_states=layernorm_output,
+                residual=residual,
+                alibi=alibi,
+                attention_mask=encoder_attention_mask,
+                layer_past=None,
+                head_mask=head_mask,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_attention_mask,
+                use_cache=False,
+                output_attentions=output_attentions,
+            )
+
+            cross_attention_output = cross_attn_outputs[0]
+            outputs = cross_attn_outputs[1:]
+
+            # Post attention layernorm
+            layernorm_output = self.post_cross_attention_layernorm(cross_attention_output)
+
+            # Get residual
+            if self.apply_residual_connection_post_layernorm:
+                residual = layernorm_output
+            else:
+                residual = attention_output
 
         # MLP.
         output = self.mlp(layernorm_output, residual)
@@ -615,6 +701,8 @@ class BloomModel(BloomPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.LongTensor] = None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -663,6 +751,7 @@ class BloomModel(BloomPreTrainedModel):
 
         presents = () if use_cache else None
         all_self_attentions = () if output_attentions else None
+        all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
         all_hidden_states = () if output_hidden_states else None
 
         if self.gradient_checkpointing and self.training:
@@ -705,6 +794,8 @@ class BloomModel(BloomPreTrainedModel):
                     causal_mask,
                     layer_past,
                     head_mask[i],
+                    encoder_hidden_states,
+                    encoder_attention_mask,
                     use_cache,
                     output_attentions,
                 )
@@ -714,6 +805,8 @@ class BloomModel(BloomPreTrainedModel):
                     layer_past=layer_past,
                     attention_mask=causal_mask,
                     head_mask=head_mask[i],
+                    encoder_hidden_states=encoder_hidden_states,
+                    encoder_attention_mask=encoder_attention_mask,
                     use_cache=use_cache,
                     output_attentions=output_attentions,
                     alibi=alibi,
@@ -725,6 +818,8 @@ class BloomModel(BloomPreTrainedModel):
 
             if output_attentions:
                 all_self_attentions = all_self_attentions + (outputs[2 if use_cache else 1],)
+                if self.config.add_cross_attention:
+                    all_cross_attentions = all_cross_attentions + (outputs[3 if use_cache else 2],)
 
         # Add last hidden state
         hidden_states = self.ln_f(hidden_states)
@@ -733,13 +828,18 @@ class BloomModel(BloomPreTrainedModel):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, presents, all_hidden_states, all_self_attentions] if v is not None)
+            return tuple(
+                v
+                for v in [hidden_states, presents, all_hidden_states, all_self_attentions, all_cross_attentions]
+                if v is not None
+            )
 
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
             past_key_values=presents,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
+            cross_attentions=all_cross_attentions,
         )
 
 
@@ -820,6 +920,8 @@ class BloomForCausalLM(BloomPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -851,6 +953,8 @@ class BloomForCausalLM(BloomPreTrainedModel):
             attention_mask=attention_mask,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -884,6 +988,7 @@ class BloomForCausalLM(BloomPreTrainedModel):
             past_key_values=transformer_outputs.past_key_values,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
+            cross_attentions=transformer_outputs.cross_attentions,
         )
 
     def _reorder_cache(
