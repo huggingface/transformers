@@ -1885,18 +1885,15 @@ class Trainer:
 
         if len(checkpoints) > 0:
             if not is_sagemaker_mp_enabled() and not self.is_deepspeed_enabled and not self.is_fsdp_enabled:
-                for i, checkpoint in enumerate(checkpoints):
+                for checkpoint in checkpoints:
                     try:
                         self._load_from_checkpoint(checkpoint)
-                        if i > 0:
-                            logger.info(f"Checkpoints {checkpoints[i:]} failed to load. Loading from {checkpoint}.")
                         checkpoints = [checkpoint]
                         break
                     except (ValueError, safetensors.SafetensorError) as e:
-                        logger.warning(f"Error loading checkpoint {checkpoint}: {e}")
+                        logger.warning(f"Error loading checkpoint {checkpoint}: {e}\nMoving onto next checkpoint.")
                 else:
-                    logger.warning(f"No valid checkpoint found in output directory ({args.output_dir}), starting from scratch")
-                    checkpoints = []
+                    raise ValueError(f"No more checkpoints found in output directory ({args.output_dir}), all failed to load.")
 
             # In case of repeating the find_executable_batch_size, set `self._train_batch_size` properly
             for checkpoint in checkpoints:
@@ -1907,9 +1904,9 @@ class Trainer:
                     resume_from_checkpoint = checkpoint
                     break
                 except OSError:
-                    logger.warning(f"Error loading checkpoint {checkpoint}: {e}")
+                    logger.warning(f"Error loading checkpoint {checkpoint}: {e}\nMoving onto next checkpoint.")
             else:
-                logger.warning(f"No valid checkpoint found in output directory ({args.output_dir}), starting from scratch")
+                raise ValueError(f"No more checkpoints found in output directory ({args.output_dir}), all failed to load.")
 
 
         # If model was re-initialized, put it on the right device and update self.model_wrapped
