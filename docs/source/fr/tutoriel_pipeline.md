@@ -84,7 +84,7 @@ out = transcriber(...)  # This will go back to using `my_parameter=1`.
 
 Voyons 3 paramètres importants :
 
-### Appareil
+### Device
 
 Si vous utilisez `device=n`, le pipeline met automatiquement le modèle sur l'appareil spécifié.
 Cela fonctionnera que vous utilisiez PyTorch ou Tensorflow.
