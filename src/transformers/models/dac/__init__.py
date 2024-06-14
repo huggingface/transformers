@@ -40,7 +40,6 @@ if TYPE_CHECKING:
     from .configuration_dac import (
         DacConfig,
     )
-    from .feature_extraction_dac import DacFeatureExtractor
 
     try:
         if not is_torch_available():
@@ -48,10 +47,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_dac import (
-            DacModel,
-            DacPreTrainedModel,
-        )
+        from .modeling_dac import DacModel, DacPreTrainedModel
 
 else:
     import sys
