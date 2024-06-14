@@ -66,6 +66,9 @@ class UMT5Config(PretrainedConfig):
             testing).
         feed_forward_proj (`string`, *optional*, defaults to `"gated-gelu"`):
             Type of feed forward layer to be used. Should be one of `"relu"` or `"gated-gelu"`.
+        max_position_embeddings (`int`, *optional*, defaults to 2048):
+            The maximum sequence length that this model might ever be used with. This is important to cache the computation of the
+            relative bias.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
     """
@@ -97,6 +100,7 @@ class UMT5Config(PretrainedConfig):
         eos_token_id=1,
         decoder_start_token_id=0,
         classifier_dropout=0.0,
+        max_position_embeddings=2048,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -116,7 +120,7 @@ class UMT5Config(PretrainedConfig):
         self.initializer_factor = initializer_factor
         self.feed_forward_proj = feed_forward_proj
         self.use_cache = use_cache
-
+        self.max_position_embeddings = max_position_embeddings
         act_info = self.feed_forward_proj.split("-")
         self.dense_act_fn = act_info[-1]
         self.is_gated_act = act_info[0] == "gated"
