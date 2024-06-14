@@ -262,7 +262,6 @@ GIT_SELF_ATTENTION_CLASSES = {
 
 
 class GitAttention(nn.Module):
-    # Copied from transformers.models.bert.modeling_bert.BertAttention.__init__ with Bert->Git,BERT->GIT
     def __init__(self, config, position_embedding_type=None, layer_idx=None):
         super().__init__()
         self.self = GIT_SELF_ATTENTION_CLASSES[config._attn_implementation](
@@ -393,7 +392,6 @@ class GitLayer(nn.Module):
 
 
 class GitEncoder(nn.Module):
-    # Copied from transformers.models.bert.modeling_bert.BertEncoder.__init__ with Bert->Git
     def __init__(self, config):
         super().__init__()
         self.config = config
