@@ -67,15 +67,6 @@ def parse_args():
             " dataset)."
         ),
     )
-    parser.add_argument(
-        "--trust_remote_code",
-        action="store_true",
-        help=(
-            "Whether to trust the execution of code from datasets/models defined on the Hub."
-            " This option should only be set to `True` for repositories you trust and in which you have read the"
-            " code, as it will execute code present on the Hub on your local machine."
-        ),
-    )
     parser.add_argument("--train_dir", type=str, default=None, help="A folder containing the training data.")
     parser.add_argument("--validation_dir", type=str, default=None, help="A folder containing the validation data.")
     parser.add_argument(
@@ -159,12 +150,11 @@ def parse_args():
     parser.add_argument("--hub_token", type=str, help="The token to use to push to the Model Hub.")
     parser.add_argument(
         "--trust_remote_code",
-        type=bool,
-        default=False,
+        action="store_true",
         help=(
-            "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option "
-            "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
-            "execute code present on the Hub on your local machine."
+            "Whether to trust the execution of code from datasets/models defined on the Hub."
+            " This option should only be set to `True` for repositories you trust and in which you have read the"
+            " code, as it will execute code present on the Hub on your local machine."
         ),
     )
     parser.add_argument(
