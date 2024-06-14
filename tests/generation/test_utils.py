@@ -1101,7 +1101,7 @@ class GenerationTesterMixin:
             self.assertListEqual(low_output.tolist(), high_output.tolist())
 
     @parameterized.expand([("random",), ("same",)])
-    @is_flaky()  # Read NOTE (1) below. If there are API issues, all attempts will fail.
+    # @is_flaky()  # Read NOTE (1) below. If there are API issues, all attempts will fail.
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
         # This test ensures that the assisted generation does not introduce output changes over greedy search.
         # NOTE (1): The sentence above is true most of the time, there is a tiny difference in the logits due to matmul
@@ -1623,19 +1623,31 @@ class GenerationTesterMixin:
             set_seed(seed)
             legacy_results = model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
             set_seed(seed)
+            past_key_values = (DynamicCache(), DynamicCache()) if model.config.is_encoder_decoder else DynamicCache()
             new_results = model.generate(
-                input_ids, attention_mask=attention_mask, past_key_values=DynamicCache(), **generation_kwargs
+                input_ids, attention_mask=attention_mask, past_key_values=past_key_values, **generation_kwargs
             )
 
             # The two sets of generated sequences must match, despite the cache format between forward passes being
             # different
             self.assertListEqual(legacy_results.sequences.tolist(), new_results.sequences.tolist())
             self.assertTrue(isinstance(legacy_results.past_key_values, tuple))
-            self.assertTrue(isinstance(new_results.past_key_values, DynamicCache))
+            if not model.config.is_encoder_decoder:
+                self.assertTrue(isinstance(new_results.past_key_values, DynamicCache))
+            else:
+                self.assertTrue(isinstance(new_results.past_key_values[0], DynamicCache))
 
             # The contents of the two caches, when converted to the same format (in both directions!), must match
             legacy_cache = legacy_results.past_key_values
-            new_cache_converted = new_results.past_key_values.to_legacy_cache()
+            if model.config.is_encoder_decoder:
+                num_hidden_layers = len(new_results.past_key_values[0].key_cache)
+                self_attn_cache = new_results.past_key_values[0].to_legacy_cache()
+                cross_attn_cache = new_results.past_key_values[1].to_legacy_cache()
+                new_cache_converted = tuple(
+                    (*self_attn_cache[i], *cross_attn_cache[i]) for i in range(num_hidden_layers)
+                )
+            else:
+                new_cache_converted = new_results.past_key_values.to_legacy_cache()
             for layer_idx in range(len(legacy_cache)):
                 for kv_idx in range(len(legacy_cache[layer_idx])):
                     self.assertTrue(
@@ -1646,15 +1658,32 @@ class GenerationTesterMixin:
                     )
 
             new_cache = new_results.past_key_values
-            legacy_cache_converted = DynamicCache.from_legacy_cache(legacy_results.past_key_values)
-            for layer_idx in range(len(new_cache)):
-                for kv_idx in range(len(new_cache[layer_idx])):
-                    self.assertTrue(
-                        torch.allclose(
-                            new_cache[layer_idx][kv_idx],
-                            legacy_cache_converted[layer_idx][kv_idx],
+            if model.config.is_encoder_decoder:
+                self_attn = [cache[:2] for cache in legacy_results.past_key_values]
+                cross_attn = [cache[2:] for cache in legacy_results.past_key_values]
+                legacy_cache_converted = (
+                    DynamicCache.from_legacy_cache(self_attn),
+                    DynamicCache.from_legacy_cache(cross_attn),
+                )
+                for cache_obj in range(len(new_cache)):
+                    for layer_idx in range(len(new_cache[cache_obj])):
+                        for kv_idx in range(len(new_cache[cache_obj][layer_idx])):
+                            self.assertTrue(
+                                torch.allclose(
+                                    new_cache[cache_obj][layer_idx][kv_idx],
+                                    legacy_cache_converted[cache_obj][layer_idx][kv_idx],
+                                )
+                            )
+            else:
+                legacy_cache_converted = DynamicCache.from_legacy_cache(legacy_results.past_key_values)
+                for layer_idx in range(len(new_cache)):
+                    for kv_idx in range(len(new_cache[layer_idx])):
+                        self.assertTrue(
+                            torch.allclose(
+                                new_cache[layer_idx][kv_idx],
+                                legacy_cache_converted[layer_idx][kv_idx],
+                            )
                         )
-                    )
 
     @require_quanto
     def test_generate_with_quant_cache(self):

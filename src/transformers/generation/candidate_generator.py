@@ -367,16 +367,19 @@ def _crop_past_key_values(model, past_key_values, maximum_length):
     """Crops the past key values up to a certain maximum length."""
     new_past = []
     if model.config.is_encoder_decoder:
-        for idx in range(len(past_key_values)):
-            new_past.append(
-                (
-                    past_key_values[idx][0][:, :, :maximum_length, :],
-                    past_key_values[idx][1][:, :, :maximum_length, :],
-                    past_key_values[idx][2],
-                    past_key_values[idx][3],
+        if isinstance(past_key_values[0], DynamicCache):
+            past_key_values[0].crop(maximum_length)
+        else:
+            for idx in range(len(past_key_values)):
+                new_past.append(
+                    (
+                        past_key_values[idx][0][:, :, :maximum_length, :],
+                        past_key_values[idx][1][:, :, :maximum_length, :],
+                        past_key_values[idx][2],
+                        past_key_values[idx][3],
+                    )
                 )
-            )
-        past_key_values = tuple(new_past)
+            past_key_values = tuple(new_past)
     # bloom is special
     elif "bloom" in model.__class__.__name__.lower() or (
         model.config.architectures is not None and "bloom" in model.config.architectures[0].lower()
