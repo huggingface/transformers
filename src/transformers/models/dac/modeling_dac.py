@@ -4,11 +4,78 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from dataclasses import dataclass
+
 from einops import rearrange
 from torch.nn.utils import weight_norm
+from ...utils import ModelOutput
 
 from ...modeling_utils import PreTrainedModel
 from .configuration_dac import DacConfig
+
+@dataclass
+class DacOutput(ModelOutput):
+    """
+    Args:
+        "z" : Tensor[B x D x T]
+            Quantized continuous representation of input
+        "codes" : Tensor[B x N x T]
+            Codebook indices for each codebook
+            (quantized discrete representation of input)
+        "latents" : Tensor[B x N*D x T]
+            Projected latents (continuous representation of input before quantization)
+        "vq/commitment_loss" : Tensor[1]
+            Commitment loss to train encoder to predict vectors closer to codebook
+            entries
+        "vq/codebook_loss" : Tensor[1]
+            Codebook loss to update the codebook
+        "length" : int
+            Number of samples in input audio
+        "audio" : Tensor[B x 1 x length]
+            Decoded audio data.
+    """
+    audio: torch.FloatTensor = None
+    z: torch.FloatTensor = None
+    codes: torch.FloatTensor = None
+    latents: torch.FloatTensor = None
+    commitment_loss: torch.FloatTensor = None
+    codebook_loss: torch.FloatTensor = None
+
+
+@dataclass
+class DacEncoderOutput(ModelOutput):
+    """
+    Args:
+        audio_scales (`torch.Tensor` of shape `(batch_size, nb_chunks)`, *optional*):
+            Scaling factor for each `audio_codes` input. This is used to unscale each chunk of audio when decoding.
+        z" : Tensor[B x D x T]
+            Quantized continuous representation of input
+        "codes" : Tensor[B x N x T]
+            Codebook indices for each codebook
+            (quantized discrete representation of input)
+        "latents" : Tensor[B x N*D x T]
+            Projected latents (continuous representation of input before quantization)
+        "vq/commitment_loss" : Tensor[1]
+            Commitment loss to train encoder to predict vectors closer to codebook
+            entries
+        "vq/codebook_loss" : Tensor[1]
+            Codebook loss to update the codebook
+    """
+    z: torch.FloatTensor = None
+    codes: torch.FloatTensor = None
+    latents: torch.FloatTensor = None
+    commitment_loss: torch.FloatTensor = None
+    codebook_loss: torch.FloatTensor = None
+
+
+@dataclass
+class DacDecoderOutput(ModelOutput):
+    """
+    Args:
+        "audio" : Tensor[B x 1 x length]
+                Decoded audio data.
+    """
+    audio: torch.FloatTensor = None
 
 
 def WNConv1d(*args, **kwargs):
@@ -38,7 +105,7 @@ class Snake1d(nn.Module):
         return snake(x, self.alpha)
 
 
-class VectorQuantize(nn.Module):
+class DacVectorQuantize(nn.Module):
     """
     Implementation of VQ similar to Karpathy's repo:
     https://github.com/karpathy/deep-vector-quantization
@@ -130,7 +197,7 @@ def init_weights(m):
 
 
 
-class ResidualUnit(nn.Module):
+class DacResidualUnit(nn.Module):
     def __init__(self, dim: int = 16, dilation: int = 1):
         super().__init__()
         pad = ((7 - 1) * dilation) // 2
@@ -149,13 +216,13 @@ class ResidualUnit(nn.Module):
         return x + y
 
 
-class EncoderBlock(nn.Module):
+class DacEncoderBlock(nn.Module):
     def __init__(self, dim: int = 16, stride: int = 1):
         super().__init__()
         self.block = nn.Sequential(
-            ResidualUnit(dim // 2, dilation=1),
-            ResidualUnit(dim // 2, dilation=3),
-            ResidualUnit(dim // 2, dilation=9),
+            DacResidualUnit(dim // 2, dilation=1),
+            DacResidualUnit(dim // 2, dilation=3),
+            DacResidualUnit(dim // 2, dilation=9),
             Snake1d(dim // 2),
             WNConv1d(
                 dim // 2,
@@ -170,7 +237,7 @@ class EncoderBlock(nn.Module):
         return self.block(x)
 
 
-class DecoderBlock(nn.Module):
+class DacDecoderBlock(nn.Module):
     def __init__(self, input_dim: int = 16, output_dim: int = 8, stride: int = 1):
         super().__init__()
         self.block = nn.Sequential(
@@ -182,9 +249,9 @@ class DecoderBlock(nn.Module):
                 stride=stride,
                 padding=math.ceil(stride / 2),
             ),
-            ResidualUnit(output_dim, dilation=1),
-            ResidualUnit(output_dim, dilation=3),
-            ResidualUnit(output_dim, dilation=9),
+            DacResidualUnit(output_dim, dilation=1),
+            DacResidualUnit(output_dim, dilation=3),
+            DacResidualUnit(output_dim, dilation=9),
         )
 
     def forward(self, x):
@@ -219,7 +286,7 @@ class DacResidualVectorQuantize(nn.Module):
 
         self.quantizers = nn.ModuleList(
             [
-                VectorQuantize(input_dim, codebook_size, codebook_dim[i])
+                DacVectorQuantize(input_dim, codebook_size, codebook_dim[i])
                 for i in range(n_codebooks)
             ]
         )
@@ -375,7 +442,7 @@ class DacDecoder(nn.Module):
         for i, stride in enumerate(rates):
             input_dim = channels // 2**i
             output_dim = channels // 2 ** (i + 1)
-            layers += [DecoderBlock(input_dim, output_dim, stride)]
+            layers += [DacDecoderBlock(input_dim, output_dim, stride)]
 
         # Add final conv layer
         layers += [
@@ -407,7 +474,7 @@ class DacEncoder(nn.Module):
         # Create EncoderBlocks that double channels as they downsample by `stride`
         for stride in strides:
             d_model *= 2
-            self.block += [EncoderBlock(d_model, stride=stride)]
+            self.block += [DacEncoderBlock(d_model, stride=stride)]
 
         # Create last convolution
         self.block += [
@@ -456,3 +523,112 @@ class DacModel(DacPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def encode(
+        self,
+        audio_data: torch.Tensor,
+        n_quantizers: int = None,
+    ):
+        """Encode given audio data and return quantized latent codes
+
+        Parameters
+        ----------
+        audio_data : Tensor[B x 1 x T]
+            Audio data to encode
+        n_quantizers : int, optional
+            Number of quantizers to use, by default None
+            If None, all quantizers are used.
+
+        Returns
+        -------
+        dict
+            A dictionary with the following keys:
+            "z" : Tensor[B x D x T]
+                Quantized continuous representation of input
+            "codes" : Tensor[B x N x T]
+                Codebook indices for each codebook
+                (quantized discrete representation of input)
+            "latents" : Tensor[B x N*D x T]
+                Projected latents (continuous representation of input before quantization)
+            "vq/commitment_loss" : Tensor[1]
+                Commitment loss to train encoder to predict vectors closer to codebook
+                entries
+            "vq/codebook_loss" : Tensor[1]
+                Codebook loss to update the codebook
+            "length" : int
+                Number of samples in input audio
+        """
+        z = self.encoder(audio_data)
+        z, codes, latents, commitment_loss, codebook_loss = self.quantizer(
+            z, n_quantizers
+        )
+        return DacEncoderOutput(z, codes, latents, commitment_loss, codebook_loss)
+
+    def decode(self, z: torch.Tensor):
+        """Decode given latent codes and return audio data
+
+        Parameters
+        ----------
+        z : Tensor[B x D x T]
+            Quantized continuous representation of input
+        length : int, optional
+            Number of samples in output audio, by default None
+
+        Returns
+        -------
+        dict
+            A dictionary with the following keys:
+            "audio" : Tensor[B x 1 x length]
+                Decoded audio data.
+        """
+        return self.decoder(z)
+
+    def forward(
+        self,
+        audio_data: torch.Tensor,
+        n_quantizers: int = None,
+    ):
+        """Model forward pass
+
+        Parameters
+        ----------
+        audio_data : Tensor[B x 1 x T]
+            Audio data to encode
+        sample_rate : int, optional
+            Sample rate of audio data in Hz, by default None
+            If None, defaults to `self.sample_rate`
+        n_quantizers : int, optional
+            Number of quantizers to use, by default None.
+            If None, all quantizers are used.
+
+        Returns
+        -------
+        dict
+            A dictionary with the following keys:
+            "z" : Tensor[B x D x T]
+                Quantized continuous representation of input
+            "codes" : Tensor[B x N x T]
+                Codebook indices for each codebook
+                (quantized discrete representation of input)
+            "latents" : Tensor[B x N*D x T]
+                Projected latents (continuous representation of input before quantization)
+            "vq/commitment_loss" : Tensor[1]
+                Commitment loss to train encoder to predict vectors closer to codebook
+                entries
+            "vq/codebook_loss" : Tensor[1]
+                Codebook loss to update the codebook
+            "length" : int
+                Number of samples in input audio
+            "audio" : Tensor[B x 1 x length]
+                Decoded audio data.
+        """
+        length = audio_data.shape[-1]
+        encoder_output = self.encode(
+            audio_data, n_quantizers
+        )
+        x = self.decode(encoder_output.z)
+
+        audio = x[..., :length]
+
+        return DacOutput(audio, **encoder_output)
+    
