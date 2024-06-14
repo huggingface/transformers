@@ -11,6 +11,7 @@ from packaging import version
 from .configuration_utils import PretrainedConfig
 from .utils import is_hqq_available, is_quanto_available, logging
 
+
 if is_quanto_available():
     quanto_version = version.parse(importlib.metadata.version("quanto"))
     if quanto_version >= version.parse("0.2.0"):
@@ -857,7 +858,7 @@ class StaticCache(Cache):
         k_out = self.key_cache[layer_idx]
         v_out = self.value_cache[layer_idx]
 
-        # `index_copy_(dim, index, source)` functions similarly to `tensor[index] = source`, 
+        # `index_copy_(dim, index, source)` functions similarly to `tensor[index] = source`,
         # but it is used for better generality and flexibility.
         # For more information, refer to: https://pytorch.org/cppdocs/notes/tensor_indexing.html
 
@@ -877,12 +878,11 @@ class StaticCache(Cache):
         # index_select(dim, index) performs the same operation as item = tensor[..., index, ...]
         # but it is used for better generality and flexibility.
         # For more information, refer to: https://pytorch.org/cppdocs/notes/tensor_indexing.html
-        
+
         item = key_cache.index_select(0, torch.tensor(0, device=device))
         head = item.index_select(1, torch.tensor(0, device=device))
 
         return head.any(dim=-1).sum()
-
 
     def get_max_length(self) -> Optional[int]:
         """Returns the maximum sequence length of the cached states."""
