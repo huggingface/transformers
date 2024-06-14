@@ -1,7 +1,10 @@
+import inspect
 import math
-from typing import List
-from typing import Union
-
+import shutil
+import tempfile
+import typing
+from pathlib import Path
+from typing import List, Union
 
 import numpy as np
 import torch
@@ -9,16 +12,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
 from torch.nn.utils import weight_norm
-
-
-import inspect
-import shutil
-import tempfile
-import typing
-from pathlib import Path
-
-import torch
-from torch import nn
 
 
 class BaseModel(nn.Module):
@@ -286,10 +279,10 @@ class BaseModel(nn.Module):
         target_base.mkdir(exist_ok=True, parents=True)
 
         if package:
-            package_path = target_base / f"package.pth"
+            package_path = target_base / "package.pth"
             self.save(package_path)
 
-        weights_path = target_base / f"weights.pth"
+        weights_path = target_base / "weights.pth"
         self.save(weights_path, package=False)
 
         for path, obj in extra_data.items():
@@ -744,7 +737,7 @@ class Decoder(nn.Module):
 
     def forward(self, x):
         return self.model(x)
-    
+
 def preprocess(audio_data, sample_rate):
     if sample_rate is None:
         sample_rate = 16000
@@ -787,7 +780,7 @@ class DAC(BaseModel):
         self.latent_dim = latent_dim
 
         self.hop_length = np.prod(encoder_rates)
-        
+
         print(self.hop_length)
         self.encoder = Encoder(encoder_dim, encoder_rates, latent_dim)
 
@@ -927,7 +920,7 @@ class DAC(BaseModel):
         }
 
 
-if __name__ == '__main__': 
+if __name__ == '__main__':
 
     torch.random.manual_seed(0)
     model = DAC()
@@ -952,4 +945,6 @@ if __name__ == '__main__':
 
         # Decode audio signal
         y = model.decode(z)
+
+    print(y)
 
