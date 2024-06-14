@@ -24,6 +24,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
 from torch.nn import functional as F
 
 from ...activations import get_activation
+from ...cache_utils import Cache, DynamicCache
 from ...modeling_attn_mask_utils import (
     AttentionMaskConverter,
     _prepare_4d_causal_attention_mask,
@@ -258,7 +259,7 @@ def dropout_add(x: torch.Tensor, residual: torch.Tensor, prob: float, training: 
 
 
 class FalconAttention(nn.Module):
-    def __init__(self, config: FalconConfig):
+    def __init__(self, config: FalconConfig, layer_idx=None):
         super().__init__()
 
         self.config = config
@@ -271,6 +272,13 @@ class FalconAttention(nn.Module):
         self.rope_theta = config.rope_theta
         self.is_causal = True
         self._use_sdpa = config._attn_implementation == "sdpa"
+        self.layer_idx = layer_idx
+        if layer_idx is None:
+            logger.warning_once(
+                f"Instantiating {self.__class__.__name__} without passing a `layer_idx` is not recommended and will "
+                "lead to errors during the forward call if caching is used. Please make sure to provide a `layer_idx` "
+                "when creating this class."
+            )
 
         if self.head_dim * self.num_heads != self.hidden_size:
             raise ValueError(
@@ -406,25 +414,22 @@ class FalconAttention(nn.Module):
 
         kv_seq_len = key_layer.shape[-2]
         if layer_past is not None:
-            kv_seq_len += layer_past[0].shape[-2]
+            if self.layer_idx is None:
+                raise ValueError(
+                    f"The cache structure has changed since version v4.36. If you are using {self.__class__.__name__} "
+                    "for auto-regressive decoding with k/v caching, please make sure to initialize the attention class "
+                    "with a layer index."
+                )
+            kv_seq_len += layer_past.get_seq_length(self.layer_idx)
         if alibi is None:
             cos, sin = self.rotary_emb(value_layer, seq_len=kv_seq_len)
             query_layer, key_layer = apply_rotary_pos_emb(query_layer, key_layer, cos, sin, position_ids)
 
         if layer_past is not None:
-            past_key, past_value = layer_past
-            # concatenate along seq_length dimension:
-            #  - key: [batch_size, self.num_heads, kv_length, head_dim]
-            #  - value: [batch_size, self.num_heads, kv_length, head_dim]
-            key_layer = torch.cat((past_key, key_layer), dim=-2)
-            value_layer = torch.cat((past_value, value_layer), dim=-2)
+            cache_kwargs = {"sin": sin, "cos": cos} if alibi is None else None
+            key_layer, value_layer = layer_past.update(key_layer, value_layer, self.layer_idx, cache_kwargs)
 
         kv_length = key_layer.shape[-2]
-        if use_cache:
-            present = (key_layer, value_layer)
-        else:
-            present = None
-
         if self._use_sdpa and query_layer.device.type == "cuda" and attention_mask is not None:
             # For torch<=2.1.2, SDPA with memory-efficient backend is bugged with non-contiguous inputs with custom attn_mask,
             # Reference: https://github.com/pytorch/pytorch/issues/112577.
@@ -463,9 +468,9 @@ class FalconAttention(nn.Module):
             attn_output = self.dense(attn_output)
 
             if output_attentions:
-                return attn_output, present, attention_scores
+                return attn_output, layer_past, attention_scores
             else:
-                return attn_output, present
+                return attn_output, layer_past
 
         else:
             if self._use_sdpa and not output_attentions and head_mask is None:
@@ -517,9 +522,9 @@ class FalconAttention(nn.Module):
                 attn_output = self.dense(attn_output)
 
             if output_attentions:
-                return attn_output, present, attention_probs
+                return attn_output, layer_past, attention_probs
             else:
-                return attn_output, present
+                return attn_output, layer_past
 
 
 class FalconFlashAttention2(FalconAttention):
@@ -562,20 +567,20 @@ class FalconFlashAttention2(FalconAttention):
 
         kv_seq_len = key_layer.shape[-2]
         if layer_past is not None:
-            kv_seq_len += layer_past[0].shape[-2]
+            if self.layer_idx is None:
+                raise ValueError(
+                    f"The cache structure has changed since version v4.36. If you are using {self.__class__.__name__} "
+                    "for auto-regressive decoding with k/v caching, please make sure to initialize the attention class "
+                    "with a layer index."
+                )
+            kv_seq_len += layer_past.get_seq_length(self.layer_idx)
         if alibi is None:
             cos, sin = self.rotary_emb(value_layer, seq_len=kv_seq_len)
             query_layer, key_layer = apply_rotary_pos_emb(query_layer, key_layer, cos, sin, position_ids)
 
-        if layer_past is not None and use_cache:
-            past_key, past_value = layer_past
-            # concatenate along seq_length dimension:
-            #  - key: [batch_size, self.num_heads, kv_length, head_dim]
-            #  - value: [batch_size, self.num_heads, kv_length, head_dim]
-            key_layer = torch.cat((past_key, key_layer), dim=-2)
-            value_layer = torch.cat((past_value, value_layer), dim=-2)
-
-        past_key_value = (key_layer, value_layer) if use_cache else None
+        if layer_past is not None:
+            cache_kwargs = {"sin": sin, "cos": cos} if alibi is None else None
+            key_layer, value_layer = layer_past.update(key_layer, value_layer, self.layer_idx, cache_kwargs)
 
         # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
         # to be able to avoid many of these transpose/reshape/view.
@@ -621,7 +626,7 @@ class FalconFlashAttention2(FalconAttention):
         if not output_attentions:
             attn_weights = None
 
-        return attn_output, past_key_value, attn_weights
+        return attn_output, layer_past, attn_weights
 
     # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._flash_attention_forward
     def _flash_attention_forward(
@@ -747,12 +752,12 @@ FALCON_ATTENTION_CLASSES = {
 
 
 class FalconDecoderLayer(nn.Module):
-    def __init__(self, config: FalconConfig):
+    def __init__(self, config: FalconConfig, layer_idx=None):
         super().__init__()
         hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
 
-        self.self_attention = FALCON_ATTENTION_CLASSES[config._attn_implementation](config)
+        self.self_attention = FALCON_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
         self.mlp = FalconMLP(config)
         self.hidden_dropout = config.hidden_dropout
         self.config = config
@@ -836,7 +841,7 @@ class FalconDecoderLayer(nn.Module):
         else:
             outputs = (output,) + outputs[1:]
 
-        return outputs  # hidden_states, present, attentions
+        return outputs  # hidden_states, past_kv, attentions
 
 
 FALCON_START_DOCSTRING = r"""
@@ -926,6 +931,7 @@ class FalconPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["FalconDecoderLayer"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
+    _supports_cache_class = True
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
@@ -982,7 +988,7 @@ class FalconModel(FalconPreTrainedModel):
         self.word_embeddings = nn.Embedding(config.vocab_size, self.embed_dim)
 
         # Transformer blocks
-        self.h = nn.ModuleList([FalconDecoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.h = nn.ModuleList([FalconDecoderLayer(config, layer_idx=i) for i in range(config.num_hidden_layers)])
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
         self._use_sdpa = config._attn_implementation == "sdpa"
 
@@ -1035,9 +1041,6 @@ class FalconModel(FalconPreTrainedModel):
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        if past_key_values is None:
-            past_key_values = tuple([None] * len(self.h))
-
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
 
@@ -1049,14 +1052,17 @@ class FalconModel(FalconPreTrainedModel):
                     "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                 )
                 use_cache = False
-        presents = () if use_cache else None
+        next_decoder_cache = None
         all_self_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
 
         # Compute alibi tensor: check build_alibi_tensor documentation
         past_key_values_length = 0
-        if past_key_values[0] is not None:
-            past_key_values_length = past_key_values[0][0].shape[-2]
+        if use_cache:
+            use_legacy_cache = not isinstance(past_key_values, Cache)
+            if use_legacy_cache:
+                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+            past_key_values_length = past_key_values.get_seq_length()
 
         if self.use_alibi:
             mask = (
@@ -1126,7 +1132,7 @@ class FalconModel(FalconPreTrainedModel):
         # head_mask has shape n_layer x batch x num_heads x N x N
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
-        for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
+        for i, block in enumerate(self.h):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -1138,14 +1144,14 @@ class FalconModel(FalconPreTrainedModel):
                     attention_mask,
                     position_ids,
                     head_mask[i],
-                    layer_past,
+                    past_key_values,
                     use_cache,
                     output_attentions,
                 )
             else:
                 outputs = block(
                     hidden_states,
-                    layer_past=layer_past,
+                    layer_past=past_key_values,
                     attention_mask=attention_mask,
                     position_ids=position_ids,
                     head_mask=head_mask[i],
@@ -1156,7 +1162,7 @@ class FalconModel(FalconPreTrainedModel):
 
             hidden_states = outputs[0]
             if use_cache is True:
-                presents = presents + (outputs[1],)
+                next_decoder_cache = outputs[1]
 
             if output_attentions:
                 all_self_attentions = all_self_attentions + (outputs[2 if use_cache else 1],)
@@ -1167,12 +1173,16 @@ class FalconModel(FalconPreTrainedModel):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
+        next_cache = None
+        if use_cache:
+            next_cache = next_decoder_cache.to_legacy_cache() if use_legacy_cache else next_decoder_cache
+        
         if not return_dict:
-            return tuple(v for v in [hidden_states, presents, all_hidden_states, all_self_attentions] if v is not None)
+            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attentions] if v is not None)
 
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
-            past_key_values=presents,
+            past_key_values=next_cache,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )
@@ -1208,8 +1218,10 @@ class FalconForCausalLM(FalconPreTrainedModel):
         inputs_embeds: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> dict:
+        past_length = 0
         if past_key_values is not None:
-            past_length = past_key_values[0][0].shape[2]
+            past_length = cache_length = past_key_values.get_seq_length()
+            max_cache_length = past_key_values.get_max_length()
 
             # Some generation methods already pass only the last input ID
             if input_ids.shape[1] > past_length:
@@ -1220,6 +1232,15 @@ class FalconForCausalLM(FalconPreTrainedModel):
 
             input_ids = input_ids[:, remove_prefix_length:]
 
+            # If we are about to go beyond the maximum cache length, we need to crop the input attention mask.
+            if (
+                max_cache_length is not None
+                and attention_mask is not None
+                and cache_length + input_ids.shape[1] > max_cache_length
+            ):
+                attention_mask = attention_mask[:, -max_cache_length:]
+
+
         # Note: versions of Falcon with alibi do not use position_ids. It is used with RoPE.
         if not self.transformer.use_alibi and attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation
@@ -1228,7 +1249,7 @@ class FalconForCausalLM(FalconPreTrainedModel):
             if past_key_values:
                 position_ids = position_ids[:, -input_ids.shape[1] :]
 
-        if inputs_embeds is not None and past_key_values is None:
+        if inputs_embeds is not None and past_length == 0:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids}
