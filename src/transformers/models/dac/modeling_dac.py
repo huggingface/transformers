@@ -1,4 +1,3 @@
-
 import math
 
 import numpy as np
@@ -124,8 +123,6 @@ class VectorQuantize(nn.Module):
 
 
 
-
-
 def init_weights(m):
     if isinstance(m, nn.Conv1d):
         nn.init.trunc_normal_(m.weight, std=0.02)
@@ -207,11 +204,11 @@ class DacResidualVectorQuantize(nn.Module):
     ):
         super().__init__()
 
-        input_dim=config.latent_dim,
-        n_codebooks=config.n_codebooks,
-        codebook_size= config.codebook_size,
-        codebook_dim=config.codebook_dim,
-        quantizer_dropout= config.quantizer_dropout,
+        input_dim=config.latent_dim
+        n_codebooks=config.n_codebooks
+        codebook_size= config.codebook_size
+        codebook_dim=config.codebook_dim
+        quantizer_dropout= config.quantizer_dropout
 
         if isinstance(codebook_dim, int):
             codebook_dim = [codebook_dim for _ in range(n_codebooks)]
@@ -426,7 +423,7 @@ class DacEncoder(nn.Module):
         return self.block(x)
 
 
-class DacPretrainedModel(PreTrainedModel):
+class DacPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
@@ -459,5 +456,3 @@ class DacModel(DacPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-
