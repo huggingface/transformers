@@ -486,12 +486,14 @@ class GPTNeoAttention(nn.Module):
                 "lead to errors during the forward call if caching is used. Please make sure to provide a `layer_idx` "
                 "when creating this class."
             )
-            layer_id = 0 # keep 0 for BC when used to get attention_type
+            layer_id = 0  # keep 0 for BC when used to get attention_type
         self.attention_layers = config.attention_layers
         self.attention_type = self.attention_layers[layer_id]
 
         if self.attention_type in ["global", "local"]:
-            self.attention = GPT_NEO_ATTENTION_CLASSES[config._attn_implementation](config, self.attention_type, layer_idx)
+            self.attention = GPT_NEO_ATTENTION_CLASSES[config._attn_implementation](
+                config, self.attention_type, layer_idx
+            )
         else:
             raise NotImplementedError(
                 "Only attn layer types 'global' and 'local' exist, but got `config.attention_layers`: "
@@ -647,7 +649,7 @@ GPT_NEO_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        past_key_values (`Tuple[Tuple[torch.Tensor]]` of length `config.num_layers`):
+        past_key_values (`Cache` or `Tuple[Tuple[torch.Tensor]]` of length `config.num_layers`):
             Contains precomputed hidden-states (key and values in the attention blocks) as computed by the model (see
             `past_key_values` output below). Can be used to speed up sequential decoding. The `input_ids` which have
             their past given to this model should not be passed as `input_ids` as they have already been computed.
@@ -733,7 +735,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Tuple[torch.FloatTensor]] = None,
+        past_key_values: Optional[Union[Cache, Tuple[torch.FloatTensor]]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
@@ -773,7 +775,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
             if use_legacy_cache:
                 past_key_values = DynamicCache.from_legacy_cache(past_key_values)
             past_length = past_key_values.get_seq_length()
-        
+
         if position_ids is None:
             position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)
             position_ids = position_ids.unsqueeze(0)
@@ -856,9 +858,11 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         next_cache = None
         if use_cache:
             next_cache = next_decoder_cache.to_legacy_cache() if use_legacy_cache else next_decoder_cache
-        
+
         if not return_dict:
-            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attentions] if v is not None)
+            return tuple(
+                v for v in [hidden_states, next_cache, all_hidden_states, all_self_attentions] if v is not None
+            )
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
@@ -894,6 +898,7 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
 
     def prepare_inputs_for_generation(self, input_ids, past_key_values=None, inputs_embeds=None, **kwargs):
         token_type_ids = kwargs.get("token_type_ids", None)
+        attention_mask = kwargs.get("attention_mask", None)
         past_length = 0
         # Omit tokens covered by past_key_values
         if past_key_values is not None:
@@ -911,7 +916,7 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
 
             if token_type_ids is not None:
                 token_type_ids = token_type_ids[:, -input_ids.shape[1] :]
-            
+
             # If we are about to go beyond the maximum cache length, we need to crop the input attention mask.
             if (
                 max_cache_length is not None
@@ -920,7 +925,6 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
             ):
                 attention_mask = attention_mask[:, -max_cache_length:]
 
-        attention_mask = kwargs.get("attention_mask", None)
         position_ids = kwargs.get("position_ids", None)
 
         if attention_mask is not None and position_ids is None:
@@ -957,7 +961,7 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Tuple[torch.FloatTensor]] = None,
+        past_key_values: Optional[Union[Cache, Tuple[torch.FloatTensor]]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
@@ -1073,7 +1077,7 @@ class GPTNeoForSequenceClassification(GPTNeoPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Tuple[torch.FloatTensor]] = None,
+        past_key_values: Optional[Union[Cache, Tuple[torch.FloatTensor]]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
@@ -1197,7 +1201,7 @@ class GPTNeoForTokenClassification(GPTNeoPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[Union[Cache, Tuple[Tuple[torch.Tensor]]]] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,

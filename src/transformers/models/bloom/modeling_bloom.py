@@ -24,8 +24,8 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
 from torch.nn import functional as F
 
-from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...cache_utils import Cache, DynamicCache
+from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
@@ -251,7 +251,7 @@ class BloomAttention(nn.Module):
         residual: torch.Tensor,
         alibi: torch.Tensor,
         attention_mask: torch.Tensor,
-        layer_past: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        layer_past: Optional[Cache] = None,
         head_mask: Optional[torch.Tensor] = None,
         use_cache: bool = False,
         output_attentions: bool = False,
@@ -266,7 +266,7 @@ class BloomAttention(nn.Module):
         query_layer = query_layer.transpose(1, 2).reshape(batch_size * self.num_heads, q_length, self.head_dim)
         key_layer = key_layer.transpose(1, 2).reshape(batch_size * self.num_heads, q_length, self.head_dim)
         value_layer = value_layer.transpose(1, 2).reshape(batch_size * self.num_heads, q_length, self.head_dim)
-        
+
         if layer_past is not None:
             key_layer, value_layer = layer_past.update(key_layer, value_layer, self.layer_idx)
 
@@ -381,7 +381,7 @@ class BloomBlock(nn.Module):
         hidden_states: torch.Tensor,
         alibi: torch.Tensor,
         attention_mask: torch.Tensor,
-        layer_past: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        layer_past: Optional[Cache] = None,
         head_mask: Optional[torch.Tensor] = None,
         use_cache: bool = False,
         output_attentions: bool = False,
@@ -472,18 +472,22 @@ class BloomPreTrainedModel(PreTrainedModel):
         num_heads = batch_size_times_num_heads // batch_size
         if use_legacy_cache:
             past_key_value = tuple(
-            (
-                layer_past[0].view(batch_size, num_heads, seq_length, head_dim),
-                layer_past[1].view(batch_size, num_heads, seq_length, head_dim),
+                (
+                    layer_past[0].view(batch_size, num_heads, seq_length, head_dim),
+                    layer_past[1].view(batch_size, num_heads, seq_length, head_dim),
+                )
+                for layer_past in past_key_value
             )
-            for layer_past in past_key_value
-        )
         else:
             # in-place in case of DynamicCache, because we don't assume cache will become a new object after `prepare_input_for_generation`
             for layer_idx in range(len(past_key_value)):
-                past_key_value.key_cache[layer_idx] = past_key_value.key_cache[layer_idx].view(batch_size, num_heads, seq_length, head_dim)
-                past_key_value.value_cache[layer_idx] = past_key_value.value_cache[layer_idx].view(batch_size, num_heads, seq_length, head_dim)
-        return past_key_value 
+                past_key_value.key_cache[layer_idx] = past_key_value.key_cache[layer_idx].view(
+                    batch_size, num_heads, seq_length, head_dim
+                )
+                past_key_value.value_cache[layer_idx] = past_key_value.value_cache[layer_idx].view(
+                    batch_size, num_heads, seq_length, head_dim
+                )
+        return past_key_value
 
     @staticmethod
     def _convert_to_bloom_cache(
@@ -506,9 +510,13 @@ class BloomPreTrainedModel(PreTrainedModel):
         else:
             # in-place in case of DynamicCache, because we don't assume cache will become a new object after `prepare_input_for_generation`
             for layer_idx in range(len(past_key_value)):
-                past_key_value.key_cache[layer_idx] = past_key_value.key_cache[layer_idx].view(batch_size_times_num_heads, seq_length, head_dim)
-                past_key_value.value_cache[layer_idx] = past_key_value.value_cache[layer_idx].view(batch_size_times_num_heads, seq_length, head_dim)
-        return past_key_value 
+                past_key_value.key_cache[layer_idx] = past_key_value.key_cache[layer_idx].view(
+                    batch_size_times_num_heads, seq_length, head_dim
+                )
+                past_key_value.value_cache[layer_idx] = past_key_value.value_cache[layer_idx].view(
+                    batch_size_times_num_heads, seq_length, head_dim
+                )
+        return past_key_value
 
 
 BLOOM_START_DOCSTRING = r"""
@@ -539,7 +547,7 @@ BLOOM_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        past_key_values (`Tuple[Tuple[torch.Tensor]]` of length `config.n_layers`):
+        past_key_values (`Cache` or `Tuple[Tuple[torch.Tensor]]` of length `config.n_layers`):
             Contains precomputed hidden-states (key and values in the attention blocks) as computed by the model (see
             `past_key_values` output below). Can be used to speed up sequential decoding. The `input_ids` which have
             their past given to this model should not be passed as `input_ids` as they have already been computed.
@@ -625,7 +633,7 @@ class BloomModel(BloomPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor, torch.Tensor], ...]] = None,
+        past_key_values: Optional[Union[Cache, Tuple[Tuple[torch.Tensor, torch.Tensor], ...]]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.LongTensor] = None,
@@ -691,7 +699,7 @@ class BloomModel(BloomPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
 
         # Compute alibi tensor: check build_alibi_tensor documentation
-        seq_length_with_past = seq_length + past_length        
+        seq_length_with_past = seq_length + past_length
         if attention_mask is None:
             attention_mask = torch.ones((batch_size, seq_length_with_past), device=hidden_states.device)
         else:
@@ -751,7 +759,9 @@ class BloomModel(BloomPreTrainedModel):
             next_cache = next_decoder_cache.to_legacy_cache() if use_legacy_cache else next_decoder_cache
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attentions] if v is not None)
+            return tuple(
+                v for v in [hidden_states, next_cache, all_hidden_states, all_self_attentions] if v is not None
+            )
 
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
@@ -788,7 +798,7 @@ class BloomForCausalLM(BloomPreTrainedModel):
     def prepare_inputs_for_generation(
         self,
         input_ids: torch.LongTensor,
-        past_key_values: Optional[torch.Tensor] = None,
+        past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         **kwargs,
@@ -844,7 +854,7 @@ class BloomForCausalLM(BloomPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor, torch.Tensor], ...]] = None,
+        past_key_values: Optional[Union[Cache, Tuple[Tuple[torch.Tensor, torch.Tensor], ...]]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
@@ -974,7 +984,7 @@ class BloomForSequenceClassification(BloomPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor, torch.Tensor], ...]] = None,
+        past_key_values: Optional[Union[Cache, Tuple[Tuple[torch.Tensor, torch.Tensor], ...]]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
@@ -1111,7 +1121,7 @@ class BloomForTokenClassification(BloomPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor, torch.Tensor], ...]] = None,
+        past_key_values: Optional[Union[Cache, Tuple[Tuple[torch.Tensor, torch.Tensor], ...]]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
