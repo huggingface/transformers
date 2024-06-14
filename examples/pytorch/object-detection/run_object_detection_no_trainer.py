@@ -240,6 +240,15 @@ def parse_args():
         default="cppe-5",
     )
     parser.add_argument(
+        "--trust_remote_dataset_code",
+        action="store_true",
+        help=(
+            "Whether to trust the execution of code from the dataset defined on the Hub that uses a loading script."
+            " This option should only be set to `True` for repositories you trust and in which you have read the"
+            " code, as it will execute code present on the Hub on your local machine."
+        ),
+    )
+    parser.add_argument(
         "--train_val_split",
         type=float,
         default=0.15,
@@ -445,7 +454,9 @@ def main():
     # Load dataset
     # In distributed training, the load_dataset function guarantees that only one local process can concurrently
     # download the dataset.
-    dataset = load_dataset(args.dataset_name, cache_dir=args.cache_dir)
+    dataset = load_dataset(
+        args.dataset_name, cache_dir=args.cache_dir, trust_remote_code=args.trust_remote_dataset_code
+    )
 
     # If we don't have a validation split, split off a percentage of train as validation.
     args.train_val_split = None if "validation" in dataset.keys() else args.train_val_split

@@ -78,6 +78,15 @@ def parse_args():
         help="The configuration name of the dataset to use (via the datasets library).",
     )
     parser.add_argument(
+        "--trust_remote_dataset_code",
+        action="store_true",
+        help=(
+            "Whether to trust the execution of code from the dataset defined on the Hub that uses a loading script."
+            " This option should only be set to `True` for repositories you trust and in which you have read the"
+            " code, as it will execute code present on the Hub on your local machine."
+        ),
+    )
+    parser.add_argument(
         "--image_column_name",
         type=str,
         default=None,
@@ -441,6 +450,7 @@ def main():
         data_files=args.data_files,
         cache_dir=args.cache_dir,
         token=args.token,
+        trust_remote_code=args.trust_remote_dataset_code,
     )
 
     # If we don't have a validation split, split off a percentage of train as validation.

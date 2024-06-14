@@ -87,6 +87,15 @@ def parse_args():
         default="segments/sidewalk-semantic",
     )
     parser.add_argument(
+        "--trust_remote_dataset_code",
+        action="store_true",
+        help=(
+            "Whether to trust the execution of code from the dataset defined on the Hub that uses a loading script."
+            " This option should only be set to `True` for repositories you trust and in which you have read the"
+            " code, as it will execute code present on the Hub on your local machine."
+        ),
+    )
+    parser.add_argument(
         "--do_reduce_labels",
         action="store_true",
         help="Whether or not to reduce all labels by 1 and replace background by 255.",
@@ -294,7 +303,9 @@ def main():
     # In distributed training, the load_dataset function guarantees that only one local process can concurrently
     # download the dataset.
     # TODO support datasets from local folders
-    dataset = load_dataset(args.dataset_name, cache_dir=args.cache_dir)
+    dataset = load_dataset(
+        args.dataset_name, cache_dir=args.cache_dir, trust_remote_code=args.trust_remote_dataset_code
+    )
 
     # Rename column names to standardized names (only "image" and "label" need to be present)
     if "pixel_values" in dataset["train"].column_names:

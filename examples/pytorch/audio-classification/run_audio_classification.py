@@ -72,6 +72,16 @@ class DataTrainingArguments:
     dataset_config_name: Optional[str] = field(
         default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
     )
+    trust_remote_dataset_code: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Whether to trust the execution of code from the dataset defined on the Hub that uses a loading script."
+                " This option should only be set to `True` for repositories you trust and in which you have read the"
+                " code, as it will execute code present on the Hub on your local machine."
+            )
+        },
+    )
     train_file: Optional[str] = field(
         default=None, metadata={"help": "A file containing the training audio paths and labels."}
     )
@@ -261,12 +271,14 @@ def main():
         data_args.dataset_config_name,
         split=data_args.train_split_name,
         token=model_args.token,
+        trust_remote_code=data_args.trust_remote_dataset_code,
     )
     raw_datasets["eval"] = load_dataset(
         data_args.dataset_name,
         data_args.dataset_config_name,
         split=data_args.eval_split_name,
         token=model_args.token,
+        trust_remote_code=data_args.trust_remote_dataset_code,
     )
 
     if data_args.audio_column_name not in raw_datasets["train"].column_names:
