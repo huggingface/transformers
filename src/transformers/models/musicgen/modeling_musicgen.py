@@ -545,7 +545,6 @@ class MusicgenFlashAttention2(MusicgenAttention):
         )
 
 
-# Copied from transformers.models.bart.modeling_bart.BartSdpaAttention with Bart->Musicgen
 class MusicgenSdpaAttention(MusicgenAttention):
     def forward(
         self,
@@ -572,7 +571,6 @@ class MusicgenSdpaAttention(MusicgenAttention):
                 output_attentions=output_attentions,
             )
 
-        # Ignore copy
         if (
             attention_mask is not None
             and (attention_mask.mean(dim=[1, 2, 3]) <= torch.finfo(attention_mask.dtype).min).any()
