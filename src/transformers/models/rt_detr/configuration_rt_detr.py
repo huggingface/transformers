@@ -244,7 +244,7 @@ class RTDetrConfig(PretrainedConfig):
         # backbone
         if backbone_config is None and backbone is None:
             logger.info(
-                "`backbone_config` is `None`. Initializing the config with the default `RTDetr-ResNet` backbone."
+                "`backbone_config` and `backbone` are `None`. Initializing the config with the default `RTDetr-ResNet` backbone."
             )
             backbone_config = RTDetrResNetConfig(
                 num_channels=3,
