@@ -936,47 +936,7 @@ class SlidingWindowCache(Cache):
         self.value_cache.zero_()
 
 class StaticCacheXLA(StaticCache):
-    """
-    Static Cache class to be used with `torch.compile(model)`.
-
-    Parameters:
-        config (`PretrainedConfig):
-            The configuration file defining the shape-related attributes required to initialize the static cache.
-        max_batch_size (`int`):
-            The maximum batch size with which the model will be used.
-        max_cache_len (`int`):
-            The maximum sequence length with which the model will be used.
-        device (`torch.device`):
-            The device on which the cache should be initialized. Should be the same as the layer.
-        dtype (*optional*, defaults to `torch.float32`):
-            The default `dtype` to use when initializing the layer.
-    """
-
-    def __init__(self, config: PretrainedConfig, max_batch_size: int, max_cache_len: int, device, dtype=None) -> None:
-        super().__init__(config, max_batch_size, max_cache_len, device, dtype)
-        self.max_batch_size = max_batch_size
-        self.max_cache_len = config.max_position_embeddings if max_cache_len is None else max_cache_len
-        # Some model define a custom `head_dim` != config.hidden_size // config.num_attention_heads
-        self.head_dim = (
-            config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
-        )
-
-        self.dtype = dtype if dtype is not None else torch.float32
-        self.num_key_value_heads = (
-            config.num_attention_heads if config.num_key_value_heads is None else config.num_key_value_heads
-        )
-
-        self.key_cache: List[torch.Tensor] = []
-        self.value_cache: List[torch.Tensor] = []
-        cache_shape = (max_batch_size, self.num_key_value_heads, self.max_cache_len, self.head_dim)
-        for _ in range(config.num_hidden_layers):
-            # Note: `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
-            # breaks when updating the cache.
-            new_layer_key_cache = torch.zeros(cache_shape, dtype=self.dtype, device=device)
-            new_layer_value_cache = torch.zeros(cache_shape, dtype=self.dtype, device=device)
-            self.key_cache.append(new_layer_key_cache)
-            self.value_cache.append(new_layer_value_cache)
-
+    """ XLA optimized Implementation of StaticCache """
     def update(
         self,
         key_states: torch.Tensor,
@@ -1007,11 +967,8 @@ class StaticCacheXLA(StaticCache):
         k_out = self.key_cache[layer_idx]
         v_out = self.value_cache[layer_idx]
 
-        k_out = k_out.index_copy(2, cache_position, key_states)
-        v_out = v_out.index_copy(2, cache_position, value_states)
-
-        self.key_cache[layer_idx] = k_out
-        self.value_cache[layer_idx] = v_out
+        k_out.index_copy_(2, cache_position, key_states)
+        v_out.index_copy_(2, cache_position, value_states)
 
         return k_out, v_out
 
@@ -1020,7 +977,6 @@ class StaticCacheXLA(StaticCache):
         # Occupied cache == any slot in the 3rd dim (sequence length) holds a non-zero value. To save on compute, let's
         # limit the check to the first batch member and head dimension.
         # TODO: deprecate this function in favor of `cache_position`
-        logger.debug("Use cache_position parameter in your model for better performance.")
         key_cache = self.key_cache[layer_idx]
         device = key_cache.device
 
@@ -1028,14 +984,3 @@ class StaticCacheXLA(StaticCache):
         head = item.index_select(1, torch.tensor(0, device=device))
 
         return head.any(dim=-1).sum()
-
-    def get_max_length(self) -> Optional[int]:
-        """Returns the maximum sequence length of the cached states."""
-        return self.max_cache_len
-
-    def reset(self):
-        """Resets the cache values while preserving the objects"""
-        for layer_idx in range(len(self.key_cache)):
-            # In-place ops prevent breaking the static address
-            self.key_cache[layer_idx].zero_()
-            self.value_cache[layer_idx].zero_()
