@@ -202,7 +202,6 @@ Flax), PyTorch, and/or TensorFlow.
 |                       [MGP-STR](model_doc/mgp-str)                       |       ✅        |         ❌         |      ❌      |
 |                       [Mistral](model_doc/mistral)                       |       ✅        |         ✅         |      ✅      |
 |                       [Mixtral](model_doc/mixtral)                       |       ✅        |         ❌         |      ❌      |
-|                     [MixtureOfTokens](model_doc/mot)                     |       ✅        |         ❌         |      ❌      |
 |                         [mLUKE](model_doc/mluke)                         |       ✅        |         ❌         |      ❌      |
 |                           [MMS](model_doc/mms)                           |       ✅        |         ✅         |      ✅      |
 |                    [MobileBERT](model_doc/mobilebert)                    |       ✅        |         ✅         |      ❌      |
@@ -210,6 +209,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                  [MobileNetV2](model_doc/mobilenet_v2)                   |       ✅        |         ❌         |      ❌      |
 |                     [MobileViT](model_doc/mobilevit)                     |       ✅        |         ✅         |      ❌      |
 |                   [MobileViTV2](model_doc/mobilevitv2)                   |       ✅        |         ❌         |      ❌      |
+|                     [MoTLMHeadModel](model_doc/mot)                      |       ✅        |         ❌         |      ❌      |
 |                         [MPNet](model_doc/mpnet)                         |       ✅        |         ✅         |      ❌      |
 |                           [MPT](model_doc/mpt)                           |       ✅        |         ❌         |      ❌      |
 |                           [MRA](model_doc/mra)                           |       ✅        |         ❌         |      ❌      |

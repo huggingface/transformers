@@ -142,7 +142,7 @@ def load_tf_weights_in_mot(model, config, mot_checkpoint_path):
 class MoTAttention(nn.Module):
     def __init__(self, config, is_cross_attention=False, layer_idx=None):
         super().__init__()
-
+        self.config = config
         max_positions = config.max_position_embeddings
         self.register_buffer(
             "bias",
@@ -180,6 +180,7 @@ class MoTAttention(nn.Module):
 
         self.attn_dropout = nn.Dropout(config.attn_pdrop)
         self.resid_dropout = nn.Dropout(config.resid_pdrop)
+        self.is_causal = True
 
         self.pruned_heads = set()
 
@@ -595,13 +596,14 @@ class MoTBlock(nn.Module):
         super().__init__()
         hidden_size = config.hidden_size
         inner_dim = config.n_inner if config.n_inner is not None else 4 * hidden_size
+        attention_class = MoT_ATTENTION_CLASSES[config._attn_implementation]
 
         self.ln_1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
-        self.attn = MoTAttention(config, layer_idx=layer_idx)
+        self.attn = attention_class(config=config, layer_idx=layer_idx)
         self.ln_2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
         if config.add_cross_attention:
-            self.crossattention = MoTAttention(config, is_cross_attention=True, layer_idx=layer_idx)
+            self.crossattention = attention_class(config=config, is_cross_attention=True, layer_idx=layer_idx)
             self.ln_cross_attn = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
         self.mlp = MoTMLP(inner_dim, config)
@@ -682,6 +684,7 @@ class MoTPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["MoTBlock"]
     _skip_keys_device_placement = "past_key_values"
+    _supports_flash_attn_2 = True
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)

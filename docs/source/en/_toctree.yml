@@ -446,12 +446,12 @@
         title: Mistral
       - local: model_doc/mixtral
         title: Mixtral
+      - local: model_doc/mot
+        title: MixtureOfTokens
       - local: model_doc/mluke
         title: mLUKE
       - local: model_doc/mobilebert
         title: MobileBERT
-      - local: model_doc/mot
-        title: MixtureOfTokens
       - local: model_doc/mpnet
         title: MPNet
       - local: model_doc/mpt

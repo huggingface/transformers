@@ -557,10 +557,6 @@ _import_structure = {
     "models.mobilenet_v2": ["MobileNetV2Config"],
     "models.mobilevit": ["MobileViTConfig"],
     "models.mobilevitv2": ["MobileViTV2Config"],
-    "models.mpnet": [
-        "MPNetConfig",
-        "MPNetTokenizer",
-    ],
     "models.mot": [
         "MoTConfig",
         "MoTForQuestionAnswering",
@@ -568,7 +564,11 @@ _import_structure = {
         "MoTForTokenClassification",
         "MoTLMHeadModel",
         "MoTModel",
-        "MoTPreTrainedModel"
+        "MoTPreTrainedModel",
+    ],
+    "models.mpnet": [
+        "MPNetConfig",
+        "MPNetTokenizer",
     ],
     "models.mpt": ["MptConfig"],
     "models.mra": ["MraConfig"],

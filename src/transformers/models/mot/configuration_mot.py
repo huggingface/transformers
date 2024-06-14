@@ -73,37 +73,6 @@ class MoTConfig(PretrainedConfig):
             The epsilon to use in the layer normalization layers.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        summary_type (`string`, *optional*, defaults to `"cls_index"`):
-            Argument used when doing sequence summary, used in the models [`MoTDoubleHeadsModel`] and
-            [`TFMoTDoubleHeadsModel`].
-
-            Has to be one of the following options:
-
-                - `"last"`: Take the last token hidden state (like XLNet).
-                - `"first"`: Take the first token hidden state (like BERT).
-                - `"mean"`: Take the mean of all tokens hidden states.
-                - `"cls_index"`: Supply a Tensor of classification token position (like GPT/GPT-2).
-                - `"attn"`: Not implemented now, use multi-head attention.
-        summary_use_proj (`bool`, *optional*, defaults to `True`):
-            Argument used when doing sequence summary, used in the models [`MoTDoubleHeadsModel`] and
-            [`TFMoTDoubleHeadsModel`].
-
-            Whether or not to add a projection after the vector extraction.
-        summary_activation (`str`, *optional*):
-            Argument used when doing sequence summary. Used in for the multiple choice head in
-            [`MoTDoubleHeadsModel`].
-
-            Pass `"tanh"` for a tanh activation to the output, any other value will result in no activation.
-        summary_proj_to_labels (`bool`, *optional*, defaults to `True`):
-            Argument used when doing sequence summary, used in the models [`MoTDoubleHeadsModel`] and
-            [`TFMoTDoubleHeadsModel`].
-
-            Whether the projection outputs should have `config.num_labels` or `config.hidden_size` classes.
-        summary_first_dropout (`float`, *optional*, defaults to 0.1):
-            Argument used when doing sequence summary, used in the models [`MoTDoubleHeadsModel`] and
-            [`TFMoTDoubleHeadsModel`].
-
-            The dropout ratio to be used after the projection and activation.
         scale_attn_weights (`bool`, *optional*, defaults to `True`):
             Scale attention weights by dividing by sqrt(hidden_size)..
         use_cache (`bool`, *optional*, defaults to `True`):
@@ -164,11 +133,6 @@ class MoTConfig(PretrainedConfig):
         attn_pdrop=0.1,
         layer_norm_epsilon=1e-5,
         initializer_range=0.02,
-        summary_type="cls_index",
-        summary_use_proj=True,
-        summary_activation=None,
-        summary_proj_to_labels=True,
-        summary_first_dropout=0.1,
         scale_attn_weights=True,
         use_cache=True,
         bos_token_id=50256,
@@ -195,11 +159,6 @@ class MoTConfig(PretrainedConfig):
         self.attn_pdrop = attn_pdrop
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_range = initializer_range
-        self.summary_type = summary_type
-        self.summary_use_proj = summary_use_proj
-        self.summary_activation = summary_activation
-        self.summary_first_dropout = summary_first_dropout
-        self.summary_proj_to_labels = summary_proj_to_labels
         self.scale_attn_weights = scale_attn_weights
         self.use_cache = use_cache
         self.scale_attn_by_inverse_layer_idx = scale_attn_by_inverse_layer_idx
