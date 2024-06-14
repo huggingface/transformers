@@ -157,7 +157,6 @@ class TestDeepSpeedWav2Vec2(TestCasePlus):
             --dataset_config_name clean
             --train_split_name validation
             --validation_split_name validation
-            --trust_remote_dataset_code
             --output_dir {output_dir}
             --num_train_epochs {str(num_train_epochs)}
             --per_device_train_batch_size 2
