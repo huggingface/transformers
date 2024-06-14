@@ -15,10 +15,8 @@ import argparse
 from pathlib import Path
 from typing import Tuple
 
-import cv2
-import numpy as np
 import torch
-from PIL import Image
+from datasets import load_dataset
 
 from transformers import (
     AutoConfig,
@@ -159,89 +157,9 @@ def add_keypoint_detector_state_dict(superglue_state_dict, keypoint_detector_sta
     return superglue_state_dict
 
 
-def process_resize(w, h, resize):
-    assert len(resize) > 0 and len(resize) <= 2
-    if len(resize) == 1 and resize[0] > -1:
-        scale = resize[0] / max(h, w)
-        w_new, h_new = int(round(w * scale)), int(round(h * scale))
-    elif len(resize) == 1 and resize[0] == -1:
-        w_new, h_new = w, h
-    else:  # len(resize) == 2:
-        w_new, h_new = resize[0], resize[1]
-
-    # Issue warning if resolution is too small or too large.
-    if max(w_new, h_new) < 160:
-        print("Warning: input resolution is very small, results may vary")
-    elif max(w_new, h_new) > 2000:
-        print("Warning: input resolution is very large, results may vary")
-
-    return w_new, h_new
-
-
-def frame2tensor(frame, device):
-    return torch.from_numpy(frame / 255.0).float()[None, None].to(device)
-
-
-def read_image(path, device, resize, rotation, resize_float):
-    image = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
-    if image is None:
-        return None, None, None
-    w, h = image.shape[1], image.shape[0]
-    w_new, h_new = process_resize(w, h, resize)
-    scales = (float(w) / float(w_new), float(h) / float(h_new))
-
-    if resize_float:
-        image = cv2.resize(image.astype("float32"), (w_new, h_new))
-    else:
-        image = cv2.resize(image, (w_new, h_new)).astype("float32")
-
-    if rotation != 0:
-        image = np.rot90(image, k=rotation)
-        if rotation % 2:
-            scales = scales[::-1]
-
-    # inp = frame2tensor(image, device)
-    return image[None]
-
-
-def prepare_imgs_as_original():
-    url = "tests/fixtures/tests_samples/image_matching/tower_bridge_78916675_4568141288.jpg"
-    im1 = read_image(url, "cuda", [640, 480], 0, False)
-    url = "tests/fixtures/tests_samples/image_matching/tower_bridge_19481797_2295892421.jpg"
-    im2 = read_image(url, "cuda", [640, 480], 0, False)
-    url = "tests/fixtures/tests_samples/image_matching/tower_bridge_49190386_5209386933.jpg"
-    im3 = read_image(url, "cuda", [640, 480], 0, False)
-    return [im1, im2, im3, im2]
-
-
-def prepare_imgs_with_cv2_grayscale():
-    url = "tests/fixtures/tests_samples/image_matching/tower_bridge_78916675_4568141288.jpg"
-    im1 = cv2.imread(url, cv2.IMREAD_GRAYSCALE)[None]
-    url = "tests/fixtures/tests_samples/image_matching/tower_bridge_19481797_2295892421.jpg"
-    im2 = cv2.imread(url, cv2.IMREAD_GRAYSCALE)[None]
-    url = "tests/fixtures/tests_samples/image_matching/tower_bridge_49190386_5209386933.jpg"
-    im3 = cv2.imread(url, cv2.IMREAD_GRAYSCALE)[None]
-    return [im1, im2, im3, im2]
-
-
-def prepare_imgs_with_cv2_rgb():
-    url = "tests/fixtures/tests_samples/image_matching/tower_bridge_78916675_4568141288.jpg"
-    im1 = cv2.cvtColor(cv2.imread(url, cv2.IMREAD_COLOR), cv2.COLOR_BGR2RGB)
-    url = "tests/fixtures/tests_samples/image_matching/tower_bridge_19481797_2295892421.jpg"
-    im2 = cv2.cvtColor(cv2.imread(url, cv2.IMREAD_COLOR), cv2.COLOR_BGR2RGB)
-    url = "tests/fixtures/tests_samples/image_matching/tower_bridge_49190386_5209386933.jpg"
-    im3 = cv2.cvtColor(cv2.imread(url, cv2.IMREAD_COLOR), cv2.COLOR_BGR2RGB)
-    return [im1, im2, im3, im2]
-
-
 def prepare_imgs_for_image_processor():
-    url = "tests/fixtures/tests_samples/image_matching/tower_bridge_78916675_4568141288.jpg"
-    im1 = Image.open(url)
-    url = "tests/fixtures/tests_samples/image_matching/tower_bridge_19481797_2295892421.jpg"
-    im2 = Image.open(url)
-    url = "tests/fixtures/tests_samples/image_matching/tower_bridge_49190386_5209386933.jpg"
-    im3 = Image.open(url)
-    return [im1, im2, im3, im2]
+    dataset = load_dataset("stevenbucaille/image_matching", split="train")
+    return [dataset[0]["image"], dataset[1]["image"], dataset[2]["image"], dataset[1]["image"]]
 
 
 def extract_keypoint_information_from_image_point_description_output(
@@ -286,7 +204,6 @@ def convert_superglue_checkpoint(checkpoint_url, pytorch_dump_folder_path, save_
     model.eval()
     print("Successfully loaded weights in the model")
 
-    ## USE REGULAR IMAGE PROCESSOR FOR INFERENCE
     images = prepare_imgs_for_image_processor()
     preprocessor = SuperGlueImageProcessor()
     inputs = preprocessor(images=images, return_tensors="pt")
@@ -294,37 +211,7 @@ def convert_superglue_checkpoint(checkpoint_url, pytorch_dump_folder_path, save_
 
     output = model(**inputs, return_dict=True)
 
-    print("Number of matching keypoints using image processor")
-    print(torch.sum(output.matches[0][0] != -1))
-
-    images = prepare_imgs_with_cv2_rgb()
-    preprocessor = SuperGlueImageProcessor()
-    inputs = preprocessor(images=images, return_tensors="pt")
-    inputs.to("cuda")
-
-    output = model(**inputs, return_dict=True)
-
-    print("Number of matching keypoints using cv2 grayscale")
-    print(torch.sum(output.matches[0][0] != -1))
-
-    images = prepare_imgs_with_cv2_grayscale()
-    preprocessor = SuperGlueImageProcessor()
-    inputs = preprocessor(images=images, return_tensors="pt")
-    inputs.to("cuda")
-
-    output = model(**inputs, return_dict=True)
-
-    print("Number of matching keypoints using cv2 rgb")
-    print(torch.sum(output.matches[0][0] != -1))
-
-    images = prepare_imgs_as_original()
-    preprocessor = SuperGlueImageProcessor()
-    inputs = preprocessor(images=images, return_tensors="pt")
-    inputs.to("cuda")
-
-    output = model(**inputs, return_dict=True)
-
-    print("Number of matching keypoints using original function")
+    print("Number of matching keypoints")
     print(torch.sum(output.matches[0][0] != -1))
 
     if save_model:
