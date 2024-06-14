@@ -90,6 +90,7 @@ class BlipImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = BlipImageProcessor if is_vision_available() else None
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = BlipImageProcessingTester(self)
 
     @property
@@ -112,6 +113,7 @@ class BlipImageProcessingTestFourChannels(ImageProcessingTestMixin, unittest.Tes
     image_processing_class = BlipImageProcessor if is_vision_available() else None
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = BlipImageProcessingTester(self, num_channels=4)
         self.expected_encoded_image_num_channels = 3
 

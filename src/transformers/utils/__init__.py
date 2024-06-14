@@ -21,6 +21,7 @@ from packaging import version
 
 from .. import __version__
 from .backbone_utils import BackboneConfigMixin, BackboneMixin
+from .chat_template_utils import DocstringParsingException, TypeHintParsingException, get_json_schema
 from .constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from .doc import (
     add_code_sample_docstrings,
@@ -41,6 +42,7 @@ from .generic import (
     cached_property,
     can_return_loss,
     expand_dims,
+    filter_out_non_signature_kwargs,
     find_labels,
     flatten_dict,
     infer_framework,

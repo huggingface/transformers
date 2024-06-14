@@ -146,6 +146,7 @@ class GroundingDinoImageProcessingTest(AnnotationFormatTestMixin, ImageProcessin
     image_processing_class = GroundingDinoImageProcessor if is_vision_available() else None
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = GroundingDinoImageProcessingTester(self)
 
     @property
