@@ -174,7 +174,6 @@ class BartModelTester:
 
     def create_and_check_decoder_model_past_large_inputs(self, config, inputs_dict):
         model = BartModel(config=config).get_decoder().to(torch_device).eval()
-        model.config.is_encoder_decoder = False
         input_ids = inputs_dict["input_ids"]
         attention_mask = inputs_dict["attention_mask"]
         head_mask = inputs_dict["head_mask"]
@@ -1462,9 +1461,9 @@ class BartStandaloneDecoderModelTester:
 
         # get two different outputs
         output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
-        output_from_past = model(
-            next_tokens, attention_mask=attn_mask, past_key_values=past_key_values, use_cache=True
-        )["last_hidden_state"]
+        output_from_past = model(next_tokens, attention_mask=attn_mask, past_key_values=past_key_values)[
+            "last_hidden_state"
+        ]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()

@@ -26,7 +26,6 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache
 from ...modeling_attn_mask_utils import (
     _prepare_4d_attention_mask,
     _prepare_4d_attention_mask_for_sdpa,
@@ -155,7 +154,6 @@ class BartAttention(nn.Module):
         is_decoder: bool = False,
         bias: bool = True,
         is_causal: bool = False,
-        layer_idx: int = None,
         config: Optional[BartConfig] = None,
     ):
         super().__init__()
@@ -164,14 +162,6 @@ class BartAttention(nn.Module):
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
         self.config = config
-
-        if layer_idx is None and is_decoder:
-            logger.warning_once(
-                f"Instantiating a decoder {self.__class__.__name__} without passing `layer_idx` is not recommended and "
-                "will to errors during the forward call, if caching is used. Please make sure to provide a `layer_idx` "
-                "when creating this class."
-            )
-        self.layer_idx = layer_idx
 
         if (self.head_dim * num_heads) != self.embed_dim:
             raise ValueError(
@@ -194,7 +184,7 @@ class BartAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
@@ -209,27 +199,42 @@ class BartAttention(nn.Module):
 
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
-
-        if is_cross_attention:
-            # check that the `sequence_length` of the `past_key_value` is the same as
-            # the provided `key_value_states` to support prefix tuning
-            # try to reuse k,v, cross_attentions. Always layer_idx=0 because there's only
-            # one encoder_hidden_states for all decoder layers
-            if past_key_value is None:
-                key_states = self._shape(self.k_proj(key_value_states), -1, bsz)
-                value_states = self._shape(self.v_proj(key_value_states), -1, bsz)
-            elif past_key_value.get_seq_length(self.layer_idx) == key_value_states.shape[1]:
-                key_states = past_key_value.key_cache[self.layer_idx]
-                value_states = past_key_value.value_cache[self.layer_idx]
-            else:
-                key_states = self._shape(self.k_proj(key_value_states), -1, bsz)
-                value_states = self._shape(self.v_proj(key_value_states), -1, bsz)
-                key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx)
-        else:
+        # get key, value proj
+        # `past_key_value[0].shape[2] == key_value_states.shape[1]`
+        # is checking that the `sequence_length` of the `past_key_value` is the same as
+        # the provided `key_value_states` to support prefix tuning
+        if (
+            is_cross_attention
+            and past_key_value is not None
+            and past_key_value[0].shape[2] == key_value_states.shape[1]
+        ):
+            # reuse k,v, cross_attentions
+            key_states = past_key_value[0]
+            value_states = past_key_value[1]
+        elif is_cross_attention:
+            # cross_attentions
+            key_states = self._shape(self.k_proj(key_value_states), -1, bsz)
+            value_states = self._shape(self.v_proj(key_value_states), -1, bsz)
+        elif past_key_value is not None:
+            # reuse k, v, self_attention
             key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
             value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
-            if past_key_value is not None:
-                key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx)
+            key_states = torch.cat([past_key_value[0], key_states], dim=2)
+            value_states = torch.cat([past_key_value[1], value_states], dim=2)
+        else:
+            # self_attention
+            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
+            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+
+        if self.is_decoder:
+            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
+            # Further calls to cross_attention layer can then reuse all cross-attention
+            # key/value_states (first "if" case)
+            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
+            # all previous decoder key/value_states. Further calls to uni-directional self-attention
+            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
+            # if encoder bi-directional self-attention `past_key_value` is always `None`
+            past_key_value = (key_states, value_states)
 
         proj_shape = (bsz * self.num_heads, -1, self.head_dim)
         query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
@@ -237,7 +242,6 @@ class BartAttention(nn.Module):
         value_states = value_states.reshape(*proj_shape)
 
         src_len = key_states.size(1)
-
         attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
 
         if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
@@ -313,6 +317,9 @@ class BartFlashAttention2(BartAttention):
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
 
+    def _reshape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
+        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim)
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -334,30 +341,46 @@ class BartFlashAttention2(BartAttention):
 
         # get query proj
         query_states = self._reshape(self.q_proj(hidden_states), -1, bsz)
-
-        if is_cross_attention:
-            # check that the `sequence_length` of the `past_key_value` is the same as
-            # the provided `key_value_states` to support prefix tuning
-            # try to reuse k,v, cross_attentions. Always layer_idx=0 because there's only
-            # one encoder_hidden_states for all decoder layers
-            if past_key_value is None:
-                key_states = self._shape(self.k_proj(key_value_states), -1, bsz)
-                value_states = self._shape(self.v_proj(key_value_states), -1, bsz)
-            elif past_key_value.get_seq_length(self.layer_idx) == key_value_states.shape[1]:
-                key_states = past_key_value.key_cache[self.layer_idx]
-                value_states = past_key_value.value_cache[self.layer_idx]
-            else:
-                key_states = self._shape(self.k_proj(key_value_states), -1, bsz)
-                value_states = self._shape(self.v_proj(key_value_states), -1, bsz)
-                key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx)
+        # get key, value proj
+        # `past_key_value[0].shape[2] == key_value_states.shape[1]`
+        # is checking that the `sequence_length` of the `past_key_value` is the same as
+        # the provided `key_value_states` to support prefix tuning
+        if (
+            is_cross_attention
+            and past_key_value is not None
+            and past_key_value[0].shape[2] == key_value_states.shape[1]
+        ):
+            # reuse k,v, cross_attentions
+            key_states = past_key_value[0].transpose(1, 2)
+            value_states = past_key_value[1].transpose(1, 2)
+        elif is_cross_attention:
+            # cross_attentions
+            key_states = self._reshape(self.k_proj(key_value_states), -1, bsz)
+            value_states = self._reshape(self.v_proj(key_value_states), -1, bsz)
+        elif past_key_value is not None:
+            # reuse k, v, self_attention
+            key_states = self._reshape(self.k_proj(hidden_states), -1, bsz)
+            value_states = self._reshape(self.v_proj(hidden_states), -1, bsz)
+            key_states = torch.cat([past_key_value[0].transpose(1, 2), key_states], dim=1)
+            value_states = torch.cat([past_key_value[1].transpose(1, 2), value_states], dim=1)
         else:
-            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
-            if past_key_value is not None:
-                key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx)
+            # self_attention
+            key_states = self._reshape(self.k_proj(hidden_states), -1, bsz)
+            value_states = self._reshape(self.v_proj(hidden_states), -1, bsz)
 
-        key_states = key_states.transpose(1, 2)
-        value_states = value_states.transpose(1, 2)
+        if self.is_decoder:
+            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
+            # Further calls to cross_attention layer can then reuse all cross-attention
+            # key/value_states (first "if" case)
+            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
+            # all previous decoder key/value_states. Further calls to uni-directional self-attention
+            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
+            # if encoder bi-directional self-attention `past_key_value` is always `None`
+            past_key_value = (key_states.transpose(1, 2), value_states.transpose(1, 2))
+
+        kv_seq_len = key_states.shape[-2]
+        if past_key_value is not None:
+            kv_seq_len += past_key_value[0].shape[-2]
 
         # In PEFT, usually we cast the layer norms in float32 for training stability reasons
         # therefore the input hidden states gets silently casted in float32. Hence, we need
@@ -531,27 +554,42 @@ class BartSdpaAttention(BartAttention):
 
         # get query proj
         query_states = self.q_proj(hidden_states)
-
-        if is_cross_attention:
-            # check that the `sequence_length` of the `past_key_value` is the same as
-            # the provided `key_value_states` to support prefix tuning
-            # try to reuse k,v, cross_attentions. Always layer_idx=0 because there's only
-            # one encoder_hidden_states for all decoder layers
-            if past_key_value is None:
-                key_states = self._shape(self.k_proj(key_value_states), -1, bsz)
-                value_states = self._shape(self.v_proj(key_value_states), -1, bsz)
-            elif past_key_value.get_seq_length(self.layer_idx) == key_value_states.shape[1]:
-                key_states = past_key_value.key_cache[self.layer_idx]
-                value_states = past_key_value.value_cache[self.layer_idx]
-            else:
-                key_states = self._shape(self.k_proj(key_value_states), -1, bsz)
-                value_states = self._shape(self.v_proj(key_value_states), -1, bsz)
-                key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx)
-        else:
+        # get key, value proj
+        # `past_key_value[0].shape[2] == key_value_states.shape[1]`
+        # is checking that the `sequence_length` of the `past_key_value` is the same as
+        # the provided `key_value_states` to support prefix tuning
+        if (
+            is_cross_attention
+            and past_key_value is not None
+            and past_key_value[0].shape[2] == key_value_states.shape[1]
+        ):
+            # reuse k,v, cross_attentions
+            key_states = past_key_value[0]
+            value_states = past_key_value[1]
+        elif is_cross_attention:
+            # cross_attentions
+            key_states = self._shape(self.k_proj(key_value_states), -1, bsz)
+            value_states = self._shape(self.v_proj(key_value_states), -1, bsz)
+        elif past_key_value is not None:
+            # reuse k, v, self_attention
             key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
             value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
-            if past_key_value is not None:
-                key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx)
+            key_states = torch.cat([past_key_value[0], key_states], dim=2)
+            value_states = torch.cat([past_key_value[1], value_states], dim=2)
+        else:
+            # self_attention
+            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
+            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+
+        if self.is_decoder:
+            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
+            # Further calls to cross_attention layer can then reuse all cross-attention
+            # key/value_states (first "if" case)
+            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
+            # all previous decoder key/value_states. Further calls to uni-directional self-attention
+            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
+            # if encoder bi-directional self-attention `past_key_value` is always `None`
+            past_key_value = (key_states, value_states)
 
         query_states = self._shape(query_states, tgt_len, bsz)
 
@@ -605,7 +643,6 @@ class BartEncoderLayer(nn.Module):
             num_heads=config.encoder_attention_heads,
             dropout=config.attention_dropout,
             config=config,
-            layer_idx=0,
         )
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.dropout = config.dropout
@@ -667,10 +704,9 @@ class BartEncoderLayer(nn.Module):
 
 
 class BartDecoderLayer(nn.Module):
-    def __init__(self, config: BartConfig, layer_idx: int = None):
+    def __init__(self, config: BartConfig):
         super().__init__()
         self.embed_dim = config.d_model
-        self.config = config
 
         self.self_attn = BART_ATTENTION_CLASSES[config._attn_implementation](
             embed_dim=self.embed_dim,
@@ -678,7 +714,6 @@ class BartDecoderLayer(nn.Module):
             dropout=config.attention_dropout,
             is_decoder=True,
             is_causal=True,
-            layer_idx=layer_idx,
             config=config,
         )
         self.dropout = config.dropout
@@ -691,7 +726,6 @@ class BartDecoderLayer(nn.Module):
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
             is_decoder=True,
-            layer_idx=layer_idx,
             config=config,
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
@@ -731,14 +765,11 @@ class BartDecoderLayer(nn.Module):
         """
         residual = hidden_states
 
-        # decoder self-attention Cache object is at position 0 in Encoder-Decoder setting, otherwise it's simply one Cache object
-        # cross_attn Cache object is at positions 1 of past_key_value tuple
-        self_attn_past_key_value = cross_attn_past_key_value = None
-        if past_key_value is not None:
-            self_attn_past_key_value = past_key_value[0] if self.config.is_encoder_decoder else past_key_value
-            cross_attn_past_key_value = past_key_value[1] if self.config.is_encoder_decoder else None
-
-        hidden_states, self_attn_weights, past_key_values = self.self_attn(
+        # Self Attention
+        # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
+        self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
+        # add present self-attn cache to positions 1,2 of present_key_value tuple
+        hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
             past_key_value=self_attn_past_key_value,
             attention_mask=attention_mask,
@@ -750,11 +781,14 @@ class BartDecoderLayer(nn.Module):
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Cross-Attention Block
+        cross_attn_present_key_value = None
         cross_attn_weights = None
         if encoder_hidden_states is not None:
             residual = hidden_states
 
-            hidden_states, cross_attn_weights, cross_attn_past_key_value = self.encoder_attn(
+            # cross_attn cached key/values tuple is at positions 3,4 of present_key_value tuple
+            cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
+            hidden_states, cross_attn_weights, cross_attn_present_key_value = self.encoder_attn(
                 hidden_states=hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
@@ -766,9 +800,8 @@ class BartDecoderLayer(nn.Module):
             hidden_states = residual + hidden_states
             hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
-            # add self-attn and cross-attn in a past_key_values tuple, otherwise set to None (not tuple of Nones)
-            if past_key_values is not None and cross_attn_past_key_value is not None:
-                past_key_values = (past_key_values, cross_attn_past_key_value)
+            # add cross-attn to positions 3,4 of present_key_value tuple
+            present_key_value = present_key_value + cross_attn_present_key_value
 
         # Fully Connected
         residual = hidden_states
@@ -785,7 +818,7 @@ class BartDecoderLayer(nn.Module):
             outputs += (self_attn_weights, cross_attn_weights)
 
         if use_cache:
-            outputs += (past_key_values,)
+            outputs += (present_key_value,)
 
         return outputs
 
@@ -823,7 +856,6 @@ class BartPreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
     _supports_sdpa = True
-    _supports_cache_class = True
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -1236,7 +1268,7 @@ class BartDecoder(BartPreTrainedModel):
             config.max_position_embeddings,
             config.d_model,
         )
-        self.layers = nn.ModuleList([BartDecoderLayer(config, i) for i in range(config.decoder_layers)])
+        self.layers = nn.ModuleList([BartDecoderLayer(config) for _ in range(config.decoder_layers)])
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
         self._use_sdpa = config._attn_implementation == "sdpa"
 
@@ -1352,31 +1384,8 @@ class BartDecoder(BartPreTrainedModel):
         else:
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
-        # past_key_values in encpder-decoder models is a tuple of cache objects
-        # first element holds past_kv for decoder attn, and the second for cross attn
-        past_key_values_length = 0
-        if use_cache:
-            use_legacy_cache = (
-                not (past_key_values is not None and isinstance(past_key_values[0], Cache))
-                if self.config.is_encoder_decoder
-                else not isinstance(past_key_values, Cache)
-            )
-            if self.config.is_encoder_decoder and use_legacy_cache:
-                self_attn = cross_attn = None
-                if past_key_values is not None:
-                    self_attn = [cache[:2] for cache in past_key_values]
-                    cross_attn = [cache[2:] for cache in past_key_values]
-                past_key_values = (
-                    DynamicCache.from_legacy_cache(self_attn),
-                    DynamicCache.from_legacy_cache(cross_attn),
-                )
-            elif use_legacy_cache:
-                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-            past_key_values_length = (
-                past_key_values.get_seq_length()
-                if not self.config.is_encoder_decoder
-                else past_key_values[0].get_seq_length()
-            )
+        # past_key_values_length
+        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input)
@@ -1438,7 +1447,7 @@ class BartDecoder(BartPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
         all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
-        next_decoder_cache = None
+        next_decoder_cache = () if use_cache else None
 
         # check if head_mask/cross_attn_head_mask has a correct number of layers specified if desired
         for attn_mask, mask_name in zip([head_mask, cross_attn_head_mask], ["head_mask", "cross_attn_head_mask"]):
@@ -1457,6 +1466,8 @@ class BartDecoder(BartPreTrainedModel):
                 dropout_probability = torch.rand([])
                 if dropout_probability < self.layerdrop:
                     continue
+
+            past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
@@ -1481,14 +1492,14 @@ class BartDecoder(BartPreTrainedModel):
                     cross_attn_layer_head_mask=(
                         cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None
                     ),
-                    past_key_value=past_key_values,
+                    past_key_value=past_key_value,
                     output_attentions=output_attentions,
                     use_cache=use_cache,
                 )
             hidden_states = layer_outputs[0]
 
             if use_cache:
-                next_decoder_cache = layer_outputs[3 if output_attentions else 1]
+                next_decoder_cache += (layer_outputs[3 if output_attentions else 1],)
 
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
@@ -1500,19 +1511,7 @@ class BartDecoder(BartPreTrainedModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        next_cache = None
-        if use_cache:
-            if not use_legacy_cache:
-                next_cache = next_decoder_cache
-            else:
-                if self.config.is_encoder_decoder:
-                    num_hidden_layers = len(next_decoder_cache[0].key_cache)
-                    self_attn_cache = next_decoder_cache[0].to_legacy_cache()
-                    cross_attn_cache = next_decoder_cache[1].to_legacy_cache()
-                    next_cache = tuple((*self_attn_cache[i], *cross_attn_cache[i]) for i in range(num_hidden_layers))
-                else:
-                    next_cache = next_decoder_cache.to_legacy_cache()
-
+        next_cache = next_decoder_cache if use_cache else None
         if not return_dict:
             return tuple(
                 v
@@ -1801,13 +1800,9 @@ class BartForConditionalGeneration(BartPreTrainedModel):
         encoder_outputs=None,
         **kwargs,
     ):
+        # cut decoder_input_ids if past_key_values is used
         if past_key_values is not None:
-            if isinstance(past_key_values, Cache):  # BART as standalone decoder
-                past_length = past_key_values.get_seq_length()
-            elif isinstance(past_key_values[0], Cache):  # BART in enc-dec setting
-                past_length = past_key_values[0].get_seq_length()
-            else:  # BART with legacy cache format
-                past_length = past_key_values[0][0].shape[2]
+            past_length = past_key_values[0][0].shape[2]
 
             # Some generation methods already pass only the last input ID
             if decoder_input_ids.shape[1] > past_length:
@@ -1838,8 +1833,10 @@ class BartForConditionalGeneration(BartPreTrainedModel):
     def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
         for layer_past in past_key_values:
+            # cached cross_attention states don't have to be reordered -> they are always the same
             reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
+                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past[:2])
+                + layer_past[2:],
             )
         return reordered_past
 
@@ -2304,13 +2301,8 @@ class BartForCausalLM(BartPreTrainedModel):
         if attention_mask is None:
             attention_mask = input_ids.new_ones(input_ids.shape)
 
-        if past_key_values is not None:
-            if isinstance(past_key_values, Cache):  # BART as standalone decoder
-                past_length = past_key_values.get_seq_length()
-            elif isinstance(past_key_values[0], Cache):  # BART in enc-dec setting
-                past_length = past_key_values[0].get_seq_length()
-            else:  # BART with legacy cache format
-                past_length = past_key_values[0][0].shape[2]
+        if past_key_values:
+            past_length = past_key_values[0][0].shape[2]
 
             # Some generation methods already pass only the last input ID
             if input_ids.shape[1] > past_length:
