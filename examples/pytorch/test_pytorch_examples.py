@@ -391,6 +391,7 @@ class ExamplesTests(TestCasePlus):
             --output_dir {tmp_dir}
             --model_name_or_path google/vit-base-patch16-224-in21k
             --dataset_name hf-internal-testing/cats_vs_dogs_sample
+            --trust_remote_dataset_code
             --do_train
             --do_eval
             --learning_rate 1e-4
@@ -516,6 +517,7 @@ class ExamplesTests(TestCasePlus):
             --output_dir {tmp_dir}
             --model_name_or_path hf-internal-testing/tiny-random-wav2vec2
             --dataset_name anton-l/superb_demo
+            --trust_remote_dataset_code
             --dataset_config_name ks
             --train_split_name test
             --eval_split_name test
@@ -571,6 +573,7 @@ class ExamplesTests(TestCasePlus):
             run_mae.py
             --output_dir {tmp_dir}
             --dataset_name hf-internal-testing/cats_vs_dogs_sample
+            --trust_remote_dataset_code
             --do_train
             --do_eval
             --learning_rate 1e-4
