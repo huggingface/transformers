@@ -908,7 +908,7 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
     def test_model_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_forward(*config_and_inputs)
-        
+
     def test_model_forward_with_labels(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
         model = SpeechT5ForTextToSpeech(config=config).to(torch_device).eval()
@@ -918,7 +918,9 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
         decoder_attention_mask = inputs_dict["decoder_attention_mask"]
         labels = inputs_dict["decoder_input_values"]
 
-        result = model(input_ids, attention_mask=attention_mask, labels=labels, decoder_attention_mask=decoder_attention_mask)
+        result = model(
+            input_ids, attention_mask=attention_mask, labels=labels, decoder_attention_mask=decoder_attention_mask
+        )
         self.assertEqual(
             result.spectrogram.shape,
             (self.model_tester.batch_size, self.model_tester.decoder_seq_length, self.model_tester.num_mel_bins),
@@ -1450,7 +1452,7 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
     def test_model_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_forward(*config_and_inputs)
-        
+
     def test_model_forward_with_labels(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
         model = SpeechT5ForSpeechToSpeech(config=config).to(torch_device).eval()
@@ -1460,7 +1462,9 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
         decoder_attention_mask = inputs_dict["decoder_attention_mask"]
         labels = inputs_dict["decoder_input_values"]
 
-        result = model(input_values, attention_mask=attention_mask, labels=labels, decoder_attention_mask=decoder_attention_mask)
+        result = model(
+            input_values, attention_mask=attention_mask, labels=labels, decoder_attention_mask=decoder_attention_mask
+        )
         self.assertEqual(
             result.spectrogram.shape,
             (self.model_tester.batch_size, self.model_tester.decoder_seq_length, self.model_tester.num_mel_bins),
