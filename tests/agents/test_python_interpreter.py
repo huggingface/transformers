@@ -81,6 +81,12 @@ class PythonInterpreterTester(unittest.TestCase):
         assert result == 5
         self.assertDictEqual(state, {"x": 5, "y": 5, "print_outputs": ""})
 
+    def test_assignment_cannot_overwrite_tool(self):
+        code = "print = '3'"
+        with pytest.raises(InterpretorError) as e:
+            evaluate_python_code(code, {"print": print}, state={})
+        assert "Cannot assign to name 'print': doing this would erase the existing tool!" in str(e)
+
     def test_evaluate_call(self):
         code = "y = add_two(x)"
         state = {"x": 3}

@@ -297,6 +297,10 @@ def evaluate_assign(assign, state, tools):
         target = var_names[0]
         if isinstance(target, ast.Tuple):
             for i, elem in enumerate(target.elts):
+                if elem.id in tools:
+                    raise InterpretorError(
+                        f"Cannot assign to name '{elem.id}': doing this would erase the existing tool!"
+                    )
                 state[elem.id] = result[i]
         elif isinstance(target, ast.Attribute):
             obj = evaluate_ast(target.value, state, tools)
@@ -306,12 +310,20 @@ def evaluate_assign(assign, state, tools):
             key = evaluate_ast(target.slice, state, tools)
             obj[key] = result
         else:
+            if target.id in tools:
+                raise InterpretorError(
+                    f"Cannot assign to name '{target.id}': doing this would erase the existing tool!"
+                )
             state[target.id] = result
 
     else:
         if len(result) != len(var_names):
             raise InterpretorError(f"Expected {len(var_names)} values but got {len(result)}.")
         for var_name, r in zip(var_names, result):
+            if var_name.id in tools:
+                raise InterpretorError(
+                    f"Cannot assign to name '{var_name.id}': doing this would erase the existing tool!"
+                )
             state[var_name.id] = r
     return result
 
