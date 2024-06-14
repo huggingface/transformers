@@ -20,7 +20,7 @@ import pytest
 from transformers import load_tool
 from transformers.agents.agent_types import AGENT_TYPE_MAPPING
 from transformers.agents.default_tools import BASE_PYTHON_TOOLS
-from transformers.agents.python_interpreter import InterpretorError, evaluate_python_code
+from transformers.agents.python_interpreter import InterpreterError, evaluate_python_code
 
 from .test_tools_common import ToolTesterMixin
 
@@ -83,7 +83,7 @@ class PythonInterpreterTester(unittest.TestCase):
 
     def test_assignment_cannot_overwrite_tool(self):
         code = "print = '3'"
-        with pytest.raises(InterpretorError) as e:
+        with pytest.raises(InterpreterError) as e:
             evaluate_python_code(code, {"print": print}, state={})
         assert "Cannot assign to name 'print': doing this would erase the existing tool!" in str(e)
 
@@ -95,7 +95,7 @@ class PythonInterpreterTester(unittest.TestCase):
         self.assertDictEqual(state, {"x": 3, "y": 5, "print_outputs": ""})
 
         # Should not work without the tool
-        with pytest.raises(InterpretorError) as e:
+        with pytest.raises(InterpreterError) as e:
             evaluate_python_code(code, {}, state=state)
         assert "tried to execute add_two" in str(e.value)
 
@@ -274,7 +274,7 @@ for block in text_block:
 
         # test infinite loop
         code = "i = 0\nwhile i < 3:\n    i -= 1\ni"
-        with pytest.raises(InterpretorError) as e:
+        with pytest.raises(InterpreterError) as e:
             evaluate_python_code(code, BASE_PYTHON_TOOLS, state={})
         assert "iterations in While loop exceeded" in str(e)
 
@@ -520,7 +520,7 @@ a.count += 1
         code = """
 counts = [1, 2, 3]
 counts += 1"""
-        with pytest.raises(InterpretorError) as e:
+        with pytest.raises(InterpreterError) as e:
             evaluate_python_code(code, BASE_PYTHON_TOOLS, state={})
         assert "Cannot add non-list value 1 to a list." in str(e)
 
@@ -534,7 +534,7 @@ b = 2
 counts = [1, 2, 3]
 counts += 1
 b += 1"""
-        with pytest.raises(InterpretorError) as e:
+        with pytest.raises(InterpreterError) as e:
             evaluate_python_code(code, BASE_PYTHON_TOOLS, state={})
         assert "Evaluation stopped at line 'counts += 1" in str(e)
 

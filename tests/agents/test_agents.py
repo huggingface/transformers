@@ -73,6 +73,25 @@ final_answer(7.2904)
 ```<end_code>
 """
 
+def fake_react_code_llm_error(messages, stop_sequences=None) -> str:
+    prompt = str(messages)
+    if "special_marker" not in prompt:
+        return """
+Thought: I should multiply 2 by 3.6452. special_marker
+Code:
+```py
+print = 2
+```<end_code>
+"""
+    else:  # We're at step 2
+        return """
+Thought: I can now answer the initial question
+Code:
+```py
+final_answer("got an error")
+```<end_code>
+"""
+
 
 def fake_code_llm_oneshot(messages, stop_sequences=None) -> str:
     return """
@@ -123,6 +142,14 @@ Action:
             "tool_arguments": "final_answer(7.2904)",
             "tool_name": "code interpreter",
         }
+
+    def test_react_code_agent_code_errors_show_offending_lines(self):
+        agent = ReactCodeAgent(tools=[PythonInterpreterTool()], llm_engine=fake_react_code_llm_error)
+        output = agent.run("What is 2 multiplied by 3.6452?")
+        assert isinstance(output, AgentText)
+        assert output == "got an error"
+        assert "Evaluation stopped at line 'print = 2' because of" in str(agent.logs)
+
 
     def test_setup_agent_with_empty_toolbox(self):
         ReactJsonAgent(llm_engine=fake_react_json_llm, tools=[])

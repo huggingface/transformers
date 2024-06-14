@@ -15,7 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from .agents import BASE_PYTHON_TOOLS
-from .python_interpreter import InterpretorError, evaluate
+from .python_interpreter import InterpreterError, evaluate
 
 
 ### Fake tools for test
@@ -256,7 +256,7 @@ def evaluate_code(code, inputs=None, state=None, verbose=False, return_interpret
 
     try:
         return evaluate(code, tools, state)
-    except InterpretorError as e:
+    except InterpreterError as e:
         return str(e)
     except Exception as e:
         if verbose:

@@ -21,7 +21,7 @@ from collections.abc import Mapping
 from typing import Any, Callable, Dict, List, Optional
 
 
-class InterpretorError(ValueError):
+class InterpreterError(ValueError):
     """
     An error raised when the interpretor cannot evaluate a Python expression, due to syntax error or unsupported
     operations.
@@ -65,7 +65,7 @@ def get_iterable(obj):
     elif hasattr(obj, "__iter__"):
         return list(obj)
     else:
-        raise InterpretorError("Object is not iterable")
+        raise InterpreterError("Object is not iterable")
 
 
 def evaluate_unaryop(expression, state, tools):
@@ -79,7 +79,7 @@ def evaluate_unaryop(expression, state, tools):
     elif isinstance(expression.op, ast.Invert):
         return ~operand
     else:
-        raise InterpretorError(f"Unary operation {expression.op.__class__.__name__} is not supported.")
+        raise InterpreterError(f"Unary operation {expression.op.__class__.__name__} is not supported.")
 
 
 def evaluate_lambda(lambda_expression, state, tools):
@@ -102,7 +102,7 @@ def evaluate_while(while_loop, state, tools):
             evaluate_ast(node, state, tools)
         iterations += 1
         if iterations > max_iterations:
-            raise InterpretorError(f"Maximum number of {max_iterations} iterations in While loop exceeded")
+            raise InterpreterError(f"Maximum number of {max_iterations} iterations in While loop exceeded")
     return None
 
 
@@ -160,7 +160,7 @@ def evaluate_class_def(class_def, state, tools):
                 elif isinstance(target, ast.Attribute):
                     class_dict[target.attr] = evaluate_ast(stmt.value, state, tools)
         else:
-            raise InterpretorError(f"Unsupported statement in class body: {stmt.__class__.__name__}")
+            raise InterpreterError(f"Unsupported statement in class body: {stmt.__class__.__name__}")
 
     new_class = type(class_name, tuple(bases), class_dict)
     state[class_name] = new_class
@@ -184,7 +184,7 @@ def evaluate_augassign(expression: ast.AugAssign, state: Dict[str, Any], tools: 
         elif isinstance(target, ast.List):
             return [get_current_value(elt) for elt in target.elts]
         else:
-            raise InterpretorError("AugAssign not supported for {type(target)} targets.")
+            raise InterpreterError("AugAssign not supported for {type(target)} targets.")
 
     def set_new_value(target, value):
         if isinstance(target, ast.Name):
@@ -203,7 +203,7 @@ def evaluate_augassign(expression: ast.AugAssign, state: Dict[str, Any], tools: 
             for elt, val in zip(target.elts, value):
                 set_new_value(elt, val)
         else:
-            raise InterpretorError(f"AugAssign not supported for {type(target)} targets.")
+            raise InterpreterError(f"AugAssign not supported for {type(target)} targets.")
 
     current_value = get_current_value(expression.target)
     value_to_add = evaluate_ast(expression.value, state, tools)
@@ -212,7 +212,7 @@ def evaluate_augassign(expression: ast.AugAssign, state: Dict[str, Any], tools: 
     if isinstance(expression.op, ast.Add):
         if isinstance(current_value, list):
             if not isinstance(value_to_add, list):
-                raise InterpretorError(f"Cannot add non-list value {value_to_add} to a list.")
+                raise InterpreterError(f"Cannot add non-list value {value_to_add} to a list.")
             updated_value = current_value + value_to_add
         else:
             updated_value = current_value + value_to_add
@@ -239,7 +239,7 @@ def evaluate_augassign(expression: ast.AugAssign, state: Dict[str, Any], tools: 
     elif isinstance(expression.op, ast.RShift):
         updated_value = current_value >> value_to_add
     else:
-        raise InterpretorError(f"Operation {type(expression.op).__name__} is not supported.")
+        raise InterpreterError(f"Operation {type(expression.op).__name__} is not supported.")
 
     # Update the state
     set_new_value(expression.target, updated_value)
@@ -298,7 +298,7 @@ def evaluate_assign(assign, state, tools):
         if isinstance(target, ast.Tuple):
             for i, elem in enumerate(target.elts):
                 if elem.id in tools:
-                    raise InterpretorError(
+                    raise InterpreterError(
                         f"Cannot assign to name '{elem.id}': doing this would erase the existing tool!"
                     )
                 state[elem.id] = result[i]
@@ -311,17 +311,17 @@ def evaluate_assign(assign, state, tools):
             obj[key] = result
         else:
             if target.id in tools:
-                raise InterpretorError(
+                raise InterpreterError(
                     f"Cannot assign to name '{target.id}': doing this would erase the existing tool!"
                 )
             state[target.id] = result
 
     else:
         if len(result) != len(var_names):
-            raise InterpretorError(f"Expected {len(var_names)} values but got {len(result)}.")
+            raise InterpreterError(f"Expected {len(var_names)} values but got {len(result)}.")
         for var_name, r in zip(var_names, result):
             if var_name.id in tools:
-                raise InterpretorError(
+                raise InterpreterError(
                     f"Cannot assign to name '{var_name.id}': doing this would erase the existing tool!"
                 )
             state[var_name.id] = r
@@ -330,14 +330,14 @@ def evaluate_assign(assign, state, tools):
 
 def evaluate_call(call, state, tools):
     if not (isinstance(call.func, ast.Attribute) or isinstance(call.func, ast.Name)):
-        raise InterpretorError(
+        raise InterpreterError(
             f"It is not permitted to evaluate other functions than the provided tools (tried to execute {call.func})."
         )
     if isinstance(call.func, ast.Attribute):
         obj = evaluate_ast(call.func.value, state, tools)
         func_name = call.func.attr
         if not hasattr(obj, func_name):
-            raise InterpretorError(f"Object {obj} has no attribute {func_name}")
+            raise InterpreterError(f"Object {obj} has no attribute {func_name}")
         func = getattr(obj, func_name)
     elif isinstance(call.func, ast.Name):
         func_name = call.func.id
@@ -348,7 +348,7 @@ def evaluate_call(call, state, tools):
         elif func_name in ERRORS:
             func = ERRORS[func_name]
         else:
-            raise InterpretorError(
+            raise InterpreterError(
                 f"It is not permitted to evaluate other functions than the provided tools or imported functions (tried to execute {call.func.id})."
             )
 
@@ -367,17 +367,17 @@ def evaluate_call(call, state, tools):
                 if "__class__" in state and "self" in state:
                     return super(state["__class__"], state["self"])
                 else:
-                    raise InterpretorError("super() needs at least one argument")
+                    raise InterpreterError("super() needs at least one argument")
             cls = args[0]
             if not isinstance(cls, type):
-                raise InterpretorError("super() argument 1 must be type")
+                raise InterpreterError("super() argument 1 must be type")
             if len(args) == 1:
                 return super(cls)
             elif len(args) == 2:
                 instance = args[1]
                 return super(cls, instance)
             else:
-                raise InterpretorError("super() takes at most 2 arguments")
+                raise InterpreterError("super() takes at most 2 arguments")
 
         else:
             if func_name == "print":
@@ -404,7 +404,7 @@ def evaluate_subscript(subscript, state, tools):
         close_matches = difflib.get_close_matches(index, list(value.keys()))
         if len(close_matches) > 0:
             return value[close_matches[0]]
-    raise InterpretorError(f"Could not index {value} with '{index}'.")
+    raise InterpreterError(f"Could not index {value} with '{index}'.")
 
 
 def evaluate_name(name, state, tools):
@@ -417,7 +417,7 @@ def evaluate_name(name, state, tools):
     close_matches = difflib.get_close_matches(name.id, list(state.keys()))
     if len(close_matches) > 0:
         return state[close_matches[0]]
-    raise InterpretorError(f"The variable `{name.id}` is not defined.")
+    raise InterpreterError(f"The variable `{name.id}` is not defined.")
 
 
 def evaluate_condition(condition, state, tools):
@@ -448,7 +448,7 @@ def evaluate_condition(condition, state, tools):
         elif op == ast.NotIn:
             result = result not in comparator
         else:
-            raise InterpretorError(f"Operator not supported: {op}")
+            raise InterpreterError(f"Operator not supported: {op}")
 
     return result
 
@@ -550,7 +550,7 @@ def evaluate_raise(raise_node, state, tools):
         else:
             raise exc
     else:
-        raise InterpretorError("Re-raise is not supported without an active exception")
+        raise InterpreterError("Re-raise is not supported without an active exception")
 
 
 def evaluate_assert(assert_node, state, tools):
@@ -608,7 +608,7 @@ def evaluate_ast(
             encounters assignements.
         tools (`Dict[str, Callable]`):
             The functions that may be called during the evaluation. Any call to another function will fail with an
-            `InterpretorError`.
+            `InterpreterError`.
         authorized_imports (`List[str]`):
             The list of modules that can be imported by the code. By default, only a few safe modules are allowed.
             Add more at your own risk!
@@ -722,7 +722,7 @@ def evaluate_ast(
                 module = __import__(alias.name)
                 state[alias.asname or alias.name] = module
             else:
-                raise InterpretorError(f"Import of {alias.name} is not allowed.")
+                raise InterpreterError(f"Import of {alias.name} is not allowed.")
         return None
     elif isinstance(expression, ast.While):
         return evaluate_while(expression, state, tools)
@@ -732,7 +732,7 @@ def evaluate_ast(
             for alias in expression.names:
                 state[alias.asname or alias.name] = getattr(module, alias.name)
         else:
-            raise InterpretorError(f"Import from {expression.module} is not allowed.")
+            raise InterpreterError(f"Import from {expression.module} is not allowed.")
         return None
     elif isinstance(expression, ast.ClassDef):
         return evaluate_class_def(expression, state, tools)
@@ -746,7 +746,7 @@ def evaluate_ast(
         return evaluate_with(expression, state, tools)
     else:
         # For now we refuse anything else. Let's add things as we need them.
-        raise InterpretorError(f"{expression.__class__.__name__} is not supported.")
+        raise InterpreterError(f"{expression.__class__.__name__} is not supported.")
 
 
 def evaluate_python_code(
@@ -763,7 +763,7 @@ def evaluate_python_code(
             The code to evaluate.
         tools (`Dict[str, Callable]`):
             The functions that may be called during the evaluation. Any call to another function will fail with an
-            `InterpretorError`.
+            `InterpreterError`.
         state (`Dict[str, Any]`):
             A dictionary mapping variable names to values. The `state` should contain the initial inputs but will be
             updated by this function to contain all variables as they are evaluated.
@@ -780,11 +780,11 @@ def evaluate_python_code(
     for node in expression.body:
         try:
             line_result = evaluate_ast(node, state, tools, authorized_imports)
-        except InterpretorError as e:
+        except InterpreterError as e:
             msg = f"Evaluation stopped at line '{ast.get_source_segment(code, node)}' because of the following error:\n{e}"
             if len(state["print_outputs"]) > 0:
                 msg += f"Executing code yielded these outputs:\n{state['print_outputs']}\n====\n"
-            raise InterpretorError(msg)
+            raise InterpreterError(msg)
         if line_result is not None:
             result = line_result
 
