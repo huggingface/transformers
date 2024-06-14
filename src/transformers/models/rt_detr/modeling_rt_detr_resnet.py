@@ -189,7 +189,6 @@ class RTDetrResNetBottleNeckLayer(nn.Module):
         in_channels: int,
         out_channels: int,
         stride: int = 1,
-        downsample_in_bottleneck: bool = False,
     ):
         super().__init__()
         reduction = 4
@@ -212,10 +211,10 @@ class RTDetrResNetBottleNeckLayer(nn.Module):
             )
         self.layer = nn.Sequential(
             RTDetrResNetConvLayer(
-                in_channels, reduces_channels, kernel_size=1, stride=stride if downsample_in_bottleneck else 1
+                in_channels, reduces_channels, kernel_size=1, stride=stride if config.downsample_in_bottleneck else 1
             ),
             RTDetrResNetConvLayer(
-                reduces_channels, reduces_channels, stride=stride if not downsample_in_bottleneck else 1
+                reduces_channels, reduces_channels, stride=stride if not config.downsample_in_bottleneck else 1
             ),
             RTDetrResNetConvLayer(reduces_channels, out_channels, kernel_size=1, activation=None),
         )
