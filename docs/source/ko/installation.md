@@ -157,7 +157,7 @@ conda install conda-forge::transformers
 
 ## 오프라인 모드[[offline-mode]]
 
-🤗 Transformers를 로컬 파일만 사용하도록 해서 방화벽 또는 오프라인 환경에서 실행할 수 있습니다. 활성화하려면 `TRANSFORMERS_OFFLINE=1` 환경 변수를 설정하세요.
+🤗 Transformers를 로컬 파일만 사용하도록 해서 방화벽 또는 오프라인 환경에서 실행할 수 있습니다. 활성화하려면 `HF_HUB_OFFLINE=1` 환경 변수를 설정하세요.
 
 <Tip>
 
@@ -174,7 +174,7 @@ python examples/pytorch/translation/run_translation.py --model_name_or_path goog
 오프라인 기기에서 동일한 프로그램을 다음과 같이 실행할 수 있습니다.
 
 ```bash
-HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+HF_DATASETS_OFFLINE=1 HF_HUB_OFFLINE=1 \
 python examples/pytorch/translation/run_translation.py --model_name_or_path google-t5/t5-small --dataset_name wmt16 --dataset_config ro-en ...
 ```
 

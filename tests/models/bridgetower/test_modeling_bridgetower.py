@@ -499,7 +499,7 @@ class BridgeTowerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
                         )
 
     @unittest.skip(reason="""Bridge Tower does not have input/output embeddings. So this test is not applicable.""")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip(reason="""Bridge Tower does not have input/output embeddings. Thus this test is not applicable.""")

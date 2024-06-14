@@ -13,7 +13,7 @@ streamlit
 elasticsearch
 nltk
 pandas
-datasets >= 1.13.3
+datasets >= 1.13.3,<2.20.0 # Temporary upper version
 fire
 pytest<8.0.1
 conllu
@@ -29,3 +29,4 @@ timm
 albumentations >= 1.4.5
 torchmetrics
 pycocotools
+Pillow>=10.0.1,<=15.0

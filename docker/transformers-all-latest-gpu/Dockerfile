@@ -51,6 +51,10 @@ RUN python3 -m pip install --no-cache-dir bitsandbytes
 # Some tests require quanto
 RUN python3 -m pip install --no-cache-dir quanto
 
+# `quanto` will install `ninja` which leads to many `CUDA error: an illegal memory access ...` in some model tests
+# (`deformable_detr`, `rwkv`, `mra`)
+RUN python3 -m pip uninstall -y ninja
+
 # For `dinat` model
 # The `XXX` part in `torchXXX` needs to match `PYTORCH` (to some extent)
 RUN python3 -m pip install --no-cache-dir natten==0.15.1+torch220$CUDA -f https://shi-labs.com/natten/wheels
