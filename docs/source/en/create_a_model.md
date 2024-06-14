@@ -327,20 +327,10 @@ For example, to load a [ResNet](../model_doc/resnet) backbone into a [MaskFormer
 Set `use_pretrained_backbone=True` to load pretrained ResNet weights for the backbone.
 
 ```py
-from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation, ResNetConfig
+from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation
 
-config = MaskFormerConfig(backbone="microsoft/resnet50", use_pretrained_backbone=True) # backbone and neck config
+config = MaskFormerConfig(backbone="microsoft/resnet-50", use_pretrained_backbone=True) # backbone and neck config
 model = MaskFormerForInstanceSegmentation(config) # head
-```
-
-You could also load the backbone config separately and then pass it to the model config.
-
-```py
-from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation, ResNetConfig
-
-backbone_config = ResNetConfig.from_pretrained("microsoft/resnet-50")
-config = MaskFormerConfig(backbone_config=backbone_config)
-model = MaskFormerForInstanceSegmentation(config)
 ```
 
 </hfoption>
@@ -349,9 +339,9 @@ model = MaskFormerForInstanceSegmentation(config)
 Set `use_pretrained_backbone=False` to randomly initialize a ResNet backbone.
 
 ```py
-from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation, ResNetConfig
+from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation
 
-config = MaskFormerConfig(backbone="microsoft/resnet50", use_pretrained_backbone=False) # backbone and neck config
+config = MaskFormerConfig(backbone="microsoft/resnet-50", use_pretrained_backbone=False) # backbone and neck config
 model = MaskFormerForInstanceSegmentation(config) # head
 ```
 
@@ -366,15 +356,43 @@ model = MaskFormerForInstanceSegmentation(config)
 ```
 
 </hfoption>
-</hfoptions>
+</hfoptions id="timm backbone">
 
-[timm](https://hf.co/docs/timm/index) models are loaded with [`TimmBackbone`] and [`TimmBackboneConfig`].
+[timm](https://hf.co/docs/timm/index) models are loaded within a model with `use_timm_backbone=True` or with [`TimmBackbone`] and [`TimmBackboneConfig`].
+
+Use `use_timm_backbone=True` and `use_pretrained_backbone=True` to load pretrained timm weights for the backbone.
+
+```python
+from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation
+
+config = MaskFormerConfig(backbone="resnet50", use_pretrained_backbone=True, use_timm_backbone=True) # backbone and neck config
+model = MaskFormerForInstanceSegmentation(config) # head
+```
+
+Set `use_timm_backbone=True` and `use_pretrained_backbone=False` to load a randomly initialized timm backbone.
+
+```python
+from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation
+
+config = MaskFormerConfig(backbone="resnet50", use_pretrained_backbone=False, use_timm_backbone=True) # backbone and neck config
+model = MaskFormerForInstanceSegmentation(config) # head
+```
+
+You could also load the backbone config and use it to create a `TimmBackbone` or pass it to the model config. Timm backbones will load pretrained weights by default. Set `use_pretrained_backbone=False` to load randomly initialized weights.
 
 ```python
 from transformers import TimmBackboneConfig, TimmBackbone
 
-backbone_config = TimmBackboneConfig("resnet50")
-model = TimmBackbone(config=backbone_config)
+backbone_config = TimmBackboneConfig("resnet50", use_pretrained_backbone=False)
+
+# Create a backbone class
+backbone = TimmBackbone(config=backbone_config)
+
+# Create a model with a timm backbone
+from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation
+
+config = MaskFormerConfig(backbone_config=backbone_config)
+model = MaskFormerForInstanceSegmentation(config)
 ```
 
 ## Feature extractor

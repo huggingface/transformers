@@ -2175,7 +2175,7 @@ class Trainer:
         grad_norm: Optional[float] = None
         self.control = self.callback_handler.on_train_begin(args, self.state, self.control)
 
-        if args.sanity_evaluation:
+        if args.eval_on_start:
             self._evaluate(trial, ignore_keys_for_eval, skip_scheduler=True)
 
         total_batched_samples = 0
@@ -3407,8 +3407,6 @@ class Trainer:
         logger.info(f"Saving model checkpoint to {output_dir}")
         model = self.model
         xm.mark_step()
-        if self.args.save_safetensors:
-            model.to("cpu")
 
         if xm.is_master_ordinal():
             os.makedirs(output_dir, exist_ok=True)
@@ -3423,13 +3421,13 @@ class Trainer:
                 self.accelerator.unwrap_model(model).save_pretrained(
                     output_dir,
                     is_main_process=self.args.should_save,
-                    state_dict=model.state_dict(),
+                    state_dict=xm._maybe_convert_to_cpu(model.state_dict()),
                     save_function=xm.save,
                     safe_serialization=self.args.save_safetensors,
                 )
             else:
                 logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
-                state_dict = model.state_dict()
+                state_dict = xm._maybe_convert_to_cpu(model.state_dict())
                 xm.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
         else:
             model.save_pretrained(
@@ -3437,14 +3435,10 @@ class Trainer:
                 is_main_process=self.args.should_save,
                 save_function=xm.save,
                 safe_serialization=self.args.save_safetensors,
+                state_dict=xm._maybe_convert_to_cpu(model.state_dict()),
             )
         if self.tokenizer is not None and self.args.should_save:
             self.tokenizer.save_pretrained(output_dir)
-
-        # We moved the model from TPU -> CPU for saving the weights.
-        # Now we should move it back to subsequent compute still works.
-        if self.args.save_safetensors:
-            model.to(self.args.device)
 
     def _save(self, output_dir: Optional[str] = None, state_dict=None):
         # If we are executing this function, we are the process zero, so we don't check for that.
@@ -3759,7 +3753,7 @@ class Trainer:
 
         batch_size = self.args.eval_batch_size
 
-        logger.info(f"***** Running {description} *****")
+        logger.info(f"\n***** Running {description} *****")
         if has_length(dataloader):
             logger.info(f"  Num examples = {self.num_examples(dataloader)}")
         else:
@@ -3797,7 +3791,7 @@ class Trainer:
                     batch_size = observed_batch_size
 
             # Prediction step
-            loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only, ignore_keys=ignore_keys)
+            losses, logits, labels = self.prediction_step(model, inputs, prediction_loss_only, ignore_keys=ignore_keys)
             main_input_name = getattr(self.model, "main_input_name", "input_ids")
             inputs_decode = self._prepare_input(inputs[main_input_name]) if args.include_inputs_for_metrics else None
 
@@ -3805,8 +3799,8 @@ class Trainer:
                 xm.mark_step()
 
             # Update containers
-            if loss is not None:
-                losses = self.gather_function((loss.repeat(batch_size)))
+            if losses is not None:
+                losses = self.gather_function((losses.repeat(batch_size)))
                 all_losses.add(losses)
             if inputs_decode is not None:
                 inputs_decode = self.accelerator.pad_across_processes(inputs_decode, dim=1, pad_index=-100)
@@ -4343,7 +4337,7 @@ class Trainer:
 
         batch_size = dataloader.batch_size
         num_examples = self.num_examples(dataloader)
-        logger.info(f"***** Running {description} *****")
+        logger.info(f"\n***** Running {description} *****")
         logger.info(f"  Num examples = {num_examples}")
         logger.info(f"  Batch size = {batch_size}")
 

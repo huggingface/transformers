@@ -170,7 +170,7 @@ class CacheConfig:
     # Copied from transformers.utils.quantization_config.QuantizationConfigMixin.update
     def update(self, **kwargs):
         """
-        Updates attributes of this class instance with attributes from `kwargs` if they match existing atributtes,
+        Updates attributes of this class instance with attributes from `kwargs` if they match existing attributes,
         returning all the unused kwargs.
 
         Args:
@@ -377,7 +377,8 @@ class DynamicCache(Cache):
         return None
 
     def to_legacy_cache(self) -> Tuple[Tuple[torch.Tensor], Tuple[torch.Tensor]]:
-        """Converts the `DynamicCache` instance into the its equivalent in the legacy cache format."""
+        """Converts the `DynamicCache` instance into the its equivalent in the legacy cache format. Used for
+        backward compatibility."""
         legacy_cache = ()
         for layer_idx in range(len(self)):
             legacy_cache += ((self.key_cache[layer_idx], self.value_cache[layer_idx]),)
@@ -385,13 +386,65 @@ class DynamicCache(Cache):
 
     @classmethod
     def from_legacy_cache(cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None) -> "DynamicCache":
-        """Converts a cache in the legacy cache format into an equivalent `DynamicCache`."""
+        """Converts a cache in the legacy cache format into an equivalent `DynamicCache`. Used for
+        backward compatibility."""
         cache = cls()
         if past_key_values is not None:
             for layer_idx in range(len(past_key_values)):
                 key_states, value_states = past_key_values[layer_idx]
                 cache.update(key_states, value_states, layer_idx)
         return cache
+
+    def crop(self, maximum_length: int):
+        """Crop the past key values up to a new `maximum_length` in terms of tokens. `maximum_length` can also be
+        negative to remove `maximum_length` tokens. This is used in assisted decoding and contrastive search."""
+
+        # In case it is negative
+        if maximum_length < 0:
+            maximum_length = self.get_seq_length() - abs(maximum_length)
+
+        if self.get_seq_length() <= maximum_length:
+            return
+
+        self._seen_tokens = maximum_length
+        for idx in range(len(self.key_cache)):
+            self.key_cache[idx] = self.key_cache[idx][..., :maximum_length, :]
+            self.value_cache[idx] = self.value_cache[idx][..., :maximum_length, :]
+
+    def batch_split(self, full_batch_size: int, split_size: int) -> List["DynamicCache"]:
+        """Split the current instance into a list of `DynamicCache` by the batch size. This will be used by
+        `_split_model_inputs()` in `generation.utils`"""
+        out = []
+        for i in range(0, full_batch_size, split_size):
+            current_split = DynamicCache()
+            current_split._seen_tokens = self._seen_tokens
+            current_split.key_cache = [tensor[i : i + split_size] for tensor in self.key_cache]
+            current_split.value_cache = [tensor[i : i + split_size] for tensor in self.value_cache]
+            out.append(current_split)
+        return out
+
+    @classmethod
+    def from_batch_splits(cls, splits: List["DynamicCache"]) -> "DynamicCache":
+        """This is the opposite of the above `batch_split()` method. This will be used by `stack_model_outputs` in
+        `generation.utils`"""
+        cache = cls()
+        for idx in range(len(splits[0])):
+            layer_keys = torch.cat([current.key_cache[idx] for current in splits], dim=0)
+            layer_values = torch.cat([current.value_cache[idx] for current in splits], dim=0)
+            cache.update(layer_keys, layer_values, idx)
+        return cache
+
+    def batch_repeat_interleave(self, repeats: int):
+        """Repeat the cache `repeats` times in the batch dimension. Used in contrastive search."""
+        for layer_idx in range(len(self)):
+            self.key_cache[layer_idx] = self.key_cache[layer_idx].repeat_interleave(repeats, dim=0)
+            self.value_cache[layer_idx] = self.value_cache[layer_idx].repeat_interleave(repeats, dim=0)
+
+    def batch_select_indices(self, indices: torch.Tensor):
+        """Only keep the `indices` in the batch dimension of the cache. Used in contrastive search."""
+        for layer_idx in range(len(self)):
+            self.key_cache[layer_idx] = self.key_cache[layer_idx][indices, ...]
+            self.value_cache[layer_idx] = self.value_cache[layer_idx][indices, ...]
 
 
 class QuantizedCache(DynamicCache):
