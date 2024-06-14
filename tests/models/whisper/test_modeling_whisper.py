@@ -1765,7 +1765,9 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
         model.to(torch_device)
 
-        ds = load_dataset("facebook/multilingual_librispeech", "german", split="test", streaming=True)
+        ds = load_dataset(
+            "facebook/multilingual_librispeech", "german", split="test", streaming=True, trust_remote_code=True
+        )
         ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
 
         input_speech = next(iter(ds))["audio"]["array"]
@@ -1832,7 +1834,14 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model.to(torch_device)
 
         token = os.getenv("HF_HUB_READ_TOKEN", True)
-        ds = load_dataset("mozilla-foundation/common_voice_6_1", "ja", split="test", streaming=True, token=token)
+        ds = load_dataset(
+            "mozilla-foundation/common_voice_6_1",
+            "ja",
+            split="test",
+            streaming=True,
+            token=token,
+            trust_remote_code=True,
+        )
         ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
 
         input_speech = next(iter(ds))["audio"]["array"]

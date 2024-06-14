@@ -206,7 +206,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
     @require_torch
     @require_pyctcdecode
     def test_large_model_pt_with_lm(self):
-        dataset = load_dataset("Narsil/asr_dummy", streaming=True)
+        dataset = load_dataset("Narsil/asr_dummy", streaming=True, trust_remote_code=True)
         third_item = next(iter(dataset["test"].skip(3)))
         filename = third_item["file"]
 
@@ -332,7 +332,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             chunk_length_s=8,
             stride_length_s=1,
         )
-        data = load_dataset("librispeech_asr", "clean", split="test", streaming=True)
+        data = load_dataset("openslr/librispeech_asr", "clean", split="test", streaming=True, trust_remote_code=True)
         sample = next(iter(data))
         pipe.model.config.forced_decoder_ids = pipe.tokenizer.get_decoder_prompt_ids(language="en", task="transcribe")
 
@@ -375,7 +375,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             task="automatic-speech-recognition",
             model="openai/whisper-tiny.en",
         )
-        data = load_dataset("librispeech_asr", "clean", split="test", streaming=True)
+        data = load_dataset("openslr/librispeech_asr", "clean", split="test", streaming=True, trust_remote_code=True)
         samples = [next(iter(data)) for _ in range(8)]
         audio = np.concatenate([sample["audio"]["array"] for sample in samples])
 

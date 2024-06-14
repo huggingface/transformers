@@ -101,7 +101,9 @@ def _test_wav2vec2_with_lm_invalid_pool(in_queue, out_queue, timeout):
     try:
         _ = in_queue.get(timeout=timeout)
 
-        ds = load_dataset("mozilla-foundation/common_voice_11_0", "es", split="test", streaming=True)
+        ds = load_dataset(
+            "mozilla-foundation/common_voice_11_0", "es", split="test", streaming=True, trust_remote_code=True
+        )
         sample = next(iter(ds))
 
         resampled_audio = torchaudio.functional.resample(
@@ -1479,7 +1481,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         return [x["array"] for x in speech_samples]
 
     def _load_superb(self, task, num_samples):
-        ds = load_dataset("anton-l/superb_dummy", task, split="test")
+        ds = load_dataset("anton-l/superb_dummy", task, split="test", trust_remote_code=True)
 
         return ds[:num_samples]
 
@@ -1845,7 +1847,9 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
     @require_pyctcdecode
     @require_torchaudio
     def test_wav2vec2_with_lm(self):
-        ds = load_dataset("mozilla-foundation/common_voice_11_0", "es", split="test", streaming=True)
+        ds = load_dataset(
+            "mozilla-foundation/common_voice_11_0", "es", split="test", streaming=True, trust_remote_code=True
+        )
         sample = next(iter(ds))
 
         resampled_audio = torchaudio.functional.resample(
@@ -1869,7 +1873,9 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
     @require_pyctcdecode
     @require_torchaudio
     def test_wav2vec2_with_lm_pool(self):
-        ds = load_dataset("mozilla-foundation/common_voice_11_0", "es", split="test", streaming=True)
+        ds = load_dataset(
+            "mozilla-foundation/common_voice_11_0", "es", split="test", streaming=True, trust_remote_code=True
+        )
         sample = next(iter(ds))
 
         resampled_audio = torchaudio.functional.resample(
@@ -1967,7 +1973,9 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         LANG_MAP = {"it": "ita", "es": "spa", "fr": "fra", "en": "eng"}
 
         def run_model(lang):
-            ds = load_dataset("mozilla-foundation/common_voice_11_0", lang, split="test", streaming=True)
+            ds = load_dataset(
+                "mozilla-foundation/common_voice_11_0", lang, split="test", streaming=True, trust_remote_code=True
+            )
             sample = next(iter(ds))
 
             wav2vec2_lang = LANG_MAP[lang]

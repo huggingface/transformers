@@ -178,7 +178,7 @@ class GgufIntegrationTests(unittest.TestCase):
         gguf_tokenizer = AutoTokenizer.from_pretrained(self.model_id, gguf_file=self.q8_0_gguf_model_id)
         original_tokenizer = AutoTokenizer.from_pretrained(self.original_model_id)
 
-        dataset = load_dataset("code_x_glue_ct_code_to_text", "go")
+        dataset = load_dataset("google/code_x_glue_ct_code_to_text", "go")
         for item in tqdm.tqdm(dataset["validation"]):
             string = item["code"]
             encoded1 = gguf_tokenizer.encode(string)
@@ -191,7 +191,7 @@ class GgufIntegrationTests(unittest.TestCase):
 
             self.assertEqual(decoded1, decoded2)
 
-        dataset = load_dataset("xnli", "all_languages")
+        dataset = load_dataset("facebook/xnli", "all_languages")
 
         for i, item in enumerate(tqdm.tqdm(dataset["train"].select(range(100)))):
             for string in item["premise"].values():
