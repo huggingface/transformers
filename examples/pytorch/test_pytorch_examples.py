@@ -424,6 +424,7 @@ class ExamplesTests(TestCasePlus):
             --dataset_config_name clean
             --train_split_name validation
             --eval_split_name validation
+            --trust_remote_dataset_code
             --do_train
             --do_eval
             --learning_rate 1e-4
@@ -454,6 +455,7 @@ class ExamplesTests(TestCasePlus):
             --dataset_config_name clean
             --train_split_name validation
             --eval_split_name validation
+            --trust_remote_dataset_code
             --do_train
             --do_eval
             --learning_rate 1e-4
@@ -486,6 +488,7 @@ class ExamplesTests(TestCasePlus):
             --dataset_config_name clean
             --train_split_name validation
             --eval_split_name validation
+            --trust_remote_dataset_code
             --do_train
             --do_eval
             --learning_rate 1e-4
@@ -547,6 +550,7 @@ class ExamplesTests(TestCasePlus):
             --dataset_name hf-internal-testing/librispeech_asr_dummy
             --dataset_config_names clean
             --dataset_split_names validation
+            --trust_remote_dataset_code
             --learning_rate 1e-4
             --per_device_train_batch_size 4
             --per_device_eval_batch_size 4
