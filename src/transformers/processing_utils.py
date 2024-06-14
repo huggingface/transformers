@@ -33,7 +33,6 @@ from .image_utils import ChannelDimension, is_vision_available
 if is_vision_available():
     from .image_utils import PILImageResampling
 
-
 from .tokenization_utils_base import (
     PaddingStrategy,
     PreTrainedTokenizerBase,
@@ -74,17 +73,17 @@ class TextKwargs(TypedDict, total=False):
     docstrings associated.
 
     Attributes:
-        add_special_tokens (`bool`, *optional*, defaults to `True`):
+        add_special_tokens (`bool`, *optional*)
             Whether or not to add special tokens when encoding the sequences.
-        padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
+        padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*)
             Activates and controls padding.
-        truncation (`bool`, `str` or [`~tokenization_utils_base.TruncationStrategy`], *optional*, defaults to `False`):
+        truncation (`bool`, `str` or [`~tokenization_utils_base.TruncationStrategy`], *optional*):
             Activates and controls truncation.
         max_length (`int`, *optional*):
             Controls the maximum length to use by one of the truncation/padding parameters.
-        stride (`int`, *optional*, defaults to 0):
+        stride (`int`, *optional*):
             If set, the overflowing tokens will contain some tokens from the end of the truncated sequence.
-        is_split_into_words (`bool`, *optional*, defaults to `False`):
+        is_split_into_words (`bool`, *optional*):
             Whether or not the input is already pre-tokenized.
         pad_to_multiple_of (`int`, *optional*):
             If set, will pad the sequence to a multiple of the provided value.
@@ -92,15 +91,15 @@ class TextKwargs(TypedDict, total=False):
             Whether to return token type IDs.
         return_attention_mask (`bool`, *optional*):
             Whether to return the attention mask.
-        return_overflowing_tokens (`bool`, *optional*, defaults to `False`):
+        return_overflowing_tokens (`bool`, *optional*):
             Whether or not to return overflowing token sequences.
-        return_special_tokens_mask (`bool`, *optional*, defaults to `False`):
+        return_special_tokens_mask (`bool`, *optional*):
             Whether or not to return special tokens mask information.
-        return_offsets_mapping (`bool`, *optional*, defaults to `False`):
+        return_offsets_mapping (`bool`, *optional*):
             Whether or not to return `(char_start, char_end)` for each token.
-        return_length (`bool`, *optional*, defaults to `False`):
+        return_length (`bool`, *optional*):
             Whether or not to return the lengths of the encoded inputs.
-        verbose (`bool`, *optional*, defaults to `True`):
+        verbose (`bool`, *optional*):
             Whether or not to print more information and warnings.
         padding_side (`str`, *optional*):
             The side on which padding will be applied.
@@ -129,33 +128,33 @@ class ImagesKwargs(TypedDict, total=False):
     class methods and docstrings.
 
     Attributes:
-        do_resize (`bool`, *optional*, defaults to `True`):
+        do_resize (`bool`, *optional*):
             Whether to resize the image.
-        size (`Dict[str, int]`, *optional*, defaults to `{'shortest_edge': 288}`):
+        size (`Dict[str, int]`, *optional*):
             Resize the shorter side of the input to `size["shortest_edge"]`.
-        size_divisor (`int`, *optional*, defaults to 32):
+        size_divisor (`int`, *optional*):
             The size by which to make sure both the height and width can be divided.
         crop_size (`Dict[str, int]`, *optional*):
             Desired output size when applying center-cropping.
-        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
+        resample (`PILImageResampling`, *optional*):
             Resampling filter to use if resizing the image.
-        do_rescale (`bool`, *optional*, defaults to `True`):
+        do_rescale (`bool`, *optional*):
             Whether to rescale the image by the specified scale `rescale_factor`.
-        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
+        rescale_factor (`int` or `float`, *optional*):
             Scale factor to use if rescaling the image.
-        do_normalize (`bool`, *optional*, defaults to `True`):
+        do_normalize (`bool`, *optional*):
             Whether to normalize the image.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
+        image_mean (`float` or `List[float]`, *optional*):
             Mean to use if normalizing the image.
-        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
+        image_std (`float` or `List[float]`, *optional*):
             Standard deviation to use if normalizing the image.
-        do_pad (`bool`, *optional*, defaults to `True`):
+        do_pad (`bool`, *optional*):
             Whether to pad the image to the `(max_height, max_width)` of the images in the batch.
         pad_size (`Dict[str, int]`, *optional*):
             The size `{"height": int, "width" int}` to pad the images to.
-        do_center_crop (`bool`, *optional*, defaults to `True`):
+        do_center_crop (`bool`, *optional*):
             Whether to center crop the image.
-        data_format (`ChannelDimension` or `str`, *optional*, defaults to `"channels_first"`):
+        data_format (`ChannelDimension` or `str`, *optional*):
             The channel dimension format for the output image.
         input_data_format (`ChannelDimension` or `str`, *optional*):
             The channel dimension format for the input image.
@@ -183,9 +182,32 @@ class VideosKwargs(TypedDict, total=False):
     Keyword arguments for video processing.
 
     Attributes:
-        do_resize (`bool`, *optional*, defaults to `True`):
+        do_resize (`bool`):
             Whether to resize the image.
-        # ... (Add docstrings for other videos_kwargs)
+        size (`Dict[str, int]`, *optional*):
+            Resize the shorter side of the input to `size["shortest_edge"]`.
+        size_divisor (`int`, *optional*):
+            The size by which to make sure both the height and width can be divided.
+        resample (`PILImageResampling`, *optional*):
+            Resampling filter to use if resizing the image.
+        do_rescale (`bool`, *optional*):
+            Whether to rescale the image by the specified scale `rescale_factor`.
+        rescale_factor (`int` or `float`, *optional*):
+            Scale factor to use if rescaling the image.
+        do_normalize (`bool`, *optional*):
+            Whether to normalize the image.
+        image_mean (`float` or `List[float]`, *optional*):
+            Mean to use if normalizing the image.
+        image_std (`float` or `List[float]`, *optional*):
+            Standard deviation to use if normalizing the image.
+        do_pad (`bool`, *optional*):
+            Whether to pad the image to the `(max_height, max_width)` of the images in the batch.
+        do_center_crop (`bool`, *optional*):
+            Whether to center crop the image.
+        data_format (`ChannelDimension` or `str`, *optional*):
+            The channel dimension format for the output image.
+        input_data_format (`ChannelDimension` or `str`, *optional*):
+            The channel dimension format for the input image.
     """
 
     do_resize: Optional[bool]
@@ -222,15 +244,14 @@ class AudioKwargs(TypedDict, total=False):
                 sequence if provided).
             - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
                 acceptable input length for the model if that argument is not provided.
-            - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
-                lengths).
+            - `False` or `'do_not_pad'`
         max_length (`int`, *optional*):
             Maximum length of the returned list and optionally padding length (see above).
-        truncation (`bool`):
+        truncation (`bool`, *optional*):
             Activates truncation to cut input sequences longer than *max_length* to *max_length*.
         pad_to_multiple_of (`int`, *optional*):
             If set, will pad the sequence to a multiple of the provided value.
-        return_attention_mask (`bool`, *optional*, defaults to `False`):
+        return_attention_mask (`bool`, *optional*):
             Whether or not [`~ASTFeatureExtractor.__call__`] should return `attention_mask`.
     """
 
@@ -297,6 +318,7 @@ class ProcessorMixin(PushToHubMixin):
     """
 
     attributes = ["feature_extractor", "tokenizer"]
+    optional_attributes = ["chat_template"]
     # Names need to be attr_class for attr in attributes
     feature_extractor_class = None
     tokenizer_class = None
@@ -304,6 +326,10 @@ class ProcessorMixin(PushToHubMixin):
 
     # args have to match the attributes class attribute
     def __init__(self, *args, **kwargs):
+        # First, extract optional attributes from kwargs if present
+        # Optional attributes can never be positional arguments
+        for optional_attribute in self.optional_attributes:
+            setattr(self, optional_attribute, kwargs.pop(optional_attribute, None))
         # Sanitize args and kwargs
         for key in kwargs:
             if key not in self.attributes:
@@ -711,17 +737,19 @@ class ProcessorMixin(PushToHubMixin):
         # get defaults from set model processor kwargs if they exist
         for modality in default_kwargs:
             default_kwargs[modality] = ModelProcessorKwargs._defaults.get(modality, {}).copy()
-        # update modality kwargs with passed kwargs
-        non_modality_kwargs = set(kwargs) - set(output_kwargs)
-
-        for modality in set(output_kwargs):
-            output_kwargs[modality] = {
-                **default_kwargs[modality],
-            }
+            # update defaults with arguments from tokenizer init
             for modality_key in ModelProcessorKwargs.__annotations__[modality].__annotations__.keys():
                 # init with tokenizer init kwargs if necessary
                 if modality_key in tokenizer_init_kwargs:
-                    output_kwargs[modality][modality_key] = tokenizer_init_kwargs[modality_key]
+                    default_kwargs[modality][modality_key] = tokenizer_init_kwargs[modality_key]
+        # now defaults kwargs are updated with the tokenizers defaults.
+        # pass defaults to output dictionary
+        output_kwargs.update(default_kwargs)
+
+        # update modality kwargs with passed kwargs
+        non_modality_kwargs = set(kwargs) - set(output_kwargs)
+        for modality in output_kwargs:
+            for modality_key in ModelProcessorKwargs.__annotations__[modality].__annotations__.keys():
                 # check if we received a structured kwarg dict or not to handle it correctly
                 if modality in kwargs:
                     kwarg_value = kwargs[modality].pop(modality_key, "__empty__")
@@ -861,6 +889,51 @@ class ProcessorMixin(PushToHubMixin):
     def model_input_names(self):
         first_attribute = getattr(self, self.attributes[0])
         return getattr(first_attribute, "model_input_names", None)
+
+    def apply_chat_template(
+        self,
+        conversation: Union[List[Dict[str, str]]],
+        chat_template: Optional[str] = None,
+        tokenize: bool = False,
+        **kwargs,
+    ) -> str:
+        """
+        Similar to the `apply_chat_template` method on tokenizers, this method applies a Jinja template to input
+        conversations to turn them into a single tokenizable string.
+
+        Args:
+            conversation (`List[Dict, str, str]`):
+                The conversation to format.
+            chat_template (`Optional[str]`, *optional*):
+                The Jinja template to use for formatting the conversation. If not provided, the default chat template
+                is used.
+            tokenize (`bool`, *optional*, defaults to `False`):
+                Whether to tokenize the output or not.
+            **kwargs:
+                Additional keyword arguments
+        """
+
+        if chat_template is None:
+            if self.chat_template is not None:
+                chat_template = self.chat_template
+            elif getattr(self, "default_chat_template", None) is not None:
+                logger.warning_once(
+                    "No chat template is set for this processor, falling back to a default class-level template. This is "
+                    "very error-prone, because models are often trained with templates different from the class default! "
+                    "Default chat templates are a legacy feature and will be removed in Transformers v4.43, at which "
+                    "point any code depending on them will stop working. We recommend setting a valid chat template before "
+                    "then to ensure that this model continues working without issues."
+                )
+                chat_template = self.default_chat_template
+            else:
+                raise ValueError(
+                    "No chat template is set for this processor. Please either set the `chat_template` attribute, "
+                    "or provide a chat template as an argument. See "
+                    "https://huggingface.co/docs/transformers/main/en/chat_templating for more information."
+                )
+        return self.tokenizer.apply_chat_template(
+            conversation, chat_template=chat_template, tokenize=tokenize, **kwargs
+        )
 
 
 ProcessorMixin.push_to_hub = copy_func(ProcessorMixin.push_to_hub)
