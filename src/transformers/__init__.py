@@ -559,6 +559,12 @@ _import_structure = {
     "models.mobilevitv2": ["MobileViTV2Config"],
     "models.mot": [
         "MoTConfig",
+        "MoTForQuestionAnswering",
+        "MoTForSequenceClassification",
+        "MoTForTokenClassification",
+        "MoTLMHeadModel",
+        "MoTModel",
+        "MoTPreTrainedModel",
     ],
     "models.mpnet": [
         "MPNetConfig",
@@ -5166,6 +5172,12 @@ if TYPE_CHECKING:
     )
     from .models.mot import (
         MoTConfig,
+        MoTForQuestionAnswering,
+        MoTForSequenceClassification,
+        MoTForTokenClassification,
+        MoTLMHeadModel,
+        MoTModel,
+        MoTPreTrainedModel,
     )
     from .models.mpnet import (
         MPNetConfig,
