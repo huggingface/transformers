@@ -483,16 +483,16 @@ except ValueError as e:
         assert result == int
 
     def test_tuple_id(self):
-        code="""
+        code = """
 food_items = {"apple": 2, "banana": 3, "orange": 1, "pear": 1}
 unique_food_items = [item for item, count in food_item_counts.items() if count == 1]
 """
         state = {}
         result = evaluate_python_code(code, {}, state=state)
-        assert result == ['orange', 'pear']
+        assert result == ["orange", "pear"]
 
     def test_nonsimple_augassign(self):
-        code="""
+        code = """
 counts_dict = {'a': 0}
 counts_dict['a'] += 1
 counts_list = [1, 2, 3]
@@ -506,12 +506,12 @@ a.count += 1
 """
         state = {}
         evaluate_python_code(code, {}, state=state)
-        assert state['counts_dict'] == {'a': 1}
-        assert state['counts_list'] == [1, 2, 3, 4, 5, 6]
-        assert state['a'].count == 1
+        assert state["counts_dict"] == {"a": 1}
+        assert state["counts_list"] == [1, 2, 3, 4, 5, 6]
+        assert state["a"].count == 1
 
     def test_adding_int_to_list_raises_error(self):
-        code="""
+        code = """
 counts = [1, 2, 3]
 counts += 1"""
         with pytest.raises(InterpretorError) as e:
@@ -519,7 +519,7 @@ counts += 1"""
         assert "Cannot add non-list value 1 to a list." in str(e)
 
     def test_error_highlights_correct_line_of_code(self):
-        code="""# Ok this is a very long code
+        code = """# Ok this is a very long code
 # It has many commented lines
 a = 1
 b = 2
@@ -539,8 +539,7 @@ assert 1 == 2
 """
         with pytest.raises(AssertionError) as e:
             evaluate_python_code(code, BASE_PYTHON_TOOLS, state={})
-        assert "1 == 2" in str(e) and not "1 == 1" in str(e)
-
+        assert "1 == 2" in str(e) and "1 == 1" not in str(e)
 
     def test_with_context_manager(self):
         code = """

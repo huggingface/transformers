@@ -395,38 +395,37 @@ class Agent:
                 thought_message = {"role": MessageRole.ASSISTANT, "content": step_log["llm_output"] + "\n"}
                 memory.append(thought_message)
 
-            if "error" in step_log or "observation" in step_log:
-                if "error" in step_log:
-                    message_content = (
-                        "Error: "
-                        + str(step_log["error"])
-                        + "\nNow let's retry: take care not to repeat previous errors! If you have retried several times, try a completely different approach.\n"
-                    )
-                elif "observation" in step_log:
-                    message_content = f"Observation:\n{step_log['observation']}"
-                tool_response_message = {"role": MessageRole.TOOL_RESPONSE, "content": message_content}
-                memory.append(tool_response_message)
+            if "error" in step_log:
+                message_content = (
+                    "Error: "
+                    + str(step_log["error"])
+                    + "\nNow let's retry: take care not to repeat previous errors! If you have retried several times, try a completely different approach.\n"
+                )
+            elif "observation" in step_log:
+                message_content = f"Observation: {step_log['observation']}"
+            tool_response_message = {"role": MessageRole.TOOL_RESPONSE, "content": message_content}
+            memory.append(tool_response_message)
 
-            # if len(memory) % 3 == 0:
-            #     reminder_content = (
-            #         "Reminder: you are working towards solving the following task: " + self.logs[0]["task"]
-            #     )
-            #     reminder_content += "\nHere is a summary of your past tool calls and their results:"
-            #     for j in range(i + 1):
-            #         reminder_content += "\nStep " + str(j + 1)
-            #         if "tool_call" in self.logs[j]:
-            #             reminder_content += "\nTool call:" + str(self.logs[j]["tool_call"])
-            #         if self.memory_verbose:
-            #             if "observation" in self.logs[j]:
-            #                 reminder_content += "\nObservation:" + str(self.logs[j]["observation"])
-            #         if "error" in self.logs[j]:
-            #             reminder_content += "\nError:" + str(self.logs[j]["error"])
-            #     memory.append(
-            #         {
-            #             "role": MessageRole.USER,
-            #             "content": reminder_content,
-            #         }
-            #     )
+            if len(memory) % 3 == 0:
+                reminder_content = (
+                    "Reminder: you are working towards solving the following task: " + self.logs[0]["task"]
+                )
+                reminder_content += "\nHere is a summary of your past tool calls and their results:"
+                for j in range(i + 1):
+                    reminder_content += "\nStep " + str(j + 1)
+                    if "tool_call" in self.logs[j]:
+                        reminder_content += "\nTool call:" + str(self.logs[j]["tool_call"])
+                    if self.memory_verbose:
+                        if "observation" in self.logs[j]:
+                            reminder_content += "\nObservation:" + str(self.logs[j]["observation"])
+                    if "error" in self.logs[j]:
+                        reminder_content += "\nError:" + str(self.logs[j]["error"])
+                memory.append(
+                    {
+                        "role": MessageRole.USER,
+                        "content": reminder_content,
+                    }
+                )
         return memory
 
     def get_succinct_logs(self):
@@ -702,16 +701,13 @@ class ReactAgent(Agent):
 
         yield final_answer
 
-    def direct_run(self, task: str, run_planning_step = True, **kwargs):
+    def direct_run(self, task: str, **kwargs):
         self.initialize_for_run(task, **kwargs)
 
         final_answer = None
         iteration = 0
         while final_answer is None and iteration < self.max_iterations:
             try:
-                if iteration % 3 == 0 and run_planning_step:
-                    # run planning step
-                    self.planning_step(task, is_first_step=(iteration == 0))
                 step_logs = self.step()
                 if "final_answer" in step_logs:
                     final_answer = step_logs["final_answer"]
@@ -730,72 +726,6 @@ class ReactAgent(Agent):
             final_step_log["final_answer"] = final_answer
 
         return final_answer
-    
-
-    def planning_step(self, task, is_first_step = False):
-        """
-        Plan the next steps to reach the objective.
-        """
-        if is_first_step:
-            prompt_facts = f"""Below I will present you a task. Before we begin addressing the task, please answer the following pre-survey to the best of your ability.
-
-Here is the task:
-
-{task}
-
-Here is the pre-survey:
-
-    1. Please list any specific facts or figures that are GIVEN in the task itself. It is possible that there are none.
-    2. Please list any facts that may need to be looked up, and WHERE SPECIFICALLY they might be found. In some cases, authoritative sources are mentioned in the request itself.
-    3. Please list any facts that may need to be derived (e.g., via logical deduction, simulation, or computation)
-
-When answering this survey, keep in mind that "facts" will typically be specific names, dates, statistics, etc. Your answer should use headings:
-
-    1. GIVEN OR VERIFIED FACTS
-    2. FACTS TO LOOK UP
-    3. FACTS TO DERIVE"""
-            message_prompt_facts = {"role": MessageRole.SYSTEM, "content": prompt_facts}
-
-            answer_facts = self.llm_engine([message_prompt_facts])
-            message_answer_facts = {"role": MessageRole.ASSISTANT, "content": answer_facts}
-
-            prompt_plan = f"""Great.
-Now you will have access to the following tools: {self._toolbox.show_tool_descriptions(self.tool_description_template)}.
-Based on the tools at your disposal, and known and unknown facts, please devise a short bullet-point plan for addressing the original request. Remember, there is no requirement to use all tools - a particular tool may not be needed for this task."""
-            message_prompt_plan = {"role": MessageRole.SYSTEM, "content": prompt_plan}
-            answer_plan = self.llm_engine([message_prompt_plan, message_answer_facts])
-
-            final_plan_redaction = f"""Here are the facts that I deduced from the instructions:
-{answer_facts}
-
-Here is the plan of action that I will follow to solve the task:
-{answer_plan}"""
-            print("FINAL REDACTED PLAN", final_plan_redaction)
-            self.logs.append({"llm_output": final_plan_redaction})
-            self.plan_initialization = [
-                message_prompt_facts,
-                message_answer_facts,
-                message_prompt_plan,
-                {"role": MessageRole.ASSISTANT, "content": answer_plan},
-            ]
-        else: # update plan
-            agent_memory = self.plan_initialization + self.write_inner_memory_from_logs()[2:]
-            facts_update_message = {"role": MessageRole.USER, "content": "Please update the list of facts that you did above based on the new information. New list of facts:"}
-            facts_update = self.llm_engine(agent_memory+[facts_update_message])
-
-            plan_update_message = {"role": MessageRole.USER, "content": f"Here is the updated list of facts based on history:\n{facts_update}\nThe task to solve is still the same: {task}\nPlease update your plan to solve this task based on the new facts. New plan:"}
-            plan_update = self.llm_engine(agent_memory+[plan_update_message])
-            self.logs.append({"llm_output": f"""I still need to solve the task:
-{task}
-
-Here is the updated list of facts based on history:
-{facts_update}
-
-Here is my new plan of action based on these facts:
-{plan_update}
-"""})
-            print("UPDATED PLAN", self.logs[-1]["llm_output"])
-
 
 
 class ReactJsonAgent(ReactAgent):
@@ -988,7 +918,7 @@ class ReactCodeAgent(ReactAgent):
             self.logger.log(32, information)
             current_step_logs["observation"] = information
         except Exception as e:
-            error_msg = f"Failed while trying to execute the code below:\n{code_action}\nThis failed due to the following error:\n{str(e)}"
+            error_msg = f"Failed while trying to execute the code below:\n{CustomFormatter.reset + code_action + CustomFormatter.reset}\nThis failed due to the following error:\n{str(e)}"
             if "'dict' object has no attribute 'read'" in str(e):
                 error_msg += "\nYou get this error because you passed a dict as input for one of the arguments instead of a string."
             raise AgentExecutionError(error_msg)

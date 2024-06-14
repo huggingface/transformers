@@ -225,7 +225,7 @@ def evaluate_augassign(expression: ast.AugAssign, state: Dict[str, Any], tools: 
     elif isinstance(expression.op, ast.Mod):
         updated_value = current_value % value_to_add
     elif isinstance(expression.op, ast.Pow):
-        updated_value = current_value ** value_to_add
+        updated_value = current_value**value_to_add
     elif isinstance(expression.op, ast.FloorDiv):
         updated_value = current_value // value_to_add
     elif isinstance(expression.op, ast.BitAnd):
@@ -563,7 +563,7 @@ def evaluate_with(with_node, state, tools):
         else:
             context_var = context_expr.__enter__()
             contexts.append(context_var)
-    
+
     try:
         for stmt in with_node.body:
             evaluate_ast(stmt, state, tools)

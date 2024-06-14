@@ -77,6 +77,13 @@ BASE_PYTHON_TOOLS = {
     "chr": chr,
     "next": next,
     "iter": iter,
+    "divmod": divmod,
+    "callable": callable,
+    "getattr": getattr,
+    "hasattr": hasattr,
+    "setattr": setattr,
+    "issubclass": issubclass,
+    "type": type,
 }
 
 
