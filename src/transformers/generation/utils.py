@@ -686,7 +686,8 @@ class GenerationMixin:
             and "cache_position" in model_kwargs
             and model_kwargs["cache_position"] is not None
         ):
-            model_kwargs["cache_position"] = model_kwargs["cache_position"][-1:] + num_new_tokens
+            # model_kwargs["cache_position"] = model_kwargs["cache_position"][-1:] + num_new_tokens
+            model_kwargs["cache_position"] = [x + num_new_tokens for x in model_kwargs["cache_position"][-1:]]
 
         return model_kwargs
 
@@ -1399,7 +1400,8 @@ class GenerationMixin:
             cur_len = model_kwargs["inputs_embeds"].shape[1]
         else:
             cur_len = input_ids.shape[-1]
-        model_kwargs["cache_position"] = torch.arange(past_length, cur_len, device=input_ids.device)
+        # model_kwargs["cache_position"] = torch.arange(past_length, cur_len, device=input_ids.device)
+        model_kwargs["cache_position"] = torch.arange(past_length, cur_len, device=input_ids.device).tolist()
         return model_kwargs
 
     def _get_cache(self, cache_implementation: str, max_batch_size: int, max_cache_len: int) -> Cache:
@@ -3716,11 +3718,11 @@ class GenerationMixin:
             if "cache_position" in candidate_kwargs:
                 candidate_kwargs["cache_position"] = torch.cat(
                     (
-                        candidate_kwargs["cache_position"],
+                        torch.tensor(candidate_kwargs["cache_position"], device=input_ids.device, dtype=torch.long),
                         torch.arange(cur_len, cur_len + candidate_length, device=input_ids.device, dtype=torch.long),
                     ),
                     dim=0,
-                )
+                ).tolist()
 
             model_inputs = self.prepare_inputs_for_generation(candidate_input_ids, **candidate_kwargs)
             if "num_logits_to_keep" in model_inputs:

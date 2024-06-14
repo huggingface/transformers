@@ -563,7 +563,7 @@ class GemmaSdpaAttention(GemmaAttention):
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": torch.tensor(cache_position, device=hidden_states.device, dtype=torch.long)}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
@@ -873,12 +873,13 @@ class GemmaModel(GemmaPreTrainedModel):
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
+            # cache_position = torch.arange(
+            #     past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+            # )
+            cache_position = list(range(past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1]))
 
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            position_ids = torch.tensor(cache_position, device=inputs_embeds.device, dtype=torch.long).unsqueeze(0)
 
         causal_mask = self._update_causal_mask(
             attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
@@ -1008,7 +1009,7 @@ class GemmaModel(GemmaPreTrainedModel):
             )
             if sequence_length != 1:
                 causal_mask = torch.triu(causal_mask, diagonal=1)
-            causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+            causal_mask *= torch.arange(target_length, device=device) > torch.tensor(cache_position, device=device, dtype=torch.long).reshape(-1, 1)
             causal_mask = causal_mask[None, None, :, :].expand(input_tensor.shape[0], 1, -1, -1)
             if attention_mask is not None:
                 causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
@@ -1213,6 +1214,8 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
             cache_position = torch.arange(past_length, past_length + input_length, device=input_ids.device)
         elif use_cache:
             cache_position = cache_position[-input_length:]
+
+        cache_position = cache_position.tolist()
 
         model_inputs.update(
             {
