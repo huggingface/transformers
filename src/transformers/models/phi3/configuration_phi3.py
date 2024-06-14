@@ -78,8 +78,8 @@ class Phi3Config(PretrainedConfig):
             The base period of the RoPE embeddings.
         rope_scaling (`dict`, *optional*):
             The scaling strategy for the RoPE embeddings. If `None`, no scaling is applied. If a dictionary, it must
-            contain the following keys: `type`, `short_factor` and `long_factor`. The `type` must be either `su` or `yarn` and
-            the `short_factor` and `long_factor` must be lists of numbers with the same length as the hidden size
+            contain the following keys: `type`, `short_factor` and `long_factor`. The `type` must be `longrope` and 
+            the `short_factor` and `long_factor` must be lists of numbers with the same length as the hidden size 
             divided by the number of attention heads divided by 2.
         bos_token_id (`int`, *optional*, defaults to 1):
             The id of the "beginning-of-sequence" token.
@@ -155,6 +155,7 @@ class Phi3Config(PretrainedConfig):
         self.use_cache = use_cache
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
+        self._rope_scaling_adjustment()
         self._rope_scaling_validation()
         self.sliding_window = sliding_window
 
@@ -166,6 +167,19 @@ class Phi3Config(PretrainedConfig):
             **kwargs,
         )
 
+    def _rope_scaling_adjustment(self):
+        """
+        Adjust the `type` of the `rope_scaling` configuration for backward compatibility.
+        """
+        if self.rope_scaling is None:
+            return
+
+        rope_scaling_type = self.rope_scaling.get("type", None)
+
+        # For backward compatibility if previous version used "su" or "yarn"
+        if rope_scaling_type is not None and rope_scaling_type in ["su", "yarn"]:
+            self.rope_scaling["type"] = "longrope"
+ 
     def _rope_scaling_validation(self):
         """
         Validate the `rope_scaling` configuration.
@@ -181,8 +195,8 @@ class Phi3Config(PretrainedConfig):
         rope_scaling_type = self.rope_scaling.get("type", None)
         rope_scaling_short_factor = self.rope_scaling.get("short_factor", None)
         rope_scaling_long_factor = self.rope_scaling.get("long_factor", None)
-        if rope_scaling_type is None or rope_scaling_type not in ["su", "yarn"]:
-            raise ValueError(f"`rope_scaling`'s type field must be one of ['su', 'yarn'], got {rope_scaling_type}")
+        if rope_scaling_type is None or rope_scaling_type not in ["longrope"]:
+            raise ValueError(f"`rope_scaling`'s type field must be one of ['longrope'], got {rope_scaling_type}")
         if not (
             isinstance(rope_scaling_short_factor, list)
             and all(isinstance(x, (int, float)) for x in rope_scaling_short_factor)
