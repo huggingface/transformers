@@ -1393,7 +1393,27 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
         >>> from transformers import InstructBlipVideoProcessor, InstructBlipVideoForConditionalGeneration
         >>> import torch
         >>> from huggingface_hub import hf_hub_download
-        >>> from decord import VideoReader
+        >>> from av
+
+        >>> def read_video_pyav(container, indices):
+        ...     '''
+        ...     Decode the video with PyAV decoder.
+        ...     Args:
+        ...         container (`av.container.input.InputContainer`): PyAV container.
+        ...         indices (`List[int]`): List of frame indices to decode.
+        ...     Returns:
+        ...         result (np.ndarray): np array of decoded frames of shape (num_frames, height, width, 3).
+        ...     '''
+        ...     frames = []
+        ...     container.seek(0)
+        ...     start_index = indices[0]
+        ...     end_index = indices[-1]
+        ...     for i, frame in enumerate(container.decode(video=0)):
+        ...         if i > end_index:
+        ...             break
+        ...         if i >= start_index and i in indices:
+        ...             frames.append(frame)
+        ...     return np.stack([x.to_ndarray(format="rgb24") for x in frames])
 
         >>> model = InstructBlipVideoProcessor.from_pretrained("Salesforce/instructblip-vicuna-7b", device_map="auto")
         >>> processor = InstructBlipVideoForConditionalGeneration.from_pretrained("Salesforce/instructblip-vicuna-7b")
@@ -1401,25 +1421,22 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
         >>> file_path = hf_hub_download(
                 repo_id="nielsr/video-demo", filename="eating_spaghetti.mp4", repo_type="dataset"
             )
+        >>> container = av.open(video_path)
+        >>> # sample uniformly 4 frames from the videWhy is this video funny?o
+        >>> total_frames = container.streams.video[0].frames
+        >>> indices = np.arange(0, total_frames, total_frames / 4).astype(int)
+        >>> clip = read_video_pyav(container, indices)
 
-        >>> vr = VideoReader(uri=file_path, height=224, width=224)
-        >>> start, end = 0, len(vr)
-        >>> indices = np.arange(start, end, vlen / 4).astype(int)
-        >>> frames = vr.get_batch(indices).asnumpy()
-        >>> video = list(frames)
         >>> prompt = "What is happening in the video?"
-        >>> inputs = processor(videos=[video], text=prompt, return_tensors="pt").to(device)
+        >>> inputs = processor(videos=clip, text=prompt, return_tensors="pt").to(device)
 
         >>> outputs = model.generate(
         ...     **inputs,
         ...     do_sample=False,
         ...     num_beams=5,
         ...     max_length=256,
-        ...     min_length=1,
-        ...     top_p=0.9,
         ...     repetition_penalty=1.5,
         ...     length_penalty=1.0,
-        ...     temperature=1,
         ... )
         >>> generated_text = processor.batch_decode(outputs, skip_special_tokens=True)[0].strip()
         >>> print(generated_text)
