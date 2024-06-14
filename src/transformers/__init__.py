@@ -2605,6 +2605,17 @@ else:
             "MobileViTV2PreTrainedModel",
         ]
     )
+    _import_structure["models.mot"].extend(
+        [
+            "MoTForQuestionAnswering",
+            "MoTForSequenceClassification",
+            "MoTForTokenClassification",
+            "MoTLMHeadModel",
+            "MoTModel",
+            "MoTPreTrainedModel",
+            "load_tf_weights_in_mot",
+        ]
+    )
     _import_structure["models.mpnet"].extend(
         [
             "MPNetForMaskedLM",
@@ -6990,6 +7001,15 @@ if TYPE_CHECKING:
             MobileViTV2ForSemanticSegmentation,
             MobileViTV2Model,
             MobileViTV2PreTrainedModel,
+        )
+        from .models.mot import (
+            MoTForQuestionAnswering,
+            MoTForSequenceClassification,
+            MoTForTokenClassification,
+            MoTLMHeadModel,
+            MoTModel,
+            MoTPreTrainedModel,
+            load_tf_weights_in_mot,
         )
         from .models.mpnet import (
             MPNetForMaskedLM,
