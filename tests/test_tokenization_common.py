@@ -4221,9 +4221,6 @@ class TokenizerTesterMixin:
                 output_tokens_reloaded_unsplit = fast_from_saved.tokenize(special_sentence, split_special_tokens=False)
                 self.assertTrue(special_token in output_tokens_reloaded_unsplit)
 
-    import pytest
-
-    @pytest.mark.tt
     def test_added_tokens_serialization(self):
         # Utility to test the added vocab
         def _test_added_vocab_and_eos(expected, tokenizer_class, expected_eos, temp_dir):

@@ -200,20 +200,20 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         tokenizer = DebertaV2Tokenizer(SAMPLE_VOCAB, unk_token="<unk>", keep_accents=True)
         rust_tokenizer = DebertaV2TokenizerFast(SAMPLE_VOCAB, unk_token="<unk>", keep_accents=True)
-        #
-        # ids = tokenizer.encode(sequence, add_special_tokens=False)
-        # self.assertListEqual(ids, ids_target)
-        # tokens = tokenizer.tokenize(sequence)
-        # self.assertListEqual(tokens, tokens_target)
-        # back_tokens = tokenizer.convert_ids_to_tokens(ids)
-        # self.assertListEqual(back_tokens, back_tokens_target)
-        #
-        # rust_ids = rust_tokenizer.encode(sequence, add_special_tokens=False)
-        # self.assertListEqual(rust_ids, ids_target)
-        # rust_tokens = rust_tokenizer.tokenize(sequence)
-        # self.assertListEqual(rust_tokens, tokens_target)
-        # rust_back_tokens = rust_tokenizer.convert_ids_to_tokens(rust_ids)
-        # self.assertListEqual(rust_back_tokens, back_tokens_target)
+
+        ids = tokenizer.encode(sequence, add_special_tokens=False)
+        self.assertListEqual(ids, ids_target)
+        tokens = tokenizer.tokenize(sequence)
+        self.assertListEqual(tokens, tokens_target)
+        back_tokens = tokenizer.convert_ids_to_tokens(ids)
+        self.assertListEqual(back_tokens, back_tokens_target)
+
+        rust_ids = rust_tokenizer.encode(sequence, add_special_tokens=False)
+        self.assertListEqual(rust_ids, ids_target)
+        rust_tokens = rust_tokenizer.tokenize(sequence)
+        self.assertListEqual(rust_tokens, tokens_target)
+        rust_back_tokens = rust_tokenizer.convert_ids_to_tokens(rust_ids)
+        self.assertListEqual(rust_back_tokens, back_tokens_target)
 
         # fmt: off
         sequence = "I was born in 92000, and this is falsé!"
