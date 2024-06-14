@@ -14,8 +14,11 @@ def get_daily_ci_runs(token, num_runs=7):
     if token is not None:
         headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}"}
 
-    # The id of a workflow (not of a workflow run)
-    workflow_id = "636036"
+    # The id of a workflow (not of a workflow run).
+    # From a given workflow run (where we have workflow run id), we can get the workflow id by going to
+    # https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}
+    # and check the `workflow_id` key.
+    workflow_id = "90575235"
 
     url = f"https://api.github.com/repos/huggingface/transformers/actions/workflows/{workflow_id}/runs"
     # On `main` branch + event being `schedule` + not returning PRs + only `num_runs` results

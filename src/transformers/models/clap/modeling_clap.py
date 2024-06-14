@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch CLAP model."""
+"""PyTorch CLAP model."""
+
 import collections
 import math
 from dataclasses import dataclass
@@ -43,12 +44,6 @@ from .configuration_clap import ClapAudioConfig, ClapConfig, ClapTextConfig
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "laion/clap-htsat-fused"
-
-CLAP_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "laion/clap-htsat-fused",
-    "laion/clap-htsat-unfused",
-    # See all clap models at https://huggingface.co/models?filter=clap
-]
 
 
 # Adapted from: https://github.com/LAION-AI/CLAP/blob/6ad05a971ba0622f6acee8c41993e0d02bbed639/src/open_clip/utils.py#L191
@@ -92,6 +87,7 @@ def window_partition(hidden_states, window_size):
 # Adapted from https://github.com/LAION-AI/CLAP/blob/6ad05a971ba0622f6acee8c41993e0d02bbed639/src/open_clip/htsat.py#L263
 def window_reverse(windows, window_size, height, width):
     """
+    Merges windows to produce higher resolution features.
     Args:
         windows (`torch.FloatTensor` of shape `(num_windows * batch_size, window_size, window_size, num_channels)`):
             Input windows
@@ -102,11 +98,10 @@ def window_reverse(windows, window_size, height, width):
         width (`int`):
             Width of the resized audio
     """
-    batch_size = int(windows.shape[0] / (height * width / window_size / window_size))
-
-    hidden_states = windows.view(batch_size, height // window_size, width // window_size, window_size, window_size, -1)
-    hidden_states = hidden_states.permute(0, 1, 3, 2, 4, 5).contiguous().view(batch_size, height, width, -1)
-    return hidden_states
+    num_channels = windows.shape[-1]
+    windows = windows.view(-1, height // window_size, width // window_size, window_size, window_size, num_channels)
+    windows = windows.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, height, width, num_channels)
+    return windows
 
 
 # Copied from transformers.models.roberta.modeling_roberta.create_position_ids_from_input_ids
@@ -159,8 +154,8 @@ class ClapTextModelOutput(ModelOutput):
 
     text_embeds: Optional[torch.FloatTensor] = None
     last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -188,8 +183,8 @@ class ClapAudioModelOutput(ModelOutput):
 
     audio_embeds: Optional[torch.FloatTensor] = None
     last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -598,10 +593,10 @@ class ClapAudioLayer(nn.Module):
             self.shift_size = 0
             self.window_size = min(input_resolution)
 
-    def get_attn_mask(self, height, width, dtype):
+    def get_attn_mask(self, height, width, dtype, device):
         if self.shift_size > 0:
             # calculate attention mask for SW-MSA
-            img_mask = torch.zeros((1, height, width, 1), dtype=dtype)
+            img_mask = torch.zeros((1, height, width, 1), dtype=dtype, device=device)
             height_slices = (
                 slice(0, -self.window_size),
                 slice(-self.window_size, -self.shift_size),
@@ -666,9 +661,9 @@ class ClapAudioLayer(nn.Module):
         # partition windows
         hidden_states_windows = window_partition(shifted_hidden_states, self.window_size)
         hidden_states_windows = hidden_states_windows.view(-1, self.window_size * self.window_size, channels)
-        attn_mask = self.get_attn_mask(height_pad, width_pad, dtype=hidden_states.dtype)
-        if attn_mask is not None:
-            attn_mask = attn_mask.to(hidden_states_windows.device)
+        attn_mask = self.get_attn_mask(
+            height_pad, width_pad, dtype=hidden_states.dtype, device=hidden_states_windows.device
+        )
 
         attention_outputs = self.attention(
             hidden_states_windows, attn_mask, head_mask, output_attentions=output_attentions
@@ -1379,11 +1374,18 @@ class ClapTextSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->ClapText
+CLAP_TEXT_SELF_ATTENTION_CLASSES = {
+    "eager": ClapTextSelfAttention,
+}
+
+
+# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->ClapText,BERT->CLAP_TEXT
 class ClapTextAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = ClapTextSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.self = CLAP_TEXT_SELF_ATTENTION_CLASSES[config._attn_implementation](
+            config, position_embedding_type=position_embedding_type
+        )
         self.output = ClapTextSelfOutput(config)
         self.pruned_heads = set()
 
@@ -1722,7 +1724,7 @@ class ClapAudioModel(ClapPreTrainedModel):
         >>> from datasets import load_dataset
         >>> from transformers import AutoProcessor, ClapAudioModel
 
-        >>> dataset = load_dataset("ashraq/esc50")
+        >>> dataset = load_dataset("hf-internal-testing/ashraq-esc50-1-dog-example")
         >>> audio_sample = dataset["train"]["audio"][0]["array"]
 
         >>> model = ClapAudioModel.from_pretrained("laion/clap-htsat-fused")
@@ -1766,7 +1768,6 @@ class ClapTextModel(ClapPreTrainedModel):
 
     config_class = ClapTextConfig
 
-    # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->ClapText
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
@@ -1785,7 +1786,6 @@ class ClapTextModel(ClapPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
-    # Copied from transformers.models.bert.modeling_bert.BertModel.forward
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -2070,7 +2070,7 @@ class ClapModel(ClapPreTrainedModel):
         >>> from datasets import load_dataset
         >>> from transformers import AutoProcessor, ClapModel
 
-        >>> dataset = load_dataset("ashraq/esc50")
+        >>> dataset = load_dataset("hf-internal-testing/ashraq-esc50-1-dog-example")
         >>> audio_sample = dataset["train"]["audio"][0]["array"]
 
         >>> model = ClapModel.from_pretrained("laion/clap-htsat-unfused")
@@ -2263,7 +2263,7 @@ class ClapAudioModelWithProjection(ClapPreTrainedModel):
         >>> model = ClapAudioModelWithProjection.from_pretrained("laion/clap-htsat-fused")
         >>> processor = ClapProcessor.from_pretrained("laion/clap-htsat-fused")
 
-        >>> dataset = load_dataset("ashraq/esc50")
+        >>> dataset = load_dataset("hf-internal-testing/ashraq-esc50-1-dog-example")
         >>> audio_sample = dataset["train"]["audio"][0]["array"]
 
         >>> inputs = processor(audios=audio_sample, return_tensors="pt")

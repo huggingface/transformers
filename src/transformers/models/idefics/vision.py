@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch IdeficsVision model: a copy of CLIPVisionModel using a simpler config object"""
-
+"""PyTorch IdeficsVision model: a copy of CLIPVisionModel using a simpler config object"""
 
 import math
 from dataclasses import dataclass
@@ -57,8 +56,8 @@ class IdeficsVisionModelOutput(ModelOutput):
 
     image_embeds: Optional[torch.FloatTensor] = None
     last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 # Adapted from transformers.models.clip.modeling_clip.CLIPVisionEmbeddings

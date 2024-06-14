@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License
-""" Tokenization classes for LayoutXLM model."""
-
+"""Tokenization classes for LayoutXLM model."""
 
 import os
 from shutil import copyfile
@@ -32,8 +31,6 @@ from ...tokenization_utils_base import (
 )
 from ...utils import PaddingStrategy, TensorType, add_end_docstrings, logging
 from ..xlm_roberta.tokenization_xlm_roberta import (
-    PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES,
-    PRETRAINED_VOCAB_FILES_MAP,
     SPIECE_UNDERLINE,
     VOCAB_FILES_NAMES,
 )
@@ -225,8 +222,6 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(

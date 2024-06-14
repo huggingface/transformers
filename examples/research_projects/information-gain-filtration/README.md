@@ -64,7 +64,7 @@ To fine-tune a transformer model with IGF on a language modeling task, use the f
   
 ```python
 python run_clm_igf.py\
---model_name_or_path "gpt2" \
+--model_name_or_path "openai-community/gpt2" \
 --data_file="data/tokenized_stories_train_wikitext103" \
 --igf_data_file="data/IGF_values" \
 --context_len 32 \
@@ -84,7 +84,7 @@ python run_clm_igf.py\
 
 If you find the resource useful, please cite the following paper
 
-```
+```bibtex
 @inproceedings{antonello-etal-2021-selecting,
     title = "Selecting Informative Contexts Improves Language Model Fine-tuning",
     author = "Antonello, Richard and Beckage, Nicole and Turek, Javier and Huth, Alexander",

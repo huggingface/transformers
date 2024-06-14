@@ -51,6 +51,7 @@ if is_torch_available():
 @require_sentencepiece
 @require_tokenizers
 class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "hf-internal-testing/llama-code-tokenizer"
     tokenizer_class = CodeLlamaTokenizer
     rust_tokenizer_class = CodeLlamaTokenizerFast
     test_rust_tokenizer = False
@@ -367,10 +368,10 @@ class LlamaIntegrationTest(unittest.TestCase):
         fast = fast_tokenizer.encode("A sample test", add_special_tokens=True)
         assert fast == [319, 4559, 1243, 2]
 
-        slow_tokenzier = CodeLlamaTokenizer.from_pretrained(
+        slow_tokenizer = CodeLlamaTokenizer.from_pretrained(
             "hf-internal-testing/llama-tokenizer", add_eos_token=True, add_bos_token=False
         )
-        slow = slow_tokenzier.encode("A sample test", add_special_tokens=True)
+        slow = slow_tokenizer.encode("A sample test", add_special_tokens=True)
         assert slow == [319, 4559, 1243, 2]
 
         self.tokenizer.add_eos_token = False

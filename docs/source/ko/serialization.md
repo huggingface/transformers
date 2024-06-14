@@ -56,10 +56,10 @@ pip install optimum[exporters]
 optimum-cli export onnx --help
 ```
 
-예를 들어, 🤗 Hub에서 `distilbert-base-uncased-distilled-squad`와 같은 모델의 체크포인트를 내보내려면 다음 명령을 실행하세요:
+예를 들어, 🤗 Hub에서 `distilbert/distilbert-base-uncased-distilled-squad`와 같은 모델의 체크포인트를 내보내려면 다음 명령을 실행하세요:
 
 ```bash
-optimum-cli export onnx --model distilbert-base-uncased-distilled-squad distilbert_base_uncased_squad_onnx/
+optimum-cli export onnx --model distilbert/distilbert-base-uncased-distilled-squad distilbert_base_uncased_squad_onnx/
 ```
 
 위와 같이 진행 상황을 나타내는 로그가 표시되고 결과인 `model.onnx`가 저장된 위치가 표시됩니다.
@@ -141,7 +141,7 @@ pip install transformers[onnx]
 `transformers.onnx` 패키지를 Python 모듈로 사용하여 준비된 구성을 사용하여 체크포인트를 내보냅니다:
 
 ```bash
-python -m transformers.onnx --model=distilbert-base-uncased onnx/
+python -m transformers.onnx --model=distilbert/distilbert-base-uncased onnx/
 ```
 
 이렇게 하면 `--model` 인수에 정의된 체크포인트의 ONNX 그래프가 내보내집니다. 🤗 Hub에서 제공하는 체크포인트나 로컬에 저장된 체크포인트를 전달할 수 있습니다. 결과로 생성된 `model.onnx` 파일은 ONNX 표준을 지원하는 많은 가속기 중 하나에서 실행할 수 있습니다. 예를 들어, 다음과 같이 ONNX Runtime을 사용하여 모델을 로드하고 실행할 수 있습니다:
@@ -150,7 +150,7 @@ python -m transformers.onnx --model=distilbert-base-uncased onnx/
 >>> from transformers import AutoTokenizer
 >>> from onnxruntime import InferenceSession
 
->>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+>>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
 >>> session = InferenceSession("onnx/model.onnx")
 >>> # ONNX Runtime expects NumPy arrays as input
 >>> inputs = tokenizer("Using DistilBERT with ONNX Runtime!", return_tensors="np")

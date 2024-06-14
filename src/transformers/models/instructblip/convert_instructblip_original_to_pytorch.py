@@ -132,7 +132,7 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
     """
     Copy/paste/tweak model's weights to Transformers design.
     """
-    qformer_tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased", truncation_side="left")
+    qformer_tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased", truncation_side="left")
     qformer_tokenizer.add_special_tokens({"bos_token": "[DEC]"})
 
     if "t5" in model_name:

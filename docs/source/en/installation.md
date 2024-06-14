@@ -70,9 +70,9 @@ pip install 'transformers[tf-cpu]'
 <Tip warning={true}>
 
 M1 / ARM Users
-    
+
 You will need to install the following before installing TensorFLow 2.0
-```
+```bash
 brew install cmake
 brew install pkg-config
 ```
@@ -147,10 +147,10 @@ Your Python environment will find the `main` version of 🤗 Transformers on the
 
 ## Install with conda
 
-Install from the conda channel `huggingface`:
+Install from the conda channel `conda-forge`:
 
 ```bash
-conda install -c huggingface transformers
+conda install conda-forge::transformers
 ```
 
 ## Cache setup
@@ -169,7 +169,7 @@ Pretrained models are downloaded and locally cached at: `~/.cache/huggingface/hu
 
 ## Offline mode
 
-Run 🤗 Transformers in a firewalled or offline environment with locally cached files by setting the environment variable `TRANSFORMERS_OFFLINE=1`.
+Run 🤗 Transformers in a firewalled or offline environment with locally cached files by setting the environment variable `HF_HUB_OFFLINE=1`.
 
 <Tip>
 
@@ -178,8 +178,8 @@ Add [🤗 Datasets](https://huggingface.co/docs/datasets/) to your offline train
 </Tip>
 
 ```bash
-HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
-python examples/pytorch/translation/run_translation.py --model_name_or_path t5-small --dataset_name wmt16 --dataset_config ro-en ...
+HF_DATASETS_OFFLINE=1 HF_HUB_OFFLINE=1 \
+python examples/pytorch/translation/run_translation.py --model_name_or_path google-t5/t5-small --dataset_name wmt16 --dataset_config ro-en ...
 ```
 
 This script should run without hanging or waiting to timeout because it won't attempt to download the model from the Hub.

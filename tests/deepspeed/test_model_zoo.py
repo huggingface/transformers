@@ -50,7 +50,7 @@ DS_TESTS_DIRECTORY = dirname(os.path.abspath(__file__))
 # default torch.distributed port
 DEFAULT_MASTER_PORT = "10999"
 
-T5_SMALL = "t5-small"
+T5_SMALL = "google-t5/t5-small"
 
 # *** Working Models ***
 ALBERT_TINY = "hf-internal-testing/tiny-albert"
@@ -105,7 +105,7 @@ HUBERT_TINY = "hf-internal-testing/tiny-random-hubert"
 
 # issues with tokenizer
 CTRL_TINY = "hf-internal-testing/tiny-random-ctrl"
-TRANSFO_XL_TINY = "hf-internal-testing/tiny-random-transfo-xl"  # same as ctrl
+TRANSFO_XL_TINY = "hf-internal-testing/tiny-random-transfo-xl"  # same as Salesforce/ctrl
 
 # other issues with tiny models
 IBERT_TINY = "hf-internal-testing/tiny-random-ibert"  # multiple issues with either mlm/qa/clas
@@ -218,9 +218,9 @@ def make_task_cmds():
             "xlnet",
             # "hubert", # missing tokenizer files
             # "ibert", # multiple issues with either mlm/qa/clas
-            # "transfo-xl", # tokenizer issues as ctrl
-            # "ctrl", # tokenizer issues
-            # "openai-gpt", missing model files
+            # "transfo-xl", # tokenizer issues as Salesforce/ctrl
+            # "Salesforce/ctrl", # tokenizer issues
+            # "openai-community/openai-gpt", missing model files
             # "tapas", multiple issues
         ],
         "img_clas": [
@@ -236,6 +236,8 @@ def make_task_cmds():
         --train_file {data_dir_wmt}/train.json
         --source_lang en
         --target_lang ro
+        --max_source_length 12
+        --max_target_length 12
         """,
         "sum": f"""
         {scripts_dir}/summarization/run_summarization.py
@@ -269,6 +271,7 @@ def make_task_cmds():
             --remove_unused_columns False
             --max_steps 10
             --image_processor_name {DS_TESTS_DIRECTORY}/vit_feature_extractor.json
+            --label_column_name labels
         """,
     }
 

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Donut Swin model. """
+"""Testing suite for the PyTorch Donut Swin model."""
 
 import collections
 import unittest
@@ -31,7 +31,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import DonutSwinModel
-    from transformers.models.donut.modeling_donut_swin import DONUT_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class DonutSwinModelTester:
@@ -145,7 +144,7 @@ class DonutSwinModelTester:
 @require_torch
 class DonutSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (DonutSwinModel,) if is_torch_available() else ()
-    pipeline_model_mapping = {"feature-extraction": DonutSwinModel} if is_torch_available() else {}
+    pipeline_model_mapping = {"image-feature-extraction": DonutSwinModel} if is_torch_available() else {}
     fx_compatible = True
 
     test_pruning = False
@@ -176,7 +175,7 @@ class DonutSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         # DonutSwin does not use inputs_embeds
         pass
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -334,9 +333,9 @@ class DonutSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in DONUT_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = DonutSwinModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "naver-clova-ix/donut-base"
+        model = DonutSwinModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

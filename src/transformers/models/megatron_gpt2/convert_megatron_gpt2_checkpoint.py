@@ -324,13 +324,13 @@ def main():
     if ds_args is not None:
         tokenizer_type = ds_args.tokenizer_type
         if tokenizer_type == "GPT2BPETokenizer":
-            tokenizer_model_name = "gpt2"
+            tokenizer_model_name = "openai-community/gpt2"
         elif tokenizer_type == "PretrainedFromHF":
             tokenizer_model_name = ds_args.tokenizer_name_or_path
         else:
             raise ValueError(f"Unrecognized tokenizer_type {tokenizer_type}")
     else:
-        tokenizer_model_name = "gpt2"
+        tokenizer_model_name = "openai-community/gpt2"
 
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_model_name)
     tokenizer_class = type(tokenizer).__name__

@@ -21,7 +21,7 @@ from transformers import (
     TFPreTrainedModel,
     pipeline,
 )
-from transformers.testing_utils import get_gpu_count, is_pipeline_test, require_tf, require_torch, slow, torch_device
+from transformers.testing_utils import is_pipeline_test, require_tf, require_torch, slow, torch_device
 from transformers.tokenization_utils import TruncationStrategy
 
 from .test_pipelines_common import ANY
@@ -67,8 +67,8 @@ class SummarizationPipelineTests(unittest.TestCase):
             # the embedding layer.
             if not (
                 isinstance(model, TFPreTrainedModel)
-                and get_gpu_count() > 0
                 and len(summarizer.model.trainable_weights) > 0
+                and "GPU" in summarizer.model.trainable_weights[0].device
             ):
                 with self.assertRaises(Exception):
                     outputs = summarizer("This " * 1000)

@@ -39,8 +39,6 @@ if is_torch_available():
         LongT5ForConditionalGeneration,
         LongT5Model,
     )
-    from transformers.models.longt5.modeling_longt5 import LONGT5_PRETRAINED_MODEL_ARCHIVE_LIST
-    from transformers.pytorch_utils import is_torch_less_than_1_11
 
 
 class LongT5ModelTester:
@@ -506,7 +504,6 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     all_generative_model_classes = (LongT5ForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "conversational": LongT5ForConditionalGeneration,
             "feature-extraction": LongT5Model,
             "summarization": LongT5ForConditionalGeneration,
             "text2text-generation": LongT5ForConditionalGeneration,
@@ -591,14 +588,10 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in LONGT5_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = LongT5Model.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/long-t5-local-base"
+        model = LongT5Model.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
-    @unittest.skipIf(
-        not is_torch_available() or is_torch_less_than_1_11,
-        "Test failed with torch < 1.11 with an exception in a C++ file.",
-    )
     @slow
     def test_export_to_onnx(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -758,7 +751,7 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
     def _check_encoder_attention_for_generate(self, attentions, batch_size, config, seq_length):
         block_len = getattr(self.model_tester, "block_len", None)
-        encoder_expected_shape = (batch_size, 1, config.num_attention_heads, block_len, 3 * block_len)
+        encoder_expected_shape = (batch_size, 2, config.num_attention_heads, block_len, 3 * block_len)
         self.assertIsInstance(attentions, tuple)
         self.assertListEqual(
             [layer_attentions.shape for layer_attentions in attentions],
@@ -891,7 +884,7 @@ class LongT5TGlobalModelTest(LongT5ModelTest):
         global_seq_length = seq_length // global_block_size
         encoder_expected_shape = (
             batch_size,
-            1,
+            2,
             config.num_attention_heads,
             block_len,
             3 * block_len + global_seq_length,

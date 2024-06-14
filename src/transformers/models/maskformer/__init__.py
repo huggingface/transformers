@@ -17,7 +17,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_maskformer": ["MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "MaskFormerConfig"],
+    "configuration_maskformer": ["MaskFormerConfig"],
     "configuration_maskformer_swin": ["MaskFormerSwinConfig"],
 }
 
@@ -38,7 +38,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_maskformer"] = [
-        "MASKFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "MaskFormerForInstanceSegmentation",
         "MaskFormerModel",
         "MaskFormerPreTrainedModel",
@@ -50,7 +49,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_maskformer import MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, MaskFormerConfig
+    from .configuration_maskformer import MaskFormerConfig
     from .configuration_maskformer_swin import MaskFormerSwinConfig
 
     try:
@@ -68,7 +67,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_maskformer import (
-            MASKFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             MaskFormerForInstanceSegmentation,
             MaskFormerModel,
             MaskFormerPreTrainedModel,

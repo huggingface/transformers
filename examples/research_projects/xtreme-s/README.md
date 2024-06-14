@@ -90,7 +90,7 @@ python -m torch.distributed.launch \
     --gradient_accumulation_steps=2 \
     --learning_rate="3e-4" \
     --warmup_steps=3000 \
-    --evaluation_strategy="steps" \
+    --eval_strategy="steps" \
     --max_duration_in_seconds=20 \
     --save_steps=500 \
     --eval_steps=500 \
@@ -134,7 +134,7 @@ python -m torch.distributed.launch \
     --gradient_accumulation_steps=1 \
     --learning_rate="3e-4" \
     --warmup_steps=1500 \
-    --evaluation_strategy="steps" \
+    --eval_strategy="steps" \
     --max_duration_in_seconds=30 \
     --save_steps=200 \
     --eval_steps=200 \

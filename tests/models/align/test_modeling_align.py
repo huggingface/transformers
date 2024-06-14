@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch ALIGN model. """
-
+"""Testing suite for the PyTorch ALIGN model."""
 
 import inspect
 import os
@@ -51,7 +50,6 @@ if is_torch_available():
         AlignTextModel,
         AlignVisionModel,
     )
-    from transformers.models.align.modeling_align import ALIGN_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -168,8 +166,12 @@ class AlignVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
+    @unittest.skip(reason="AlignVisionModel does not use inputs_embeds")
+    def test_inputs_embeds_matches_input_ids(self):
+        pass
+
     @unittest.skip(reason="AlignVisionModel does not support input and output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     def test_forward_signature(self):
@@ -238,9 +240,9 @@ class AlignVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in ALIGN_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = AlignVisionModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "kakaobrain/align-base"
+        model = AlignVisionModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class AlignTextModelTester:
@@ -380,6 +382,10 @@ class AlignTextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
+    @unittest.skip(reason="Align does not use inputs_embeds")
+    def test_inputs_embeds_matches_input_ids(self):
+        pass
+
     @unittest.skip(reason="AlignTextModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_from_base(self):
         pass
@@ -390,9 +396,9 @@ class AlignTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in ALIGN_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = AlignTextModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "kakaobrain/align-base"
+        model = AlignTextModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class AlignModelTester:
@@ -405,6 +411,7 @@ class AlignModelTester:
         self.parent = parent
         self.text_model_tester = AlignTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = AlignVisionModelTester(parent, **vision_kwargs)
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
@@ -473,12 +480,16 @@ class AlignModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
+    @unittest.skip(reason="Align does not use inputs_embeds")
+    def test_inputs_embeds_matches_input_ids(self):
+        pass
+
     @unittest.skip(reason="Retain_grad is tested in individual model tests")
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
     @unittest.skip(reason="AlignModel does not have input/output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     # override as the `temperature` parameter initilization is different for ALIGN
@@ -598,9 +609,9 @@ class AlignModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in ALIGN_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = AlignModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "kakaobrain/align-base"
+        model = AlignModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

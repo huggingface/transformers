@@ -426,7 +426,7 @@ class FlaxViT2GPT2EncoderDecoderModelTest(FlaxEncoderDecoderMixin, unittest.Test
 
     def get_pretrained_model(self):
         return FlaxVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
-            "google/vit-base-patch16-224-in21k", "gpt2"
+            "google/vit-base-patch16-224-in21k", "openai-community/gpt2"
         )
 
 
@@ -434,7 +434,7 @@ class FlaxViT2GPT2EncoderDecoderModelTest(FlaxEncoderDecoderMixin, unittest.Test
 class FlaxVisionEncoderDecoderModelTest(unittest.TestCase):
     def get_from_encoderdecoder_pretrained_model(self):
         return FlaxVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
-            "google/vit-base-patch16-224-in21k", "gpt2"
+            "google/vit-base-patch16-224-in21k", "openai-community/gpt2"
         )
 
     def _check_configuration_tie(self, model):

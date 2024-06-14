@@ -12,13 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Dinov2 model. """
-
+"""Testing suite for the PyTorch Dinov2 model."""
 
 import unittest
 
 from transformers import Dinov2Config
 from transformers.testing_utils import (
+    is_flaky,
     require_torch,
     require_vision,
     slow,
@@ -37,7 +37,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import Dinov2Backbone, Dinov2ForImageClassification, Dinov2Model
-    from transformers.models.dinov2.modeling_dinov2 import DINOV2_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -216,7 +215,7 @@ class Dinov2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else ()
     )
     pipeline_model_mapping = (
-        {"feature-extraction": Dinov2Model, "image-classification": Dinov2ForImageClassification}
+        {"image-feature-extraction": Dinov2Model, "image-classification": Dinov2ForImageClassification}
         if is_torch_available()
         else {}
     )
@@ -229,6 +228,10 @@ class Dinov2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = Dinov2ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Dinov2Config, has_text_modality=False, hidden_size=37)
+
+    @is_flaky(max_attempts=3, description="`torch.nn.init.trunc_normal_` is flaky.")
+    def test_initialization(self):
+        super().test_initialization()
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -255,7 +258,7 @@ class Dinov2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -282,9 +285,9 @@ class Dinov2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in DINOV2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = Dinov2Model.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/dinov2-base"
+        model = Dinov2Model.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

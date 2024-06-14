@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch FLAVA model."""
+"""PyTorch FLAVA model."""
 
 import collections
 import math
@@ -55,11 +55,7 @@ _CONFIG_CLASS_FOR_TEXT_MODEL_DOC = "FlavaTextConfig"
 _CONFIG_CLASS_FOR_MULTIMODAL_MODEL_DOC = "FlavaMultimodalConfig"
 _EXPECTED_IMAGE_OUTPUT_SHAPE = [1, 197, 768]
 
-FLAVA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/flava-full",
-    # See all flava models at https://huggingface.co/models?filter=flava
-]
-FLAVA_CODEBOOK_PRETRAINED_MODEL_ARCHIVE_LIST = ["facebook/flava-image-codebook"]
+
 LOGIT_SCALE_CLAMP_MIN = 0
 LOGIT_SCALE_CLAMP_MAX = 4.6052
 
@@ -474,8 +470,6 @@ class FlavaSelfAttention(nn.Module):
             # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
             attention_scores = attention_scores + attention_mask
 
-        # Normalize the attention scores to probabilities.
-        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
         # Normalize the attention scores to probabilities.
         attention_probs = nn.functional.softmax(attention_scores, dim=-1)
 
@@ -1415,8 +1409,18 @@ class FlavaModel(FlavaPreTrainedModel):
         multimodal_embeddings = None
         multimodal_output = None
         if image_mm_projection is not None and text_mm_projection is not None and not skip_multimodal_encoder:
+            if attention_mask is not None:
+                batch_size, seq_len, _ = image_mm_projection.shape
+                if self.multimodal_model.use_cls_token:
+                    seq_len += 1
+                attention_mask_image = torch.ones(batch_size, seq_len, device=image_mm_projection.device)
+                attention_multimodal = torch.cat([attention_mask_image, attention_mask], dim=1)
+            else:
+                attention_multimodal = None
             multimodal_input = torch.cat([image_mm_projection, text_mm_projection], dim=1)
-            multimodal_output = self.multimodal_model(multimodal_input, return_dict=return_dict)
+            multimodal_output = self.multimodal_model(
+                multimodal_input, attention_mask=attention_multimodal, return_dict=return_dict
+            )
             multimodal_embeddings = multimodal_output[0]
 
         if not return_dict:
@@ -1650,6 +1654,9 @@ class FlavaMaskedPredictionHead(nn.Module):
             self.decoder.weight = weight
 
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
+        self.decoder.bias = self.bias
+
+    def _tie_weights(self):
         self.decoder.bias = self.bias
 
     def forward(self, x):
@@ -1949,6 +1956,7 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
 
                 if mim_labels is not None:
                     mim_labels = mim_labels[pos_mask]
+                    bool_masked_pos = bool_masked_pos[pos_mask]
 
         # MMM Image Loss
         if multimodal_masked_embeddings is not None and self.mmm_image_weight > 0:
@@ -1956,8 +1964,6 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
             end_index = image_masked_embeddings.size(1) - 1
             sequence_for_image = sequence_for_image[:, 2 : 2 + end_index, :]
 
-            if pos_mask is not None:
-                sequence_for_image = sequence_for_image[pos_mask]
             if mim_labels is not None:
                 mim_labels = self._resize_to_2d(mim_labels)
                 bool_masked_pos = self._resize_to_2d(bool_masked_pos)
@@ -1979,8 +1985,6 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
         if multimodal_masked_embeddings is not None and self.mmm_text_weight > 0:
             sequence_for_text = multimodal_masked_embeddings
             sequence_for_text = sequence_for_text[:, -text_masked_embeddings.size(1) :, :]
-            if pos_mask is not None:
-                sequence_for_text = sequence_for_text[pos_mask]
 
             if mlm_labels is not None:
                 mlm_labels = self._resize_to_2d(mlm_labels)

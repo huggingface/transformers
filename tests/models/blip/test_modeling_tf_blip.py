@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the TensorFlow Blip model. """
-
+"""Testing suite for the TensorFlow Blip model."""
 
 from __future__ import annotations
 
@@ -44,7 +43,7 @@ if is_tf_available():
         TFBlipTextModel,
         TFBlipVisionModel,
     )
-    from transformers.models.blip.modeling_tf_blip import TF_BLIP_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.modeling_tf_utils import keras
 
 
 if is_vision_available():
@@ -172,9 +171,9 @@ class TFBlipVisionModelTest(TFModelTesterMixin, unittest.TestCase):
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            self.assertIsInstance(model.get_input_embeddings(), (tf.keras.layers.Layer))
+            self.assertIsInstance(model.get_input_embeddings(), (keras.layers.Layer))
             x = model.get_output_embeddings()
-            self.assertTrue(x is None or isinstance(x, tf.keras.layers.Layer))
+            self.assertTrue(x is None or isinstance(x, keras.layers.Layer))
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -190,9 +189,9 @@ class TFBlipVisionModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFBlipVisionModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "Salesforce/blip-vqa-base"
+        model = TFBlipVisionModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class TFBlipTextModelTester:
@@ -318,9 +317,9 @@ class TFBlipTextModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFBlipTextModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "Salesforce/blip-vqa-base"
+        model = TFBlipTextModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_pt_tf_model_equivalence(self, allow_missing_keys=True):
         super().test_pt_tf_model_equivalence(allow_missing_keys=allow_missing_keys)
@@ -427,9 +426,9 @@ class TFBlipModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFBlipModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "Salesforce/blip-vqa-base"
+        model = TFBlipModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_pt_tf_model_equivalence(self, allow_missing_keys=True):
         super().test_pt_tf_model_equivalence(allow_missing_keys=allow_missing_keys)
@@ -715,9 +714,9 @@ class TFBlipTextRetrievalModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFBlipModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "Salesforce/blip-vqa-base"
+        model = TFBlipModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @unittest.skip(reason="Tested in individual model tests")
     def test_compile_tf_model(self):
@@ -830,9 +829,9 @@ class TFBlipTextImageModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFBlipModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "Salesforce/blip-vqa-base"
+        model = TFBlipModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

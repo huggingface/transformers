@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch UperNet model. Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation."""
+"""PyTorch UperNet model. Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation."""
 
 from typing import List, Optional, Tuple, Union
 
@@ -20,17 +20,12 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-from ... import AutoBackbone
 from ...modeling_outputs import SemanticSegmenterOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
+from ...utils.backbone_utils import load_backbone
 from .configuration_upernet import UperNetConfig
 
-
-UPERNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "openmmlab/upernet-convnext-tiny",
-    # See all UperNet models at https://huggingface.co/models?filter=upernet
-]
 
 # General docstring
 _CONFIG_FOR_DOC = "UperNetConfig"
@@ -298,6 +293,7 @@ class UperNetPreTrainedModel(PreTrainedModel):
 
     config_class = UperNetConfig
     main_input_name = "pixel_values"
+    _no_split_modules = []
 
     def _init_weights(self, module):
         if isinstance(module, UperNetPreTrainedModel):
@@ -348,7 +344,7 @@ class UperNetForSemanticSegmentation(UperNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.backbone = AutoBackbone.from_config(config.backbone_config)
+        self.backbone = load_backbone(config)
 
         # Semantic segmentation head(s)
         self.decode_head = UperNetHead(config, in_channels=self.backbone.channels)
@@ -396,6 +392,8 @@ class UperNetForSemanticSegmentation(UperNetPreTrainedModel):
         >>> list(logits.shape)
         [1, 150, 512, 512]
         ```"""
+        if labels is not None and self.config.num_labels == 1:
+            raise ValueError("The number of labels should be greater than one")
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (
@@ -420,15 +418,12 @@ class UperNetForSemanticSegmentation(UperNetPreTrainedModel):
 
         loss = None
         if labels is not None:
-            if self.config.num_labels == 1:
-                raise ValueError("The number of labels should be greater than one")
-            else:
-                # compute weighted loss
-                loss_fct = CrossEntropyLoss(ignore_index=self.config.loss_ignore_index)
-                loss = loss_fct(logits, labels)
-                if auxiliary_logits is not None:
-                    auxiliary_loss = loss_fct(auxiliary_logits, labels)
-                    loss += self.config.auxiliary_loss_weight * auxiliary_loss
+            # compute weighted loss
+            loss_fct = CrossEntropyLoss(ignore_index=self.config.loss_ignore_index)
+            loss = loss_fct(logits, labels)
+            if auxiliary_logits is not None:
+                auxiliary_loss = loss_fct(auxiliary_logits, labels)
+                loss += self.config.auxiliary_loss_weight * auxiliary_loss
 
         if not return_dict:
             if output_hidden_states:

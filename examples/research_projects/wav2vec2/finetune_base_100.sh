@@ -4,7 +4,7 @@ python run_asr.py \
 --num_train_epochs="30" \
 --per_device_train_batch_size="32" \
 --per_device_eval_batch_size="32" \
---evaluation_strategy="steps" \
+--eval_strategy="steps" \
 --save_total_limit="3" \
 --save_steps="500" \
 --eval_steps="100" \

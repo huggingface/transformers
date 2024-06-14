@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Flax RoBERTa-PreLayerNorm model."""
+"""Flax RoBERTa-PreLayerNorm model."""
+
 from typing import Callable, Optional, Tuple
 
 import flax.linen as nn
@@ -1365,7 +1366,7 @@ class FlaxRobertaPreLayerNormForQuestionAnsweringModule(nn.Module):
         hidden_states = outputs[0]
 
         logits = self.qa_outputs(hidden_states)
-        start_logits, end_logits = logits.split(self.config.num_labels, axis=-1)
+        start_logits, end_logits = jnp.split(logits, self.config.num_labels, axis=-1)
         start_logits = start_logits.squeeze(-1)
         end_logits = end_logits.squeeze(-1)
 

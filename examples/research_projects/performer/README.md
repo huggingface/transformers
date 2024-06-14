@@ -10,8 +10,8 @@ Paper authors: Krzysztof Choromanski, Valerii Likhosherstov, David Dohan, Xingyo
 
 ## Examples
 
-`sanity_script.sh` will launch performer fine-tuning from the bert-base-cased checkpoint on the Simple Wikipedia dataset (a small, easy-language English Wikipedia) from `datasets`.
-`full_script.sh` will launch performer fine-tuning from the bert-large-cased checkpoint on the English Wikipedia dataset from `datasets`.
+`sanity_script.sh` will launch performer fine-tuning from the google-bert/bert-base-cased checkpoint on the Simple Wikipedia dataset (a small, easy-language English Wikipedia) from `datasets`.
+`full_script.sh` will launch performer fine-tuning from the google-bert/bert-large-cased checkpoint on the English Wikipedia dataset from `datasets`.
 
 Here are a few key arguments:
 - Remove the `--performer` argument to use a standard Bert model.

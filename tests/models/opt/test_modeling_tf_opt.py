@@ -180,7 +180,7 @@ class TFOPTModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             else:
                 # Here we build the word embeddings weights if not exists.
                 # And then we retry to get the attribute once built.
-                model.build()
+                model.build_in_name_scope()
                 if hasattr(embedding_layer, "weight"):
                     return embedding_layer.weight
                 else:

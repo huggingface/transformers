@@ -14,7 +14,6 @@
 # limitations under the License.
 """PyTorch MarianMTModel model, ported from the Marian C++ repo."""
 
-
 import copy
 import math
 from typing import Dict, List, Optional, Tuple, Union
@@ -49,12 +48,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "MarianConfig"
 _CHECKPOINT_FOR_DOC = "Helsinki-NLP/opus-mt-en-de"
-
-
-MARIAN_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Helsinki-NLP/opus-mt-en-de",
-    # See all Marian models at https://huggingface.co/models?filter=marian
-]
 
 
 # Copied from transformers.models.bart.modeling_bart.shift_tokens_right
@@ -272,9 +265,8 @@ class MarianEncoderLayer(nn.Module):
     def __init__(self, config: MarianConfig):
         super().__init__()
         self.embed_dim = config.d_model
-        attn_type = "flash_attention_2" if getattr(config, "_flash_attn_2_enabled", False) else "default"
 
-        self.self_attn = MARIAN_ATTENTION_CLASSES[attn_type](
+        self.self_attn = MARIAN_ATTENTION_CLASSES[config._attn_implementation](
             embed_dim=self.embed_dim,
             num_heads=config.encoder_attention_heads,
             dropout=config.attention_dropout,
@@ -339,7 +331,7 @@ class MarianEncoderLayer(nn.Module):
         return outputs
 
 
-MARIAN_ATTENTION_CLASSES = {"default": MarianAttention}
+MARIAN_ATTENTION_CLASSES = {"eager": MarianAttention}
 
 
 # Copied from transformers.models.bart.modeling_bart.BartDecoderLayer with Bart->Marian, BART->MARIAN
@@ -348,8 +340,7 @@ class MarianDecoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
 
-        attn_type = "flash_attention_2" if getattr(config, "_flash_attn_2_enabled", False) else "default"
-        self.self_attn = MARIAN_ATTENTION_CLASSES[attn_type](
+        self.self_attn = MARIAN_ATTENTION_CLASSES[config._attn_implementation](
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -362,7 +353,7 @@ class MarianDecoderLayer(nn.Module):
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.encoder_attn = MARIAN_ATTENTION_CLASSES[attn_type](
+        self.encoder_attn = MARIAN_ATTENTION_CLASSES[config._attn_implementation](
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -1351,7 +1342,13 @@ class MarianMTModel(MarianPreTrainedModel):
         if getattr(self.config, "is_encoder_decoder", False) and getattr(self.config, "tie_encoder_decoder", False):
             if hasattr(self, self.base_model_prefix):
                 self = getattr(self, self.base_model_prefix)
-            self._tie_encoder_decoder_weights(self.encoder, self.decoder, self.base_model_prefix)
+            tied_weights = self._tie_encoder_decoder_weights(
+                self.encoder, self.decoder, self.base_model_prefix, "encoder"
+            )
+            # Setting a dynamic variable instead of `_tied_weights_keys` because it's a class
+            # attributed not an instance member, therefore modifying it will modify the entire class
+            # Leading to issues on subsequent calls by different tests or subsequent calls.
+            self._dynamic_tied_weights_keys = tied_weights
 
         for module in self.modules():
             if hasattr(module, "_tie_weights"):

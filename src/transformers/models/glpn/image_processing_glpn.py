@@ -30,6 +30,8 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
+    validate_kwargs,
+    validate_preprocess_arguments,
 )
 from ...utils import TensorType, logging
 
@@ -70,6 +72,16 @@ class GLPNImageProcessor(BaseImageProcessor):
         self.size_divisor = size_divisor
         self.resample = resample
         super().__init__(**kwargs)
+        self._valid_processor_keys = [
+            "images",
+            "do_resize",
+            "size_divisor",
+            "resample",
+            "do_rescale",
+            "return_tensors",
+            "data_format",
+            "input_data_format",
+        ]
 
     def resize(
         self,
@@ -173,13 +185,23 @@ class GLPNImageProcessor(BaseImageProcessor):
         size_divisor = size_divisor if size_divisor is not None else self.size_divisor
         resample = resample if resample is not None else self.resample
 
-        if do_resize and size_divisor is None:
-            raise ValueError("size_divisor is required for resizing")
-
         images = make_list_of_images(images)
 
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
+
         if not valid_images(images):
-            raise ValueError("Invalid image(s)")
+            raise ValueError(
+                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
+                "torch.Tensor, tf.Tensor or jax.ndarray."
+            )
+
+        # Here, the rescale() method uses a constant rescale_factor. It does not need to be validated
+        # with a rescale_factor.
+        validate_preprocess_arguments(
+            do_resize=do_resize,
+            size=size_divisor,  # Here, size_divisor is used as a parameter for optimal resizing instead of size.
+            resample=resample,
+        )
 
         # All transformations expect numpy arrays.
         images = [to_numpy_array(img) for img in images]

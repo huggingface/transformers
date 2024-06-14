@@ -10,6 +10,32 @@ from collections import Counter
 import requests
 
 
+def get_jobs(workflow_run_id, token=None):
+    """Extract jobs in a GitHub Actions workflow run"""
+
+    headers = None
+    if token is not None:
+        headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}"}
+
+    url = f"https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}/jobs?per_page=100"
+    result = requests.get(url, headers=headers).json()
+    jobs = []
+
+    try:
+        jobs.extend(result["jobs"])
+        pages_to_iterate_over = math.ceil((result["total_count"] - 100) / 100)
+
+        for i in range(pages_to_iterate_over):
+            result = requests.get(url + f"&page={i + 2}", headers=headers).json()
+            jobs.extend(result["jobs"])
+
+        return jobs
+    except Exception:
+        print(f"Unknown error, could not fetch links:\n{traceback.format_exc()}")
+
+    return []
+
+
 def get_job_links(workflow_run_id, token=None):
     """Extract job names and their job links in a GitHub Actions workflow run"""
 

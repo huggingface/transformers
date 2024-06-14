@@ -3,7 +3,7 @@ from typing import List, Union
 import numpy as np
 
 from ..utils import add_end_docstrings, is_torch_available, is_vision_available, logging, requires_backends
-from .base import PIPELINE_INIT_ARGS, Pipeline
+from .base import Pipeline, build_pipeline_init_args
 
 
 if is_vision_available():
@@ -19,7 +19,7 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-@add_end_docstrings(PIPELINE_INIT_ARGS)
+@add_end_docstrings(build_pipeline_init_args(has_image_processor=True))
 class DepthEstimationPipeline(Pipeline):
     """
     Depth estimation pipeline using any `AutoModelForDepthEstimation`. This pipeline predicts the depth of an image.
@@ -29,7 +29,7 @@ class DepthEstimationPipeline(Pipeline):
     ```python
     >>> from transformers import pipeline
 
-    >>> depth_estimator = pipeline(task="depth-estimation", model="Intel/dpt-large")
+    >>> depth_estimator = pipeline(task="depth-estimation", model="LiheYoung/depth-anything-base-hf")
     >>> output = depth_estimator("http://images.cocodataset.org/val2017/000000039769.jpg")
     >>> # This is a tensor with the values being the depth expressed in meters for each pixel
     >>> output["predicted_depth"].shape
@@ -52,7 +52,7 @@ class DepthEstimationPipeline(Pipeline):
 
     def __call__(self, images: Union[str, List[str], "Image.Image", List["Image.Image"]], **kwargs):
         """
-        Assign labels to the image(s) passed as inputs.
+        Predict the depth(s) of the image(s) passed as inputs.
 
         Args:
             images (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
@@ -65,9 +65,6 @@ class DepthEstimationPipeline(Pipeline):
                 The pipeline accepts either a single image or a batch of images, which must then be passed as a string.
                 Images in a batch must all be in the same format: all as http links, all as local paths, or all as PIL
                 images.
-            top_k (`int`, *optional*, defaults to 5):
-                The number of top labels that will be returned by the pipeline. If the provided number is higher than
-                the number of labels available in the model configuration, it will default to the number of labels.
             timeout (`float`, *optional*, defaults to None):
                 The maximum time in seconds to wait for fetching images from the web. If None, no timeout is set and
                 the call may block forever.
@@ -79,8 +76,8 @@ class DepthEstimationPipeline(Pipeline):
 
             The dictionaries contain the following keys:
 
-            - **label** (`str`) -- The label identified by the model.
-            - **score** (`int`) -- The score attributed by the model for that label.
+            - **predicted_depth** (`torch.Tensor`) -- The predicted depth by the model as a `torch.Tensor`.
+            - **depth** (`PIL.Image`) -- The predicted depth by the model as a `PIL.Image`.
         """
         return super().__call__(images, **kwargs)
 

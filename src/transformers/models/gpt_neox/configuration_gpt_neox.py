@@ -12,18 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" GPTNeoX model configuration"""
+"""GPTNeoX model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "EleutherAI/gpt-neox-20b": "https://huggingface.co/EleutherAI/gpt-neox-20b/resolve/main/config.json",
-    # See all GPTNeoX models at https://huggingface.co/models?filter=gpt_neox
-}
 
 
 class GPTNeoXConfig(PretrainedConfig):
@@ -86,6 +81,8 @@ class GPTNeoXConfig(PretrainedConfig):
             these scaling strategies behave:
             https://www.reddit.com/r/LocalLLaMA/comments/14mrgpr/dynamically_scaled_rope_further_increases/. This is an
             experimental feature, subject to breaking API changes in future versions.
+        attention_bias (`bool`, *optional*, defaults to `True`):
+            Whether to use a bias in the query, key, value and output projection layers during self-attention.
 
         Example:
 
@@ -103,6 +100,7 @@ class GPTNeoXConfig(PretrainedConfig):
     ```"""
 
     model_type = "gpt_neox"
+    keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
         self,
@@ -126,6 +124,7 @@ class GPTNeoXConfig(PretrainedConfig):
         tie_word_embeddings=False,
         use_parallel_residual=True,
         rope_scaling=None,
+        attention_bias=True,
         **kwargs,
     ):
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
@@ -147,6 +146,7 @@ class GPTNeoXConfig(PretrainedConfig):
         self.tie_word_embeddings = tie_word_embeddings
         self.use_parallel_residual = use_parallel_residual
         self.rope_scaling = rope_scaling
+        self.attention_bias = attention_bias
         self._rope_scaling_validation()
 
         if self.hidden_size % self.num_attention_heads != 0:
@@ -164,8 +164,7 @@ class GPTNeoXConfig(PretrainedConfig):
 
         if not isinstance(self.rope_scaling, dict) or len(self.rope_scaling) != 2:
             raise ValueError(
-                "`rope_scaling` must be a dictionary with with two fields, `type` and `factor`, "
-                f"got {self.rope_scaling}"
+                "`rope_scaling` must be a dictionary with two fields, `type` and `factor`, " f"got {self.rope_scaling}"
             )
         rope_scaling_type = self.rope_scaling.get("type", None)
         rope_scaling_factor = self.rope_scaling.get("factor", None)

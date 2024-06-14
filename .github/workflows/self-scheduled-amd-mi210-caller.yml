@@ -12,8 +12,9 @@ on:
 jobs:
   run_amd_ci:
     name: AMD mi210
-    if: (cancelled() != true) && ((github.event_name == 'schedule') || ((github.event_name == 'push') && startsWith(github.ref_name, 'run_amd_scheduled_ci_caller')))
+    if: (cancelled() != true) && ((github.event_name == 'workflow_run') || ((github.event_name == 'push') && startsWith(github.ref_name, 'run_amd_scheduled_ci_caller')))
     uses: ./.github/workflows/self-scheduled-amd.yml
     with:
       gpu_flavor: mi210
+      slack_report_channel: "#transformers-ci-daily-amd"
     secrets: inherit
