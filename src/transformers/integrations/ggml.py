@@ -600,7 +600,7 @@ class GGUFLlamaConverter(LlamaConverter):
             tokenizer.add_special_tokens(special_tokens)
 
         if len(self.proto.added_tokens) != 0:
-            tokenizer.add_special_tokens(
+            tokenizer.add_tokens(
                 [AddedToken(added_token, normalized=False, special=False) for added_token in self.proto.added_tokens]
             )
 
