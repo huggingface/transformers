@@ -138,10 +138,10 @@ class RTDetrResNetBasicLayer(nn.Module):
 
     def __init__(
         self,
+        config: RTDetrResNetConfig,
         in_channels: int,
         out_channels: int,
         stride: int = 1,
-        activation: str = "relu",
         should_apply_shortcut: bool = False,
     ):
         super().__init__()
@@ -163,7 +163,7 @@ class RTDetrResNetBasicLayer(nn.Module):
             RTDetrResNetConvLayer(in_channels, out_channels, stride=stride),
             RTDetrResNetConvLayer(out_channels, out_channels, activation=None),
         )
-        self.activation = ACT2FN[activation]
+        self.activation = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_state):
         residual = hidden_state
@@ -185,14 +185,14 @@ class RTDetrResNetBottleNeckLayer(nn.Module):
 
     def __init__(
         self,
+        config: RTDetrResNetConfig,
         in_channels: int,
         out_channels: int,
         stride: int = 1,
-        activation: str = "relu",
-        reduction: int = 4,
         downsample_in_bottleneck: bool = False,
     ):
         super().__init__()
+        reduction = 4
         should_apply_shortcut = in_channels != out_channels or stride != 1
         reduces_channels = out_channels // reduction
         if stride == 2:
@@ -219,7 +219,7 @@ class RTDetrResNetBottleNeckLayer(nn.Module):
             ),
             RTDetrResNetConvLayer(reduces_channels, out_channels, kernel_size=1, activation=None),
         )
-        self.activation = ACT2FN[activation]
+        self.activation = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_state):
         residual = hidden_state
@@ -249,18 +249,15 @@ class RTDetrResNetStage(nn.Module):
 
         if config.layer_type == "bottleneck":
             first_layer = layer(
+                config,
                 in_channels,
                 out_channels,
                 stride=stride,
-                activation=config.hidden_act,
-                downsample_in_bottleneck=config.downsample_in_bottleneck,
             )
         else:
-            first_layer = layer(
-                in_channels, out_channels, stride=stride, activation=config.hidden_act, should_apply_shortcut=True
-            )
+            first_layer = layer(config, in_channels, out_channels, stride=stride, should_apply_shortcut=True)
         self.layers = nn.Sequential(
-            first_layer, *[layer(out_channels, out_channels, activation=config.hidden_act) for _ in range(depth - 1)]
+            first_layer, *[layer(config, out_channels, out_channels) for _ in range(depth - 1)]
         )
 
     def forward(self, input: Tensor) -> Tensor:

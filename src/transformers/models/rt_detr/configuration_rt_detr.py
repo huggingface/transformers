@@ -264,11 +264,11 @@ class RTDetrConfig(PretrainedConfig):
             backbone_config = config_class.from_dict(backbone_config)
 
         verify_backbone_config_arguments(
-            use_timm_backbone=False,
-            use_pretrained_backbone=False,
-            backbone=None,
+            use_timm_backbone=use_timm_backbone,
+            use_pretrained_backbone=use_pretrained_backbone,
+            backbone=backbone,
             backbone_config=backbone_config,
-            backbone_kwargs=None,
+            backbone_kwargs=backbone_kwargs,
         )
 
         self.backbone_config = backbone_config
