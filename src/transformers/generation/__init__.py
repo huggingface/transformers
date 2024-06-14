@@ -18,7 +18,7 @@ from ..utils import OptionalDependencyNotAvailable, _LazyModule, is_flax_availab
 
 
 _import_structure = {
-    "configuration_utils": ["GenerationConfig"],
+    "configuration_utils": ["GenerationConfig", "GenerationMode", "WatermarkingConfig"],
     "streamers": ["TextIteratorStreamer", "TextStreamer"],
 }
 
@@ -64,6 +64,7 @@ else:
         "LogitsWarper",
         "MinLengthLogitsProcessor",
         "MinNewTokensLengthLogitsProcessor",
+        "MinPLogitsWarper",
         "NoBadWordsLogitsProcessor",
         "NoRepeatNGramLogitsProcessor",
         "PrefixConstrainedLogitsProcessor",
@@ -77,18 +78,20 @@ else:
         "TypicalLogitsWarper",
         "UnbatchedClassifierFreeGuidanceLogitsProcessor",
         "WhisperTimeStampLogitsProcessor",
+        "WatermarkLogitsProcessor",
     ]
     _import_structure["stopping_criteria"] = [
         "MaxNewTokensCriteria",
         "MaxLengthCriteria",
         "MaxTimeCriteria",
+        "EosTokenCriteria",
         "StoppingCriteria",
         "StoppingCriteriaList",
         "validate_stopping_criteria",
+        "StopStringCriteria",
     ]
     _import_structure["utils"] = [
         "GenerationMixin",
-        "top_k_top_p_filtering",
         "GreedySearchEncoderDecoderOutput",
         "GreedySearchDecoderOnlyOutput",
         "SampleEncoderDecoderOutput",
@@ -103,6 +106,10 @@ else:
         "GenerateBeamEncoderDecoderOutput",
         "GenerateDecoderOnlyOutput",
         "GenerateEncoderDecoderOutput",
+    ]
+    _import_structure["watermarking"] = [
+        "WatermarkDetector",
+        "WatermarkDetectorOutput",
     ]
 
 try:
@@ -130,7 +137,6 @@ else:
     ]
     _import_structure["tf_utils"] = [
         "TFGenerationMixin",
-        "tf_top_k_top_p_filtering",
         "TFGreedySearchDecoderOnlyOutput",
         "TFGreedySearchEncoderDecoderOutput",
         "TFSampleEncoderDecoderOutput",
@@ -163,6 +169,7 @@ else:
         "FlaxTopKLogitsWarper",
         "FlaxTopPLogitsWarper",
         "FlaxWhisperTimeStampLogitsProcessor",
+        "FlaxNoRepeatNGramLogitsProcessor",
     ]
     _import_structure["flax_utils"] = [
         "FlaxGenerationMixin",
@@ -172,7 +179,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_utils import GenerationConfig
+    from .configuration_utils import GenerationConfig, GenerationMode, WatermarkingConfig
     from .streamers import TextIteratorStreamer, TextStreamer
 
     try:
@@ -203,6 +210,7 @@ if TYPE_CHECKING:
             LogitsWarper,
             MinLengthLogitsProcessor,
             MinNewTokensLengthLogitsProcessor,
+            MinPLogitsWarper,
             NoBadWordsLogitsProcessor,
             NoRepeatNGramLogitsProcessor,
             PrefixConstrainedLogitsProcessor,
@@ -215,14 +223,17 @@ if TYPE_CHECKING:
             TopPLogitsWarper,
             TypicalLogitsWarper,
             UnbatchedClassifierFreeGuidanceLogitsProcessor,
+            WatermarkLogitsProcessor,
             WhisperTimeStampLogitsProcessor,
         )
         from .stopping_criteria import (
+            EosTokenCriteria,
             MaxLengthCriteria,
             MaxNewTokensCriteria,
             MaxTimeCriteria,
             StoppingCriteria,
             StoppingCriteriaList,
+            StopStringCriteria,
             validate_stopping_criteria,
         )
         from .utils import (
@@ -241,7 +252,10 @@ if TYPE_CHECKING:
             GreedySearchEncoderDecoderOutput,
             SampleDecoderOnlyOutput,
             SampleEncoderDecoderOutput,
-            top_k_top_p_filtering,
+        )
+        from .watermarking import (
+            WatermarkDetector,
+            WatermarkDetectorOutput,
         )
 
     try:
@@ -279,7 +293,6 @@ if TYPE_CHECKING:
             TFGreedySearchEncoderDecoderOutput,
             TFSampleDecoderOnlyOutput,
             TFSampleEncoderDecoderOutput,
-            tf_top_k_top_p_filtering,
         )
 
     try:
@@ -296,6 +309,7 @@ if TYPE_CHECKING:
             FlaxLogitsProcessorList,
             FlaxLogitsWarper,
             FlaxMinLengthLogitsProcessor,
+            FlaxNoRepeatNGramLogitsProcessor,
             FlaxSuppressTokensAtBeginLogitsProcessor,
             FlaxSuppressTokensLogitsProcessor,
             FlaxTemperatureLogitsWarper,

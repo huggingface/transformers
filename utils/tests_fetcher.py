@@ -68,6 +68,10 @@ PATH_TO_EXAMPLES = PATH_TO_REPO / "examples"
 PATH_TO_TRANFORMERS = PATH_TO_REPO / "src/transformers"
 PATH_TO_TESTS = PATH_TO_REPO / "tests"
 
+# The value is just a heuristic to determine if we `guess` all models are impacted.
+# This variable has effect only if `filter_models=False`.
+NUM_MODELS_TO_TRIGGER_FULL_CI = 30
+
 # List here the models to always test.
 IMPORTANT_MODELS = [
     "auto",
@@ -87,6 +91,7 @@ IMPORTANT_MODELS = [
     "opt",
     "longformer",
     "vit",
+    "whisper",
     # Pipeline-specific model (to be sure each pipeline has one model in this list)
     "tapas",
     "vilt",
@@ -497,7 +502,12 @@ def get_all_doctest_files() -> List[str]:
     """
     py_files = [str(x.relative_to(PATH_TO_REPO)) for x in PATH_TO_REPO.glob("**/*.py")]
     md_files = [str(x.relative_to(PATH_TO_REPO)) for x in PATH_TO_REPO.glob("**/*.md")]
+
     test_files_to_run = py_files + md_files
+    # change to use "/" as path separator
+    test_files_to_run = ["/".join(Path(x).parts) for x in test_files_to_run]
+    # don't run doctest for files in `src/transformers/models/deprecated`
+    test_files_to_run = [x for x in test_files_to_run if "models/deprecated" not in x]
 
     # only include files in `src` or `docs/source/en/`
     test_files_to_run = [x for x in test_files_to_run if x.startswith(("src/", "docs/source/en/"))]
@@ -953,10 +963,25 @@ def create_module_to_test_map(
         model_tests = {Path(t).parts[2] for t in tests if t.startswith("tests/models/")}
         return len(model_tests) > num_model_tests // 2
 
-    def filter_tests(tests):
-        return [t for t in tests if not t.startswith("tests/models/") or Path(t).parts[2] in IMPORTANT_MODELS]
+    # for each module (if specified in the argument `module`) of the form `models/my_model` (i.e. starting with it),
+    # we always keep the tests (those are already in the argument `tests`) which are in `tests/models/my_model`.
+    # This is to avoid them being excluded when a module has many impacted tests: the directly related test files should
+    # always be included!
+    def filter_tests(tests, module=""):
+        return [
+            t
+            for t in tests
+            if not t.startswith("tests/models/")
+            or Path(t).parts[2] in IMPORTANT_MODELS
+            # at this point, `t` is of the form `tests/models/my_model`, and we check if `models/my_model`
+            # (i.e. `parts[1:3]`) is in `module`.
+            or "/".join(Path(t).parts[1:3]) in module
+        ]
 
-    return {module: (filter_tests(tests) if has_many_models(tests) else tests) for module, tests in test_map.items()}
+    return {
+        module: (filter_tests(tests, module=module) if has_many_models(tests) else tests)
+        for module, tests in test_map.items()
+    }
 
 
 def check_imports_all_exist():
@@ -1064,8 +1089,16 @@ def infer_tests_to_run(
     impacted_files = sorted(set(impacted_files))
     print(f"\n### IMPACTED FILES ###\n{_print_list(impacted_files)}")
 
+    model_impacted = {"/".join(x.split("/")[:3]) for x in impacted_files if x.startswith("tests/models/")}
+
     # Grab the corresponding test files:
     if any(x in modified_files for x in ["setup.py", ".circleci/create_circleci_config.py"]):
+        test_files_to_run = ["tests", "examples"]
+        repo_utils_launch = True
+    elif not filter_models and len(model_impacted) >= NUM_MODELS_TO_TRIGGER_FULL_CI:
+        print(
+            f"More than {NUM_MODELS_TO_TRIGGER_FULL_CI - 1} models are impacted and `filter_models=False`. CI is configured to test everything."
+        )
         test_files_to_run = ["tests", "examples"]
         repo_utils_launch = True
     else:
@@ -1232,8 +1265,9 @@ if __name__ == "__main__":
         if commit_flags["test_all"]:
             print("Force-launching all tests")
 
+        is_main_branch = not repo.head.is_detached and repo.head.ref == repo.refs.main
         diff_with_last_commit = args.diff_with_last_commit
-        if not diff_with_last_commit and not repo.head.is_detached and repo.head.ref == repo.refs.main:
+        if not diff_with_last_commit and is_main_branch:
             print("main branch detected, fetching tests against last commit.")
             diff_with_last_commit = True
 
@@ -1243,7 +1277,7 @@ if __name__ == "__main__":
                     args.output_file,
                     diff_with_last_commit=diff_with_last_commit,
                     json_output_file=args.json_output_file,
-                    filter_models=not commit_flags["no_filter"],
+                    filter_models=(not (commit_flags["no_filter"] or is_main_branch)),
                 )
                 filter_tests(args.output_file, ["repo_utils"])
             except Exception as e:

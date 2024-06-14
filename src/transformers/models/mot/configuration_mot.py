@@ -26,10 +26,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-MOT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "mot-base": "https://huggingface.co/mot-base/resolve/main/config.json",
-}
-
 
 class MoTConfig(PretrainedConfig):
     """

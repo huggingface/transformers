@@ -120,12 +120,12 @@ Define la función `compute` en `metric` para calcular el accuracy de tus predic
 ...     return metric.compute(predictions=predictions, references=labels)
 ```
 
-Si quieres controlar tus métricas de evaluación durante el fine-tuning, especifica el parámetro `evaluation_strategy` en tus argumentos de entrenamiento para que el modelo tenga en cuenta la métrica de evaluación al final de cada época:
+Si quieres controlar tus métricas de evaluación durante el fine-tuning, especifica el parámetro `eval_strategy` en tus argumentos de entrenamiento para que el modelo tenga en cuenta la métrica de evaluación al final de cada época:
 
 ```py
 >>> from transformers import TrainingArguments
 
->>> training_args = TrainingArguments(output_dir="test_trainer", evaluation_strategy="epoch")
+>>> training_args = TrainingArguments(output_dir="test_trainer", eval_strategy="epoch")
 ```
 
 ### Trainer

@@ -17,22 +17,26 @@ Generic utilities
 
 import inspect
 import tempfile
+import warnings
 from collections import OrderedDict, UserDict
 from collections.abc import MutableMapping
 from contextlib import ExitStack, contextmanager
 from dataclasses import fields, is_dataclass
 from enum import Enum
-from functools import partial
-from typing import Any, ContextManager, Iterable, List, Tuple
+from functools import partial, wraps
+from typing import Any, ContextManager, Iterable, List, Optional, Tuple
 
 import numpy as np
 from packaging import version
 
-from .import_utils import get_torch_version, is_flax_available, is_tf_available, is_torch_available, is_torch_fx_proxy
-
-
-if is_flax_available():
-    import jax.numpy as jnp
+from .import_utils import (
+    get_torch_version,
+    is_flax_available,
+    is_mlx_available,
+    is_tf_available,
+    is_torch_available,
+    is_torch_fx_proxy,
+)
 
 
 class cached_property(property):
@@ -87,6 +91,8 @@ def infer_framework_from_repr(x):
         return "jax"
     elif representation.startswith("<class 'numpy."):
         return "np"
+    elif representation.startswith("<class 'mlx."):
+        return "mlx"
 
 
 def _get_frameworks_and_test_func(x):
@@ -99,6 +105,7 @@ def _get_frameworks_and_test_func(x):
         "tf": is_tf_tensor,
         "jax": is_jax_tensor,
         "np": is_numpy_array,
+        "mlx": is_mlx_array,
     }
     preferred_framework = infer_framework_from_repr(x)
     # We will test this one first, then numpy, then the others.
@@ -111,8 +118,8 @@ def _get_frameworks_and_test_func(x):
 
 def is_tensor(x):
     """
-    Tests if `x` is a `torch.Tensor`, `tf.Tensor`, `jaxlib.xla_extension.DeviceArray` or `np.ndarray` in the order
-    defined by `infer_framework_from_repr`
+    Tests if `x` is a `torch.Tensor`, `tf.Tensor`, `jaxlib.xla_extension.DeviceArray`, `np.ndarray` or `mlx.array`
+    in the order defined by `infer_framework_from_repr`
     """
     # This gives us a smart order to test the frameworks with the corresponding tests.
     framework_to_test_func = _get_frameworks_and_test_func(x)
@@ -229,6 +236,19 @@ def is_jax_tensor(x):
     Tests if `x` is a Jax tensor or not. Safe to call even if jax is not installed.
     """
     return False if not is_flax_available() else _is_jax(x)
+
+
+def _is_mlx(x):
+    import mlx.core as mx
+
+    return isinstance(x, mx.array)
+
+
+def is_mlx_array(x):
+    """
+    Tests if `x` is a mlx array or not. Safe to call even when mlx is not installed.
+    """
+    return False if not is_mlx_available() else _is_mlx(x)
 
 
 def to_py_obj(obj):
@@ -499,6 +519,7 @@ class TensorType(ExplicitEnum):
     TENSORFLOW = "tf"
     NUMPY = "np"
     JAX = "jax"
+    MLX = "mlx"
 
 
 class ContextManagers:
@@ -600,6 +621,8 @@ def transpose(array, axes=None):
 
         return tf.transpose(array, perm=axes)
     elif is_jax_tensor(array):
+        import jax.numpy as jnp
+
         return jnp.transpose(array, axes=axes)
     else:
         raise ValueError(f"Type not supported for transpose: {type(array)}.")
@@ -619,6 +642,8 @@ def reshape(array, newshape):
 
         return tf.reshape(array, newshape)
     elif is_jax_tensor(array):
+        import jax.numpy as jnp
+
         return jnp.reshape(array, newshape)
     else:
         raise ValueError(f"Type not supported for reshape: {type(array)}.")
@@ -638,6 +663,8 @@ def squeeze(array, axis=None):
 
         return tf.squeeze(array, axis=axis)
     elif is_jax_tensor(array):
+        import jax.numpy as jnp
+
         return jnp.squeeze(array, axis=axis)
     else:
         raise ValueError(f"Type not supported for squeeze: {type(array)}.")
@@ -657,6 +684,8 @@ def expand_dims(array, axis):
 
         return tf.expand_dims(array, axis=axis)
     elif is_jax_tensor(array):
+        import jax.numpy as jnp
+
         return jnp.expand_dims(array, axis=axis)
     else:
         raise ValueError(f"Type not supported for expand_dims: {type(array)}.")
@@ -693,6 +722,19 @@ def add_model_info_to_auto_map(auto_map, repo_id):
     return auto_map
 
 
+def add_model_info_to_custom_pipelines(custom_pipeline, repo_id):
+    """
+    Adds the information of the repo_id to a given custom pipeline.
+    """
+    # {custom_pipelines : {task: {"impl": "path.to.task"},...} }
+    for task in custom_pipeline.keys():
+        if "impl" in custom_pipeline[task]:
+            module = custom_pipeline[task]["impl"]
+            if "--" not in module:
+                custom_pipeline[task]["impl"] = f"{repo_id}--{module}"
+    return custom_pipeline
+
+
 def infer_framework(model_class):
     """
     Infers the framework of a given model without using isinstance(), because we cannot guarantee that the relevant
@@ -709,3 +751,79 @@ def infer_framework(model_class):
             return "flax"
     else:
         raise TypeError(f"Could not infer framework from class {model_class}.")
+
+
+def filter_out_non_signature_kwargs(extra: Optional[list] = None):
+    """
+    Decorator to filter out named arguments that are not in the function signature.
+
+    This decorator ensures that only the keyword arguments that match the function's signature, or are specified in the
+    `extra` list, are passed to the function. Any additional keyword arguments are filtered out and a warning is issued.
+
+    Parameters:
+        extra (`Optional[list]`, *optional*):
+            A list of extra keyword argument names that are allowed even if they are not in the function's signature.
+
+    Returns:
+        Callable:
+            A decorator that wraps the function and filters out invalid keyword arguments.
+
+    Example usage:
+
+        ```python
+        @filter_out_non_signature_kwargs(extra=["allowed_extra_arg"])
+        def my_function(arg1, arg2, **kwargs):
+            print(arg1, arg2, kwargs)
+
+        my_function(arg1=1, arg2=2, allowed_extra_arg=3, invalid_arg=4)
+        # This will print: 1 2 {"allowed_extra_arg": 3}
+        # And issue a warning: "The following named arguments are not valid for `my_function` and were ignored: 'invalid_arg'"
+        ```
+    """
+    extra = extra or []
+    extra_params_to_pass = set(extra)
+
+    def decorator(func):
+        sig = inspect.signature(func)
+        function_named_args = set(sig.parameters.keys())
+        valid_kwargs_to_pass = function_named_args.union(extra_params_to_pass)
+
+        # Required for better warning message
+        is_instance_method = "self" in function_named_args
+        is_class_method = "cls" in function_named_args
+
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            valid_kwargs = {}
+            invalid_kwargs = {}
+
+            for k, v in kwargs.items():
+                if k in valid_kwargs_to_pass:
+                    valid_kwargs[k] = v
+                else:
+                    invalid_kwargs[k] = v
+
+            if invalid_kwargs:
+                invalid_kwargs_names = [f"'{k}'" for k in invalid_kwargs.keys()]
+                invalid_kwargs_names = ", ".join(invalid_kwargs_names)
+
+                # Get the class name for better warning message
+                if is_instance_method:
+                    cls_prefix = args[0].__class__.__name__ + "."
+                elif is_class_method:
+                    cls_prefix = args[0].__name__ + "."
+                else:
+                    cls_prefix = ""
+
+                warnings.warn(
+                    f"The following named arguments are not valid for `{cls_prefix}{func.__name__}`"
+                    f" and were ignored: {invalid_kwargs_names}",
+                    UserWarning,
+                    stacklevel=2,
+                )
+
+            return func(*args, **valid_kwargs)
+
+        return wrapper
+
+    return decorator

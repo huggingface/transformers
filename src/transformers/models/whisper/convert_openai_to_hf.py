@@ -21,7 +21,7 @@ import os
 import tempfile
 import urllib
 import warnings
-from typing import Any, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 import torch
 from huggingface_hub.utils import insecure_hashlib
@@ -252,7 +252,7 @@ def convert_openai_whisper_to_tfms(
 
 
 # Adapted from https://github.com/openai/tiktoken/issues/60#issuecomment-1499977960
-def _bpe(mergeable_ranks, token: bytes, max_rank=None) -> list[bytes]:
+def _bpe(mergeable_ranks, token: bytes, max_rank=None) -> List[bytes]:
     parts = [bytes([b]) for b in token]
     while True:
         min_idx = None
@@ -347,9 +347,11 @@ if __name__ == "__main__":
     if args.convert_preprocessor:
         try:
             if not _is_package_available("tiktoken"):
-                raise """`tiktoken` is not installed, use `pip install tiktoken` to convert the tokenizer"""
-        except Exception:
-            pass
+                raise ModuleNotFoundError(
+                    """`tiktoken` is not installed, use `pip install tiktoken` to convert the tokenizer"""
+                )
+        except Exception as e:
+            print(e)
         else:
             from tiktoken.load import load_tiktoken_bpe
 

@@ -168,7 +168,7 @@ pytest -k "ada and not adam" tests/test_optimization.py
 For example to run both `test_adafactor` and `test_adam_w` you can use:
 
 ```bash
-pytest -k "test_adam_w or test_adam_w" tests/test_optimization.py
+pytest -k "test_adafactor or test_adam_w" tests/test_optimization.py
 ```
 
 Note that we use `or` here, since we want either of the keywords to match to include both.
@@ -451,13 +451,13 @@ decorators are used to set the requirements of tests CPU/GPU/TPU-wise:
 - `require_torch_multi_gpu` - as `require_torch` plus requires at least 2 GPUs
 - `require_torch_non_multi_gpu` - as `require_torch` plus requires 0 or 1 GPUs
 - `require_torch_up_to_2_gpus` - as `require_torch` plus requires 0 or 1 or 2 GPUs
-- `require_torch_tpu` - as `require_torch` plus requires at least 1 TPU
+- `require_torch_xla` - as `require_torch` plus requires at least 1 TPU
 
 Let's depict the GPU requirements in the following table:
 
 
 | n gpus | decorator                      |
-|--------+--------------------------------|
+|--------|--------------------------------|
 | `>= 0` | `@require_torch`               |
 | `>= 1` | `@require_torch_gpu`           |
 | `>= 2` | `@require_torch_multi_gpu`     |
@@ -518,21 +518,21 @@ To run the test suite on a specific torch device add `TRANSFORMERS_TEST_DEVICE="
 TRANSFORMERS_TEST_DEVICE="cpu" pytest tests/utils/test_logging.py
 ```
 
-This variable is useful for testing custom or less common PyTorch backends such as `mps`. It can also be used to achieve the same effect as `CUDA_VISIBLE_DEVICES` by targeting specific GPUs or testing in CPU-only mode.
+This variable is useful for testing custom or less common PyTorch backends such as `mps`, `xpu` or `npu`. It can also be used to achieve the same effect as `CUDA_VISIBLE_DEVICES` by targeting specific GPUs or testing in CPU-only mode.
 
 Certain devices will require an additional import after importing `torch` for the first time. This can be specified using the environment variable `TRANSFORMERS_TEST_BACKEND`:
 
 ```bash
 TRANSFORMERS_TEST_BACKEND="torch_npu" pytest tests/utils/test_logging.py
 ```
-Alternative backends may also require the replacement of device-specific functions. For example `torch.cuda.manual_seed` may need to be replaced with a device-specific seed setter like `torch.npu.manual_seed` to correctly set a random seed on the device. To specify a new backend with backend-specific device functions when running the test suite, create a Python device specification file in the format:
+Alternative backends may also require the replacement of device-specific functions. For example `torch.cuda.manual_seed` may need to be replaced with a device-specific seed setter like `torch.npu.manual_seed` or `torch.xpu.manual_seed` to correctly set a random seed on the device. To specify a new backend with backend-specific device functions when running the test suite, create a Python device specification file `spec.py` in the format:
 
-```
+```python
 import torch
-import torch_npu
+import torch_npu # for xpu, replace it with `import intel_extension_for_pytorch`
 # !! Further additional imports can be added here !!
 
-# Specify the device name (eg. 'cuda', 'cpu', 'npu')
+# Specify the device name (eg. 'cuda', 'cpu', 'npu', 'xpu', 'mps')
 DEVICE_NAME = 'npu'
 
 # Specify device-specific backends to dispatch to.
@@ -541,10 +541,9 @@ MANUAL_SEED_FN = torch.npu.manual_seed
 EMPTY_CACHE_FN = torch.npu.empty_cache
 DEVICE_COUNT_FN = torch.npu.device_count
 ```
-This format also allows for specification of any additional imports required. To use this file to replace equivalent methods in the test suite, set the environment variable `TRANSFORMERS_TEST_DEVICE_SPEC` to the path of the spec file.
+This format also allows for specification of any additional imports required. To use this file to replace equivalent methods in the test suite, set the environment variable `TRANSFORMERS_TEST_DEVICE_SPEC` to the path of the spec file, e.g. `TRANSFORMERS_TEST_DEVICE_SPEC=spec.py`.
 
 Currently, only `MANUAL_SEED_FN`, `EMPTY_CACHE_FN` and `DEVICE_COUNT_FN` are supported for device-specific dispatch.
-
 
 ### Distributed training
 
@@ -579,7 +578,7 @@ pytest -s tests/utils/test_logging.py
 To send test results to JUnit format output:
 
 ```bash
-py.test tests --junitxml=result.xml
+pytest tests --junitxml=result.xml
 ```
 
 ### Color control

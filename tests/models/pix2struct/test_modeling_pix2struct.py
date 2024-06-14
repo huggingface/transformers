@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Pix2Struct model. """
+"""Testing suite for the PyTorch Pix2Struct model."""
 
 import copy
 import inspect
@@ -48,7 +48,6 @@ if is_torch_available():
         Pix2StructTextModel,
         Pix2StructVisionModel,
     )
-    from transformers.models.pix2struct.modeling_pix2struct import PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -163,7 +162,7 @@ class Pix2StructVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -222,9 +221,9 @@ class Pix2StructVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = Pix2StructVisionModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/pix2struct-textcaps-base"
+        model = Pix2StructVisionModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class Pix2StructTextModelTester:
@@ -371,9 +370,9 @@ class Pix2StructTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = Pix2StructTextModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/pix2struct-textcaps-base"
+        model = Pix2StructTextModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class Pix2StructModelTester:
@@ -386,6 +385,8 @@ class Pix2StructModelTester:
         self.parent = parent
         self.text_model_tester = Pix2StructTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = Pix2StructVisionModelTester(parent, **vision_kwargs)
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
+        self.seq_length = self.text_model_tester.seq_length  # need seq_length for common tests
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
@@ -457,7 +458,7 @@ class Pix2StructModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         pass
 
     @unittest.skip(reason="Pix2StructModel does not have input/output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     def test_forward_signature(self):

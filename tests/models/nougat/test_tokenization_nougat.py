@@ -24,6 +24,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 @require_tokenizers
 class NougatTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "facebook/nougat-base"
     slow_tokenizer_class = None
     rust_tokenizer_class = NougatTokenizerFast
     tokenizer_class = NougatTokenizerFast

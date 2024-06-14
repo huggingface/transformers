@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch ESM model."""
+"""PyTorch ESM model."""
 
 import math
 from typing import List, Optional, Tuple, Union
@@ -39,13 +39,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "facebook/esm2_t6_8M_UR50D"
 _CONFIG_FOR_DOC = "EsmConfig"
-
-ESM_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/esm2_t6_8M_UR50D",
-    "facebook/esm2_t12_35M_UR50D",
-    # This is not a complete list of all ESM models!
-    # See all ESM models at https://huggingface.co/models?filter=esm
-]
 
 
 def rotate_half(x):
@@ -377,7 +370,7 @@ class EsmSelfAttention(nn.Module):
         if head_mask is not None:
             attention_probs = attention_probs * head_mask
 
-        context_layer = torch.matmul(attention_probs, value_layer)
+        context_layer = torch.matmul(attention_probs.to(value_layer.dtype), value_layer)
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)

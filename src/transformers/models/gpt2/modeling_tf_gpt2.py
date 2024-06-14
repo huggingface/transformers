@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 OpenAI GPT-2 model."""
+"""TF 2.0 OpenAI GPT-2 model."""
 
 from __future__ import annotations
 
@@ -57,15 +57,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "openai-community/gpt2"
 _CONFIG_FOR_DOC = "GPT2Config"
-
-TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "openai-community/gpt2",
-    "openai-community/gpt2-medium",
-    "openai-community/gpt2-large",
-    "openai-community/gpt2-xl",
-    "distilbert/distilgpt2",
-    # See all GPT-2 models at https://huggingface.co/models?filter=openai-community/gpt2
-]
 
 
 class TFAttention(keras.layers.Layer):

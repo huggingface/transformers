@@ -17,7 +17,6 @@
 Processor class for CLVP
 """
 
-
 from ...processing_utils import ProcessorMixin
 
 

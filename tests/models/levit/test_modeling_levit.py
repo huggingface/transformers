@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch LeViT model. """
-
+"""Testing suite for the PyTorch LeViT model."""
 
 import unittest
 import warnings
@@ -40,7 +39,6 @@ if is_torch_available():
         MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
         MODEL_MAPPING_NAMES,
     )
-    from transformers.models.levit.modeling_levit import LEVIT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -211,7 +209,7 @@ class LevitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="Levit does not support input and output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip(reason="Levit does not output attentions")
@@ -382,9 +380,9 @@ class LevitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in LEVIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = LevitModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/levit-128S"
+        model = LevitModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
@@ -398,13 +396,11 @@ def prepare_img():
 class LevitModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return LevitImageProcessor.from_pretrained(LEVIT_PRETRAINED_MODEL_ARCHIVE_LIST[0])
+        return LevitImageProcessor.from_pretrained("facebook/levit-128S")
 
     @slow
     def test_inference_image_classification_head(self):
-        model = LevitForImageClassificationWithTeacher.from_pretrained(LEVIT_PRETRAINED_MODEL_ARCHIVE_LIST[0]).to(
-            torch_device
-        )
+        model = LevitForImageClassificationWithTeacher.from_pretrained("facebook/levit-128S").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()

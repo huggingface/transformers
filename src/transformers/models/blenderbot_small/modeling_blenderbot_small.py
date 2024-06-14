@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch BlenderbotSmall model."""
-
+"""PyTorch BlenderbotSmall model."""
 
 import copy
 import math
@@ -47,12 +46,6 @@ from .configuration_blenderbot_small import BlenderbotSmallConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "BlenderbotSmallConfig"
-
-
-BLENDERBOT_SMALL_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/blenderbot_small-90M",
-    # See all BlenderbotSmall models at https://huggingface.co/models?filter=blenderbot_small
-]
 
 
 # Copied from transformers.models.bart.modeling_bart.shift_tokens_right

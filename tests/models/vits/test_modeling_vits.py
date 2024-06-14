@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch VITS model. """
+"""Testing suite for the PyTorch VITS model."""
 
 import copy
 import os
@@ -216,6 +216,10 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_determinism(self):
         pass
 
+    @unittest.skip("VITS is not deterministic")
+    def test_batching_equivalence(self):
+        pass
+
     @is_flaky(
         max_attempts=3,
         description="Weight initialisation for the VITS conv layers sometimes exceeds the kaiming normal range",
@@ -261,7 +265,7 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip("VITS has no input embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     # override since the model is not deterministic, so we need to set the seed for each forward pass

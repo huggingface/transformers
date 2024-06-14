@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
 from ..utils import is_accelerate_available, is_auto_awq_available, is_torch_available, logging
+from ..utils.quantization_config import AWQLinearVersion
 
 
 if is_torch_available():
@@ -74,7 +75,7 @@ class AwqQuantizer(HfQuantizer):
         return torch_dtype
 
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        from ..integrations import get_keys_to_not_convert, replace_with_awq_linear
+        from ..integrations import get_keys_to_not_convert, replace_quantization_scales, replace_with_awq_linear
 
         self.modules_to_not_convert = get_keys_to_not_convert(model)
 
@@ -84,6 +85,8 @@ class AwqQuantizer(HfQuantizer):
         model, has_been_replaced = replace_with_awq_linear(
             model, quantization_config=self.quantization_config, modules_to_not_convert=self.modules_to_not_convert
         )
+
+        model = replace_quantization_scales(model, model.config.model_type)
 
         if not has_been_replaced:
             logger.warning(
@@ -98,12 +101,22 @@ class AwqQuantizer(HfQuantizer):
             model = fuse_awq_modules(model, self.quantization_config)
             model._awq_is_fused = True  # TODO: consider storing this flag in model.config instead
 
+        if self.quantization_config.version == AWQLinearVersion.EXLLAMA:
+            from ..integrations import post_init_awq_exllama_modules
+
+            model = post_init_awq_exllama_modules(model, self.quantization_config.exllama_config)
+
     @property
     def is_serializable(self):
         # AWQ through auto-awq has been always serializable, except if the model is fused.
         if self.quantization_config.do_fuse:
             logger.warning("You cannot save an AWQ model that uses fused modules!")
             return False
+
+        if self.quantization_config.version == AWQLinearVersion.EXLLAMA:
+            logger.warning("You cannot save an AWQ model that uses Exllama backend!")
+            return False
+
         return True
 
     @property

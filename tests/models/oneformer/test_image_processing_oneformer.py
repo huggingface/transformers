@@ -159,6 +159,7 @@ class OneFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = image_processing_class
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = OneFormerImageProcessorTester(self)
 
     @property
@@ -295,6 +296,19 @@ class OneFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 el["segmentation"].shape, (self.image_processor_tester.height, self.image_processor_tester.width)
             )
 
+        segmentation_with_opts = image_processor.post_process_instance_segmentation(
+            outputs,
+            threshold=0,
+            target_sizes=[(1, 4) for _ in range(self.image_processor_tester.batch_size)],
+            task_type="panoptic",
+        )
+        self.assertTrue(len(segmentation_with_opts) == self.image_processor_tester.batch_size)
+        for el in segmentation_with_opts:
+            self.assertTrue("segmentation" in el)
+            self.assertTrue("segments_info" in el)
+            self.assertEqual(type(el["segments_info"]), list)
+            self.assertEqual(el["segmentation"].shape, (1, 4))
+
     def test_post_process_panoptic_segmentation(self):
         image_processor = self.image_processing_class(
             num_labels=self.image_processor_tester.num_classes,
@@ -336,3 +350,16 @@ class OneFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             image_processor = self.image_processing_class(**config_dict)
 
         self.assertEqual(image_processor.metadata, metadata)
+
+    def test_removed_deprecated_kwargs(self):
+        image_processor_dict = dict(self.image_processor_dict)
+        image_processor_dict.pop("do_reduce_labels", None)
+        image_processor_dict["reduce_labels"] = True
+
+        # test we are able to create the image processor with the deprecated kwargs
+        image_processor = self.image_processing_class(**image_processor_dict)
+        self.assertEqual(image_processor.do_reduce_labels, True)
+
+        # test we still support reduce_labels with config
+        image_processor = self.image_processing_class.from_dict(image_processor_dict)
+        self.assertEqual(image_processor.do_reduce_labels, True)

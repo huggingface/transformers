@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert ProphetNet checkpoint."""
 
-
 import argparse
 
 from torch import nn

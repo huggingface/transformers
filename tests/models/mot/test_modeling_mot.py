@@ -23,6 +23,7 @@ import unittest
 from transformers import AutoModelForSequenceClassification, MoTConfig, is_torch_available
 from transformers.models.auto import get_values
 from transformers.models.auto.modeling_auto import MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES
+from transformers.models.mot.modeling_mot import MOT_PRETRAINED_MODEL_ARCHIVE_LIST
 from transformers.testing_utils import CaptureLogger, backend_empty_cache, require_torch, slow, torch_device
 from transformers.utils import logging
 
@@ -42,7 +43,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        MOT_PRETRAINED_MODEL_ARCHIVE_LIST,
         GPT2Tokenizer,
         MoTForQuestionAnswering,
         MoTForSequenceClassification,

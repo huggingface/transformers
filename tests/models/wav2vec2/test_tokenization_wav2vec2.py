@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tests for the Wav2Vec2 tokenizer."""
+
 import inspect
 import json
 import os
@@ -24,7 +25,6 @@ import unittest
 import numpy as np
 
 from transformers import (
-    WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
     AddedToken,
     Wav2Vec2Config,
     Wav2Vec2CTCTokenizer,
@@ -145,8 +145,10 @@ class Wav2Vec2TokenizerTest(unittest.TestCase):
             [24, 22, 5, tokenizer.word_delimiter_token_id, 24, 22, 5, 77, tokenizer.pad_token_id, 34, 34],
         ]
         batch_tokens = tokenizer.batch_decode(sample_ids)
+        batch_tokens_2 = tokenizer.batch_decode(sample_ids, skip_special_tokens=True)
 
         self.assertEqual(batch_tokens, ["HELLO<unk>!?!?$$$", "BYE BYE<unk>$$$"])
+        self.assertEqual(batch_tokens_2, ["HELO!?!?", "BYE BYE"])
 
     def test_call(self):
         # Tests that all call wrap to encode_plus and batch_encode_plus
@@ -357,16 +359,17 @@ class Wav2Vec2TokenizerTest(unittest.TestCase):
         # this test makes sure that models that are using
         # group norm don't have their tokenizer return the
         # attention_mask
-        for model_id in WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST:
-            config = Wav2Vec2Config.from_pretrained(model_id)
-            tokenizer = Wav2Vec2Tokenizer.from_pretrained(model_id)
+        model_id = "facebook/wav2vec2-base-960h"
+        config = Wav2Vec2Config.from_pretrained(model_id)
+        tokenizer = Wav2Vec2Tokenizer.from_pretrained(model_id)
 
-            # only "layer" feature extraction norm should make use of
-            # attention_mask
-            self.assertEqual(tokenizer.return_attention_mask, config.feat_extract_norm == "layer")
+        # only "layer" feature extraction norm should make use of
+        # attention_mask
+        self.assertEqual(tokenizer.return_attention_mask, config.feat_extract_norm == "layer")
 
 
 class Wav2Vec2CTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "facebook/wav2vec2-base-960h"
     tokenizer_class = Wav2Vec2CTCTokenizer
     test_rust_tokenizer = False
 
@@ -452,18 +455,20 @@ class Wav2Vec2CTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_tokenizer_decode_added_tokens(self):
         tokenizer = self.tokenizer_class.from_pretrained("facebook/wav2vec2-base-960h")
-        tokenizer.add_tokens(["!", "?"])
+        tokenizer.add_tokens(["!", "?", "<new_tokens>"])
         tokenizer.add_special_tokens({"cls_token": "$$$"})
 
         # fmt: off
         sample_ids = [
-            [11, 5, 15, tokenizer.pad_token_id, 15, 8, 98, 32, 32, 33, tokenizer.word_delimiter_token_id, 32, 32, 33, 34, 34],
-            [24, 22, 5, tokenizer.word_delimiter_token_id, 24, 22, 5, 77, tokenizer.pad_token_id, 34, 34],
+            [11, 5, 15, tokenizer.pad_token_id, 15, 8, 98, 32, 32, 33, tokenizer.word_delimiter_token_id, 32, 32, 33, 34, 34, 35, 35],
+            [24, 22, 5, tokenizer.word_delimiter_token_id, 24, 22, 5, 77, tokenizer.pad_token_id, 34, 34, 35, 35],
         ]
         # fmt: on
         batch_tokens = tokenizer.batch_decode(sample_ids)
+        batch_tokens_2 = tokenizer.batch_decode(sample_ids, skip_special_tokens=True)
 
-        self.assertEqual(batch_tokens, ["HELLO<unk>!?!?$$$", "BYE BYE<unk>$$$"])
+        self.assertEqual(batch_tokens, ["HELLO<unk>!?!?<new_tokens>$$$", "BYE BYE<unk><new_tokens>$$$"])
+        self.assertEqual(batch_tokens_2, ["HELO!?!?<new_tokens>", "BYE BYE<new_tokens>"])
 
     def test_special_characters_in_vocab(self):
         sent = "ʈʰ æ æ̃ ˧ kʰ"
@@ -701,10 +706,6 @@ class Wav2Vec2CTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(expected_word_time_stamps_text, word_offsets_text)
         self.assertListEqual(expected_word_time_stamps_start, word_time_stamps_start)
         self.assertListEqual(expected_word_time_stamps_end, word_time_stamps_end)
-
-    def test_pretrained_model_lists(self):
-        # Wav2Vec2Model has no max model length => no testing
-        pass
 
     # overwrite from test_tokenization_common
     def test_add_tokens_tokenizer(self):

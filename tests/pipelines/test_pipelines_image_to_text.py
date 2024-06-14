@@ -142,6 +142,35 @@ class ImageToTextPipelineTests(unittest.TestCase):
         outputs = pipe(image, prompt=prompt)
         self.assertTrue(outputs[0]["generated_text"].startswith(prompt))
 
+    @require_torch
+    def test_consistent_batching_behaviour(self):
+        pipe = pipeline("image-to-text", model="hf-internal-testing/tiny-random-BlipForConditionalGeneration")
+        image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
+        prompt = "a photo of"
+
+        outputs = pipe([image, image], prompt=prompt)
+        self.assertTrue(outputs[0][0]["generated_text"].startswith(prompt))
+        self.assertTrue(outputs[1][0]["generated_text"].startswith(prompt))
+
+        outputs = pipe([image, image], prompt=prompt, batch_size=2)
+        self.assertTrue(outputs[0][0]["generated_text"].startswith(prompt))
+        self.assertTrue(outputs[1][0]["generated_text"].startswith(prompt))
+
+        from torch.utils.data import Dataset
+
+        class MyDataset(Dataset):
+            def __len__(self):
+                return 5
+
+            def __getitem__(self, i):
+                return "./tests/fixtures/tests_samples/COCO/000000039769.png"
+
+        dataset = MyDataset()
+        for batch_size in (1, 2, 4):
+            outputs = pipe(dataset, prompt=prompt, batch_size=batch_size if batch_size > 1 else None)
+            self.assertTrue(list(outputs)[0][0]["generated_text"].startswith(prompt))
+            self.assertTrue(list(outputs)[1][0]["generated_text"].startswith(prompt))
+
     @slow
     @require_torch
     def test_large_model_pt(self):
@@ -261,7 +290,7 @@ class ImageToTextPipelineTests(unittest.TestCase):
             outputs,
             [
                 {
-                    "generated_text": "<image> \nUSER: What does the label 15 represent? (1) lava (2) core (3) tunnel (4) ash cloud?\nASSISTANT: Lava"
+                    "generated_text": "\nUSER: What does the label 15 represent? (1) lava (2) core (3) tunnel (4) ash cloud?\nASSISTANT: Lava"
                 }
             ],
         )

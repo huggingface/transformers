@@ -12,20 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TrajectoryTransformer model configuration"""
+"""TrajectoryTransformer model configuration"""
 
 from ....configuration_utils import PretrainedConfig
 from ....utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-TRAJECTORY_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "CarlCochet/trajectory-transformer-halfcheetah-medium-v2": (
-        "https://huggingface.co/CarlCochet/trajectory-transformer-halfcheetah-medium-v2/resolve/main/config.json"
-    ),
-    # See all TrajectoryTransformer models at https://huggingface.co/models?filter=trajectory_transformer
-}
 
 
 class TrajectoryTransformerConfig(PretrainedConfig):
