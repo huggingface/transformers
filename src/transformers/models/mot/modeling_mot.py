@@ -590,6 +590,11 @@ class MoTMLP(nn.Module):
         return x
 
 
+MoT_ATTENTION_CLASSES = {
+    "eager": MoTAttention,
+}
+
+
 # Copied from transformers.models.gpt2.modeling_gpt2.GPT2Block with GPT2->MoT
 class MoTBlock(nn.Module):
     def __init__(self, config, layer_idx=None):
