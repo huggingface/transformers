@@ -61,8 +61,10 @@ class DacConfig(PretrainedConfig):
 
         self.latent_dim = latent_dim
 
-        self.hop_length = np.prod(encoder_rates)
+        self.hop_length = int(np.prod(encoder_rates))
 
         super().__init__(**kwargs)
+
+
 
 
