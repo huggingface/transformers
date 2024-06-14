@@ -1171,7 +1171,7 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
                 if past_key_values.get_max_length() is not None
                 else None
             )
-            cache_length = past_length if max_cache_length is None else torch.min(max_cache_length, past_length)
+            cache_length = past_length if max_cache_length is None else torch.min(max_cache_length, torch.tensor(past_length, device=max_cache_length.device))
 
             # Keep only the unprocessed tokens:
             # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
@@ -1215,7 +1215,8 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
         elif use_cache:
             cache_position = cache_position[-input_length:]
 
-        cache_position = cache_position.tolist()
+        if torch.is_tensor(cache_position):
+            cache_position = cache_position.tolist()
 
         model_inputs.update(
             {
