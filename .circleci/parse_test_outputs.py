@@ -1,5 +1,6 @@
 import re
 import argparse
+from collections import Counter
 
 def parse_pytest_output(file_path):
     skipped_tests = {}
@@ -24,9 +25,17 @@ def parse_pytest_failure_output(file_path):
             if match:
                 failed_count += 1
                 test_name, error, reason = match.groups()
-                failed_tests[test_name] = [reason, error]
+                failed_tests[test_name] = (reason, error)
+
+
+    print("Failures:")
     for test_name, (reason, error) in failed_tests.items():
         print(f"{test_name} failed because `{error}` -> {reason}")
+
+    print("\nSummary:")
+    fail_counts = Counter(failed_tests.values())
+    for (reason, error), count in sorted(fail_counts.items(), key=lambda x:x[1], reverse=True):
+        print(f"{count:4} failed because of `{error}` -> {reason}")
     print("Number of failed tests:", failed_count)
     if failed_count>0:
         exit(1)
