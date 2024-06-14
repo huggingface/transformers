@@ -50,7 +50,7 @@ LIST_SAFE_MODULES = [
     "unicodedata",
 ]
 
-
+PRINT_OUTPUTS = ""
 class BreakException(Exception):
     pass
 
@@ -247,13 +247,17 @@ def evaluate_augassign(expression: ast.AugAssign, state: Dict[str, Any], tools: 
     return updated_value
 
 
-def evaluate_boolop(boolop, state, tools):
-    values = [evaluate_ast(val, state, tools) for val in boolop.values]
-    op = boolop.op
-    if isinstance(op, ast.And):
-        return all(values)
-    elif isinstance(op, ast.Or):
-        return any(values)
+def evaluate_boolop(node, state, tools):
+    if isinstance(node.op, ast.And):
+        for value in node.values:
+            if not evaluate_ast(value, state, tools):
+                return False
+        return True
+    elif isinstance(node.op, ast.Or):
+        for value in node.values:
+            if evaluate_ast(value, state, tools):
+                return True
+        return False
 
 
 def evaluate_binop(binop, state, tools):
@@ -378,16 +382,15 @@ def evaluate_call(call, state, tools):
                 return super(cls, instance)
             else:
                 raise InterpreterError("super() takes at most 2 arguments")
-
         else:
             if func_name == "print":
                 output = " ".join(map(str, args))
-                state["print_outputs"] += output + "\n"
+                global PRINT_OUTPUTS
+                PRINT_OUTPUTS += output + "\n"
                 return output
             else:  # Assume it's a callable object
                 output = func(*args, **kwargs)
                 return output
-
 
 def evaluate_subscript(subscript, state, tools):
     index = evaluate_ast(subscript.slice, state, tools)
@@ -395,8 +398,14 @@ def evaluate_subscript(subscript, state, tools):
     if isinstance(index, slice):
         return value[index]
     elif isinstance(value, (list, tuple)):
+        # Ensure the index is within bounds
+        if not (-len(value) <= index < len(value)):
+            raise InterpreterError(f"Index {index} out of bounds for list of length {len(value)}")
         return value[int(index)]
     elif isinstance(value, str):
+        # Ensure the index is within bounds
+        if not (-len(value) <= index < len(value)):
+            raise InterpreterError(f"Index {index} out of bounds for string of length {len(value)}")
         return value[index]
     elif index in value:
         return value[index]
@@ -424,7 +433,6 @@ def evaluate_condition(condition, state, tools):
     left = evaluate_ast(condition.left, state, tools)
     comparators = [evaluate_ast(c, state, tools) for c in condition.comparators]
     ops = [type(op) for op in condition.ops]
-
     result = left
     for op, comparator in zip(ops, comparators):
         if op == ast.Eq:
@@ -776,14 +784,16 @@ def evaluate_python_code(
     if state is None:
         state = {}
     result = None
-    state["print_outputs"] = ""
+    global PRINT_OUTPUTS
+    PRINT_OUTPUTS = ""
     for node in expression.body:
         try:
             line_result = evaluate_ast(node, state, tools, authorized_imports)
+            state['print_outputs'] = PRINT_OUTPUTS
         except InterpreterError as e:
             msg = f"Evaluation stopped at line '{ast.get_source_segment(code, node)}' because of the following error:\n{e}"
-            if len(state["print_outputs"]) > 0:
-                msg += f"Executing code yielded these outputs:\n{state['print_outputs']}\n====\n"
+            if len(PRINT_OUTPUTS) > 0:
+                msg += f"Executing code yielded these outputs:\n{PRINT_OUTPUTS}\n====\n"
             raise InterpreterError(msg)
         if line_result is not None:
             result = line_result

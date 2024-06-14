@@ -278,6 +278,17 @@ for block in text_block:
             evaluate_python_code(code, BASE_PYTHON_TOOLS, state={})
         assert "iterations in While loop exceeded" in str(e)
 
+        # test lazy evaluation
+        code="""
+house_positions = [0, 7, 10, 15, 18, 22, 22]
+i, n, loc = 0, 7, 30
+while i < n and house_positions[i] <= loc:
+    i += 1
+    print("New I", i)
+"""
+        state = {}
+        evaluate_python_code(code, BASE_PYTHON_TOOLS, state=state)
+
     def test_generator(self):
         code = "a = [1, 2, 3, 4, 5]; b = (i**2 for i in a); list(b)"
         result = evaluate_python_code(code, BASE_PYTHON_TOOLS, state={})
@@ -359,6 +370,16 @@ if char.isalpha():
         result = evaluate_python_code(code, BASE_PYTHON_TOOLS, state=state)
         assert result == "Ok no one cares"
         assert state["print_outputs"] == "Hello world!\nOk no one cares\n"
+
+        # test print in function
+        code="""
+print("1")
+def function():
+    print("2")
+function()"""
+        state = {}
+        evaluate_python_code(code, {"print":print}, state)
+        assert state["print_outputs"] == "1\n2\n"
 
     def test_tuple_target_in_iterator(self):
         code = "for a, b in [('Ralf Weikert', 'Austria'), ('Samuel Seungwon Lee', 'South Korea')]:res = a.split()[0]"
@@ -567,7 +588,6 @@ with lock as l:
 
 assert lock.locked == False
     """
-
         state = {}
         tools = {}
         evaluate_python_code(code, tools, state)
