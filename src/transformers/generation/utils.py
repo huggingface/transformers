@@ -2808,7 +2808,7 @@ class GenerationMixin:
             generation_config.pad_token_id.to(self.device) if generation_config.pad_token_id is not None else None
         )
         eos_token_id = (
-            generation_config.eos_token_id.to(self.device) if generation_config.pad_token_id is not None else None
+            generation_config.eos_token_id.to(self.device) if generation_config.eos_token_id is not None else None
         )
         output_attentions = generation_config.output_attentions
         output_hidden_states = generation_config.output_hidden_states
@@ -3131,7 +3131,7 @@ class GenerationMixin:
             generation_config.pad_token_id.to(self.device) if generation_config.pad_token_id is not None else None
         )
         eos_token_id = (
-            generation_config.eos_token_id.to(self.device) if generation_config.pad_token_id is not None else None
+            generation_config.eos_token_id.to(self.device) if generation_config.eos_token_id is not None else None
         )
         output_attentions = generation_config.output_attentions
         output_hidden_states = generation_config.output_hidden_states
@@ -3427,7 +3427,7 @@ class GenerationMixin:
             generation_config.pad_token_id.to(self.device) if generation_config.pad_token_id is not None else None
         )
         eos_token_id = (
-            generation_config.eos_token_id.to(self.device) if generation_config.pad_token_id is not None else None
+            generation_config.eos_token_id.to(self.device) if generation_config.eos_token_id is not None else None
         )
         output_attentions = generation_config.output_attentions
         output_hidden_states = generation_config.output_hidden_states
