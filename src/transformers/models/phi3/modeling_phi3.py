@@ -124,17 +124,41 @@ class Phi3SuScaledRotaryEmbedding(Phi3RotaryEmbedding):
     def __init__(self, dim, config, device=None):
         super().__init__(dim, config.max_position_embeddings, config.rope_theta, device)
 
-        inv_freq_shape = torch.arange(0, self.dim, 2, dtype=torch.int64, device=device).float() / self.dim
+        self._short_factor = None
+        self._long_factor = None
 
-        short_factor = torch.tensor(config.rope_scaling["short_factor"], dtype=torch.float32, device=device)
+        self.short_factor = config.rope_scaling["short_factor"]
+        self.long_factor = config.rope_scaling["long_factor"]
+
+        self.original_max_position_embeddings = config.original_max_position_embeddings
+
+    @property
+    def short_factor(self):
+        return self._short_factor
+
+    @short_factor.setter
+    def short_factor(self, value):
+        self._short_factor = value
+
+        inv_freq_shape = torch.arange(0, self.dim, 2, dtype=torch.int64).float() / self.dim
+
+        short_factor = torch.tensor(value, dtype=torch.float32)
         short_inv_freq = 1.0 / (short_factor * self.base**inv_freq_shape)
         self.register_buffer("short_inv_freq", short_inv_freq, persistent=False)
 
-        long_factor = torch.tensor(config.rope_scaling["long_factor"], dtype=torch.float32, device=device)
+    @property
+    def long_factor(self):
+        return self._long_factor
+
+    @long_factor.setter
+    def long_factor(self, value):
+        self._long_factor = value
+
+        inv_freq_shape = torch.arange(0, self.dim, 2, dtype=torch.int64).float() / self.dim
+
+        long_factor = torch.tensor(value, dtype=torch.float32)
         long_inv_freq = 1.0 / (long_factor * self.base**inv_freq_shape)
         self.register_buffer("long_inv_freq", long_inv_freq, persistent=False)
-
-        self.original_max_position_embeddings = config.original_max_position_embeddings
 
     @torch.no_grad()
     def forward(self, x, position_ids, seq_len=None):
@@ -171,17 +195,41 @@ class Phi3YarnScaledRotaryEmbedding(Phi3RotaryEmbedding):
     def __init__(self, dim, config, device=None):
         super().__init__(dim, config.max_position_embeddings, config.rope_theta, device)
 
-        inv_freq_shape = torch.arange(0, self.dim, 2, dtype=torch.int64, device=device).float() / self.dim
+        self._short_factor = None
+        self._long_factor = None
 
-        short_factor = torch.tensor(config.rope_scaling["short_factor"], dtype=torch.float32, device=device)
+        self.short_factor = config.rope_scaling["short_factor"]
+        self.long_factor = config.rope_scaling["long_factor"]
+
+        self.original_max_position_embeddings = config.original_max_position_embeddings
+
+    @property
+    def short_factor(self):
+        return self._short_factor
+
+    @short_factor.setter
+    def short_factor(self, value):
+        self._short_factor = value
+
+        inv_freq_shape = torch.arange(0, self.dim, 2, dtype=torch.int64).float() / self.dim
+
+        short_factor = torch.tensor(value, dtype=torch.float32)
         short_inv_freq = 1.0 / (short_factor * self.base**inv_freq_shape)
         self.register_buffer("short_inv_freq", short_inv_freq, persistent=False)
 
-        long_factor = torch.tensor(config.rope_scaling["long_factor"], dtype=torch.float32, device=device)
+    @property
+    def long_factor(self):
+        return self._long_factor
+
+    @long_factor.setter
+    def long_factor(self, value):
+        self._long_factor = value
+
+        inv_freq_shape = torch.arange(0, self.dim, 2, dtype=torch.int64).float() / self.dim
+
+        long_factor = torch.tensor(value, dtype=torch.float32)
         long_inv_freq = 1.0 / (long_factor * self.base**inv_freq_shape)
         self.register_buffer("long_inv_freq", long_inv_freq, persistent=False)
-
-        self.original_max_position_embeddings = config.original_max_position_embeddings
 
     @torch.no_grad()
     def forward(self, x, position_ids, seq_len=None):
