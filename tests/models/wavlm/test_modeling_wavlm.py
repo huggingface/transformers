@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch WavLM model. """
+"""Testing suite for the PyTorch WavLM model."""
 
 import math
 import unittest
@@ -288,6 +288,15 @@ class WavLMModelTester:
 
         loss.backward()
 
+    def check_output_attentions(self, config, input_values, attention_mask):
+        model = WavLMModel(config=config)
+        model.config.layerdrop = 1.0
+        model.to(torch_device)
+        model.train()
+
+        outputs = model(input_values, attention_mask=attention_mask, output_attentions=True)
+        self.parent.assertTrue(len(outputs.attentions) > 0)
+
     def check_labels_out_of_vocab(self, config, input_values, *args):
         model = WavLMForCTC(config)
         model.to(torch_device)
@@ -354,6 +363,10 @@ class WavLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_seq_classifier_training(*config_and_inputs)
 
+    def test_output_attentions(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_output_attentions(*config_and_inputs)
+
     def test_labels_out_of_vocab(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
@@ -374,7 +387,7 @@ class WavLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     # WavLM has no inputs_embeds
     # and thus the `get_input_embeddings` fn
     # is not implemented
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     # WavLM uses PyTorch's multi-head-attention class
@@ -515,7 +528,6 @@ class WavLMModelIntegrationTest(unittest.TestCase):
         EXPECTED_HIDDEN_STATES_SLICE = torch.tensor(
             [[[0.0577, 0.1161], [0.0579, 0.1165]], [[0.0199, 0.1237], [0.0059, 0.0605]]]
         )
-        # TODO: update the tolerance after the CI moves to torch 1.10
         self.assertTrue(torch.allclose(hidden_states_slice, EXPECTED_HIDDEN_STATES_SLICE, atol=5e-2))
 
     def test_inference_large(self):
@@ -567,7 +579,6 @@ class WavLMModelIntegrationTest(unittest.TestCase):
         )
         self.assertEqual(labels[0, :, 0].sum(), 258)
         self.assertEqual(labels[0, :, 1].sum(), 647)
-        # TODO: update the tolerance after the CI moves to torch 1.10
         self.assertTrue(torch.allclose(outputs.logits[:, :4], expected_logits, atol=1e-2))
 
     def test_inference_speaker_verification(self):
@@ -592,5 +603,4 @@ class WavLMModelIntegrationTest(unittest.TestCase):
         # id10002 vs id10004
         self.assertAlmostEqual(cosine_sim(embeddings[2], embeddings[3]).item(), 0.4780, 3)
 
-        # TODO: update the tolerance after the CI moves to torch 1.10
         self.assertAlmostEqual(outputs.loss.item(), 18.4154, 2)

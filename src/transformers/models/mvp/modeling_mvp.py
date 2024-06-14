@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch MVP model."""
+"""PyTorch MVP model."""
+
 import copy
 import math
 from typing import List, Optional, Tuple, Union
@@ -52,25 +53,6 @@ _CONFIG_FOR_DOC = "MvpConfig"
 
 # Base model docstring
 _EXPECTED_OUTPUT_SHAPE = [1, 8, 1024]
-
-MVP_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "RUCAIBox/mvp",
-    "RUCAIBox/mvp-data-to-text",
-    "RUCAIBox/mvp-open-dialog",
-    "RUCAIBox/mvp-question-answering",
-    "RUCAIBox/mvp-question-generation",
-    "RUCAIBox/mvp-story",
-    "RUCAIBox/mvp-summarization",
-    "RUCAIBox/mvp-task-dialog",
-    "RUCAIBox/mtl-data-to-text",
-    "RUCAIBox/mtl-multi-task",
-    "RUCAIBox/mtl-open-dialog",
-    "RUCAIBox/mtl-question-answering",
-    "RUCAIBox/mtl-question-generation",
-    "RUCAIBox/mtl-story",
-    "RUCAIBox/mtl-summarization",
-    # See all MVP models at https://huggingface.co/models?filter=mvp
-]
 
 
 # Copied from transformers.models.bart.modeling_bart.shift_tokens_right
@@ -629,10 +611,11 @@ MVP_INPUTS_DOCSTRING = r"""
 
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of shape
-            `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing `input_ids` you
-            can choose to directly pass an embedded representation. This is useful if you want more control over how to
-            convert `input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+            than the model's internal embedding lookup matrix.
         decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
             representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
@@ -1067,11 +1050,11 @@ class MvpDecoder(MvpPreTrainedModel):
 
                 If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
                 that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
-                all `decoder_input_ids` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of
-                shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
-                `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more
-                control over how to convert `input_ids` indices into associated vectors than the model's internal
-                embedding lookup matrix.
+                all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
+                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+                than the model's internal embedding lookup matrix.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.

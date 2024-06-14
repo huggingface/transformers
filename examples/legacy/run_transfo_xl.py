@@ -14,13 +14,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Transformer XL model evaluation script.
-    Adapted from https://github.com/kimiyoung/transformer-xl.
-    In particular https://github.com/kimiyoung/transformer-xl/blob/master/pytorch/eval.py
+"""PyTorch Transformer XL model evaluation script.
+Adapted from https://github.com/kimiyoung/transformer-xl.
+In particular https://github.com/kimiyoung/transformer-xl/blob/master/pytorch/eval.py
 
-    This script with default values evaluates a pretrained Transformer-XL on WikiText 103
+This script with default values evaluates a pretrained Transformer-XL on WikiText 103
 """
-
 
 import argparse
 import logging
@@ -40,7 +39,7 @@ logger = logging.getLogger(__name__)
 
 def main():
     parser = argparse.ArgumentParser(description="PyTorch Transformer Language Model")
-    parser.add_argument("--model_name", type=str, default="transfo-xl-wt103", help="pretrained model name")
+    parser.add_argument("--model_name", type=str, default="transfo-xl/transfo-xl-wt103", help="pretrained model name")
     parser.add_argument(
         "--split", type=str, default="test", choices=["all", "valid", "test"], help="which split to evaluate"
     )

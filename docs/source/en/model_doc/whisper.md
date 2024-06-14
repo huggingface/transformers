@@ -31,7 +31,6 @@ The original code can be found [here](https://github.com/openai/whisper).
 
 - The model usually performs well without requiring any finetuning.
 - The architecture follows a classic encoder-decoder architecture, which means that it relies on the [`~generation.GenerationMixin.generate`] function for inference.
-- Inference is currently only implemented for short-form i.e. audio is pre-segmented into <=30s segments. Long-form (including timestamps) will be implemented in a future release.
 - One can use [`WhisperProcessor`] to prepare audio for the model, and decode the predicted ID's back into text.
 
 - To convert the model and the processor, we recommend using the following:
@@ -79,6 +78,8 @@ Here is a step-by-step guide to transcribing an audio sample using a pre-trained
 
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with Whisper. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
 
+- [Fine-tune Whisper](https://huggingface.co/blog/fine-tune-whisper) on your own dataset for better downstream performance.
+- [Distil-Whisper](https://huggingface.co/distil-whisper): Upto 6x faster, 2x smaller distilled Whisper models for English. We release the [model checkpoints](https://huggingface.co/distil-whisper), and [distillation code](https://github.com/huggingface/distil-whisper).
 - A fork with a script to [convert a Whisper model in Hugging Face format to OpenAI format](https://github.com/zuazo-forks/transformers/blob/convert_hf_to_openai/src/transformers/models/whisper/convert_hf_to_openai.py). 🌎
 Usage example:
 ```bash
@@ -102,6 +103,8 @@ python convert_hf_to_openai.py \
     - save_vocabulary
     - batch_decode
     - decode
+    - basic_normalize
+    - normalize
 
 ## WhisperTokenizerFast
 
@@ -113,6 +116,8 @@ python convert_hf_to_openai.py \
     - save_vocabulary
     - batch_decode
     - decode
+    - basic_normalize
+    - normalize
 
 ## WhisperFeatureExtractor
 

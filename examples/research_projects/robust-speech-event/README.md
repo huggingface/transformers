@@ -3,7 +3,7 @@
 Welcome to the robust speech recognition challenge 🎙️ !
 
 The goal of this event is to build **robust**, **real-world** speech recognition (ASR) systems in as many languages as possible 🌏🌍🌎.
-If necessary and available, free access to a V100S 32 GB GPU will kindly be provided by the [OVHcloud team]( https://www.ovhcloud.com/) 🚀.
+If necessary and available, free access to a V100S 32 GB GPU will kindly be provided by the [OVHcloud team](https://www.ovhcloud.com/) 🚀.
 This document summarizes all the relevant information required for the speech community event 📋.
 
 To sign-up, please see [this forum post](https://discuss.huggingface.co/t/open-to-the-community-robust-speech-recognition-challenge/13614) 🤗. Please make sure to:
@@ -216,7 +216,7 @@ library from source to profit from the most current additions during the communi
 
 Simply run the following steps:
 
-```
+```bash
 $ cd ~/
 $ git clone https://github.com/huggingface/datasets.git
 $ cd datasets
@@ -362,7 +362,7 @@ echo '''python run_speech_recognition_ctc.py \
 	--per_device_train_batch_size="2" \
 	--learning_rate="3e-4" \
 	--save_total_limit="1" \
-	--evaluation_strategy="steps" \
+	--eval_strategy="steps" \
 	--text_column_name="sentence" \
 	--length_column_name="input_length" \
 	--save_steps="5" \
@@ -438,7 +438,7 @@ echo '''python run_speech_recognition_ctc.py \
 	--learning_rate="7.5e-5" \
 	--warmup_steps="2000" \
 	--length_column_name="input_length" \
-	--evaluation_strategy="steps" \
+	--eval_strategy="steps" \
 	--text_column_name="sentence" \
 	--chars_to_ignore , ? . ! \- \; \: \" “ % ‘ ” � — ’ … – \
 	--save_steps="500" \

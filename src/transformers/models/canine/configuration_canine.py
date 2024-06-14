@@ -12,18 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" CANINE model configuration"""
+"""CANINE model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/canine-s": "https://huggingface.co/google/canine-s/resolve/main/config.json",
-    # See all CANINE models at https://huggingface.co/models?filter=canine
-}
 
 
 class CanineConfig(PretrainedConfig):
@@ -50,7 +45,7 @@ class CanineConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoders, and pooler.
+            The dropout probability for all fully connected layers in the embeddings, encoders, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         max_position_embeddings (`int`, *optional*, defaults to 16384):

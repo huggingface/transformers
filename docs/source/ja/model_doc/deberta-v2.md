@@ -38,8 +38,7 @@ DeBERTa モデルは、Pengcheng He、Xiaodong Liu、Jianfeng Gao、Weizhu Chen 
 (90.2% 対 91.1%)、SQuAD v2.0 では +2.3% (88.4% 対 90.7%)、RACE では +3.6% (83.2% 対 86.8%) でした。 DeBERTa コードと
 事前トレーニングされたモデルは https://github.com/microsoft/DeBERTa で公開されます。*
 
-次の情報は、[元の実装で直接表示されます]
-リポジトリ](https://github.com/microsoft/DeBERTa)。 DeBERTa v2 は、DeBERTa モデルの 2 番目のバージョンです。それには以下が含まれます
+次の情報は、[元の実装で直接表示されます リポジトリ](https://github.com/microsoft/DeBERTa)。 DeBERTa v2 は、DeBERTa モデルの 2 番目のバージョンです。それには以下が含まれます
 SuperGLUE 単一モデルの提出に使用された 1.5B モデルは、人間のベースライン 89.8 に対して 89.9 を達成しました。あなたはできる
 この投稿に関する詳細については、著者のドキュメントを参照してください。
 [ブログ](https://www.microsoft.com/en-us/research/blog/microsoft-deberta-surpasses-human-performance-on-the-superglue-benchmark/)

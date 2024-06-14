@@ -483,12 +483,14 @@ class FlaxGPT2EncoderDecoderModelTest(FlaxEncoderDecoderMixin, unittest.TestCase
         }
 
     def get_pretrained_model(self):
-        return FlaxEncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-cased", "gpt2")
+        return FlaxEncoderDecoderModel.from_encoder_decoder_pretrained(
+            "google-bert/bert-base-cased", "openai-community/gpt2"
+        )
 
     @slow
     def test_bert2gpt2_summarization(self):
-        tokenizer_in = AutoTokenizer.from_pretrained("bert-base-cased")
-        tokenizer_out = AutoTokenizer.from_pretrained("gpt2")
+        tokenizer_in = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
+        tokenizer_out = AutoTokenizer.from_pretrained("openai-community/gpt2")
 
         model = FlaxEncoderDecoderModel.from_pretrained(
             "patrickvonplaten/bert2gpt2-cnn_dailymail-fp16", pad_token_id=tokenizer_out.eos_token_id
@@ -539,7 +541,9 @@ class FlaxBartEncoderDecoderModelTest(FlaxEncoderDecoderMixin, unittest.TestCase
         }
 
     def get_pretrained_model(self):
-        return FlaxEncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-cased", "facebook/bart-base")
+        return FlaxEncoderDecoderModel.from_encoder_decoder_pretrained(
+            "google-bert/bert-base-cased", "facebook/bart-base"
+        )
 
 
 @require_flax
@@ -576,13 +580,17 @@ class FlaxBertEncoderDecoderModelTest(FlaxEncoderDecoderMixin, unittest.TestCase
         }
 
     def get_pretrained_model(self):
-        return FlaxEncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-cased", "bert-base-cased")
+        return FlaxEncoderDecoderModel.from_encoder_decoder_pretrained(
+            "google-bert/bert-base-cased", "google-bert/bert-base-cased"
+        )
 
 
 @require_flax
 class FlaxEncoderDecoderModelTest(unittest.TestCase):
     def get_from_encoderdecoder_pretrained_model(self):
-        return FlaxEncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-cased", "gpt2")
+        return FlaxEncoderDecoderModel.from_encoder_decoder_pretrained(
+            "google-bert/bert-base-cased", "openai-community/gpt2"
+        )
 
     def _check_configuration_tie(self, model):
         module = model.module.bind(model.params)

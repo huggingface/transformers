@@ -12,17 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Mixtral model configuration"""
+"""Mixtral model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-MIXTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "mistral-ai/Mixtral-8x7B": "https://huggingface.co/mistral-ai/Mixtral-8x7B/resolve/main/config.json",
-}
 
 
 class MixtralConfig(PretrainedConfig):
@@ -79,12 +75,12 @@ class MixtralConfig(PretrainedConfig):
             Whether the model's input and output word embeddings should be tied.
         rope_theta (`float`, *optional*, defaults to 1000000.0):
             The base period of the RoPE embeddings.
-        sliding_window (`int`, *optional*, defaults to 4096):
+        sliding_window (`int`, *optional*):
             Sliding window attention window size. If not specified, will default to `4096`.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         num_experts_per_tok (`int`, *optional*, defaults to 2):
-            The number of experts to root per-token, can be also interpreted as the `top-p` routing
+            The number of experts to route per-token, can be also interpreted as the `top-k` routing
             parameter
         num_local_experts (`int`, *optional*, defaults to 8):
             Number of experts per Sparse MLP layer.
@@ -93,6 +89,8 @@ class MixtralConfig(PretrainedConfig):
             allow the model to output the auxiliary loss. See [here]() for more details
         router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
             The aux loss factor for the total loss.
+        router_jitter_noise (`float`, *optional*, defaults to 0.0):
+            Amount of noise to add to the router.
 
     ```python
     >>> from transformers import MixtralModel, MixtralConfig
@@ -128,12 +126,13 @@ class MixtralConfig(PretrainedConfig):
         eos_token_id=2,
         tie_word_embeddings=False,
         rope_theta=1e6,
-        sliding_window=4096,
+        sliding_window=None,
         attention_dropout=0.0,
         num_experts_per_tok=2,
         num_local_experts=8,
         output_router_logits=False,
         router_aux_loss_coef=0.001,
+        router_jitter_noise=0.0,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -160,6 +159,7 @@ class MixtralConfig(PretrainedConfig):
         self.num_local_experts = num_local_experts
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
+        self.router_jitter_noise = router_jitter_noise
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,

@@ -151,7 +151,7 @@ class BenchmarkArguments:
         if len(self.models) <= 0:
             raise ValueError(
                 "Please make sure you provide at least one model name / model identifier, *e.g.* `--models"
-                " bert-base-cased` or `args.models = ['bert-base-cased']."
+                " google-bert/bert-base-cased` or `args.models = ['google-bert/bert-base-cased']."
             )
         return self.models
 

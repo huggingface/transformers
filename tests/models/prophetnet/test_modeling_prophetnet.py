@@ -891,7 +891,6 @@ class ProphetNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     all_generative_model_classes = (ProphetNetForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "conversational": ProphetNetForConditionalGeneration,
             "feature-extraction": ProphetNetModel,
             "summarization": ProphetNetForConditionalGeneration,
             "text-generation": ProphetNetForCausalLM,
@@ -1145,10 +1144,6 @@ class ProphetNetStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMix
     def test_retain_grad_hidden_states_attentions(self):
         # decoder cannot keep gradients
         return
-
-    @unittest.skip("The model doesn't support left padding")  # and it's not used enough to be worth fixing :)
-    def test_left_padding_compatibility(self):
-        pass
 
 
 @require_torch

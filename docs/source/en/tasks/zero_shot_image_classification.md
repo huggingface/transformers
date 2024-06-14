@@ -39,7 +39,7 @@ In this guide you'll learn how to:
 Before you begin, make sure you have all the necessary libraries installed:
 
 ```bash
-pip install -q transformers
+pip install -q "transformers[torch]" pillow
 ```
 
 ## Zero-shot image classification pipeline

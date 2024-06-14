@@ -272,7 +272,7 @@ score: 0.9327, start: 30, end: 54, answer: huggingface/transformers
 >>> from transformers import pipeline
 
 >>> text = "translate English to French: Hugging Face is a community-based open-source platform for machine learning."
->>> translator = pipeline(task="translation", model="t5-small")
+>>> translator = pipeline(task="translation", model="google-t5/t5-small")
 >>> translator(text)
 [{'translation_text': "Hugging Face est une tribune communautaire de l'apprentissage des machines."}]
 ```
@@ -284,7 +284,6 @@ score: 0.9327, start: 30, end: 54, answer: huggingface/transformers
 有两种类型的话语模型：
 
 * causal：模型的目标是预测序列中的下一个`token`，而未来的`tokens`被遮盖。
-  
 
     ```py
     >>> from transformers import pipeline
@@ -294,9 +293,8 @@ score: 0.9327, start: 30, end: 54, answer: huggingface/transformers
     >>> generator(prompt)  # doctest: +SKIP
     ```
 
-*  masked：模型的目标是预测序列中被遮蔽的`token`，同时具有对序列中所有`tokens`的完全访问权限。
+* masked：模型的目标是预测序列中被遮蔽的`token`，同时具有对序列中所有`tokens`的完全访问权限。
 
-    
     ```py
     >>> text = "Hugging Face is a community-based open-source <mask> for machine learning."
     >>> fill_mask = pipeline(task="fill-mask")
@@ -332,7 +330,7 @@ score: 0.9327, start: 30, end: 54, answer: huggingface/transformers
 >>> from PIL import Image
 >>> import requests
 
->>> url = "https://datasets-server.huggingface.co/assets/hf-internal-testing/example-documents/--/hf-internal-testing--example-documents/test/2/image/image.jpg"
+>>> url = "https://huggingface.co/datasets/hf-internal-testing/example-documents/resolve/main/jpeg_images/2.jpg"
 >>> image = Image.open(requests.get(url, stream=True).raw)
 
 >>> doc_question_answerer = pipeline("document-question-answering", model="magorshunov/layoutlm-invoices")

@@ -9,7 +9,7 @@ from ..utils import (
     logging,
     requires_backends,
 )
-from .base import PIPELINE_INIT_ARGS, Pipeline
+from .base import Pipeline, build_pipeline_init_args
 
 
 if is_vision_available():
@@ -18,6 +18,8 @@ if is_vision_available():
     from ..image_utils import load_image
 
 if is_torch_available():
+    import torch
+
     from ..models.auto.modeling_auto import MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES
 
 if is_tf_available():
@@ -27,7 +29,7 @@ if is_tf_available():
 logger = logging.get_logger(__name__)
 
 
-@add_end_docstrings(PIPELINE_INIT_ARGS)
+@add_end_docstrings(build_pipeline_init_args(has_image_processor=True))
 class ZeroShotImageClassificationPipeline(Pipeline):
     """
     Zero shot image classification pipeline using `CLIPModel`. This pipeline predicts the class of an image when you
@@ -38,7 +40,7 @@ class ZeroShotImageClassificationPipeline(Pipeline):
     ```python
     >>> from transformers import pipeline
 
-    >>> classifier = pipeline(model="openai/clip-vit-large-patch14")
+    >>> classifier = pipeline(model="google/siglip-so400m-patch14-384")
     >>> classifier(
     ...     "https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png",
     ...     candidate_labels=["animals", "humans", "landscape"],
@@ -120,7 +122,8 @@ class ZeroShotImageClassificationPipeline(Pipeline):
         inputs = self.image_processor(images=[image], return_tensors=self.framework)
         inputs["candidate_labels"] = candidate_labels
         sequences = [hypothesis_template.format(x) for x in candidate_labels]
-        text_inputs = self.tokenizer(sequences, return_tensors=self.framework, padding=True)
+        padding = "max_length" if self.model.config.model_type == "siglip" else True
+        text_inputs = self.tokenizer(sequences, return_tensors=self.framework, padding=padding)
         inputs["text_inputs"] = [text_inputs]
         return inputs
 
@@ -144,7 +147,12 @@ class ZeroShotImageClassificationPipeline(Pipeline):
     def postprocess(self, model_outputs):
         candidate_labels = model_outputs.pop("candidate_labels")
         logits = model_outputs["logits"][0]
-        if self.framework == "pt":
+        if self.framework == "pt" and self.model.config.model_type == "siglip":
+            probs = torch.sigmoid(logits).squeeze(-1)
+            scores = probs.tolist()
+            if not isinstance(scores, list):
+                scores = [scores]
+        elif self.framework == "pt":
             probs = logits.softmax(dim=-1).squeeze(-1)
             scores = probs.tolist()
             if not isinstance(scores, list):

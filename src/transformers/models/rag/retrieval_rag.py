@@ -266,6 +266,7 @@ class CanonicalHFIndex(HFIndexBase):
         index_name: Optional[str] = None,
         index_path: Optional[str] = None,
         use_dummy_dataset=False,
+        dataset_revision=None,
     ):
         if int(index_path is None) + int(index_name is None) != 1:
             raise ValueError("Please provide `index_name` or `index_path`.")
@@ -274,9 +275,14 @@ class CanonicalHFIndex(HFIndexBase):
         self.index_name = index_name
         self.index_path = index_path
         self.use_dummy_dataset = use_dummy_dataset
+        self.dataset_revision = dataset_revision
         logger.info(f"Loading passages from {self.dataset_name}")
         dataset = load_dataset(
-            self.dataset_name, with_index=False, split=self.dataset_split, dummy=self.use_dummy_dataset
+            self.dataset_name,
+            with_index=False,
+            split=self.dataset_split,
+            dummy=self.use_dummy_dataset,
+            revision=dataset_revision,
         )
         super().__init__(vector_size, dataset, index_initialized=False)
 
@@ -293,6 +299,7 @@ class CanonicalHFIndex(HFIndexBase):
                 split=self.dataset_split,
                 index_name=self.index_name,
                 dummy=self.use_dummy_dataset,
+                revision=self.dataset_revision,
             )
             self.dataset.set_format("numpy", columns=["embeddings"], output_all_columns=True)
         self._index_initialized = True
@@ -427,6 +434,7 @@ class RagRetriever:
                 index_name=config.index_name,
                 index_path=config.index_path,
                 use_dummy_dataset=config.use_dummy_dataset,
+                dataset_revision=config.dataset_revision,
             )
 
     @classmethod

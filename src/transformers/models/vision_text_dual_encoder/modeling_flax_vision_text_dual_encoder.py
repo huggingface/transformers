@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Flax VisionTextDualEncoder model."""
-
+"""Flax VisionTextDualEncoder model."""
 
 from typing import Optional, Tuple
 
@@ -426,8 +425,6 @@ class FlaxVisionTextDualEncoderModel(FlaxPreTrainedModel):
                 Information necessary to initiate the vision model. Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
-                      user or organization name, like `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing model weights saved using
                       [`~FlaxPreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
                     - A path or url to a *PyTorch checkpoint folder* (e.g, `./pt_model`). In this case, `from_pt`
@@ -439,8 +436,6 @@ class FlaxVisionTextDualEncoderModel(FlaxPreTrainedModel):
                 Information necessary to initiate the text model. Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
-                      user or organization name, like `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing model weights saved using
                       [`~FlaxPreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
                     - A path or url to a *PyTorch checkpoint folder* (e.g, `./pt_model`). In this case, `from_pt`
@@ -468,7 +463,7 @@ class FlaxVisionTextDualEncoderModel(FlaxPreTrainedModel):
 
         >>> # initialize a model from pretrained ViT and BERT models. Note that the projection layers will be randomly initialized.
         >>> model = FlaxVisionTextDualEncoderModel.from_vision_text_pretrained(
-        ...     "google/vit-base-patch16-224", "bert-base-uncased"
+        ...     "google/vit-base-patch16-224", "google-bert/bert-base-uncased"
         ... )
         >>> # saving model after fine-tuning
         >>> model.save_pretrained("./vit-bert")
@@ -560,11 +555,11 @@ VISION_TEXT_DUAL_ENCODER_MODEL_DOCSTRING = r"""
     ...     AutoTokenizer,
     ... )
 
-    >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+    >>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
     >>> image_processor = AutoImageProcesor.from_pretrained("google/vit-base-patch16-224")
     >>> processor = VisionTextDualEncoderProcessor(image_processor, tokenizer)
     >>> model = FlaxVisionTextDualEncoderModel.from_vision_text_pretrained(
-    ...     "google/vit-base-patch16-224", "bert-base-uncased"
+    ...     "google/vit-base-patch16-224", "google-bert/bert-base-uncased"
     ... )
 
     >>> # contrastive training

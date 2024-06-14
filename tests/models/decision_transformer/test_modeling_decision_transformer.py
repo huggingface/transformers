@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch DecisionTransformer model. """
-
+"""Testing suite for the PyTorch DecisionTransformer model."""
 
 import inspect
 import unittest
@@ -31,9 +30,6 @@ if is_torch_available():
     import torch
 
     from transformers import DecisionTransformerModel
-    from transformers.models.decision_transformer.modeling_decision_transformer import (
-        DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
 
 
 class DecisionTransformerModelTester:
@@ -147,7 +143,6 @@ class DecisionTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
     test_attention_outputs = False
     test_hidden_states_output = False
     test_inputs_embeds = False
-    test_model_common_attributes = False
     test_gradient_checkpointing = False
     test_torchscript = False
 
@@ -164,9 +159,9 @@ class DecisionTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = DecisionTransformerModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "edbeeching/decision-transformer-gym-hopper-medium"
+        model = DecisionTransformerModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -187,6 +182,10 @@ class DecisionTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
             ]
 
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+
+    @unittest.skip(reason="Model does not have input embeddings")
+    def test_model_get_set_embeddings(self):
+        pass
 
 
 @require_torch

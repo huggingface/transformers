@@ -131,7 +131,7 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
         # Out indices are set to the last layer by default. For timm models, we don't know
         # the number of layers in advance, so we set it to (-1,), whereas for transformers
         # models, we set it to [len(stage_names) - 1] (kept for backward compatibility).
-        self.assertEqual(timm_model.out_indices, (-1,))
+        self.assertEqual(timm_model.out_indices, [-1])
         self.assertEqual(transformers_model.out_indices, [len(timm_model.stage_names) - 1])
 
         timm_model = AutoBackbone.from_pretrained(timm_checkpoint, use_timm_backbone=True, out_indices=[1, 2, 3])
@@ -158,7 +158,7 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
         pass
 
     @unittest.skip("TimmBackbone models doesn't have inputs_embeds")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip("TimmBackbone model cannot be created without specifying a backbone checkpoint")
@@ -167,6 +167,18 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
 
     @unittest.skip("Only checkpoints on timm can be loaded into TimmBackbone")
     def test_save_load(self):
+        pass
+
+    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    def test_save_load_low_cpu_mem_usage(self):
+        pass
+
+    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    def test_save_load_low_cpu_mem_usage_checkpoints(self):
+        pass
+
+    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    def test_save_load_low_cpu_mem_usage_no_safetensors(self):
         pass
 
     @unittest.skip("model weights aren't tied in TimmBackbone.")

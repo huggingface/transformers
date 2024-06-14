@@ -157,10 +157,11 @@ class GenerationIntegrationTestsMixin:
         is_pt = not model_cls.__name__.startswith("TF")
 
         articles = ["Justin Timberlake", "Michael Phelps"]
-        tokenizer = AutoTokenizer.from_pretrained("distilgpt2", padding_side="left")
+        tokenizer = AutoTokenizer.from_pretrained("distilbert/distilgpt2", padding_side="left")
         tokenizer.pad_token = tokenizer.eos_token
 
-        model = model_cls.from_pretrained("distilgpt2")
+        model = model_cls.from_pretrained("distilbert/distilgpt2")
+        model.generation_config.eos_token_id = None
         input_ids = tokenizer(articles, return_tensors=return_tensors, padding=True).input_ids
         if is_pt:
             model = model.to(torch_device)
@@ -170,7 +171,6 @@ class GenerationIntegrationTestsMixin:
             input_ids=input_ids,
             max_new_tokens=5,
             pad_token_id=tokenizer.eos_token_id,
-            eos_token_id=None,
             return_dict_in_generate=True,
             output_scores=True,
         )
@@ -193,10 +193,11 @@ class GenerationIntegrationTestsMixin:
         is_pt = not model_cls.__name__.startswith("TF")
 
         articles = ["Justin Timberlake", "Michael Phelps"]
-        tokenizer = AutoTokenizer.from_pretrained("distilgpt2", padding_side="left")
+        tokenizer = AutoTokenizer.from_pretrained("distilbert/distilgpt2", padding_side="left")
         tokenizer.pad_token = tokenizer.eos_token
 
-        model = model_cls.from_pretrained("distilgpt2")
+        model = model_cls.from_pretrained("distilbert/distilgpt2")
+        model.generation_config.eos_token_id = None
         input_ids = tokenizer(articles, return_tensors=return_tensors, padding=True).input_ids
         if is_pt:
             model = model.to(torch_device)
@@ -206,7 +207,6 @@ class GenerationIntegrationTestsMixin:
             input_ids=input_ids,
             max_new_tokens=5,
             pad_token_id=tokenizer.eos_token_id,
-            eos_token_id=None,
             return_dict_in_generate=True,
             output_scores=True,
         )
@@ -375,7 +375,7 @@ class GenerationIntegrationTestsMixin:
         is_pt = not model_cls.__name__.startswith("TF")
 
         input_ids = create_tensor_fn(2 * [[822, 10, 571, 33, 25, 58, 2625, 10, 27, 141, 3, 9, 307, 239, 6, 1]])
-        model = model_cls.from_pretrained("t5-small")
+        model = model_cls.from_pretrained("google-t5/t5-small")
         if is_pt:
             model = model.to(torch_device)
             input_ids = input_ids.to(torch_device)
@@ -529,7 +529,7 @@ class GenerationIntegrationTestsMixin:
 
         pixel_values = floats_tensor((2, 3, 30, 30))
         model = model_cls.from_pretrained("hf-internal-testing/tiny-random-VisionEncoderDecoderModel-vit-gpt2")
-        model.config.decoder.eos_token_id = None
+        model.generation_config.eos_token_id = None
         if is_pt:
             pixel_values = pixel_values.to(torch_device)
             model = model.to(torch_device)

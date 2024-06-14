@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 A classificação de tokens atribui um rótulo a tokens individuais em uma frase. Uma das tarefas de classificação de tokens mais comuns é o Reconhecimento de Entidade Nomeada, também chamada de NER (sigla em inglês para Named Entity Recognition). O NER tenta encontrar um rótulo para cada entidade em uma frase, como uma pessoa, local ou organização.
 
-Este guia mostrará como realizar o fine-tuning do [DistilBERT](https://huggingface.co/distilbert-base-uncased) no conjunto de dados [WNUT 17](https://huggingface.co/datasets/wnut_17) para detectar novas entidades.
+Este guia mostrará como realizar o fine-tuning do [DistilBERT](https://huggingface.co/distilbert/distilbert-base-uncased) no conjunto de dados [WNUT 17](https://huggingface.co/datasets/wnut_17) para detectar novas entidades.
 
 <Tip>
 
@@ -85,7 +85,7 @@ Carregue o tokenizer do DistilBERT para processar os `tokens`:
 ```py
 >>> from transformers import AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+>>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 Como a entrada já foi dividida em palavras, defina `is_split_into_words=True` para tokenizar as palavras em subpalavras:
@@ -162,7 +162,7 @@ Carregue o DistilBERT com o [`AutoModelForTokenClassification`] junto com o núm
 ```py
 >>> from transformers import AutoModelForTokenClassification, TrainingArguments, Trainer
 
->>> model = AutoModelForTokenClassification.from_pretrained("distilbert-base-uncased", num_labels=14)
+>>> model = AutoModelForTokenClassification.from_pretrained("distilbert/distilbert-base-uncased", num_labels=14)
 ```
 
 <Tip>
@@ -180,7 +180,7 @@ Nesse ponto, restam apenas três passos:
 ```py
 >>> training_args = TrainingArguments(
 ...     output_dir="./results",
-...     evaluation_strategy="epoch",
+...     eval_strategy="epoch",
 ...     learning_rate=2e-5,
 ...     per_device_train_batch_size=16,
 ...     per_device_eval_batch_size=16,
@@ -246,7 +246,7 @@ Carregue o DistilBERT com o [`TFAutoModelForTokenClassification`] junto com o n�
 ```py
 >>> from transformers import TFAutoModelForTokenClassification
 
->>> model = TFAutoModelForTokenClassification.from_pretrained("distilbert-base-uncased", num_labels=2)
+>>> model = TFAutoModelForTokenClassification.from_pretrained("distilbert/distilbert-base-uncased", num_labels=2)
 ```
 
 Configure o modelo para treinamento com o método [`compile`](https://keras.io/api/models/model_training_apis/#compile-method):

@@ -24,7 +24,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_llama": ["LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "LlamaConfig"],
+    "configuration_llama": ["LlamaConfig"],
 }
 
 try:
@@ -54,6 +54,8 @@ else:
         "LlamaModel",
         "LlamaPreTrainedModel",
         "LlamaForSequenceClassification",
+        "LlamaForQuestionAnswering",
+        "LlamaForTokenClassification",
     ]
 
 try:
@@ -66,7 +68,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_llama import LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP, LlamaConfig
+    from .configuration_llama import LlamaConfig
 
     try:
         if not is_sentencepiece_available():
@@ -90,7 +92,14 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_llama import LlamaForCausalLM, LlamaForSequenceClassification, LlamaModel, LlamaPreTrainedModel
+        from .modeling_llama import (
+            LlamaForCausalLM,
+            LlamaForQuestionAnswering,
+            LlamaForSequenceClassification,
+            LlamaForTokenClassification,
+            LlamaModel,
+            LlamaPreTrainedModel,
+        )
 
     try:
         if not is_flax_available():

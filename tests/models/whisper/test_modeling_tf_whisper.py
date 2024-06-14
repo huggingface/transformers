@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the TensorFlow Whisper model. """
+"""Testing suite for the TensorFlow Whisper model."""
 
 from __future__ import annotations
 
@@ -312,7 +312,7 @@ class TFWhisperModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
         config = self.model_tester.get_config()
         for model_class in self.all_model_classes:
             model = model_class(config)
-            model.build()
+            model.build_in_name_scope()
 
             embeds = model.get_encoder().embed_positions.get_weights()[0]
             sinusoids = sinusoidal_embedding_init(embeds.shape).numpy()

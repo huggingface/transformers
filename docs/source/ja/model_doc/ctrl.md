@@ -17,7 +17,7 @@ rendered properly in your Markdown viewer.
 # CTRL
 
 <div class="flex flex-wrap space-x-1">
-<a href="https://huggingface.co/models?filter=ctrl">
+<a href="https://huggingface.co/models?filter=Salesforce/ctrl">
 <img alt="Models" src="https://img.shields.io/badge/All_model_pages-ctrl-blueviolet">
 </a>
 <a href="https://huggingface.co/spaces/docs-demos/tiny-ctrl">
@@ -42,12 +42,12 @@ CTRL モデルは、Nitish Shirish Keskar*、Bryan McCann*、Lav R. Varshney、C
 モデルベースのソース帰属を介して。*
 
 このモデルは、[keskarnitishr](https://huggingface.co/keskarnitishr) によって提供されました。元のコードが見つかる
-[こちら](https://github.com/salesforce/ctrl)。
+[こちら](https://github.com/salesforce/Salesforce/ctrl)。
 
 ## Usage tips
 
 - CTRL は制御コードを利用してテキストを生成します。生成を特定の単語や文で開始する必要があります。
-  またはリンクして一貫したテキストを生成します。 [元の実装](https://github.com/salesforce/ctrl) を参照してください。
+  またはリンクして一貫したテキストを生成します。 [元の実装](https://github.com/salesforce/Salesforce/ctrl) を参照してください。
   詳しくは。
 - CTRL は絶対位置埋め込みを備えたモデルであるため、通常は入力を右側にパディングすることをお勧めします。
   左。

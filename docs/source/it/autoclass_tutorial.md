@@ -20,7 +20,7 @@ Con così tante architetture Transformer differenti, può essere sfidante crearn
 
 <Tip>
 
-Ricorda, con architettura ci si riferisce allo scheletro del modello e con checkpoint ai pesi di una determinata architettura. Per esempio, [BERT](https://huggingface.co/bert-base-uncased) è un'architettura, mentre `bert-base-uncased` è un checkpoint. Modello è un termine generale che può significare sia architettura che checkpoint.
+Ricorda, con architettura ci si riferisce allo scheletro del modello e con checkpoint ai pesi di una determinata architettura. Per esempio, [BERT](https://huggingface.co/google-bert/bert-base-uncased) è un'architettura, mentre `google-bert/bert-base-uncased` è un checkpoint. Modello è un termine generale che può significare sia architettura che checkpoint.
 
 </Tip>
 
@@ -40,7 +40,7 @@ Carica un tokenizer con [`AutoTokenizer.from_pretrained`]:
 ```py
 >>> from transformers import AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("xlm-roberta-base")
+>>> tokenizer = AutoTokenizer.from_pretrained("FacebookAI/xlm-roberta-base")
 ```
 
 Poi tokenizza il tuo input come mostrato in seguito:
@@ -87,7 +87,7 @@ Infine, le classi `AutoModelFor` ti permettono di caricare un modello pre-allena
 ```py
 >>> from transformers import AutoModelForSequenceClassification
 
->>> model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
+>>> model = AutoModelForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 Semplicemente utilizza lo stesso checkpoint per caricare un'architettura per un task differente:
@@ -95,7 +95,7 @@ Semplicemente utilizza lo stesso checkpoint per caricare un'architettura per un 
 ```py
 >>> from transformers import AutoModelForTokenClassification
 
->>> model = AutoModelForTokenClassification.from_pretrained("distilbert-base-uncased")
+>>> model = AutoModelForTokenClassification.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 Generalmente, raccomandiamo di utilizzare la classe `AutoTokenizer` e la classe `AutoModelFor` per caricare istanze pre-allenate dei modelli. Questo ti assicurerà di aver caricato la corretta architettura ogni volta. Nel prossimo [tutorial](preprocessing), imparerai come utilizzare il tokenizer, il feature extractor e il processore per elaborare un dataset per il fine-tuning.
@@ -107,7 +107,7 @@ Infine, le classi `TFAutoModelFor` ti permettono di caricare un modello pre-alle
 ```py
 >>> from transformers import TFAutoModelForSequenceClassification
 
->>> model = TFAutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
+>>> model = TFAutoModelForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 Semplicemente utilizza lo stesso checkpoint per caricare un'architettura per un task differente:
@@ -115,7 +115,7 @@ Semplicemente utilizza lo stesso checkpoint per caricare un'architettura per un 
 ```py
 >>> from transformers import TFAutoModelForTokenClassification
 
->>> model = TFAutoModelForTokenClassification.from_pretrained("distilbert-base-uncased")
+>>> model = TFAutoModelForTokenClassification.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 Generalmente, raccomandiamo di utilizzare la classe `AutoTokenizer` e la classe `TFAutoModelFor` per caricare istanze pre-allenate dei modelli. Questo ti assicurerà di aver caricato la corretta architettura ogni volta. Nel prossimo [tutorial](preprocessing), imparerai come utilizzare il tokenizer, il feature extractor e il processore per elaborare un dataset per il fine-tuning.

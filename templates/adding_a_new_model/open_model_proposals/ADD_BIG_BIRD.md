@@ -593,27 +593,27 @@ You should do the following:
 
 1.  Create a branch with a descriptive name from your main branch
 
-```
+```bash
     git checkout -b add_big_bird
 ```
 
 2.  Commit the automatically generated code:
 
-```
+```bash
     git add .
     git commit
 ```
 
 3.  Fetch and rebase to current main
 
-```
+```bash
     git fetch upstream
     git rebase upstream/main
 ```
 
 4.  Push the changes to your account using:
 
-```
+```bash
     git push -u origin a-descriptive-name-for-my-changes
 ```
 

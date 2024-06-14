@@ -37,13 +37,13 @@ Tips:
 - For better results, we recommend users to prompt the model with the correct prompt format: 
 
 ```bash
-"USER: <image>\n<prompt>ASSISTANT:"
+A chat between a curious human and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the human's questions.###Human: <image>\n<prompt>###Assistant:
 ```
 
 For multiple turns conversation:
 
 ```bash
-"USER: <image>\n<prompt1>ASSISTANT: <answer1>USER: <prompt2>ASSISTANT: <answer2>USER: <prompt3>ASSISTANT:"
+A chat between a curious human and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the human's questions.###Human: <image>\n<prompt1>###Assistant: <answer1>###Human: <prompt2>###Assistant:
 ```
 
 The original code can be found [here](https://github.com/mu-cai/ViP-LLaVA).

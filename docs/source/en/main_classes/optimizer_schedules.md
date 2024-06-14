@@ -66,6 +66,8 @@ The `.optimization` module provides:
 
 [[autodoc]] get_inverse_sqrt_schedule
 
+[[autodoc]] get_wsd_schedule
+
 ### Warmup (TensorFlow)
 
 [[autodoc]] WarmUp

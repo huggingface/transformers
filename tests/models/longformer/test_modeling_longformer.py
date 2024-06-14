@@ -388,6 +388,10 @@ class LongformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         # longformer cannot keep gradients in attentions or hidden states
         return
 
+    @unittest.skip("LongFormer calculates global attn only when attn_mask has non-zero elements")
+    def test_batching_equivalence(self):
+        return
+
 
 @require_torch
 @require_sentencepiece
