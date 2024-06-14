@@ -521,7 +521,7 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config.backbone = "tf_mobilenetv3_small_075"
         config.backbone_config = None
         config.use_timm_backbone = True
-        config.backbone_kwargs = {"out_indices": [1, 2, 3, 4]}
+        config.backbone_kwargs = {"out_indices": [2, 3, 4]}
 
         for model_class in self.all_model_classes:
             model = model_class(config)
@@ -538,10 +538,10 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 )
                 self.assertEqual(outputs.logits.shape, expected_shape)
                 # Confirm out_indices was propogated to backbone
-                self.assertEqual(len(model.model.backbone.conv_encoder.intermediate_channel_sizes), 4)
+                self.assertEqual(len(model.model.backbone.intermediate_channel_sizes), 3)
             else:
                 # Confirm out_indices was propogated to backbone
-                self.assertEqual(len(model.backbone.conv_encoder.intermediate_channel_sizes), 4)
+                self.assertEqual(len(model.backbone.intermediate_channel_sizes), 3)
 
             self.assertTrue(outputs)
 
@@ -553,7 +553,7 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config.backbone_config = None
         config.use_timm_backbone = False
         config.use_pretrained_backbone = True
-        config.backbone_kwargs = {"out_indices": [1, 2, 3, 4]}
+        config.backbone_kwargs = {"out_indices": [2, 3, 4]}
 
         for model_class in self.all_model_classes:
             model = model_class(config)
@@ -570,10 +570,10 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 )
                 self.assertEqual(outputs.logits.shape, expected_shape)
                 # Confirm out_indices was propogated to backbone
-                self.assertEqual(len(model.model.backbone.conv_encoder.intermediate_channel_sizes), 4)
+                self.assertEqual(len(model.model.backbone.intermediate_channel_sizes), 3)
             else:
                 # Confirm out_indices was propogated to backbone
-                self.assertEqual(len(model.backbone.conv_encoder.intermediate_channel_sizes), 4)
+                self.assertEqual(len(model.backbone.intermediate_channel_sizes), 3)
 
             self.assertTrue(outputs)
 
