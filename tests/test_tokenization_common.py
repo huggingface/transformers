@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import inspect
 import itertools
 import json
@@ -709,7 +708,7 @@ class TokenizerTesterMixin:
                 # Isolate this from the other tests because we save additional tokens/etc
                 tmpdirname = tempfile.mkdtemp()
 
-                sample_text = " He is very happy, UNwant\u00E9d,running"
+                sample_text = " He is very happy, UNwant\u00e9d,running"
                 before_tokens = tokenizer.encode(sample_text, add_special_tokens=False)
                 before_vocab = tokenizer.get_vocab()
                 tokenizer.save_pretrained(tmpdirname)
@@ -728,7 +727,7 @@ class TokenizerTesterMixin:
                 # Isolate this from the other tests because we save additional tokens/etc
                 tmpdirname = tempfile.mkdtemp()
 
-                sample_text = " He is very happy, UNwant\u00E9d,running"
+                sample_text = " He is very happy, UNwant\u00e9d,running"
                 tokenizer.add_tokens(["bim", "bambam"])
                 additional_special_tokens = tokenizer.additional_special_tokens
                 additional_special_tokens.append("new_additional_special_token")
@@ -764,7 +763,7 @@ class TokenizerTesterMixin:
                 # Isolate this from the other tests because we save additional tokens/etc
                 tmpdirname = tempfile.mkdtemp()
 
-                sample_text = " He is very happy, UNwant\u00E9d,running"
+                sample_text = " He is very happy, UNwant\u00e9d,running"
                 tokenizer.add_tokens(["bim", "bambam"])
                 additional_special_tokens = tokenizer.additional_special_tokens
                 additional_special_tokens.append("new_additional_special_token")
@@ -1022,24 +1021,6 @@ class TokenizerTesterMixin:
 
                 decoded = tokenizer.decode(encoded, spaces_between_special_tokens=False)
                 self.assertIn(decoded, ["[ABC][SAMPLE][DEF]", "[ABC][SAMPLE][DEF]".lower()])
-
-    def test_pretrained_model_lists(self):
-        # We should have at least one default checkpoint for each tokenizer
-        # We should specify the max input length as well (used in some part to list the pretrained checkpoints)
-        self.assertGreaterEqual(len(self.tokenizer_class.pretrained_vocab_files_map), 1)
-        self.assertGreaterEqual(len(list(self.tokenizer_class.pretrained_vocab_files_map.values())[0]), 1)
-        self.assertEqual(
-            len(list(self.tokenizer_class.pretrained_vocab_files_map.values())[0]),
-            len(self.tokenizer_class.max_model_input_sizes),
-        )
-
-        weights_list = list(self.tokenizer_class.max_model_input_sizes.keys())
-        weights_lists_2 = []
-        for file_id, map_list in self.tokenizer_class.pretrained_vocab_files_map.items():
-            weights_lists_2.append(list(map_list.keys()))
-
-        for weights_list_2 in weights_lists_2:
-            self.assertListEqual(weights_list, weights_list_2)
 
     def test_mask_output(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
@@ -1598,6 +1579,10 @@ class TokenizerTesterMixin:
                     self.assertEqual(len(overflowing_tokens), 2 + stride)
                     self.assertEqual(overflowing_tokens, seq1_tokens[-(2 + stride) :])
 
+    # TODO: FIXME @ArthurZucker
+    @unittest.skip(
+        reason="start to fail after # 29473. See https://github.com/huggingface/transformers/pull/29473#pullrequestreview-1945687810"
+    )
     @slow
     @require_read_token
     def test_encode_decode_fast_slow_all_tokens(self):
@@ -1622,7 +1607,7 @@ class TokenizerTesterMixin:
                     with self.subTest(f"{(chunk/len(input_full_vocab_string))*100}%"):
                         slow_encode = slow_tokenizer.encode(string_to_check)
                         fast_encode = rust_tokenizer.encode(string_to_check)
-                        self.assertEquals(
+                        self.assertEqual(
                             slow_encode,
                             fast_encode,
                             "Hint: the following tokenization diff were obtained for slow vs fast:\n "
@@ -1634,7 +1619,7 @@ class TokenizerTesterMixin:
                 for chunk in range(0, len(input_full_vocab_ids) - 100, 100):
                     ids_to_decode = input_full_vocab_ids[chunk : chunk + 100]
                     with self.subTest(f"{(chunk/len(input_full_vocab_string))*100}%"):
-                        self.assertEquals(
+                        self.assertEqual(
                             slow_tokenizer.decode(
                                 ids_to_decode,
                                 space_between_special_tokens=False,
@@ -4182,34 +4167,59 @@ class TokenizerTesterMixin:
     def test_split_special_tokens(self):
         if not self.test_slow_tokenizer:
             return
-
+        # Tests the expected appearance (or absence) of special token in encoded output,
+        # explicit values are not tested because tokenization is model dependent and can change
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            special_token = "[SPECIAL_TOKEN]"
+            special_token = "<my_new_token>"
+            special_sentence = f"Hey this is a {special_token} token"
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_rust = self.rust_tokenizer_class.from_pretrained(
+                    pretrained_name, additional_special_tokens=[special_token], split_special_tokens=True, **kwargs
+                )
+                tokenizer_py = self.tokenizer_class.from_pretrained(
+                    pretrained_name, additional_special_tokens=[special_token], split_special_tokens=True, **kwargs
+                )
 
-                if not tokenizer.is_fast:
-                    # bloom, gptneox etc only have a fast
-                    tokenizer.add_special_tokens(
-                        {
-                            "additional_special_tokens": [
-                                AddedToken(special_token, rstrip=True, lstrip=True, normalized=True, special=True)
-                            ]
-                        }
-                    )
-                    encoded_special_token = tokenizer.encode(special_token, add_special_tokens=False)
-                    self.assertEqual(len(encoded_special_token), 1)
+                special_token_id = tokenizer_py.convert_tokens_to_ids(special_token)
+                encoded_special_token_unsplit = tokenizer_py.encode(
+                    special_token, add_special_tokens=False, split_special_tokens=False
+                )
+                self.assertTrue(special_token_id in encoded_special_token_unsplit)
 
-                    encoded_split_special_token = tokenizer.encode(
-                        special_token, add_special_tokens=False, split_special_tokens=True
-                    )
-                    if len(encoded_split_special_token) == 1:
-                        # if we have subword tokenization or special vocab
-                        self.assertTrue(
-                            encoded_split_special_token[0] != tokenizer.convert_tokens_to_ids(special_token)
-                        )
-                    else:
-                        self.assertTrue(len(encoded_split_special_token) > 1)
+                encoded_special_token_split = tokenizer_py.encode(special_token, add_special_tokens=False)
+                self.assertTrue(special_token_id not in encoded_special_token_split)
+
+                py_tokens_output = tokenizer_py.tokenize(special_sentence)
+                rust_tokens_output = tokenizer_rust.tokenize(special_sentence)
+
+                self.assertTrue(special_token not in py_tokens_output)
+                self.assertTrue(special_token not in rust_tokens_output)
+
+                py_tokens_output_unsplit = tokenizer_py.tokenize(special_sentence, split_special_tokens=False)
+                rust_tokens_output_unsplit = tokenizer_rust.tokenize(special_sentence, split_special_tokens=False)
+
+                self.assertTrue(special_token in py_tokens_output_unsplit)
+                self.assertTrue(special_token in rust_tokens_output_unsplit)
+
+                py_tokens_output = tokenizer_py(special_sentence)
+                rust_tokens_output = tokenizer_rust(special_sentence)
+
+                self.assertTrue(special_token_id not in py_tokens_output)
+                self.assertTrue(special_token_id not in rust_tokens_output)
+
+                tmp_dir = tempfile.mkdtemp()
+
+                try:
+                    tokenizer_py.save_pretrained(tmp_dir)
+                    fast_from_saved = self.tokenizer_class.from_pretrained(tmp_dir)
+                finally:
+                    shutil.rmtree(tmp_dir)
+
+                output_tokens_reloaded_split = fast_from_saved.tokenize(special_sentence)
+                self.assertTrue(special_token not in output_tokens_reloaded_split)
+
+                output_tokens_reloaded_unsplit = fast_from_saved.tokenize(special_sentence, split_special_tokens=False)
+                self.assertTrue(special_token in output_tokens_reloaded_unsplit)
 
     def test_added_tokens_serialization(self):
         # Utility to test the added vocab

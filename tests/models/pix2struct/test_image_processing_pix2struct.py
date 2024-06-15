@@ -87,6 +87,7 @@ class Pix2StructImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
     image_processing_class = Pix2StructImageProcessor if is_vision_available() else None
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = Pix2StructImageProcessingTester(self)
 
     @property
@@ -288,6 +289,7 @@ class Pix2StructImageProcessingTestFourChannels(ImageProcessingTestMixin, unitte
     image_processing_class = Pix2StructImageProcessor if is_vision_available() else None
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = Pix2StructImageProcessingTester(self, num_channels=4)
         self.expected_encoded_image_num_channels = 3
 

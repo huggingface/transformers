@@ -14,7 +14,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Autoformer model."""
+"""PyTorch Autoformer model."""
 
 import math
 from dataclasses import dataclass
@@ -165,12 +165,6 @@ class AutoformerModelOutput(ModelOutput):
     loc: Optional[torch.FloatTensor] = None
     scale: Optional[torch.FloatTensor] = None
     static_features: Optional[torch.FloatTensor] = None
-
-
-AUTOFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "huggingface/autoformer-tourism-monthly",
-    # See all Autoformer models at https://huggingface.co/models?filter=autoformer
-]
 
 
 # Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesFeatureEmbedder with TimeSeries->Autoformer

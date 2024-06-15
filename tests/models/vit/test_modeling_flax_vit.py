@@ -49,6 +49,7 @@ class FlaxViTModelTester(unittest.TestCase):
         attention_probs_dropout_prob=0.1,
         type_sequence_label_size=10,
         initializer_range=0.02,
+        attn_implementation="eager",
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -66,6 +67,7 @@ class FlaxViTModelTester(unittest.TestCase):
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
+        self.attn_implementation = attn_implementation
 
         # in ViT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
         num_patches = (image_size // patch_size) ** 2
@@ -87,6 +89,7 @@ class FlaxViTModelTester(unittest.TestCase):
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             is_decoder=False,
             initializer_range=self.initializer_range,
+            attn_implementation=self.attn_implementation,
         )
 
         return config, pixel_values

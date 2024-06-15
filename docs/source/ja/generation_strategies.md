@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 テキスト生成は、オープンエンドのテキスト生成、要約、翻訳など、多くの自然言語処理タスクに不可欠です。また、テキストを出力とするさまざまな混在モダリティアプリケーションにも影響を与えており、例えば音声からテキストへの変換や画像からテキストへの変換などがあります。テキストを生成できるいくつかのモデルには、GPT2、XLNet、OpenAI GPT、CTRL、TransformerXL、XLM、Bart、T5、GIT、Whisperが含まれます。
 
-[`~transformers.generation_utils.GenerationMixin.generate`] メソッドを使用して、異なるタスクのテキスト出力を生成するいくつかの例をご紹介します：
+[`~generation.GenerationMixin.generate`] メソッドを使用して、異なるタスクのテキスト出力を生成するいくつかの例をご紹介します：
 * [テキスト要約](./tasks/summarization#inference)
 * [画像のキャプション](./model_doc/git#transformers.GitForCausalLM.forward.example)
 * [音声の転記](./model_doc/whisper#transformers.WhisperForConditionalGeneration.forward.example)

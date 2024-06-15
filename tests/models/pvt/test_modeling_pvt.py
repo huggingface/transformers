@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Pvt model. """
-
+"""Testing suite for the PyTorch Pvt model."""
 
 import unittest
 
@@ -37,7 +36,6 @@ if is_torch_available():
 
     from transformers import PvtConfig, PvtForImageClassification, PvtImageProcessor, PvtModel
     from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
-    from transformers.models.pvt.modeling_pvt import PVT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -185,7 +183,7 @@ class PvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip("Pvt does not have get_input_embeddings method and get_output_embeddings methods")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     def test_initialization(self):
@@ -254,9 +252,9 @@ class PvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in PVT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = PvtModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "Zetatech/pvt-tiny-224"
+        model = PvtModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_torch

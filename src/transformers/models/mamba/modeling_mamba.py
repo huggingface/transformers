@@ -56,11 +56,25 @@ is_fast_path_available = all(
 _CHECKPOINT_FOR_DOC = "state-spaces/mamba-130m-hf"
 _CONFIG_FOR_DOC = "MambaConfig"
 
-MAMBA_PRETRAINED_MODEL_ARCHIVE_LIST = []  # See all Mamba models at https://huggingface.co/models?filter=mamba
-
 
 class MambaCache:
-    def __init__(self, config, batch_size, dtype=torch.float16, device=None):
+    """
+    Arguments:
+        config: MambaConfig
+        batch_size: int
+        dtype: torch.dtype
+        device: torch.device
+
+    Attributes:
+        seqlen_offset: int
+        dtype: torch.dtype
+        conv_states: Dict[int, torch.Tensor] # layer_idx -> [batch_size, intermediate_size, conv_kernel_size]
+        ssm_states: Dict[int, torch.Tensor] # layer_idx -> [batch_size, intermediate_size, ssm_state_size]
+    """
+
+    def __init__(
+        self, config: MambaConfig, batch_size: int, dtype: torch.dtype = torch.float16, device: Optional[str] = None
+    ):
         self.seqlen_offset = 0
         self.dtype = dtype
         intermediate_size = config.intermediate_size
@@ -85,13 +99,13 @@ class MambaMixer(nn.Module):
     and is why Mamba is called **selective** state spaces)
     """
 
-    def __init__(self, config, layer_idx):
+    def __init__(self, config: MambaConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.ssm_state_size = config.state_size
         self.conv_kernel_size = config.conv_kernel
         self.intermediate_size = config.intermediate_size
-        self.time_step_rank = config.time_step_rank
+        self.time_step_rank = int(config.time_step_rank)
         self.layer_idx = layer_idx
         self.use_conv_bias = config.use_conv_bias
         self.conv1d = nn.Conv1d(
@@ -229,7 +243,8 @@ class MambaMixer(nn.Module):
 
         # 2. Convolution sequence transformation
         if cache_params is not None:
-            ssm_state = cache_params.ssm_states[self.layer_idx]
+            ssm_state = cache_params.ssm_states[self.layer_idx].clone()
+            ssm_state = ssm_state.to(hidden_states.device)
             if cache_params.seqlen_offset > 0:
                 conv_state = cache_params.conv_states[self.layer_idx]                   # [batch, intermediate_size, conv_kernel_size]
                 conv_state = torch.roll(conv_state, shifts=-1, dims=-1)
@@ -265,16 +280,16 @@ class MambaMixer(nn.Module):
         # 3.b. Discretization: B and C to [batch, seq_len, intermediate_size, ssm_state_size] (SRAM)
         A = -torch.exp(self.A_log.float())                                              # [intermediate_size, ssm_state_size]
         discrete_A = torch.exp(A[None, :, None, :] * discrete_time_step[:, :, :, None]) # [batch, intermediate_size, seq_len, ssm_state_size]
-        discrete_B = discrete_time_step[:, :, :, None] * B[:, None, :, :].float()       # [batch, intermediade_size, seq_len, ssm_state_size]
+        discrete_B = discrete_time_step[:, :, :, None] * B[:, None, :, :].float()       # [batch, intermediate_size, seq_len, ssm_state_size]
         deltaB_u = discrete_B * hidden_states[:, :, :, None].float()
 
         # 3.c perform the recurrence y ← SSM(A, B, C)(x)
         scan_outputs = []
         for i in range(seq_len):
-            ssm_state = discrete_A[:, :, i, :] * ssm_state + deltaB_u[:, :, i, :]      # [batch, intermediade_size, ssm_state]
-            scan_output = torch.matmul(ssm_state.to(dtype), C[:, i, :].unsqueeze(-1))  # [batch, intermediade_size, 1]
+            ssm_state = discrete_A[:, :, i, :] * ssm_state + deltaB_u[:, :, i, :]      # [batch, intermediate_size, ssm_state]
+            scan_output = torch.matmul(ssm_state.to(dtype), C[:, i, :].unsqueeze(-1))  # [batch, intermediate_size, 1]
             scan_outputs.append(scan_output[:, :, 0])
-        scan_output = torch.stack(scan_outputs, dim=-1)                                # [batch, seq_len, intermediade_size]
+        scan_output = torch.stack(scan_outputs, dim=-1)                                # [batch, intermediate_size, seq_len]
         scan_output = scan_output + (hidden_states * self.D[None, :, None])
         scan_output = (scan_output * self.act(gate))
 
@@ -282,7 +297,7 @@ class MambaMixer(nn.Module):
             cache_params.ssm_states[self.layer_idx].copy_(ssm_state)
 
         # 4. Final linear projection
-        contextualized_states = self.out_proj(scan_output.transpose(1, 2))             # [batch, seq_len, hidden_size]
+        contextualized_states = self.out_proj(scan_output.transpose(1, 2))  # [batch, seq_len, hidden_size]
         return contextualized_states
     # fmt: on
 
@@ -385,7 +400,7 @@ class MambaPreTrainedModel(PreTrainedModel):
                     # Having just p *= scale would repeatedly scale it down
                     nn.init.kaiming_uniform_(p, a=math.sqrt(5))
                     with torch.no_grad():
-                        p /= math.sqrt(self.config.num_layers)
+                        p /= math.sqrt(self.config.num_hidden_layers)
 
 
 @dataclass
@@ -500,7 +515,14 @@ class MambaModel(MambaPreTrainedModel):
         self.gradient_checkpointing = False
         self.norm_f = MambaRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
         # Initialize weights and apply final processing
+        self._register_load_state_dict_pre_hook(self.load_hook)
         self.post_init()
+
+    def load_hook(self, state_dict, prefix, *args):
+        for k in state_dict:
+            if "embedding." in k:
+                state_dict[k.replace("embedding.", "embeddings.")] = state_dict.pop(k)
+                break
 
     def get_input_embeddings(self):
         return self.embeddings
@@ -611,7 +633,12 @@ class MambaForCausalLM(MambaPreTrainedModel):
         return model_kwargs
 
     def prepare_inputs_for_generation(
-        self, input_ids, cache_params: Optional[MambaCache] = None, inputs_embeds=None, attention_mask=None, **kwargs
+        self,
+        input_ids,
+        inputs_embeds=None,
+        use_cache=None,
+        cache_params: Optional[MambaCache] = None,
+        **kwargs,
     ):
         # only last token for inputs_ids if the state is passed along.
         if cache_params is not None:
@@ -622,7 +649,12 @@ class MambaForCausalLM(MambaPreTrainedModel):
         else:
             model_inputs = {"input_ids": input_ids}
 
-        model_inputs["cache_params"] = cache_params
+        model_inputs.update(
+            {
+                "cache_params": cache_params,
+                "use_cache": use_cache,
+            }
+        )
         return model_inputs
 
     @add_start_docstrings_to_model_forward(MAMBA_INPUTS_DOCSTRING)

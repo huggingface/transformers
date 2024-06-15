@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tests for the Wav2Vec2Phoneme tokenizer."""
+
 import json
 import os
 import unittest
@@ -337,10 +338,6 @@ class Wav2Vec2PhonemeCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip("Wav2Vec2PhonemeModel has no max model length => no testing")
-    def test_pretrained_model_lists(self):
-        pass
-
-    # overwrite common
     def test_add_tokens_tokenizer(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:

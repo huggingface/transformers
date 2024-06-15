@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" VipLlava model configuration"""
+"""VipLlava model configuration"""
 
 import warnings
 
@@ -21,10 +21,6 @@ from ..auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
-
-VIPLLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "ybelkada/vip-llava-7b-hf": "https://huggingface.co/llava-hf/vip-llava-7b-hf/resolve/main/config.json",
-}
 
 
 class VipLlavaConfig(PretrainedConfig):

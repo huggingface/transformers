@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch BART model. """
-
+"""Testing suite for the PyTorch BART model."""
 
 import copy
 import tempfile
@@ -431,7 +430,6 @@ class BartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     all_generative_model_classes = (BartForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "conversational": BartForConditionalGeneration,
             "feature-extraction": BartModel,
             "fill-mask": BartForConditionalGeneration,
             "question-answering": BartForQuestionAnswering,
@@ -513,10 +511,6 @@ class BartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         model.half()
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
-
-    @unittest.skip("Does not support conversations.")
-    def test_pipeline_conversational(self):
-        pass
 
 
 def assert_tensors_close(a, b, atol=1e-12, prefix=""):

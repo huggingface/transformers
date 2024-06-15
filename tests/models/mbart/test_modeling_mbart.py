@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch MBART model. """
-
+"""Testing suite for the PyTorch MBART model."""
 
 import copy
 import tempfile
@@ -241,7 +240,6 @@ class MBartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     all_generative_model_classes = (MBartForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "conversational": MBartForConditionalGeneration,
             "feature-extraction": MBartModel,
             "fill-mask": MBartForConditionalGeneration,
             "question-answering": MBartForQuestionAnswering,

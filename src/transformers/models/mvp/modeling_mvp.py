@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch MVP model."""
+"""PyTorch MVP model."""
+
 import copy
 import math
 from typing import List, Optional, Tuple, Union
@@ -52,25 +53,6 @@ _CONFIG_FOR_DOC = "MvpConfig"
 
 # Base model docstring
 _EXPECTED_OUTPUT_SHAPE = [1, 8, 1024]
-
-MVP_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "RUCAIBox/mvp",
-    "RUCAIBox/mvp-data-to-text",
-    "RUCAIBox/mvp-open-dialog",
-    "RUCAIBox/mvp-question-answering",
-    "RUCAIBox/mvp-question-generation",
-    "RUCAIBox/mvp-story",
-    "RUCAIBox/mvp-summarization",
-    "RUCAIBox/mvp-task-dialog",
-    "RUCAIBox/mtl-data-to-text",
-    "RUCAIBox/mtl-multi-task",
-    "RUCAIBox/mtl-open-dialog",
-    "RUCAIBox/mtl-question-answering",
-    "RUCAIBox/mtl-question-generation",
-    "RUCAIBox/mtl-story",
-    "RUCAIBox/mtl-summarization",
-    # See all MVP models at https://huggingface.co/models?filter=mvp
-]
 
 
 # Copied from transformers.models.bart.modeling_bart.shift_tokens_right

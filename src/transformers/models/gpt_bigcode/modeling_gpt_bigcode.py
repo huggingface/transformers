@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """PyTorch GPTBigCode model."""
+
 import math
 from typing import List, Optional, Tuple, Union
 
@@ -51,11 +52,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "bigcode/gpt_bigcode-santacoder"
 _CONFIG_FOR_DOC = "GPTBigCodeConfig"
-
-GPT_BIGCODE_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "bigcode/gpt_bigcode-santacoder",
-    # See all GPTBigCode models at https://huggingface.co/models?filter=gpt_bigcode
-]
 
 
 # Fused kernels
@@ -554,14 +550,19 @@ class GPTBigCodeSdpaAttention(GPTBigCodeAttention):
                 key = key.contiguous()
                 value = value.contiguous()
 
+        # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
+        # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
+        # The query_length > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not
+        # create a causal mask in case query_length == 1.
+        is_causal = True if self.is_causal and attention_mask is None and query_length > 1 else False
+
         sdpa_result = torch.nn.functional.scaled_dot_product_attention(
             query,
             key,
             value,
             attn_mask=attention_mask,
             dropout_p=self.attn_pdrop if self.training else 0.0,
-            # The query_length > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case query_length == 1.
-            is_causal=self.is_causal and attention_mask is None and query_length > 1,
+            is_causal=is_causal,
             scale=scale,
         )
 
@@ -1211,6 +1212,24 @@ class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel):
         )
         return model_inputs
 
+    def _get_initial_cache_position(self, input_ids, model_kwargs):
+        """
+        Calculates `cache_position` for the pre-fill stage based on `input_ids` and optionally past length.
+        Since gpt bigcode is special, the method is overridden here, other models use it from `generation.utils.py`.
+        """
+        past_length = 0
+        if "past_key_values" in model_kwargs:
+            if self.config.multi_query:
+                past_length = model_kwargs["past_key_values"][0].shape[1]
+            else:
+                past_length = model_kwargs["past_key_values"][0].shape[2]
+        if "inputs_embeds" in model_kwargs:
+            cur_len = model_kwargs["inputs_embeds"].shape[1]
+        else:
+            cur_len = input_ids.shape[-1]
+        model_kwargs["cache_position"] = torch.arange(past_length, cur_len, device=input_ids.device)
+        return model_kwargs
+
     @add_start_docstrings_to_model_forward(GPT_BIGCODE_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1378,7 +1397,7 @@ class GPTBigCodeForSequenceClassification(GPTBigCodePreTrainedModel):
                 sequence_lengths = sequence_lengths.to(logits.device)
             else:
                 sequence_lengths = -1
-                logger.warning(
+                logger.warning_once(
                     f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
                     "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
                 )

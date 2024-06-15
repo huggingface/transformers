@@ -17,7 +17,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch StableLM model."""
+"""PyTorch StableLM model."""
+
 import math
 from typing import List, Optional, Tuple, Union
 
@@ -30,7 +31,12 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask, _prepare_4d_causal_attention_mask_for_sdpa
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    CausalLMOutputWithPast,
+    SequenceClassifierOutputWithPast,
+    TokenClassifierOutput,
+)
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
@@ -66,7 +72,7 @@ def _get_unpad_data(attention_mask):
     )
 
 
-# Copied from transformers.models.mistral.modeling_mistral.MistralRotaryEmbedding with Mistral->StableLm
+# Copied from transformers.models.mixtral.modeling_mixtral.MixtralRotaryEmbedding with Mixtral->StableLm
 class StableLmRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
@@ -158,7 +164,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-# Copied from transformers.models.mistral.modeling_mistral.apply_rotary_pos_emb
+# Copied from transformers.models.mixtral.modeling_mixtral.apply_rotary_pos_emb
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -191,7 +197,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
 class StableLmMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
@@ -199,8 +204,23 @@ class StableLmMLP(nn.Module):
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, x):
-        return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+    def forward(self, hidden_state):
+        return self.down_proj(self.act_fn(self.gate_proj(hidden_state)) * self.up_proj(hidden_state))
+
+
+class StableLmLayerNormPerHead(nn.Module):
+    def __init__(self, dim, num_heads, eps=1e-5, bias=False):
+        super().__init__()
+        self.dim = dim
+        self.num_heads = num_heads
+        self.norms = nn.ModuleList([nn.LayerNorm(dim, eps=eps, bias=bias) for _ in range(self.num_heads)])
+
+    def forward(self, hidden_states: torch.Tensor):
+        # Split along the num_heads axis to get per-head inputs
+        # [batch_size, num_heads, seq_len, head_dim] -> [batch_size, 1, seq_len, head_dim] * num_heads
+        states_per_heads = torch.split(hidden_states, 1, dim=1)
+        # Normalize and merge the heads back together
+        return torch.cat([norm(hidden_states) for norm, hidden_states in zip(self.norms, states_per_heads)], dim=1)
 
 
 # Copied from transformers.models.llama.modeling_llama.repeat_kv
@@ -249,6 +269,13 @@ class StableLmAttention(nn.Module):
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.use_qkv_bias)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.use_qkv_bias)
         self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
+
+        self.qk_layernorm = config.qk_layernorm
+        if self.qk_layernorm:
+            self.q_layernorm = StableLmLayerNormPerHead(self.head_dim, self.num_heads, eps=config.layer_norm_eps)
+            self.k_layernorm = StableLmLayerNormPerHead(
+                self.head_dim, self.num_key_value_heads, eps=config.layer_norm_eps
+            )
 
         self.attention_dropout = nn.Dropout(config.attention_dropout)
         self._init_rope()
@@ -299,6 +326,10 @@ class StableLmAttention(nn.Module):
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+
+        if self.qk_layernorm:
+            query_states = self.q_layernorm(query_states)
+            key_states = self.k_layernorm(key_states)
 
         kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
@@ -409,6 +440,10 @@ class StableLmSdpaAttention(StableLmAttention):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
+        if self.qk_layernorm:
+            query_states = self.q_layernorm(query_states)
+            key_states = self.k_layernorm(key_states)
+
         kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
             if self.layer_idx is None:
@@ -452,14 +487,18 @@ class StableLmSdpaAttention(StableLmAttention):
             key_states = key_states.contiguous()
             value_states = value_states.contiguous()
 
+        # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
+        # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
+        # The q_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case q_len == 1.
+        is_causal = True if self.is_causal and attention_mask is None and q_len > 1 else False
+
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
             key_states,
             value_states,
             attn_mask=attention_mask,
             dropout_p=self.attention_dropout.p if self.training else 0.0,
-            # The q_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case q_len == 1.
-            is_causal=self.is_causal and attention_mask is None and q_len > 1,
+            is_causal=is_causal,
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
@@ -512,6 +551,10 @@ class StableLmFlashAttention2(StableLmAttention):
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+
+        if self.qk_layernorm:
+            query_states = self.q_layernorm(query_states)
+            key_states = self.k_layernorm(key_states)
 
         kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
@@ -678,11 +721,14 @@ ATTENTION_CLASSES = {
 class StableLmDecoderLayer(nn.Module):
     def __init__(self, config: StableLmConfig, layer_idx: int):
         super().__init__()
+        self.use_parallel_residual = config.use_parallel_residual
         self.hidden_size = config.hidden_size
         self.self_attn = ATTENTION_CLASSES[config._attn_implementation](config, layer_idx=layer_idx)
         self.mlp = StableLmMLP(config)
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.post_attention_layernorm = None
+        if not self.use_parallel_residual:
+            self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout)
 
     def forward(
@@ -719,7 +765,7 @@ class StableLmDecoderLayer(nn.Module):
         hidden_states = self.input_layernorm(hidden_states)
 
         # Self Attention
-        hidden_states, self_attn_weights, present_key_value = self.self_attn(
+        self_attn_output, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -727,15 +773,22 @@ class StableLmDecoderLayer(nn.Module):
             output_attentions=output_attentions,
             use_cache=use_cache,
         )
-        hidden_states = residual + hidden_states
 
-        # Fully Connected
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = hidden_states + residual
+        # copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXLayer.forward
+        if self.use_parallel_residual:
+            # x = x + attn(ln1(x)) + mlp(ln1(x))
+            # Fully Connected
+            mlp_output = self.mlp(hidden_states)
+            mlp_output = self.dropout(mlp_output)
+            hidden_states = residual + self_attn_output + mlp_output
+        else:
+            # x = x + attn(ln1(x))
+            # x = x + mlp(ln2(x))
+            residual = residual + self_attn_output
+            # Fully Connected
+            mlp_output = self.mlp(self.post_attention_layernorm(residual))
+            mlp_output = self.dropout(mlp_output)
+            hidden_states = residual + mlp_output
 
         outputs = (hidden_states,)
 
@@ -778,6 +831,7 @@ class StableLmPreTrainedModel(PreTrainedModel):
     _supports_flash_attn_2 = True
     _supports_cache_class = True
     _supports_sdpa = True
+    _supports_quantized_cache = True
 
     def _init_weights(self, module):
         std = self.config.initializer_range
@@ -1154,14 +1208,12 @@ class StableLmForCausalLM(StableLmPreTrainedModel):
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
     ):
+        past_length = 0
         if past_key_values is not None:
-            if isinstance(past_key_values, Cache):
-                cache_length = past_key_values.get_seq_length()
-                past_length = past_key_values.seen_tokens
-                max_cache_length = past_key_values.get_max_length()
-            else:
-                cache_length = past_length = past_key_values[0][0].shape[2]
-                max_cache_length = None
+            # Past key values are always initialized with a `Cache` object -> no need for if-else anymore
+            cache_length = past_key_values.get_seq_length()
+            past_length = past_key_values.seen_tokens
+            max_cache_length = past_key_values.get_max_length()
 
             # Keep only the unprocessed tokens:
             # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
@@ -1192,7 +1244,7 @@ class StableLmForCausalLM(StableLmPreTrainedModel):
                 position_ids = position_ids[:, -input_ids.shape[1] :]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and past_key_values is None:
+        if inputs_embeds is not None and past_length == 0:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids}
@@ -1255,7 +1307,7 @@ class StableLmForSequenceClassification(StableLmPreTrainedModel):
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -1338,4 +1390,89 @@ class StableLmForSequenceClassification(StableLmPreTrainedModel):
             past_key_values=transformer_outputs.past_key_values,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
+        )
+
+
+@add_start_docstrings(
+    """
+    The StableLm Model transformer with a token classification head on top (a linear layer on top of the hidden-states
+    output) e.g. for Named-Entity-Recognition (NER) tasks.
+    """,
+    STABLELM_START_DOCSTRING,
+)
+# Copied from transformers.models.llama.modeling_llama.LlamaForTokenClassification with Llama->StableLm, LLAMA->STABLELM
+class StableLmForTokenClassification(StableLmPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+        self.model = StableLmModel(config)
+        if getattr(config, "classifier_dropout", None) is not None:
+            classifier_dropout = config.classifier_dropout
+        elif getattr(config, "hidden_dropout", None) is not None:
+            classifier_dropout = config.hidden_dropout
+        else:
+            classifier_dropout = 0.1
+        self.dropout = nn.Dropout(classifier_dropout)
+        self.score = nn.Linear(config.hidden_size, config.num_labels)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.model.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.model.embed_tokens = value
+
+    @add_start_docstrings_to_model_forward(STABLELM_INPUTS_DOCSTRING)
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, SequenceClassifierOutputWithPast]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.model(
+            input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        sequence_output = outputs[0]
+        sequence_output = self.dropout(sequence_output)
+        logits = self.score(sequence_output)
+
+        loss = None
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TokenClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )

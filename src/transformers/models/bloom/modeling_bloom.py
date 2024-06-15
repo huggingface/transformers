@@ -43,16 +43,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "bigscience/bloom-560m"
 _CONFIG_FOR_DOC = "BloomConfig"
 
-BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "bigscience/bigscience-small-testing",
-    "bigscience/bloom-560m",
-    "bigscience/bloom-1b1",
-    "bigscience/bloom-1b7",
-    "bigscience/bloom-3b",
-    "bigscience/bloom-7b1",
-    "bigscience/bloom",
-]
-
 
 def build_alibi_tensor(attention_mask: torch.Tensor, num_heads: int, dtype: torch.dtype) -> torch.Tensor:
     """
@@ -1017,7 +1007,7 @@ class BloomForSequenceClassification(BloomPreTrainedModel):
                 sequence_lengths = sequence_lengths.to(logits.device)
             else:
                 sequence_lengths = -1
-                logger.warning(
+                logger.warning_once(
                     f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
                     "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
                 )

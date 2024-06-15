@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Chinese-CLIP model. """
+"""Testing suite for the PyTorch Chinese-CLIP model."""
 
 import inspect
 import os
@@ -48,7 +48,6 @@ if is_torch_available():
         ChineseCLIPTextModel,
         ChineseCLIPVisionModel,
     )
-    from transformers.models.chinese_clip.modeling_chinese_clip import CHINESE_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -385,9 +384,9 @@ class ChineseCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CHINESE_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ChineseCLIPTextModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "OFA-Sys/chinese-clip-vit-base-patch16"
+        model = ChineseCLIPTextModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_training(self):
         pass
@@ -442,7 +441,7 @@ class ChineseCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -495,9 +494,9 @@ class ChineseCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CHINESE_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ChineseCLIPVisionModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "OFA-Sys/chinese-clip-vit-base-patch16"
+        model = ChineseCLIPVisionModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class ChineseCLIPModelTester:
@@ -590,7 +589,7 @@ class ChineseCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         pass
 
     @unittest.skip(reason="ChineseCLIPModel does not have input/output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     # override as the `logit_scale` parameter initilization is different for CHINESE_CLIP
@@ -693,9 +692,9 @@ class ChineseCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CHINESE_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ChineseCLIPModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "OFA-Sys/chinese-clip-vit-base-patch16"
+        model = ChineseCLIPModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of Pikachu

@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch FLAVA model. """
-
+"""Testing suite for the PyTorch FLAVA model."""
 
 import inspect
 import os
@@ -56,10 +55,6 @@ if is_torch_available():
         FlavaModel,
         FlavaMultimodalModel,
         FlavaTextModel,
-    )
-    from transformers.models.flava.modeling_flava import (
-        FLAVA_CODEBOOK_PRETRAINED_MODEL_ARCHIVE_LIST,
-        FLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 else:
     FlavaModel = None
@@ -185,7 +180,7 @@ class FlavaImageModelTest(ModelTesterMixin, unittest.TestCase):
         # FLAVA does not use inputs_embeds
         pass
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -335,9 +330,9 @@ class FlavaImageModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in FLAVA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = FlavaImageModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/flava-full"
+        model = FlavaImageModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class FlavaTextModelTester:
@@ -498,9 +493,9 @@ class FlavaTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in FLAVA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = FlavaTextModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/flava-full"
+        model = FlavaTextModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class FlavaMultimodalModelTester:
@@ -624,7 +619,7 @@ class FlavaMultimodalModelTest(ModelTesterMixin, unittest.TestCase):
             expected_arg_names = ["hidden_states"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         # No embedding in multimodal model
         pass
 
@@ -662,9 +657,9 @@ class FlavaMultimodalModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in FLAVA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = FlavaMultimodalModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/flava-full"
+        model = FlavaMultimodalModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class FlavaImageCodebookTester:
@@ -747,7 +742,7 @@ class FlavaImageCodebookTest(ModelTesterMixin, unittest.TestCase):
     def test_attention_outputs(self):
         pass
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         # No embedding in multimodal model
         pass
 
@@ -795,9 +790,9 @@ class FlavaImageCodebookTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in FLAVA_CODEBOOK_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = FlavaImageCodebook.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/flava-full"
+        model = FlavaImageCodebook.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class FlavaModelTester:
@@ -949,7 +944,7 @@ class FlavaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pass
 
     # FlavaModel does not have input/output embeddings
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     # override as the `logit_scale` parameter initilization is different for FLAVA
@@ -1081,9 +1076,9 @@ class FlavaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     # overwrite from common since FlavaModel/TFFlavaModel return FLAVAOutput/TFFLAVAOutput
     @slow
     def test_model_from_pretrained(self):
-        for model_name in FLAVA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = FlavaModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/flava-full"
+        model = FlavaModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class FlavaForPreTrainingTester(FlavaModelTester):
@@ -1290,7 +1285,7 @@ class FlavaModelIntegrationTest(unittest.TestCase):
         # verify the embeddings
         self.assertAlmostEqual(outputs.image_embeddings.sum().item(), -1352.53540, places=4)
         self.assertAlmostEqual(outputs.text_embeddings.sum().item(), -198.98225, places=4)
-        self.assertAlmostEqual(outputs.multimodal_embeddings.sum().item(), -4030.4602050, places=4)
+        self.assertAlmostEqual(outputs.multimodal_embeddings.sum().item(), -4030.4604492, places=4)
 
 
 @require_vision

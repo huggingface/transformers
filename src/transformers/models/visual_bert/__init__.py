@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 
-_import_structure = {"configuration_visual_bert": ["VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "VisualBertConfig"]}
+_import_structure = {"configuration_visual_bert": ["VisualBertConfig"]}
 
 try:
     if not is_torch_available():
@@ -25,7 +25,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_visual_bert"] = [
-        "VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "VisualBertForMultipleChoice",
         "VisualBertForPreTraining",
         "VisualBertForQuestionAnswering",
@@ -38,7 +37,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_visual_bert import VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, VisualBertConfig
+    from .configuration_visual_bert import VisualBertConfig
 
     try:
         if not is_torch_available():
@@ -47,7 +46,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_visual_bert import (
-            VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             VisualBertForMultipleChoice,
             VisualBertForPreTraining,
             VisualBertForQuestionAnswering,

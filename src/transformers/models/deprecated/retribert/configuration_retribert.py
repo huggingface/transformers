@@ -12,20 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" RetriBERT model configuration"""
+"""RetriBERT model configuration"""
 
 from ....configuration_utils import PretrainedConfig
 from ....utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-# TODO: upload to AWS
-RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "yjernite/retribert-base-uncased": (
-        "https://huggingface.co/yjernite/retribert-base-uncased/resolve/main/config.json"
-    ),
-}
 
 
 class RetriBertConfig(PretrainedConfig):

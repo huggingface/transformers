@@ -18,7 +18,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tensorflow_
 
 
 _import_structure = {
-    "configuration_ernie": ["ERNIE_PRETRAINED_CONFIG_ARCHIVE_MAP", "ErnieConfig", "ErnieOnnxConfig"],
+    "configuration_ernie": ["ErnieConfig", "ErnieOnnxConfig"],
 }
 
 try:
@@ -28,7 +28,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_ernie"] = [
-        "ERNIE_PRETRAINED_MODEL_ARCHIVE_LIST",
         "ErnieForCausalLM",
         "ErnieForMaskedLM",
         "ErnieForMultipleChoice",
@@ -42,7 +41,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_ernie import ERNIE_PRETRAINED_CONFIG_ARCHIVE_MAP, ErnieConfig, ErnieOnnxConfig
+    from .configuration_ernie import ErnieConfig, ErnieOnnxConfig
 
     try:
         if not is_torch_available():
@@ -51,7 +50,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_ernie import (
-            ERNIE_PRETRAINED_MODEL_ARCHIVE_LIST,
             ErnieForCausalLM,
             ErnieForMaskedLM,
             ErnieForMultipleChoice,

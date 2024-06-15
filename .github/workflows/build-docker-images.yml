@@ -27,7 +27,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
       -
         name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       -
         name: Login to DockerHub
         uses: docker/login-action@v3
@@ -57,26 +57,25 @@ jobs:
           push: true
           tags: huggingface/transformers-all-latest-gpu-push-ci
 
+      - name: Post to Slack
+        if: always()
+        uses: huggingface/hf-workflows/.github/actions/post-slack@main
+        with:
+          slack_channel: ${{ secrets.CI_SLACK_CHANNEL_DOCKER }}
+          title: 🤗 Results of the transformers-all-latest-gpu-push-ci docker build 
+          status: ${{ job.status }}
+          slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
+
   latest-torch-deepspeed-docker:
     name: "Latest PyTorch + DeepSpeed"
     runs-on: [intel-cpu, 8-cpu, ci]
     steps:
-      - name: Cleanup disk
-        run: |
-          sudo ls -l /usr/local/lib/
-          sudo ls -l /usr/share/
-          sudo du -sh /usr/local/lib/
-          sudo du -sh /usr/share/
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /usr/share/dotnet
-          sudo du -sh /usr/local/lib/
-          sudo du -sh /usr/share/
       -
         name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       -
         name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       -
         name: Login to DockerHub
         uses: docker/login-action@v3
@@ -93,27 +92,26 @@ jobs:
           push: true
           tags: huggingface/transformers-pytorch-deepspeed-latest-gpu${{ inputs.image_postfix }}
 
+      - name: Post to Slack
+        if: always()
+        uses: huggingface/hf-workflows/.github/actions/post-slack@main
+        with:
+          slack_channel: ${{ secrets.CI_SLACK_CHANNEL_DOCKER}}
+          title: 🤗 Results of the transformers-pytorch-deepspeed-latest-gpu docker build 
+          status: ${{ job.status }}
+          slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
+
   # Can't build 2 images in a single job `latest-torch-deepspeed-docker` (for `nvcr.io/nvidia`)
   latest-torch-deepspeed-docker-for-push-ci-daily-build:
     name: "Latest PyTorch + DeepSpeed (Push CI - Daily Build)"
     runs-on: [intel-cpu, 8-cpu, ci]
     steps:
-      - name: Cleanup disk
-        run: |
-          sudo ls -l /usr/local/lib/
-          sudo ls -l /usr/share/
-          sudo du -sh /usr/local/lib/
-          sudo du -sh /usr/share/
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /usr/share/dotnet
-          sudo du -sh /usr/local/lib/
-          sudo du -sh /usr/share/
       -
         name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       -
         name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       -
         name: Login to DockerHub
         uses: docker/login-action@v3
@@ -134,6 +132,15 @@ jobs:
           push: true
           tags: huggingface/transformers-pytorch-deepspeed-latest-gpu-push-ci
 
+      - name: Post to Slack
+        if: always()
+        uses: huggingface/hf-workflows/.github/actions/post-slack@main
+        with:
+          slack_channel: ${{ secrets.CI_SLACK_CHANNEL_DOCKER }}
+          title: 🤗 Results of the transformers-pytorch-deepspeed-latest-gpu-push-ci docker build 
+          status: ${{ job.status }}
+          slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
+
   doc-builder:
     name: "Doc builder"
     # Push CI doesn't need this image
@@ -145,7 +152,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
       -
         name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       -
         name: Login to DockerHub
         uses: docker/login-action@v3
@@ -160,28 +167,27 @@ jobs:
           push: true
           tags: huggingface/transformers-doc-builder
 
+      - name: Post to Slack
+        if: always()
+        uses: huggingface/hf-workflows/.github/actions/post-slack@main
+        with:
+          slack_channel: ${{ secrets.CI_SLACK_CHANNEL_DOCKER }}
+          title: 🤗 Results of the huggingface/transformers-doc-builder docker build 
+          status: ${{ job.status }}
+          slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
+
   latest-pytorch:
     name: "Latest PyTorch [dev]"
     # Push CI doesn't need this image
     if: inputs.image_postfix != '-push-ci'
     runs-on: [intel-cpu, 8-cpu, ci]
     steps:
-      - name: Cleanup disk
-        run: |
-          sudo ls -l /usr/local/lib/
-          sudo ls -l /usr/share/
-          sudo du -sh /usr/local/lib/
-          sudo du -sh /usr/share/
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /usr/share/dotnet
-          sudo du -sh /usr/local/lib/
-          sudo du -sh /usr/share/
       -
         name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       -
         name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       -
         name: Login to DockerHub
         uses: docker/login-action@v3
@@ -198,6 +204,15 @@ jobs:
           push: true
           tags: huggingface/transformers-pytorch-gpu
 
+      - name: Post to Slack
+        if: always()
+        uses: huggingface/hf-workflows/.github/actions/post-slack@main
+        with:
+          slack_channel: ${{ secrets.CI_SLACK_CHANNEL_DOCKER }}
+          title: 🤗 Results of the huggingface/transformers-pytorch-gpudocker build 
+          status: ${{ job.status }}
+          slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
+
   latest-pytorch-amd:
     name: "Latest PyTorch (AMD) [dev]"
     runs-on: [intel-cpu, 8-cpu, ci]
@@ -207,7 +222,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
       - 
         name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - 
         name: Login to DockerHub
         uses: docker/login-action@v3
@@ -237,6 +252,15 @@ jobs:
           push: true
           tags: huggingface/transformers-pytorch-amd-gpu-push-ci
 
+      - name: Post to Slack
+        if: always()
+        uses: huggingface/hf-workflows/.github/actions/post-slack@main
+        with:
+          slack_channel: ${{ secrets.CI_SLACK_CHANNEL_DOCKER }}
+          title: 🤗 Results of the huggingface/transformers-pytorch-amd-gpu-push-ci build 
+          status: ${{ job.status }}
+          slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
+
   latest-tensorflow:
     name: "Latest TensorFlow [dev]"
     # Push CI doesn't need this image
@@ -248,7 +272,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
       -
         name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       -
         name: Login to DockerHub
         uses: docker/login-action@v3
@@ -265,6 +289,15 @@ jobs:
           push: true
           tags: huggingface/transformers-tensorflow-gpu
 
+      - name: Post to Slack
+        if: always()
+        uses: huggingface/hf-workflows/.github/actions/post-slack@main
+        with:
+          slack_channel: ${{ secrets.CI_SLACK_CHANNEL_DOCKER }}
+          title: 🤗 Results of the huggingface/transformers-tensorflow-gpu build 
+          status: ${{ job.status }}
+          slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
+
   latest-pytorch-deepspeed-amd:
     name: "PyTorch + DeepSpeed (AMD) [dev]"
     runs-on: [intel-cpu, 8-cpu, ci]
@@ -274,7 +307,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
       - 
         name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - 
         name: Login to DockerHub
         uses: docker/login-action@v3
@@ -304,6 +337,15 @@ jobs:
           push: true
           tags: huggingface/transformers-pytorch-deepspeed-amd-gpu-push-ci
 
+      - name: Post to Slack
+        if: always()
+        uses: huggingface/hf-workflows/.github/actions/post-slack@main
+        with:
+          slack_channel: ${{ secrets.CI_SLACK_CHANNEL_DOCKER }}
+          title: 🤗 Results of the transformers-pytorch-deepspeed-amd-gpu build 
+          status: ${{ job.status }}
+          slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
+
   latest-quantization-torch-docker:
     name: "Latest Pytorch + Quantization [dev]"
      # Push CI doesn't need this image
@@ -315,7 +357,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
       -
         name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       -
         name: Login to DockerHub
         uses: docker/login-action@v3
@@ -331,3 +373,12 @@ jobs:
             REF=main
           push: true
           tags: huggingface/transformers-quantization-latest-gpu${{ inputs.image_postfix }}
+
+      - name: Post to Slack
+        if: always()
+        uses: huggingface/hf-workflows/.github/actions/post-slack@main
+        with:
+          slack_channel: ${{ secrets.CI_SLACK_CHANNEL_DOCKER }}
+          title: 🤗 Results of the transformers-quantization-latest-gpu build 
+          status: ${{ job.status }}
+          slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}

@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch CLIP model."""
-
+"""PyTorch CLIP model."""
 
 from dataclasses import dataclass
 from typing import Any, Optional, Tuple, Union
@@ -47,11 +46,6 @@ _CHECKPOINT_FOR_DOC = "openai/clip-vit-base-patch32"
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "openai/clip-vit-base-patch32"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "LABEL_0"
-
-CLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "openai/clip-vit-base-patch32",
-    # See all CLIP models at https://huggingface.co/models?filter=clip
-]
 
 
 # contrastive loss function, adapted from
@@ -452,6 +446,11 @@ class CLIPPreTrainedModel(PreTrainedModel):
                 module.text_projection.weight,
                 std=self.config.hidden_size**-0.5 * self.config.initializer_factor,
             )
+        elif isinstance(module, CLIPForImageClassification):
+            nn.init.normal_(
+                module.classifier.weight,
+                std=self.config.vision_config.hidden_size**-0.5 * self.config.initializer_factor,
+            )
 
         if isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
@@ -736,6 +735,7 @@ class CLIPTextTransformer(nn.Module):
             pooled_output = last_hidden_state[
                 torch.arange(last_hidden_state.shape[0], device=last_hidden_state.device),
                 # We need to get the first position of `eos_token_id` value (`pad_token_ids` might equal to `eos_token_id`)
+                # Note: we assume each sequence (along batch dim.) contains an  `eos_token_id` (e.g. prepared by the tokenizer)
                 (input_ids.to(dtype=torch.int, device=last_hidden_state.device) == self.eos_token_id)
                 .int()
                 .argmax(dim=-1),
@@ -933,7 +933,7 @@ class CLIPVisionModel(CLIPPreTrainedModel):
 @add_start_docstrings(CLIP_START_DOCSTRING)
 class CLIPModel(CLIPPreTrainedModel):
     config_class = CLIPConfig
-    _no_split_modules = ["CLIPTextEmbeddings", "CLIPEncoderLayer"]
+    _no_split_modules = ["CLIPTextEmbeddings", "CLIPEncoderLayer", "CLIPVisionEmbeddings"]
 
     def __init__(self, config: CLIPConfig):
         super().__init__(config)
@@ -1135,7 +1135,9 @@ class CLIPModel(CLIPPreTrainedModel):
 
         # cosine similarity as logits
         logit_scale = self.logit_scale.exp()
-        logits_per_text = torch.matmul(text_embeds, image_embeds.t()) * logit_scale
+        logits_per_text = torch.matmul(text_embeds, image_embeds.t().to(text_embeds.device)) * logit_scale.to(
+            text_embeds.device
+        )
         logits_per_image = logits_per_text.t()
 
         loss = None

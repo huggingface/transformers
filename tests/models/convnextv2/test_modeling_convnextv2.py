@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch ConvNextV2 model. """
-
+"""Testing suite for the PyTorch ConvNextV2 model."""
 
 import unittest
 
@@ -32,7 +31,6 @@ if is_torch_available():
     import torch
 
     from transformers import ConvNextV2Backbone, ConvNextV2ForImageClassification, ConvNextV2Model
-    from transformers.models.convnextv2.modeling_convnextv2 import CONVNEXTV2_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -196,7 +194,6 @@ class ConvNextV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         self.config_tester = ConfigTester(self, config_class=ConvNextV2Config, has_text_modality=False, hidden_size=37)
 
     def test_config(self):
-        self.create_and_test_config_common_properties()
         self.config_tester.create_and_test_config_to_json_string()
         self.config_tester.create_and_test_config_to_json_file()
         self.config_tester.create_and_test_config_from_and_save_pretrained()
@@ -204,15 +201,12 @@ class ConvNextV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         self.config_tester.check_config_can_be_init_without_params()
         self.config_tester.check_config_arguments_init()
 
-    def create_and_test_config_common_properties(self):
-        return
-
     @unittest.skip(reason="ConvNextV2 does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
     @unittest.skip(reason="ConvNextV2 does not support input and output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip(reason="ConvNextV2 does not use feedforward chunking")
@@ -306,9 +300,9 @@ class ConvNextV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CONVNEXTV2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ConvNextV2Model.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/convnextv2-tiny-1k-224"
+        model = ConvNextV2Model.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

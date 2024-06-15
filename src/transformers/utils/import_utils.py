@@ -89,13 +89,17 @@ TORCH_FX_REQUIRED_VERSION = version.parse("1.10")
 
 ACCELERATE_MIN_VERSION = "0.21.0"
 FSDP_MIN_VERSION = "1.12.0"
+XLA_FSDPV2_MIN_VERSION = "2.2.0"
 
 
 _accelerate_available, _accelerate_version = _is_package_available("accelerate", return_version=True)
 _apex_available = _is_package_available("apex")
 _aqlm_available = _is_package_available("aqlm")
+_av_available = importlib.util.find_spec("av") is not None
 _bitsandbytes_available = _is_package_available("bitsandbytes")
+_eetq_available = _is_package_available("eetq")
 _galore_torch_available = _is_package_available("galore_torch")
+_lomo_available = _is_package_available("lomo_optim")
 # `importlib.metadata.version` doesn't work with `bs4` but `beautifulsoup4`. For `importlib.util.find_spec`, reversed.
 _bs4_available = importlib.util.find_spec("bs4") is not None
 _coloredlogs_available = _is_package_available("coloredlogs")
@@ -139,6 +143,7 @@ _phonemizer_available = _is_package_available("phonemizer")
 _psutil_available = _is_package_available("psutil")
 _py3nvml_available = _is_package_available("py3nvml")
 _pyctcdecode_available = _is_package_available("pyctcdecode")
+_pygments_available = _is_package_available("pygments")
 _pytesseract_available = _is_package_available("pytesseract")
 _pytest_available = _is_package_available("pytest")
 _pytorch_quantization_available = _is_package_available("pytorch_quantization")
@@ -148,6 +153,7 @@ _safetensors_available = _is_package_available("safetensors")
 _scipy_available = _is_package_available("scipy")
 _sentencepiece_available = _is_package_available("sentencepiece")
 _is_seqio_available = _is_package_available("seqio")
+_is_gguf_available = _is_package_available("gguf")
 _sklearn_available = importlib.util.find_spec("sklearn") is not None
 if _sklearn_available:
     try:
@@ -167,6 +173,7 @@ _torchaudio_available = _is_package_available("torchaudio")
 _torchdistx_available = _is_package_available("torchdistx")
 _torchvision_available = _is_package_available("torchvision")
 _mlx_available = _is_package_available("mlx")
+_hqq_available = _is_package_available("hqq")
 
 
 _torch_version = "N/A"
@@ -289,6 +296,26 @@ def is_torch_available():
     return _torch_available
 
 
+def is_torch_deterministic():
+    """
+    Check whether pytorch uses deterministic algorithms by looking if torch.set_deterministic_debug_mode() is set to 1 or 2"
+    """
+    import torch
+
+    if torch.get_deterministic_debug_mode() == 0:
+        return False
+    else:
+        return True
+
+
+def is_hqq_available():
+    return _hqq_available
+
+
+def is_pygments_available():
+    return _pygments_available
+
+
 def get_torch_version():
     return _torch_version
 
@@ -312,6 +339,10 @@ def is_torchvision_available():
 
 def is_galore_torch_available():
     return _galore_torch_available
+
+
+def is_lomo_available():
+    return _lomo_available
 
 
 def is_pyctcdecode_available():
@@ -365,7 +396,7 @@ def is_torch_mps_available():
         import torch
 
         if hasattr(torch.backends, "mps"):
-            return torch.backends.mps.is_available()
+            return torch.backends.mps.is_available() and torch.backends.mps.is_built()
     return False
 
 
@@ -585,6 +616,29 @@ def is_torch_npu_available(check_device=False):
     return hasattr(torch, "npu") and torch.npu.is_available()
 
 
+@lru_cache()
+def is_torch_mlu_available(check_device=False):
+    "Checks if `torch_mlu` is installed and potentially if a MLU is in the environment"
+    if not _torch_available or importlib.util.find_spec("torch_mlu") is None:
+        return False
+
+    import torch
+    import torch_mlu  # noqa: F401
+
+    from ..dependency_versions_table import deps
+
+    deps["deepspeed"] = "deepspeed-mlu>=0.10.1"
+
+    if check_device:
+        try:
+            # Will raise a RuntimeError if no MLU is found
+            _ = torch.mlu.device_count()
+            return torch.mlu.is_available()
+        except RuntimeError:
+            return False
+    return hasattr(torch, "mlu") and torch.mlu.is_available()
+
+
 def is_torchdynamo_available():
     if not is_torch_available():
         return False
@@ -656,6 +710,10 @@ def is_aqlm_available():
     return _aqlm_available
 
 
+def is_av_available():
+    return _av_available
+
+
 def is_ninja_available():
     r"""
     Code comes from *torch.utils.cpp_extension.is_ninja_available()*. Returns `True` if the
@@ -689,12 +747,17 @@ def is_ipex_available():
 
 @lru_cache
 def is_torch_xpu_available(check_device=False):
-    "Checks if `intel_extension_for_pytorch` is installed and potentially if a XPU is in the environment"
-    if not is_ipex_available():
+    """
+    Checks if XPU acceleration is available either via `intel_extension_for_pytorch` or
+    via stock PyTorch (>=2.4) and potentially if a XPU is in the environment
+    """
+    if not is_torch_available():
         return False
 
-    import intel_extension_for_pytorch  # noqa: F401
     import torch
+
+    if is_ipex_available():
+        import intel_extension_for_pytorch  # noqa: F401
 
     if check_device:
         try:
@@ -770,6 +833,10 @@ def is_seqio_available():
     return _is_seqio_available
 
 
+def is_gguf_available():
+    return _is_gguf_available
+
+
 def is_protobuf_available():
     if importlib.util.find_spec("google") is None:
         return False
@@ -777,9 +844,7 @@ def is_protobuf_available():
 
 
 def is_accelerate_available(min_version: str = ACCELERATE_MIN_VERSION):
-    if min_version is not None:
-        return _accelerate_available and version.parse(_accelerate_version) >= version.parse(min_version)
-    return _accelerate_available
+    return _accelerate_available and version.parse(_accelerate_version) >= version.parse(min_version)
 
 
 def is_fsdp_available(min_version: str = FSDP_MIN_VERSION):
@@ -800,6 +865,10 @@ def is_quanto_available():
 
 def is_auto_gptq_available():
     return _auto_gptq_available
+
+
+def is_eetq_available():
+    return _eetq_available
 
 
 def is_levenshtein_available():
@@ -1010,6 +1079,16 @@ def is_jinja_available():
 
 def is_mlx_available():
     return _mlx_available
+
+
+# docstyle-ignore
+AV_IMPORT_ERROR = """
+{0} requires the PyAv library but it was not found in your environment. You can install it with:
+```
+pip install av
+```
+Please note that you may need to restart your runtime after installation.
+"""
 
 
 # docstyle-ignore
@@ -1247,6 +1326,11 @@ shi-labs.com/natten . You can also install it with pip (may take longer to build
 `pip install natten`. Please note that you may need to restart your runtime after installation.
 """
 
+NUMEXPR_IMPORT_ERROR = """
+{0} requires the numexpr library but it was not found in your environment. You can install it by referring to:
+https://numexpr.readthedocs.io/en/latest/index.html.
+"""
+
 
 # docstyle-ignore
 NLTK_IMPORT_ERROR = """
@@ -1336,6 +1420,7 @@ jinja2`. Please note that you may need to restart your runtime after installatio
 
 BACKENDS_MAPPING = OrderedDict(
     [
+        ("av", (is_av_available, AV_IMPORT_ERROR)),
         ("bs4", (is_bs4_available, BS4_IMPORT_ERROR)),
         ("cv2", (is_cv2_available, CV2_IMPORT_ERROR)),
         ("datasets", (is_datasets_available, DATASETS_IMPORT_ERROR)),

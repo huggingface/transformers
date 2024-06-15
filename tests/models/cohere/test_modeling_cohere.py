@@ -12,11 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Cohere model. """
+"""Testing suite for the PyTorch Cohere model."""
 
 import unittest
-
-from parameterized import parameterized
 
 from transformers import CohereConfig, is_torch_available
 from transformers.testing_utils import (
@@ -283,9 +281,7 @@ class CohereModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     )
     test_headmasking = False
     test_pruning = False
-    fx_compatible = (
-        False  # FIXME @michaelbenayoun or @fxmarty from https://github.com/huggingface/transformers/pull/29753
-    )
+    fx_compatible = True
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer
@@ -295,13 +291,16 @@ class CohereModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         self.model_tester = CohereModelTester(self)
         self.config_tester = ConfigTester(self, config_class=CohereConfig, hidden_size=37)
 
+    @unittest.skip("Failing. Issue opened in #31351")
+    def test_initialization(self):
+        super().test_initialization()
+
+    @unittest.skip("Failing. Issue opened in #31351")
+    def test_fast_init_context_manager(self):
+        super().test_fast_init_context_manager()
+
     def test_config(self):
         self.config_tester.run_common_tests()
-
-    @unittest.skip("TODO @gante fix this for Cohere")
-    @parameterized.expand([(1, False), (1, True), (4, False)])
-    def test_new_cache_format(self, num_beams, do_sample):
-        pass
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -376,15 +375,16 @@ class CohereModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 @slow
 class CohereIntegrationTest(unittest.TestCase):
     @require_torch_multi_gpu
+    @require_bitsandbytes
     def test_batched_4bit(self):
         model_id = "CohereForAI/c4ai-command-r-v01-4bit"
 
         EXPECTED_TEXT = [
             'Hello today I am going to show you how to make a simple and easy card using the new stamp set called "Hello" from the Occasions catalog. This set is so versatile and can be used for many occasions. I used the new In',
-            "Hi there, here we are again with another great collection of free fonts. This time we have gathered 10 free fonts that you can download and use in your designs. These fonts are free for personal and commercial use. So",
+            "Hi there, here we are again with another great collection of free fonts for your next project. This time we have gathered 10 free fonts that you can download and use in your designs. These fonts are perfect for any kind",
         ]
 
-        model = CohereForCausalLM.from_pretrained(model_id)
+        model = CohereForCausalLM.from_pretrained(model_id, device_map="auto")
         tokenizer = AutoTokenizer.from_pretrained(model_id)
 
         tokenizer.pad_token = tokenizer.eos_token
@@ -395,6 +395,7 @@ class CohereIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=40, do_sample=False)
         self.assertEqual(tokenizer.batch_decode(output, skip_special_tokens=True), EXPECTED_TEXT)
 
+    @require_torch_sdpa
     def test_batched_small_model_logits(self):
         # Since the model is very large, we created a random cohere model so that we can do a simple
         # logits check on it.

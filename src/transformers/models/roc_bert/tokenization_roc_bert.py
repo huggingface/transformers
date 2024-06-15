@@ -47,28 +47,6 @@ VOCAB_FILES_NAMES = {
     "word_pronunciation_file": "word_pronunciation.json",
 }
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "weiweishi/roc-bert-base-zh": "https://huggingface.co/weiweishi/roc-bert-base-zh/resolve/main/vocab.txt"
-    },
-    "word_shape_file": {
-        "weiweishi/roc-bert-base-zh": "https://huggingface.co/weiweishi/roc-bert-base-zh/resolve/main/word_shape.json"
-    },
-    "word_pronunciation_file": {
-        "weiweishi/roc-bert-base-zh": (
-            "https://huggingface.co/weiweishi/roc-bert-base-zh/resolve/main/word_pronunciation.json"
-        )
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "weiweishi/roc-bert-base-zh": 512,
-}
-
-PRETRAINED_INIT_CONFIGURATION = {
-    "weiweishi/roc-bert-base-zh": {"do_lower_case": True},
-}
-
 
 # Copied from transformers.models.bert.tokenization_bert.load_vocab
 def load_vocab(vocab_file):
@@ -135,9 +113,6 @@ class RoCBertTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(
         self,

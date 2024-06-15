@@ -110,7 +110,7 @@ New models are constantly released and if you want to implement a new model, ple
 
 If you are willing to contribute the model yourself, let us know so we can help you add it to 🤗 Transformers!
 
-We have added a [detailed guide and templates](https://github.com/huggingface/transformers/tree/main/templates) to help you get started with adding a new model, and we also have a more technical guide for [how to add a model to 🤗 Transformers](https://huggingface.co/docs/transformers/add_new_model).
+We have a technical guide for [how to add a model to 🤗 Transformers](https://huggingface.co/docs/transformers/add_new_model).
 
 ## Do you want to add documentation?
 

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch FastSpeech2Conformer model."""
+"""PyTorch FastSpeech2Conformer model."""
 
 import math
 from dataclasses import dataclass
@@ -32,11 +32,6 @@ from .configuration_fastspeech2_conformer import (
 
 
 logger = logging.get_logger(__name__)
-
-FASTSPEECH2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "espnet/fastspeech2_conformer",
-    # See all FastSpeech2Conformer models at https://huggingface.co/models?filter=fastspeech2_conformer
-]
 
 
 @dataclass

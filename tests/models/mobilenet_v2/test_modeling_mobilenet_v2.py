@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch MobileNetV2 model. """
-
+"""Testing suite for the PyTorch MobileNetV2 model."""
 
 import unittest
 
@@ -30,7 +29,6 @@ if is_torch_available():
     import torch
 
     from transformers import MobileNetV2ForImageClassification, MobileNetV2ForSemanticSegmentation, MobileNetV2Model
-    from transformers.models.mobilenet_v2.modeling_mobilenet_v2 import MOBILENET_V2_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -220,7 +218,7 @@ class MobileNetV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         pass
 
     @unittest.skip(reason="MobileNetV2 does not support input and output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip(reason="MobileNetV2 does not output attentions")
@@ -267,9 +265,9 @@ class MobileNetV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in MOBILENET_V2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = MobileNetV2Model.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/mobilenet_v2_1.4_224"
+        model = MobileNetV2Model.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @is_flaky(description="is_flaky https://github.com/huggingface/transformers/issues/29516")
     def test_batching_equivalence(self):

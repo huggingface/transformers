@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Dinat model. """
+"""Testing suite for the PyTorch Dinat model."""
 
 import collections
 import unittest
@@ -32,7 +32,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import DinatBackbone, DinatForImageClassification, DinatModel
-    from transformers.models.dinat.modeling_dinat import DINAT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 if is_vision_available():
     from PIL import Image
@@ -223,16 +222,12 @@ class DinatModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.config_tester = ConfigTester(self, config_class=DinatConfig, embed_dim=37)
 
     def test_config(self):
-        self.create_and_test_config_common_properties()
         self.config_tester.create_and_test_config_to_json_string()
         self.config_tester.create_and_test_config_to_json_file()
         self.config_tester.create_and_test_config_from_and_save_pretrained()
         self.config_tester.create_and_test_config_with_num_labels()
         self.config_tester.check_config_can_be_init_without_params()
         self.config_tester.check_config_arguments_init()
-
-    def create_and_test_config_common_properties(self):
-        return
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -254,7 +249,7 @@ class DinatModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_feed_forward_chunking(self):
         pass
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -330,9 +325,9 @@ class DinatModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in DINAT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = DinatModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "shi-labs/dinat-mini-in1k-224"
+        model = DinatModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

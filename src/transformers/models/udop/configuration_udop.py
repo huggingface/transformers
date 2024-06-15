@@ -12,18 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" UDOP model configuration"""
-
+"""UDOP model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-UDOP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/udop-large": "https://huggingface.co/microsoft/udop-large/resolve/main/config.json",
-}
 
 
 class UdopConfig(PretrainedConfig):

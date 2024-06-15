@@ -13,8 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-""" PyTorch Phi model."""
-
+"""PyTorch Phi model."""
 
 import math
 from typing import List, Optional, Tuple, Union
@@ -62,13 +61,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "microsoft/phi-1"
 _CONFIG_FOR_DOC = "PhiConfig"
 
-PHI_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/phi-1",
-    "microsoft/phi-1_5",
-    "microsoft/phi-2",
-    # See all Phi models at https://huggingface.co/models?filter=phi
-]
-
 
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
 def _get_unpad_data(attention_mask):
@@ -83,7 +75,7 @@ def _get_unpad_data(attention_mask):
     )
 
 
-# Copied from transformers.models.mistral.modeling_mistral.MistralRotaryEmbedding with Mistral->Phi
+# Copied from transformers.models.mixtral.modeling_mixtral.MixtralRotaryEmbedding with Mixtral->Phi
 class PhiRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
@@ -175,7 +167,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-# Copied from transformers.models.mistral.modeling_mistral.apply_rotary_pos_emb
+# Copied from transformers.models.mixtral.modeling_mixtral.apply_rotary_pos_emb
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -716,13 +708,17 @@ class PhiSdpaAttention(PhiAttention):
             key_states = key_states.contiguous()
             value_states = value_states.contiguous()
 
+        # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
+        # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
+        is_causal = True if self.is_causal and attention_mask is None and q_len > 1 else False
+
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
             key_states,
             value_states,
             attn_mask=attention_mask,
             dropout_p=self.attention_dropout if self.training else 0.0,
-            is_causal=self.is_causal and attention_mask is None and q_len > 1,
+            is_causal=is_causal,
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
@@ -1215,14 +1211,12 @@ class PhiForCausalLM(PhiPreTrainedModel):
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
     ):
+        past_length = 0
         if past_key_values is not None:
-            if isinstance(past_key_values, Cache):
-                cache_length = past_key_values.get_seq_length()
-                past_length = past_key_values.seen_tokens
-                max_cache_length = past_key_values.get_max_length()
-            else:
-                cache_length = past_length = past_key_values[0][0].shape[2]
-                max_cache_length = None
+            # Past key values are always initialized with a `Cache` object -> no need for if-else anymore
+            cache_length = past_key_values.get_seq_length()
+            past_length = past_key_values.seen_tokens
+            max_cache_length = past_key_values.get_max_length()
 
             # Keep only the unprocessed tokens:
             # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
@@ -1253,7 +1247,7 @@ class PhiForCausalLM(PhiPreTrainedModel):
                 position_ids = position_ids[:, -input_ids.shape[1] :]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and past_key_values is None:
+        if inputs_embeds is not None and past_length == 0:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids}
@@ -1317,7 +1311,7 @@ class PhiForSequenceClassification(PhiPreTrainedModel):
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,

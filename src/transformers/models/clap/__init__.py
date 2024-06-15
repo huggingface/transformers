@@ -18,7 +18,6 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 _import_structure = {
     "configuration_clap": [
-        "CLAP_PRETRAINED_MODEL_ARCHIVE_LIST",
         "ClapAudioConfig",
         "ClapConfig",
         "ClapTextConfig",
@@ -33,7 +32,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_clap"] = [
-        "CLAP_PRETRAINED_MODEL_ARCHIVE_LIST",
         "ClapModel",
         "ClapPreTrainedModel",
         "ClapTextModel",
@@ -45,7 +43,6 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_clap import (
-        CLAP_PRETRAINED_MODEL_ARCHIVE_LIST,
         ClapAudioConfig,
         ClapConfig,
         ClapTextConfig,
@@ -60,7 +57,6 @@ if TYPE_CHECKING:
     else:
         from .feature_extraction_clap import ClapFeatureExtractor
         from .modeling_clap import (
-            CLAP_PRETRAINED_MODEL_ARCHIVE_LIST,
             ClapAudioModel,
             ClapAudioModelWithProjection,
             ClapModel,

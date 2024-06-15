@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 DeBERTa-v2 model."""
+"""TF 2.0 DeBERTa-v2 model."""
 
 from __future__ import annotations
 
@@ -51,11 +51,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "DebertaV2Config"
 _CHECKPOINT_FOR_DOC = "kamalkraj/deberta-v2-xlarge"
-
-TF_DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "kamalkraj/deberta-v2-xlarge",
-    # See all DeBERTa models at https://huggingface.co/models?filter=deberta-v2
-]
 
 
 # Copied from transformers.models.deberta.modeling_tf_deberta.TFDebertaContextPooler with Deberta->DebertaV2

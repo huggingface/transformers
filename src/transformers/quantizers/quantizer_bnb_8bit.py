@@ -58,10 +58,14 @@ class Bnb8BitHfQuantizer(HfQuantizer):
             self.modules_to_not_convert = self.quantization_config.llm_int8_skip_modules
 
     def validate_environment(self, *args, **kwargs):
-        if not (is_accelerate_available() and is_bitsandbytes_available()):
+        if not torch.cuda.is_available():
+            raise RuntimeError("No GPU found. A GPU is needed for quantization.")
+
+        if not is_accelerate_available():
+            raise ImportError("Using `bitsandbytes` 8-bit quantization requires Accelerate: `pip install accelerate`")
+        if not is_bitsandbytes_available():
             raise ImportError(
-                "Using `bitsandbytes` 8-bit quantization requires Accelerate: `pip install accelerate` "
-                "and the latest version of bitsandbytes: `pip install -i https://pypi.org/simple/ bitsandbytes`"
+                "Using `bitsandbytes` 8-bit quantization requires the latest version of bitsandbytes: `pip install -U bitsandbytes`"
             )
 
         if kwargs.get("from_tf", False) or kwargs.get("from_flax", False):
@@ -69,9 +73,6 @@ class Bnb8BitHfQuantizer(HfQuantizer):
                 "Converting into 4-bit or 8-bit weights from tf/flax weights is currently not supported, please make"
                 " sure the weights are in PyTorch format."
             )
-
-        if not torch.cuda.is_available():
-            raise RuntimeError("No GPU found. A GPU is needed for quantization.")
 
         device_map = kwargs.get("device_map", None)
         if (
@@ -84,14 +85,12 @@ class Bnb8BitHfQuantizer(HfQuantizer):
             }
             if "cpu" in device_map_without_lm_head.values() or "disk" in device_map_without_lm_head.values():
                 raise ValueError(
-                    """
-                    Some modules are dispatched on the CPU or the disk. Make sure you have enough GPU RAM to fit the
-                    quantized model. If you want to dispatch the model on the CPU or the disk while keeping these modules
-                    in 32-bit, you need to set `load_in_8bit_fp32_cpu_offload=True` and pass a custom `device_map` to
-                    `from_pretrained`. Check
-                    https://huggingface.co/docs/transformers/main/en/main_classes/quantization#offload-between-cpu-and-gpu
-                    for more details.
-                    """
+                    "Some modules are dispatched on the CPU or the disk. Make sure you have enough GPU RAM to fit the "
+                    "quantized model. If you want to dispatch the model on the CPU or the disk while keeping these modules "
+                    "in 32-bit, you need to set `load_in_8bit_fp32_cpu_offload=True` and pass a custom `device_map` to "
+                    "`from_pretrained`. Check "
+                    "https://huggingface.co/docs/transformers/main/en/main_classes/quantization#offload-between-cpu-and-gpu "
+                    "for more details. "
                 )
 
         if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.37.2"):
@@ -171,7 +170,10 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         import bitsandbytes as bnb
 
         fp16_statistics_key = param_name.replace("weight", "SCB")
+        fp16_weights_format_key = param_name.replace("weight", "weight_format")
+
         fp16_statistics = state_dict.get(fp16_statistics_key, None)
+        fp16_weights_format = state_dict.get(fp16_weights_format_key, None)
 
         module, tensor_name = get_module_from_name(model, param_name)
         if tensor_name not in module._parameters:
@@ -209,6 +211,11 @@ class Bnb8BitHfQuantizer(HfQuantizer):
             setattr(module.weight, "SCB", fp16_statistics.to(target_device))
             if unexpected_keys is not None:
                 unexpected_keys.remove(fp16_statistics_key)
+
+        # We just need to pop the `weight_format` keys from the state dict to remove unneeded
+        # messages. The correct format is correctly retrieved during the first forward pass.
+        if fp16_weights_format is not None and unexpected_keys is not None:
+            unexpected_keys.remove(fp16_weights_format_key)
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         model.is_loaded_in_8bit = True
@@ -275,3 +282,11 @@ class Bnb8BitHfQuantizer(HfQuantizer):
     @property
     def is_trainable(self) -> bool:
         return version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse("0.37.0")
+
+    def _dequantize(self, model):
+        from ..integrations import dequantize_and_replace
+
+        model = dequantize_and_replace(
+            model, self.modules_to_not_convert, quantization_config=self.quantization_config
+        )
+        return model

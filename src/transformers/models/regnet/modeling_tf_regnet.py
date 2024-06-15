@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TensorFlow RegNet model."""
+"""TensorFlow RegNet model."""
 
 from typing import Optional, Tuple, Union
 
@@ -49,11 +49,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 1088, 7, 7]
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "facebook/regnet-y-040"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
-
-TF_REGNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/regnet-y-040",
-    # See all regnet models at https://huggingface.co/models?filter=regnet
-]
 
 
 class TFRegNetConvLayer(keras.layers.Layer):

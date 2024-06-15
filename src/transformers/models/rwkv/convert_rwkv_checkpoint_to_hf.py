@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert a RWKV checkpoint from BlinkDL to the Hugging Face format."""
 
-
 import argparse
 import gc
 import json

@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch DPT model. """
-
+"""Testing suite for the PyTorch DPT model."""
 
 import unittest
 
@@ -31,7 +30,6 @@ if is_torch_available():
 
     from transformers import DPTForDepthEstimation
     from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
-    from transformers.models.dpt.modeling_dpt import DPT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -219,7 +217,7 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     )
 
     @unittest.skip(reason="DPT with AutoBackbone does not have a base model and hence no input_embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip(reason="DPT with AutoBackbone does not have a base model")
@@ -244,9 +242,9 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in DPT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = DPTForDepthEstimation.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "Intel/dpt-large"
+        model = DPTForDepthEstimation.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

@@ -167,9 +167,9 @@ for working on really long audio files (for example, subtitling entire movies or
 cannot handle on its own:
 
 ```python
->>> transcriber = pipeline(model="openai/whisper-large-v2", chunk_length_s=30, return_timestamps=True)
->>> transcriber("https://huggingface.co/datasets/sanchit-gandhi/librispeech_long/resolve/main/audio.wav")
-{'text': " Chapter 16. I might have told you of the beginning of this liaison in a few lines, but I wanted you to see every step by which we came.  I, too, agree to whatever Marguerite wished, Marguerite to be unable to live apart from me. It was the day after the evening...
+>>> transcriber = pipeline(model="openai/whisper-large-v2", chunk_length_s=30)
+>>> transcriber("https://huggingface.co/datasets/reach-vb/random-audios/resolve/main/ted_60.wav")
+{'text': " So in college, I was a government major, which means I had to write a lot of papers. Now, when a normal student writes a paper, they might spread the work out a little like this. So, you know. You get started maybe a little slowly, but you get enough done in the first week that with some heavier days later on, everything gets done and things stay civil. And I would want to do that like that. That would be the plan. I would have it all ready to go, but then actually the paper would come along, and then I would kind of do this. And that would happen every single paper. But then came my 90-page senior thesis, a paper you're supposed to spend a year on. I knew for a paper like that, my normal workflow was not an option, it was way too big a project. So I planned things out and I decided I kind of had to go something like this. This is how the year would go. So I'd start off light and I'd bump it up"}
 ```
 
 If you can't find a parameter that would really help you out, feel free to [request it](https://github.com/huggingface/transformers/issues/new?assignees=&labels=feature&template=feature-request.yml)!
@@ -270,11 +270,13 @@ For example, if you use this [invoice image](https://huggingface.co/spaces/impir
 >>> from transformers import pipeline
 
 >>> vqa = pipeline(model="impira/layoutlm-document-qa")
->>> vqa(
+>>> output = vqa(
 ...     image="https://huggingface.co/spaces/impira/docquery/resolve/2359223c1837a7587402bda0f2643382a6eefeab/invoice.png",
 ...     question="What is the invoice number?",
 ... )
-[{'score': 0.42515, 'answer': 'us-001', 'start': 16, 'end': 16}]
+>>> output[0]["score"] = round(output[0]["score"], 3)
+>>> output
+[{'score': 0.425, 'answer': 'us-001', 'start': 16, 'end': 16}]
 ```
 
 <Tip>

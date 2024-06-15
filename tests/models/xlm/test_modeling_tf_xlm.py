@@ -30,7 +30,6 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers import (
-        TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFXLMForMultipleChoice,
         TFXLMForQuestionAnsweringSimple,
         TFXLMForSequenceClassification,
@@ -360,9 +359,9 @@ class TFXLMModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFXLMModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "FacebookAI/xlm-mlm-en-2048"
+        model = TFXLMModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_tf

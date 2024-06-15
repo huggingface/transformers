@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 Cvt model."""
-
+"""TF 2.0 Cvt model."""
 
 from __future__ import annotations
 
@@ -48,16 +47,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "CvtConfig"
-
-TF_CVT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/cvt-13",
-    "microsoft/cvt-13-384",
-    "microsoft/cvt-13-384-22k",
-    "microsoft/cvt-21",
-    "microsoft/cvt-21-384",
-    "microsoft/cvt-21-384-22k",
-    # See all Cvt models at https://huggingface.co/models?filter=cvt
-]
 
 
 @dataclass
