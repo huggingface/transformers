@@ -542,26 +542,11 @@ class OffloadedCache(DynamicCache):
 
         return self.key_cache[layer_idx], self.value_cache[layer_idx]
 
-    @classmethod
-    def from_legacy_cache(cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None) -> "OffloadedCache":
-        """Converts a cache in the legacy cache format into an equivalent `DynamicCache`."""
-        cache = cls()
-        if past_key_values is not None:
-            for layer_idx in range(len(past_key_values)):
-                key_states, value_states = past_key_values[layer_idx]
-                cache.key_cache.append(key_states)
-                cache.value_cache.append(value_states)
-                cache.original_device.append(key_states.device)
-        return cache
+    # According to https://docs.python.org/3/library/exceptions.html#NotImplementedError
+    # if a method is not supposed to be supported in a subclass we should set it to None
+    from_legacy_cache = None
 
-    def to_legacy_cache(self) -> Tuple[Tuple[torch.Tensor], Tuple[torch.Tensor]]:
-        """Converts the `OffloadedCache` instance into the its equivalent in the legacy cache format."""
-        legacy_cache_lst = []
-        for layer_idx in range(len(self)):
-            original_device = self.original_device[layer_idx]
-            self.key_cache[layer_idx] = self.key_cache[layer_idx].to(original_device)
-            legacy_cache_lst.append((self.key_cache[layer_idx], self.value_cache[layer_idx]))
-        return tuple(legacy_cache_lst)
+    to_legacy_cache = None
 
 
 class QuantizedCache(DynamicCache):
