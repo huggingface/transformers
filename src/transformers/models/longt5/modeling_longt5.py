@@ -420,6 +420,41 @@ class LongT5Attention(nn.Module):
         values = values.permute([2, 0, 1]).unsqueeze(0)  # shape (1, num_heads, query_length, key_length)
         return values
 
+    def _shape(self, states, batch_size):
+        """projection"""
+        return states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
+
+    def _unshape(self, states, batch_size):
+        """reshape"""
+        return states.transpose(1, 2).contiguous().view(batch_size, -1, self.inner_dim)
+
+    def _project(self, hidden_states, proj_layer, key_value_states, past_key_value, batch_size):
+        """projects hidden states correctly to key/query states"""
+        if key_value_states is None:
+            # self-attn
+            # (batch_size, n_heads, seq_length, dim_per_head)
+            hidden_states = self._shape(proj_layer(hidden_states), batch_size)
+        elif past_key_value is None:
+            # cross-attn
+            # (batch_size, n_heads, seq_length, dim_per_head)
+            hidden_states = self._shape(proj_layer(key_value_states), batch_size)
+
+        if past_key_value is not None:
+            if key_value_states is None:
+                # self-attn
+                # (batch_size, n_heads, key_length, dim_per_head)
+                hidden_states = torch.cat([past_key_value, hidden_states], dim=2)
+            elif past_key_value.shape[2] != key_value_states.shape[1]:
+                # checking that the `sequence_length` of the `past_key_value` is the same as
+                # the provided `key_value_states` to support prefix tuning
+                # cross-attn
+                # (batch_size, n_heads, seq_length, dim_per_head)
+                hidden_states = self._shape(proj_layer(key_value_states), batch_size)
+            else:
+                # cross-attn
+                hidden_states = past_key_value
+        return hidden_states
+
     def forward(
         self,
         hidden_states,
@@ -451,50 +486,25 @@ class LongT5Attention(nn.Module):
 
         key_length = real_seq_length if key_value_states is None else key_value_states.shape[1]
 
-        def shape(states):
-            """projection"""
-            return states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
-
-        def unshape(states):
-            """reshape"""
-            return states.transpose(1, 2).contiguous().view(batch_size, -1, self.inner_dim)
-
-        def project(hidden_states, proj_layer, key_value_states, past_key_value):
-            """projects hidden states correctly to key/query states"""
-            if key_value_states is None:
-                # self-attn
-                # (batch_size, n_heads, seq_length, dim_per_head)
-                hidden_states = shape(proj_layer(hidden_states))
-            elif past_key_value is None:
-                # cross-attn
-                # (batch_size, n_heads, seq_length, dim_per_head)
-                hidden_states = shape(proj_layer(key_value_states))
-
-            if past_key_value is not None:
-                if key_value_states is None:
-                    # self-attn
-                    # (batch_size, n_heads, key_length, dim_per_head)
-                    hidden_states = torch.cat([past_key_value, hidden_states], dim=2)
-                elif past_key_value.shape[2] != key_value_states.shape[1]:
-                    # checking that the `sequence_length` of the `past_key_value` is the same as
-                    # the provided `key_value_states` to support prefix tuning
-                    # cross-attn
-                    # (batch_size, n_heads, seq_length, dim_per_head)
-                    hidden_states = shape(proj_layer(key_value_states))
-                else:
-                    # cross-attn
-                    hidden_states = past_key_value
-            return hidden_states
-
         # get query states
-        query_states = shape(self.q(hidden_states))  # (batch_size, n_heads, seq_length, dim_per_head)
+        query_states = self._shape(
+            self.q(hidden_states), batch_size
+        )  # (batch_size, n_heads, seq_length, dim_per_head)
 
         # get key/value states
-        key_states = project(
-            hidden_states, self.k, key_value_states, past_key_value[0] if past_key_value is not None else None
+        key_states = self._project(
+            hidden_states,
+            self.k,
+            key_value_states,
+            past_key_value[0] if past_key_value is not None else None,
+            batch_size,
         )
-        value_states = project(
-            hidden_states, self.v, key_value_states, past_key_value[1] if past_key_value is not None else None
+        value_states = self._project(
+            hidden_states,
+            self.v,
+            key_value_states,
+            past_key_value[1] if past_key_value is not None else None,
+            batch_size,
         )
 
         # compute scores
@@ -539,7 +549,9 @@ class LongT5Attention(nn.Module):
         if layer_head_mask is not None:
             attn_weights = attn_weights * layer_head_mask
 
-        attn_output = unshape(torch.matmul(attn_weights, value_states))  # (batch_size, seq_length, dim)
+        attn_output = self._unshape(
+            torch.matmul(attn_weights, value_states), batch_size
+        )  # (batch_size, seq_length, dim)
         attn_output = self.o(attn_output)
 
         present_key_value_state = (key_states, value_states) if (self.is_decoder and use_cache) else None
@@ -1007,6 +1019,7 @@ class LongT5TransientGlobalAttention(nn.Module):
 
 # Copied from transformers.models.t5.modeling_t5.T5LayerSelfAttention with T5->LongT5
 class LongT5LayerSelfAttention(nn.Module):
+    # Ignore copy
     def __init__(self, config, has_relative_attention_bias=False):
         super().__init__()
         self.SelfAttention = LongT5Attention(config, has_relative_attention_bias=has_relative_attention_bias)
@@ -1104,6 +1117,7 @@ class LongT5LayerTransientGlobalSelfAttention(nn.Module):
 
 # Copied from transformers.models.t5.modeling_t5.T5LayerCrossAttention with T5->LongT5
 class LongT5LayerCrossAttention(nn.Module):
+    # Ignore copy
     def __init__(self, config):
         super().__init__()
         self.EncDecAttention = LongT5Attention(config, has_relative_attention_bias=False)
