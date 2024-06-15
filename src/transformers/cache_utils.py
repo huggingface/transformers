@@ -548,6 +548,7 @@ class OffloadedCache(DynamicCache):
 
     to_legacy_cache = None
 
+
 class QuantizedCache(DynamicCache):
     """
     A quantizer cache similar to what is described in the [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache paper](https://arxiv.org/abs/2402.02750).
