@@ -78,8 +78,8 @@ class Phi3Config(PretrainedConfig):
             The base period of the RoPE embeddings.
         rope_scaling (`dict`, *optional*):
             The scaling strategy for the RoPE embeddings. If `None`, no scaling is applied. If a dictionary, it must
-            contain the following keys: `type`, `short_factor` and `long_factor`. The `type` must be `longrope` and 
-            the `short_factor` and `long_factor` must be lists of numbers with the same length as the hidden size 
+            contain the following keys: `type`, `short_factor` and `long_factor`. The `type` must be `longrope` and
+            the `short_factor` and `long_factor` must be lists of numbers with the same length as the hidden size
             divided by the number of attention heads divided by 2.
         bos_token_id (`int`, *optional*, defaults to 1):
             The id of the "beginning-of-sequence" token.
@@ -179,7 +179,7 @@ class Phi3Config(PretrainedConfig):
         # For backward compatibility if previous version used "su" or "yarn"
         if rope_scaling_type is not None and rope_scaling_type in ["su", "yarn"]:
             self.rope_scaling["type"] = "longrope"
- 
+
     def _rope_scaling_validation(self):
         """
         Validate the `rope_scaling` configuration.
