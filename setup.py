@@ -102,7 +102,7 @@ _deps = [
     "codecarbon==1.2.0",
     "cookiecutter==1.7.3",
     "dataclasses",
-    "datasets!=2.5.0",
+    "datasets!=2.5.0,<2.20.0",  # Temporary upper version
     "decord==0.6.0",
     "deepspeed>=0.9.3",
     "diffusers",
@@ -117,7 +117,7 @@ _deps = [
     "fugashi>=1.0",
     "GitPython<3.1.19",
     "hf-doc-builder>=0.3.0",
-    "huggingface-hub>=0.23.0,<1.0",
+    "huggingface-hub>=0.23.2,<1.0",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",

@@ -128,6 +128,7 @@ class VideoLlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
 
     # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest.setUp with CLIP->VideoLlava
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = VideoLlavaImageProcessingTester(self)
 
     @property
