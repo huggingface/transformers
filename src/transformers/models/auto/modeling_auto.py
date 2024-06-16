@@ -128,7 +128,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("jetmoe", "JetMoeModel"),
         ("jukebox", "JukeboxModel"),
         ("kosmos-2", "Kosmos2Model"),
-        ("kosmos-2_5", "Kosmos2_5Model"),
+        ("kosmos-2.5", "Kosmos2_5Model"),
         ("layoutlm", "LayoutLMModel"),
         ("layoutlmv2", "LayoutLMv2Model"),
         ("layoutlmv3", "LayoutLMv3Model"),

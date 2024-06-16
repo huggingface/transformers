@@ -19,9 +19,9 @@ bf16 now
 
 from typing import List, Optional, Union
 
-from transformers.processing_utils import ProcessorMixin
-from transformers.tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
-from transformers.utils import TensorType
+from ...processing_utils import ProcessorMixin
+from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
+from ...utils import TensorType
 
 
 class Kosmos2_5Processor(ProcessorMixin):

@@ -16,19 +16,11 @@
 
 import os
 from typing import Union
-from transformers import logging
-from transformers.configuration_utils import PretrainedConfig
-from transformers import Pix2StructVisionModel, Pix2StructVisionConfig
+from ...utils import logging
+from ...configuration_utils import PretrainedConfig
+from ...models.pix2struct import Pix2StructVisionModel, Pix2StructVisionConfig
 
 logger = logging.get_logger(__name__)
-
-# to b modified
-# Kosmos2_5_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-#     "microsoft/KOSMOS-2.5-patch14-224": (
-#         "https://huggingface.co/microsoft/KOSMOS-2.5-patch14-224/resolve/main/config.json"
-#     ),
-#     # See all KOSMOS-2.5 models at https://huggingface.co/models?filter=KOSMOS-2.5
-# }
 
 
 class Kosmos2_5TextConfig(PretrainedConfig):
@@ -78,7 +70,7 @@ class Kosmos2_5TextConfig(PretrainedConfig):
             Whether or not the model should return the last key/values attentions (not used by all models).
     ```"""
 
-    model_type = "kosmos_2_text_model"
+    model_type = "kosmos_2_5_text_model"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "num_attention_heads": "attention_heads",
@@ -138,7 +130,7 @@ class Kosmos2_5TextConfig(PretrainedConfig):
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the text config dict if we are loading from Kosmos2_5Config
-        if config_dict.get("model_type") == "KOSMOS-2.5":
+        if config_dict.get("model_type") == "kosmos-2.5":
             config_dict = config_dict["text_config"]
 
         if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
@@ -150,6 +142,7 @@ class Kosmos2_5TextConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 class Kosmos2_5VisionConfig(Pix2StructVisionConfig):
+    model_type = "kosmos_2_5_vision_model"
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
@@ -173,7 +166,7 @@ class Kosmos2_5Config(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import Kosmos2_5Config, Kosmos2_5Model
+    >>> from .. import Kosmos2_5Config, Kosmos2_5Model
 
     >>> # Initializing a KOSMOS-2.5 KOSMOS-2.5-patch14-224 style configuration
     >>> configuration = Kosmos2_5Config()
@@ -185,7 +178,7 @@ class Kosmos2_5Config(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "KOSMOS-2.5"
+    model_type = "kosmos-2.5"
     is_composition = True
 
     def __init__(

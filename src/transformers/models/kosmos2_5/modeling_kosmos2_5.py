@@ -9,15 +9,15 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-from transformers.activations import ACT2FN
-from transformers.modeling_outputs import (
+from ...activations import ACT2FN
+from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPooling,
     CausalLMOutputWithCrossAttentions,
 )
-from transformers.modeling_utils import PreTrainedModel
-from transformers.utils import (
+from ...modeling_utils import PreTrainedModel
+from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -67,7 +67,7 @@ def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, device: t
     return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
 
 
-# Copied from transformers.models.roberta.modeling_roberta.create_position_ids_from_input_ids
+# Copied from ...models.roberta.modeling_roberta.create_position_ids_from_input_ids
 def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_length=0):
     """
     Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding symbols
@@ -89,10 +89,48 @@ KOSMOS2_5_VISION_INPUTS_DOCSTRING = r""""""
 
 KOSMOS2_5_TEXT_INPUTS_DOCSTRING = r""""""
 
-KOSMOS2_5_INPUTS_DOCSTRING = ""
+KOSMOS2_5_INPUTS_DOCSTRING = r""""""
 
 @dataclass
 class Kosmos2_5ModelOutput(ModelOutput):
+    """
+    Base class for text model's outputs that also contains a pooling of the last hidden states.
+
+    Args:
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+        image_embeds (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
+            Sequence of hidden-states at the output of `Kosmos2ImageToTextProjection`.
+        projection_attentions (`tuple(torch.FloatTensor)`, *optional*):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights given by `Kosmos2ImageToTextProjection`, after the attention softmax, used to compute
+            the weighted average in the self-attention heads.
+        vision_model_output(`BaseModelOutputWithPooling`, *optional*):
+            The output of the [`Kosmos2VisionModel`].
+        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and optionally if
+            `config.is_encoder_decoder=True` 2 additional tensors of shape `(batch_size, num_heads,
+            encoder_sequence_length, embed_size_per_head)`.
+
+            Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
+            `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
+            input) to speed up sequential decoding.
+    """
+
     last_hidden_state: torch.FloatTensor = None
     past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
@@ -164,7 +202,7 @@ class Kosmos2_5ForConditionalGenerationModelOutput(ModelOutput):
             for k in self.keys()
         )
 
-# Copied from transformers.models.pix2struct.modeling_pix2struct.Pix2StructLayerNorm -> Kosmos2_5LayerNorm
+# Copied from ...models.pix2struct.modeling_pix2struct.Pix2StructLayerNorm -> Kosmos2_5LayerNorm
 class Kosmos2_5LayerNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
@@ -204,7 +242,7 @@ except Exception:
 
 # ALL_LAYERNORM_LAYERS.append(Kosmos2_5LayerNorm)
 
-# Copied from transformers.models.pix2struct.modeling_pix2struct.Pix2StructVisionEmbeddings -> Kosmos2_5VisionEmbeddings
+# Copied from ...models.pix2struct.modeling_pix2struct.Pix2StructVisionEmbeddings -> Kosmos2_5VisionEmbeddings
 class Kosmos2_5VisionEmbeddings(nn.Module):
     def __init__(self, config:  Kosmos2_5Config) -> None:
         super().__init__()
@@ -234,7 +272,7 @@ class Kosmos2_5VisionEmbeddings(nn.Module):
 
         return embeddings
 
-# Copied from transformers.models.pix2struct.modeling_pix2struct.Pix2StructVisionAttention -> Kosmos2_5VisionAttention
+# Copied from ...models.pix2struct.modeling_pix2struct.Pix2StructVisionAttention -> Kosmos2_5VisionAttention
 class Kosmos2_5VisionAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -311,7 +349,7 @@ class Kosmos2_5VisionAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.pix2struct.modeling_pix2struct.Pix2StructVisionMlp -> Kosmos2_5VisionMlp
+# Copied from ...models.pix2struct.modeling_pix2struct.Pix2StructVisionMlp -> Kosmos2_5VisionMlp
 class Kosmos2_5VisionMlp(nn.Module):
     def __init__(self, config: Kosmos2_5VisionConfig):
         super().__init__()
@@ -340,7 +378,7 @@ class Kosmos2_5VisionMlp(nn.Module):
         hidden_states = self.wo(hidden_states)
         return hidden_states
 
-# Copied from transformers.models.pix2struct.modeling_pix2struct.Pix2StructVisionLayer -> Kosmos2_5VisionLayer
+# Copied from ...models.pix2struct.modeling_pix2struct.Pix2StructVisionLayer -> Kosmos2_5VisionLayer
 class Kosmos2_5VisionLayer(nn.Module):
     def __init__(self, config:  Kosmos2_5Config) -> None:
         super().__init__()
@@ -383,7 +421,7 @@ class Kosmos2_5VisionLayer(nn.Module):
 
         return outputs
 
-# Copied from transformers.models.pix2struct.modeling_pix2struct.Pix2StructVisionEncoder -> Kosmos2_5VisionEncoder
+# Copied from ...models.pix2struct.modeling_pix2struct.Pix2StructVisionEncoder -> Kosmos2_5VisionEncoder
 class Kosmos2_5VisionEncoder(nn.Module):
     def __init__(self, config: Kosmos2_5Config) -> None:
         super().__init__()
@@ -509,11 +547,11 @@ class Kosmos2_5VisionModel(PreTrainedModel):
         )
 
 
-# Copied from transformers.models.kosmos2.modeling_kosmos2.Kosmos2TextSinusoidalPositionalEmbedding -> Kosmos2_5TextSinusoidalPositionalEmbedding
+# Copied from ...models.kosmos2.modeling_kosmos2.Kosmos2TextSinusoidalPositionalEmbedding -> Kosmos2_5TextSinusoidalPositionalEmbedding
 class Kosmos2_5TextSinusoidalPositionalEmbedding(nn.Module):
     """This module produces sinusoidal positional embeddings of any length."""
 
-    # Copied from transformers.models.m2m_100.modeling_m2m_100.M2M100SinusoidalPositionalEmbedding.__init__
+    # Copied from ...models.m2m_100.modeling_m2m_100.M2M100SinusoidalPositionalEmbedding.__init__
     def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None):
         super().__init__()
         self.offset = 2
@@ -521,7 +559,7 @@ class Kosmos2_5TextSinusoidalPositionalEmbedding(nn.Module):
         self.padding_idx = padding_idx
         self.make_weights(num_positions + self.offset, embedding_dim, padding_idx)
 
-    # Copied from transformers.models.m2m_100.modeling_m2m_100.M2M100SinusoidalPositionalEmbedding.make_weights
+    # Copied from ...models.m2m_100.modeling_m2m_100.M2M100SinusoidalPositionalEmbedding.make_weights
     def make_weights(self, num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
         emb_weights = self.get_embedding(num_embeddings, embedding_dim, padding_idx)
         if hasattr(self, "weights"):
@@ -531,7 +569,7 @@ class Kosmos2_5TextSinusoidalPositionalEmbedding(nn.Module):
         self.register_buffer("weights", emb_weights, persistent=False)
 
     @staticmethod
-    # Copied from transformers.models.m2m_100.modeling_m2m_100.M2M100SinusoidalPositionalEmbedding.get_embedding
+    # Copied from ...models.m2m_100.modeling_m2m_100.M2M100SinusoidalPositionalEmbedding.get_embedding
     def get_embedding(num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
         """
         Build sinusoidal embeddings.
@@ -579,7 +617,7 @@ class Kosmos2_5TextSinusoidalPositionalEmbedding(nn.Module):
 
         return self.weights.index_select(0, position_ids.view(-1)).view(bsz, seq_len, self.weights.shape[-1]).detach()
 
-    # Copied from transformers.models.m2m_100.modeling_m2m_100.M2M100SinusoidalPositionalEmbedding.create_position_ids_from_inputs_embeds
+    # Copied from ...models.m2m_100.modeling_m2m_100.M2M100SinusoidalPositionalEmbedding.create_position_ids_from_inputs_embeds
     def create_position_ids_from_inputs_embeds(self, inputs_embeds, past_key_values_length):
         """
         We are provided embeddings directly. We cannot infer which are padded so just generate sequential position ids.
@@ -1198,6 +1236,136 @@ class Kosmos2_5TextModel(Kosmos2_5PreTrainedModel):
 
 @add_start_docstrings(
     """
+    KOSMOS-2 Model for generating text and image features. The model consists of a vision encoder and a language model.
+    """,
+    KOSMOS2_5_START_DOCSTRING,
+)
+class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
+    config_class = Kosmos2_5Config
+    main_input_name = "flattened_patches"
+
+    def __init__(self, config: Kosmos2_5Config):
+        super().__init__(config)
+
+        self.text_model = Kosmos2_5TextModel(config.text_config)
+        self.vision_model = Kosmos2_5VisionModel(config.vision_config)
+        self.image_to_text_projection = Kosmos2_5ImageToTextProjection(config)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self) -> nn.Module:
+        return self.text_model.model.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.text_model.model.embed_tokens = value
+
+    @add_start_docstrings_to_model_forward(KOSMOS2_5_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=Kosmos2_5ModelOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        flattened_patches: Optional[torch.Tensor] = None,
+        input_ids: Optional[torch.Tensor] = None,
+        image_embeds_position_mask: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        image_embeds: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, Kosmos2_5ModelOutput]:
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, Kosmos2Model
+
+        >>> model = Kosmos2Model.from_pretrained("microsoft/kosmos-2-patch14-224")
+        >>> processor = AutoProcessor.from_pretrained("microsoft/kosmos-2-patch14-224")
+
+        >>> url = "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/snowman.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> text = (
+        ...     "<grounding> An image of<phrase> a snowman</phrase><object><patch_index_0044><patch_index_0863>"
+        ...     "</object> warming himself by<phrase> a fire</phrase><object><patch_index_0005><patch_index_0911>"
+        ...     "</object>"
+        ... )
+
+        >>> inputs = processor(text=text, images=image, return_tensors="pt", add_eos_token=True)
+
+        >>> last_hidden_state = model(
+        ...     pixel_values=inputs["pixel_values"],
+        ...     input_ids=inputs["input_ids"],
+        ...     attention_mask=inputs["attention_mask"],
+        ...     image_embeds_position_mask=inputs["image_embeds_position_mask"],
+        ... ).last_hidden_state
+        >>> list(last_hidden_state.shape)
+        [1, 91, 2048]
+        ```"""
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        vision_model_output = None
+        projection_attentions = None
+        if image_embeds is None:
+            if flattened_patches is None:
+                raise ValueError("You have to specify either `flattened_patches` or `image_embeds`.")
+
+            vision_model_output = self.vision_model(
+                flattened_patches=flattened_patches,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
+            # The whole `last_hidden_state` through `post_layernorm` instead of just `pooled_output`.
+            image_embeds = self.vision_model.model.post_layernorm(vision_model_output[0])
+            # normalized features
+            image_embeds = nn.functional.normalize(image_embeds, dim=-1)
+            image_embeds, projection_attentions = self.image_to_text_projection(image_embeds)
+
+        outputs = self.text_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            image_embeds=image_embeds,
+            image_embeds_position_mask=image_embeds_position_mask,
+            head_mask=head_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            position_ids=position_ids,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        if not return_dict:
+            outputs = outputs + (image_embeds, projection_attentions, vision_model_output)
+            return tuple(output for output in outputs if output is not None)
+
+        return Kosmos2_5ModelOutput(
+            last_hidden_state=outputs.last_hidden_state,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            image_embeds=image_embeds,
+            projection_attentions=projection_attentions,
+            vision_model_output=vision_model_output,
+        )
+
+@add_start_docstrings(
+    """
     The text model from KOSMOS-2.5 with a language modeling head on top (linear layer with weights tied to the input
     embeddings).
     """,
@@ -1363,7 +1531,7 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel):
         }
 
     @staticmethod
-    # Copied from transformers.models.umt5.modeling_umt5.UMT5ForConditionalGeneration._reorder_cache
+    # Copied from ...models.umt5.modeling_umt5.UMT5ForConditionalGeneration._reorder_cache
     def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
         for layer_past in past_key_values:
@@ -1439,7 +1607,7 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import AutoProcessor, Kosmos2ForConditionalGeneration
+        >>> from .. import AutoProcessor, Kosmos2ForConditionalGeneration
 
         >>> model = Kosmos2ForConditionalGeneration.from_pretrained("microsoft/kosmos-2-patch14-224")
         >>> processor = AutoProcessor.from_pretrained("microsoft/kosmos-2-patch14-224")

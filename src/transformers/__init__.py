@@ -1140,6 +1140,7 @@ else:
     _import_structure["models.idefics"].extend(["IdeficsImageProcessor"])
     _import_structure["models.idefics2"].extend(["Idefics2ImageProcessor"])
     _import_structure["models.imagegpt"].extend(["ImageGPTFeatureExtractor", "ImageGPTImageProcessor"])
+    _import_structure["models.kosmos2_5"].extend(["Kosmos2_5ImageProcessor"])
     _import_structure["models.layoutlmv2"].extend(["LayoutLMv2FeatureExtractor", "LayoutLMv2ImageProcessor"])
     _import_structure["models.layoutlmv3"].extend(["LayoutLMv3FeatureExtractor", "LayoutLMv3ImageProcessor"])
     _import_structure["models.levit"].extend(["LevitFeatureExtractor", "LevitImageProcessor"])

@@ -20,9 +20,9 @@ from typing import Dict, Optional, Union
 import numpy as np
 from huggingface_hub import hf_hub_download
 
-from transformers.image_processing_utils import BaseImageProcessor, BatchFeature
-from transformers.image_transforms import convert_to_rgb, normalize, to_channel_dimension_format, to_pil_image
-from transformers.image_utils import (
+from ...image_processing_utils import BaseImageProcessor, BatchFeature
+from ...image_transforms import convert_to_rgb, normalize, to_channel_dimension_format, to_pil_image
+from ...image_utils import (
     ChannelDimension,
     ImageInput,
     get_image_size,
@@ -31,8 +31,8 @@ from transformers.image_utils import (
     to_numpy_array,
     valid_images,
 )
-from transformers.utils import TensorType, is_torch_available, is_vision_available, logging
-from transformers.utils.import_utils import requires_backends
+from ...utils import TensorType, is_torch_available, is_vision_available, logging
+from ...utils.import_utils import requires_backends
 
 
 if is_vision_available():
