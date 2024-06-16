@@ -54,7 +54,7 @@ def load_demo_image():
 
 
 # here we list all keys to be renamed (original name on the left, our name on the right)
-def create_rename_keys(config):
+def create_rename_keys(config, model_name):
     rename_keys = []
     # fmt: off
 
@@ -82,12 +82,13 @@ def create_rename_keys(config):
     # QFormer
     rename_keys.append(("Qformer.bert.embeddings.LayerNorm.weight", "qformer.layernorm.weight"))
     rename_keys.append(("Qformer.bert.embeddings.LayerNorm.bias", "qformer.layernorm.bias"))
-    rename_keys.append(("Qformer.bert.embeddings.word_embeddings.weight", "embeddings.word_embeddings.weight"))
-    rename_keys.append(("Qformer.bert.embeddings.position_embeddings.weight", "embeddings.position_embeddings.weight"))
-    rename_keys.append(("vision_proj.weight", "vision_projection.weight"))
-    rename_keys.append(("vision_proj.bias", "vision_projection.bias"))
-    rename_keys.append(("text_proj.weight", "text_projection.weight"))
-    rename_keys.append(("text_proj.bias", "text_projection.bias"))
+    if "itm" in model_name:
+        rename_keys.append(("Qformer.bert.embeddings.word_embeddings.weight", "embeddings.word_embeddings.weight"))
+        rename_keys.append(("Qformer.bert.embeddings.position_embeddings.weight", "embeddings.position_embeddings.weight"))
+        rename_keys.append(("vision_proj.weight", "vision_projection.weight"))
+        rename_keys.append(("vision_proj.bias", "vision_projection.bias"))
+        rename_keys.append(("text_proj.weight", "text_projection.weight"))
+        rename_keys.append(("text_proj.bias", "text_projection.bias"))
 
     # fmt: on
     return rename_keys
@@ -189,7 +190,7 @@ def convert_blip2_checkpoint(
 
     # update state dict keys
     state_dict = original_model.state_dict()
-    rename_keys = create_rename_keys(config)
+    rename_keys = create_rename_keys(config, model_name)
     for src, dest in rename_keys:
         rename_key(state_dict, src, dest)
 
