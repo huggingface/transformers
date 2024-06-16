@@ -53,10 +53,10 @@ if is_torch_available():
     )
     from transformers.models.llama.modeling_llama import (
         LlamaDynamicNTKScalingRotaryEmbedding,
-        LlamaDynamicYaRNScalingRotaryEmbedding,
+        LlamaDynamicYarnScalingRotaryEmbedding,
         LlamaLinearScalingRotaryEmbedding,
         LlamaRotaryEmbedding,
-        LlamaYaRNScalingRotaryEmbedding,
+        LlamaYarnScalingRotaryEmbedding,
     )
 
 
@@ -422,7 +422,7 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
         # Dynamic scaling does not change the RoPE embeddings until it receives an input longer than the original
         # maximum sequence length, so the outputs for the short input should match.
-        if scaling_type in ("dynamic", "dynamic-yarn"):
+        if scaling_type == "dynamic":
             self.assertTrue(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
         else:
             self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
@@ -493,8 +493,8 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             torch.testing.assert_close(ntk_sin_long, original_sin_long)
         self.assertTrue((ntk_scaling_rope.inv_freq <= original_rope.inv_freq).all())
 
-        # Sanity check YaRN RoPE scaling
-        yarn_scaling_rope = LlamaYaRNScalingRotaryEmbedding(
+        # Sanity check Yarn RoPE scaling
+        yarn_scaling_rope = LlamaYarnScalingRotaryEmbedding(
             head_dim,
             max_position_embeddings=config.max_position_embeddings,
             base=config.rope_theta,
@@ -505,12 +505,16 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         torch.testing.assert_close(yarn_cos_short, yarn_cos_long[:, :short_input_length, :])
         torch.testing.assert_close(yarn_sin_short, yarn_sin_long[:, :short_input_length, :])
         with self.assertRaises(AssertionError):
+            torch.testing.assert_close(yarn_cos_short, original_cos_short)
+        with self.assertRaises(AssertionError):
+            torch.testing.assert_close(yarn_sin_short, original_sin_short)
+        with self.assertRaises(AssertionError):
             torch.testing.assert_close(yarn_cos_long, original_cos_long)
         with self.assertRaises(AssertionError):
             torch.testing.assert_close(yarn_sin_long, original_sin_long)
 
-        # Sanity check Dynamic YaRN RoPE scaling
-        dynamic_yarn_scaling_rope = LlamaDynamicYaRNScalingRotaryEmbedding(
+        # Sanity check Dynamic Yarn RoPE scaling
+        dynamic_yarn_scaling_rope = LlamaDynamicYarnScalingRotaryEmbedding(
             head_dim,
             max_position_embeddings=config.max_position_embeddings,
             base=config.rope_theta,
@@ -518,8 +522,10 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         ).to(torch_device)
         dynamic_yarn_cos_short, dynamic_yarn_sin_short = dynamic_yarn_scaling_rope(x, position_ids_short)
         dynamic_yarn_cos_long, dynamic_yarn_sin_long = dynamic_yarn_scaling_rope(x, position_ids_long)
-        torch.testing.assert_close(dynamic_yarn_cos_short, original_cos_short)
-        torch.testing.assert_close(dynamic_yarn_sin_short, original_sin_short)
+        with self.assertRaises(AssertionError):
+            torch.testing.assert_close(dynamic_yarn_cos_short, original_cos_short)
+        with self.assertRaises(AssertionError):
+            torch.testing.assert_close(dynamic_yarn_sin_short, original_sin_short)
         with self.assertRaises(AssertionError):
             torch.testing.assert_close(dynamic_yarn_cos_long, original_cos_long)
         with self.assertRaises(AssertionError):

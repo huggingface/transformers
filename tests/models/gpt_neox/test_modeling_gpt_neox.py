@@ -39,10 +39,8 @@ if is_torch_available():
     )
     from transformers.models.gpt_neox.modeling_gpt_neox import (
         GPTNeoXDynamicNTKScalingRotaryEmbedding,
-        GPTNeoXDynamicYaRNScalingRotaryEmbedding,
         GPTNeoXLinearScalingRotaryEmbedding,
         GPTNeoXRotaryEmbedding,
-        GPTNeoXYaRNScalingRotaryEmbedding,
     )
 
 
@@ -306,7 +304,7 @@ class GPTNeoXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_feed_forward_chunking(self):
         pass
 
-    @parameterized.expand([("linear",), ("dynamic",), ("yarn",), ("dynamic-yarn",)])
+    @parameterized.expand([("linear",), ("dynamic",)])
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_model_rope_scaling_from_config with Llama->GPTNeoX
     def test_model_rope_scaling_from_config(self, scaling_type):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -330,7 +328,7 @@ class GPTNeoXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         # Dynamic scaling does not change the RoPE embeddings until it receives an input longer than the original
         # maximum sequence length, so the outputs for the short input should match.
-        if scaling_type in ("dynamic", "dynamic-yarn"):
+        if scaling_type == "dynamic":
             self.assertTrue(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
         else:
             self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
@@ -397,40 +395,6 @@ class GPTNeoXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         with self.assertRaises(AssertionError):
             torch.testing.assert_close(ntk_sin_long, original_sin_long)
         self.assertTrue((ntk_scaling_rope.inv_freq <= original_rope.inv_freq).all())
-
-        # Sanity check YaRN RoPE scaling
-        yarn_scaling_rope = GPTNeoXYaRNScalingRotaryEmbedding(
-            head_dim,
-            max_position_embeddings=config.max_position_embeddings,
-            base=config.rotary_emb_base,
-            scaling_factor=scaling_factor,
-        ).to(torch_device)
-        yarn_cos_short, yarn_sin_short = yarn_scaling_rope(x, short_input_length)
-        yarn_cos_long, yarn_sin_long = yarn_scaling_rope(x, long_input_length)
-        torch.testing.assert_close(yarn_cos_short, yarn_cos_long[:short_input_length, :])
-        torch.testing.assert_close(yarn_sin_short, yarn_sin_long[:short_input_length, :])
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(yarn_cos_long, original_cos_long)
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(yarn_sin_long, original_sin_long)
-
-        # Sanity check Dynamic YaRN RoPE scaling
-        dynamic_yarn_scaling_rope = GPTNeoXDynamicYaRNScalingRotaryEmbedding(
-            head_dim,
-            max_position_embeddings=config.max_position_embeddings,
-            base=config.rotary_emb_base,
-            scaling_factor=scaling_factor,
-        ).to(torch_device)
-        dynamic_yarn_cos_short, dynamic_yarn_sin_short = dynamic_yarn_scaling_rope(x, short_input_length)
-        dynamic_yarn_cos_long, dynamic_yarn_sin_long = dynamic_yarn_scaling_rope(x, long_input_length)
-        dynamic_yarn_cos_short = dynamic_yarn_cos_short.squeeze(0)
-        dynamic_yarn_sin_short = dynamic_yarn_sin_short.squeeze(0)
-        torch.testing.assert_close(dynamic_yarn_cos_short, original_cos_short)
-        torch.testing.assert_close(dynamic_yarn_sin_short, original_sin_short)
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(dynamic_yarn_cos_long, original_cos_long)
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(dynamic_yarn_sin_long, original_sin_long)
 
 
 @require_torch

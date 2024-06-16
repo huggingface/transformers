@@ -149,7 +149,7 @@ class LlamaDynamicNTKScalingRotaryEmbedding(LlamaRotaryEmbedding):
         return cos, sin
 
 
-class LlamaYaRNScalingRotaryEmbedding(LlamaRotaryEmbedding):
+class LlamaYarnScalingRotaryEmbedding(LlamaRotaryEmbedding):
     def __init__(
         self,
         dim,
@@ -157,8 +157,7 @@ class LlamaYaRNScalingRotaryEmbedding(LlamaRotaryEmbedding):
         base=10000,
         scaling_factor=1,
         original_max_position_embeddings=2048,
-        extrapolation_factor=1,
-        attention_factor=1,
+        attention_factor=None,
         beta_fast=32,
         beta_slow=1,
         device=None,
@@ -166,12 +165,14 @@ class LlamaYaRNScalingRotaryEmbedding(LlamaRotaryEmbedding):
         super().__init__(dim, max_position_embeddings, base, device, scaling_factor)
 
         self.original_max_position_embeddings = original_max_position_embeddings
-        self.extrapolation_factor = extrapolation_factor
         self.attention_factor = attention_factor
         self.beta_fast = beta_fast
         self.beta_slow = beta_slow
 
-        self.yarn(device)
+        if self.attention_factor is None:
+            self.attention_factor = 0.1 * math.log(scaling_factor) + 1.0
+
+        self.compute_yarn_scaling(device)
 
         # Build here to make `torch.jit.trace` work.
         self.max_seq_len_cached = max_position_embeddings
@@ -205,28 +206,16 @@ class LlamaYaRNScalingRotaryEmbedding(LlamaRotaryEmbedding):
         ramp_func = torch.clamp(linear_func, 0, 1)
         return ramp_func
 
-    def get_mscale(self, scaling_factor=1):
-        if scaling_factor <= 1:
-            return 1.0
-        return 0.1 * math.log(scaling_factor) + 1.0
-
     def forward(self, x, position_ids=None):
         # Difference to the original RoPE: applies a scaling factor computed with
         # the YaRN method (NTK-by-Parts + Attn Scaling)
-        # x: [batch_size, seq_len, head_dim]
-        seq_len = torch.max(position_ids) + 1
-        if seq_len > self.max_seq_len_cached:
-            self.max_seq_len_cached = seq_len
-            emb = self.get_pos_embeddings(x.device)
+        # x: [bs, num_attention_heads, seq_len, head_size]
+        cos, sin = super().forward(x, position_ids)
+        cos = cos * self.mscale
+        sin = sin * self.mscale
+        return cos, sin
 
-            self._cos_cached = (emb.cos() * self.mscale)[None, :, :].to(x.dtype)
-            self._sin_cached = (emb.sin() * self.mscale)[None, :, :].to(x.dtype)
-        return (
-            self._cos_cached[:, :seq_len, ...].to(dtype=x.dtype),
-            self._sin_cached[:, :seq_len, ...].to(dtype=x.dtype),
-        )
-
-    def yarn(self, device):
+    def compute_yarn_scaling(self, device):
         pos_freqs = self.base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim)
         inv_freq_extrapolation = 1.0 / pos_freqs
         inv_freq_interpolation = 1.0 / (self.scaling_factor * pos_freqs)
@@ -235,17 +224,15 @@ class LlamaYaRNScalingRotaryEmbedding(LlamaRotaryEmbedding):
             self.beta_fast, self.beta_slow, self.dim, self.base, self.original_max_position_embeddings
         )
         # Get n-dimensional rotational scaling corrected for extrapolation
-        inv_freq_mask = (
-            1 - self.linear_ramp_mask(low, high, self.dim // 2).float().to(device)
-        ) * self.extrapolation_factor
+        inv_freq_mask = 1 - self.linear_ramp_mask(low, high, self.dim // 2).float().to(device)
         inv_freq = inv_freq_interpolation * (1 - inv_freq_mask) + inv_freq_extrapolation * inv_freq_mask
 
         self.register_buffer("inv_freq", inv_freq)
         # Get n-dimensional magnitude scaling corrected for interpolation
-        self.mscale = float(self.get_mscale(self.scaling_factor) * self.attention_factor)
+        self.mscale = self.attention_factor
 
 
-class LlamaDynamicYaRNScalingRotaryEmbedding(LlamaYaRNScalingRotaryEmbedding):
+class LlamaDynamicYarnScalingRotaryEmbedding(LlamaYarnScalingRotaryEmbedding):
     def __init__(
         self,
         dim,
@@ -253,11 +240,9 @@ class LlamaDynamicYaRNScalingRotaryEmbedding(LlamaYaRNScalingRotaryEmbedding):
         base=10000,
         scaling_factor=1,
         original_max_position_embeddings=2048,
-        extrapolation_factor=1,
-        attention_factor=1,
+        attention_factor=None,
         beta_fast=32,
         beta_slow=1,
-        finetuned=False,
         device=None,
     ):
         super().__init__(
@@ -266,16 +251,15 @@ class LlamaDynamicYaRNScalingRotaryEmbedding(LlamaYaRNScalingRotaryEmbedding):
             base,
             scaling_factor,
             original_max_position_embeddings,
-            extrapolation_factor,
             attention_factor,
             beta_fast,
             beta_slow,
             device,
         )
 
-        if finetuned:
+        if self.max_position_embeddings != self.original_max_position_embeddings:
             self.scaling_factor = self.max_position_embeddings / self.original_max_position_embeddings
-            self.yarn(device)
+            self.compute_yarn_scaling(device)
         else:
             inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float().to(device) / dim))
             self.register_buffer("inv_freq", inv_freq)
@@ -290,20 +274,13 @@ class LlamaDynamicYaRNScalingRotaryEmbedding(LlamaYaRNScalingRotaryEmbedding):
 
     def forward(self, x, position_ids=None):
         # Difference to the standard YaRN: the scaling factor is updated when the max sequence length is exceeded
-        # x: [batch_size, seq_len, head_dim]
+        # x: [bs, num_attention_heads, seq_len, head_size]
         seq_len = torch.max(position_ids) + 1
-        if seq_len > self.max_seq_len_cached:
-            self.max_seq_len_cached = seq_len
-            self.scaling_factor = seq_len / self.original_max_position_embeddings
-            self.yarn(x.device)
-            emb = self.get_pos_embeddings(x.device)
+        self.scaling_factor = seq_len / self.original_max_position_embeddings
+        self.compute_yarn_scaling(x.device)
 
-            self._cos_cached = (emb.cos() * self.mscale)[None, :, :].to(x.dtype)
-            self._sin_cached = (emb.sin() * self.mscale)[None, :, :].to(x.dtype)
-        return (
-            self._cos_cached[:, :seq_len, ...].to(dtype=x.dtype),
-            self._sin_cached[:, :seq_len, ...].to(dtype=x.dtype),
-        )
+        cos, sin = super().forward(x, position_ids)
+        return cos, sin
 
 
 def rotate_half(x):
@@ -432,13 +409,15 @@ class LlamaAttention(nn.Module):
         else:
             scaling_type = self.config.rope_scaling["type"]
             scaling_factor = self.config.rope_scaling["factor"]
-            # YaRN parameters
-            original_max_position_embeddings = self.config.yarn_rope_scaling["original_max_position_embeddings"]
-            extrapolation_factor = self.config.yarn_rope_scaling["extrapolation_factor"]
-            attention_factor = self.config.yarn_rope_scaling["attention_factor"]
-            beta_fast = self.config.yarn_rope_scaling["beta_fast"]
-            beta_slow = self.config.yarn_rope_scaling["beta_slow"]
-            finetuned = self.config.yarn_rope_scaling["finetuned"]
+            # Yarn parameters
+            kwargs = {
+                "dim": self.config.rope_scaling.get("original_max_position_embeddings", None),
+                "max_position_embeddings": self.config.rope_scaling.get("attention_factor", None),
+                "base": self.config.rope_scaling.get("beta_fast", None),
+                "scaling_factor": self.config.rope_scaling.get("beta_slow", None),
+            }
+            kwargs = {k: v for k, v in kwargs.items() if v is not None}
+
             if scaling_type == "linear":
                 self.rotary_emb = LlamaLinearScalingRotaryEmbedding(
                     self.head_dim,
@@ -454,29 +433,20 @@ class LlamaAttention(nn.Module):
                     base=self.rope_theta,
                 )
             elif scaling_type == "yarn":
-                self.rotary_emb = LlamaYaRNScalingRotaryEmbedding(
+                self.rotary_emb = LlamaYarnScalingRotaryEmbedding(
                     self.head_dim,
                     max_position_embeddings=self.max_position_embeddings,
                     scaling_factor=scaling_factor,
                     base=self.rope_theta,
-                    original_max_position_embeddings=original_max_position_embeddings,
-                    extrapolation_factor=extrapolation_factor,
-                    attention_factor=attention_factor,
-                    beta_fast=beta_fast,
-                    beta_slow=beta_slow,
+                    **kwargs,
                 )
             elif scaling_type == "dynamic-yarn":
-                self.rotary_emb = LlamaDynamicYaRNScalingRotaryEmbedding(
+                self.rotary_emb = LlamaDynamicYarnScalingRotaryEmbedding(
                     self.head_dim,
                     max_position_embeddings=self.max_position_embeddings,
                     scaling_factor=scaling_factor,
                     base=self.rope_theta,
-                    original_max_position_embeddings=original_max_position_embeddings,
-                    extrapolation_factor=extrapolation_factor,
-                    attention_factor=attention_factor,
-                    beta_fast=beta_fast,
-                    beta_slow=beta_slow,
-                    finetuned=finetuned,
+                    **kwargs,
                 )
             else:
                 raise ValueError(f"Unknown RoPE scaling type {scaling_type}")
