@@ -114,6 +114,12 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     elif model_id == "lmms-lab/llama3-llava-next-8b":
         text_model_id = "meta-llama/Meta-Llama-3-8B-Instruct"
         image_token_index = 128256
+    elif model_id == "lmms-lab/llava-next-72b":
+        text_model_id = "Qwen/Qwen1.5-72B-Chat"
+        image_token_index = 151646
+    elif model_id == "lmms-lab/llava-next-110b":
+        text_model_id = "Qwen/Qwen1.5-110B-Chat"
+        image_token_index = 151646
 
     vision_model_id = data["mm_vision_tower"]
 
@@ -155,28 +161,37 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
 
     # We add an image token so we resize the model
     # Pad to 64 for performance reasons
-    pad_shape = 64
-    vocab_size = config.text_config.vocab_size
-    if model_id == "liuhaotian/llava-v1.6-34b":
-        # this one has 3 additional tokens, namely <|startoftext|>, <|endoftext|> and <image>
-        num_tokens = vocab_size + 3
-    else:
-        # this one has 2 additional tokens, namely <image> and <pad>
-        num_tokens = vocab_size + 2
-    model.resize_token_embeddings(num_tokens, pad_to_multiple_of=pad_shape)
-    model.language_model.model.embed_tokens.weight.data[vocab_size:] = torch.stack(
-        tuple(
-            (dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[vocab_size:].shape[0]))
-        ),
-        dim=0,
-    )
-    model.language_model.lm_head.weight.data[vocab_size:] = torch.stack(
-        tuple((dist.sample() for _ in range(model.language_model.lm_head.weight.data[vocab_size:].shape[0]))),
-        dim=0,
-    )
+    # Qwen-based models have extra unused space in the vocab size already, so no need to resize
+    if model_id not in ["lmms-lab/llava-next-72b", "lmms-lab/llava-next-110b"]:
+        pad_shape = 64
+        vocab_size = config.text_config.vocab_size
+        if model_id == "liuhaotian/llava-v1.6-34b":
+            # this one has 3 additional tokens, namely <|startoftext|>, <|endoftext|> and <image>
+            num_tokens = vocab_size + 3
+        else:
+            # this one has 2 additional tokens, namely <image> and <pad>
+            num_tokens = vocab_size + 2
+        model.resize_token_embeddings(num_tokens, pad_to_multiple_of=pad_shape)
+        model.language_model.model.embed_tokens.weight.data[vocab_size:] = torch.stack(
+            tuple(
+                (dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[vocab_size:].shape[0]))
+            ),
+            dim=0,
+        )
+        model.language_model.lm_head.weight.data[vocab_size:] = torch.stack(
+            tuple((dist.sample() for _ in range(model.language_model.lm_head.weight.data[vocab_size:].shape[0]))),
+            dim=0,
+        )
 
-    device = "cuda:2"
-    model.to(device)
+    if model_id in ["lmms-lab/llava-next-72b", "lmms-lab/llava-next-110b"]:
+        # For these big models need to do multi-gpu inference, so reload the model with device_map="auto" in order to use accelerate
+        # Is there a way to do this without saving and reloading the model?
+        model.save_pretrained("/tmp/llava_qwen")
+        model = LlavaNextForConditionalGeneration.from_pretrained("/tmp/llava_qwen", device_map="auto")
+        device = "cuda"
+    else:
+        device = "cuda:2"
+        model.to(device)
 
     # prepare inputs
     image = load_image()
@@ -188,6 +203,8 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
         prompt = "<|im_start|>system\nAnswer the questions.<|im_end|><|im_start|>user\n<image>\nWhat is shown in this image?<|im_end|><|im_start|>assistant\n"
     elif model_id == "lmms-lab/llama3-llava-next-8b":
         prompt = "<|start_header_id|>system<|end_header_id|>\n\nYou are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.<|eot_id|><|start_header_id|><|start_header_id|>user<|end_header_id|>\n\n<image>\nWhat is shown in this image?<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n"
+    elif model_id in ["lmms-lab/llava-next-72b", "lmms-lab/llava-next-110b"]:
+        prompt = "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\n<image>\nWhat is shown in this image?<|im_end|>\n<|im_start|>assistant\n"
 
     inputs = processor(images=image, text=prompt, return_tensors="pt")
 
@@ -256,6 +273,19 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
                 dtype=torch.float32,
                 device=device,
             )
+        elif model_id == "lmms-lab/llava-next-72b":
+            # Not yet checked against reference
+            expected_slice = torch.tensor(
+                [[3.7148, 3.9277, 3.4395], [-0.4341, 1.1387, 6.5117], [3.2324, 3.4688, 4.1133]],
+                dtype=torch.float32,
+                device=device,
+            )
+        elif model_id == "lmms-lab/llava-next-110b":
+            # Not yet checked against reference
+            expected_slice = torch.tensor([[-2.5449, -1.6738, -2.0371], [1.0811, 3.4961, 5.0312], [1.7803, 2.5137, 2.4277]],
+                dtype=torch.float32,
+                device=device,
+            )
         else:
             raise ValueError(f"Model {model_id} not supported")
 
@@ -283,6 +313,10 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
         expected_text = "<|im_start|> system\nAnswer the questions. <|im_start|> user\n\nWhat is shown in this image? <|im_start|> assistant\nThe image appears to be a radar chart, also known as a spider chart, which is a graphical method of displaying multivariate data in the form of a two-dimensional chart of three or more quantitative variables represented on axes starting from the same point.\n\nIn this particular chart, there are several datasets represented by different colors and labeled with various acronyms such as MM-Vet, LLaVA-Bench, SEED-Bench, MM-Bench-CN, MM-"
     elif model_id == "lmms-lab/llama3-llava-next-8b":
         expected_text = 'system\n\nYou are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.user\n\n\nWhat is shown in this image?assistant\n\n\nThe image shows a radar chart, also known as a spider chart or a web chart, which is a type of graph used to display multivariate data in the form of a two-dimensional chart of three or more quantitative variables represented on axes starting from the same point. Each axis represents a different variable, and the values are plotted along each axis and connected to form a polygon.\n\nIn this particular radar chart, there are several axes labeled with different variables, such as "MM-Vet," "LL'
+    elif model_id == "lmms-lab/llava-next-72b":
+        expected_text = "system\nYou are a helpful assistant.\nuser\n\nWhat is shown in this image?\nassistant\nThe image displays a radar chart, also known as a spider chart or a star chart, which is a graphical method of displaying multivariate data in the form of a two-dimensional chart of three or more quantitative variables represented on axes starting from the same point. Each axis represents a different variable, and the value of each variable is represented by the distance from the center of the chart to the point where the axis intersects with the line representing that variable's value.\n\nIn this particular chart, there are several axes"
+    elif model_id == "lmms-lab/llava-next-110b":
+        expected_text = 'system\nYou are a helpful assistant.\nuser\n\nWhat is shown in this image?\nassistant\nThe image shows a radar chart comparing the performance of different models on various visual question answering (VQA) benchmarks. Each colored line represents a different model, and the distance from the center of the chart indicates the score or performance level of the model on a particular benchmark. The benchmarks are labeled around the edges of the chart, and include VQA v2, GQA, VizWiz, TextVQA, MMBench-CN, MME, and others. The chart allows for a'
     else:
         raise ValueError(f"Model {model_id} not supported")
 
@@ -344,6 +378,8 @@ if __name__ == "__main__":
             "liuhaotian/llava-v1.6-vicuna-13b",
             "liuhaotian/llava-v1.6-34b",
             "lmms-lab/llama3-llava-next-8b",
+            "lmms-lab/llava-next-72b",
+            "lmms-lab/llava-next-110b"
         ],
         required=False,
     )
