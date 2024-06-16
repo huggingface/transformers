@@ -56,11 +56,8 @@ def get_resize_output_image_size(
     multiple: int,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ) -> Tuple[int, int]:
-    def constrain_to_multiple_of(val, multiple, min_val=0, max_val=None):
+    def constrain_to_multiple_of(val, multiple, min_val=0):
         x = (np.round(val / multiple) * multiple).astype(int)
-
-        if max_val is not None and x > max_val:
-            x = math.floor(val / multiple) * multiple
 
         if x < min_val:
             x = math.ceil(val / multiple) * multiple
@@ -124,8 +121,11 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
             desired output size. Do note that `ensure_multiple_of` can be used after this.
             Can be overidden by `keep_aspect_ratio` in `preprocess`.
         ensure_multiple_of (`int`, *optional*, defaults to 32):
-            If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Works both with and without
-            `keep_aspect_ratio` being set to `True`. Can be overidden by `ensure_multiple_of` in `preprocess`.
+            If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Works by flooring
+            the height and width to the nearest multiple of this value.
+
+            Works both with and without `keep_aspect_ratio` being set to `True`. Can be overidden by `ensure_multiple_of`
+            in `preprocess`.
     """
 
     model_input_names = ["pixel_values"]
@@ -337,16 +337,18 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
-                Size of the image after reszing. If `keep_aspect_ratio` is `True`, the image is resized to the largest
-                possible size such that the aspect ratio is preserved. If `ensure_multiple_of` is set, the image is
+                Size of the image after resizing. If `keep_aspect_ratio` is `True`, the image is resized to the largest
+                possible size such that the aspect ratio is preserved. If `ensure_multiple_of` is also set, the image is
                 resized to a size that is a multiple of this value.
             keep_aspect_ratio (`bool`, *optional*, defaults to `self.keep_aspect_ratio`):
                 If `True` and `do_resize=True`, the image is resized by choosing the smaller of the height and width scaling factors and using it for
                 both dimensions. This ensures that the image is scaled down as little as possible while still fitting within the
                 desired output size. Do note that `ensure_multiple_of` can be used after this.
             ensure_multiple_of (`int`, *optional*, defaults to `self.ensure_multiple_of`):
-                If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Works both with and without
-                `keep_aspect_ratio` being set to `True`. Can be overidden by `ensure_multiple_of` in `preprocess`.
+                If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Works by flooring
+                the height and width to the nearest multiple of this value.
+
+                Works both with and without `keep_aspect_ratio` being set to `True`. Can be overidden by `ensure_multiple_of` in `preprocess`.
             resample (`int`, *optional*, defaults to `self.resample`):
                 Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`, Only
                 has an effect if `do_resize` is set to `True`.

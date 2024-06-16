@@ -121,48 +121,52 @@ class ZoeDepthImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertEqual(image_processor.size, {"height": 42, "width": 42})
 
     def test_ensure_multiple_of(self):
+        # Test variable by turning off `keep_aspect_ratio`, size which is not multiple of 32
         image = np.zeros((489, 640, 3))
 
-        multiple = 19
-        image_processor = ZoeDepthImageProcessor(ensure_multiple_of=multiple)
-
+        size = {"height": 380, "width": 513}
+        multiple = 32
+        image_processor = ZoeDepthImageProcessor(ensure_multiple_of=multiple, size=size, keep_aspect_ratio=False)
         pixel_values = image_processor(image, return_tensors="pt").pixel_values
 
-        self.assertEqual(list(pixel_values.shape), [1, 3, 399, 513])
+        self.assertEqual(list(pixel_values.shape), [1, 3, 384, 512])
         self.assertTrue(pixel_values.shape[2] % multiple == 0)
         self.assertTrue(pixel_values.shape[3] % multiple == 0)
 
-        image_processor = ZoeDepthImageProcessor(ensure_multiple_of=1)
+        # Test variable by tuning off `keep_aspect_ratio, size which is already multiple of 32
+        image = np.zeros((511, 511, 3))
 
+        size = {"height": 512, "width": 512}
+        multiple = 32
+        image_processor = ZoeDepthImageProcessor(ensure_multiple_of=multiple, size=size, keep_aspect_ratio=False)
         pixel_values = image_processor(image, return_tensors="pt").pixel_values
 
-        self.assertEqual(list(pixel_values.shape), [1, 3, 399, 512])
-
-        # Test without `keep_aspect_ratio`
-        image_processor = ZoeDepthImageProcessor(ensure_multiple_of=multiple, keep_aspect_ratio=False)
-        pixel_values = image_processor(image, return_tensors="pt").pixel_values
-
-        self.assertEqual(list(pixel_values.shape), [1, 3, 380, 513])
+        self.assertEqual(list(pixel_values.shape), [1, 3, 512, 512])
         self.assertTrue(pixel_values.shape[2] % multiple == 0)
         self.assertTrue(pixel_values.shape[3] % multiple == 0)
 
     def test_keep_aspect_ratio(self):
+        # Test `keep_aspect_ratio=True` by turning off `ensure_multiple_of`
         image = np.zeros((489, 640, 3))
 
-        # Test with `keep_aspect_ratio`
-        image_processor = ZoeDepthImageProcessor(keep_aspect_ratio=True)
+        size = {"height": 489, "width": 640}
+        image_processor = ZoeDepthImageProcessor(keep_aspect_ratio=True, size=size, ensure_multiple_of=1)
         pixel_values = image_processor(image, return_tensors="pt").pixel_values
 
-        self.assertEqual(list(pixel_values.shape), [1, 3, 384, 512])
+        self.assertEqual(list(pixel_values.shape), [1, 3, 498, 640])
 
-        # Test without `keep_aspect_ratio`, `ensure_multiple_of` set
-        image_processor = ZoeDepthImageProcessor(keep_aspect_ratio=False)
+        # Test `keep_aspect_ratio=False` by turning off `ensure_multiple_of`
+        # As can be seen, the size is respected
+        image = np.zeros((489, 640, 3))
+
+        size = {"height": 489, "width": 640}
+        image_processor = ZoeDepthImageProcessor(keep_aspect_ratio=False, size=size, ensure_multiple_of=1)
         pixel_values = image_processor(image, return_tensors="pt").pixel_values
 
-        self.assertEqual(list(pixel_values.shape), [1, 3, 384, 512])
+        self.assertEqual(list(pixel_values.shape), [1, 3, 489, 640])
 
-        # Test with `ensure_multiple_of`
-        size = {"height": 512, "width": 512}
+        # Test `keep_aspect_ratio=True` with `ensure_multiple_of` set
+        size = {"height": 511, "width": 511}
         multiple = 32
         image_processor = ZoeDepthImageProcessor(size=size, keep_aspect_ratio=True, ensure_multiple_of=multiple)
 
@@ -171,11 +175,3 @@ class ZoeDepthImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertEqual(list(pixel_values.shape), [1, 3, 512, 672])
         self.assertTrue(pixel_values.shape[2] % multiple == 0)
         self.assertTrue(pixel_values.shape[3] % multiple == 0)
-
-        # Test without `ensure_multiple_of`
-        size = {"height": 512, "width": 512}
-        image_processor = ZoeDepthImageProcessor(size=size, keep_aspect_ratio=True, ensure_multiple_of=1)
-
-        pixel_values = image_processor(image, return_tensors="pt").pixel_values
-
-        self.assertEqual(list(pixel_values.shape), [1, 3, 512, 657])
