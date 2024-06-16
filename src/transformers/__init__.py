@@ -2343,7 +2343,7 @@ else:
             "Kosmos2PreTrainedModel",
         ]
     )
-    _import_structure["models.modeling_kosmos2_5"].extend(
+    _import_structure["models.kosmos2_5"].extend(
         [
             "Kosmos2_5ForConditionalGeneration",
             "kosmos2_5Model",
