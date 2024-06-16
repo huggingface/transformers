@@ -42,8 +42,8 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_kosmos2_5 import kosmos2_5Config
-    from .processing_kosmos2_5 import kosmos2_5Processor
+    from .configuration_kosmos2_5 import Kosmos2_5Config
+    from .processing_kosmos2_5 import Kosmos2_5Processor
 
     try:
         if not is_torch_available():
