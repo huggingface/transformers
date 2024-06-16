@@ -347,7 +347,7 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
             ensure_multiple_of (`int`, *optional*, defaults to `self.ensure_multiple_of`):
                 If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Works both with and without
                 `keep_aspect_ratio` being set to `True`. Can be overidden by `ensure_multiple_of` in `preprocess`.
-                resample (`int`, *optional*, defaults to `self.resample`):
+            resample (`int`, *optional*, defaults to `self.resample`):
                 Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`, Only
                 has an effect if `do_resize` is set to `True`.
             return_tensors (`str` or `TensorType`, *optional*):
