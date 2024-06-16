@@ -52,9 +52,9 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_kosmos2_5 import (
-            kosmos2_5ForConditionalGeneration,
-            kosmos2_5Model,
-            kosmos2_5PreTrainedModel,
+            Kosmos2_5ForConditionalGeneration,
+            Kosmos2_5Model,
+            Kosmos2_5PreTrainedModel,
         )
 
 else:
