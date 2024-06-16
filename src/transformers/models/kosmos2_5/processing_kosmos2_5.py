@@ -98,7 +98,9 @@ class Kosmos2_5Processor(ProcessorMixin):
             "attention_mask": attention_mask.to(torch.bfloat16),
             "image_attention_mask" : encoding_image_processor.attention_mask.to(torch.bfloat16),
             "image_embeds_position_mask": image_embeds_position_mask,
-            "image_embeds": None
+            "image_embeds": None,
+            "height": encoding_image_processor.height,
+            "width": encoding_image_processor.width,
         }
 
 
