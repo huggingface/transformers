@@ -303,9 +303,7 @@ def main():
     # In distributed training, the load_dataset function guarantees that only one local process can concurrently
     # download the dataset.
     # TODO support datasets from local folders
-    dataset = load_dataset(
-        args.dataset_name, cache_dir=args.cache_dir, trust_remote_code=args.trust_remote_dataset_code
-    )
+    dataset = load_dataset(args.dataset_name, cache_dir=args.cache_dir, trust_remote_code=args.trust_remote_code)
 
     # Rename column names to standardized names (only "image" and "label" need to be present)
     if "pixel_values" in dataset["train"].column_names:

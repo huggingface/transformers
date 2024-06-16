@@ -374,7 +374,7 @@ def main():
     # Load dataset, prepare splits
     # ------------------------------------------------------------------------------------------------
 
-    dataset = load_dataset(args.dataset_name, trust_remote_code=args.trust_remote_dataset_code)
+    dataset = load_dataset(args.dataset_name, trust_remote_code=args.trust_remote_code)
 
     # We need to specify the label2id mapping for the model
     # it is a mapping from semantic class name to class index.

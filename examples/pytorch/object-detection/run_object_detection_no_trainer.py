@@ -454,9 +454,7 @@ def main():
     # Load dataset
     # In distributed training, the load_dataset function guarantees that only one local process can concurrently
     # download the dataset.
-    dataset = load_dataset(
-        args.dataset_name, cache_dir=args.cache_dir, trust_remote_code=args.trust_remote_dataset_code
-    )
+    dataset = load_dataset(args.dataset_name, cache_dir=args.cache_dir, trust_remote_code=args.trust_remote_code)
 
     # If we don't have a validation split, split off a percentage of train as validation.
     args.train_val_split = None if "validation" in dataset.keys() else args.train_val_split

@@ -79,7 +79,7 @@ def parse_args():
 
 def main(args):
     dataset = datasets.load_dataset(
-        args.dataset_name, args.dataset_config, split="train", trust_remote_code=args.trust_remote_dataset_code
+        args.dataset_name, args.dataset_config, split="train", trust_remote_code=args.trust_remote_code
     )
 
     if args.limit is not None:

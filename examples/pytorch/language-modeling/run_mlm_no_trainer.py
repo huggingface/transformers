@@ -344,20 +344,20 @@ def main():
     if args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
         raw_datasets = load_dataset(
-            args.dataset_name, args.dataset_config_name, trust_remote_code=args.trust_remote_dataset_code
+            args.dataset_name, args.dataset_config_name, trust_remote_code=args.trust_remote_code
         )
         if "validation" not in raw_datasets.keys():
             raw_datasets["validation"] = load_dataset(
                 args.dataset_name,
                 args.dataset_config_name,
                 split=f"train[:{args.validation_split_percentage}%]",
-                trust_remote_code=args.trust_remote_dataset_code,
+                trust_remote_code=args.trust_remote_code,
             )
             raw_datasets["train"] = load_dataset(
                 args.dataset_name,
                 args.dataset_config_name,
                 split=f"train[{args.validation_split_percentage}%:]",
-                trust_remote_code=args.trust_remote_dataset_code,
+                trust_remote_code=args.trust_remote_code,
             )
     else:
         data_files = {}

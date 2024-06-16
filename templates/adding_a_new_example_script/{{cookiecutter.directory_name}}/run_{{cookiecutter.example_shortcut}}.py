@@ -749,7 +749,7 @@ def main():
     if args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
         raw_datasets = load_dataset(
-            args.dataset_name, args.dataset_config_name, trust_remote_code=args.trust_remote_dataset_code
+            args.dataset_name, args.dataset_config_name, trust_remote_code=args.trust_remote_code
         )
     else:
         data_files = {}

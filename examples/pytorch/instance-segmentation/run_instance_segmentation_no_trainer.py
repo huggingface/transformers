@@ -434,9 +434,7 @@ def main():
 
     # In distributed training, the load_dataset function guarantees that only one local process can concurrently
     # download the dataset.
-    dataset = load_dataset(
-        args.dataset_name, cache_dir=args.cache_dir, trust_remote_code=args.trust_remote_dataset_code
-    )
+    dataset = load_dataset(args.dataset_name, cache_dir=args.cache_dir, trust_remote_code=args.trust_remote_code)
 
     # We need to specify the label2id mapping for the model
     # it is a mapping from semantic class name to class index.

@@ -450,7 +450,7 @@ def main():
         data_files=args.data_files,
         cache_dir=args.cache_dir,
         token=args.token,
-        trust_remote_code=args.trust_remote_dataset_code,
+        trust_remote_code=args.trust_remote_code,
     )
 
     # If we don't have a validation split, split off a percentage of train as validation.
