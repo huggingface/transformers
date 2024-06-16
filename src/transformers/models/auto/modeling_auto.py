@@ -698,7 +698,7 @@ MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES = OrderedDict(
         ("idefics2", "Idefics2ForConditionalGeneration"),
         ("instructblip", "InstructBlipForConditionalGeneration"),
         ("kosmos-2", "Kosmos2ForConditionalGeneration"),
-        ("kosmos-2_5", "Kosmos2_5ForConditionalGeneration"),
+        ("kosmos-2.5", "Kosmos2_5ForConditionalGeneration"),
         ("llava", "LlavaForConditionalGeneration"),
         ("llava_next", "LlavaNextForConditionalGeneration"),
         ("paligemma", "PaliGemmaForConditionalGeneration"),
