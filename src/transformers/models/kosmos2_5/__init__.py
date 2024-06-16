@@ -23,9 +23,9 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_kosmos2_5": ["kosmos2_5Config"],
-    "processing_kosmos2_5": ["kosmos2_5Processor"],
-    "image_processing_kosmos2_5": ["kosmos2_5ImageProcessor"],
+    "configuration_kosmos2_5": ["Kosmos2_5Config"],
+    "processing_kosmos2_5": ["Kosmos2_5Processor"],
+    "image_processing_kosmos2_5": ["Kosmos2_5ImageProcessor"],
 }
 
 try:
@@ -35,9 +35,9 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_kosmos2_5"] = [
-        "kosmos2_5ForConditionalGeneration",
-        "kosmos2_5Model",
-        "kosmos2_5PreTrainedModel",
+        "Kosmos2_5ForConditionalGeneration",
+        "Kosmos2_5Model",
+        "Kosmos2_5PreTrainedModel",
     ]
 
 

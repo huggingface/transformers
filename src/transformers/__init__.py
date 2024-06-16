@@ -6791,7 +6791,7 @@ if TYPE_CHECKING:
         from .models.kosmos2_5 import (
             Kosmos2_5ForConditionalGeneration,
             Kosmos2_5Model,
-            Kosmos2_PreTrainedModel,
+            Kosmos2_5PreTrainedModel,
         )
         from .models.layoutlm import (
             LayoutLMForMaskedLM,
