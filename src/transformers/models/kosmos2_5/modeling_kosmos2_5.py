@@ -26,7 +26,7 @@ from transformers.utils import (
     replace_return_docstrings,
 )
 
-from configuration_kosmos2_5 import Kosmos2_5Config, Kosmos2_5TextConfig, Kosmos2_5VisionConfig
+from .configuration_kosmos2_5 import Kosmos2_5Config, Kosmos2_5TextConfig, Kosmos2_5VisionConfig
 
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
