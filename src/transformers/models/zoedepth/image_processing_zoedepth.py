@@ -341,7 +341,7 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
                 possible size such that the aspect ratio is preserved. If `ensure_multiple_of` is set, the image is
                 resized to a size that is a multiple of this value.
             keep_aspect_ratio (`bool`, *optional*, defaults to `self.keep_aspect_ratio`):
-                If `True`, the image is resized by choosing the smaller of the height and width scaling factors and using it for
+                If `True` and `do_resize=True`, the image is resized by choosing the smaller of the height and width scaling factors and using it for
                 both dimensions. This ensures that the image is scaled down as little as possible while still fitting within the
                 desired output size. Do note that `ensure_multiple_of` can be used after this.
             ensure_multiple_of (`int`, *optional*, defaults to `self.ensure_multiple_of`):
