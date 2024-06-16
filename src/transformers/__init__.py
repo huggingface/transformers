@@ -2343,11 +2343,13 @@ else:
             "Kosmos2PreTrainedModel",
         ]
     )
-    _import_structure["modeling_kosmos2_5"] = [
-        "kosmos2_5ForConditionalGeneration",
-        "kosmos2_5Model",
-        "kosmos2_5PreTrainedModel",
-    ]
+    _import_structure["modeling_kosmos2_5"].extend(
+        [
+            "Kosmos2_5ForConditionalGeneration",
+            "kosmos2_5Model",
+            "kosmos2_5PreTrainedModel",
+     ]
+    )
     _import_structure["models.layoutlm"].extend(
         [
             "LayoutLMForMaskedLM",
