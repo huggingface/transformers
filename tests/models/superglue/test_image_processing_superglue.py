@@ -82,6 +82,7 @@ class SuperGlueImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = SuperGlueImageProcessor if is_vision_available() else None
 
     def setUp(self) -> None:
+        super().setUp()
         self.image_processor_tester = SuperGlueImageProcessingTester(self)
 
     @property
