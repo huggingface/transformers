@@ -74,31 +74,13 @@ class GPTNeoXConfig(PretrainedConfig):
             Whether to use a "parallel" formulation in each Transformer layer, which can provide a slight training
             speedup at large scales (e.g. 20B).
         rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. Currently supports four scaling
-            strategies: linear, dynamic, yarn and dynamic-yarn. Their scaling factor must be a float greater than 1. The expected format is
+            Dictionary containing the scaling configuration for the RoPE embeddings. Currently supports two scaling
+            strategies: linear and dynamic. Their scaling factor must be a float greater than 1. The expected format is
             `{"type": strategy name, "factor": scaling factor}`. When using this flag, don't update
             `max_position_embeddings` to the expected new maximum. See the following thread for more information on how
             these scaling strategies behave:
             https://www.reddit.com/r/LocalLLaMA/comments/14mrgpr/dynamically_scaled_rope_further_increases/. This is an
             experimental feature, subject to breaking API changes in future versions.
-        yarn_rope_scaling (`Dict`, *optional*, defaults to`{'original_max_position_embeddings': 2048, 'extrapolation_factor': 1.0, 'attention_factor': 1.0, 'beta_fast': 32.0, 'beta_slow': 1.0, 'finetuned': False}`):
-            Dictionary containing the YaRN-specific scaling configuration for the RoPE embeddings. The expected format is
-            `{"original_max_position_embeddings": int, "extrapolation_factor": float, "attention_factor": float,
-            "beta_fast": float, "beta_slow": float,"finetuned": bool}`.
-            Fields:
-                original_max_position_embeddings (`int`, *optional*, defaults to 2048):
-                    The original maximum sequence length. This is used to scale the RoPE embeddings.
-                extrapolation_factor (`float`, defaults to 1):
-                    Factor to ajust the n-dimensional rotational scaling for extrapolation.
-                attention_factor (`float`, *optional*, defaults to 1):
-                    Factor to adjust the weight attention scaling mechanism.
-                beta_fast (`float`, *optional*, defaults to 32):
-                    Parameter to set the boundary for extrapolation (only) in the linear ramp function.
-                beta_slow (`float`, *optional*, defaults to 1):
-                    Parameter to set the boundary for interpolation (only) in the linear ramp function.
-                finetuned (`bool`, *optional*, defaults to `False`):
-                    [Dynamic] Whether the model is finetuned or not.
-            For more details please refer to https://arxiv.org/abs/2309.00071.
         attention_bias (`bool`, *optional*, defaults to `True`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
 
@@ -142,14 +124,6 @@ class GPTNeoXConfig(PretrainedConfig):
         tie_word_embeddings=False,
         use_parallel_residual=True,
         rope_scaling=None,
-        yarn_rope_scaling={
-            "original_max_position_embeddings": 2048,
-            "extrapolation_factor": 1.0,
-            "attention_factor": 1.0,
-            "beta_fast": 32.0,
-            "beta_slow": 1.0,
-            "finetuned": False,
-        },
         attention_bias=True,
         **kwargs,
     ):
@@ -172,17 +146,14 @@ class GPTNeoXConfig(PretrainedConfig):
         self.tie_word_embeddings = tie_word_embeddings
         self.use_parallel_residual = use_parallel_residual
         self.rope_scaling = rope_scaling
-        self.yarn_rope_scaling = yarn_rope_scaling
         self.attention_bias = attention_bias
         self._rope_scaling_validation()
-        self._yarn_rope_scaling_validation()
 
         if self.hidden_size % self.num_attention_heads != 0:
             raise ValueError(
                 "The hidden size is not divisble by the number of attention heads! Make sure to update them!"
             )
 
-    # Copied from transformers.models.llama.configuration_llama.LlamaConfig._rope_scaling_validation
     def _rope_scaling_validation(self):
         """
         Validate the `rope_scaling` configuration.
@@ -196,61 +167,9 @@ class GPTNeoXConfig(PretrainedConfig):
             )
         rope_scaling_type = self.rope_scaling.get("type", None)
         rope_scaling_factor = self.rope_scaling.get("factor", None)
-        if rope_scaling_type is None or rope_scaling_type not in ["linear", "dynamic", "yarn", "dynamic-yarn"]:
+        if rope_scaling_type is None or rope_scaling_type not in ["linear", "dynamic"]:
             raise ValueError(
-                f"`rope_scaling`'s type field must be one of ['linear', 'dynamic', 'yarn', 'dynamic-yarn'], got {rope_scaling_type}"
+                f"`rope_scaling`'s type field must be one of ['linear', 'dynamic'], got {rope_scaling_type}"
             )
         if rope_scaling_factor is None or not isinstance(rope_scaling_factor, float) or rope_scaling_factor <= 1.0:
             raise ValueError(f"`rope_scaling`'s factor field must be a float > 1, got {rope_scaling_factor}")
-
-    # Copied from transformers.models.llama.configuration_llama.LlamaConfig._yarn_rope_scaling_validation
-    def _yarn_rope_scaling_validation(self):
-        """
-        Validate the `yarn_rope_scaling` configuration.
-        """
-        if self.rope_scaling is None:
-            return
-
-        if not isinstance(self.rope_scaling, dict) or len(self.rope_scaling) > 6:
-            raise ValueError(
-                "`yarn_rope_scaling` must be a dictionary with a maximum of six fields, `original_max_position_embeddings`, "
-                "`extrapolation_factor`, `attention_factor`, `beta_fast`, `beta_slow`, `finetuned`, "
-                f"got {self.rope_scaling}"
-            )
-        original_max_position_embeddings = self.rope_scaling.get("original_max_position_embeddings", None)
-        extrapolation_factor = self.rope_scaling.get("extrapolation_factor", None)
-        attention_factor = self.rope_scaling.get("attention_factor", None)
-        beta_fast = self.rope_scaling.get("beta_fast", None)
-        beta_slow = self.rope_scaling.get("beta_slow", None)
-        finetuned = self.rope_scaling.get("finetuned", None)
-
-        if original_max_position_embeddings is not None and not isinstance(original_max_position_embeddings, int):
-            raise ValueError(
-                f"`yarn_rope_scaling`'s original_max_position_embeddings field must be an int, got {original_max_position_embeddings}"
-            )
-        if (
-            extrapolation_factor is not None
-            and not isinstance(extrapolation_factor, float)
-            or extrapolation_factor < 0
-            or extrapolation_factor > 1
-        ):
-            raise ValueError(
-                f"`yarn_rope_scaling`'s extrapolation_factor field must be a float between 0 and 1, got {extrapolation_factor}"
-            )
-        if attention_factor is not None and not isinstance(attention_factor, float) or attention_factor < 0:
-            raise ValueError(
-                f"`yarn_rope_scaling`'s attention_factor field must be a float greater than 0, got {attention_factor}"
-            )
-        if beta_fast is not None and not isinstance(beta_fast, float):
-            raise ValueError(f"`yarn_rope_scaling`'s beta_fast field must be a float, got {beta_fast}")
-        if beta_slow is not None and not isinstance(beta_slow, float):
-            raise ValueError(f"`yarn_rope_scaling`'s beta_slow field must be a float, got {beta_slow}")
-        if finetuned is not None and not isinstance(finetuned, bool):
-            raise ValueError(f"`yarn_rope_scaling`'s finetuned field must be a bool, got {finetuned}")
-
-        b_fast = beta_fast if beta_fast is not None else 32
-        b_slow = beta_slow if beta_slow is not None else 1
-        if b_fast < b_slow:
-            raise ValueError(
-                f"`yarn_rope_scaling`'s beta_fast field must be greater than beta_slow, got beta_fast={b_fast} and beta_slow={b_slow}"
-            )

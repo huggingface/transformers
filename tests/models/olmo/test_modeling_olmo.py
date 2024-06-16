@@ -322,7 +322,7 @@ class OlmoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_eager_matches_sdpa_generate(self):
         super().test_eager_matches_sdpa_generate()
 
-    @parameterized.expand([("linear",), ("dynamic",), ("yarn",), ("dynamic-yarn",)])
+    @parameterized.expand([("linear",), ("dynamic",)])
     def test_model_rope_scaling(self, scaling_type):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         short_input = ids_tensor([1, 10], config.vocab_size)
@@ -345,7 +345,7 @@ class OlmoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
         # Dynamic scaling does not change the RoPE embeddings until it receives an input longer than the original
         # maximum sequence length, so the outputs for the short input should match.
-        if scaling_type in ("dynamic", "dynamic-yarn"):
+        if scaling_type == "dynamic":
             self.assertTrue(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
         else:
             self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
