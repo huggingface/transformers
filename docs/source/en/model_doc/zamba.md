@@ -26,7 +26,7 @@ pip install mamba-ssm causal-conv1d>=1.2.0
 
 You can run the model not using the optimized Mamba kernels, but it is **not** recommended as it will result in significantly higher latency. 
 
-To run on CPU, please specify `use_mamba_kernels=False` when loading the model using ``AutoModelForCausalLM.from_pretrained``.
+To run on CPU, please specify `use_mamba_kernels=False` when loading the model using `AutoModelForCausalLM.from_pretrained`.
 
 ## Inference
 
