@@ -15,9 +15,7 @@
 
 import copy
 import os
-from typing import TYPE_CHECKING, Any, Dict, Union
-
-
+from typing import Any, Dict, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -557,11 +555,12 @@ class ImageBindConfig(PretrainedConfig):
         self.initializer_factor = 1.0
 
     @classmethod
+    # Copied from transformers.models.clip.configuration_clip.CLIPConfig.from_text_vision_configs with CLIP->ImageBind, clip->imagebind
     def from_text_vision_configs(
         cls, text_config: ImageBindTextConfig, vision_config: ImageBindVisionConfig, **kwargs
     ):
         r"""
-        Instantiate a [`ImageBindConfig`] (or a derived class) from ImageBind text model configuration and ImageBind vision model
+        Instantiate a [`ImageBindConfig`] (or a derived class) from imagebind text model configuration and imagebind vision model
         configuration.
 
         Returns:

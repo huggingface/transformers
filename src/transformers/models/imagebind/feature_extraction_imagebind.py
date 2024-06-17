@@ -43,25 +43,17 @@ def valid_batched_clipped_audio(raw_speech):
     - batched: `List[List[float]]`, `List[np.ndarray]` (`ndim=1`), `np.ndarray` (`ndim=2`)
     - batched and clipped: `List[List[List[float]]]`, `List[List[np.ndarray]]` (`ndim=1`), List[np.ndarray] (`ndim=2`), np.ndarray (`ndim=3`)
     """
-    valid_audio = False
-    if isinstance(raw_speech, np.ndarray) and (1 <= len(raw_speech.shape) <= 3):
-        # unbatched, batched, or batched and clipped np.ndarray
-        valid_audio = True
-    elif isinstance(raw_speech, (list, tuple)):
-        if isinstance(raw_speech[0], np.ndarray) and (1 <= len(raw_speech[0].shape) <= 2):
-            # batched or batched and clipped List[np.ndarray]
-            valid_audio = True
-        elif isinstance(raw_speech[0], float):
-            # unbatched List[float]
-            valid_audio = True
-        elif isinstance(raw_speech[0], (list, tuple)):
-            if isinstance(raw_speech[0][0], np.ndarray) and (len(raw_speech[0][0].shape == 1)):
-                # batched and clipped List[List[np.ndarray]]
-                valid_audio = True
-            elif isinstance(raw_speech, (float, list, tuple)):
-                # batched List[List[float]], batched and clipped List[List[List[float]]]
-                valid_audio = True
-    return valid_audio
+    if isinstance(raw_speech, np.ndarray):
+        return 1 <= raw_speech.ndim <= 3
+    if isinstance(raw_speech, (list, tuple)):
+        first_elem = raw_speech[0]
+        if isinstance(first_elem, float):
+            return True
+        if isinstance(first_elem, np.ndarray):
+            return 1 <= first_elem.ndim <= 2
+        if isinstance(first_elem, (list, tuple)):
+            return isinstance(first_elem[0], (float, np.ndarray))
+    return False
 
 
 def convert_to_numpy_array(raw_speech):

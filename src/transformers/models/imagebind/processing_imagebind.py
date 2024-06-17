@@ -19,9 +19,6 @@ from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
 
 
-# NOTE: currently copied from previous PR (#23284)
-
-
 class ImageBindProcessor(ProcessorMixin):
     r"""
     Constructs a ImageBind processor which wraps a ImageBind image processor and feature extracotr and a CLIP tokenizer into a single processor.
