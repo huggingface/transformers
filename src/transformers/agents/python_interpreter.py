@@ -61,6 +61,11 @@ class ContinueException(Exception):
     pass
 
 
+class ReturnException(Exception):
+    def __init__(self, value):
+        self.value = value
+
+
 def get_iterable(obj):
     if isinstance(obj, list):
         return obj
@@ -101,7 +106,12 @@ def evaluate_while(while_loop, state, tools):
     iterations = 0
     while evaluate_ast(while_loop.test, state, tools):
         for node in while_loop.body:
-            evaluate_ast(node, state, tools)
+            try:
+                evaluate_ast(node, state, tools)
+            except BreakException:
+                return None
+            except ContinueException:
+                break
         iterations += 1
         if iterations > max_iterations:
             raise InterpreterError(f"Maximum number of {max_iterations} iterations in While loop exceeded")
@@ -146,8 +156,11 @@ def create_function(func_def, state, tools):
                 func_state["__class__"] = args[0].__class__
 
         result = None
-        for stmt in func_def.body:
-            result = evaluate_ast(stmt, func_state, tools)
+        try:
+            for stmt in func_def.body:
+                result = evaluate_ast(stmt, func_state, tools)
+        except ReturnException as e:
+            result = e.value
         return result
 
     return new_func
@@ -303,7 +316,6 @@ def evaluate_assign(assign, state, tools):
     else:
         if len(assign.targets) != len(result):
             raise InterpreterError(f"Assign failed: expected {len(result)} values but got {len(assign.targets)}.")
-        print("TRGETS", assign.targets)
         for tgt, val in zip(assign.targets, result):
             set_value(tgt, val, state, tools)
     return result
@@ -432,30 +444,37 @@ def evaluate_condition(condition, state, tools):
     left = evaluate_ast(condition.left, state, tools)
     comparators = [evaluate_ast(c, state, tools) for c in condition.comparators]
     ops = [type(op) for op in condition.ops]
-    result = left
+
+    result = True
+    current_left = left
+
     for op, comparator in zip(ops, comparators):
         if op == ast.Eq:
-            result = result == comparator
+            result = result and (current_left == comparator)
         elif op == ast.NotEq:
-            result = result != comparator
+            result = result and (current_left != comparator)
         elif op == ast.Lt:
-            result = result < comparator
+            result = result and (current_left < comparator)
         elif op == ast.LtE:
-            result = result <= comparator
+            result = result and (current_left <= comparator)
         elif op == ast.Gt:
-            result = result > comparator
+            result = result and (current_left > comparator)
         elif op == ast.GtE:
-            result = result >= comparator
+            result = result and (current_left >= comparator)
         elif op == ast.Is:
-            result = result is comparator
+            result = result and (current_left is comparator)
         elif op == ast.IsNot:
-            result = result is not comparator
+            result = result and (current_left is not comparator)
         elif op == ast.In:
-            result = result in comparator
+            result = result and (current_left in comparator)
         elif op == ast.NotIn:
-            result = result not in comparator
+            result = result and (current_left not in comparator)
         else:
             raise InterpreterError(f"Operator not supported: {op}")
+
+        current_left = comparator
+        if not result:
+            break
 
     return result
 
@@ -651,8 +670,6 @@ def evaluate_ast(
     elif isinstance(expression, ast.Compare):
         # Comparison -> evaluate the comparison
         return evaluate_condition(expression, state, tools)
-    elif isinstance(expression, ast.Return):
-        return evaluate_ast(expression.value, state, tools)
     elif isinstance(expression, ast.Lambda):
         return evaluate_lambda(expression, state, tools)
     elif isinstance(expression, ast.FunctionDef):
@@ -753,6 +770,8 @@ def evaluate_ast(
         return evaluate_with(expression, state, tools)
     elif isinstance(expression, ast.Set):
         return {evaluate_ast(elt, state, tools) for elt in expression.elts}
+    elif isinstance(expression, ast.Return):
+        raise ReturnException(evaluate_ast(expression.value, state, tools) if expression.value else None)
     else:
         # For now we refuse anything else. Let's add things as we need them.
         raise InterpreterError(f"{expression.__class__.__name__} is not supported.")
@@ -789,9 +808,7 @@ def evaluate_python_code(
     PRINT_OUTPUTS = ""
     for node in expression.body:
         try:
-            line_result = evaluate_ast(node, state, tools, authorized_imports)
-            if line_result is not None:
-                result = line_result
+            result = evaluate_ast(node, state, tools, authorized_imports)
         except InterpreterError as e:
             msg = f"Evaluation stopped at line '{ast.get_source_segment(code, node)}' because of the following error:\n{e}"
             if len(PRINT_OUTPUTS) > 0:
