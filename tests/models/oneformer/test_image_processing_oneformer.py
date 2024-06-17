@@ -159,6 +159,7 @@ class OneFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = image_processing_class
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = OneFormerImageProcessorTester(self)
 
     @property
@@ -349,3 +350,16 @@ class OneFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             image_processor = self.image_processing_class(**config_dict)
 
         self.assertEqual(image_processor.metadata, metadata)
+
+    def test_removed_deprecated_kwargs(self):
+        image_processor_dict = dict(self.image_processor_dict)
+        image_processor_dict.pop("do_reduce_labels", None)
+        image_processor_dict["reduce_labels"] = True
+
+        # test we are able to create the image processor with the deprecated kwargs
+        image_processor = self.image_processing_class(**image_processor_dict)
+        self.assertEqual(image_processor.do_reduce_labels, True)
+
+        # test we still support reduce_labels with config
+        image_processor = self.image_processing_class.from_dict(image_processor_dict)
+        self.assertEqual(image_processor.do_reduce_labels, True)

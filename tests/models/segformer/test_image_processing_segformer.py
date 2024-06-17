@@ -112,6 +112,7 @@ class SegformerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = SegformerImageProcessor if is_vision_available() else None
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = SegformerImageProcessingTester(self)
 
     @property
@@ -132,7 +133,9 @@ class SegformerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertEqual(image_processor.size, {"height": 30, "width": 30})
         self.assertEqual(image_processor.do_reduce_labels, False)
 
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42, reduce_labels=True)
+        image_processor = self.image_processing_class.from_dict(
+            self.image_processor_dict, size=42, do_reduce_labels=True
+        )
         self.assertEqual(image_processor.size, {"height": 42, "width": 42})
         self.assertEqual(image_processor.do_reduce_labels, True)
 
@@ -256,3 +259,16 @@ class SegformerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         encoding = image_processing(image, map, return_tensors="pt")
         self.assertTrue(encoding["labels"].min().item() >= 0)
         self.assertTrue(encoding["labels"].max().item() <= 255)
+
+    def test_removed_deprecated_kwargs(self):
+        image_processor_dict = dict(self.image_processor_dict)
+        image_processor_dict.pop("do_reduce_labels", None)
+        image_processor_dict["reduce_labels"] = True
+
+        # test we are able to create the image processor with the deprecated kwargs
+        image_processor = self.image_processing_class(**image_processor_dict)
+        self.assertEqual(image_processor.do_reduce_labels, True)
+
+        # test we still support reduce_labels with config
+        image_processor = self.image_processing_class.from_dict(image_processor_dict)
+        self.assertEqual(image_processor.do_reduce_labels, True)

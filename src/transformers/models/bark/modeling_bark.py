@@ -763,6 +763,12 @@ class BarkCausalModel(BarkPreTrainedModel):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        loss = None
+        if labels is not None:
+            raise NotImplementedError(
+                "Training is not implemented yet for Bark - ensure you do not pass `labels` to the model."
+            )
+
         # Verify if input_embeds already exists
         # then compute embeddings.
         if input_ids is not None and input_embeds is not None:
@@ -869,12 +875,6 @@ class BarkCausalModel(BarkPreTrainedModel):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         logits = self.lm_head(hidden_states)
-
-        loss = None
-        if labels is not None:
-            raise NotImplementedError(
-                "Training is not implemented yet for Bark - ensure you do not pass `labels` to the model."
-            )
 
         if not return_dict:
             return tuple(
@@ -991,11 +991,11 @@ class BarkSemanticModel(BarkCausalModel):
             list(range(semantic_generation_config.semantic_pad_token + 1, self.config.output_vocab_size))
         )
 
-        suppress_tokens_logits_processor = SuppressTokensLogitsProcessor(tokens_to_suppress)
+        suppress_tokens_logits_processor = SuppressTokensLogitsProcessor(tokens_to_suppress, device=input_ids.device)
 
         min_eos_p = kwargs.get("min_eos_p", semantic_generation_config.min_eos_p)
         early_stopping_logits_processor = BarkEosPrioritizerLogitsProcessor(
-            eos_token_id=semantic_generation_config.eos_token_id, min_eos_p=min_eos_p
+            eos_token_id=semantic_generation_config.eos_token_id, min_eos_p=min_eos_p, device=input_ids.device
         )
 
         # pass input_ids in order to stay consistent with the transformers generate method even though it is not used
@@ -1393,6 +1393,10 @@ class BarkFineModel(BarkPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        loss = None
+        if labels is not None:
+            raise NotImplementedError("Training is not implemented yet")
+
         if codebook_idx == 0:
             raise ValueError("Cannot predict 0th codebook - 0th codebook should be predicted by the coarse model")
 
@@ -1469,10 +1473,6 @@ class BarkFineModel(BarkPreTrainedModel):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         logits = self.lm_heads[codebook_idx - self.config.n_codes_given](hidden_states)
-
-        loss = None
-        if labels is not None:
-            raise NotImplementedError("Training is not implemented yet")
 
         if not return_dict:
             return tuple(v for v in [None, logits, all_hidden_states, all_self_attentions] if v is not None)

@@ -34,7 +34,7 @@ jsonschema==3.2.0
 jupyter==1.0.0
 jupyter-client==6.1.7
 jupyter-console==6.2.0
-jupyter-core==4.6.3
+jupyter-core==4.11.2
 jupyterlab-pygments==0.1.1
 kiwisolver==1.2.0
 lockfile==0.12.2
@@ -86,7 +86,7 @@ testpath==0.4.4
 tokenizers==0.8.1rc2
 torch==1.13.1
 torchvision==0.7.0
-tornado==6.3.3
+tornado==6.4.1
 tqdm==4.66.3
 traitlets
 git+https://github.com/huggingface/transformers.git

@@ -31,6 +31,7 @@ from .utils.import_utils import (
     is_flax_available,
     is_tf_available,
     is_torch_available,
+    is_torchvision_available,
     is_vision_available,
     requires_backends,
 )
@@ -49,6 +50,9 @@ if is_tf_available():
 
 if is_flax_available():
     import jax.numpy as jnp
+
+if is_torchvision_available():
+    from torchvision.transforms import functional as F
 
 
 def to_channel_dimension_format(
@@ -374,6 +378,7 @@ def normalize(
 
     if input_data_format is None:
         input_data_format = infer_channel_dimension_format(image)
+
     channel_axis = get_channel_dimension_axis(image, input_data_format=input_data_format)
     num_channels = image.shape[channel_axis]
 
@@ -802,3 +807,48 @@ def flip_channel_order(
     if data_format is not None:
         image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
     return image
+
+
+def _cast_tensor_to_float(x):
+    if x.is_floating_point():
+        return x
+    return x.float()
+
+
+class FusedRescaleNormalize:
+    """
+    Rescale and normalize the input image in one step.
+    """
+
+    def __init__(self, mean, std, rescale_factor: float = 1.0, inplace: bool = False):
+        self.mean = torch.tensor(mean) * (1.0 / rescale_factor)
+        self.std = torch.tensor(std) * (1.0 / rescale_factor)
+        self.inplace = inplace
+
+    def __call__(self, image: "torch.Tensor"):
+        image = _cast_tensor_to_float(image)
+        return F.normalize(image, self.mean, self.std, inplace=self.inplace)
+
+
+class Rescale:
+    """
+    Rescale the input image by rescale factor: image *= rescale_factor.
+    """
+
+    def __init__(self, rescale_factor: float = 1.0):
+        self.rescale_factor = rescale_factor
+
+    def __call__(self, image: "torch.Tensor"):
+        image = image * self.rescale_factor
+        return image
+
+
+class NumpyToTensor:
+    """
+    Convert a numpy array to a PyTorch tensor.
+    """
+
+    def __call__(self, image: np.ndarray):
+        # Same as in PyTorch, we assume incoming numpy images are in HWC format
+        # c.f. https://github.com/pytorch/vision/blob/61d97f41bc209e1407dcfbd685d2ee2da9c1cdad/torchvision/transforms/functional.py#L154
+        return torch.from_numpy(image.transpose(2, 0, 1)).contiguous()

@@ -179,25 +179,20 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
         )
 
     @property
-    # Copied from tokenization_gpt_neox_japanese.GPTNeoXJapaneseTokenizer.vocab_size
     def vocab_size(self):
         # self.vocab contains support for character fluctuation unique to Japanese, and has a large number of vocab
         return len(self.raw_vocab)
 
-    # Copied from tokenization_gpt_neox_japanese.GPTNeoXJapaneseTokenizer.get_vocab
     def get_vocab(self):
         return dict(self.raw_vocab, **self.added_tokens_encoder)
 
-    # Copied from tokenization_gpt_neox_japanese.GPTNeoXJapaneseTokenizer._tokenize
     def _tokenize(self, text):
         return self.subword_tokenizer.tokenize(text, clean=self.do_clean_text)
 
-    # Copied from tokenization_gpt_neox_japanese.GPTNeoXJapaneseTokenizer._convert_token_to_id
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
         return self.vocab.get(token, self.vocab.get(self.unk_token))
 
-    # Copied from tokenization_gpt_neox_japanese.GPTNeoXJapaneseTokenizer._convert_id_to_token
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
         return self.subword_tokenizer.convert_id_to_token(index)
@@ -254,7 +249,6 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
             "{% endfor %}"
         )
 
-    # Copied from tokenization_gpt_neox_japanese.GPTNeoXJapaneseTokenizer.save_vocabulary
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         index = 0
         if os.path.isdir(save_directory):
@@ -412,7 +406,6 @@ class SubWordJapaneseTokenizer(object):
     SOFTWARE.
     """
 
-    # Copied from tokenization_gpt_neox_japanese.SubWordJapaneseTokenizer.__init__
     def __init__(self, vocab, ids_to_tokens, emoji):
         self.vocab = vocab  # same as swe
         self.ids_to_tokens = ids_to_tokens  # same as bpe
@@ -434,11 +427,9 @@ class SubWordJapaneseTokenizer(object):
         blocks = "▀▁▂▃▄▅▆▇█▉▊▋▌▍▎▏▐░▒▓▔▕▖▗▘▙▚▛▜▝▞▟"
         self.content_trans1 = str.maketrans({k: "<BLOCK>" for k in keisen + blocks})
 
-    # Copied from tokenization_gpt_neox_japanese.SubWordJapaneseTokenizer.__len__
     def __len__(self):
         return len(self.ids_to_tokens)
 
-    # Copied from tokenization_gpt_neox_japanese.SubWordJapaneseTokenizer.clean_text
     def clean_text(self, content):
         content = self.content_repatter1.sub("<URL>", content)
         content = self.content_repatter2.sub("<EMAIL>", content)
@@ -451,7 +442,6 @@ class SubWordJapaneseTokenizer(object):
             content = content.replace("<BLOCK><BLOCK>", "<BLOCK>")
         return content
 
-    # Copied from tokenization_gpt_neox_japanese.SubWordJapaneseTokenizer.tokenize
     def tokenize(self, text, clean=False):
         text = text.replace(" ", "<SP>")
         text = text.replace("　", "<SP>")
