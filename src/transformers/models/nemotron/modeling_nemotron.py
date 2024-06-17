@@ -25,7 +25,7 @@ from typing import List, Optional, Tuple, Union
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
-from torch import nn
+from torch import nn, Tensor, Size
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
@@ -72,20 +72,27 @@ def _get_unpad_data(attention_mask):
         max_seqlen_in_batch,
     )
 
+class LayerNorm1P(nn.LayerNorm):
+    def __init__(self, normalized_shape: Union[int, List[int], Size], eps: float = 1e-5, elementwise_affine: bool = True,
+                 bias: bool = True, device=None, dtype=None):
+        super().__init__(normalized_shape, eps, elementwise_affine, bias, device, dtype)
+    def forward(self, input: Tensor) -> Tensor:
+        return F.layer_norm(
+            input, self.normalized_shape, self.weight + 1, self.bias, self.eps)
 
 class NemotronLayerNorm(nn.Module):
     def __init__(self, hidden_size, normalization='layernorm1p', eps=1e-6):
         super().__init__()
         self.normalization = normalization
-        if normalization == 'layernorm1p' or normalization == 'layernorm':
+        if normalization == 'layernorm1p':
+            self.ln = LayerNorm1P(hidden_size, bias=True, eps=eps)
+        elif normalization == 'layernorm':
             self.ln = nn.LayerNorm(hidden_size, bias=True, eps=eps)
         else:
             raise ValueError(f'Unsupported layernorm type: {normalization}')
 
     def forward(self, hidden_states):
-        if self.normalization == 'layernorm1p':
-            return F.layer_norm(hidden_states, self.ln.normalized_shape, self.ln.weight + 1, self.ln.bias, self.ln.eps)
-        elif self.normalization == 'layernorm':
+        if self.normalization == 'layernorm1p' or self.normalization == 'layernorm':
             return self.ln(hidden_states)
         else:
             raise ValueError(f'Unsupported layernorm type: {normalization}')
