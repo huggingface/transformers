@@ -32,8 +32,18 @@ def add_two(x):
 
 class PythonInterpreterToolTester(unittest.TestCase, ToolTesterMixin):
     def setUp(self):
-        self.tool = load_tool("python_interpreter")
+        self.tool = load_tool("python_interpreter", authorized_imports=["sqlite3"])
         self.tool.setup()
+
+    def test_exact_match_input_spec(self):
+        inputs_spec = self.tool.inputs
+        expected_description = (
+            "The code snippet to evaluate. All variables used in this snippet must be defined in this same snippet, "
+            "else you will get an error. This code can only import the following python libraries: "
+            "['math', 'statistics', 'time', 'itertools', 'stat', 'unicodedata', 'sqlite3', 'queue', 'collections', "
+            "'random', 're']."
+        )
+        self.assertEqual(inputs_spec["code"]["description"], expected_description)
 
     def test_exact_match_arg(self):
         result = self.tool("(2 / 2) * 4")
