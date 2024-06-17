@@ -594,7 +594,7 @@ isn't printing extra spaces where it shouldn't be!
 
 <Tip>
 A good way to ensure that your template isn't printing unwanted whitespaces or newlines is to use **{{-** and **{%-** instead
-of `{{` and `{%`. This will strip any whitespace or newlines that come before the block or statement. If you use these,
+of **{{** and **{%**. This will strip any whitespace or newlines that come before the block or statement. If you use these,
 you can write your template with proper indentation and newlines and still have it render correctly!
 </Tip>
 
