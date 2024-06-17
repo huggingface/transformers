@@ -83,7 +83,8 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = RTDetrImageProcessor if is_vision_available() else None
 
     def setUp(self):
-        self.image_processor_tester = RTDetrImageProcessingTester()
+        super().setUp()
+        self.image_processor_tester = RTDetrImageProcessingTester(self)
 
     @property
     def image_processor_dict(self):
