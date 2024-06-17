@@ -686,9 +686,11 @@ Jinja statements like `if tools is defined` and `{% macro %}` definitions to eas
 single template.
 
 When a tokenizer has multiple templates, `tokenizer.chat_template` will be a `dict`, where each key is the name
-of a template. Our tools have special handling for certain template names: Specifically, they will look for a template
-named `default` in most cases, and will raise an error if they can't find one. They will also use a template called
-`tool_use` when the user has passed a `tools` argument, or fall back to `default` if one doesn't exist.
+of a template. The `apply_chat_template` method has special handling for certain template names: Specifically, it will
+look for a template named `default` in most cases, and will raise an error if it can't find one. However, if a template
+named `tool_use` exists when the user has passed a `tools` argument, it will use that instead. To access templates
+with other names, pass the name of the template you want to the `chat_template` argument of
+`apply_chat_template()`.
 
 We find that this can be a bit confusing for users, though - so if you're writing a template yourself, we recommend
 trying to put it all in a single template where possible!
