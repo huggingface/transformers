@@ -3791,7 +3791,7 @@ class Trainer:
                     batch_size = observed_batch_size
 
             # Prediction step
-            loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only, ignore_keys=ignore_keys)
+            losses, logits, labels = self.prediction_step(model, inputs, prediction_loss_only, ignore_keys=ignore_keys)
             main_input_name = getattr(self.model, "main_input_name", "input_ids")
             inputs_decode = self._prepare_input(inputs[main_input_name]) if args.include_inputs_for_metrics else None
 
@@ -3799,8 +3799,8 @@ class Trainer:
                 xm.mark_step()
 
             # Update containers
-            if loss is not None:
-                losses = self.gather_function((loss.repeat(batch_size)))
+            if losses is not None:
+                losses = self.gather_function((losses.repeat(batch_size)))
                 all_losses.add(losses)
             if inputs_decode is not None:
                 inputs_decode = self.accelerator.pad_across_processes(inputs_decode, dim=1, pad_index=-100)
