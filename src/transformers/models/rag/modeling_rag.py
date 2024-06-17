@@ -1550,7 +1550,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
                     f"num_return_sequences has to be 1, but is {generation_config.num_return_sequences} when doing"
                     " greedy search."
                 )
-            return self._greedy_search(
+            return self._sample(
                 input_ids,
                 logits_processor=pre_processor,
                 stopping_criteria=prepared_stopping_criteria,

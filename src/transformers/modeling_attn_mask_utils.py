@@ -250,7 +250,7 @@ class AttentionMaskConverter:
         allowing to dispatch to the flash attention kernel (that can otherwise not be used if a custom `attn_mask` is passed).
         """
 
-        batch_size, query_length = inputs_embeds.shape[0], inputs_embeds.shape[1]
+        _, query_length = inputs_embeds.shape[0], inputs_embeds.shape[1]
         key_value_length = query_length + past_key_values_length
 
         is_tracing = (
@@ -275,11 +275,7 @@ class AttentionMaskConverter:
                 ignore_causal_mask = True
         elif sliding_window is None or key_value_length < sliding_window:
             if len(attention_mask.shape) == 4:
-                expected_shape = (batch_size, 1, query_length, key_value_length)
-                if tuple(attention_mask.shape) != expected_shape:
-                    raise ValueError(
-                        f"Incorrect 4D attention_mask shape: {tuple(attention_mask.shape)}; expected: {expected_shape}."
-                    )
+                return False
             elif (is_training or not is_tracing) and torch.all(attention_mask == 1):
                 if query_length == 1 or key_value_length == query_length:
                     # For query_length == 1, causal attention and bi-directional attention are the same.
@@ -387,12 +383,18 @@ def _prepare_4d_causal_attention_mask_for_sdpa(
             input_shape[0], input_shape[-1], key_value_length, dtype=inputs_embeds.dtype, device=inputs_embeds.device
         )
     else:
-        expanded_4d_mask = attn_mask_converter.to_4d(
-            attention_mask,
-            input_shape[-1],
-            dtype=inputs_embeds.dtype,
-            key_value_length=key_value_length,
-        )
+        if attention_mask.dim() == 4:
+            # in this case we assume that the mask comes already in inverted form and requires no inversion or slicing
+            if attention_mask.max() != 0:
+                raise ValueError("Custom 4D attention mask should be passed in inverted form with max==0`")
+            expanded_4d_mask = attention_mask
+        else:
+            expanded_4d_mask = attn_mask_converter.to_4d(
+                attention_mask,
+                input_shape[-1],
+                dtype=inputs_embeds.dtype,
+                key_value_length=key_value_length,
+            )
 
         # Attend to all tokens in masked rows from the causal_mask, for example the relevant first rows when
         # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.

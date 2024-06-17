@@ -173,6 +173,55 @@ your screen, one word at a time:
 An increasing sequence: one, two, three, four, five, six, seven, eight, nine, ten, eleven,
 ```
 
+
+## Watermarking
+
+The `generate()` supports watermarking the generated text by randomly marking a portion of tokens as "green". 
+When generating the "green" will have a small 'bias' value added to their logits, thus having a higher chance to be generated.
+The watermarked text can be detected by calculating the proportion of "green" tokens in the text and estimating how likely it is
+statistically to obtain that amount of "green" tokens for human-generated text. This watermarking strategy was proposed in the paper 
+["On the Reliability of Watermarks for Large Language Models"](https://arxiv.org/abs/2306.04634). For more information on 
+the inner functioning of watermarking, it is recommended to refer to the paper.
+
+The watermarking can be used with any generative model in `tranformers` and does not require an extra classification model
+to detect watermarked text. To trigger watermarking, pass in a [`WatermarkingConfig`] with needed arguments directly to the
+`.generate()` method or add it to the [`GenerationConfig`]. Watermarked text can be later detected with a [`WatermarkDetector`].
+
+
+<Tip warning={true}>
+
+The WatermarkDetector internally relies on the proportion of "green" tokens, and whether generated text follows the coloring pattern.
+That is why it is recommended to strip off the prompt text, if it is much longer than the generated text.
+This also can have an effect when one sequence in the batch is a lot longer causing other rows to be padded.
+Additionally, the detector **must** be initiated with identical watermark configuration arguments used when generating.
+
+</Tip>
+
+Let's generate some text with watermarking. In the below code snippet, we set the bias to 2.5 which is a value that
+will be added to "green" tokens' logits. After generating watermarked text, we can pass it directly to the `WatermarkDetector`
+to check if the text is machine-generated (outputs `True` for machine-generated and `False` otherwise).
+
+```python
+>>> from transformers import AutoTokenizer, AutoModelForCausalLM, WatermarkDetector, WatermarkingConfig
+
+>>> model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
+>>> tok = AutoTokenizer.from_pretrained("openai-community/gpt2")
+>>> tok.pad_token_id = tok.eos_token_id
+>>> tok.padding_side = "left"
+
+>>> inputs = tok(["This is the beginning of a long story", "Alice and Bob are"], padding=True, return_tensors="pt")
+>>> input_len = inputs["input_ids"].shape[-1]
+
+>>> watermarking_config = WatermarkingConfig(bias=2.5, seeding_scheme="selfhash")
+>>> out = model.generate(**inputs, watermarking_config=watermarking_config, do_sample=False, max_length=20)
+
+>>> detector = WatermarkDetector(model_config=model.config, device="cpu", watermarking_config=watermarking_config)
+>>> detection_out = detector(out, return_dict=True)
+>>> detection_out.prediction
+array([True, True])
+```
+
+
 ## Decoding strategies
 
 Certain combinations of the `generate()` parameters, and ultimately `generation_config`, can be used to enable specific

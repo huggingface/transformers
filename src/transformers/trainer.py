@@ -436,7 +436,7 @@ class Trainer:
                 "https://huggingface.co/docs/transformers/model_doc/auto"
             )
 
-        if hasattr(model, "is_parallelizable") and model.is_parallelizable and model.model_parallel:
+        if getattr(model, "is_parallelizable", False) and getattr(model, "model_parallel", False):
             self.is_model_parallel = True
         else:
             self.is_model_parallel = False
@@ -2533,7 +2533,7 @@ class Trainer:
                 if os.path.exists(resume_from_checkpoint):
                     # For BC for older PEFT versions
                     if hasattr(model, "active_adapters"):
-                        active_adapters = model.active_adapters()
+                        active_adapters = model.active_adapters
                         if len(active_adapters) > 1:
                             logger.warning("Multiple active adapters detected will only consider the first adapter")
                         active_adapter = active_adapters[0]
@@ -2626,8 +2626,8 @@ class Trainer:
                     ):
                         # For BC for older PEFT versions
                         if hasattr(model, "active_adapters"):
-                            active_adapter = model.active_adapters()[0]
-                            if len(model.active_adapters()) > 1:
+                            active_adapter = model.active_adapters[0]
+                            if len(model.active_adapters) > 1:
                                 logger.warning("Detected multiple active adapters, will only consider the first one")
                         else:
                             active_adapter = model.active_adapter

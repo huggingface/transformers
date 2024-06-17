@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """
 Script to find a candidate list of models to deprecate based on the number of downloads and the date of the last commit.
 """
@@ -149,7 +148,7 @@ def get_list_of_models_to_deprecate(
         with open("models_info.json", "w") as f:
             json.dump(models_info, f, indent=4)
 
-    print("\nModels to deprecate:")
+    print("\nFinding models to deprecate:")
     n_models_to_deprecate = 0
     models_to_deprecate = {}
     for model, info in models_info.items():
@@ -160,6 +159,7 @@ def get_list_of_models_to_deprecate(
             print(f"\nModel: {model}")
             print(f"Downloads: {n_downloads}")
             print(f"Date: {info['first_commit_datetime']}")
+    print("\nModels to deprecate: ", "\n" + "\n".join(models_to_deprecate.keys()))
     print(f"\nNumber of models to deprecate: {n_models_to_deprecate}")
     print("Before deprecating make sure to verify the models, including if they're used as a module in other models.")
 

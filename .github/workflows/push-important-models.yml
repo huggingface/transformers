@@ -97,7 +97,7 @@ jobs:
       
       - name: Post to Slack
         if: always()
-        uses: ./.github/actions/post-slack
+        uses: huggingface/hf-workflows/.github/actions/post-slack@main
         with:
           slack_channel: ${{ env.OUTPUT_SLACK_CHANNEL_ID }}
           title: 🤗 Results of the FA2 tests - ${{ matrix.model-name }}
@@ -119,7 +119,7 @@ jobs:
 
       - name: Post to Slack
         if: always()
-        uses: ./.github/actions/post-slack
+        uses: huggingface/hf-workflows/.github/actions/post-slack@main 
         with:
           slack_channel: ${{ env.OUTPUT_SLACK_CHANNEL_ID }}
           title: 🤗 Results of the Integration tests - ${{ matrix.model-name }}

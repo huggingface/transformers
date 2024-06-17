@@ -386,6 +386,8 @@
         title: I-BERT
       - local: model_doc/jamba
         title: Jamba
+      - local: model_doc/jetmoe
+        title: JetMoe
       - local: model_doc/jukebox
         title: Jukebox
       - local: model_doc/led

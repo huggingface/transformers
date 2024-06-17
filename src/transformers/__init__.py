@@ -117,7 +117,12 @@ _import_structure = {
     "feature_extraction_sequence_utils": ["SequenceFeatureExtractor"],
     "feature_extraction_utils": ["BatchFeature", "FeatureExtractionMixin"],
     "file_utils": [],
-    "generation": ["GenerationConfig", "TextIteratorStreamer", "TextStreamer"],
+    "generation": [
+        "GenerationConfig",
+        "TextIteratorStreamer",
+        "TextStreamer",
+        "WatermarkingConfig",
+    ],
     "hf_argparser": ["HfArgumentParser"],
     "hyperparameter_search": [],
     "image_transforms": [],
@@ -444,6 +449,7 @@ _import_structure = {
         "InstructBlipVisionConfig",
     ],
     "models.jamba": ["JambaConfig"],
+    "models.jetmoe": ["JetMoeConfig"],
     "models.jukebox": [
         "JukeboxConfig",
         "JukeboxPriorConfig",
@@ -1234,6 +1240,8 @@ else:
             "TopPLogitsWarper",
             "TypicalLogitsWarper",
             "UnbatchedClassifierFreeGuidanceLogitsProcessor",
+            "WatermarkDetector",
+            "WatermarkLogitsProcessor",
             "WhisperTimeStampLogitsProcessor",
         ]
     )
@@ -2203,6 +2211,14 @@ else:
             "JambaForSequenceClassification",
             "JambaModel",
             "JambaPreTrainedModel",
+        ]
+    )
+    _import_structure["models.jetmoe"].extend(
+        [
+            "JetMoeForCausalLM",
+            "JetMoeForSequenceClassification",
+            "JetMoeModel",
+            "JetMoePreTrainedModel",
         ]
     )
     _import_structure["models.jukebox"].extend(
@@ -3872,6 +3888,15 @@ else:
             "TFHubertPreTrainedModel",
         ]
     )
+
+    _import_structure["models.idefics"].extend(
+        [
+            "TFIdeficsForVisionText2Text",
+            "TFIdeficsModel",
+            "TFIdeficsPreTrainedModel",
+        ]
+    )
+
     _import_structure["models.layoutlm"].extend(
         [
             "TFLayoutLMForMaskedLM",
@@ -4618,7 +4643,7 @@ if TYPE_CHECKING:
     from .feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 
     # Generation
-    from .generation import GenerationConfig, TextIteratorStreamer, TextStreamer
+    from .generation import GenerationConfig, TextIteratorStreamer, TextStreamer, WatermarkingConfig
     from .hf_argparser import HfArgumentParser
 
     # Integrations
@@ -4970,6 +4995,7 @@ if TYPE_CHECKING:
         InstructBlipVisionConfig,
     )
     from .models.jamba import JambaConfig
+    from .models.jetmoe import JetMoeConfig
     from .models.jukebox import (
         JukeboxConfig,
         JukeboxPriorConfig,
@@ -5802,6 +5828,8 @@ if TYPE_CHECKING:
             TopPLogitsWarper,
             TypicalLogitsWarper,
             UnbatchedClassifierFreeGuidanceLogitsProcessor,
+            WatermarkDetector,
+            WatermarkLogitsProcessor,
             WhisperTimeStampLogitsProcessor,
         )
         from .modeling_utils import PreTrainedModel
@@ -6592,6 +6620,12 @@ if TYPE_CHECKING:
             JambaForSequenceClassification,
             JambaModel,
             JambaPreTrainedModel,
+        )
+        from .models.jetmoe import (
+            JetMoeForCausalLM,
+            JetMoeForSequenceClassification,
+            JetMoeModel,
+            JetMoePreTrainedModel,
         )
         from .models.jukebox import (
             JukeboxModel,
@@ -7924,6 +7958,11 @@ if TYPE_CHECKING:
             TFHubertForCTC,
             TFHubertModel,
             TFHubertPreTrainedModel,
+        )
+        from .models.idefics import (
+            TFIdeficsForVisionText2Text,
+            TFIdeficsModel,
+            TFIdeficsPreTrainedModel,
         )
         from .models.layoutlm import (
             TFLayoutLMForMaskedLM,
