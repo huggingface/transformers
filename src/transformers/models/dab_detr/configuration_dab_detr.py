@@ -125,7 +125,7 @@ class DABDETRConfig(PretrainedConfig):
         temperatureH (`int`, *optional*, defaults to 20):
             Temperature parameter to tune the flatness of positional attention (HEIGHT)
         iter_update (`bool`, *optional*, defaults to `True`):
-            Whether to use dynamic iterative anchor update are to be used.
+            Whether to use dynamic iterative anchor updates.
         query_dim (`int`, *optional*, defaults to 4):
             Query dimension parameter represents the size of the output vector.
         decoder_query_dim (`int`, *optional*, defaults to 4):
@@ -135,7 +135,7 @@ class DABDETRConfig(PretrainedConfig):
         decoder_bbox_embed_diff_each_layer (`bool`, *optional*, defaults to `False`):
             Whether to perform layer-by-layer bounding box embedding refinement.
         random_refpoints_xy (`bool`, *optional*, defaults to `False`):
-            Whether to fix x, y of the anchor boxes with the random initialization.
+            Whether to fix the x and y coordinates of the anchor boxes with random initialization.
         keep_query_pos (`bool`, *optional*, defaults to `False`):
             ####
         query_scale_type (`str`, *optional*, defaults to `cond_elewise` Valid options: ['cond_elewise', 'cond_scalar', 'fix_elewise'])
