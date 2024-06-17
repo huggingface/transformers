@@ -35,23 +35,7 @@ from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInp
 
 
 class ChineseClipProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": True,
-            "truncation": True,
-            "max_length": 64,
-            "stride": 0,
-            "is_split_into_words": False,
-            "return_overflowing_tokens": False,
-            "return_special_tokens_mask": False,
-            "return_offsets_mapping": False,
-            "return_length": False,
-            "verbose": True,
-        },
-        "images_kwargs": {
-            "data_format": "channels_first",
-        },
-    }
+    _defaults = {}
 
 
 class ChineseCLIPProcessor(ProcessorMixin):
