@@ -961,7 +961,14 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
             mask_labels.append(self._whole_word_mask(ref_tokens))
         batch_mask = _torch_collate_batch(mask_labels, self.tokenizer, pad_to_multiple_of=self.pad_to_multiple_of)
         inputs, labels = self.torch_mask_tokens(batch_input, batch_mask)
-        return {"input_ids": inputs, "labels": labels}
+        batch = {}
+        batch["input_ids"], batch["labels"] = inputs, labels
+        if "next_sentence_label" in examples[0]:
+            batch["token_type_ids"] =  examples[0]["token_type_ids"]
+            batch["next_sentence_label"] = examples[0]["next_sentence_label"]
+        else:
+            batch
+        return batch
 
     def tf_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
         import tensorflow as tf
@@ -991,7 +998,14 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
             mask_labels.append(self._whole_word_mask(ref_tokens))
         batch_mask = _tf_collate_batch(mask_labels, self.tokenizer, pad_to_multiple_of=self.pad_to_multiple_of)
         inputs, labels = self.tf_mask_tokens(tf.cast(batch_input, tf.int64), batch_mask)
-        return {"input_ids": inputs, "labels": labels}
+        batch = {}
+        batch["input_ids"], batch["labels"] = inputs, labels
+        if "next_sentence_label" in examples[0]:
+            batch["token_type_ids"] =  examples[0]["token_type_ids"]
+            batch["next_sentence_label"] = examples[0]["next_sentence_label"]
+        else:
+            batch
+        return batch
 
     def numpy_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
         if isinstance(examples[0], Mapping):
@@ -1019,7 +1033,14 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
             mask_labels.append(self._whole_word_mask(ref_tokens))
         batch_mask = _numpy_collate_batch(mask_labels, self.tokenizer, pad_to_multiple_of=self.pad_to_multiple_of)
         inputs, labels = self.numpy_mask_tokens(batch_input, batch_mask)
-        return {"input_ids": inputs, "labels": labels}
+        batch = {}
+        batch["input_ids"], batch["labels"] = inputs, labels
+        if "next_sentence_label" in examples[0]:
+            batch["token_type_ids"] =  examples[0]["token_type_ids"]
+            batch["next_sentence_label"] = examples[0]["next_sentence_label"]
+        else:
+            batch
+        return batch
 
     def _whole_word_mask(self, input_tokens: List[str], max_predictions=512):
         """
