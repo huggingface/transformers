@@ -12,10 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch RegNet model. """
+"""Testing suite for the PyTorch RegNet model."""
 
-
-import inspect
 import unittest
 
 from transformers import RegNetConfig
@@ -32,7 +30,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import RegNetForImageClassification, RegNetModel
-    from transformers.models.regnet.modeling_regnet import REGNET_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -127,7 +124,7 @@ class RegNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     all_model_classes = (RegNetModel, RegNetForImageClassification) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": RegNetModel, "image-classification": RegNetForImageClassification}
+        {"image-feature-extraction": RegNetModel, "image-classification": RegNetForImageClassification}
         if is_torch_available()
         else {}
     )
@@ -142,7 +139,6 @@ class RegNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.config_tester = ConfigTester(self, config_class=RegNetConfig, has_text_modality=False)
 
     def test_config(self):
-        self.create_and_test_config_common_properties()
         self.config_tester.create_and_test_config_to_json_string()
         self.config_tester.create_and_test_config_to_json_file()
         self.config_tester.create_and_test_config_from_and_save_pretrained()
@@ -150,28 +146,13 @@ class RegNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.config_tester.check_config_can_be_init_without_params()
         self.config_tester.check_config_arguments_init()
 
-    def create_and_test_config_common_properties(self):
-        return
-
     @unittest.skip(reason="RegNet does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
     @unittest.skip(reason="RegNet does not support input and output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
-
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
-
-            expected_arg_names = ["pixel_values"]
-            self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -233,9 +214,9 @@ class RegNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in REGNET_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = RegNetModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/regnet-y-040"
+        model = RegNetModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
@@ -249,15 +230,11 @@ def prepare_img():
 class RegNetModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return (
-            AutoImageProcessor.from_pretrained(REGNET_PRETRAINED_MODEL_ARCHIVE_LIST[0])
-            if is_vision_available()
-            else None
-        )
+        return AutoImageProcessor.from_pretrained("facebook/regnet-y-040") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
-        model = RegNetForImageClassification.from_pretrained(REGNET_PRETRAINED_MODEL_ARCHIVE_LIST[0]).to(torch_device)
+        model = RegNetForImageClassification.from_pretrained("facebook/regnet-y-040").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()

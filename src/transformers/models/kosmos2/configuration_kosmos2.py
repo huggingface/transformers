@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" KOSMOS-2 model configuration"""
+"""KOSMOS-2 model configuration"""
 
 import os
 from typing import Union
@@ -22,13 +22,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-KOSMOS2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/kosmos-2-patch14-224": (
-        "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/config.json"
-    ),
-    # See all KOSMOS-2 models at https://huggingface.co/models?filter=kosmos-2
-}
 
 
 class Kosmos2TextConfig(PretrainedConfig):
@@ -77,6 +70,7 @@ class Kosmos2TextConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
     ```"""
+
     model_type = "kosmos_2_text_model"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
@@ -271,6 +265,7 @@ class Kosmos2Config(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "kosmos-2"
     is_composition = True
 

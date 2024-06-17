@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert TrOCR checkpoints from the unilm repository."""
 
-
 import argparse
 from pathlib import Path
 
@@ -183,7 +182,7 @@ def convert_tr_ocr_checkpoint(checkpoint_url, pytorch_dump_folder_path):
 
     # Check outputs on an image
     image_processor = ViTImageProcessor(size=encoder_config.image_size)
-    tokenizer = RobertaTokenizer.from_pretrained("roberta-large")
+    tokenizer = RobertaTokenizer.from_pretrained("FacebookAI/roberta-large")
     processor = TrOCRProcessor(image_processor, tokenizer)
 
     pixel_values = processor(images=prepare_img(checkpoint_url), return_tensors="pt").pixel_values

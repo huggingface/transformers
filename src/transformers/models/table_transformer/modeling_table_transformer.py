@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Table Transformer model."""
-
+"""PyTorch Table Transformer model."""
 
 import math
 from dataclasses import dataclass
@@ -30,6 +29,7 @@ from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_accelerate_available,
     is_scipy_available,
     is_timm_available,
     is_vision_available,
@@ -37,7 +37,7 @@ from ...utils import (
     replace_return_docstrings,
     requires_backends,
 )
-from ..auto import AutoBackbone
+from ...utils.backbone_utils import load_backbone
 from .configuration_table_transformer import TableTransformerConfig
 
 
@@ -50,25 +50,23 @@ if is_timm_available():
 if is_vision_available():
     from transformers.image_transforms import center_to_corners_format
 
+if is_accelerate_available():
+    from accelerate import PartialState
+    from accelerate.utils import reduce
+
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "TableTransformerConfig"
 _CHECKPOINT_FOR_DOC = "microsoft/table-transformer-detection"
-
-TABLE_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/table-transformer-detection",
-    # See all Table Transformer models at https://huggingface.co/models?filter=table-transformer
-]
 
 
 @dataclass
 # Copied from transformers.models.detr.modeling_detr.DetrDecoderOutput with DETR->TABLE_TRANSFORMER,Detr->TableTransformer
 class TableTransformerDecoderOutput(BaseModelOutputWithCrossAttentions):
     """
-    Base class for outputs of the TABLE_TRANSFORMER decoder. This class adds one attribute to
-    BaseModelOutputWithCrossAttentions, namely an optional stack of intermediate decoder activations, i.e. the output
-    of each decoder layer, each of them gone through a layernorm. This is useful when training the model with auxiliary
-    decoding losses.
+    Base class for outputs of the TABLE_TRANSFORMER decoder. This class adds one attribute to BaseModelOutputWithCrossAttentions,
+    namely an optional stack of intermediate decoder activations, i.e. the output of each decoder layer, each of them
+    gone through a layernorm. This is useful when training the model with auxiliary decoding losses.
 
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -97,10 +95,9 @@ class TableTransformerDecoderOutput(BaseModelOutputWithCrossAttentions):
 # Copied from transformers.models.detr.modeling_detr.DetrModelOutput with DETR->TABLE_TRANSFORMER,Detr->TableTransformer
 class TableTransformerModelOutput(Seq2SeqModelOutput):
     """
-    Base class for outputs of the TABLE_TRANSFORMER encoder-decoder model. This class adds one attribute to
-    Seq2SeqModelOutput, namely an optional stack of intermediate decoder activations, i.e. the output of each decoder
-    layer, each of them gone through a layernorm. This is useful when training the model with auxiliary decoding
-    losses.
+    Base class for outputs of the TABLE_TRANSFORMER encoder-decoder model. This class adds one attribute to Seq2SeqModelOutput,
+    namely an optional stack of intermediate decoder activations, i.e. the output of each decoder layer, each of them
+    gone through a layernorm. This is useful when training the model with auxiliary decoding losses.
 
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -153,8 +150,8 @@ class TableTransformerObjectDetectionOutput(ModelOutput):
         pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding). You can use [`~TableTransformerImageProcessor.post_process_object_detection`] to
-            retrieve the unnormalized bounding boxes.
+            possible padding). You can use [`~TableTransformerImageProcessor.post_process_object_detection`] to retrieve the
+            unnormalized bounding boxes.
         auxiliary_outputs (`list[Dict]`, *optional*):
             Optional, only returned when auxilary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
             and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
@@ -278,21 +275,27 @@ class TableTransformerConvEncoder(nn.Module):
 
         self.config = config
 
+        # For backwards compatibility we have to use the timm library directly instead of the AutoBackbone API
         if config.use_timm_backbone:
+            # We default to values which were previously hard-coded. This enables configurability from the config
+            # using backbone arguments, while keeping the default behavior the same.
             requires_backends(self, ["timm"])
-            kwargs = {}
+            kwargs = getattr(config, "backbone_kwargs", {})
+            kwargs = {} if kwargs is None else kwargs.copy()
+            out_indices = kwargs.pop("out_indices", (1, 2, 3, 4))
+            num_channels = kwargs.pop("in_chans", config.num_channels)
             if config.dilation:
-                kwargs["output_stride"] = 16
+                kwargs["output_stride"] = kwargs.get("output_stride", 16)
             backbone = create_model(
                 config.backbone,
                 pretrained=config.use_pretrained_backbone,
                 features_only=True,
-                out_indices=(1, 2, 3, 4),
-                in_chans=config.num_channels,
+                out_indices=out_indices,
+                in_chans=num_channels,
                 **kwargs,
             )
         else:
-            backbone = AutoBackbone.from_config(config.backbone_config)
+            backbone = load_backbone(config)
 
         # replace batch norm by frozen batch norm
         with torch.no_grad():
@@ -302,7 +305,14 @@ class TableTransformerConvEncoder(nn.Module):
             self.model.feature_info.channels() if config.use_timm_backbone else self.model.channels
         )
 
-        backbone_model_type = config.backbone if config.use_timm_backbone else config.backbone_config.model_type
+        backbone_model_type = None
+        if config.backbone is not None:
+            backbone_model_type = config.backbone
+        elif config.backbone_config is not None:
+            backbone_model_type = config.backbone_config.model_type
+        else:
+            raise ValueError("Either `backbone` or `backbone_config` should be provided in the config")
+
         if "resnet" in backbone_model_type:
             for name, parameter in self.model.named_parameters():
                 if config.use_timm_backbone:
@@ -373,7 +383,7 @@ class TableTransformerSinePositionEmbedding(nn.Module):
             y_embed = y_embed / (y_embed[:, -1:, :] + 1e-6) * self.scale
             x_embed = x_embed / (x_embed[:, :, -1:] + 1e-6) * self.scale
 
-        dim_t = torch.arange(self.embedding_dim, dtype=torch.float32, device=pixel_values.device)
+        dim_t = torch.arange(self.embedding_dim, dtype=torch.int64, device=pixel_values.device).float()
         dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.embedding_dim)
 
         pos_x = x_embed[:, :, :, None] / dim_t
@@ -457,23 +467,7 @@ class TableTransformerAttention(nn.Module):
     def _shape(self, tensor: torch.Tensor, seq_len: int, batch_size: int):
         return tensor.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
-    def with_pos_embed(self, tensor: torch.Tensor, object_queries: Optional[Tensor], **kwargs):
-        position_embeddings = kwargs.pop("position_embeddings", None)
-
-        if kwargs:
-            raise ValueError(f"Unexpected arguments {kwargs.keys()}")
-
-        if position_embeddings is not None and object_queries is not None:
-            raise ValueError(
-                "Cannot specify both position_embeddings and object_queries. Please use just object_queries"
-            )
-
-        if position_embeddings is not None:
-            logger.warning_once(
-                "position_embeddings has been deprecated and will be removed in v4.34. Please use object_queries instead"
-            )
-            object_queries = position_embeddings
-
+    def with_pos_embed(self, tensor: torch.Tensor, object_queries: Optional[Tensor]):
         return tensor if object_queries is None else tensor + object_queries
 
     def forward(
@@ -484,38 +478,8 @@ class TableTransformerAttention(nn.Module):
         key_value_states: Optional[torch.Tensor] = None,
         spatial_position_embeddings: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-        **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
-
-        position_embeddings = kwargs.pop("position_ebmeddings", None)
-        key_value_position_embeddings = kwargs.pop("key_value_position_embeddings", None)
-
-        if kwargs:
-            raise ValueError(f"Unexpected arguments {kwargs.keys()}")
-
-        if position_embeddings is not None and object_queries is not None:
-            raise ValueError(
-                "Cannot specify both position_embeddings and object_queries. Please use just object_queries"
-            )
-
-        if key_value_position_embeddings is not None and spatial_position_embeddings is not None:
-            raise ValueError(
-                "Cannot specify both key_value_position_embeddings and spatial_position_embeddings. Please use just spatial_position_embeddings"
-            )
-
-        if position_embeddings is not None:
-            logger.warning_once(
-                "position_embeddings has been deprecated and will be removed in v4.34. Please use object_queries instead"
-            )
-            object_queries = position_embeddings
-
-        if key_value_position_embeddings is not None:
-            logger.warning_once(
-                "key_value_position_embeddings has been deprecated and will be removed in v4.34. Please use spatial_position_embeddings instead"
-            )
-            spatial_position_embeddings = key_value_position_embeddings
-
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
         is_cross_attention = key_value_states is not None
@@ -778,25 +742,6 @@ class TableTransformerDecoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrClassificationHead with Detr->TableTransformer
-class TableTransformerClassificationHead(nn.Module):
-    """Head for sentence-level classification tasks."""
-
-    def __init__(self, input_dim: int, inner_dim: int, num_classes: int, pooler_dropout: float):
-        super().__init__()
-        self.dense = nn.Linear(input_dim, inner_dim)
-        self.dropout = nn.Dropout(p=pooler_dropout)
-        self.out_proj = nn.Linear(inner_dim, num_classes)
-
-    def forward(self, hidden_states: torch.Tensor):
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.dense(hidden_states)
-        hidden_states = torch.tanh(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.out_proj(hidden_states)
-        return hidden_states
-
-
 class TableTransformerPreTrainedModel(PreTrainedModel):
     config_class = TableTransformerConfig
     base_model_prefix = "model"
@@ -1035,7 +980,6 @@ class TableTransformerDecoder(TableTransformerPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        **kwargs,
     ):
         r"""
         Args:
@@ -1073,22 +1017,6 @@ class TableTransformerDecoder(TableTransformerPreTrainedModel):
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
-        position_embeddings = kwargs.pop("position_embeddings", None)
-
-        if kwargs:
-            raise ValueError(f"Unexpected arguments {kwargs.keys()}")
-
-        if position_embeddings is not None and object_queries is not None:
-            raise ValueError(
-                "Cannot specify both position_embeddings and object_queries. Please use just object_queries"
-            )
-
-        if position_embeddings is not None:
-            logger.warning_once(
-                "position_embeddings has been deprecated and will be removed in v4.34. Please use object_queries instead"
-            )
-            object_queries = position_embeddings
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1433,7 +1361,7 @@ class TableTransformerForObjectDetection(TableTransformerPreTrainedModel):
         >>> inputs = image_processor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
 
-        >>> # convert outputs (bounding boxes and class logits) to COCO API
+        >>> # convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
         >>> target_sizes = torch.tensor([image.size[::-1]])
         >>> results = image_processor.post_process_object_detection(outputs, threshold=0.9, target_sizes=target_sizes)[
         ...     0
@@ -1583,15 +1511,15 @@ def sigmoid_focal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: f
 # Copied from transformers.models.detr.modeling_detr.DetrLoss with Detr->TableTransformer,detr->table_transformer
 class TableTransformerLoss(nn.Module):
     """
-    This class computes the losses for TableTransformerForObjectDetection/TableTransformerForSegmentation. The process
-    happens in two steps: 1) we compute hungarian assignment between ground truth boxes and the outputs of the model 2)
-    we supervise each pair of matched ground-truth / prediction (supervise class and box).
+    This class computes the losses for TableTransformerForObjectDetection/TableTransformerForSegmentation. The process happens in two steps: 1)
+    we compute hungarian assignment between ground truth boxes and the outputs of the model 2) we supervise each pair
+    of matched ground-truth / prediction (supervise class and box).
 
-    A note on the `num_classes` argument (copied from original repo in table_transformer.py): "the naming of the
-    `num_classes` parameter of the criterion is somewhat misleading. It indeed corresponds to `max_obj_id` + 1, where
-    `max_obj_id` is the maximum id for a class in your dataset. For example, COCO has a `max_obj_id` of 90, so we pass
-    `num_classes` to be 91. As another example, for a dataset that has a single class with `id` 1, you should pass
-    `num_classes` to be 2 (`max_obj_id` + 1). For more details on this, check the following discussion
+    A note on the `num_classes` argument (copied from original repo in table_transformer.py): "the naming of the `num_classes`
+    parameter of the criterion is somewhat misleading. It indeed corresponds to `max_obj_id` + 1, where `max_obj_id` is
+    the maximum id for a class in your dataset. For example, COCO has a `max_obj_id` of 90, so we pass `num_classes` to
+    be 91. As another example, for a dataset that has a single class with `id` 1, you should pass `num_classes` to be 2
+    (`max_obj_id` + 1). For more details on this, check the following discussion
     https://github.com/facebookresearch/table_transformer/issues/108#issuecomment-650269223"
 
 
@@ -1753,11 +1681,12 @@ class TableTransformerLoss(nn.Module):
         # Compute the average number of target boxes across all nodes, for normalization purposes
         num_boxes = sum(len(t["class_labels"]) for t in targets)
         num_boxes = torch.as_tensor([num_boxes], dtype=torch.float, device=next(iter(outputs.values())).device)
-        # (Niels): comment out function below, distributed training to be added
-        # if is_dist_avail_and_initialized():
-        #     torch.distributed.all_reduce(num_boxes)
-        # (Niels) in original implementation, num_boxes is divided by get_world_size()
-        num_boxes = torch.clamp(num_boxes, min=1).item()
+        world_size = 1
+        if is_accelerate_available():
+            if PartialState._shared_state != {}:
+                num_boxes = reduce(num_boxes)
+                world_size = PartialState().num_processes
+        num_boxes = torch.clamp(num_boxes / world_size, min=1).item()
 
         # Compute all the requested losses
         losses = {}

@@ -75,7 +75,7 @@ DatasetDict({
 
 </Tip>
 
-[~datasets.Dataset.train_test_split] 메소드를 사용하여 데이터세트의 학습 분할을 학습 및 테스트 세트로 나눕니다:
+[`~datasets.Dataset.train_test_split`] 메소드를 사용하여 데이터세트의 학습 분할을 학습 및 테스트 세트로 나눕니다:
 
 
 ```python
@@ -201,7 +201,7 @@ training_args = TrainingArguments(
     per_device_eval_batch_size=32,
     gradient_accumulation_steps=2,
     save_total_limit=3,
-    evaluation_strategy="steps",
+    eval_strategy="steps",
     eval_steps=50,
     save_strategy="steps",
     save_steps=50,

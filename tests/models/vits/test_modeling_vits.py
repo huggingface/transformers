@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch VITS model. """
+"""Testing suite for the PyTorch VITS model."""
 
 import copy
 import os
@@ -176,6 +176,11 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    # TODO: @ydshieh
+    @is_flaky(description="torch 2.2.0 gives `Timeout >120.0s`")
+    def test_pipeline_feature_extraction(self):
+        super().test_pipeline_feature_extraction()
+
     @unittest.skip("Need to fix this after #26538")
     def test_model_forward(self):
         set_seed(12345)
@@ -209,6 +214,10 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @unittest.skip("VITS is not deterministic")
     def test_determinism(self):
+        pass
+
+    @unittest.skip("VITS is not deterministic")
+    def test_batching_equivalence(self):
         pass
 
     @is_flaky(
@@ -256,7 +265,7 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip("VITS has no input embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     # override since the model is not deterministic, so we need to set the seed for each forward pass

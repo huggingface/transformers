@@ -91,7 +91,7 @@ python src/transformers/commands/transformers_cli.py env
 
 ## 새로운 모델을 구현하고 싶으신가요? [[do-you-want-to-implement-a-new-model]]
 
-새로운 모델은 계속해서 출시됩니다. 만약 여러분이 새로운 모델을 구현하고 싶다면 다음 정보를 제공해 주세요.
+새로운 모델은 계속해서 출시됩니다. 만약 여러분이 새로운 모델을 구현하고 싶다면 다음 정보를 제공해 주세요:
 
 * 모델에 대한 간단한 설명과 논문 링크.
 * 구현이 공개되어 있다면 구현 링크.
@@ -99,7 +99,7 @@ python src/transformers/commands/transformers_cli.py env
 
 만약 모델을 직접 기여하고 싶으시다면, 알려주세요. 🤗 Transformers에 추가할 수 있도록 도와드리겠습니다!
 
-새로운 모델을 추가하는 방법에 대한 [상세 안내서와 템플릿](https://github.com/huggingface/transformers/tree/main/templates)을 제공하고 있으며, [🤗 Transformers에 새로운 모델을 추가하는 방법](https://huggingface.co/docs/transformers/add_new_model)에 대한 기술적인 안내서도 있습니다.
+[🤗 Transformers에 새로운 모델을 추가하는 방법](https://huggingface.co/docs/transformers/add_new_model)에 대한 기술적인 안내서도 있습니다.
 
 ## 문서를 추가하고 싶으신가요? [[do-you-want-to-add-documentation]]
 
@@ -113,7 +113,7 @@ python src/transformers/commands/transformers_cli.py env
 
 🤗 Transformers에 기여하기 위해서는 기본적인 `git` 사용 능력이 필요합니다. `git`은 사용하기 쉬운 도구는 아니지만, 매우 훌륭한 매뉴얼을 제공합니다. 쉘(shell)에서 `git --help`을 입력하여 확인해보세요! 만약 책을 선호한다면, [Pro Git](https://git-scm.com/book/en/v2)은 매우 좋은 참고 자료가 될 것입니다.
 
-🤗 Transformers에 기여하려면 **[Python 3.8]((https://github.com/huggingface/transformers/blob/main/setup.py#L426))** 이상의 버전이 필요합니다. 기여를 시작하려면 다음 단계를 따르세요:
+🤗 Transformers에 기여하려면 **[Python 3.8](https://github.com/huggingface/transformers/blob/main/setup.py#L426)** 이상의 버전이 필요합니다. 기여를 시작하려면 다음 단계를 따르세요:
 
 1. 저장소 페이지에서 **[Fork](https://github.com/huggingface/transformers/fork)** 버튼을 클릭하여 저장소를 포크하세요. 이렇게 하면 코드의 복사본이 여러분의 GitHub 사용자 계정 아래에 생성됩니다.
 
@@ -250,7 +250,7 @@ Pull Request에서 실행되는 검사에 대한 자세한 정보는 [Pull Reque
 
 라이브러리 동작과 여러 예제를 테스트할 수 있는 광범위한 테스트 스위트가 포함되어 있습니다. 라이브러리 테스트는 [tests](https://github.com/huggingface/transformers/tree/main/tests) 폴더에, 예제 테스트는 [examples](https://github.com/huggingface/transformers/tree/main/examples) 폴더에 있습니다.
 
-속도가 빠른 `pytest`와 `pytest-xdist`를 선호합니다. 저장소의 루트 디렉터리에서 테스트를 실행할 *하위 폴더 경로 또는 테스트 파일 경로*를 지정하세요.
+속도가 빠른 `pytest`와 `pytest-xdist`를 선호합니다. 저장소의 루트 디렉터리에서 테스트를 실행할 *하위 폴더 경로 또는 테스트 파일 경로*를 지정하세요:
 
 ```bash
 python -m pytest -n auto --dist=loadfile -s -v ./tests/models/my_new_model
@@ -315,7 +315,7 @@ Windows에서 `make` 명령을 실행하는 한 가지 방법은 MSYS2를 사용
 3. 쉘에서 다음을 실행하여: `pacman -Syu` 및 `pacman -S make`로 `make`를 설치합니다.
 4. 환경 변수 PATH에 `C:\msys64\usr\bin`을 추가하세요.
 
-이제 모든 터미널 (Powershell, cmd.exe 등)에서 `make`를 사용할 수 있습니다! 🎉
+이제 모든 터미널 (PowerShell, cmd.exe 등)에서 `make`를 사용할 수 있습니다! 🎉
 
 ### 포크한 저장소를 상위 원본 브랜치(main)과 동기화하기 (Hugging Face 저장소) [[sync-a-forked-repository-with-upstream-main-the-hugging-face-repository]]
 
@@ -324,9 +324,9 @@ Windows에서 `make` 명령을 실행하는 한 가지 방법은 MSYS2를 사용
 1. 가능하면 포크된 저장소의 브랜치 및 PR을 사용하여 upstream과 동기화하지 마세요. 대신 포크된 main 저장소에 직접 병합하세요.
 2. PR이 반드시 필요한 경우, 브랜치를 확인한 후 다음 단계를 사용하세요:
 
-```bash
-git checkout -b your-branch-for-syncing
-git pull --squash --no-commit upstream main
-git commit -m '<your message without GitHub references>'
-git push --set-upstream origin your-branch-for-syncing
-```
+   ```bash
+   git checkout -b your-branch-for-syncing
+   git pull --squash --no-commit upstream main
+   git commit -m '<your message without GitHub references>'
+   git push --set-upstream origin your-branch-for-syncing
+   ```

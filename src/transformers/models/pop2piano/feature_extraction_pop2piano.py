@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Feature extractor class for Pop2Piano"""
+"""Feature extractor class for Pop2Piano"""
 
 import warnings
 from typing import List, Optional, Union
@@ -76,6 +76,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         num_bars (`int`, *optional*, defaults to 2):
             Determines interval between each sequence.
     """
+
     model_input_names = ["input_features", "beatsteps", "extrapolated_beatstep"]
 
     def __init__(

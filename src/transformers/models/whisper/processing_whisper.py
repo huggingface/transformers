@@ -16,7 +16,6 @@
 Speech processor class for Whisper
 """
 
-
 from ...processing_utils import ProcessorMixin
 
 
@@ -34,6 +33,7 @@ class WhisperProcessor(ProcessorMixin):
         tokenizer (`WhisperTokenizer`):
             An instance of [`WhisperTokenizer`]. The tokenizer is a required input.
     """
+
     feature_extractor_class = "WhisperFeatureExtractor"
     tokenizer_class = "WhisperTokenizer"
 

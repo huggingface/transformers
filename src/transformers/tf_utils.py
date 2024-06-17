@@ -17,6 +17,8 @@ from typing import List, Optional, Union
 import numpy as np
 import tensorflow as tf
 
+from .feature_extraction_utils import BatchFeature
+from .tokenization_utils_base import BatchEncoding
 from .utils import logging
 
 
@@ -100,6 +102,33 @@ def functional_layernorm(inputs, weight, bias, epsilon=1e-5, axis=-1):
         variance_epsilon=epsilon,
     )
     return outputs
+
+
+def scaled_dot_product_attention(
+    query, key, value, attn_mask=None, dropout_p=0.0, is_causal=False, scale: float = None
+):
+    """TF equivalent for torch's nn.functional.scaled_dot_product_attention"""
+    if dropout_p != 0.0:
+        raise ValueError(
+            "Dropout is not supported in this implementation - file an issue "
+            "with Transformers and ping @Rocketknight1 if you need it for a port!"
+        )
+    if is_causal and attn_mask is not None:
+        raise ValueError("You cannot specify an attn_mask and is_causal at the same time!")
+    if is_causal:
+        attn_mask = tf.ones((tf.shape(query)[-2], tf.shape(key)[-2]), dtype=tf.int32)
+        attn_mask = tf.experimental.numpy.tril(attn_mask, k=0)
+    if attn_mask is not None and (attn_mask.dtype.is_integer or attn_mask.dtype.is_bool):
+        # Convert boolean mask to a negative logit bias
+        attn_mask = tf.where(attn_mask > 0, tf.cast(0.0, query.dtype), tf.cast(-1000.0, query.dtype))
+    logits = tf.einsum("...qd, ...kd -> ...qk", query, key)
+    if scale is None:
+        scale = tf.cast(tf.shape(key)[-1], logits.dtype) ** -0.5
+    logits *= scale  # scale by 1/sqrt(key_dim)
+    if attn_mask is not None:
+        logits += attn_mask
+    probs = tf.nn.softmax(logits)
+    return probs @ value
 
 
 def flatten(input, start_dim=0, end_dim=-1):
@@ -253,3 +282,13 @@ def expand_1d(data):
         return t
 
     return tf.nest.map_structure(_expand_single_1d_tensor, data)
+
+
+def convert_batch_encoding(*args, **kwargs):
+    # Convert HF BatchEncoding/BatchFeature objects in the inputs to dicts that Keras understands
+    if args and isinstance(args[0], (BatchEncoding, BatchFeature)):
+        args = list(args)
+        args[0] = dict(args[0])
+    elif "x" in kwargs and isinstance(kwargs["x"], (BatchEncoding, BatchFeature)):
+        kwargs["x"] = dict(kwargs["x"])
+    return args, kwargs

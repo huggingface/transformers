@@ -30,7 +30,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST,
         BloomForCausalLM,
         BloomForQuestionAnswering,
         BloomForSequenceClassification,
@@ -396,9 +395,9 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = BloomModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "bigscience/bigscience-small-testing"
+        model = BloomModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @slow
     @require_torch_accelerator
@@ -699,9 +698,7 @@ class BloomEmbeddingTest(unittest.TestCase):
             },
         }
 
-        # fmt: off
-        EXAMPLE_IDS = [3478, 368, 109586, 35433, 2, 77, 132619, 3478, 368, 109586, 35433, 2, 2175, 23714, 73173, 144252, 2, 77, 132619, 3478]
-        # fmt: on
+        EXAMPLE_IDS = [3478, 368, 109586, 35433, 2, 77, 132619, 3478, 368, 109586, 35433, 2, 2175, 23714, 73173, 144252, 2, 77, 132619, 3478]  # fmt: skip
 
         EMBEDDINGS_DS_AFTER_LN_MEAN = {
             3478: -6.580352783203125e-05,
@@ -782,9 +779,7 @@ class BloomEmbeddingTest(unittest.TestCase):
         )
         model.eval()
 
-        # fmt: off
-        EXAMPLE_IDS = [3478, 368, 109586, 35433, 2, 77, 132619, 3478, 368, 109586, 35433, 2, 2175, 23714, 73173, 144252, 2, 77, 132619, 3478]
-        # fmt: on
+        EXAMPLE_IDS = [3478, 368, 109586, 35433, 2, 77, 132619, 3478, 368, 109586, 35433, 2, 2175, 23714, 73173, 144252, 2, 77, 132619, 3478]  # fmt: skip
 
         MEAN_VALUE_LAST_LM = -4.3392181396484375e-05
         MIN_MAX_DICT = {"min": -2.0625, "max": 2.75}
@@ -812,9 +807,7 @@ class BloomEmbeddingTest(unittest.TestCase):
         )  # load in bf16
         model.eval()
 
-        # fmt: off
-        EXAMPLE_IDS = [3478, 368, 109586, 35433, 2, 77, 132619, 3478, 368, 109586, 35433, 2, 2175, 23714, 73173, 144252, 2, 77, 132619, 3478]
-        # fmt: on
+        EXAMPLE_IDS = [3478, 368, 109586, 35433, 2, 77, 132619, 3478, 368, 109586, 35433, 2, 2175, 23714, 73173, 144252, 2, 77, 132619, 3478]  # fmt: skip
 
         MEAN_LOGITS_GPU_1 = -1.823902130126953e-05
         MEAN_LOGITS_GPU_2 = 1.9431114196777344e-05

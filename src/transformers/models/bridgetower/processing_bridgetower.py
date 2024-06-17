@@ -38,6 +38,7 @@ class BridgeTowerProcessor(ProcessorMixin):
         tokenizer (`RobertaTokenizerFast`):
             An instance of ['RobertaTokenizerFast`]. The tokenizer is a required input.
     """
+
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "BridgeTowerImageProcessor"
     tokenizer_class = ("RobertaTokenizer", "RobertaTokenizerFast")

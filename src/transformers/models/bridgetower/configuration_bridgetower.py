@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND=, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" BridgeTower model configuration"""
+"""BridgeTower model configuration"""
 
 import os
 from typing import Union
@@ -22,13 +22,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-BRIDGETOWER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "BridgeTower/bridgetower-base": "https://huggingface.co/BridgeTower/bridgetower-base/blob/main/config.json",
-    "BridgeTower/bridgetower-base-itm-mlm": (
-        "https://huggingface.co/BridgeTower/bridgetower-base-itm-mlm/blob/main/config.json"
-    ),
-}
 
 
 class BridgeTowerVisionConfig(PretrainedConfig):
@@ -73,6 +66,7 @@ class BridgeTowerVisionConfig(PretrainedConfig):
     >>> # Accessing the configuration
     >>> configuration
     ```"""
+
     model_type = "bridgetower_vision_model"
 
     def __init__(
@@ -179,6 +173,7 @@ class BridgeTowerTextConfig(PretrainedConfig):
     >>> # Accessing the configuration
     >>> configuration
     ```"""
+
     model_type = "bridgetower_text_model"
 
     def __init__(
@@ -291,6 +286,7 @@ class BridgeTowerConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "bridgetower"
 
     def __init__(

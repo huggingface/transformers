@@ -21,7 +21,7 @@ This repository contains examples and best practices for building recommendation
 
 Keywords: Recommender systems, AzureML
 
-## [lama-cleaner](https://github.com/Sanster/lama-cleaner)
+## [IOPaint](https://github.com/Sanster/IOPaint)
 
 Image inpainting tool powered by Stable Diffusion. Remove any unwanted object, defect, people from your pictures or erase and replace anything on your pictures.
 
@@ -105,9 +105,9 @@ An open-source Implementation of Imagen, Google's closed-source Text-to-Image Ne
 
 Keywords: Imagen, Text-to-image
 
-## [adapter-transformers](https://github.com/adapter-hub/adapter-transformers)
+## [adapters](https://github.com/adapter-hub/adapters)
 
-[adapter-transformers](https://github.com/adapter-hub/adapter-transformers) is an extension of HuggingFace's Transformers library, integrating adapters into state-of-the-art language models by incorporating AdapterHub, a central repository for pre-trained adapter modules. It is a drop-in replacement for transformers, which is regularly updated to stay up-to-date with the developments of transformers.
+[adapters](https://github.com/adapter-hub/adapters) is an extension of HuggingFace's Transformers library, integrating adapters into state-of-the-art language models by incorporating AdapterHub, a central repository for pre-trained adapter modules. It is a drop-in replacement for transformers, which is regularly updated to stay up-to-date with the developments of transformers.
 
 Keywords: Adapters, LoRA, Parameter-efficient fine-tuning, Hub
 
@@ -601,9 +601,9 @@ All Hugging Face models and pipelines can be seamlessly integrated into BentoML 
 
 Keywords: BentoML, Framework, Deployment, AI Applications
 
-## [LLaMA-Efficient-Tuning](https://github.com/hiyouga/LLaMA-Efficient-Tuning)
+## [LLaMA Factory](https://github.com/hiyouga/LLaMA-Factory)
 
-[LLaMA-Efficient-Tuning](https://github.com/hiyouga/LLaMA-Efficient-Tuning) offers a user-friendly fine-tuning framework that incorporates PEFT. The repository includes training(fine-tuning) and inference examples for LLaMA-2, BLOOM, Falcon, Baichuan, Qwen, and other LLMs. A ChatGLM version is also available in [ChatGLM-Efficient-Tuning](https://github.com/hiyouga/ChatGLM-Efficient-Tuning).
+[LLaMA Factory](https://github.com/hiyouga/LLaMA-Factory) offers a user-friendly fine-tuning framework that incorporates PEFT. The repository includes training(fine-tuning) and inference examples for LLaMA-2, BLOOM, Falcon, Baichuan, Qwen, and other LLMs. A ChatGLM version is also available in [ChatGLM-Efficient-Tuning](https://github.com/hiyouga/ChatGLM-Efficient-Tuning).
 
 Keywords: PEFT, fine-tuning, LLaMA-2, ChatGLM, Qwen
 

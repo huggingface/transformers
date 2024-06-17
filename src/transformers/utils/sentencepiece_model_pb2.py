@@ -1445,7 +1445,7 @@ TrainerSpec = _reflection.GeneratedProtocolMessageType(
     (_message.Message,),
     {
         "DESCRIPTOR": _TRAINERSPEC,
-        "__module__": "sentencepiece_model_pb2"
+        "__module__": "sentencepiece_model_pb2",
         # @@protoc_insertion_point(class_scope:sentencepiece.TrainerSpec)
     },
 )
@@ -1456,7 +1456,7 @@ NormalizerSpec = _reflection.GeneratedProtocolMessageType(
     (_message.Message,),
     {
         "DESCRIPTOR": _NORMALIZERSPEC,
-        "__module__": "sentencepiece_model_pb2"
+        "__module__": "sentencepiece_model_pb2",
         # @@protoc_insertion_point(class_scope:sentencepiece.NormalizerSpec)
     },
 )
@@ -1471,12 +1471,12 @@ SelfTestData = _reflection.GeneratedProtocolMessageType(
             (_message.Message,),
             {
                 "DESCRIPTOR": _SELFTESTDATA_SAMPLE,
-                "__module__": "sentencepiece_model_pb2"
+                "__module__": "sentencepiece_model_pb2",
                 # @@protoc_insertion_point(class_scope:sentencepiece.SelfTestData.Sample)
             },
         ),
         "DESCRIPTOR": _SELFTESTDATA,
-        "__module__": "sentencepiece_model_pb2"
+        "__module__": "sentencepiece_model_pb2",
         # @@protoc_insertion_point(class_scope:sentencepiece.SelfTestData)
     },
 )
@@ -1492,12 +1492,12 @@ ModelProto = _reflection.GeneratedProtocolMessageType(
             (_message.Message,),
             {
                 "DESCRIPTOR": _MODELPROTO_SENTENCEPIECE,
-                "__module__": "sentencepiece_model_pb2"
+                "__module__": "sentencepiece_model_pb2",
                 # @@protoc_insertion_point(class_scope:sentencepiece.ModelProto.SentencePiece)
             },
         ),
         "DESCRIPTOR": _MODELPROTO,
-        "__module__": "sentencepiece_model_pb2"
+        "__module__": "sentencepiece_model_pb2",
         # @@protoc_insertion_point(class_scope:sentencepiece.ModelProto)
     },
 )

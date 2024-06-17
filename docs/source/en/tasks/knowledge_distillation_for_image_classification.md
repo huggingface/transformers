@@ -61,8 +61,8 @@ import torch.nn.functional as F
 
 
 class ImageDistilTrainer(Trainer):
-    def __init__(self, *args, teacher_model=None, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, teacher_model=None, student_model=None, temperature=None, lambda_param=None,  *args, **kwargs):
+        super().__init__(model=student_model, *args, **kwargs)
         self.teacher = teacher_model
         self.student = student_model
         self.loss_function = nn.KLDivLoss(reduction="batchmean")
@@ -112,7 +112,7 @@ training_args = TrainingArguments(
     fp16=True,
     logging_dir=f"{repo_name}/logs",
     logging_strategy="epoch",
-    evaluation_strategy="epoch",
+    eval_strategy="epoch",
     save_strategy="epoch",
     load_best_model_at_end=True,
     metric_for_best_model="accuracy",
@@ -164,7 +164,7 @@ trainer = ImageDistilTrainer(
     train_dataset=processed_datasets["train"],
     eval_dataset=processed_datasets["validation"],
     data_collator=data_collator,
-    tokenizer=teacher_extractor,
+    tokenizer=teacher_processor,
     compute_metrics=compute_metrics,
     temperature=5,
     lambda_param=0.5

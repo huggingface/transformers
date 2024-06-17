@@ -158,6 +158,6 @@ class FlaxBertModelTest(FlaxModelTesterMixin, unittest.TestCase):
     def test_model_from_pretrained(self):
         # Only check this for base model, not necessary for all model classes.
         # This will also help speed-up tests.
-        model = FlaxBertModel.from_pretrained("bert-base-cased")
+        model = FlaxBertModel.from_pretrained("google-bert/bert-base-cased")
         outputs = model(np.ones((1, 1)))
         self.assertIsNotNone(outputs)

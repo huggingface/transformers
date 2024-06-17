@@ -196,7 +196,7 @@ _python_、_numpy_、および _pytorch_ の RNG 状態は、そのチェック�
 [`DistributedDataParallel`](https://pytorch.org/docs/stable/generated/torch.nn.Parallel.DistributedDataParallel.html) を使用して GPU のサブセットのみを使用する場合、使用する GPU の数を指定するだけです。 。たとえば、GPU が 4 つあるが、最初の 2 つを使用したい場合は、次のようにします。
 
 ```bash
-python -m torch.distributed.launch --nproc_per_node=2  trainer-program.py ...
+torchrun --nproc_per_node=2  trainer-program.py ...
 ```
 
 [`accelerate`](https://github.com/huggingface/accelerate) または [`deepspeed`](https://github.com/microsoft/DeepSpeed) がインストールされている場合は、次を使用して同じことを達成することもできます。の一つ：
@@ -209,7 +209,7 @@ accelerate launch --num_processes 2 trainer-program.py ...
 deepspeed --num_gpus 2 trainer-program.py ...
 ```
 
-これらのランチャーを使用するために、Accelerate または [Deepspeed 統合](Deepspeed) 機能を使用する必要はありません。
+これらのランチャーを使用するために、Accelerate または [Deepspeed 統合](deepspeed) 機能を使用する必要はありません。
 
 
 これまでは、プログラムに使用する GPU の数を指示できました。次に、特定の GPU を選択し、その順序を制御する方法について説明します。
@@ -223,7 +223,7 @@ deepspeed --num_gpus 2 trainer-program.py ...
 たとえば、4 つの GPU (0、1、2、3) があるとします。物理 GPU 0 と 2 のみで実行するには、次のようにします。
 
 ```bash
-CUDA_VISIBLE_DEVICES=0,2 python -m torch.distributed.launch trainer-program.py ...
+CUDA_VISIBLE_DEVICES=0,2 torchrun trainer-program.py ...
 ```
 
 したがって、pytorch は 2 つの GPU のみを認識し、物理 GPU 0 と 2 はそれぞれ `cuda:0` と `cuda:1` にマッピングされます。
@@ -231,7 +231,7 @@ CUDA_VISIBLE_DEVICES=0,2 python -m torch.distributed.launch trainer-program.py .
 順序を変更することもできます。
 
 ```bash
-CUDA_VISIBLE_DEVICES=2,0 python -m torch.distributed.launch trainer-program.py ...
+CUDA_VISIBLE_DEVICES=2,0 torchrun trainer-program.py ...
 ```
 
 ここでは、物理 GPU 0 と 2 がそれぞれ`cuda:1`と`cuda:0`にマッピングされています。
@@ -253,7 +253,7 @@ CUDA_VISIBLE_DEVICES= python trainer-program.py ...
 
 ```bash
 export CUDA_VISIBLE_DEVICES=0,2
-python -m torch.distributed.launch trainer-program.py ...
+torchrun trainer-program.py ...
 ```
 
 ただし、この方法では、以前に環境変数を設定したことを忘れて、なぜ間違った GPU が使用されているのか理解できない可能性があるため、混乱を招く可能性があります。したがって、このセクションのほとんどの例で示されているように、同じコマンド ラインで特定の実行に対してのみ環境変数を設定するのが一般的です。
@@ -291,8 +291,7 @@ export CUDA_VISIBLE_DEVICES=1,0
 [`Trainer`] は、トレーニングを劇的に改善する可能性のあるライブラリをサポートするように拡張されました。
 時間とはるかに大きなモデルに適合します。
 
-現在、サードパーティのソリューション [DeepSpeed](https://github.com/microsoft/DeepSpeed) および [PyTorch FSDP](https://pytorch.org/docs/stable/fsdp.html) をサポートしています。論文 [ZeRO: メモリの最適化]
-兆パラメータ モデルのトレーニングに向けて、Samyam Rajbhandari、Jeff Rasley、Olatunji Ruwase、Yuxiong He 著](https://arxiv.org/abs/1910.02054)。
+現在、サードパーティのソリューション [DeepSpeed](https://github.com/microsoft/DeepSpeed) および [PyTorch FSDP](https://pytorch.org/docs/stable/fsdp.html) をサポートしています。論文 [ZeRO: メモリの最適化兆パラメータ モデルのトレーニングに向けて、Samyam Rajbhandari、Jeff Rasley、Olatunji Ruwase、Yuxiong He 著](https://arxiv.org/abs/1910.02054)。
 
 この提供されるサポートは、この記事の執筆時点では新しくて実験的なものです。 DeepSpeed と PyTorch FSDP のサポートはアクティブであり、それに関する問題は歓迎しますが、FairScale 統合は PyTorch メインに統合されているため、もうサポートしていません ([PyTorch FSDP 統合](#pytorch-fully-sharded-data-parallel))
 
@@ -526,7 +525,7 @@ MacOS マシンに PyTorch >= 1.13 (執筆時点ではナイトリー バージ�
 export TASK_NAME=mrpc
 
 python examples/pytorch/text-classification/run_glue.py \
-  --model_name_or_path bert-base-cased \
+  --model_name_or_path google-bert/bert-base-cased \
   --task_name $TASK_NAME \
   --do_train \
   --do_eval \
@@ -661,7 +660,7 @@ cd transformers
 
 accelerate launch \
 ./examples/pytorch/text-classification/run_glue.py \
---model_name_or_path bert-base-cased \
+--model_name_or_path google-bert/bert-base-cased \
 --task_name $TASK_NAME \
 --do_train \
 --do_eval \
@@ -686,7 +685,7 @@ accelerate launch --num_processes=2 \
 --fsdp_sharding_strategy=1 \
 --fsdp_state_dict_type=FULL_STATE_DICT \
 ./examples/pytorch/text-classification/run_glue.py
---model_name_or_path bert-base-cased \
+--model_name_or_path google-bert/bert-base-cased \
 --task_name $TASK_NAME \
 --do_train \
 --do_eval \

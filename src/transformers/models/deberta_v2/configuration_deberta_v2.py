@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" DeBERTa-v2 model configuration"""
+"""DeBERTa-v2 model configuration"""
+
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Any, Mapping, Optional, Union
 
@@ -26,17 +27,6 @@ if TYPE_CHECKING:
 
 
 logger = logging.get_logger(__name__)
-
-DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/deberta-v2-xlarge": "https://huggingface.co/microsoft/deberta-v2-xlarge/resolve/main/config.json",
-    "microsoft/deberta-v2-xxlarge": "https://huggingface.co/microsoft/deberta-v2-xxlarge/resolve/main/config.json",
-    "microsoft/deberta-v2-xlarge-mnli": (
-        "https://huggingface.co/microsoft/deberta-v2-xlarge-mnli/resolve/main/config.json"
-    ),
-    "microsoft/deberta-v2-xxlarge-mnli": (
-        "https://huggingface.co/microsoft/deberta-v2-xxlarge-mnli/resolve/main/config.json"
-    ),
-}
 
 
 class DebertaV2Config(PretrainedConfig):
@@ -85,7 +75,7 @@ class DebertaV2Config(PretrainedConfig):
             as `max_position_embeddings`.
         pad_token_id (`int`, *optional*, defaults to 0):
             The value used to pad input_ids.
-        position_biased_input (`bool`, *optional*, defaults to `False`):
+        position_biased_input (`bool`, *optional*, defaults to `True`):
             Whether add absolute position embedding to content embedding.
         pos_att_type (`List[str]`, *optional*):
             The type of relative position attention, it can be a combination of `["p2c", "c2p"]`, e.g. `["p2c"]`,
@@ -107,6 +97,7 @@ class DebertaV2Config(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "deberta-v2"
 
     def __init__(
@@ -150,7 +141,7 @@ class DebertaV2Config(PretrainedConfig):
         self.position_biased_input = position_biased_input
 
         # Backwards compatibility
-        if type(pos_att_type) == str:
+        if isinstance(pos_att_type, str):
             pos_att_type = [x.strip() for x in pos_att_type.lower().split("|")]
 
         self.pos_att_type = pos_att_type

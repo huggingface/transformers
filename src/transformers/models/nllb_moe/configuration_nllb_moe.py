@@ -12,16 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" NLLB-MoE model configuration"""
+"""NLLB-MoE model configuration"""
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-NLLB_MOE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/nllb-moe-54B": "https://huggingface.co/facebook/nllb-moe-54b/resolve/main/config.json",
-}
 
 
 class NllbMoeConfig(PretrainedConfig):
@@ -125,6 +122,7 @@ class NllbMoeConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "nllb-moe"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}

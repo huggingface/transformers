@@ -38,7 +38,6 @@ if is_torch_available():
         LxmertForQuestionAnswering,
         LxmertModel,
     )
-    from transformers.models.lxmert.modeling_lxmert import LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_tf_available():
@@ -584,10 +583,10 @@ class LxmertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = LxmertModel.from_pretrained(model_name)
-            model.to(torch_device)
-            self.assertIsNotNone(model)
+        model_name = "unc-nlp/lxmert-base-uncased"
+        model = LxmertModel.from_pretrained(model_name)
+        model.to(torch_device)
+        self.assertIsNotNone(model)
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -751,7 +750,7 @@ class LxmertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 tf_inputs_dict[key] = self.prepare_pt_inputs_from_tf_inputs(value)
             elif isinstance(value, (list, tuple)):
                 tf_inputs_dict[key] = (self.prepare_pt_inputs_from_tf_inputs(iter_value) for iter_value in value)
-            elif type(value) == bool:
+            elif isinstance(value, bool):
                 tf_inputs_dict[key] = value
             elif key == "input_values":
                 tf_inputs_dict[key] = tf.convert_to_tensor(value.cpu().numpy(), dtype=tf.float32)
@@ -767,12 +766,24 @@ class LxmertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
         return tf_inputs_dict
 
+    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    def test_save_load_low_cpu_mem_usage(self):
+        pass
+
+    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    def test_save_load_low_cpu_mem_usage_checkpoints(self):
+        pass
+
+    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    def test_save_load_low_cpu_mem_usage_no_safetensors(self):
+        pass
+
 
 @require_torch
 class LxmertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head_absolute_embedding(self):
-        model = LxmertModel.from_pretrained(LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST[0])
+        model = LxmertModel.from_pretrained("unc-nlp/lxmert-base-uncased")
         input_ids = torch.tensor([[101, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 102]])
         num_visual_features = 10
         _, visual_feats = np.random.seed(0), np.random.rand(1, num_visual_features, model.config.visual_feat_dim)

@@ -12,11 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch TimeSformer model. """
-
+"""Testing suite for the PyTorch TimeSformer model."""
 
 import copy
-import inspect
 import unittest
 
 import numpy as np
@@ -41,7 +39,6 @@ if is_torch_available():
         TimesformerForVideoClassification,
         TimesformerModel,
     )
-    from transformers.models.timesformer.modeling_timesformer import TIMESFORMER_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -195,7 +192,7 @@ class TimesformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def test_inputs_embeds(self):
         pass
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -203,18 +200,6 @@ class TimesformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
             self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
-
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
-
-            expected_arg_names = ["pixel_values"]
-            self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -226,9 +211,9 @@ class TimesformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TIMESFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TimesformerModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/timesformer-base-finetuned-k400"
+        model = TimesformerModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_attention_outputs(self):
         if not self.has_attentions:

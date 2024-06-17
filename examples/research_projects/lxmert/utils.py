@@ -1,20 +1,20 @@
 """
- coding=utf-8
- Copyright 2018, Antonio Mendoza Hao Tan, Mohit Bansal, Huggingface team :)
- Adapted From Facebook Inc, Detectron2
+coding=utf-8
+Copyright 2018, Antonio Mendoza Hao Tan, Mohit Bansal, Huggingface team :)
+Adapted From Facebook Inc, Detectron2
 
- Licensed under the Apache License, Version 2.0 (the "License");
- you may not use this file except in compliance with the License.
- You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-     http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
- Unless required by applicable law or agreed to in writing, software
- distributed under the License is distributed on an "AS IS" BASIS,
- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- See the License for the specific language governing permissions and
- limitations under the License.import copy
- """
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.import copy
+"""
 
 import copy
 import fnmatch
@@ -28,7 +28,6 @@ import tempfile
 from collections import OrderedDict
 from contextlib import contextmanager
 from functools import partial
-from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
 from urllib.parse import urlparse
@@ -39,6 +38,7 @@ import numpy as np
 import requests
 import wget
 from filelock import FileLock
+from huggingface_hub.utils import insecure_hashlib
 from PIL import Image
 from tqdm.auto import tqdm
 from yaml import Loader, dump, load
@@ -402,12 +402,12 @@ def get_from_cache(
 
 def url_to_filename(url, etag=None):
     url_bytes = url.encode("utf-8")
-    url_hash = sha256(url_bytes)
+    url_hash = insecure_hashlib.sha256(url_bytes)
     filename = url_hash.hexdigest()
 
     if etag:
         etag_bytes = etag.encode("utf-8")
-        etag_hash = sha256(etag_bytes)
+        etag_hash = insecure_hashlib.sha256(etag_bytes)
         filename += "." + etag_hash.hexdigest()
 
     if url.endswith(".h5"):

@@ -379,7 +379,7 @@ pytest --random-order-bucket=none
 
 Standardmäßig ist `--random-order-bucket=module` impliziert, wodurch die Dateien auf den Modulebenen gemischt werden. Es kann auch
 auf den Ebenen `class`, `package`, `global` und `none` mischen. Die vollständigen Details entnehmen Sie bitte der
-[Dokumentation] (https://github.com/jbasko/pytest-random-order).
+[Dokumentation](https://github.com/jbasko/pytest-random-order).
 
 Eine weitere Alternative zur Randomisierung ist: [`pytest-random`](https://github.com/pytest-dev/pytest-randomly). Dieses
 Modul hat eine sehr ähnliche Funktionalität/Schnittstelle, aber es hat nicht die Eimermodi, die in
@@ -452,7 +452,7 @@ Dekorateure werden verwendet, um die Anforderungen von Tests in Bezug auf CPU/GP
 - `require_torch_multi_gpu` - wie `require_torch` und zusätzlich mindestens 2 GPUs erforderlich
 - `require_torch_non_multi_gpu` - wie `require_torch` plus benötigt 0 oder 1 GPUs
 - `require_torch_up_to_2_gpus` - wie `require_torch` plus erfordert 0 oder 1 oder 2 GPUs
-- `require_torch_tpu` - wie `require_torch` plus erfordert mindestens 1 TPU
+- `require_torch_xla` - wie `require_torch` plus erfordert mindestens 1 TPU
 
 Lassen Sie uns die GPU-Anforderungen in der folgenden Tabelle darstellen:
 
@@ -720,8 +720,8 @@ Zugriffsmöglichkeiten auf sie bietet:
   - `test_file_dir` - das Verzeichnis, das die aktuelle Testdatei enthält
   - `tests_dir` - das Verzeichnis der `tests` Testreihe
   - `examples_dir` - das Verzeichnis der `examples` Test-Suite
-  - repo_root_dir` - das Verzeichnis des Repositorys
-  - src_dir` - das Verzeichnis von `src` (d.h. wo sich das Unterverzeichnis `transformers` befindet)
+  - `repo_root_dir` - das Verzeichnis des Repositorys
+  - `src_dir` - das Verzeichnis von `src` (d.h. wo sich das Unterverzeichnis `transformers` befindet)
 
 - stringifizierte Pfade - wie oben, aber diese geben Pfade als Strings zurück, anstatt als `pathlib`-Objekte:
 
@@ -945,7 +945,7 @@ from transformers.testing_utils import slow
 def test_integration_foo():
 ```
 
-Sobald ein Test als `@langsam` markiert ist, setzen Sie die Umgebungsvariable `RUN_SLOW=1`, um solche Tests auszuführen, z.B:
+Sobald ein Test als `@slow` markiert ist, setzen Sie die Umgebungsvariable `RUN_SLOW=1`, um solche Tests auszuführen, z.B:
 
 ```bash
 RUN_SLOW=1 pytest tests
@@ -955,7 +955,7 @@ Einige Dekoratoren wie `@parameterized` schreiben Testnamen um, daher müssen `@
 `@require_*` müssen als letztes aufgeführt werden, damit sie korrekt funktionieren. Hier ist ein Beispiel für die korrekte Verwendung:
 
 ```python no-style
-@parameteriz ed.expand(...)
+@parameterized.expand(...)
 @slow
 def test_integration_foo():
 ```
@@ -978,8 +978,8 @@ Ansatz zu verfeinern, sollten wir Ausnahmen einführen:
   wird in den folgenden Abschnitten erläutert.
 - Alle Tests, die ein Training durchführen müssen, das nicht speziell auf Schnelligkeit optimiert ist, sollten auf langsam gesetzt werden.
 - Wir können Ausnahmen einführen, wenn einige dieser Tests, die nicht langsam sein sollten, unerträglich langsam sind, und sie auf
-  @langsam`. Auto-Modellierungstests, die große Dateien auf der Festplatte speichern und laden, sind ein gutes Beispiel für Tests, die als
-  als `@langsam` markiert sind.
+  `@slow`. Auto-Modellierungstests, die große Dateien auf der Festplatte speichern und laden, sind ein gutes Beispiel für Tests, die als
+  als `@slow` markiert sind.
 - Wenn ein Test in weniger als 1 Sekunde auf CI abgeschlossen wird (einschließlich eventueller Downloads), sollte es sich trotzdem um einen normalen Test handeln.
 
 Insgesamt müssen alle nicht langsamen Tests die verschiedenen Interna abdecken und dabei schnell bleiben. Zum Beispiel,
@@ -1172,7 +1172,7 @@ class EnvExampleTest(TestCasePlus):
 ```
 
 Je nachdem, ob die Testdatei in der Testsuite `tests` oder in `examples` war, wird sie korrekt eingerichtet
-env[PYTHONPATH]` eines dieser beiden Verzeichnisse und auch das `src` Verzeichnis, um sicherzustellen, dass der Test gegen das aktuelle
+`env[PYTHONPATH]` eines dieser beiden Verzeichnisse und auch das `src` Verzeichnis, um sicherzustellen, dass der Test gegen das aktuelle
 um sicherzustellen, dass der Test mit dem aktuellen Projektarchiv durchgeführt wird, und schließlich mit dem, was in `env[PYTHONPATH]` bereits eingestellt war, bevor der Test aufgerufen wurde.
 wenn überhaupt.
 

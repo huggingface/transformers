@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Chinese-CLIP model configuration"""
+"""Chinese-CLIP model configuration"""
 
 import os
 from collections import OrderedDict
@@ -29,12 +29,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-CHINESE_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "OFA-Sys/chinese-clip-vit-base-patch16": (
-        "https://huggingface.co/OFA-Sys/chinese-clip-vit-base-patch16/resolve/main/config.json"
-    ),
-}
 
 
 class ChineseCLIPTextConfig(PretrainedConfig):
@@ -106,6 +100,7 @@ class ChineseCLIPTextConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "chinese_clip_text_model"
 
     def __init__(
@@ -170,8 +165,7 @@ class ChineseCLIPVisionConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`ChineseCLIPModel`]. It is used to instantiate an
     ChineseCLIP model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the ChineseCLIP
-    [OFA-Sys/chinese-clip-vit-base-patch16](https:
-        //huggingface.co/OFA-Sys/chinese-clip-vit-base-patch16) architecture.
+    [OFA-Sys/chinese-clip-vit-base-patch16](https://huggingface.co/OFA-Sys/chinese-clip-vit-base-patch16) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -359,7 +353,7 @@ class ChineseCLIPConfig(PretrainedConfig):
                             f"`text_config_dict` is provided which will be used to initialize `ChineseCLIPTextConfig`. "
                             f'The value `text_config["{key}"]` will be overriden.'
                         )
-                    logger.warning(message)
+                    logger.info(message)
 
             # Update all values in `text_config` with the ones in `_text_config_dict`.
             text_config.update(_text_config_dict)
@@ -391,7 +385,7 @@ class ChineseCLIPConfig(PretrainedConfig):
                             f"`vision_config_dict` is provided which will be used to initialize "
                             f'`ChineseCLIPVisionConfig`. The value `vision_config["{key}"]` will be overriden.'
                         )
-                    logger.warning(message)
+                    logger.info(message)
 
             # Update all values in `vision_config` with the ones in `_vision_config_dict`.
             vision_config.update(_vision_config_dict)

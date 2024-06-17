@@ -12,15 +12,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch DPT model. """
+"""Testing suite for the PyTorch DPT model."""
 
-
-import inspect
 import unittest
 
 from transformers import Dinov2Config, DPTConfig
 from transformers.file_utils import is_torch_available, is_vision_available
-from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
@@ -31,8 +28,8 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import MODEL_MAPPING, DPTForDepthEstimation
-    from transformers.models.dpt.modeling_dpt import DPT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers import DPTForDepthEstimation
+    from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
 
 
 if is_vision_available():
@@ -96,6 +93,7 @@ class DPTModelTester:
     def get_config(self):
         return DPTConfig(
             backbone_config=self.get_backbone_config(),
+            backbone=None,
             neck_hidden_sizes=self.neck_hidden_sizes,
             fusion_hidden_size=self.fusion_hidden_size,
         )
@@ -154,18 +152,6 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
-
-            expected_arg_names = ["pixel_values"]
-            self.assertListEqual(arg_names[:1], expected_arg_names)
-
     def test_for_depth_estimation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_depth_estimation(*config_and_inputs)
@@ -178,7 +164,7 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             config.return_dict = True
 
-            if model_class in get_values(MODEL_MAPPING):
+            if model_class.__name__ in MODEL_MAPPING_NAMES.values():
                 continue
 
             model = model_class(config)
@@ -197,7 +183,7 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             config.use_cache = False
             config.return_dict = True
 
-            if model_class in get_values(MODEL_MAPPING) or not model_class.supports_gradient_checkpointing:
+            if model_class.__name__ in MODEL_MAPPING_NAMES.values() or not model_class.supports_gradient_checkpointing:
                 continue
             model = model_class(config)
             model.to(torch_device)
@@ -231,7 +217,7 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     )
 
     @unittest.skip(reason="DPT with AutoBackbone does not have a base model and hence no input_embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip(reason="DPT with AutoBackbone does not have a base model")
@@ -256,9 +242,9 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in DPT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = DPTForDepthEstimation.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "Intel/dpt-large"
+        model = DPTForDepthEstimation.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
@@ -271,7 +257,7 @@ def prepare_img():
 @require_vision
 @slow
 class DPTModelIntegrationTest(unittest.TestCase):
-    def test_inference_depth_estimation(self):
+    def test_inference_depth_estimation_dinov2(self):
         image_processor = DPTImageProcessor.from_pretrained("facebook/dpt-dinov2-small-kitti")
         model = DPTForDepthEstimation.from_pretrained("facebook/dpt-dinov2-small-kitti").to(torch_device)
 
@@ -289,6 +275,50 @@ class DPTModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor(
             [[6.0433, 7.1636, 7.4268], [6.9047, 7.2471, 7.2355], [7.9261, 8.0631, 8.0244]]
+        ).to(torch_device)
+
+        self.assertTrue(torch.allclose(outputs.predicted_depth[0, :3, :3], expected_slice, atol=1e-4))
+
+    def test_inference_depth_estimation_beit(self):
+        image_processor = DPTImageProcessor.from_pretrained("Intel/dpt-beit-base-384")
+        model = DPTForDepthEstimation.from_pretrained("Intel/dpt-beit-base-384").to(torch_device)
+
+        image = prepare_img()
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs)
+            predicted_depth = outputs.predicted_depth
+
+        # verify the predicted depth
+        expected_shape = torch.Size((1, 384, 384))
+        self.assertEqual(predicted_depth.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [[2669.7061, 2663.7144, 2674.9399], [2633.9326, 2650.9092, 2665.4270], [2621.8271, 2632.0129, 2637.2290]]
+        ).to(torch_device)
+
+        self.assertTrue(torch.allclose(outputs.predicted_depth[0, :3, :3], expected_slice, atol=1e-4))
+
+    def test_inference_depth_estimation_swinv2(self):
+        image_processor = DPTImageProcessor.from_pretrained("Intel/dpt-swinv2-tiny-256")
+        model = DPTForDepthEstimation.from_pretrained("Intel/dpt-swinv2-tiny-256").to(torch_device)
+
+        image = prepare_img()
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs)
+            predicted_depth = outputs.predicted_depth
+
+        # verify the predicted depth
+        expected_shape = torch.Size((1, 256, 256))
+        self.assertEqual(predicted_depth.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [[1032.7719, 1025.1886, 1030.2661], [1023.7619, 1021.0075, 1024.9121], [1022.5667, 1018.8522, 1021.4145]]
         ).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.predicted_depth[0, :3, :3], expected_slice, atol=1e-4))

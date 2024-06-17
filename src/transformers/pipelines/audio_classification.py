@@ -18,7 +18,7 @@ import numpy as np
 import requests
 
 from ..utils import add_end_docstrings, is_torch_available, is_torchaudio_available, logging
-from .base import PIPELINE_INIT_ARGS, Pipeline
+from .base import Pipeline, build_pipeline_init_args
 
 
 if is_torch_available():
@@ -63,7 +63,7 @@ def ffmpeg_read(bpayload: bytes, sampling_rate: int) -> np.array:
     return audio
 
 
-@add_end_docstrings(PIPELINE_INIT_ARGS)
+@add_end_docstrings(build_pipeline_init_args(has_feature_extractor=True))
 class AudioClassificationPipeline(Pipeline):
     """
     Audio classification pipeline using any `AutoModelForAudioClassification`. This pipeline predicts the class of a

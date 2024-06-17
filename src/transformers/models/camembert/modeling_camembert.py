@@ -48,15 +48,9 @@ from .configuration_camembert import CamembertConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "camembert-base"
+_CHECKPOINT_FOR_DOC = "almanach/camembert-base"
 _CONFIG_FOR_DOC = "CamembertConfig"
 
-CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "camembert-base",
-    "Musixmatch/umberto-commoncrawl-cased-v1",
-    "Musixmatch/umberto-wikipedia-uncased-v1",
-    # See all CamemBERT models at https://huggingface.co/models?filter=camembert
-]
 
 CAMEMBERT_START_DOCSTRING = r"""
 
@@ -315,11 +309,18 @@ class CamembertSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaAttention with Roberta->Camembert
+CAMEMBERT_SELF_ATTENTION_CLASSES = {
+    "eager": CamembertSelfAttention,
+}
+
+
+# Copied from transformers.models.roberta.modeling_roberta.RobertaAttention with Roberta->Camembert,ROBERTA->CAMEMBERT
 class CamembertAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = CamembertSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.self = CAMEMBERT_SELF_ATTENTION_CLASSES[config._attn_implementation](
+            config, position_embedding_type=position_embedding_type
+        )
         self.output = CamembertSelfOutput(config)
         self.pruned_heads = set()
 
@@ -748,7 +749,7 @@ class CamembertModel(CamembertPreTrainedModel):
 
     _no_split_modules = []
 
-    # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->Camembert
+    # Copied from transformers.models.clap.modeling_clap.ClapTextModel.__init__ with ClapText->Camembert
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
@@ -781,7 +782,7 @@ class CamembertModel(CamembertPreTrainedModel):
         output_type=BaseModelOutputWithPoolingAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
-    # Copied from transformers.models.bert.modeling_bert.BertModel.forward
+    # Copied from transformers.models.clap.modeling_clap.ClapTextModel.forward
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1397,7 +1398,7 @@ class CamembertForQuestionAnswering(CamembertPreTrainedModel):
 @add_start_docstrings(
     """CamemBERT Model with a `language modeling` head on top for CLM fine-tuning.""", CAMEMBERT_START_DOCSTRING
 )
-# Copied from transformers.models.roberta.modeling_roberta.RobertaForCausalLM with Roberta->Camembert, ROBERTA->CAMEMBERT, roberta-base->camembert-base
+# Copied from transformers.models.roberta.modeling_roberta.RobertaForCausalLM with Roberta->Camembert, ROBERTA->CAMEMBERT, FacebookAI/roberta-base->almanach/camembert-base
 class CamembertForCausalLM(CamembertPreTrainedModel):
     _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
@@ -1471,10 +1472,10 @@ class CamembertForCausalLM(CamembertPreTrainedModel):
         >>> from transformers import AutoTokenizer, CamembertForCausalLM, AutoConfig
         >>> import torch
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("camembert-base")
-        >>> config = AutoConfig.from_pretrained("camembert-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("almanach/camembert-base")
+        >>> config = AutoConfig.from_pretrained("almanach/camembert-base")
         >>> config.is_decoder = True
-        >>> model = CamembertForCausalLM.from_pretrained("camembert-base", config=config)
+        >>> model = CamembertForCausalLM.from_pretrained("almanach/camembert-base", config=config)
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)

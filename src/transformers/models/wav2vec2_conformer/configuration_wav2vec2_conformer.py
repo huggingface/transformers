@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Wav2Vec2Conformer model configuration"""
+"""Wav2Vec2Conformer model configuration"""
 
 import functools
 import operator
@@ -22,12 +22,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-WAV2VEC2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/wav2vec2-conformer-rel-pos-large": (
-        "https://huggingface.co/facebook/wav2vec2-conformer-rel-pos-large/resolve/main/config.json"
-    ),
-}
 
 
 class Wav2Vec2ConformerConfig(PretrainedConfig):
@@ -84,7 +78,7 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the 1D convolutional layers of the feature
             extractor. If string, `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` are supported.
         feat_quantizer_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for quantized feature encoder states.
+            The dropout probability for quantized feature encoder states.
         conv_dim (`Tuple[int]` or `List[int]`, *optional*, defaults to `(512, 512, 512, 512, 512, 512, 512)`):
             A tuple of integers defining the number of input and output channels of each 1D convolutional layer in the
             feature encoder. The length of *conv_dim* defines the number of 1D convolutional layers.
@@ -138,7 +132,7 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
         contrastive_logits_temperature (`float`, *optional*, defaults to 0.1):
             The temperature *kappa* in the contrastive loss.
         feat_quantizer_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for the output of the feature encoder that's used by the quantizer.
+            The dropout probability for the output of the feature encoder that's used by the quantizer.
         num_negatives (`int`, *optional*, defaults to 100):
             Number of negative samples for the contrastive loss.
         codevector_dim (`int`, *optional*, defaults to 256):
@@ -209,6 +203,7 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "wav2vec2-conformer"
 
     def __init__(

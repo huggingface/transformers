@@ -49,6 +49,28 @@ class DataCollatorMixin:
             raise ValueError(f"Framework '{return_tensors}' not recognized!")
 
 
+def pad_without_fast_tokenizer_warning(tokenizer, *pad_args, **pad_kwargs):
+    """
+    Pads without triggering the warning about how using the pad function is sub-optimal when using a fast tokenizer.
+    """
+
+    # To avoid errors when using Feature extractors
+    if not hasattr(tokenizer, "deprecation_warnings"):
+        return tokenizer.pad(*pad_args, **pad_kwargs)
+
+    # Save the state of the warning, then disable it
+    warning_state = tokenizer.deprecation_warnings.get("Asking-to-pad-a-fast-tokenizer", False)
+    tokenizer.deprecation_warnings["Asking-to-pad-a-fast-tokenizer"] = True
+
+    try:
+        padded = tokenizer.pad(*pad_args, **pad_kwargs)
+    finally:
+        # Restore the state of the warning.
+        tokenizer.deprecation_warnings["Asking-to-pad-a-fast-tokenizer"] = warning_state
+
+    return padded
+
+
 def default_data_collator(features: List[InputDataClass], return_tensors="pt") -> Dict[str, Any]:
     """
     Very simple data collator that simply collates batches of dict-like objects and performs special handling for
@@ -121,7 +143,7 @@ def torch_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any
         if isinstance(first["label_ids"], torch.Tensor):
             batch["labels"] = torch.stack([f["label_ids"] for f in features])
         else:
-            dtype = torch.long if type(first["label_ids"][0]) is int else torch.float
+            dtype = torch.long if isinstance(first["label_ids"][0], int) else torch.float
             batch["labels"] = torch.tensor([f["label_ids"] for f in features], dtype=dtype)
 
     # Handling of all other possible keys.
@@ -196,7 +218,7 @@ def numpy_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any
         if isinstance(first["label_ids"], np.ndarray):
             batch["labels"] = np.stack([f["label_ids"] for f in features])
         else:
-            dtype = np.int64 if type(first["label_ids"][0]) is int else np.float32
+            dtype = np.int64 if isinstance(first["label_ids"][0], int) else np.float32
             batch["labels"] = np.array([f["label_ids"] for f in features], dtype=dtype)
 
     # Handling of all other possible keys.
@@ -246,7 +268,8 @@ class DataCollatorWithPadding:
     return_tensors: str = "pt"
 
     def __call__(self, features: List[Dict[str, Any]]) -> Dict[str, Any]:
-        batch = self.tokenizer.pad(
+        batch = pad_without_fast_tokenizer_warning(
+            self.tokenizer,
             features,
             padding=self.padding,
             max_length=self.max_length,
@@ -307,7 +330,8 @@ class DataCollatorForTokenClassification(DataCollatorMixin):
 
         no_labels_features = [{k: v for k, v in feature.items() if k != label_name} for feature in features]
 
-        batch = self.tokenizer.pad(
+        batch = pad_without_fast_tokenizer_warning(
+            self.tokenizer,
             no_labels_features,
             padding=self.padding,
             max_length=self.max_length,
@@ -343,7 +367,8 @@ class DataCollatorForTokenClassification(DataCollatorMixin):
 
         label_name = "label" if "label" in features[0].keys() else "labels"
         labels = [feature[label_name] for feature in features] if label_name in features[0].keys() else None
-        batch = self.tokenizer.pad(
+        batch = pad_without_fast_tokenizer_warning(
+            self.tokenizer,
             features,
             padding=self.padding,
             max_length=self.max_length,
@@ -372,7 +397,8 @@ class DataCollatorForTokenClassification(DataCollatorMixin):
     def numpy_call(self, features):
         label_name = "label" if "label" in features[0].keys() else "labels"
         labels = [feature[label_name] for feature in features] if label_name in features[0].keys() else None
-        batch = self.tokenizer.pad(
+        batch = pad_without_fast_tokenizer_warning(
+            self.tokenizer,
             features,
             padding=self.padding,
             max_length=self.max_length,
@@ -559,37 +585,83 @@ class DataCollatorForSeq2Seq:
     def __call__(self, features, return_tensors=None):
         if return_tensors is None:
             return_tensors = self.return_tensors
-        labels = [feature["labels"] for feature in features] if "labels" in features[0].keys() else None
-        # We have to pad the labels before calling `tokenizer.pad` as this method won't pad them and needs them of the
-        # same length to return tensors.
-        if labels is not None:
-            max_label_length = max(len(l) for l in labels)
-            if self.pad_to_multiple_of is not None:
-                max_label_length = (
-                    (max_label_length + self.pad_to_multiple_of - 1)
-                    // self.pad_to_multiple_of
-                    * self.pad_to_multiple_of
-                )
 
-            padding_side = self.tokenizer.padding_side
-            for feature in features:
-                remainder = [self.label_pad_token_id] * (max_label_length - len(feature["labels"]))
-                if isinstance(feature["labels"], list):
-                    feature["labels"] = (
-                        feature["labels"] + remainder if padding_side == "right" else remainder + feature["labels"]
-                    )
-                elif padding_side == "right":
-                    feature["labels"] = np.concatenate([feature["labels"], remainder]).astype(np.int64)
-                else:
-                    feature["labels"] = np.concatenate([remainder, feature["labels"]]).astype(np.int64)
+        label_name = "label" if "label" in features[0].keys() else "labels"
+        labels = [feature[label_name] for feature in features] if label_name in features[0].keys() else None
+        # reconvert list[None] to None if necessary
+        # this might occur when we pass {..., "labels": None}
+        if labels is not None and all(label is None for label in labels):
+            labels = None
+        non_labels_features = [{k: v for k, v in feature.items() if k != label_name} for feature in features]
 
-        features = self.tokenizer.pad(
-            features,
+        # run through tokenizer without labels to ensure no side effects
+        batch = pad_without_fast_tokenizer_warning(
+            self.tokenizer,
+            non_labels_features,
             padding=self.padding,
             max_length=self.max_length,
             pad_to_multiple_of=self.pad_to_multiple_of,
             return_tensors=return_tensors,
         )
+
+        # we have to pad the labels manually as we cannot rely on `tokenizer.pad` and we need them to be of the same length to return tensors
+        no_padding = self.padding is False or self.padding == PaddingStrategy.DO_NOT_PAD
+        if labels is not None:
+            if no_padding:
+                if isinstance(features[0][label_name], list):
+                    batch["labels"] = list(labels)
+                else:
+                    batch["labels"] = [np.concatenate([label, []]) for label in labels]
+            else:
+                max_padding = self.padding == PaddingStrategy.MAX_LENGTH and self.max_length is not None
+                max_label_length = max(len(l) for l in labels) if not max_padding else self.max_length
+                if self.pad_to_multiple_of is not None:
+                    max_label_length = (
+                        (max_label_length + self.pad_to_multiple_of - 1)
+                        // self.pad_to_multiple_of
+                        * self.pad_to_multiple_of
+                    )
+
+                padding_side = self.tokenizer.padding_side
+                if isinstance(features[0][label_name], list):
+                    batch["labels"] = [
+                        label + [self.label_pad_token_id] * (max_label_length - len(label))
+                        if padding_side == "right"
+                        else [self.label_pad_token_id] * (max_label_length - len(label)) + label
+                        for label in labels
+                    ]
+                else:
+                    batch["labels"] = [
+                        np.concatenate(
+                            [
+                                label,
+                                np.array([self.label_pad_token_id] * (max_label_length - len(label)), dtype=np.int64),
+                            ]
+                        )
+                        if padding_side == "right"
+                        else np.concatenate(
+                            [
+                                np.array([self.label_pad_token_id] * (max_label_length - len(label)), dtype=np.int64),
+                                label,
+                            ]
+                        )
+                        for label in labels
+                    ]
+
+        # reintroduce side effects via tokenizer that return respective datatypes for the `return_tensors` argument
+        if batch.get("labels", None) is not None:
+            if return_tensors == "pt":
+                import torch
+
+                batch["labels"] = torch.tensor(batch["labels"], dtype=torch.int64)
+            elif return_tensors == "tf":
+                import tensorflow as tf
+
+                batch["labels"] = tf.constant(batch["labels"], dtype=tf.int64)
+            else:
+                batch["labels"] = np.array(batch["labels"], dtype=np.int64)
+        else:
+            batch["labels"] = None
 
         # prepare decoder_input_ids
         if (
@@ -597,10 +669,10 @@ class DataCollatorForSeq2Seq:
             and self.model is not None
             and hasattr(self.model, "prepare_decoder_input_ids_from_labels")
         ):
-            decoder_input_ids = self.model.prepare_decoder_input_ids_from_labels(labels=features["labels"])
-            features["decoder_input_ids"] = decoder_input_ids
+            decoder_input_ids = self.model.prepare_decoder_input_ids_from_labels(labels=batch["labels"])
+            batch["decoder_input_ids"] = decoder_input_ids
 
-        return features
+        return batch
 
 
 @dataclass
@@ -692,7 +764,9 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
 
         # Handle dict or lists with proper padding and conversion to tensor.
         if isinstance(examples[0], Mapping):
-            batch = self.tokenizer.pad(examples, return_tensors="tf", pad_to_multiple_of=self.pad_to_multiple_of)
+            batch = pad_without_fast_tokenizer_warning(
+                self.tokenizer, examples, return_tensors="tf", pad_to_multiple_of=self.pad_to_multiple_of
+            )
         else:
             batch = {
                 "input_ids": _tf_collate_batch(examples, self.tokenizer, pad_to_multiple_of=self.pad_to_multiple_of)
@@ -729,7 +803,9 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
     def torch_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
         # Handle dict or lists with proper padding and conversion to tensor.
         if isinstance(examples[0], Mapping):
-            batch = self.tokenizer.pad(examples, return_tensors="pt", pad_to_multiple_of=self.pad_to_multiple_of)
+            batch = pad_without_fast_tokenizer_warning(
+                self.tokenizer, examples, return_tensors="pt", pad_to_multiple_of=self.pad_to_multiple_of
+            )
         else:
             batch = {
                 "input_ids": _torch_collate_batch(examples, self.tokenizer, pad_to_multiple_of=self.pad_to_multiple_of)
@@ -784,7 +860,9 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
     def numpy_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
         # Handle dict or lists with proper padding and conversion to tensor.
         if isinstance(examples[0], Mapping):
-            batch = self.tokenizer.pad(examples, return_tensors="np", pad_to_multiple_of=self.pad_to_multiple_of)
+            batch = pad_without_fast_tokenizer_warning(
+                self.tokenizer, examples, return_tensors="np", pad_to_multiple_of=self.pad_to_multiple_of
+            )
         else:
             batch = {
                 "input_ids": _numpy_collate_batch(examples, self.tokenizer, pad_to_multiple_of=self.pad_to_multiple_of)

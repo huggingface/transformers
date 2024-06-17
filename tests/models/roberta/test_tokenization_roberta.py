@@ -28,6 +28,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 @require_tokenizers
 class RobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "FacebookAI/roberta-base"
     tokenizer_class = RobertaTokenizer
     rust_tokenizer_class = RobertaTokenizerFast
     test_rust_tokenizer = True
@@ -105,7 +106,7 @@ class RobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @slow
     def test_sequence_builders(self):
-        tokenizer = self.tokenizer_class.from_pretrained("roberta-base")
+        tokenizer = self.tokenizer_class.from_pretrained("FacebookAI/roberta-base")
 
         text = tokenizer.encode("sequence builders", add_special_tokens=False)
         text_2 = tokenizer.encode("multi-sequence build", add_special_tokens=False)

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Flax mT5 model."""
+"""Flax mT5 model."""
 
 import jax.numpy as jnp
 
@@ -61,6 +61,7 @@ class FlaxMT5Model(FlaxT5Model):
     >>> outputs = model(input_ids=inputs["input_ids"], decoder_input_ids=decoder_input_ids)
     >>> hidden_states = outputs.last_hidden_state
     ```"""
+
     model_type = "mt5"
     config_class = MT5Config
 
@@ -87,6 +88,7 @@ class FlaxMT5EncoderModel(FlaxT5EncoderModel):
     >>> outputs = model(input_ids=inputs["input_ids"])
     >>> hidden_states = outputs.last_hidden_state
     ```"""
+
     model_type = "mt5"
     config_class = MT5Config
 

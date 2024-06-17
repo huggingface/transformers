@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Processor class for Pop2Piano."""
+"""Processor class for Pop2Piano."""
 
 import os
 from typing import List, Optional, Union
@@ -39,6 +39,7 @@ class Pop2PianoProcessor(ProcessorMixin):
         tokenizer (`Pop2PianoTokenizer`):
             An instance of ['Pop2PianoTokenizer`]. The tokenizer is a required input.
     """
+
     attributes = ["feature_extractor", "tokenizer"]
     feature_extractor_class = "Pop2PianoFeatureExtractor"
     tokenizer_class = "Pop2PianoTokenizer"

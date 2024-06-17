@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch GPT Neo model. """
-
+"""Testing suite for the PyTorch GPT Neo model."""
 
 import unittest
 
@@ -31,7 +30,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST,
         GPT2Tokenizer,
         GPTNeoForCausalLM,
         GPTNeoForQuestionAnswering,
@@ -537,10 +535,8 @@ class GPTNeoModelLanguageGenerationTest(unittest.TestCase):
             else:
                 model.gradient_checkpointing_disable()
             input_ids = torch.tensor([[464, 3290]], dtype=torch.long, device=torch_device)  # The dog
-            # fmt: off
             # The dog-eared copy of the book, which is a collection of essays by the late author,
-            expected_output_ids = [464, 3290, 12, 3380, 4866, 286, 262, 1492, 11, 543, 318, 257, 4947, 286, 27126, 416, 262, 2739, 1772, 11]
-            # fmt: on
+            expected_output_ids = [464, 3290, 12, 3380, 4866, 286, 262, 1492, 11, 543, 318, 257, 4947, 286, 27126, 416, 262, 2739, 1772, 11]  # fmt: skip
             output_ids = model.generate(input_ids, do_sample=False)
             self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
 
@@ -603,6 +599,6 @@ class GPTNeoModelLanguageGenerationTest(unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = GPTNeoModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "EleutherAI/gpt-neo-1.3B"
+        model = GPTNeoModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)

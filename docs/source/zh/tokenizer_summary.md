@@ -92,7 +92,7 @@ and [SentencePiece](#sentencepiece)，并且给出了示例，哪个模型用到
 ```py
 >>> from transformers import BertTokenizer
 
->>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+>>> tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-uncased")
 >>> tokenizer.tokenize("I have a new GPU!")
 ["i", "have", "a", "new", "gp", "##u", "!"]
 ```
@@ -106,7 +106,7 @@ token应该附着在前面那个token的后面，不带空格的附着（分词�
 ```py
 >>> from transformers import XLNetTokenizer
 
->>> tokenizer = XLNetTokenizer.from_pretrained("xlnet-base-cased")
+>>> tokenizer = XLNetTokenizer.from_pretrained("xlnet/xlnet-base-cased")
 >>> tokenizer.tokenize("Don't you love 🤗 Transformers? We sure do.")
 ["▁Don", "'", "t", "▁you", "▁love", "▁", "🤗", "▁", "Transform", "ers", "?", "▁We", "▁sure", "▁do", "."]
 ```

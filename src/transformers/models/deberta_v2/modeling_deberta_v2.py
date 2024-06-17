@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch DeBERTa-v2 model."""
+"""PyTorch DeBERTa-v2 model."""
 
 from collections.abc import Sequence
 from typing import Optional, Tuple, Union
@@ -43,13 +43,6 @@ _CONFIG_FOR_DOC = "DebertaV2Config"
 _CHECKPOINT_FOR_DOC = "microsoft/deberta-v2-xlarge"
 _QA_TARGET_START_INDEX = 2
 _QA_TARGET_END_INDEX = 9
-
-DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/deberta-v2-xlarge",
-    "microsoft/deberta-v2-xxlarge",
-    "microsoft/deberta-v2-xlarge-mnli",
-    "microsoft/deberta-v2-xxlarge-mnli",
-]
 
 
 # Copied from transformers.models.deberta.modeling_deberta.ContextPooler
@@ -780,15 +773,11 @@ class DisentangledSelfAttention(nn.Module):
             if "c2p" in self.pos_att_type:
                 pos_key_layer = self.transpose_for_scores(
                     self.pos_key_proj(rel_embeddings), self.num_attention_heads
-                ).repeat(
-                    query_layer.size(0) // self.num_attention_heads, 1, 1
-                )  # .split(self.all_head_size, dim=-1)
+                ).repeat(query_layer.size(0) // self.num_attention_heads, 1, 1)  # .split(self.all_head_size, dim=-1)
             if "p2c" in self.pos_att_type:
                 pos_query_layer = self.transpose_for_scores(
                     self.pos_query_proj(rel_embeddings), self.num_attention_heads
-                ).repeat(
-                    query_layer.size(0) // self.num_attention_heads, 1, 1
-                )  # .split(self.all_head_size, dim=-1)
+                ).repeat(query_layer.size(0) // self.num_attention_heads, 1, 1)  # .split(self.all_head_size, dim=-1)
 
         score = 0
         # content->position
@@ -1128,6 +1117,7 @@ class DebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
+        self.cls.predictions.bias = new_embeddings.bias
 
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1223,6 +1213,9 @@ class DebertaV2LMPredictionHead(nn.Module):
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
 
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
+        self.decoder.bias = self.bias
+
+    def _tie_weights(self):
         self.decoder.bias = self.bias
 
     def forward(self, hidden_states):

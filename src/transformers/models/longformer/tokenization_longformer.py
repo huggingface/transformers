@@ -29,47 +29,6 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "allenai/longformer-base-4096": "https://huggingface.co/allenai/longformer-base-4096/resolve/main/vocab.json",
-        "allenai/longformer-large-4096": (
-            "https://huggingface.co/allenai/longformer-large-4096/resolve/main/vocab.json"
-        ),
-        "allenai/longformer-large-4096-finetuned-triviaqa": (
-            "https://huggingface.co/allenai/longformer-large-4096-finetuned-triviaqa/resolve/main/vocab.json"
-        ),
-        "allenai/longformer-base-4096-extra.pos.embd.only": (
-            "https://huggingface.co/allenai/longformer-base-4096-extra.pos.embd.only/resolve/main/vocab.json"
-        ),
-        "allenai/longformer-large-4096-extra.pos.embd.only": (
-            "https://huggingface.co/allenai/longformer-large-4096-extra.pos.embd.only/resolve/main/vocab.json"
-        ),
-    },
-    "merges_file": {
-        "allenai/longformer-base-4096": "https://huggingface.co/allenai/longformer-base-4096/resolve/main/merges.txt",
-        "allenai/longformer-large-4096": (
-            "https://huggingface.co/allenai/longformer-large-4096/resolve/main/merges.txt"
-        ),
-        "allenai/longformer-large-4096-finetuned-triviaqa": (
-            "https://huggingface.co/allenai/longformer-large-4096-finetuned-triviaqa/resolve/main/merges.txt"
-        ),
-        "allenai/longformer-base-4096-extra.pos.embd.only": (
-            "https://huggingface.co/allenai/longformer-base-4096-extra.pos.embd.only/resolve/main/merges.txt"
-        ),
-        "allenai/longformer-large-4096-extra.pos.embd.only": (
-            "https://huggingface.co/allenai/longformer-large-4096-extra.pos.embd.only/resolve/main/merges.txt"
-        ),
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "allenai/longformer-base-4096": 4096,
-    "allenai/longformer-large-4096": 4096,
-    "allenai/longformer-large-4096-finetuned-triviaqa": 4096,
-    "allenai/longformer-base-4096-extra.pos.embd.only": 4096,
-    "allenai/longformer-large-4096-extra.pos.embd.only": 4096,
-}
-
 
 @lru_cache()
 # Copied from transformers.models.roberta.tokenization_roberta.bytes_to_unicode
@@ -112,7 +71,7 @@ def get_pairs(word):
     return pairs
 
 
-# Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer with roberta-base->allenai/longformer-base-4096, RoBERTa->Longformer all-casing, RobertaTokenizer->LongformerTokenizer
+# Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer with FacebookAI/roberta-base->allenai/longformer-base-4096, RoBERTa->Longformer all-casing, RobertaTokenizer->LongformerTokenizer
 class LongformerTokenizer(PreTrainedTokenizer):
     """
     Constructs a Longformer tokenizer, derived from the GPT-2 tokenizer, using byte-level Byte-Pair-Encoding.
@@ -192,8 +151,6 @@ class LongformerTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
@@ -416,8 +373,8 @@ class LongformerTokenizer(PreTrainedTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. Longformer does
-        not make use of token type ids, therefore a list of zeros is returned.
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. Longformer does not
+        make use of token type ids, therefore a list of zeros is returned.
 
         Args:
             token_ids_0 (`List[int]`):

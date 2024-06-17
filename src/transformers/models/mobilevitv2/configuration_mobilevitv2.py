@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" MobileViTV2 model configuration"""
+"""MobileViTV2 model configuration"""
 
 from collections import OrderedDict
 from typing import Mapping
@@ -25,10 +25,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-MOBILEVITV2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "apple/mobilevitv2-1.0": "https://huggingface.co/apple/mobilevitv2-1.0/resolve/main/config.json",
-}
 
 
 class MobileViTV2Config(PretrainedConfig):
@@ -97,6 +93,7 @@ class MobileViTV2Config(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "mobilevitv2"
 
     def __init__(

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch CLIPSeg model."""
+"""PyTorch CLIPSeg model."""
 
 import copy
 import math
@@ -41,11 +41,6 @@ logger = logging.get_logger(__name__)
 
 
 _CHECKPOINT_FOR_DOC = "CIDAS/clipseg-rd64-refined"
-
-CLIPSEG_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "CIDAS/clipseg-rd64-refined",
-    # See all CLIPSeg models at https://huggingface.co/models?filter=clipseg
-]
 
 
 # contrastive loss function, adapted from
@@ -77,8 +72,7 @@ class CLIPSegOutput(ModelOutput):
         text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
             The text embeddings obtained by applying the projection layer to the pooled output of [`CLIPSegTextModel`].
         image_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The image embeddings obtained by applying the projection layer to the pooled output of
-            [`CLIPSegVisionModel`].
+            The image embeddings obtained by applying the projection layer to the pooled output of [`CLIPSegVisionModel`].
         text_model_output(`BaseModelOutputWithPooling`):
             The output of the [`CLIPSegTextModel`].
         vision_model_output(`BaseModelOutputWithPooling`):
@@ -443,9 +437,7 @@ class CLIPSegPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.out_proj.weight, std=out_proj_std)
         elif isinstance(module, CLIPSegMLP):
             factor = self.config.initializer_factor
-            in_proj_std = (
-                (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
-            )
+            in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
             nn.init.normal_(module.fc1.weight, std=fc_std)
             nn.init.normal_(module.fc2.weight, std=in_proj_std)
@@ -741,6 +733,7 @@ class CLIPSegTextTransformer(nn.Module):
             pooled_output = last_hidden_state[
                 torch.arange(last_hidden_state.shape[0], device=last_hidden_state.device),
                 # We need to get the first position of `eos_token_id` value (`pad_token_ids` might equal to `eos_token_id`)
+                # Note: we assume each sequence (along batch dim.) contains an  `eos_token_id` (e.g. prepared by the tokenizer)
                 (input_ids.to(dtype=torch.int, device=last_hidden_state.device) == self.eos_token_id)
                 .int()
                 .argmax(dim=-1),
@@ -1295,7 +1288,7 @@ class CLIPSegDecoder(CLIPSegPreTrainedModel):
         batch_size = conditional_embeddings.shape[0]
         output = output.view(batch_size, output.shape[1], size, size)
 
-        logits = self.transposed_convolution(output).squeeze()
+        logits = self.transposed_convolution(output).squeeze(1)
 
         if not return_dict:
             return tuple(v for v in [logits, all_hidden_states, all_attentions] if v is not None)

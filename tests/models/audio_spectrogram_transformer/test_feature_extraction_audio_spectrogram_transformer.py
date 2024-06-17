@@ -173,7 +173,7 @@ class ASTFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Test
         input_speech = self._load_datasamples(1)
         feature_extractor = ASTFeatureExtractor()
         input_values = feature_extractor(input_speech, return_tensors="pt").input_values
-        self.assertEquals(input_values.shape, (1, 1024, 128))
+        self.assertEqual(input_values.shape, (1, 1024, 128))
         self.assertTrue(torch.allclose(input_values[0, 0, :30], EXPECTED_INPUT_VALUES, atol=1e-4))
 
     def test_feat_extract_from_and_save_pretrained(self):

@@ -12,19 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PEGASUS-X model configuration"""
+"""PEGASUS-X model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/pegasus-x-base": "https://huggingface.co/google/pegasus-x-base/resolve/main/config.json",
-    "google/pegasus-x-large": "https://huggingface.co/google/pegasus-x-large/resolve/main/config.json",
-    # See all PEGASUS-X models at https://huggingface.co/models?filter=pegasus-x
-}
 
 
 class PegasusXConfig(PretrainedConfig):
@@ -103,6 +97,7 @@ class PegasusXConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "pegasus_x"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}

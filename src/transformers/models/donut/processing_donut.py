@@ -15,6 +15,7 @@
 """
 Processor class for Donut.
 """
+
 import re
 import warnings
 from contextlib import contextmanager
@@ -37,6 +38,7 @@ class DonutProcessor(ProcessorMixin):
         tokenizer ([`XLMRobertaTokenizer`/`XLMRobertaTokenizerFast`], *optional*):
             An instance of [`XLMRobertaTokenizer`/`XLMRobertaTokenizerFast`]. The tokenizer is a required input.
     """
+
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
@@ -148,7 +150,9 @@ class DonutProcessor(ProcessorMixin):
                 end_token = end_token.group()
                 start_token_escaped = re.escape(start_token)
                 end_token_escaped = re.escape(end_token)
-                content = re.search(f"{start_token_escaped}(.*?){end_token_escaped}", tokens, re.IGNORECASE)
+                content = re.search(
+                    f"{start_token_escaped}(.*?){end_token_escaped}", tokens, re.IGNORECASE | re.DOTALL
+                )
                 if content is not None:
                     content = content.group(1).strip()
                     if r"<s_" in content and r"</s_" in content:  # non-leaf node

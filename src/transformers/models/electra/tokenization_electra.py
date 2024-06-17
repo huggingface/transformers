@@ -26,46 +26,6 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "google/electra-small-generator": (
-            "https://huggingface.co/google/electra-small-generator/resolve/main/vocab.txt"
-        ),
-        "google/electra-base-generator": "https://huggingface.co/google/electra-base-generator/resolve/main/vocab.txt",
-        "google/electra-large-generator": (
-            "https://huggingface.co/google/electra-large-generator/resolve/main/vocab.txt"
-        ),
-        "google/electra-small-discriminator": (
-            "https://huggingface.co/google/electra-small-discriminator/resolve/main/vocab.txt"
-        ),
-        "google/electra-base-discriminator": (
-            "https://huggingface.co/google/electra-base-discriminator/resolve/main/vocab.txt"
-        ),
-        "google/electra-large-discriminator": (
-            "https://huggingface.co/google/electra-large-discriminator/resolve/main/vocab.txt"
-        ),
-    }
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "google/electra-small-generator": 512,
-    "google/electra-base-generator": 512,
-    "google/electra-large-generator": 512,
-    "google/electra-small-discriminator": 512,
-    "google/electra-base-discriminator": 512,
-    "google/electra-large-discriminator": 512,
-}
-
-
-PRETRAINED_INIT_CONFIGURATION = {
-    "google/electra-small-generator": {"do_lower_case": True},
-    "google/electra-base-generator": {"do_lower_case": True},
-    "google/electra-large-generator": {"do_lower_case": True},
-    "google/electra-small-discriminator": {"do_lower_case": True},
-    "google/electra-base-discriminator": {"do_lower_case": True},
-    "google/electra-large-discriminator": {"do_lower_case": True},
-}
-
 
 # Copied from transformers.models.bert.tokenization_bert.load_vocab
 def load_vocab(vocab_file):
@@ -133,9 +93,6 @@ class ElectraTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(
         self,
@@ -280,8 +237,8 @@ class ElectraTokenizer(PreTrainedTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. A Electra
-        sequence pair mask has the following format:
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. A Electra sequence
+        pair mask has the following format:
 
         ```
         0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1

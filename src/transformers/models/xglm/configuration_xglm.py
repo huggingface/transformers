@@ -12,18 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" XGLM model configuration"""
+"""XGLM model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-XGLM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/xglm-564M": "https://huggingface.co/facebook/xglm-564M/resolve/main/config.json",
-    # See all XGLM models at https://huggingface.co/models?filter=xglm
-}
 
 
 class XGLMConfig(PretrainedConfig):
@@ -85,6 +80,7 @@ class XGLMConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "xglm"
     keys_to_ignore_at_inference = ["past_key_values"]
 

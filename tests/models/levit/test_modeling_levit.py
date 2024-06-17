@@ -12,17 +12,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch LeViT model. """
+"""Testing suite for the PyTorch LeViT model."""
 
-
-import inspect
 import unittest
 import warnings
 from math import ceil, floor
 
 from transformers import LevitConfig
 from transformers.file_utils import cached_property, is_torch_available, is_vision_available
-from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
@@ -34,13 +31,14 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
-        MODEL_MAPPING,
         LevitForImageClassification,
         LevitForImageClassificationWithTeacher,
         LevitModel,
     )
-    from transformers.models.levit.modeling_levit import LEVIT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.auto.modeling_auto import (
+        MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
+        MODEL_MAPPING_NAMES,
+    )
 
 
 if is_vision_available():
@@ -177,7 +175,7 @@ class LevitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": LevitModel,
+            "image-feature-extraction": LevitModel,
             "image-classification": (LevitForImageClassification, LevitForImageClassificationWithTeacher),
         }
         if is_torch_available()
@@ -195,7 +193,6 @@ class LevitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.config_tester = ConfigTester(self, config_class=LevitConfig, has_text_modality=False, hidden_size=37)
 
     def test_config(self):
-        self.create_and_test_config_common_properties()
         self.config_tester.create_and_test_config_to_json_string()
         self.config_tester.create_and_test_config_to_json_file()
         self.config_tester.create_and_test_config_from_and_save_pretrained()
@@ -203,32 +200,17 @@ class LevitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.config_tester.check_config_can_be_init_without_params()
         self.config_tester.check_config_arguments_init()
 
-    def create_and_test_config_common_properties(self):
-        return
-
     @unittest.skip(reason="Levit does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
     @unittest.skip(reason="Levit does not support input and output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip(reason="Levit does not output attentions")
     def test_attention_outputs(self):
         pass
-
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
-
-            expected_arg_names = ["pixel_values"]
-            self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -310,7 +292,7 @@ class LevitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             # LevitForImageClassificationWithTeacher supports inference-only
             if (
-                model_class in get_values(MODEL_MAPPING)
+                model_class.__name__ in MODEL_MAPPING_NAMES.values()
                 or model_class.__name__ == "LevitForImageClassificationWithTeacher"
             ):
                 continue
@@ -330,7 +312,7 @@ class LevitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config.return_dict = True
 
         for model_class in self.all_model_classes:
-            if model_class in get_values(MODEL_MAPPING) or not model_class.supports_gradient_checkpointing:
+            if model_class.__name__ in MODEL_MAPPING_NAMES.values() or not model_class.supports_gradient_checkpointing:
                 continue
             # LevitForImageClassificationWithTeacher supports inference-only
             if model_class.__name__ == "LevitForImageClassificationWithTeacher":
@@ -354,9 +336,9 @@ class LevitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
         for model_class in self.all_model_classes:
             if (
-                model_class
+                model_class.__name__
                 not in [
-                    *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING),
+                    *MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES.values(),
                 ]
                 or model_class.__name__ == "LevitForImageClassificationWithTeacher"
             ):
@@ -394,9 +376,9 @@ class LevitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in LEVIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = LevitModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/levit-128S"
+        model = LevitModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
@@ -410,13 +392,11 @@ def prepare_img():
 class LevitModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return LevitImageProcessor.from_pretrained(LEVIT_PRETRAINED_MODEL_ARCHIVE_LIST[0])
+        return LevitImageProcessor.from_pretrained("facebook/levit-128S")
 
     @slow
     def test_inference_image_classification_head(self):
-        model = LevitForImageClassificationWithTeacher.from_pretrained(LEVIT_PRETRAINED_MODEL_ARCHIVE_LIST[0]).to(
-            torch_device
-        )
+        model = LevitForImageClassificationWithTeacher.from_pretrained("facebook/levit-128S").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()

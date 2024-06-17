@@ -17,7 +17,7 @@ Fixes # (issue)
 
 ## Before submitting
 - [ ] This PR fixes a typo or improves the docs (you can dismiss the other checks if that's the case).
-- [ ] Did you read the [contributor guideline](https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md#start-contributing-pull-requests),
+- [ ] Did you read the [contributor guideline](https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md#create-a-pull-request),
       Pull Request section?
 - [ ] Was this discussed/approved via a Github issue or the [forum](https://discuss.huggingface.co/)? Please add a link
       to it if that's the case.
@@ -47,15 +47,15 @@ Models:
 Library:
 
 - flax: @sanchit-gandhi
-- generate: @gante
+- generate: @zucchini-nlp (visual-language models) or @gante (all others)
 - pipelines: @Narsil
 - tensorflow: @gante and @Rocketknight1
 - tokenizers: @ArthurZucker
-- trainer: @muellerzr and @pacman100
+- trainer: @muellerzr and @SunMarc
 
 Integrations:
 
-- deepspeed: HF Trainer/Accelerate: @pacman100
+- deepspeed: HF Trainer/Accelerate: @muellerzr
 - ray/raytune: @richardliaw, @amogkam
 - Big Model Inference: @SunMarc
 - quantization (bitsandbytes, autogpt): @SunMarc and @younesbelkada

@@ -12,20 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Speech2Text model configuration"""
+"""Speech2Text model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/s2t-small-librispeech-asr": (
-        "https://huggingface.co/facebook/s2t-small-librispeech-asr/resolve/main/config.json"
-    ),
-    # See all Speech2Text models at https://huggingface.co/models?filter=speech_to_text
-}
 
 
 class Speech2TextConfig(PretrainedConfig):
@@ -121,6 +114,7 @@ class Speech2TextConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "speech_to_text"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}

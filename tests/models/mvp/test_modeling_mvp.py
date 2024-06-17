@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch MVP model. """
-
+"""Testing suite for the PyTorch MVP model."""
 
 import copy
 import tempfile
@@ -422,7 +421,6 @@ class MvpModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     all_generative_model_classes = (MvpForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "conversational": MvpForConditionalGeneration,
             "feature-extraction": MvpModel,
             "fill-mask": MvpForConditionalGeneration,
             "question-answering": MvpForQuestionAnswering,
@@ -572,9 +570,7 @@ class MvpModelIntegrationTests(unittest.TestCase):
     def test_summarization_inference(self):
         model = MvpForConditionalGeneration.from_pretrained("RUCAIBox/mvp").to(torch_device)
         tok = self.default_tokenizer
-        # fmt: off
-        PGE_ARTICLE = """ Listen to local radio broadcasts for advertisements that reference casinos in your area.\nIf none are in your area, listen to national radio broadcasts for advertisements of casinos in other areas.\nNote the location that is mentioned in each advertisement that involves a casino.\nIf no locations are mentioned, note any additional contact information, such as a website or phone number. Use that information to find out where the casinos are.;\n,\n\nIf you learn about more than 1 casino on the radio, use the Internet to search the distance between your location and each casino. Sites such as maps.google.com or mapquest.com will help you in this search.'"""
-        # fmt: on
+        PGE_ARTICLE = """ Listen to local radio broadcasts for advertisements that reference casinos in your area.\nIf none are in your area, listen to national radio broadcasts for advertisements of casinos in other areas.\nNote the location that is mentioned in each advertisement that involves a casino.\nIf no locations are mentioned, note any additional contact information, such as a website or phone number. Use that information to find out where the casinos are.;\n,\n\nIf you learn about more than 1 casino on the radio, use the Internet to search the distance between your location and each casino. Sites such as maps.google.com or mapquest.com will help you in this search.'"""  # fmt: skip
         EXPECTED_SUMMARY = "Listen to the radio.\nUse the Internet."
         dct = tok.batch_encode_plus(
             [PGE_ARTICLE],
@@ -825,7 +821,3 @@ class MvpStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, uni
     def test_retain_grad_hidden_states_attentions(self):
         # decoder cannot keep gradients
         return
-
-    @unittest.skip("The model doesn't support left padding")  # and it's not used enough to be worth fixing :)
-    def test_left_padding_compatibility(self):
-        pass

@@ -15,6 +15,7 @@
 """
 Speech processor class for Speech2Text
 """
+
 import warnings
 from contextlib import contextmanager
 
@@ -36,6 +37,7 @@ class Speech2TextProcessor(ProcessorMixin):
         tokenizer (`Speech2TextTokenizer`):
             An instance of [`Speech2TextTokenizer`]. The tokenizer is a required input.
     """
+
     feature_extractor_class = "Speech2TextFeatureExtractor"
     tokenizer_class = "Speech2TextTokenizer"
 

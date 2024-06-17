@@ -78,6 +78,7 @@ ACT2FN = {
     "swish": nn.swish,
     "gelu_new": partial(nn.gelu, approximate=True),
     "quick_gelu": quick_gelu,
+    "gelu_pytorch_tanh": partial(nn.gelu, approximate=True),
 }
 
 
@@ -179,6 +180,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         - **main_input_name** (`str`) -- The name of the principal input to the model (often `input_ids` for NLP
           models, `pixel_values` for vision models and `input_values` for speech models).
     """
+
     config_class = None
     base_model_prefix = ""
     main_input_name = "input_ids"
@@ -210,7 +212,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         self.input_shape = input_shape
         self.generation_config = GenerationConfig.from_model_config(config) if self.can_generate() else None
 
-        # To check if the model was intialized automatically.
+        # To check if the model was initialized automatically.
         self._is_initialized = _do_init
 
         if _do_init:
@@ -318,10 +320,9 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         flat_params = flatten_dict(params)
         flat_mask, _ = jax.tree_util.tree_flatten(mask)
 
-        for masked, key in zip(flat_mask, flat_params.keys()):
+        for masked, key in zip(flat_mask, sorted(flat_params.keys())):
             if masked:
-                param = flat_params[key]
-                flat_params[key] = conditional_cast(param)
+                flat_params[key] = conditional_cast(flat_params[key])
 
         return unflatten_dict(flat_params)
 
@@ -346,14 +347,14 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         >>> from transformers import FlaxBertModel
 
         >>> # load model
-        >>> model = FlaxBertModel.from_pretrained("bert-base-cased")
+        >>> model = FlaxBertModel.from_pretrained("google-bert/bert-base-cased")
         >>> # By default, the model parameters will be in fp32 precision, to cast these to bfloat16 precision
         >>> model.params = model.to_bf16(model.params)
         >>> # If you want don't want to cast certain parameters (for example layer norm bias and scale)
         >>> # then pass the mask as follows
         >>> from flax import traverse_util
 
-        >>> model = FlaxBertModel.from_pretrained("bert-base-cased")
+        >>> model = FlaxBertModel.from_pretrained("google-bert/bert-base-cased")
         >>> flat_params = traverse_util.flatten_dict(model.params)
         >>> mask = {
         ...     path: (path[-2] != ("LayerNorm", "bias") and path[-2:] != ("LayerNorm", "scale"))
@@ -382,7 +383,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         >>> from transformers import FlaxBertModel
 
         >>> # Download model and configuration from huggingface.co
-        >>> model = FlaxBertModel.from_pretrained("bert-base-cased")
+        >>> model = FlaxBertModel.from_pretrained("google-bert/bert-base-cased")
         >>> # By default, the model params will be in fp32, to illustrate the use of this method,
         >>> # we'll first cast to fp16 and back to fp32
         >>> model.params = model.to_f16(model.params)
@@ -412,14 +413,14 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         >>> from transformers import FlaxBertModel
 
         >>> # load model
-        >>> model = FlaxBertModel.from_pretrained("bert-base-cased")
+        >>> model = FlaxBertModel.from_pretrained("google-bert/bert-base-cased")
         >>> # By default, the model params will be in fp32, to cast these to float16
         >>> model.params = model.to_fp16(model.params)
         >>> # If you want don't want to cast certain parameters (for example layer norm bias and scale)
         >>> # then pass the mask as follows
         >>> from flax import traverse_util
 
-        >>> model = FlaxBertModel.from_pretrained("bert-base-cased")
+        >>> model = FlaxBertModel.from_pretrained("google-bert/bert-base-cased")
         >>> flat_params = traverse_util.flatten_dict(model.params)
         >>> mask = {
         ...     path: (path[-2] != ("LayerNorm", "bias") and path[-2:] != ("LayerNorm", "scale"))
@@ -544,8 +545,6 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
-                      user or organization name, like `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing model weights saved using
                       [`~FlaxPreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
                     - A path or url to a *pt index checkpoint file* (e.g, `./tf_model/model.ckpt.index`). In this case,
@@ -592,9 +591,9 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force the (re-)download of the model weights and configuration files, overriding the
                 cached versions if they exist.
-            resume_download (`bool`, *optional*, defaults to `False`):
-                Whether or not to delete incompletely received files. Will attempt to resume the download if such a
-                file exists.
+            resume_download:
+                Deprecated and ignored. All downloads are now resumed by default when possible.
+                Will be removed in v5 of Transformers.
             proxies (`Dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
@@ -638,7 +637,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         >>> from transformers import BertConfig, FlaxBertModel
 
         >>> # Download model and configuration from huggingface.co and cache.
-        >>> model = FlaxBertModel.from_pretrained("bert-base-cased")
+        >>> model = FlaxBertModel.from_pretrained("google-bert/bert-base-cased")
         >>> # Model was saved using *save_pretrained('./test/saved_model/')* (for example purposes, not runnable).
         >>> model = FlaxBertModel.from_pretrained("./test/saved_model/")
         >>> # Loading from a PyTorch checkpoint file instead of a PyTorch model (slower, for example purposes, not runnable).
@@ -646,7 +645,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         >>> model = FlaxBertModel.from_pretrained("./pt_model/pytorch_model.bin", from_pt=True, config=config)
         ```"""
         from_pt = kwargs.pop("from_pt", False)
-        resume_download = kwargs.pop("resume_download", False)
+        resume_download = kwargs.pop("resume_download", None)
         proxies = kwargs.pop("proxies", None)
         use_auth_token = kwargs.pop("use_auth_token", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
@@ -785,6 +784,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                         "user_agent": user_agent,
                         "revision": revision,
                         "subfolder": subfolder,
+                        "_raise_exceptions_for_gated_repo": False,
                         "_raise_exceptions_for_missing_entries": False,
                         "_commit_hash": commit_hash,
                     }
@@ -823,6 +823,8 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                             "revision": revision,
                             "proxies": proxies,
                             "token": token,
+                            "cache_dir": cache_dir,
+                            "local_files_only": local_files_only,
                         }
                         if has_file(pretrained_model_name_or_path, SAFE_WEIGHTS_INDEX_NAME, **has_file_kwargs):
                             is_sharded = True
@@ -914,7 +916,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 state = jax.tree_util.tree_map(jnp.array, state)
             else:
                 # keep the params on CPU if we don't want to initialize
-                state = jax.tree_util.tree_map(lambda x: jax.device_put(x, jax.devices("cpu")[0]), state)
+                state = jax.tree_util.tree_map(lambda x: jax.device_put(x, jax.local_devices(backend="cpu")[0]), state)
 
         if "batch_stats" in state:  # if flax model contains batch norm layers
             # if model is base model only use model_prefix key
@@ -1266,13 +1268,17 @@ def overwrite_call_docstring(model_class, docstring):
     model_class.__call__ = add_start_docstrings_to_model_forward(docstring)(model_class.__call__)
 
 
-def append_call_sample_docstring(model_class, checkpoint, output_type, config_class, mask=None):
+def append_call_sample_docstring(
+    model_class, checkpoint, output_type, config_class, mask=None, revision=None, real_checkpoint=None
+):
     model_class.__call__ = copy_func(model_class.__call__)
     model_class.__call__ = add_code_sample_docstrings(
         checkpoint=checkpoint,
         output_type=output_type,
         config_class=config_class,
         model_cls=model_class.__name__,
+        revision=revision,
+        real_checkpoint=real_checkpoint,
     )(model_class.__call__)
 
 

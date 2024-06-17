@@ -73,7 +73,7 @@ class OneFormerProcessorTester(unittest.TestCase):
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
         num_labels=10,
-        reduce_labels=False,
+        do_reduce_labels=False,
         ignore_index=255,
         max_seq_length=77,
         task_seq_length=77,
@@ -105,7 +105,7 @@ class OneFormerProcessorTester(unittest.TestCase):
         self.height = 3
         self.width = 4
         self.num_labels = num_labels
-        self.reduce_labels = reduce_labels
+        self.do_reduce_labels = do_reduce_labels
         self.ignore_index = ignore_index
 
     def prepare_processor_dict(self):
@@ -116,7 +116,7 @@ class OneFormerProcessorTester(unittest.TestCase):
             "image_mean": self.image_mean,
             "image_std": self.image_std,
             "num_labels": self.num_labels,
-            "reduce_labels": self.reduce_labels,
+            "do_reduce_labels": self.do_reduce_labels,
             "ignore_index": self.ignore_index,
             "class_info_file": self.class_info_file,
             "metadata": self.metadata,
@@ -465,7 +465,7 @@ class OneFormerProcessingTest(unittest.TestCase):
         panoptic_map2, inst2class2 = create_panoptic_map(annotation2, segments_info2)
 
         image_processor = OneFormerImageProcessor(
-            reduce_labels=True,
+            do_reduce_labels=True,
             ignore_index=0,
             size=(512, 512),
             class_info_file="ade20k_panoptic.json",
@@ -499,13 +499,9 @@ class OneFormerProcessingTest(unittest.TestCase):
 
         # verify the class labels
         self.assertEqual(len(inputs["class_labels"]), 2)
-        # fmt: off
-        expected_class_labels = torch.tensor([4, 17, 32, 42, 12, 3, 5, 0, 43, 96, 104, 31, 125, 138, 87, 149])  # noqa: E231
-        # fmt: on
+        expected_class_labels = torch.tensor([4, 17, 32, 42, 12, 3, 5, 0, 43, 96, 104, 31, 125, 138, 87, 149])  # noqa: E231  # fmt: skip
         self.assertTrue(torch.allclose(inputs["class_labels"][0], expected_class_labels))
-        # fmt: off
-        expected_class_labels = torch.tensor([19, 67, 82, 17, 12, 42, 3, 14, 5, 0, 115, 43, 8, 138, 125, 143])  # noqa: E231
-        # fmt: on
+        expected_class_labels = torch.tensor([19, 67, 82, 17, 12, 42, 3, 14, 5, 0, 115, 43, 8, 138, 125, 143])  # noqa: E231  # fmt: skip
         self.assertTrue(torch.allclose(inputs["class_labels"][1], expected_class_labels))
 
         # verify the task inputs
@@ -557,7 +553,7 @@ class OneFormerProcessingTest(unittest.TestCase):
         panoptic_map2, inst2class2 = create_panoptic_map(annotation2, segments_info2)
 
         image_processor = OneFormerImageProcessor(
-            reduce_labels=True,
+            do_reduce_labels=True,
             ignore_index=0,
             size=(512, 512),
             class_info_file="ade20k_panoptic.json",
@@ -591,13 +587,9 @@ class OneFormerProcessingTest(unittest.TestCase):
 
         # verify the class labels
         self.assertEqual(len(inputs["class_labels"]), 2)
-        # fmt: off
-        expected_class_labels = torch.tensor([32, 42, 42, 42, 42, 42, 42, 42, 32, 12, 12, 12, 12, 12, 42, 42, 12, 12, 12, 42, 12, 12, 12, 12, 12, 12, 12, 12, 12, 42, 42, 42, 12, 42, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 43, 43, 43, 43, 104, 43, 31, 125, 31, 125, 138, 87, 125, 149, 138, 125, 87, 87])  # noqa: E231
-        # fmt: on
+        expected_class_labels = torch.tensor([32, 42, 42, 42, 42, 42, 42, 42, 32, 12, 12, 12, 12, 12, 42, 42, 12, 12, 12, 42, 12, 12, 12, 12, 12, 12, 12, 12, 12, 42, 42, 42, 12, 42, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 43, 43, 43, 43, 104, 43, 31, 125, 31, 125, 138, 87, 125, 149, 138, 125, 87, 87])  # fmt: skip
         self.assertTrue(torch.allclose(inputs["class_labels"][0], expected_class_labels))
-        # fmt: off
-        expected_class_labels = torch.tensor([19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 67, 82, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 12, 12, 42, 12, 12, 12, 12, 14, 12, 12, 12, 12, 12, 12, 12, 12, 14, 12, 12, 115, 43, 43, 115, 43, 43, 43, 8, 8, 8, 138, 138, 125, 143])  # noqa: E231
-        # fmt: on
+        expected_class_labels = torch.tensor([19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 67, 82, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 12, 12, 42, 12, 12, 12, 12, 14, 12, 12, 12, 12, 12, 12, 12, 12, 14, 12, 12, 115, 43, 43, 115, 43, 43, 43, 8, 8, 8, 138, 138, 125, 143])  # fmt: skip
         self.assertTrue(torch.allclose(inputs["class_labels"][1], expected_class_labels))
 
         # verify the task inputs
@@ -649,7 +641,7 @@ class OneFormerProcessingTest(unittest.TestCase):
         panoptic_map2, inst2class2 = create_panoptic_map(annotation2, segments_info2)
 
         image_processor = OneFormerImageProcessor(
-            reduce_labels=True,
+            do_reduce_labels=True,
             ignore_index=0,
             size=(512, 512),
             class_info_file="ade20k_panoptic.json",
@@ -683,13 +675,9 @@ class OneFormerProcessingTest(unittest.TestCase):
 
         # verify the class labels
         self.assertEqual(len(inputs["class_labels"]), 2)
-        # fmt: off
-        expected_class_labels = torch.tensor([4, 17, 32, 42, 42, 42, 42, 42, 42, 42, 32, 12, 12, 12, 12, 12, 42, 42, 12, 12, 12, 42, 12, 12, 12, 12, 12, 3, 12, 12, 12, 12, 42, 42, 42, 12, 42, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 5, 12, 12, 12, 12, 12, 12, 12, 0, 43, 43, 43, 96, 43, 104, 43, 31, 125, 31, 125, 138, 87, 125, 149, 138, 125, 87, 87])  # noqa: E231
-        # fmt: on
+        expected_class_labels = torch.tensor([4, 17, 32, 42, 42, 42, 42, 42, 42, 42, 32, 12, 12, 12, 12, 12, 42, 42, 12, 12, 12, 42, 12, 12, 12, 12, 12, 3, 12, 12, 12, 12, 42, 42, 42, 12, 42, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 5, 12, 12, 12, 12, 12, 12, 12, 0, 43, 43, 43, 96, 43, 104, 43, 31, 125, 31, 125, 138, 87, 125, 149, 138, 125, 87, 87])  # fmt: skip
         self.assertTrue(torch.allclose(inputs["class_labels"][0], expected_class_labels))
-        # fmt: off
-        expected_class_labels = torch.tensor([19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 67, 82, 19, 19, 17, 19, 19, 19, 19, 19, 19, 19, 19, 19, 12, 12, 42, 12, 12, 12, 12, 3, 14, 12, 12, 12, 12, 12, 12, 12, 12, 14, 5, 12, 12, 0, 115, 43, 43, 115, 43, 43, 43, 8, 8, 8, 138, 138, 125, 143])  # noqa: E231
-        # fmt: on
+        expected_class_labels = torch.tensor([19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 67, 82, 19, 19, 17, 19, 19, 19, 19, 19, 19, 19, 19, 19, 12, 12, 42, 12, 12, 12, 12, 3, 14, 12, 12, 12, 12, 12, 12, 12, 12, 14, 5, 12, 12, 0, 115, 43, 43, 115, 43, 43, 43, 8, 8, 8, 138, 138, 125, 143])  # fmt: skip
         self.assertTrue(torch.allclose(inputs["class_labels"][1], expected_class_labels))
 
         # verify the task inputs
@@ -722,7 +710,7 @@ class OneFormerProcessingTest(unittest.TestCase):
 
     def test_post_process_semantic_segmentation(self):
         image_processor = OneFormerImageProcessor(
-            reduce_labels=True,
+            do_reduce_labels=True,
             ignore_index=0,
             size=(512, 512),
             class_info_file="ade20k_panoptic.json",
@@ -756,7 +744,7 @@ class OneFormerProcessingTest(unittest.TestCase):
 
     def test_post_process_instance_segmentation(self):
         image_processor = OneFormerImageProcessor(
-            reduce_labels=True,
+            do_reduce_labels=True,
             ignore_index=0,
             size=(512, 512),
             class_info_file="ade20k_panoptic.json",
@@ -782,7 +770,7 @@ class OneFormerProcessingTest(unittest.TestCase):
 
     def test_post_process_panoptic_segmentation(self):
         image_processor = OneFormerImageProcessor(
-            reduce_labels=True,
+            do_reduce_labels=True,
             ignore_index=0,
             size=(512, 512),
             class_info_file="ade20k_panoptic.json",

@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" MVP model configuration"""
+"""MVP model configuration"""
+
 import warnings
 
 from ...configuration_utils import PretrainedConfig
@@ -20,10 +21,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-MVP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "RUCAIBox/mvp": "https://huggingface.co/RUCAIBox/mvp/resolve/main/config.json",
-}
 
 
 class MvpConfig(PretrainedConfig):
@@ -104,6 +101,7 @@ class MvpConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "mvp"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}

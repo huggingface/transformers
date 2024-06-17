@@ -161,7 +161,7 @@ class NotebookProgressBar:
             self.update_bar(value)
             self.last_value = value
             self.last_time = current_time
-            if self.average_time_per_item is None:
+            if (self.average_time_per_item is None) or (self.average_time_per_item == 0):
                 self.wait_for = 1
             else:
                 self.wait_for = max(int(self.update_every / self.average_time_per_item), 1)
@@ -177,7 +177,11 @@ class NotebookProgressBar:
                 f"[{spaced_value}/{self.total} {format_time(self.elapsed_time)} <"
                 f" {format_time(self.predicted_remaining)}"
             )
-            self.label += f", {1/self.average_time_per_item:.2f} it/s"
+            if self.average_time_per_item == 0:
+                self.label += ", +inf it/s"
+            else:
+                self.label += f", {1/self.average_time_per_item:.2f} it/s"
+
         self.label += "]" if self.comment is None or len(self.comment) == 0 else f", {self.comment}]"
         self.display()
 
@@ -288,11 +292,11 @@ class NotebookProgressCallback(TrainerCallback):
         self._force_next_update = False
 
     def on_train_begin(self, args, state, control, **kwargs):
-        self.first_column = "Epoch" if args.evaluation_strategy == IntervalStrategy.EPOCH else "Step"
+        self.first_column = "Epoch" if args.eval_strategy == IntervalStrategy.EPOCH else "Step"
         self.training_loss = 0
         self.last_log = 0
         column_names = [self.first_column] + ["Training Loss"]
-        if args.evaluation_strategy != IntervalStrategy.NO:
+        if args.eval_strategy != IntervalStrategy.NO:
             column_names.append("Validation Loss")
         self.training_tracker = NotebookTrainingTracker(state.max_steps, column_names)
 
@@ -324,7 +328,7 @@ class NotebookProgressCallback(TrainerCallback):
 
     def on_log(self, args, state, control, logs=None, **kwargs):
         # Only for when there is no evaluation
-        if args.evaluation_strategy == IntervalStrategy.NO and "loss" in logs:
+        if args.eval_strategy == IntervalStrategy.NO and "loss" in logs:
             values = {"Training Loss": logs["loss"]}
             # First column is necessarily Step sine we're not in epoch eval strategy
             values["Step"] = state.global_step
@@ -367,6 +371,8 @@ class NotebookProgressCallback(TrainerCallback):
 
     def on_train_end(self, args, state, control, **kwargs):
         self.training_tracker.update(
-            state.global_step, comment=f"Epoch {int(state.epoch)}/{state.num_train_epochs}", force_update=True
+            state.global_step,
+            comment=f"Epoch {int(state.epoch)}/{state.num_train_epochs}",
+            force_update=True,
         )
         self.training_tracker = None

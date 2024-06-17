@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" DINOv2 model configuration"""
+"""DINOv2 model configuration"""
 
 from collections import OrderedDict
 from typing import Mapping
@@ -26,10 +26,6 @@ from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_feat
 
 
 logger = logging.get_logger(__name__)
-
-DINOV2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/dinov2-base": "https://huggingface.co/facebook/dinov2-base/resolve/main/config.json",
-}
 
 
 class Dinov2Config(BackboneConfigMixin, PretrainedConfig):
@@ -79,11 +75,13 @@ class Dinov2Config(BackboneConfigMixin, PretrainedConfig):
         out_features (`List[str]`, *optional*):
             If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
             (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
-            corresponding stages. If unset and `out_indices` is unset, will default to the last stage.
+            corresponding stages. If unset and `out_indices` is unset, will default to the last stage. Must be in the
+            same order as defined in the `stage_names` attribute.
         out_indices (`List[int]`, *optional*):
             If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
             many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
-            If unset and `out_features` is unset, will default to the last stage.
+            If unset and `out_features` is unset, will default to the last stage. Must be in the
+            same order as defined in the `stage_names` attribute.
         apply_layernorm (`bool`, *optional*, defaults to `True`):
             Whether to apply layer normalization to the feature maps in case the model is used as backbone.
         reshape_hidden_states (`bool`, *optional*, defaults to `True`):
@@ -105,6 +103,7 @@ class Dinov2Config(BackboneConfigMixin, PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "dinov2"
 
     def __init__(

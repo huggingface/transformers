@@ -12,8 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Swin2SR model. """
-import inspect
+"""Testing suite for the PyTorch Swin2SR model."""
+
 import unittest
 
 from transformers import Swin2SRConfig
@@ -30,7 +30,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import Swin2SRForImageSuperResolution, Swin2SRModel
-    from transformers.models.swin2sr.modeling_swin2sr import SWIN2SR_PRETRAINED_MODEL_ARCHIVE_LIST
 
 if is_vision_available():
     from PIL import Image
@@ -162,7 +161,11 @@ class Swin2SRModelTester:
 @require_torch
 class Swin2SRModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Swin2SRModel, Swin2SRForImageSuperResolution) if is_torch_available() else ()
-    pipeline_model_mapping = {"feature-extraction": Swin2SRModel} if is_torch_available() else {}
+    pipeline_model_mapping = (
+        {"image-feature-extraction": Swin2SRModel, "image-to-image": Swin2SRForImageSuperResolution}
+        if is_torch_available()
+        else {}
+    )
 
     fx_compatible = False
     test_pruning = False
@@ -219,7 +222,7 @@ class Swin2SRModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -228,23 +231,11 @@ class Swin2SRModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
 
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
-
-            expected_arg_names = ["pixel_values"]
-            self.assertListEqual(arg_names[:1], expected_arg_names)
-
     @slow
     def test_model_from_pretrained(self):
-        for model_name in SWIN2SR_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = Swin2SRModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "caidas/swin2SR-classical-sr-x2-64"
+        model = Swin2SRModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     # overwriting because of `logit_scale` parameter
     def test_initialization(self):

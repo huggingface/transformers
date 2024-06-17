@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch KOSMOS-2 model. """
-
+"""Testing suite for the PyTorch KOSMOS-2 model."""
 
 import copy
 import inspect
@@ -26,7 +25,7 @@ import requests
 
 from transformers import AutoModelForVision2Seq, AutoProcessor, Kosmos2Config
 from transformers.models.kosmos2.configuration_kosmos2 import Kosmos2TextConfig, Kosmos2VisionConfig
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import IS_ROCM_SYSTEM, require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -37,13 +36,13 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
     import torch
 
     from transformers import Kosmos2ForConditionalGeneration, Kosmos2Model
-    from transformers.models.kosmos2.modeling_kosmos2 import KOSMOS2_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -196,6 +195,7 @@ class Kosmos2ModelTester:
         self.parent = parent
         self.text_model_tester = Kosmos2TextModelTester(parent, **text_kwargs)
         self.vision_model_tester = Kosmos2VisionModelTester(parent, **vision_kwargs)
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.latent_query_num = latent_query_num
         self.is_training = is_training
 
@@ -244,14 +244,25 @@ class Kosmos2ModelTester:
 
 
 @require_torch
-class Kosmos2ModelTest(ModelTesterMixin, unittest.TestCase):
+class Kosmos2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Kosmos2Model, Kosmos2ForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (Kosmos2ForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"feature-extraction": Kosmos2Model, "image-to-text": Kosmos2ForConditionalGeneration}
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
+
+    # TODO: `image-to-text` pipeline for this model needs Processor.
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        return pipeline_test_casse_name == "ImageToTextPipelineTests"
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
@@ -412,9 +423,9 @@ class Kosmos2ModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in KOSMOS2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = Kosmos2Model.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "microsoft/kosmos-2-patch14-224"
+        model = Kosmos2Model.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
@@ -550,6 +561,8 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
         processed_text = processed_text[0]
         final_text, entities = final_text_with_entities[0]
 
+        atol = 1e-4 if IS_ROCM_SYSTEM else 1e-5
+
         np.testing.assert_allclose(
             torch.concat(scores[1:4])[:3, :3].to("cpu").numpy(),
             np.array(
@@ -559,7 +572,7 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
                     [-0.9352350831031799, -4.688288688659668, 6.240612983703613],
                 ]
             ),
-            atol=1e-5,
+            atol=atol,
         )
         np.testing.assert_allclose(
             torch.concat(scores[-3:])[-3:, -3:].to("cpu").numpy(),
@@ -617,7 +630,7 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
                     [-0.7624598741531372, -4.771658897399902, 6.576295852661133],
                 ]
             ),
-            atol=1e-5,
+            atol=atol,
         )
         np.testing.assert_allclose(
             torch.concat(scores[-3:])[-3:, -3:].to("cpu").numpy(),

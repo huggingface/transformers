@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" ProphetNet model configuration"""
+"""ProphetNet model configuration"""
 
 from typing import Callable, Optional, Union
 
@@ -21,12 +21,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/prophetnet-large-uncased": (
-        "https://huggingface.co/microsoft/prophetnet-large-uncased/resolve/main/config.json"
-    ),
-}
 
 
 class ProphetNetConfig(PretrainedConfig):
@@ -98,6 +92,7 @@ class ProphetNetConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
     """
+
     model_type = "prophetnet"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {

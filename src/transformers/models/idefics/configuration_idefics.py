@@ -17,18 +17,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Idefics model configuration"""
+"""Idefics model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-IDEFICS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "HuggingFaceM4/idefics-9b": "https://huggingface.co/HuggingFaceM4/idefics-9b/blob/main/config.json",
-    "HuggingFaceM4/idefics-80b": "https://huggingface.co/HuggingFaceM4/idefics-80b/blob/main/config.json",
-}
 
 
 class IdeficsVisionConfig(PretrainedConfig):
@@ -72,6 +67,7 @@ class IdeficsVisionConfig(PretrainedConfig):
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
     """
+
     model_type = "idefics"
     attribute_map = {
         "hidden_size": "embed_dim",
@@ -134,6 +130,7 @@ class IdeficsPerceiverConfig(PretrainedConfig):
         qk_layer_norms_perceiver (`bool`, *optional*, defaults to `False`):
             Whether or not to use qk layer norms in perceiver
     """
+
     model_type = "idefics"
 
     def __init__(
@@ -236,6 +233,7 @@ class IdeficsConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "idefics"
     is_composition = False
 

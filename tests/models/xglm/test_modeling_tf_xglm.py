@@ -29,7 +29,6 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers.models.xglm.modeling_tf_xglm import (
-        TF_XGLM_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFXGLMForCausalLM,
         TFXGLMModel,
     )
@@ -161,9 +160,9 @@ class TFXGLMModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_XGLM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFXGLMModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/xglm-564M"
+        model = TFXGLMModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @unittest.skip(reason="Currently, model embeddings are going to undergo a major refactor.")
     def test_resize_token_embeddings(self):
@@ -177,9 +176,7 @@ class TFXGLMModelLanguageGenerationTest(unittest.TestCase):
         model = TFXGLMForCausalLM.from_pretrained("facebook/xglm-564M")
         input_ids = tf.convert_to_tensor([[2, 268, 9865]], dtype=tf.int32)  # The dog
         # </s> The dog is a very friendly dog. He is very affectionate and loves to play with other
-        # fmt: off
-        expected_output_ids = [2, 268, 9865, 67, 11, 1988, 57252, 9865, 5, 984, 67, 1988, 213838, 1658, 53, 70446, 33, 6657, 278, 1581]
-        # fmt: on
+        expected_output_ids = [2, 268, 9865, 67, 11, 1988, 57252, 9865, 5, 984, 67, 1988, 213838, 1658, 53, 70446, 33, 6657, 278, 1581]  # fmt: skip
         output_ids = model.generate(input_ids, do_sample=False, num_beams=1)
         if verify_outputs:
             self.assertListEqual(output_ids[0].numpy().tolist(), expected_output_ids)

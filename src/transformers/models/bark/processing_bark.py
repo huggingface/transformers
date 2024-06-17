@@ -15,6 +15,7 @@
 """
 Processor class for Bark
 """
+
 import json
 import os
 from typing import Optional
@@ -46,6 +47,7 @@ class BarkProcessor(ProcessorMixin):
             a list of `voice_preset_names`.
 
     """
+
     tokenizer_class = "AutoTokenizer"
     attributes = ["tokenizer"]
 
@@ -72,8 +74,7 @@ class BarkProcessor(ProcessorMixin):
                 This can be either:
 
                 - a string, the *model id* of a pretrained [`BarkProcessor`] hosted inside a model repo on
-                  huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or
-                  namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
+                  huggingface.co.
                 - a path to a *directory* containing a processor saved using the [`~BarkProcessor.save_pretrained`]
                   method, e.g., `./my_model_directory/`.
             speaker_embeddings_dict_path (`str`, *optional*, defaults to `"speaker_embeddings_path.json"`):
@@ -92,7 +93,7 @@ class BarkProcessor(ProcessorMixin):
                 cache_dir=kwargs.pop("cache_dir", None),
                 force_download=kwargs.pop("force_download", False),
                 proxies=kwargs.pop("proxies", None),
-                resume_download=kwargs.pop("resume_download", False),
+                resume_download=kwargs.pop("resume_download", None),
                 local_files_only=kwargs.pop("local_files_only", False),
                 token=kwargs.pop("use_auth_token", None),
                 revision=kwargs.pop("revision", None),
@@ -188,7 +189,7 @@ class BarkProcessor(ProcessorMixin):
                 cache_dir=kwargs.pop("cache_dir", None),
                 force_download=kwargs.pop("force_download", False),
                 proxies=kwargs.pop("proxies", None),
-                resume_download=kwargs.pop("resume_download", False),
+                resume_download=kwargs.pop("resume_download", None),
                 local_files_only=kwargs.pop("local_files_only", False),
                 token=kwargs.pop("use_auth_token", None),
                 revision=kwargs.pop("revision", None),

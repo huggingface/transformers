@@ -12,17 +12,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Fuyu model."""
+"""PyTorch Fuyu model."""
+
 from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ...modeling_outputs import BaseModelOutputWithPast
+from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...models.auto.modeling_auto import AutoModelForCausalLM
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_fuyu import FuyuConfig
 
 
@@ -101,6 +102,11 @@ FUYU_INPUTS_DOCSTRING = r"""
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
+        image_patches (`torch.FloatTensor` of shape `(batch_size, num_total_patches, patch_size_ x patch_size x num_channels)`, *optional*):
+            Image patches to be used as continuous embeddings. The patches are flattened and then projected to the
+            hidden size of the model.
+        image_patches_indices (`torch.LongTensor` of shape `(batch_size, num_total_patches + number_of_newline_tokens + number_of_text_tokens, patch_size_ x patch_size x num_channels )`, *optional*):
+            Indices indicating at which position the image_patches have to be inserted in input_embeds.
         position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
             config.n_positions - 1]`.
@@ -136,22 +142,17 @@ FUYU_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare Fuyu Model outputting raw hidden-states without any specific head on top.",
+    "Fuyu Model with a language modeling head on top for causal language model conditioned on image patches and text.",
     FUYU_START_DOCSTRING,
 )
 class FuyuForCausalLM(FuyuPreTrainedModel):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`FuyuDecoderLayer`]
-
-    Args:
-        config: FuyuConfig
-    """
-
     def __init__(self, config: FuyuConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-        self.language_model = AutoModelForCausalLM.from_config(config.text_config)
+        self.language_model = AutoModelForCausalLM.from_config(
+            config.text_config, attn_implementation=config._attn_implementation
+        )
 
         self.vision_embed_tokens = nn.Linear(
             config.patch_size * config.patch_size * config.num_channels, config.hidden_size
@@ -178,12 +179,14 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
         embeddings.
 
         Args:
-            word_embeddings: Tensor of word embeddings. Shape: [b, s, h]
-            continuous_embeddings:
-                Tensor of continuous embeddings. The length of the list is the batch size. Each entry is
-            shape [num_image_embeddings, hidden], and num_image_embeddings needs to match the number of non-negative
-            indices in image_patch_input_indices for that batch element.
-            image_patch_input_indices: Tensor of indices of the image patches in the input_ids tensor. Shape: [b, s]
+            word_embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+                Tensor of word embeddings.
+            continuous_embeddings (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`):
+                Tensor of continuous embeddings. The length of the list is the batch size. Each entry is shape
+                [num_image_embeddings, hidden], and num_image_embeddings needs to match the number of non-negative
+                indices in image_patch_input_indices for that batch element.
+            image_patch_input_indices (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Tensor of indices of the image patches in the input_ids tensor.
         """
         if not (word_embeddings.shape[0] == len(continuous_embeddings)):
             raise ValueError(
@@ -208,6 +211,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
         return output_embeddings
 
     @add_start_docstrings_to_model_forward(FUYU_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -218,10 +222,42 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
+        labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPast]:
+    ) -> Union[Tuple, CausalLMOutputWithPast]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import FuyuProcessor, FuyuForCausalLM
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> processor = FuyuProcessor.from_pretrained("adept/fuyu-8b")
+        >>> model = FuyuForCausalLM.from_pretrained("adept/fuyu-8b")
+
+        >>> url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/bus.png"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> prompt = "Generate a coco-style caption.\n"
+
+        >>> inputs = processor(text=prompt, images=image, return_tensors="pt")
+        >>> outputs = model(**inputs)
+
+        >>> generated_ids = model.generate(**inputs, max_new_tokens=7)
+        >>> generation_text = processor.batch_decode(generated_ids[:, -7:], skip_special_tokens=True)
+        >>> print(generation_text[0])
+        A blue bus parked on the side of a road.
+        ```"""
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -230,15 +266,14 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # retrieve input_ids and inputs_embeds
         if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
             batch_size, seq_length = input_ids.shape
         elif inputs_embeds is not None:
             batch_size, seq_length, _ = inputs_embeds.shape
         else:
-            raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
+            raise ValueError("You have to specify either input_is or inputs_embeds")
 
         seq_length_with_past = seq_length
         past_key_values_length = 0
@@ -258,7 +293,9 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
             inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
             if image_patches is not None and past_key_values is None:
                 patch_embeddings = [
-                    self.vision_embed_tokens(patch.to(self.vision_embed_tokens.weight.dtype)).squeeze(0)
+                    self.vision_embed_tokens(patch.to(self.vision_embed_tokens.weight.dtype))
+                    .squeeze(0)
+                    .to(inputs_embeds.device)
                     for patch in image_patches
                 ]
                 inputs_embeds = self.gather_continuous_embeddings(
@@ -273,10 +310,12 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
             position_ids=position_ids,
             past_key_values=past_key_values,
             output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            labels=labels,
             use_cache=use_cache,
+            return_dict=return_dict,
         )
-        if not return_dict:
-            return tuple(v for v in outputs if v is not None)
+
         return outputs
 
     def prepare_inputs_for_generation(

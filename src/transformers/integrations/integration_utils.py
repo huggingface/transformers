@@ -14,6 +14,7 @@
 """
 Integrations with other Python libraries.
 """
+
 import functools
 import importlib.metadata
 import importlib.util
@@ -24,14 +25,24 @@ import pickle
 import shutil
 import sys
 import tempfile
-from dataclasses import asdict
+from dataclasses import asdict, fields
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, Literal, Optional, Union
 
 import numpy as np
+import packaging.version
 
+from .. import PreTrainedModel, TFPreTrainedModel
 from .. import __version__ as version
-from ..utils import flatten_dict, is_datasets_available, is_pandas_available, is_torch_available, logging
+from ..utils import (
+    PushToHubMixin,
+    flatten_dict,
+    is_datasets_available,
+    is_pandas_available,
+    is_tf_available,
+    is_torch_available,
+    logging,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -68,10 +79,11 @@ if TYPE_CHECKING and _has_neptune:
         except importlib.metadata.PackageNotFoundError:
             _has_neptune = False
 
+from .. import modelcard  # noqa: E402
 from ..trainer_callback import ProgressCallback, TrainerCallback  # noqa: E402
 from ..trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun, IntervalStrategy  # noqa: E402
 from ..training_args import ParallelMode  # noqa: E402
-from ..utils import ENV_VARS_TRUE_VALUES, is_torch_tpu_available  # noqa: E402
+from ..utils import ENV_VARS_TRUE_VALUES, is_torch_xla_available  # noqa: E402
 
 
 # Integration functions:
@@ -236,8 +248,9 @@ def run_hp_search_optuna(trainer, n_trials: int, direction: str, **kwargs) -> Be
 
 def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
     import ray
+    import ray.train
 
-    def _objective(trial, local_trainer, checkpoint_dir=None):
+    def _objective(trial: dict, local_trainer):
         try:
             from transformers.utils.notebook import NotebookProgressCallback
 
@@ -246,19 +259,34 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
         except ModuleNotFoundError:
             pass
 
-        checkpoint = None
-        if checkpoint_dir:
-            for subdir in os.listdir(checkpoint_dir):
-                if subdir.startswith(PREFIX_CHECKPOINT_DIR):
-                    checkpoint = os.path.join(checkpoint_dir, subdir)
         local_trainer.objective = None
-        local_trainer.train(resume_from_checkpoint=checkpoint, trial=trial)
+
+        checkpoint = ray.train.get_checkpoint()
+        if checkpoint:
+            # Upon trial resume, the local_trainer's objective gets reset to None.
+            # If `local_trainer.train` is a noop (training has already reached
+            # the target number of epochs/steps), then this would
+            # trigger an unnecessary extra checkpoint at the end of training.
+            # -> Set the objective to a dummy value upon resume as a workaround.
+            local_trainer.objective = "objective"
+
+            with checkpoint.as_directory() as checkpoint_dir:
+                checkpoint_path = next(Path(checkpoint_dir).glob(f"{PREFIX_CHECKPOINT_DIR}*")).as_posix()
+                local_trainer.train(resume_from_checkpoint=checkpoint_path, trial=trial)
+        else:
+            local_trainer.train(trial=trial)
+
         # If there hasn't been any evaluation during the training loop.
         if getattr(local_trainer, "objective", None) is None:
             metrics = local_trainer.evaluate()
             local_trainer.objective = local_trainer.compute_objective(metrics)
-            local_trainer._tune_save_checkpoint()
-            ray.tune.report(objective=local_trainer.objective, **metrics, done=True)
+
+            metrics.update({"objective": local_trainer.objective, "done": True})
+
+            with tempfile.TemporaryDirectory() as temp_checkpoint_dir:
+                local_trainer._tune_save_checkpoint(checkpoint_dir=temp_checkpoint_dir)
+                checkpoint = ray.train.Checkpoint.from_directory(temp_checkpoint_dir)
+                ray.train.report(metrics, checkpoint=checkpoint)
 
     if not trainer._memory_tracker.skip_memory_metrics:
         from ..trainer_utils import TrainerMemoryTracker
@@ -296,38 +324,20 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
         from ray.tune import CLIReporter
 
         kwargs["progress_reporter"] = CLIReporter(metric_columns=["objective"])
-    if "keep_checkpoints_num" in kwargs and kwargs["keep_checkpoints_num"] > 0:
-        # `keep_checkpoints_num=0` would disabled checkpointing
-        trainer.use_tune_checkpoints = True
-        if kwargs["keep_checkpoints_num"] > 1:
-            logger.warning(
-                f"Currently keeping {kwargs['keep_checkpoints_num']} checkpoints for each trial. "
-                "Checkpoints are usually huge, "
-                "consider setting `keep_checkpoints_num=1`."
-            )
+
     if "scheduler" in kwargs:
         from ray.tune.schedulers import ASHAScheduler, HyperBandForBOHB, MedianStoppingRule, PopulationBasedTraining
-
-        # Check if checkpointing is enabled for PopulationBasedTraining
-        if isinstance(kwargs["scheduler"], PopulationBasedTraining):
-            if not trainer.use_tune_checkpoints:
-                logger.warning(
-                    "You are using PopulationBasedTraining but you haven't enabled checkpointing. "
-                    "This means your trials will train from scratch everytime they are exploiting "
-                    "new configurations. Consider enabling checkpointing by passing "
-                    "`keep_checkpoints_num=1` as an additional argument to `Trainer.hyperparameter_search`."
-                )
 
         # Check for `do_eval` and `eval_during_training` for schedulers that require intermediate reporting.
         if isinstance(
             kwargs["scheduler"], (ASHAScheduler, MedianStoppingRule, HyperBandForBOHB, PopulationBasedTraining)
-        ) and (not trainer.args.do_eval or trainer.args.evaluation_strategy == IntervalStrategy.NO):
+        ) and (not trainer.args.do_eval or trainer.args.eval_strategy == IntervalStrategy.NO):
             raise RuntimeError(
                 "You are using {cls} as a scheduler but you haven't enabled evaluation during training. "
                 "This means your trials will not report intermediate results to Ray Tune, and "
                 "can thus not be stopped early or used to exploit other trials parameters. "
                 "If this is what you want, do not use {cls}. If you would like to use {cls}, "
-                "make sure you pass `do_eval=True` and `evaluation_strategy='steps'` in the "
+                "make sure you pass `do_eval=True` and `eval_strategy='steps'` in the "
                 "Trainer `args`.".format(cls=type(kwargs["scheduler"]).__name__)
             )
 
@@ -664,6 +674,22 @@ class TensorBoardCallback(TrainerCallback):
             self.tb_writer = None
 
 
+def save_model_architecture_to_file(model: Any, output_dir: str):
+    with open(f"{output_dir}/model_architecture.txt", "w+") as f:
+        if isinstance(model, PreTrainedModel):
+            print(model, file=f)
+        elif is_tf_available() and isinstance(model, TFPreTrainedModel):
+
+            def print_to_file(s):
+                print(s, file=f)
+
+            model.summary(print_fn=print_to_file)
+        elif is_torch_available() and (
+            isinstance(model, (torch.nn.Module, PushToHubMixin)) and hasattr(model, "base_model")
+        ):
+            print(model, file=f)
+
+
 class WandbCallback(TrainerCallback):
     """
     A [`TrainerCallback`] that logs metrics, media, model checkpoints to [Weight and Biases](https://www.wandb.com/).
@@ -729,14 +755,22 @@ class WandbCallback(TrainerCallback):
             if hasattr(model, "config") and model.config is not None:
                 model_config = model.config.to_dict()
                 combined_dict = {**model_config, **combined_dict}
+            if hasattr(model, "peft_config") and model.peft_config is not None:
+                peft_config = model.peft_config
+                combined_dict = {**{"peft_config": peft_config}, **combined_dict}
             trial_name = state.trial_name
             init_args = {}
             if trial_name is not None:
                 init_args["name"] = trial_name
                 init_args["group"] = args.run_name
-            else:
-                if not (args.run_name is None or args.run_name == args.output_dir):
-                    init_args["name"] = args.run_name
+            elif args.run_name is not None:
+                init_args["name"] = args.run_name
+                if args.run_name == args.output_dir:
+                    self._wandb.termwarn(
+                        "The `run_name` is currently set to the same value as `TrainingArguments.output_dir`. If this was "
+                        "not intended, please specify a different run name by setting the `TrainingArguments.run_name` parameter.",
+                        repeat=False,
+                    )
 
             if self._wandb.run is None:
                 self._wandb.init(
@@ -753,9 +787,48 @@ class WandbCallback(TrainerCallback):
 
             # keep track of model topology and gradients, unsupported on TPU
             _watch_model = os.getenv("WANDB_WATCH", "false")
-            if not is_torch_tpu_available() and _watch_model in ("all", "parameters", "gradients"):
+            if not is_torch_xla_available() and _watch_model in ("all", "parameters", "gradients"):
                 self._wandb.watch(model, log=_watch_model, log_freq=max(100, state.logging_steps))
             self._wandb.run._label(code="transformers_trainer")
+
+            # add number of model parameters to wandb config
+            try:
+                self._wandb.config["model/num_parameters"] = model.num_parameters()
+            except AttributeError:
+                logger.info("Could not log the number of model parameters in Weights & Biases.")
+
+            # log the initial model architecture to an artifact
+            with tempfile.TemporaryDirectory() as temp_dir:
+                model_name = (
+                    f"model-{self._wandb.run.id}"
+                    if (args.run_name is None or args.run_name == args.output_dir)
+                    else f"model-{self._wandb.run.name}"
+                )
+                model_artifact = self._wandb.Artifact(
+                    name=model_name,
+                    type="model",
+                    metadata={
+                        "model_config": model.config.to_dict() if hasattr(model, "config") else None,
+                        "num_parameters": self._wandb.config.get("model/num_parameters"),
+                        "initial_model": True,
+                    },
+                )
+                # add the architecture to a separate text file
+                save_model_architecture_to_file(model, temp_dir)
+
+                for f in Path(temp_dir).glob("*"):
+                    if f.is_file():
+                        with model_artifact.new_file(f.name, mode="wb") as fa:
+                            fa.write(f.read_bytes())
+                self._wandb.run.log_artifact(model_artifact, aliases=["base_model"])
+
+                badge_markdown = (
+                    f'[<img src="https://raw.githubusercontent.com/wandb/assets/main/wandb-github-badge'
+                    f'-28.svg" alt="Visualize in Weights & Biases" width="20'
+                    f'0" height="32"/>]({self._wandb.run.get_url()})'
+                )
+
+                modelcard.AUTOGENERATED_TRAINER_COMMENT += f"\n{badge_markdown}"
 
     def on_train_begin(self, args, state, control, model=None, **kwargs):
         if self._wandb is None:
@@ -787,29 +860,46 @@ class WandbCallback(TrainerCallback):
                     else {
                         f"eval/{args.metric_for_best_model}": state.best_metric,
                         "train/total_floss": state.total_flos,
+                        "model/num_parameters": self._wandb.config.get("model/num_parameters"),
                     }
                 )
+                metadata["final_model"] = True
                 logger.info("Logging model artifacts. ...")
                 model_name = (
                     f"model-{self._wandb.run.id}"
                     if (args.run_name is None or args.run_name == args.output_dir)
                     else f"model-{self._wandb.run.name}"
                 )
+                # add the model architecture to a separate text file
+                save_model_architecture_to_file(model, temp_dir)
+
                 artifact = self._wandb.Artifact(name=model_name, type="model", metadata=metadata)
                 for f in Path(temp_dir).glob("*"):
                     if f.is_file():
                         with artifact.new_file(f.name, mode="wb") as fa:
                             fa.write(f.read_bytes())
-                self._wandb.run.log_artifact(artifact)
+                self._wandb.run.log_artifact(artifact, aliases=["final_model"])
 
     def on_log(self, args, state, control, model=None, logs=None, **kwargs):
+        single_value_scalars = [
+            "train_runtime",
+            "train_samples_per_second",
+            "train_steps_per_second",
+            "train_loss",
+            "total_flos",
+        ]
+
         if self._wandb is None:
             return
         if not self._initialized:
             self.setup(args, state, model)
         if state.is_world_process_zero:
-            logs = rewrite_logs(logs)
-            self._wandb.log({**logs, "train/global_step": state.global_step})
+            for k, v in logs.items():
+                if k in single_value_scalars:
+                    self._wandb.run.summary[k] = v
+            non_scalar_logs = {k: v for k, v in logs.items() if k not in single_value_scalars}
+            non_scalar_logs = rewrite_logs(non_scalar_logs)
+            self._wandb.log({**non_scalar_logs, "train/global_step": state.global_step})
 
     def on_save(self, args, state, control, **kwargs):
         if self._log_model == "checkpoint" and self._initialized and state.is_world_process_zero:
@@ -818,18 +908,30 @@ class WandbCallback(TrainerCallback):
                 for k, v in dict(self._wandb.summary).items()
                 if isinstance(v, numbers.Number) and not k.startswith("_")
             }
+            checkpoint_metadata["model/num_parameters"] = self._wandb.config.get("model/num_parameters")
 
             ckpt_dir = f"checkpoint-{state.global_step}"
             artifact_path = os.path.join(args.output_dir, ckpt_dir)
             logger.info(f"Logging checkpoint artifacts in {ckpt_dir}. ...")
             checkpoint_name = (
-                f"checkpoint-{self._wandb.run.id}"
+                f"model-{self._wandb.run.id}"
                 if (args.run_name is None or args.run_name == args.output_dir)
-                else f"checkpoint-{self._wandb.run.name}"
+                else f"model-{self._wandb.run.name}"
             )
             artifact = self._wandb.Artifact(name=checkpoint_name, type="model", metadata=checkpoint_metadata)
             artifact.add_dir(artifact_path)
-            self._wandb.log_artifact(artifact, aliases=[f"checkpoint-{state.global_step}"])
+            self._wandb.log_artifact(
+                artifact, aliases=[f"epoch_{round(state.epoch, 2)}", f"checkpoint_global_step_{state.global_step}"]
+            )
+
+    def on_predict(self, args, state, control, metrics, **kwargs):
+        if self._wandb is None:
+            return
+        if not self._initialized:
+            self.setup(args, state, **kwargs)
+        if state.is_world_process_zero:
+            metrics = rewrite_logs(metrics)
+            self._wandb.log(metrics)
 
 
 class CometCallback(TrainerCallback):
@@ -961,6 +1063,9 @@ class MLflowCallback(TrainerCallback):
             remote server, e.g. s3 or GCS. If set to `True` or *1*, will copy each saved checkpoint on each save in
             [`TrainingArguments`]'s `output_dir` to the local or remote artifact storage. Using it without a remote
             storage will just copy the files to your artifact location.
+        - **MLFLOW_TRACKING_URI** (`str`, *optional*):
+            Whether to store runs at a specific path or remote server. Unset by default, which skips setting the
+            tracking URI entirely.
         - **MLFLOW_EXPERIMENT_NAME** (`str`, *optional*, defaults to `None`):
             Whether to use an MLflow experiment_name under which to launch the run. Default to `None` which will point
             to the `Default` experiment in MLflow. Otherwise, it is a case sensitive name of the experiment to be
@@ -980,14 +1085,33 @@ class MLflowCallback(TrainerCallback):
         """
         self._log_artifacts = os.getenv("HF_MLFLOW_LOG_ARTIFACTS", "FALSE").upper() in ENV_VARS_TRUE_VALUES
         self._nested_run = os.getenv("MLFLOW_NESTED_RUN", "FALSE").upper() in ENV_VARS_TRUE_VALUES
+        self._tracking_uri = os.getenv("MLFLOW_TRACKING_URI", None)
         self._experiment_name = os.getenv("MLFLOW_EXPERIMENT_NAME", None)
         self._flatten_params = os.getenv("MLFLOW_FLATTEN_PARAMS", "FALSE").upper() in ENV_VARS_TRUE_VALUES
         self._run_id = os.getenv("MLFLOW_RUN_ID", None)
+
+        # "synchronous" flag is only available with mlflow version >= 2.8.0
+        # https://github.com/mlflow/mlflow/pull/9705
+        # https://github.com/mlflow/mlflow/releases/tag/v2.8.0
+        self._async_log = packaging.version.parse(self._ml_flow.__version__) >= packaging.version.parse("2.8.0")
+
         logger.debug(
             f"MLflow experiment_name={self._experiment_name}, run_name={args.run_name}, nested={self._nested_run},"
-            f" tags={self._nested_run}"
+            f" tags={self._nested_run}, tracking_uri={self._tracking_uri}"
         )
         if state.is_world_process_zero:
+            if not self._ml_flow.is_tracking_uri_set():
+                if self._tracking_uri:
+                    self._ml_flow.set_tracking_uri(self._tracking_uri)
+                    logger.debug(f"MLflow tracking URI is set to {self._tracking_uri}")
+                else:
+                    logger.debug(
+                        "Environment variable `MLFLOW_TRACKING_URI` is not provided and therefore will not be"
+                        " explicitly set."
+                    )
+            else:
+                logger.debug(f"MLflow tracking URI is set to {self._ml_flow.get_tracking_uri()}")
+
             if self._ml_flow.active_run() is None or self._nested_run or self._run_id:
                 if self._experiment_name:
                     # Use of set_experiment() ensure that Experiment is created if not exists
@@ -1014,7 +1138,12 @@ class MLflowCallback(TrainerCallback):
             # MLflow cannot log more than 100 values in one go, so we have to split it
             combined_dict_items = list(combined_dict.items())
             for i in range(0, len(combined_dict_items), self._MAX_PARAMS_TAGS_PER_BATCH):
-                self._ml_flow.log_params(dict(combined_dict_items[i : i + self._MAX_PARAMS_TAGS_PER_BATCH]))
+                if self._async_log:
+                    self._ml_flow.log_params(
+                        dict(combined_dict_items[i : i + self._MAX_PARAMS_TAGS_PER_BATCH]), synchronous=False
+                    )
+                else:
+                    self._ml_flow.log_params(dict(combined_dict_items[i : i + self._MAX_PARAMS_TAGS_PER_BATCH]))
             mlflow_tags = os.getenv("MLFLOW_TAGS", None)
             if mlflow_tags:
                 mlflow_tags = json.loads(mlflow_tags)
@@ -1033,12 +1162,18 @@ class MLflowCallback(TrainerCallback):
             for k, v in logs.items():
                 if isinstance(v, (int, float)):
                     metrics[k] = v
+                elif isinstance(v, torch.Tensor) and v.numel() == 1:
+                    metrics[k] = v.item()
                 else:
                     logger.warning(
                         f'Trainer is attempting to log a value of "{v}" of type {type(v)} for key "{k}" as a metric. '
                         "MLflow's log_metric() only accepts float and int types so we dropped this attribute."
                     )
-            self._ml_flow.log_metrics(metrics=metrics, step=state.global_step)
+
+            if self._async_log:
+                self._ml_flow.log_metrics(metrics=metrics, step=state.global_step, synchronous=False)
+            else:
+                self._ml_flow.log_metrics(metrics=metrics, step=state.global_step)
 
     def on_train_end(self, args, state, control, **kwargs):
         if self._initialized and state.is_world_process_zero:
@@ -1235,7 +1370,9 @@ class NeptuneCallback(TrainerCallback):
         self._stop_run_if_exists()
 
         try:
-            self._run = init_run(**self._init_run_kwargs, **additional_neptune_kwargs)
+            run_params = additional_neptune_kwargs.copy()
+            run_params.update(self._init_run_kwargs)
+            self._run = init_run(**run_params)
             self._run_id = self._run["sys/id"].fetch()
         except (NeptuneMissingProjectNameException, NeptuneMissingApiTokenException) as e:
             raise NeptuneMissingConfiguration() from e
@@ -1408,6 +1545,11 @@ class CodeCarbonCallback(TrainerCallback):
             raise RuntimeError(
                 "CodeCarbonCallback requires `codecarbon` to be installed. Run `pip install codecarbon`."
             )
+        elif torch.version.hip:
+            raise RuntimeError(
+                "CodeCarbonCallback requires `codecarbon` package, which is not compatible with AMD ROCm (https://github.com/mlco2/codecarbon/pull/490). When using the Trainer, please specify the `report_to` argument (https://huggingface.co/docs/transformers/v4.39.3/en/main_classes/trainer#transformers.TrainingArguments.report_to) to disable CodeCarbonCallback."
+            )
+
         import codecarbon
 
         self._codecarbon = codecarbon
@@ -1440,6 +1582,24 @@ class ClearMLCallback(TrainerCallback):
         Whether to log models as artifacts during training.
     """
 
+    log_suffix = ""
+
+    _hparams_section = "Transformers"
+    _model_config_section = "Model Configuration"
+    _ignore_hparams_overrides = "_ignore_hparams_ui_overrides_"
+    _ignoge_model_config_overrides = "_ignore_model_config_ui_overrides_"
+    _model_config_description = "The configuration of model number {}."
+    _model_config_description_note = (
+        "Note that, when cloning this task and running it remotely,"
+        " the configuration might be applied to another model instead of this one."
+        " To avoid this, initialize the task externally by calling `Task.init`"
+        " before the `ClearMLCallback` is instantiated."
+    )
+    _train_run_counter = 0
+    _model_connect_counter = 0
+    _task_created_in_callback = False
+    _should_close_on_train_end = None
+
     def __init__(self):
         if is_clearml_available():
             import clearml
@@ -1449,25 +1609,38 @@ class ClearMLCallback(TrainerCallback):
             raise RuntimeError("ClearMLCallback requires 'clearml' to be installed. Run `pip install clearml`.")
 
         self._initialized = False
-        self._initialized_externally = False
         self._clearml_task = None
 
-        self._log_model = os.getenv("CLEARML_LOG_MODEL", "FALSE").upper() in ENV_VARS_TRUE_VALUES.union({"TRUE"})
+        self._log_model = False
+        self._checkpoints_saved = []
 
     def setup(self, args, state, model, tokenizer, **kwargs):
         if self._clearml is None:
             return
         if self._initialized:
             return
+        ClearMLCallback._train_run_counter += 1
+        ClearMLCallback._model_connect_counter += 1
+        ClearMLCallback.log_suffix = (
+            "" if ClearMLCallback._train_run_counter == 1 else "_" + str(ClearMLCallback._train_run_counter)
+        )
         if state.is_world_process_zero:
             logger.info("Automatic ClearML logging enabled.")
             if self._clearml_task is None:
+                if ClearMLCallback._should_close_on_train_end is None:
+                    if not self._clearml.Task.running_locally() or self._clearml.Task.current_task():
+                        ClearMLCallback._should_close_on_train_end = False
+                    else:
+                        ClearMLCallback._should_close_on_train_end = True
+
                 # This might happen when running inside of a pipeline, where the task is already initialized
                 # from outside of Hugging Face
-                if self._clearml.Task.current_task():
+                if self._clearml.Task.running_locally() and self._clearml.Task.current_task():
                     self._clearml_task = self._clearml.Task.current_task()
-                    self._initialized = True
-                    self._initialized_externally = True
+                    self._log_model = os.getenv(
+                        "CLEARML_LOG_MODEL",
+                        "FALSE" if not ClearMLCallback._task_created_in_callback else "TRUE",
+                    ).upper() in ENV_VARS_TRUE_VALUES.union({"TRUE"})
                     logger.info("External ClearML Task has been connected.")
                 else:
                     self._clearml_task = self._clearml.Task.init(
@@ -1476,27 +1649,83 @@ class ClearMLCallback(TrainerCallback):
                         auto_connect_frameworks={"tensorboard": False, "pytorch": False},
                         output_uri=True,
                     )
-                    self._initialized = True
+                    self._log_model = os.getenv("CLEARML_LOG_MODEL", "TRUE").upper() in ENV_VARS_TRUE_VALUES.union(
+                        {"TRUE"}
+                    )
+                    ClearMLCallback._task_created_in_callback = True
                     logger.info("ClearML Task has been initialized.")
+                self._initialized = True
 
-            self._clearml_task.connect(args, "Args")
-            if hasattr(model, "config") and model.config is not None:
-                self._clearml_task.connect(model.config, "Model Configuration")
+            suffixed_hparams_section = ClearMLCallback._hparams_section + ClearMLCallback.log_suffix
+            ignore_hparams_config_section = suffixed_hparams_section + "/" + ClearMLCallback._ignore_hparams_overrides
+            if self._clearml.Task.running_locally():
+                self._copy_training_args_as_hparams(args, suffixed_hparams_section)
+                self._clearml_task.set_parameter(
+                    name=ignore_hparams_config_section,
+                    value=True,
+                    value_type=bool,
+                    description=(
+                        "If True, ignore Transformers hyperparameters overrides done in the UI/backend "
+                        + "when running remotely. Otherwise, the overrides will be applied when running remotely"
+                    ),
+                )
+            elif not self._clearml_task.get_parameter(ignore_hparams_config_section, default=True, cast=True):
+                self._clearml_task.connect(args, suffixed_hparams_section)
+            else:
+                self._copy_training_args_as_hparams(
+                    args, ClearMLCallback._hparams_section + ClearMLCallback.log_suffix
+                )
+
+            if getattr(model, "config", None) is not None:
+                ignore_model_config_section = (
+                    suffixed_hparams_section + "/" + ClearMLCallback._ignoge_model_config_overrides
+                )
+                configuration_object_description = ClearMLCallback._model_config_description.format(
+                    ClearMLCallback._model_connect_counter
+                )
+                if ClearMLCallback._model_connect_counter != ClearMLCallback._train_run_counter:
+                    configuration_object_description += " " + ClearMLCallback._model_config_description_note
+                if self._clearml.Task.running_locally():
+                    self._clearml_task.set_parameter(
+                        name=ignore_model_config_section,
+                        value=True,
+                        value_type=bool,
+                        description=(
+                            "If True, ignore Transformers model configuration overrides done in the UI/backend "
+                            + "when running remotely. Otherwise, the overrides will be applied when running remotely"
+                        ),
+                    )
+                    self._clearml_task.set_configuration_object(
+                        name=ClearMLCallback._model_config_section + ClearMLCallback.log_suffix,
+                        config_dict=model.config.to_dict(),
+                        description=configuration_object_description,
+                    )
+                elif not self._clearml_task.get_parameter(ignore_model_config_section, default=True, cast=True):
+                    model.config = model.config.from_dict(
+                        self._clearml_task.get_configuration_object_as_dict(
+                            ClearMLCallback._model_config_section + ClearMLCallback.log_suffix
+                        )
+                    )
+                else:
+                    self._clearml_task.set_configuration_object(
+                        name=ClearMLCallback._model_config_section + ClearMLCallback.log_suffix,
+                        config_dict=model.config.to_dict(),
+                        description=configuration_object_description,
+                    )
 
     def on_train_begin(self, args, state, control, model=None, tokenizer=None, **kwargs):
         if self._clearml is None:
             return
+        self._checkpoints_saved = []
         if state.is_hyper_param_search:
             self._initialized = False
         if not self._initialized:
             self.setup(args, state, model, tokenizer, **kwargs)
 
-    def on_train_end(self, args, state, control, model=None, tokenizer=None, metrics=None, logs=None, **kwargs):
-        if self._clearml is None:
-            return
-        if self._clearml_task and state.is_world_process_zero and not self._initialized_externally:
-            # Close ClearML Task at the end end of training
+    def on_train_end(self, args, state, control, **kwargs):
+        if ClearMLCallback._should_close_on_train_end:
             self._clearml_task.close()
+            ClearMLCallback._train_run_counter = 0
 
     def on_log(self, args, state, control, model=None, tokenizer=None, logs=None, **kwargs):
         if self._clearml is None:
@@ -1519,18 +1748,29 @@ class ClearMLCallback(TrainerCallback):
             for k, v in logs.items():
                 if isinstance(v, (int, float)):
                     if k in single_value_scalars:
-                        self._clearml_task.get_logger().report_single_value(name=k, value=v)
+                        self._clearml_task.get_logger().report_single_value(
+                            name=k + ClearMLCallback.log_suffix, value=v
+                        )
                     elif k.startswith(eval_prefix):
                         self._clearml_task.get_logger().report_scalar(
-                            title=k[eval_prefix_len:], series="eval", value=v, iteration=state.global_step
+                            title="eval" + ClearMLCallback.log_suffix,
+                            series=k[eval_prefix_len:],
+                            value=v,
+                            iteration=state.global_step,
                         )
                     elif k.startswith(test_prefix):
                         self._clearml_task.get_logger().report_scalar(
-                            title=k[test_prefix_len:], series="test", value=v, iteration=state.global_step
+                            title="test" + ClearMLCallback.log_suffix,
+                            series=k[test_prefix_len:],
+                            value=v,
+                            iteration=state.global_step,
                         )
                     else:
                         self._clearml_task.get_logger().report_scalar(
-                            title=k, series="train", value=v, iteration=state.global_step
+                            title="train" + ClearMLCallback.log_suffix,
+                            series=k,
+                            value=v,
+                            iteration=state.global_step,
                         )
                 else:
                     logger.warning(
@@ -1544,8 +1784,42 @@ class ClearMLCallback(TrainerCallback):
         if self._log_model and self._clearml_task and state.is_world_process_zero:
             ckpt_dir = f"checkpoint-{state.global_step}"
             artifact_path = os.path.join(args.output_dir, ckpt_dir)
-            logger.info(f"Logging checkpoint artifacts in {ckpt_dir}. This may take time.")
-            self._clearml_task.update_output_model(artifact_path, iteration=state.global_step, auto_delete_file=False)
+            name = ckpt_dir + ClearMLCallback.log_suffix
+            logger.info(f"Logging checkpoint artifact `{name}`. This may take some time.")
+            output_model = self._clearml.OutputModel(task=self._clearml_task, name=name)
+            output_model.connect(task=self._clearml_task, name=name)
+            output_model.update_weights_package(
+                weights_path=artifact_path,
+                target_filename=ckpt_dir,
+                iteration=state.global_step,
+                auto_delete_file=False,
+            )
+            self._checkpoints_saved.append(output_model)
+            while args.save_total_limit and args.save_total_limit < len(self._checkpoints_saved):
+                try:
+                    self._clearml.model.Model.remove(
+                        self._checkpoints_saved[0],
+                        delete_weights_file=True,
+                        force=True,
+                        raise_on_errors=True,
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "Could not remove checkpoint `{}` after going over the `save_total_limit`. Error is: {}".format(
+                            self._checkpoints_saved[0].name, e
+                        )
+                    )
+                    break
+                self._checkpoints_saved = self._checkpoints_saved[1:]
+
+    def _copy_training_args_as_hparams(self, training_args, prefix):
+        as_dict = {
+            field.name: getattr(training_args, field.name)
+            for field in fields(training_args)
+            if field.init and not field.name.endswith("_token")
+        }
+        flat_dict = {str(k): v for k, v in self._clearml.utilities.proxy_object.flatten_dictionary(as_dict).items()}
+        self._clearml_task._arguments.copy_from_dict(flat_dict, prefix=prefix)
 
 
 class FlyteCallback(TrainerCallback):
@@ -1637,15 +1911,20 @@ class DVCLiveCallback(TrainerCallback):
             raise RuntimeError("DVCLiveCallback requires dvclive to be installed. Run `pip install dvclive`.")
         from dvclive import Live
 
-        self._log_model = log_model
-
         self._initialized = False
         self.live = None
         if isinstance(live, Live):
             self.live = live
-            self._initialized = True
         elif live is not None:
             raise RuntimeError(f"Found class {live.__class__} for live, expected dvclive.Live")
+
+        self._log_model = log_model
+        if self._log_model is None:
+            log_model_env = os.getenv("HF_DVCLIVE_LOG_MODEL", "FALSE")
+            if log_model_env.upper() in ENV_VARS_TRUE_VALUES:
+                self._log_model = True
+            elif log_model_env.lower() == "all":
+                self._log_model = "all"
 
     def setup(self, args, state, model):
         """
@@ -1660,13 +1939,7 @@ class DVCLiveCallback(TrainerCallback):
         """
         from dvclive import Live
 
-        self._initalized = True
-        if self._log_model is not None:
-            log_model_env = os.getenv("HF_DVCLIVE_LOG_MODEL")
-            if log_model_env.upper() in ENV_VARS_TRUE_VALUES:
-                self._log_model = True
-            elif log_model_env.lower() == "all":
-                self._log_model = "all"
+        self._initialized = True
         if state.is_world_process_zero:
             if not self.live:
                 self.live = Live()
@@ -1680,10 +1953,19 @@ class DVCLiveCallback(TrainerCallback):
         if not self._initialized:
             self.setup(args, state, model)
         if state.is_world_process_zero:
+            from dvclive.plots import Metric
             from dvclive.utils import standardize_metric_name
 
             for key, value in logs.items():
-                self.live.log_metric(standardize_metric_name(key, "dvclive.huggingface"), value)
+                if Metric.could_log(value):
+                    self.live.log_metric(standardize_metric_name(key, "dvclive.huggingface"), value)
+                else:
+                    logger.warning(
+                        "Trainer is attempting to log a value of "
+                        f'"{value}" of type {type(value)} for key "{key}" as a scalar. '
+                        "This invocation of DVCLive's Live.log_metric() "
+                        "is incorrect so we dropped this attribute."
+                    )
             self.live.next_step()
 
     def on_save(self, args, state, control, **kwargs):

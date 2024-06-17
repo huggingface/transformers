@@ -56,7 +56,7 @@ def export_with_optimum(args):
         f"--framework {args.framework}" if args.framework is not None else "",
         f"{args.output}",
     ]
-    proc = subprocess.Popen(" ".join(cmd_line), stdout=subprocess.PIPE, shell=True)
+    proc = subprocess.Popen(cmd_line, stdout=subprocess.PIPE)
     proc.wait()
 
     logger.info(
