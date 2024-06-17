@@ -2804,7 +2804,7 @@ class GenerationMixin:
         """
         # init values
         pad_token_id = generation_config.pad_token_id
-        eos_token_id  = generation_config.eos_token_id
+        eos_token_id = generation_config.eos_token_id
         output_attentions = generation_config.output_attentions
         output_hidden_states = generation_config.output_hidden_states
         output_scores = generation_config.output_scores
@@ -3123,7 +3123,7 @@ class GenerationMixin:
         """
         # init values
         pad_token_id = generation_config.pad_token_id
-        eos_token_id  = generation_config.eos_token_id
+        eos_token_id = generation_config.eos_token_id
         output_attentions = generation_config.output_attentions
         output_hidden_states = generation_config.output_hidden_states
         output_scores = generation_config.output_scores
@@ -3415,7 +3415,7 @@ class GenerationMixin:
         """
         # init values
         pad_token_id = generation_config.pad_token_id
-        eos_token_id  = generation_config.eos_token_id
+        eos_token_id = generation_config.eos_token_id
         output_attentions = generation_config.output_attentions
         output_hidden_states = generation_config.output_hidden_states
         output_scores = generation_config.output_scores

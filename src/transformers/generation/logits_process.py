@@ -1696,6 +1696,7 @@ class ExponentialDecayLengthPenalty(LogitsProcessor):
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         cur_len = input_ids.shape[-1]
+        self.eos_token_id = self.eos_token_id.to(scores.device)
         penalties = torch.zeros_like(scores)
         scores_processed = scores
         if cur_len > self.regulation_start:
