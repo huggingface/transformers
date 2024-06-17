@@ -53,11 +53,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "jaszczur/mixture_of_tokens"
 _CONFIG_FOR_DOC = "MoTConfig"
 
-MOT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "jaszczur/mixture_of_tokens",
-    # See all MixtureOfTokens models at https://huggingface.co/models?filter=mot
-]
-
 
 def with_batch_size_alignment(forward_fn):
     def _forward(self, x):

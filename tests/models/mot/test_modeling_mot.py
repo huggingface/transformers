@@ -23,7 +23,6 @@ import unittest
 from transformers import AutoModelForSequenceClassification, MoTConfig, is_torch_available
 from transformers.models.auto import get_values
 from transformers.models.auto.modeling_auto import MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES
-from transformers.models.mot.modeling_mot import MOT_PRETRAINED_MODEL_ARCHIVE_LIST
 from transformers.testing_utils import CaptureLogger, backend_empty_cache, require_torch, slow, torch_device
 from transformers.utils import logging
 
@@ -671,9 +670,8 @@ class MoTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in MOT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = MoTModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model = MoTModel.from_pretrained("jaszczur/mixture_of_tokens")
+        self.assertIsNotNone(model)
 
 
 @require_torch
