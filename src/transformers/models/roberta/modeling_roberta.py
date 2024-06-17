@@ -169,6 +169,7 @@ class RobertaEmbeddings(nn.Module):
 class RobertaSelfAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
+        self.config = config
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
                 f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
@@ -395,7 +396,7 @@ class RobertaFlashAttention2(RobertaSelfAttention):
 
         seq_len = query_states.shape[1]
 
-        attn_dropout = self.config.attention_dropout if self.training else 0.0
+        attn_dropout = self.config.attention_probs_dropout_prob if self.training else 0.0
 
         # In PEFT, usually we cast the layer norms in float32 for training stability reasons
         # therefore the input hidden states gets silently casted in float32. Hence, we need
@@ -618,7 +619,7 @@ class RobertaSdpaAttention(RobertaSelfAttention):
 
         batch_size, _, seq_len, _ = query_states.size()
 
-        attn_dropout = self.config.attention_dropout if self.training else 0.0
+        attn_dropout = self.config.attention_probs_dropout_prob if self.training else 0.0
 
         # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
         # Reference: https://github.com/pytorch/pytorch/issues/112577.
