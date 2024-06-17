@@ -855,22 +855,11 @@ LLAMA_INPUTS_DOCSTRING = r"""
             the complete sequence length.
 """
 
-from typing import TypedDict,Unpack
+from typing import TypedDict, Unpack
 
-class ForwardParameters(TypedDict):
-    input_ids: torch.LongTensor = None,
-    attention_mask: Optional[torch.Tensor] = None,
-    position_ids: Optional[torch.LongTensor] = None,
-    past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
-    inputs_embeds: Optional[torch.FloatTensor] = None,
-    use_cache: Optional[bool] = None,
-    output_attentions: Optional[bool] = None,
-    output_hidden_states: Optional[bool] = None,  
-    return_dict: Optional[bool] = None,
-    cache_position: Optional[torch.LongTensor] = None,
 
-class TGIForwardParameters(ForwardParameters):
-    cu_ceq_lens:torch.tensor
+class ExtraKwargs(TypedDict):
+    cu_seqlens: torch.Tensor
 
 
 @add_start_docstrings(
@@ -907,10 +896,7 @@ class LlamaModel(LlamaPreTrainedModel):
         self.embed_tokens = value
 
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
-    def forward(
-        self,
-        **kwargs:Unpack[TGIForwardParameters]
-    ) -> Union[Tuple, BaseModelOutputWithPast]:
+    def forward(self, **kwargs: Unpack[TGIForwardParameters]) -> Union[Tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
