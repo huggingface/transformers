@@ -240,15 +240,6 @@ def parse_args():
         default="cppe-5",
     )
     parser.add_argument(
-        "--trust_remote_dataset_code",
-        action="store_true",
-        help=(
-            "Whether to trust the execution of code from the dataset defined on the Hub that uses a loading script."
-            " This option should only be set to `True` for repositories you trust and in which you have read the"
-            " code, as it will execute code present on the Hub on your local machine."
-        ),
-    )
-    parser.add_argument(
         "--train_val_split",
         type=float,
         default=0.15,
@@ -349,12 +340,11 @@ def parse_args():
     parser.add_argument("--hub_token", type=str, help="The token to use to push to the Model Hub.")
     parser.add_argument(
         "--trust_remote_code",
-        type=bool,
-        default=False,
+        action="store_true",
         help=(
-            "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option "
-            "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
-            "execute code present on the Hub on your local machine."
+            "Whether to trust the execution of code from datasets/models defined on the Hub."
+            " This option should only be set to `True` for repositories you trust and in which you have read the"
+            " code, as it will execute code present on the Hub on your local machine."
         ),
     )
     parser.add_argument(
