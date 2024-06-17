@@ -51,15 +51,13 @@ from .configuration_llama import LlamaConfig
 
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
-    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
 
+
+from typing import TypedDict, Unpack
 
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LlamaConfig"
-
-
-from typing import TypedDict, Unpack
 
 
 class ExtraKwargs(TypedDict):
@@ -529,10 +527,12 @@ class LlamaFlashAttention2(LlamaAttention):
         # Contains at least one padding token in the sequence
         if attention_mask is not None:
             batch_size = query_states.shape[0]
+            unpad_inputs = False
             if all(["cu_seqlens", "max_seq_lens"]) not in kwargs:
                 query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
                     query_states, key_states, value_states, attention_mask, query_length
                 )
+                unpad_inputs = True
             else:
                 cu_seq_lens = kwargs.get("cu_seq_lens")
                 max_seq_lens = kwargs.get("max_seq_lens")
@@ -552,52 +552,14 @@ class LlamaFlashAttention2(LlamaAttention):
                 softmax_scale=softmax_scale,
                 causal=causal,
             )
-
-            attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
+            if unpad_inputs:
+                attn_output = self._pad_input(attn_output_unpad, indices_q, batch_size, query_length)
         else:
             attn_output = flash_attn_func(
                 query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=causal
             )
 
         return attn_output
-
-    def _upad_input(self, query_layer, key_layer, value_layer, attention_mask, query_length):
-        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
-        batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
-
-        key_layer = index_first_axis(
-            key_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
-        )
-        value_layer = index_first_axis(
-            value_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
-        )
-        if query_length == kv_seq_len:
-            query_layer = index_first_axis(
-                query_layer.reshape(batch_size * kv_seq_len, self.num_heads, head_dim), indices_k
-            )
-            cu_seqlens_q = cu_seqlens_k
-            max_seqlen_in_batch_q = max_seqlen_in_batch_k
-            indices_q = indices_k
-        elif query_length == 1:
-            max_seqlen_in_batch_q = 1
-            cu_seqlens_q = torch.arange(
-                batch_size + 1, dtype=torch.int32, device=query_layer.device
-            )  # There is a memcpy here, that is very bad.
-            indices_q = cu_seqlens_q[:-1]
-            query_layer = query_layer.squeeze(1)
-        else:
-            # The -q_len: slice assumes left padding.
-            attention_mask = attention_mask[:, -query_length:]
-            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_layer, attention_mask)
-
-        return (
-            query_layer,
-            key_layer,
-            value_layer,
-            indices_q,
-            (cu_seqlens_q, cu_seqlens_k),
-            (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
-        )
 
 
 class LlamaSdpaAttention(LlamaAttention):
