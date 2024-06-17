@@ -53,7 +53,12 @@ if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
 
 
-from typing import TypedDict, Unpack
+from typing import TypedDict
+
+try:
+    from tying import Unpack
+except ImportError:
+    from typing_extension import Unpack
 
 logger = logging.get_logger(__name__)
 
