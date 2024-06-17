@@ -626,8 +626,8 @@ class MambaModel(MambaPreTrainedModel):
                 # hack to conjecture the current cache position
                 raise RuntimeError(
                     "You have to specify the `cache_position` manually when `use_cache=True` and `cache_params` is passed, "
-                    "you don't have to pass a `cache_params` if you are in prefilling stage, otherwise please pass "
-                    "`cache_params=config.conv_kernel` so that the passed cache can be updated properly"
+                    "you don't have to pass a `cache_params` if you are in prefilling stage because in that case it will "
+                    "be initialized for you automatically"
                 )
         else:
             cache_params = None
