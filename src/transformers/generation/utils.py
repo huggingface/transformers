@@ -1467,8 +1467,11 @@ class GenerationMixin:
                 device = self.device
 
             token = token_kwargs if token_kwargs is not None else token_self
-            if token is None or isinstance(token, torch.Tensor):
+            if token is None:
                 return token
+            elif isinstance(token, torch.Tensor):
+                return token.to(device)
+
             return torch.tensor(token, device=device, dtype=torch.long)
 
         bos_token_id = _tensor_or_none(
@@ -2183,9 +2186,7 @@ class GenerationMixin:
         has_eos_stopping_criteria = any(hasattr(criteria, "eos_token_id") for criteria in stopping_criteria)
         top_k = generation_config.top_k
         penalty_alpha = generation_config.penalty_alpha
-        pad_token_id = (
-            generation_config.pad_token_id.to(self.device) if generation_config.pad_token_id is not None else None
-        )
+        pad_token_id = generation_config.pad_token_id
         output_attentions = generation_config.output_attentions
         output_hidden_states = generation_config.output_hidden_states
         output_scores = generation_config.output_scores
@@ -2593,9 +2594,7 @@ class GenerationMixin:
             `model.config.is_encoder_decoder=True`.
         """
         # init values
-        pad_token_id = (
-            generation_config.pad_token_id.to(self.device) if generation_config.pad_token_id is not None else None
-        )
+        pad_token_id = generation_config.pad_token_id
         output_attentions = generation_config.output_attentions
         output_hidden_states = generation_config.output_hidden_states
         output_scores = generation_config.output_scores
@@ -2804,12 +2803,8 @@ class GenerationMixin:
             `model.config.is_encoder_decoder=True`.
         """
         # init values
-        pad_token_id = (
-            generation_config.pad_token_id.to(self.device) if generation_config.pad_token_id is not None else None
-        )
-        eos_token_id = (
-            generation_config.eos_token_id.to(self.device) if generation_config.eos_token_id is not None else None
-        )
+        pad_token_id = generation_config.pad_token_id
+        eos_token_id  = generation_config.eos_token_id
         output_attentions = generation_config.output_attentions
         output_hidden_states = generation_config.output_hidden_states
         output_scores = generation_config.output_scores
@@ -3127,12 +3122,8 @@ class GenerationMixin:
             `model.config.is_encoder_decoder=True`.
         """
         # init values
-        pad_token_id = (
-            generation_config.pad_token_id.to(self.device) if generation_config.pad_token_id is not None else None
-        )
-        eos_token_id = (
-            generation_config.eos_token_id.to(self.device) if generation_config.eos_token_id is not None else None
-        )
+        pad_token_id = generation_config.pad_token_id
+        eos_token_id  = generation_config.eos_token_id
         output_attentions = generation_config.output_attentions
         output_hidden_states = generation_config.output_hidden_states
         output_scores = generation_config.output_scores
@@ -3423,12 +3414,8 @@ class GenerationMixin:
             `model.config.is_encoder_decoder=True`.
         """
         # init values
-        pad_token_id = (
-            generation_config.pad_token_id.to(self.device) if generation_config.pad_token_id is not None else None
-        )
-        eos_token_id = (
-            generation_config.eos_token_id.to(self.device) if generation_config.eos_token_id is not None else None
-        )
+        pad_token_id = generation_config.pad_token_id
+        eos_token_id  = generation_config.eos_token_id
         output_attentions = generation_config.output_attentions
         output_hidden_states = generation_config.output_hidden_states
         output_scores = generation_config.output_scores
