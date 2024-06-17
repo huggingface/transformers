@@ -209,8 +209,8 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         self.assertEqual(token_lengths, [len(token) for token in token_list])
 
     def test_single_letter_stop_string(self):
-        true_strings = ["a", "baa", "abc"]
-        false_strings = ["abbbbbbb", "b"]
+        true_strings = ["a", "baa", "abc"]  # "abc" is a single token
+        false_strings = ["abbbbbbb", "b"]  # "abbbbbbb" is split into multiple tokens
         stop_strings = ["a"]
         tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
         tokenizer.pad_token_id = tokenizer.eos_token_id
