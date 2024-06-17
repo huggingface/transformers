@@ -233,6 +233,13 @@ for block in text_block:
         result = evaluate_python_code(code, {}, state={})
         assert result == 2
 
+        code="""
+digits, i = [1, 2, 3], 1
+digits[i], digits[i + 1] = digits[i + 1], digits[i]"""
+        state = {}
+        evaluate_python_code(code, {"range": range, "print": print, "int": int}, state)
+
+
     def test_listcomp(self):
         code = "x = [i for i in range(3)]"
         result = evaluate_python_code(code, {"range": range}, state={})
@@ -284,7 +291,6 @@ house_positions = [0, 7, 10, 15, 18, 22, 22]
 i, n, loc = 0, 7, 30
 while i < n and house_positions[i] <= loc:
     i += 1
-    print("New I", i)
 """
         state = {}
         evaluate_python_code(code, BASE_PYTHON_TOOLS, state=state)

@@ -186,25 +186,6 @@ def evaluate_augassign(expression: ast.AugAssign, state: Dict[str, Any], tools: 
         else:
             raise InterpreterError("AugAssign not supported for {type(target)} targets.")
 
-    def set_new_value(target, value):
-        if isinstance(target, ast.Name):
-            state[target.id] = value
-        elif isinstance(target, ast.Subscript):
-            obj = evaluate_ast(target.value, state, tools)
-            key = evaluate_ast(target.slice, state, tools)
-            obj[key] = value
-        elif isinstance(target, ast.Attribute):
-            obj = evaluate_ast(target.value, state, tools)
-            setattr(obj, target.attr, value)
-        elif isinstance(target, ast.Tuple):
-            for elt, val in zip(target.elts, value):
-                set_new_value(elt, val)
-        elif isinstance(target, ast.List):
-            for elt, val in zip(target.elts, value):
-                set_new_value(elt, val)
-        else:
-            raise InterpreterError(f"AugAssign not supported for {type(target)} targets.")
-
     current_value = get_current_value(expression.target)
     value_to_add = evaluate_ast(expression.value, state, tools)
 
@@ -242,7 +223,7 @@ def evaluate_augassign(expression: ast.AugAssign, state: Dict[str, Any], tools: 
         raise InterpreterError(f"Operation {type(expression.op).__name__} is not supported.")
 
     # Update the state
-    set_new_value(expression.target, updated_value)
+    set_value(expression.target, updated_value, state, tools)
 
     return updated_value
 
@@ -295,41 +276,40 @@ def evaluate_binop(binop, state, tools):
 
 
 def evaluate_assign(assign, state, tools):
-    var_names = assign.targets
     result = evaluate_ast(assign.value, state, tools)
-    if len(var_names) == 1:
-        target = var_names[0]
-        if isinstance(target, ast.Tuple):
-            for i, elem in enumerate(target.elts):
-                if elem.id in tools:
-                    raise InterpreterError(
-                        f"Cannot assign to name '{elem.id}': doing this would erase the existing tool!"
-                    )
-                state[elem.id] = result[i]
-        elif isinstance(target, ast.Attribute):
-            obj = evaluate_ast(target.value, state, tools)
-            setattr(obj, target.attr, result)
-        elif isinstance(target, ast.Subscript):
-            obj = evaluate_ast(target.value, state, tools)
-            key = evaluate_ast(target.slice, state, tools)
-            obj[key] = result
-        else:
-            if target.id in tools:
-                raise InterpreterError(
-                    f"Cannot assign to name '{target.id}': doing this would erase the existing tool!"
-                )
-            state[target.id] = result
-
+    if len(assign.targets) == 1:
+        target = assign.targets[0]
+        set_value(target, result, state, tools)
     else:
-        if len(result) != len(var_names):
-            raise InterpreterError(f"Expected {len(var_names)} values but got {len(result)}.")
-        for var_name, r in zip(var_names, result):
-            if var_name.id in tools:
-                raise InterpreterError(
-                    f"Cannot assign to name '{var_name.id}': doing this would erase the existing tool!"
-                )
-            state[var_name.id] = r
+        if len(assign.targets) != len(result):
+            raise InterpreterError(f"Assign failed: expected {len(result)} values but got {len(assign.targets)}.")
+        print("TRGETS", assign.targets)
+        for tgt, val in zip(assign.targets, result):
+            set_value(tgt, val, state, tools)
     return result
+
+
+def set_value(target, value, state, tools):
+    if isinstance(target, ast.Name):
+        if target.id in tools:
+            raise InterpreterError(
+                f"Cannot assign to name '{target.id}': doing this would erase the existing tool!"
+            )
+        state[target.id] = value
+    elif isinstance(target, ast.Tuple):
+        if not isinstance(value, tuple):
+            raise InterpreterError("Cannot unpack non-tuple value")
+        if len(target.elts) != len(value):
+            raise InterpreterError("Cannot unpack tuple of wrong size")
+        for i, elem in enumerate(target.elts):
+            set_value(elem, value[i], state, tools)
+    elif isinstance(target, ast.Subscript):
+        obj = evaluate_ast(target.value, state, tools)
+        key = evaluate_ast(target.slice, state, tools)
+        obj[key] = value
+    elif isinstance(target, ast.Attribute):
+        obj = evaluate_ast(target.value, state, tools)
+        setattr(obj, target.attr, value)
 
 
 def evaluate_call(call, state, tools):
@@ -789,13 +769,14 @@ def evaluate_python_code(
     for node in expression.body:
         try:
             line_result = evaluate_ast(node, state, tools, authorized_imports)
-            state['print_outputs'] = PRINT_OUTPUTS
+            if line_result is not None:
+                result = line_result
         except InterpreterError as e:
             msg = f"Evaluation stopped at line '{ast.get_source_segment(code, node)}' because of the following error:\n{e}"
             if len(PRINT_OUTPUTS) > 0:
                 msg += f"Executing code yielded these outputs:\n{PRINT_OUTPUTS}\n====\n"
             raise InterpreterError(msg)
-        if line_result is not None:
-            result = line_result
+        finally:
+            state['print_outputs'] = PRINT_OUTPUTS
 
     return result
