@@ -63,7 +63,6 @@ if TYPE_CHECKING:
         from .feature_extraction_dab_detr import DABDETRFeatureExtractor
         from .image_processing_dab_detr import DABDETRImageProcessor
 
-
     try:
         if not is_torch_available():
             raise OptionalDependencyNotAvailable()

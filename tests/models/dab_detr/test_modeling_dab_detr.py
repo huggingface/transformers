@@ -36,7 +36,6 @@ if is_torch_available():
     from transformers import (
         DABDETRForObjectDetection,
         DABDETRModel,
-        # DABDETRForSegmentation,
     )
 
 
@@ -284,7 +283,6 @@ class DABDETRModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     # def test_save_load_fast_init_from_base(self):
     #     pass
 
-    
     # TODO: check if this works again for PyTorch 2.x.y
     @unittest.skip(reason="Got `CUDA error: misaligned address` with PyTorch 2.0.0.")
     def test_multi_gpu_data_parallel_forward(self):
@@ -310,27 +308,39 @@ class DABDETRModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_resize_tokens_embeddings(self):
         pass
 
-    @unittest.skip(reason="DAB-DETR has shared tensors {'bbox_embed.layers.N.weight', 'decoder.bbox_embed.layers.N.weight'}")
+    @unittest.skip(
+        reason="DAB-DETR has shared tensors {'bbox_embed.layers.N.weight', 'decoder.bbox_embed.layers.N.weight'}"
+    )
     def test_load_save_without_tied_weights(self):
         pass
 
-    @unittest.skip(reason="DAB-DETR has shared tensors {'bbox_embed.layers.N.weight', 'decoder.bbox_embed.layers.N.weight'}")
+    @unittest.skip(
+        reason="DAB-DETR has shared tensors {'bbox_embed.layers.N.weight', 'decoder.bbox_embed.layers.N.weight'}"
+    )
     def test_model_weights_reload_no_missing_tied_weights(self):
         pass
 
-    @unittest.skip(reason="DAB-DETR has shared tensors {'bbox_embed.layers.N.weight', 'decoder.bbox_embed.layers.N.weight'}")
+    @unittest.skip(
+        reason="DAB-DETR has shared tensors {'bbox_embed.layers.N.weight', 'decoder.bbox_embed.layers.N.weight'}"
+    )
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip(reason="DAB-DETR has shared tensors {'bbox_embed.layers.N.weight', 'decoder.bbox_embed.layers.N.weight'}")
+    @unittest.skip(
+        reason="DAB-DETR has shared tensors {'bbox_embed.layers.N.weight', 'decoder.bbox_embed.layers.N.weight'}"
+    )
     def test_can_use_safetensors(self):
         pass
 
-    @unittest.skip(reason="DAB-DETR has shared tensors {'bbox_embed.layers.N.weight', 'decoder.bbox_embed.layers.N.weight'}")
+    @unittest.skip(
+        reason="DAB-DETR has shared tensors {'bbox_embed.layers.N.weight', 'decoder.bbox_embed.layers.N.weight'}"
+    )
     def test_save_load(self):
         pass
 
-    @unittest.skip(reason="DAB-DETR has shared tensors {'bbox_embed.layers.N.weight', 'decoder.bbox_embed.layers.N.weight'}")
+    @unittest.skip(
+        reason="DAB-DETR has shared tensors {'bbox_embed.layers.N.weight', 'decoder.bbox_embed.layers.N.weight'}"
+    )
     def test_tied_weights_keys(self):
         pass
 
@@ -353,7 +363,7 @@ class DABDETRModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             expected_num_layers = getattr(
                 self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
             )
-           
+
             self.assertEqual(len(hidden_states), expected_num_layers)
 
             if hasattr(self.model_tester, "encoder_seq_length"):
@@ -372,11 +382,11 @@ class DABDETRModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 hidden_states = outputs.decoder_hidden_states
 
                 self.assertIsInstance(hidden_states, (list, tuple))
-               
+
                 self.assertEqual(len(hidden_states), expected_num_layers)
                 seq_len = getattr(self.model_tester, "seq_length", None)
                 decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
-              
+
                 self.assertListEqual(
                     [hidden_states[0].shape[0], hidden_states[0].shape[2]],
                     [decoder_seq_length, self.model_tester.hidden_size],
@@ -522,7 +532,7 @@ class DABDETRModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
             attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
-         
+
             self.assertListEqual(
                 list(attentions[0].shape[-3:]),
                 [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
@@ -591,7 +601,6 @@ class DABDETRModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
-        
                 list(self_attentions[0].shape[-3:]),
                 [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
             )
@@ -626,7 +635,6 @@ class DABDETRModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         self.assertIsNotNone(encoder_hidden_states.grad)
         self.assertIsNotNone(decoder_attentions.grad)
         self.assertIsNotNone(cross_attentions.grad)
-        
 
     def test_forward_auxiliary_loss(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -715,12 +723,12 @@ class DABDETRModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                             abs(param.data.max().item()),
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
-                    elif 'activation_fn' in name and config.activation_function == 'prelu':
+                    elif "activation_fn" in name and config.activation_function == "prelu":
                         self.assertTrue(
                             param.data.mean() == 0.25,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
-                    elif 'self_attn.in_proj_weight' in name:
+                    elif "self_attn.in_proj_weight" in name:
                         self.assertIn(
                             ((param.data.mean() * 1e2).round() / 1e2).item(),
                             [0.0, 1.0],
@@ -750,9 +758,7 @@ class DABDETRModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return (
-            DABDETRImageProcessor.from_pretrained("davidhajdu/dab-detr-resnet-50")
-            if is_vision_available()
-            else None
+            DABDETRImageProcessor.from_pretrained("davidhajdu/dab-detr-resnet-50") if is_vision_available() else None
         )
 
     def test_inference_no_head(self):
@@ -767,15 +773,13 @@ class DABDETRModelIntegrationTests(unittest.TestCase):
 
         expected_shape = torch.Size((1, 300, 256))
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
-        expected_slice = torch.tensor( 
-            [[-0.2504, -0.2940,  0.5532], [-0.0944, -0.2442,  0.8170], [-0.6975, -0.2953,  0.7826]]
-            ).to(torch_device)
+        expected_slice = torch.tensor(
+            [[-0.2504, -0.2940, 0.5532], [-0.0944, -0.2442, 0.8170], [-0.6975, -0.2953, 0.7826]]
+        ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=2e-4))
 
     def test_inference_object_detection_head(self):
-        model = DABDETRForObjectDetection.from_pretrained("davidhajdu/dab-detr-resnet-50").to(
-            torch_device
-        )
+        model = DABDETRForObjectDetection.from_pretrained("davidhajdu/dab-detr-resnet-50").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -789,7 +793,7 @@ class DABDETRModelIntegrationTests(unittest.TestCase):
         expected_shape_logits = torch.Size((1, model.config.num_queries, model.config.num_labels))
         self.assertEqual(outputs.logits.shape, expected_shape_logits)
         expected_slice_logits = torch.tensor(
-            [[-10.1765,  -5.5243,  -8.9324], [ -9.8138,  -5.6721,  -7.5161], [-10.3054,  -5.6081,  -8.5931]]
+            [[-10.1765, -5.5243, -8.9324], [-9.8138, -5.6721, -7.5161], [-10.3054, -5.6081, -8.5931]]
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice_logits, atol=3e-4))
 

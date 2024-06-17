@@ -221,10 +221,9 @@ class DABDETRConfig(PretrainedConfig):
         decoder_bbox_embed_diff_each_layer=False,
         random_refpoints_xy=False,
         keep_query_pos=False,
-        query_scale_type='cond_elewise',
+        query_scale_type="cond_elewise",
         num_patterns=0,
         normalize_before=False,
-        
         **kwargs,
     ):
         if not use_timm_backbone and use_pretrained_backbone:

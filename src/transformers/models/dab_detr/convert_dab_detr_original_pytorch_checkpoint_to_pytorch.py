@@ -24,6 +24,7 @@ import requests
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
+
 from transformers import (
     DABDETRConfig,
     DABDETRForObjectDetection,
@@ -71,7 +72,9 @@ for i in range(6):
     rename_keys.append((f"transformer.encoder.layers.{i}.norm2.weight", f"encoder.layers.{i}.final_layer_norm.weight"))
     rename_keys.append((f"transformer.encoder.layers.{i}.norm2.bias", f"encoder.layers.{i}.final_layer_norm.bias"))
     # activation function weight
-    rename_keys.append((f"transformer.encoder.layers.{i}.activation.weight", f"encoder.layers.{i}.activation_fn.weight"))
+    rename_keys.append(
+        (f"transformer.encoder.layers.{i}.activation.weight", f"encoder.layers.{i}.activation_fn.weight")
+    )
     #########################################################################################################################################
     # decoder layers: 2 times output projection, 2 feedforward neural networks and 3 layernorms + activiation function weight
     rename_keys.append(
@@ -87,7 +90,9 @@ for i in range(6):
         )
     )
     # activation function weight
-    rename_keys.append((f"transformer.decoder.layers.{i}.activation.weight", f"decoder.layers.{i}.activation_fn.weight"))
+    rename_keys.append(
+        (f"transformer.decoder.layers.{i}.activation.weight", f"decoder.layers.{i}.activation_fn.weight")
+    )
     rename_keys.append(
         (
             f"transformer.decoder.layers.{i}.cross_attn.out_proj.bias",
@@ -166,42 +171,33 @@ rename_keys.extend(
     [
         ("input_proj.weight", "input_projection.weight"),
         ("input_proj.bias", "input_projection.bias"),
-
         ("refpoint_embed.weight", "query_refpoint_embeddings.weight"),
-
         ("class_embed.weight", "class_labels_classifier.weight"),
         ("class_embed.bias", "class_labels_classifier.bias"),
-
         ("transformer.encoder.query_scale.layers.0.weight", "encoder.query_scale.layers.0.weight"),
         ("transformer.encoder.query_scale.layers.0.bias", "encoder.query_scale.layers.0.bias"),
         ("transformer.encoder.query_scale.layers.1.weight", "encoder.query_scale.layers.1.weight"),
         ("transformer.encoder.query_scale.layers.1.bias", "encoder.query_scale.layers.1.bias"),
-        
         ("transformer.decoder.bbox_embed.layers.0.weight", "decoder.bbox_embed.layers.0.weight"),
         ("transformer.decoder.bbox_embed.layers.0.bias", "decoder.bbox_embed.layers.0.bias"),
         ("transformer.decoder.bbox_embed.layers.1.weight", "decoder.bbox_embed.layers.1.weight"),
         ("transformer.decoder.bbox_embed.layers.1.bias", "decoder.bbox_embed.layers.1.bias"),
         ("transformer.decoder.bbox_embed.layers.2.weight", "decoder.bbox_embed.layers.2.weight"),
         ("transformer.decoder.bbox_embed.layers.2.bias", "decoder.bbox_embed.layers.2.bias"),
-
         ("transformer.decoder.norm.weight", "decoder.layernorm.weight"),
         ("transformer.decoder.norm.bias", "decoder.layernorm.bias"),
-
         ("transformer.decoder.ref_point_head.layers.0.weight", "decoder.ref_point_head.layers.0.weight"),
         ("transformer.decoder.ref_point_head.layers.0.bias", "decoder.ref_point_head.layers.0.bias"),
         ("transformer.decoder.ref_point_head.layers.1.weight", "decoder.ref_point_head.layers.1.weight"),
         ("transformer.decoder.ref_point_head.layers.1.bias", "decoder.ref_point_head.layers.1.bias"),
-
         ("transformer.decoder.ref_anchor_head.layers.0.weight", "decoder.ref_anchor_head.layers.0.weight"),
         ("transformer.decoder.ref_anchor_head.layers.0.bias", "decoder.ref_anchor_head.layers.0.bias"),
         ("transformer.decoder.ref_anchor_head.layers.1.weight", "decoder.ref_anchor_head.layers.1.weight"),
         ("transformer.decoder.ref_anchor_head.layers.1.bias", "decoder.ref_anchor_head.layers.1.bias"),
-
         ("transformer.decoder.query_scale.layers.0.weight", "decoder.query_scale.layers.0.weight"),
         ("transformer.decoder.query_scale.layers.0.bias", "decoder.query_scale.layers.0.bias"),
         ("transformer.decoder.query_scale.layers.1.weight", "decoder.query_scale.layers.1.weight"),
         ("transformer.decoder.query_scale.layers.1.bias", "decoder.query_scale.layers.1.bias"),
-
         ("transformer.decoder.layers.0.ca_qpos_proj.weight", "decoder.layers.0.ca_qpos_proj.weight"),
         ("transformer.decoder.layers.0.ca_qpos_proj.bias", "decoder.layers.0.ca_qpos_proj.bias"),
     ]
@@ -269,7 +265,7 @@ def convert_dab_detr_checkpoint(model_name, pytorch_dump_folder_path):
     logger.info(f"Converting model {model_name}...")
 
     # load original model from torch hub
-    state_dict = torch.load("/Users/davidhajdu/Desktop/dab_detr_r50.pth", map_location=torch.device('cpu'))['model']
+    state_dict = torch.load("/Users/davidhajdu/Desktop/dab_detr_r50.pth", map_location=torch.device("cpu"))["model"]
     # rename keys
     for src, dest in rename_keys:
         if is_panoptic:
@@ -301,11 +297,9 @@ def convert_dab_detr_checkpoint(model_name, pytorch_dump_folder_path):
                 state_dict[prefix + key] = val
 
     expected_slice_logits = torch.tensor(
-            [[-10.1765,  -5.5243,  -8.9324], [ -9.8138,  -5.6721,  -7.5161], [-10.3054,  -5.6081,  -8.5931]]
-        )
-    expected_slice_boxes = torch.tensor(
-            [[0.3708, 0.3000, 0.2753], [0.5211, 0.6125, 0.9495], [0.2897, 0.6730, 0.5459]]
-        )
+        [[-10.1765, -5.5243, -8.9324], [-9.8138, -5.6721, -7.5161], [-10.3054, -5.6081, -8.5931]]
+    )
+    expected_slice_boxes = torch.tensor([[0.3708, 0.3000, 0.2753], [0.5211, 0.6125, 0.9495], [0.2897, 0.6730, 0.5459]])
     # finally, create HuggingFace model and load state dict
     model = DABDETRForSegmentation(config) if is_panoptic else DABDETRForObjectDetection(config)
     model.load_state_dict(state_dict)
@@ -320,7 +314,7 @@ def convert_dab_detr_checkpoint(model_name, pytorch_dump_folder_path):
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     model.save_pretrained(pytorch_dump_folder_path, safe_serialization=False)
     image_processor.save_pretrained(pytorch_dump_folder_path)
-    
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -332,7 +326,7 @@ if __name__ == "__main__":
         help="Name of the DAB_DETR model you'd like to convert.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default='DAB_DETR', type=str, help="Path to the folder to output PyTorch model."
+        "--pytorch_dump_folder_path", default="DAB_DETR", type=str, help="Path to the folder to output PyTorch model."
     )
     args = parser.parse_args()
     convert_dab_detr_checkpoint(args.model_name, args.pytorch_dump_folder_path)

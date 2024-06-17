@@ -284,7 +284,6 @@ _import_structure = {
     ],
     "models.cohere": ["CohereConfig"],
     "models.conditional_detr": ["ConditionalDetrConfig"],
-    "models.dab_detr": ["DABDETRConfig"],
     "models.convbert": [
         "ConvBertConfig",
         "ConvBertTokenizer",
@@ -301,6 +300,7 @@ _import_structure = {
         "CTRLTokenizer",
     ],
     "models.cvt": ["CvtConfig"],
+    "models.dab_detr": ["DABDETRConfig"],
     "models.data2vec": [
         "Data2VecAudioConfig",
         "Data2VecTextConfig",
@@ -1111,9 +1111,7 @@ else:
         ["ConditionalDetrFeatureExtractor", "ConditionalDetrImageProcessor"]
     )
     _import_structure["models.convnext"].extend(["ConvNextFeatureExtractor", "ConvNextImageProcessor"])
-    _import_structure["models.dab_detr"].extend(
-        ["DABDETRFeatureExtractor", "DABDETRImageProcessor"]
-    )
+    _import_structure["models.dab_detr"].extend(["DABDETRFeatureExtractor", "DABDETRImageProcessor"])
     _import_structure["models.deformable_detr"].extend(
         ["DeformableDetrFeatureExtractor", "DeformableDetrImageProcessor"]
     )
@@ -1625,14 +1623,6 @@ else:
             "ConditionalDetrPreTrainedModel",
         ]
     )
-    _import_structure["models.dab_detr"].extend(
-        [
-            "DABDETRForObjectDetection",
-            "DABDETRForSegmentation",
-            "DABDETRModel",
-            "DABDETRPreTrainedModel",
-        ]
-    )
     _import_structure["models.convbert"].extend(
         [
             "ConvBertForMaskedLM",
@@ -1682,6 +1672,14 @@ else:
             "CvtForImageClassification",
             "CvtModel",
             "CvtPreTrainedModel",
+        ]
+    )
+    _import_structure["models.dab_detr"].extend(
+        [
+            "DABDETRForObjectDetection",
+            "DABDETRForSegmentation",
+            "DABDETRModel",
+            "DABDETRPreTrainedModel",
         ]
     )
     _import_structure["models.data2vec"].extend(
@@ -4794,9 +4792,6 @@ if TYPE_CHECKING:
     from .models.conditional_detr import (
         ConditionalDetrConfig,
     )
-    from .models.dab_detr import (
-        DABDETRConfig,
-    )
     from .models.convbert import (
         ConvBertConfig,
         ConvBertTokenizer,
@@ -4814,6 +4809,9 @@ if TYPE_CHECKING:
         CTRLTokenizer,
     )
     from .models.cvt import CvtConfig
+    from .models.dab_detr import (
+        DABDETRConfig,
+    )
     from .models.data2vec import (
         Data2VecAudioConfig,
         Data2VecTextConfig,
@@ -5661,11 +5659,8 @@ if TYPE_CHECKING:
             ConditionalDetrFeatureExtractor,
             ConditionalDetrImageProcessor,
         )
-        from .models.dab_detr import (
-           DABDETRFeatureExtractor, DABDETRImageProcessor
-           
-        )
         from .models.convnext import ConvNextFeatureExtractor, ConvNextImageProcessor
+        from .models.dab_detr import DABDETRFeatureExtractor, DABDETRImageProcessor
         from .models.deformable_detr import (
             DeformableDetrFeatureExtractor,
             DeformableDetrImageProcessor,
@@ -6131,12 +6126,6 @@ if TYPE_CHECKING:
             ConditionalDetrModel,
             ConditionalDetrPreTrainedModel,
         )
-        from .models.dab_detr import (
-            DABDETRForObjectDetection,
-            DABDETRForSegmentation,
-            DABDETRModel,
-            DABDETRPreTrainedModel,
-        )
         from .models.convbert import (
             ConvBertForMaskedLM,
             ConvBertForMultipleChoice,
@@ -6175,6 +6164,12 @@ if TYPE_CHECKING:
             CvtForImageClassification,
             CvtModel,
             CvtPreTrainedModel,
+        )
+        from .models.dab_detr import (
+            DABDETRForObjectDetection,
+            DABDETRForSegmentation,
+            DABDETRModel,
+            DABDETRPreTrainedModel,
         )
         from .models.data2vec import (
             Data2VecAudioForAudioFrameClassification,
