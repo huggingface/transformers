@@ -72,6 +72,15 @@ def parse_args():
         help="The names of the training data set splits to use (via the datasets library).",
     )
     parser.add_argument(
+        "--trust_remote_code",
+        action="store_true",
+        help=(
+            "Whether to trust the execution of code from datasets/models defined on the Hub."
+            " This option should only be set to `True` for repositories you trust and in which you have read the"
+            " code, as it will execute code present on the Hub on your local machine."
+        ),
+    )
+    parser.add_argument(
         "--preprocessing_num_workers",
         type=int,
         default=None,
@@ -446,6 +455,7 @@ def main():
             dataset_config_name,
             split=train_split_name,
             cache_dir=args.cache_dir,
+            trust_remote_code=args.trust_remote_code,
         )
         datasets_splits.append(dataset_split)
 
