@@ -379,18 +379,15 @@ class MoTMLP(nn.Module):
         self.emit_softmax_over_experts: bool = config.emit_softmax_over_experts
         self.use_discrete_routing: bool = config.use_discrete_routing
 
-        assert (
-            self.d_ff % self.group_size == 0
-        ), f"d_ff = {self.d_ff} should be divisible by group size = {self.group_size}"
-        self.d_ff *= self.group_size
-
         if self.n_expert is not None:
-            assert self.d_ff % self.n_expert == 0, f"dff = {self.d_ff} is not divisible by n_expert = {self.n_expert}"
+            if self.d_ff % self.n_expert:
+                self.d_ff += self.n_expert - (self.d_ff % self.n_expert)
+                warnings.warn("d_ff should be divisible by n_expert, padding d_ff to be divisible by n_expert")
             self.expert_size = self.d_ff // self.n_expert
         elif self.expert_size is not None:
-            assert (
-                self.d_ff % self.expert_size == 0
-            ), f"dff = {self.d_ff} is not divisible by expert_size = {self.expert_size}"
+            if self.d_ff % self.expert_size:
+                self.d_ff += self.expert_size - (self.d_ff % self.expert_size)
+                warnings.warn("d_ff should be divisible by expert_size, padding d_ff to be divisible by expert_size")
             self.n_expert = self.d_ff // self.expert_size
         else:
             raise ValueError("Either expert_size or n_expert should be provided")
