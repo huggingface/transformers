@@ -32,7 +32,7 @@ class ImageBindProcessor(ProcessorMixin):
         tokenizer ([`CLIPTokenizer`, `CLIPTokenizerFast`]):
             An instance of ['PreTrainedTokenizer`] or [`PreTrainedTokenizerFast`]. The tokenizer is a required input.
         feature_extractor ([`ImageBindFeatureExtractor`]):
-            An instance of [`ImageBindFeatureExtractor`] to extract features from the audios. This is a required input.
+            An instance of [`ImageBindFeatureExtractor`] to extract features from the audio. This is a required input.
     """
 
     attributes = ["image_processor", "tokenizer", "feature_extractor"]
@@ -59,7 +59,7 @@ class ImageBindProcessor(ProcessorMixin):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            audios (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`, `List[List[List[float]]]`):
+            audio (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`, `List[List[List[float]]]`):
                 The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of numpy
                 arrays or a (possibly nested) list of float values. The supported input types are as follows:
 
@@ -81,10 +81,10 @@ class ImageBindProcessor(ProcessorMixin):
               `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
-            - **input_features** -- List of input features to be fed to a model. Returned when `audios` is not `None`.
+            - **input_features** -- List of input features to be fed to a model. Returned when `audio` is not `None`.
         """
 
-        if text is None and images is None and audios is None:
+        if text is None and images is None and audio is None:
             raise ValueError("You have to specify either text or images. Both cannot be none.")
 
         data = {}
@@ -97,8 +97,8 @@ class ImageBindProcessor(ProcessorMixin):
             image_features = self.image_processor(images, return_tensors=return_tensors)
             data.update(image_features)
 
-        if audios is not None:
-            audio_features = self.feature_extractor(audios, return_tensors=return_tensors)
+        if audio is not None:
+            audio_features = self.feature_extractor(audio, return_tensors=return_tensors)
             data.update(audio_features)
 
         return BatchEncoding(data=data, tensor_type=return_tensors)
