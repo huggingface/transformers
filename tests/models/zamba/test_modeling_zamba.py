@@ -145,7 +145,6 @@ class ZambaModelTester:
             is_decoder=True,
             initializer_range=self.initializer_range,
             use_mamba_kernels=False,
-            num_experts=2,
         )
 
     def prepare_config_and_inputs_for_decoder(self):
@@ -328,44 +327,6 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
-    def test_load_balancing_loss(self):
-        r"""
-        Let's make sure we can actually compute the loss and do a backward on it.
-        """
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_labels = 3
-        config.num_experts = 16
-        config.output_router_logits = True
-        input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(config.pad_token_id).to(torch_device)
-        model = ZambaForCausalLM(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=attention_mask)
-        bs, seqlen = input_ids.shape
-        self.assertEqual(result.router_logits[0].shape, (bs * seqlen, config.num_experts))
-        torch.testing.assert_close(result.aux_loss.cpu(), torch.tensor(2, dtype=torch.float32), rtol=1e-2, atol=1e-2)
-
-        # First, we make sure that adding padding tokens doesn't change the loss
-        # loss(input_ids, attention_mask=None) == loss(input_ids + padding, attention_mask=attention_mask_with_padding)
-        pad_length = 1000
-        # Add padding tokens to input_ids
-        padding_block = config.pad_token_id * torch.ones(input_ids.shape[0], pad_length, dtype=torch.int32).to(
-            torch_device
-        )
-        padded_input_ids = torch.cat((padding_block, input_ids), dim=1)  # this is to simulate padding to the left
-        padded_attention_mask = padded_input_ids.ne(config.pad_token_id).to(torch_device)
-
-        padded_result = model(padded_input_ids, attention_mask=padded_attention_mask)
-        torch.testing.assert_close(result.aux_loss.cpu(), padded_result.aux_loss.cpu(), rtol=1e-4, atol=1e-4)
-
-        # We make sure that the loss of including padding tokens != the loss without padding tokens
-        # if attention_mask=None --> we don't exclude padding tokens
-        include_padding_result = model(padded_input_ids, attention_mask=None)
-
-        # This is to mimic torch.testing.assert_not_close
-        self.assertNotAlmostEqual(include_padding_result.aux_loss.item(), result.aux_loss.item())
-
     def test_initialization(self):
         r"""
         Overriding the test_initialization test as the A_log and D params of the Mamba block are initialized differently
@@ -411,7 +372,7 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         expected_num_attentions = math.ceil(
             (self.model_tester.num_hidden_layers - self.model_tester.attn_layer_offset)
             / self.model_tester.attn_layer_period
-        )
+        ) + 1
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
@@ -489,7 +450,7 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             return model_kwargs
 
         for model_class in decoder_only_classes:
-            config, input_ids, attention_mask, _ = self._get_input_ids_and_config()
+            config, input_ids, attention_mask = self._get_input_ids_and_config()
             model = model_class(config).to(torch_device).eval()
             signature = inspect.signature(model.forward).parameters.keys()
 
