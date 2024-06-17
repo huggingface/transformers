@@ -225,25 +225,6 @@ def rename_backbone_keys(state_dict):
     return new_state_dict
 
 
-def read_in_q_k_v(state_dict, is_panoptic=False):
-    prefix = ""
-    if is_panoptic:
-        prefix = "dab_detr."
-
-    # first: transformer encoder
-    for i in range(6):
-        # read in weights + bias of input projection layer (in PyTorch's MultiHeadAttention, this is a single matrix + bias)
-        in_proj_weight = state_dict.pop(f"{prefix}transformer.encoder.layers.{i}.self_attn.in_proj_weight")
-        in_proj_bias = state_dict.pop(f"{prefix}transformer.encoder.layers.{i}.self_attn.in_proj_bias")
-        # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"encoder.layers.{i}.self_attn.q_proj.weight"] = in_proj_weight[:256, :]
-        state_dict[f"encoder.layers.{i}.self_attn.q_proj.bias"] = in_proj_bias[:256]
-        state_dict[f"encoder.layers.{i}.self_attn.k_proj.weight"] = in_proj_weight[256:512, :]
-        state_dict[f"encoder.layers.{i}.self_attn.k_proj.bias"] = in_proj_bias[256:512]
-        state_dict[f"encoder.layers.{i}.self_attn.v_proj.weight"] = in_proj_weight[-256:, :]
-        state_dict[f"encoder.layers.{i}.self_attn.v_proj.bias"] = in_proj_bias[-256:]
-
-
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -295,8 +276,7 @@ def convert_dab_detr_checkpoint(model_name, pytorch_dump_folder_path):
             src = "dab_detr." + src
         rename_key(state_dict, src, dest)
     state_dict = rename_backbone_keys(state_dict)
-    # query, key and value matrices need special treatment
-    # read_in_q_k_v(state_dict, is_panoptic=is_panoptic)
+   
     # important: we need to prepend a prefix to each of the base model keys as the head models use different attributes for them
     prefix = "dab_detr.model." if is_panoptic else "model."
     for key in state_dict.copy().keys():

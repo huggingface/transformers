@@ -32,7 +32,7 @@ class DABDETRConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`DABDETRModel`]. It is used to instantiate
     a DAB-DETR model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the DAB-DETR
-    [IDEA/dab_detr-base](https://huggingface.co/IDEA/dab_detr-base) architecture.
+    [IDEA-Research/dab_detr-base](https://huggingface.co/IDEA-Research/dab_detr-base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -116,16 +116,48 @@ class DABDETRConfig(PretrainedConfig):
             Relative classification weight of the 'no-object' class in the object detection loss.
         focal_alpha (`float`, *optional*, defaults to 0.25):
             Alpha parameter in the focal loss.
+        remove_self_attn_decoder (`bool`, *optional*, defaults to `False`):
+            Whether to use self-attention module in decoder layers.
+        decoder_modulate_hw_attn  (`bool`, *optional*, defaults to `False`):
+            Whether to modulate the positional attention map using the box width and height information.
+        temperatureW (`int`, *optional*, defaults to 20):
+            Temperature parameter to tune the flatness of positional attention (WIDTH)
+        temperatureH (`int`, *optional*, defaults to 20):
+            Temperature parameter to tune the flatness of positional attention (HEIGHT)
+        iter_update (`bool`, *optional*, defaults to `True`):
+            Whether to use dynamic iterative anchor update are to be used.
+        query_dim (`int`, *optional*, defaults to 4):
+            Query dimension parameter represents the size of the output vector.
+        decoder_query_dim (`int`, *optional*, defaults to 4):
+            Dimension parameter used in the MLP, where it projects a vector of size 2D to a vector of size D.
+        bbox_embed_diff_each_layer (`bool`, *optional*, defaults to `False`):
+            Whether to perform layer-by-layer bounding box embedding refinement.
+        decoder_bbox_embed_diff_each_layer (`bool`, *optional*, defaults to `False`):
+            Whether to perform layer-by-layer bounding box embedding refinement.
+        random_refpoints_xy (`bool`, *optional*, defaults to `False`):
+            Whether to fix x, y of the anchor boxes with the random initialization.
+        keep_query_pos (`bool`, *optional*, defaults to `False`):
+            ####
+        query_scale_type (`str`, *optional*, defaults to `cond_elewise` Valid options: ['cond_elewise', 'cond_scalar', 'fix_elewise'])
+            Scale type options:
+                # 'cond_elewise' - Conditional element-wise scaling using content information.
+                # 'cond_scalar' - Conditional scalar scaling using content information.
+                # 'fix_elewise' - Fixed element-wise scaling.
+        num_patterns (`int`, *optional*, defaults to 0):
+            Number of pattern embeddings.
+        normalize_before (`bool`, *optional*, defaults to `False`):
+            Whether we use a normalization layer in the Encoder or not.
+
 
     Examples:
 
     ```python
     >>> from transformers import DABDETRConfig, DABDETRModel
 
-    >>> # Initializing a DAB-DETR IDEA/dab_detr-base style configuration
+    >>> # Initializing a DAB-DETR IDEA-Research/dab_detr-base style configuration
     >>> configuration = DABDETRConfig()
 
-    >>> # Initializing a model (with random weights) from the IDEA/dab_detr-base style configuration
+    >>> # Initializing a model (with random weights) from the IDEA-Research/dab_detr-base style configuration
     >>> model = DABDETRModel(configuration)
 
     >>> # Accessing the model configuration
@@ -177,23 +209,22 @@ class DABDETRConfig(PretrainedConfig):
         bbox_loss_coefficient=5,
         giou_loss_coefficient=2,
         focal_alpha=0.25,
-        rm_self_attn_decoder=False,
-        query_dim=4,
-        bbox_embed_diff_each_layer=False,
-        random_refpoints_xy=False,
+        ### TODO DAB DETR special parameters
+        remove_self_attn_decoder=False,
+        decoder_modulate_hw_attn=True,
         temperatureH=20,
         temperatureW=20,
-        # todo simple querty dim
-        decoder_query_dim=4,
-        decoder_keep_query_pos=False,
-        query_scale_type='cond_elewise',
-        decoder_modulate_hw_attn=True,
-        decoder_bbox_embed_diff_each_layer=False,
-        decoder_num_patterns=0,
-        decoder_normalize_before=False,
-        decoder_nhead=8,
-        normalize_before=False,
         iter_update=True,
+        query_dim=4,
+        decoder_query_dim=4,
+        bbox_embed_diff_each_layer=False,
+        decoder_bbox_embed_diff_each_layer=False,
+        random_refpoints_xy=False,
+        keep_query_pos=False,
+        query_scale_type='cond_elewise',
+        num_patterns=0,
+        normalize_before=False,
+        
         **kwargs,
     ):
         if not use_timm_backbone and use_pretrained_backbone:
@@ -262,18 +293,16 @@ class DABDETRConfig(PretrainedConfig):
         self.bbox_loss_coefficient = bbox_loss_coefficient
         self.giou_loss_coefficient = giou_loss_coefficient
         self.focal_alpha = focal_alpha
-        self.rm_self_attn_decoder = rm_self_attn_decoder
+        self.rm_self_attn_decoder = remove_self_attn_decoder
         self.query_dim = query_dim
         self.bbox_embed_diff_each_layer = bbox_embed_diff_each_layer
         self.random_refpoints_xy = random_refpoints_xy
         self.query_scale_type = query_scale_type
         self.decoder_query_dim = decoder_query_dim
-        self.decoder_keep_query_pos = decoder_keep_query_pos
+        self.keep_query_pos = keep_query_pos
         self.decoder_modulate_hw_attn = decoder_modulate_hw_attn
         self.decoder_bbox_embed_diff_each_layer = decoder_bbox_embed_diff_each_layer
-        self.decoder_num_patterns = decoder_num_patterns
-        self.decoder_normalize_before = decoder_normalize_before
-        self.decoder_nhead = decoder_nhead
+        self.num_patterns = num_patterns
         self.normalize_before = normalize_before
         self.num_target_classes = num_target_classes
         self.iter_update = iter_update

@@ -597,7 +597,6 @@ class DABDETRModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             )
 
     def test_retain_grad_hidden_states_attentions(self):
-        
         # removed retain_grad and grad on decoder_hidden_states, as queries don't require grad
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
