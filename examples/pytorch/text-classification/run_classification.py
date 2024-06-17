@@ -87,7 +87,7 @@ class DataTrainingArguments:
         },
     )
     text_column_delimiter: Optional[str] = field(
-        default=" ", metadata={"help": "THe delimiter to use to join text columns into a single sentence."}
+        default=" ", metadata={"help": "The delimiter to use to join text columns into a single sentence."}
     )
     train_split_name: Optional[str] = field(
         default=None,
