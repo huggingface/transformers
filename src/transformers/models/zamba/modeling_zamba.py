@@ -1020,7 +1020,7 @@ class ZambaMambaDecoderLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        from_tf: Optional[torch.Tensor] = None,
+        transformer_hidden_states: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[HybridMambaAttentionDynamicCache] = None,
@@ -1046,9 +1046,9 @@ class ZambaMambaDecoderLayer(nn.Module):
 
         residual = hidden_states
 
-        # `from_tf` is the output from shared transformer + linear layer (see fig. 2 in https://arxiv.org/pdf/2405.16712).
-        # `from_tf` is then added to the input to the mamba layer below (as described in eq. (6) of https://arxiv.org/pdf/2405.16712).
-        hidden_states = hidden_states + from_tf if from_tf is not None else hidden_states
+        # `transformer_hidden_states` is the output from shared transformer + linear layer (see fig. 2 in https://arxiv.org/pdf/2405.16712).
+        # `transformer_hidden_states` is then added to the input to the mamba layer below (as described in eq. (6) of https://arxiv.org/pdf/2405.16712).
+        hidden_states = hidden_states + transformer_hidden_states if transformer_hidden_states is not None else hidden_states
         hidden_states = self.input_layernorm(hidden_states)
 
         hidden_states = self.mamba(
@@ -1318,31 +1318,31 @@ class ZambaModel(ZambaPreTrainedModel):
                         use_cache=use_cache,
                         cache_position=cache_position,
                     )
-                from_tf = layer_outputs[0]
+                transformer_hidden_states = layer_outputs[0]
                 if output_hidden_states:
-                    all_hidden_states += (from_tf,)
+                    all_hidden_states += (transformer_hidden_states,)
                 if output_attentions:
                     if layer_outputs[1] is not None:
                         all_self_attns += (layer_outputs[1],)
                 if self.gradient_checkpointing and self.training:
-                    from_tf = self._gradient_checkpointing_func(
+                    transformer_hidden_states = self._gradient_checkpointing_func(
                         next(linear_layers).__call__,
-                        from_tf,
+                        transformer_hidden_states,
                     )
                 else:
-                    from_tf = next(linear_layers)(
-                        from_tf,
+                    transformer_hidden_states = next(linear_layers)(
+                        transformer_hidden_states,
                     )
                 if output_hidden_states:
-                    all_hidden_states += (from_tf,)
+                    all_hidden_states += (transformer_hidden_states,)
             else:
-                from_tf = None
+                 = None
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
                     next(mamba_layers).__call__,
                     hidden_states,
-                    from_tf,
+                    transformer_hidden_states,
                     causal_mask,
                     position_ids,
                     past_key_values,
@@ -1353,7 +1353,7 @@ class ZambaModel(ZambaPreTrainedModel):
             else:
                 layer_outputs = next(mamba_layers)(
                     hidden_states,
-                    from_tf=from_tf,
+                    transformer_hidden_states=transformer_hidden_states,
                     attention_mask=causal_mask,
                     position_ids=position_ids,
                     past_key_value=past_key_values,
