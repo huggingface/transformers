@@ -68,11 +68,11 @@ class Arguments:
             "help": "Name of a dataset from the hub (could be your own, possibly private dataset hosted on the hub)."
         },
     )
-    trust_remote_dataset_code: bool = field(
+    trust_remote_code: bool = field(
         default=False,
         metadata={
             "help": (
-                "Whether to trust the execution of code from the dataset defined on the Hub that uses a loading script."
+                "Whether to trust the execution of code from datasets/models defined on the Hub."
                 " This option should only be set to `True` for repositories you trust and in which you have read the"
                 " code, as it will execute code present on the Hub on your local machine."
             )

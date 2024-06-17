@@ -70,16 +70,6 @@ class DataTrainingArguments:
     dataset_config_name: Optional[str] = field(
         default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
     )
-    trust_remote_dataset_code: bool = field(
-        default=False,
-        metadata={
-            "help": (
-                "Whether to trust the execution of code from the dataset defined on the Hub that uses a loading script."
-                " This option should only be set to `True` for repositories you trust and in which you have read the"
-                " code, as it will execute code present on the Hub on your local machine."
-            )
-        },
-    )
     image_column_name: Optional[str] = field(
         default=None,
         metadata={"help": "The column name of the images in the files. If not set, will try to use 'image' or 'img'."},
@@ -176,9 +166,9 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option "
-                "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
-                "execute code present on the Hub on your local machine."
+                "Whether to trust the execution of code from datasets/models defined on the Hub."
+                " This option should only be set to `True` for repositories you trust and in which you have read the"
+                " code, as it will execute code present on the Hub on your local machine."
             )
         },
     )
@@ -309,7 +299,7 @@ def main():
         data_files=data_args.data_files,
         cache_dir=model_args.cache_dir,
         token=model_args.token,
-        trust_remote_code=data_args.trust_remote_dataset_code,
+        trust_remote_code=model_args.trust_remote_code,
     )
 
     # If we don't have a validation split, split off a percentage of train as validation.
