@@ -4544,6 +4544,9 @@ class Trainer:
                 even_batches=accelerator_config.pop("even_batches"),
                 use_seedable_sampler=accelerator_config.pop("use_seedable_sampler"),
             )
+        if not is_accelerate_available("0.26.0"):
+            accelerator_config.pop("use_seedable_sampler")
+
         non_blocking = accelerator_config.pop("non_blocking")
         if not is_accelerate_available("0.30.0"):
             if non_blocking:
