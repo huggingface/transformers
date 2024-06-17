@@ -372,9 +372,9 @@ class StopStringCriteria(StoppingCriteria):
         token_valid_positions, token_end_overlaps = StopStringCriteria._stop_string_get_matching_positions(
             token_list, token_indices, stop_strings
         )
-
+        # Insert a 0 to catch the case where there are no valid internal positions for any stop string
         max_valid_positions = max(
-            len(val) for positions in token_valid_positions.values() for val in positions.values()
+            [len(val) for positions in token_valid_positions.values() for val in positions.values()] + [0]
         )
         max_valid_end_lens = max(len(val) for positions in token_end_overlaps.values() for val in positions.values())
         vec_size = len(stop_strings) * (max_valid_positions + max_valid_end_lens) + 1

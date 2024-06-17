@@ -208,6 +208,24 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         token_lengths = embedding_vec[:, 2].tolist()
         self.assertEqual(token_lengths, [len(token) for token in token_list])
 
+    def test_single_letter_stop_string(self):
+        true_strings = ["a", "baa", "abc"]
+        false_strings = ["abbbbbbb", "b"]
+        stop_strings = ["a"]
+        tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+        tokenizer.padding_side = "left"
+
+        true_input_ids = tokenizer(true_strings, return_tensors="pt", padding="longest", add_special_tokens=False)
+        false_input_ids = tokenizer(false_strings, return_tensors="pt", padding="longest", add_special_tokens=False)
+
+        scores = None
+        criteria = StopStringCriteria(tokenizer=tokenizer, stop_strings=stop_strings)
+        for i in range(len(true_strings)):
+            self.assertTrue(criteria(true_input_ids["input_ids"][i : i + 1], scores))
+        for i in range(len(false_strings)):
+            self.assertFalse(criteria(false_input_ids["input_ids"][i : i + 1], scores))
+
     def test_criterias_per_row(self):
         text = "They completed the challenging puzzle, revealing the hidden image at the end"
         stop_strings = ["end"]
