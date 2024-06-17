@@ -500,50 +500,13 @@ class NemotronModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
     @require_flash_attn
     @require_torch_gpu
-    @require_bitsandbytes
-    @pytest.mark.flash_attn_test
-    @require_read_token
-    @slow
-    def test_flash_attn_2_generate_padding_right(self):
-        """
-        Overwritting the common test as the test is flaky on tiny models
-        """
-        model = NemotronForCausalLM.from_pretrained(
-            "meta-Nemotron/Nemotron-2-7b-hf",
-            load_in_4bit=True,
-            device_map={"": 0},
-        )
-
-        tokenizer = NemotronTokenizer.from_pretrained("thhaus/nemotron3-8b")
-
-        texts = ["hi", "Hello this is a very long sentence"]
-
-        tokenizer.padding_side = "right"
-        tokenizer.pad_token = tokenizer.eos_token
-
-        inputs = tokenizer(texts, return_tensors="pt", padding=True).to(0)
-
-        output_native = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_native = tokenizer.batch_decode(output_native)
-
-        model = NemotronForCausalLM.from_pretrained(
-            "meta-Nemotron/Nemotron-2-7b-hf", load_in_4bit=True, device_map={"": 0}, attn_implementation="flash_attention_2"
-        )
-
-        output_fa_2 = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_fa_2 = tokenizer.batch_decode(output_fa_2)
-
-        self.assertListEqual(output_native, output_fa_2)
-
-    @require_flash_attn
-    @require_torch_gpu
     @slow
     def test_use_flash_attention_2_true(self):
         """
         NOTE: this is the only test testing that the legacy `use_flash_attention=2` argument still works as intended.
         """
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
+        for model_class in self.all_model_classes: 
             with tempfile.TemporaryDirectory() as tmp_dir:
                 model = model_class(config)
                 model.save_pretrained(tmp_dir)
