@@ -29,7 +29,6 @@ from transformers import (
     DABDETRForObjectDetection,
     DABDETRForSegmentation,
     DABDETRImageProcessor,
-    DABDETRModel
 )
 from transformers.utils import logging
 
@@ -208,6 +207,7 @@ rename_keys.extend(
     ]
 )
 
+
 def rename_key(state_dict, old, new):
     val = state_dict.pop(old)
     state_dict[new] = val
@@ -276,7 +276,6 @@ def convert_dab_detr_checkpoint(model_name, pytorch_dump_folder_path):
             src = "dab_detr." + src
         rename_key(state_dict, src, dest)
     state_dict = rename_backbone_keys(state_dict)
-   
     # important: we need to prepend a prefix to each of the base model keys as the head models use different attributes for them
     prefix = "dab_detr.model." if is_panoptic else "model."
     for key in state_dict.copy().keys():
@@ -301,52 +300,27 @@ def convert_dab_detr_checkpoint(model_name, pytorch_dump_folder_path):
                 val = state_dict.pop(key)
                 state_dict[prefix + key] = val
 
+    expected_slice_logits = torch.tensor(
+            [[-10.1765,  -5.5243,  -8.9324], [ -9.8138,  -5.6721,  -7.5161], [-10.3054,  -5.6081,  -8.5931]]
+        )
+    expected_slice_boxes = torch.tensor(
+            [[0.3708, 0.3000, 0.2753], [0.5211, 0.6125, 0.9495], [0.2897, 0.6730, 0.5459]]
+        )
     # finally, create HuggingFace model and load state dict
     model = DABDETRForSegmentation(config) if is_panoptic else DABDETRForObjectDetection(config)
     model.load_state_dict(state_dict)
     model.eval()
-    
     # verify our conversion
     outputs = model(**encoding)
-    # model.save_pretrained('dab-detr-resnet-50', safe_serialization=False)
-    # image_processor.save_pretrained('dab-detr-resnet-50')
-    # # model.push_to_hub(repo_id='dab-detr-resnet-50', organization="davidhajdu", commit_message="Add model")
+    assert torch.allclose(outputs.logits[0, :3, :3], expected_slice_logits, atol=3e-4)
+    assert torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4)
 
-    # """
-    # output_attentions: Optional[bool] = None,
-    #     output_hidden_states: Optional[bool] = None,
+    # Save model and image processor
+    logger.info(f"Saving PyTorch model and image processor to {pytorch_dump_folder_path}...")
+    Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
+    model.save_pretrained(pytorch_dump_folder_path, safe_serialization=False)
+    image_processor.save_pretrained(pytorch_dump_folder_path)
     
-    # """
-
-    # # logits = outputs[-2]
-    # # pred_boxes = outputs[-1]
-   
-    print(outputs.logits)
-    print(outputs.pred_boxes)
-
-   
-    # results = image_processor.post_process_object_detection(
-    #         outputs, threshold=0.3, target_sizes=[img.size[::-1]]
-    #     )[0]
-    
-    # print(outputs.logits.shape)  # ['pred_logits'][0, :3, :3])
-    # print(outputs.pred_boxes.shape)
-    # torch.save(logits, 'logits.pth')
-    # torch.save(pred_boxes, 'pred_boxes.pth')
-    
-    # Serialize data into file:
-    # torch.save(outputs, 'tensors.pth')
-    # assert torch.allclose(outputs.logits, original_outputs["pred_logits"], atol=1e-4)
-    # assert torch.allclose(outputs.pred_boxes, original_outputs["pred_boxes"], atol=1e-4)
-    # if is_panoptic:
-    #     assert torch.allclose(outputs.pred_masks, original_outputs["pred_masks"], atol=1e-4)
-
-    # # Save model and image processor
-    # logger.info(f"Saving PyTorch model and image processor to {pytorch_dump_folder_path}...")
-    # Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-    # model.save_pretrained(pytorch_dump_folder_path)
-    # image_processor.save_pretrained(pytorch_dump_folder_path)
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -358,7 +332,7 @@ if __name__ == "__main__":
         help="Name of the DAB_DETR model you'd like to convert.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the folder to output PyTorch model."
+        "--pytorch_dump_folder_path", default='DAB_DETR', type=str, help="Path to the folder to output PyTorch model."
     )
     args = parser.parse_args()
     convert_dab_detr_checkpoint(args.model_name, args.pytorch_dump_folder_path)
