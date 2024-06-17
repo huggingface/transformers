@@ -59,6 +59,19 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "LlamaConfig"
 
 
+from typing import TypedDict, Unpack
+
+
+class ExtraKwargs(TypedDict):
+    cu_seqlens: torch.Tensor
+    cu_seqlen_prefill: Optional[torch.Tensor]
+    prefill_cache_indixes: Optional[torch.Tensor]
+    cu_seqlens_q: Optional[torch.Tensor]
+    cu_seqlens_k: Optional[torch.Tensor]
+    max_seqlen_q: Optional[torch.Tensor]
+    max_seqlen_k: Optional[torch.Tensor]
+
+
 def _get_unpad_data(attention_mask):
     seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
     indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
@@ -301,6 +314,7 @@ class LlamaAttention(nn.Module):
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[ExtraKwargs],
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
 
@@ -399,6 +413,7 @@ class LlamaFlashAttention2(LlamaAttention):
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[ExtraKwargs],
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         if isinstance(past_key_value, StaticCache):
             raise ValueError(
@@ -464,7 +479,7 @@ class LlamaFlashAttention2(LlamaAttention):
             value_states = value_states.to(target_dtype)
 
         attn_output = self._flash_attention_forward(
-            query_states, key_states, value_states, attention_mask, q_len, dropout=dropout_rate
+            query_states, key_states, value_states, attention_mask, q_len, dropout=dropout_rate, **kwargs
         )
 
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
@@ -476,7 +491,15 @@ class LlamaFlashAttention2(LlamaAttention):
         return attn_output, attn_weights, past_key_value
 
     def _flash_attention_forward(
-        self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
+        self,
+        query_states,
+        key_states,
+        value_states,
+        attention_mask,
+        query_length,
+        dropout=0.0,
+        softmax_scale=None,
+        **kwargs: Unpack[ExtraKwargs],
     ):
         """
         Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
@@ -506,9 +529,13 @@ class LlamaFlashAttention2(LlamaAttention):
         # Contains at least one padding token in the sequence
         if attention_mask is not None:
             batch_size = query_states.shape[0]
-            query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
-                query_states, key_states, value_states, attention_mask, query_length
-            )
+            if all(["cu_seqlens", "max_seq_lens"]) not in kwargs:
+                query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
+                    query_states, key_states, value_states, attention_mask, query_length
+                )
+            else:
+                cu_seq_lens = kwargs.get("cu_seq_lens")
+                max_seq_lens = kwargs.get("max_seq_lens")
 
             cu_seqlens_q, cu_seqlens_k = cu_seq_lens
             max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
@@ -853,12 +880,6 @@ LLAMA_INPUTS_DOCSTRING = r"""
             the complete sequence length.
 """
 
-from typing import TypedDict, Unpack
-
-
-class ExtraKwargs(TypedDict):
-    cu_seqlens: torch.Tensor
-
 
 @add_start_docstrings(
     "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
@@ -906,6 +927,7 @@ class LlamaModel(LlamaPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[ExtraKwargs],
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
