@@ -25,7 +25,7 @@ try:
 except ImportError:
     from typing_extensions import Unpack
 
-from ...image_utils import ChannelDimension, ImageInput
+from ...image_utils import ImageInput
 from ...processing_utils import (
     ProcessingKwargs,
     ProcessorMixin,
@@ -42,22 +42,7 @@ if is_torch_available():
 
 
 class AltClipProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": True,
-            "padding": False,
-            "stride": 0,
-            "is_split_into_words": False,
-            "return_overflowing_tokens": False,
-            "return_special_tokens_mask": False,
-            "return_offsets_mapping": False,
-            "return_length": False,
-            "verbose": True,
-        },
-        "images_kwargs": {
-            "data_format": ChannelDimension.FIRST,
-        },
-    }
+    _defaults = {}
 
 
 class AltCLIPProcessor(ProcessorMixin):
