@@ -191,7 +191,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         >>> total_frames = container.streams.video[0].frames
         >>> indices = np.arange(0, total_frames, total_frames / 4).astype(int)
         >>> clip = read_video_pyav(container, indices)
-        
+
         >>> prompt = "What is happening in the video?"
         >>> inputs = processor(videos=clip, text=prompt, return_tensors="pt").to(device)
 
