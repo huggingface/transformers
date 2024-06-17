@@ -51,6 +51,8 @@ LIST_SAFE_MODULES = [
 ]
 
 PRINT_OUTPUTS = ""
+
+
 class BreakException(Exception):
     pass
 
@@ -292,9 +294,7 @@ def evaluate_assign(assign, state, tools):
 def set_value(target, value, state, tools):
     if isinstance(target, ast.Name):
         if target.id in tools:
-            raise InterpreterError(
-                f"Cannot assign to name '{target.id}': doing this would erase the existing tool!"
-            )
+            raise InterpreterError(f"Cannot assign to name '{target.id}': doing this would erase the existing tool!")
         state[target.id] = value
     elif isinstance(target, ast.Tuple):
         if not isinstance(value, tuple):
@@ -371,6 +371,7 @@ def evaluate_call(call, state, tools):
             else:  # Assume it's a callable object
                 output = func(*args, **kwargs)
                 return output
+
 
 def evaluate_subscript(subscript, state, tools):
     index = evaluate_ast(subscript.slice, state, tools)
@@ -777,6 +778,6 @@ def evaluate_python_code(
                 msg += f"Executing code yielded these outputs:\n{PRINT_OUTPUTS}\n====\n"
             raise InterpreterError(msg)
         finally:
-            state['print_outputs'] = PRINT_OUTPUTS
+            state["print_outputs"] = PRINT_OUTPUTS
 
     return result

@@ -233,12 +233,11 @@ for block in text_block:
         result = evaluate_python_code(code, {}, state={})
         assert result == 2
 
-        code="""
+        code = """
 digits, i = [1, 2, 3], 1
 digits[i], digits[i + 1] = digits[i + 1], digits[i]"""
         state = {}
         evaluate_python_code(code, {"range": range, "print": print, "int": int}, state)
-
 
     def test_listcomp(self):
         code = "x = [i for i in range(3)]"
@@ -286,7 +285,7 @@ digits[i], digits[i + 1] = digits[i + 1], digits[i]"""
         assert "iterations in While loop exceeded" in str(e)
 
         # test lazy evaluation
-        code="""
+        code = """
 house_positions = [0, 7, 10, 15, 18, 22, 22]
 i, n, loc = 0, 7, 30
 while i < n and house_positions[i] <= loc:
@@ -378,13 +377,13 @@ if char.isalpha():
         assert state["print_outputs"] == "Hello world!\nOk no one cares\n"
 
         # test print in function
-        code="""
+        code = """
 print("1")
 def function():
     print("2")
 function()"""
         state = {}
-        evaluate_python_code(code, {"print":print}, state)
+        evaluate_python_code(code, {"print": print}, state)
         assert state["print_outputs"] == "1\n2\n"
 
     def test_tuple_target_in_iterator(self):

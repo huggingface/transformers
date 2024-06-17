@@ -73,6 +73,7 @@ final_answer(7.2904)
 ```<end_code>
 """
 
+
 def fake_react_code_llm_error(messages, stop_sequences=None) -> str:
     prompt = str(messages)
     if "special_marker" not in prompt:
@@ -149,7 +150,6 @@ Action:
         assert isinstance(output, AgentText)
         assert output == "got an error"
         assert "Evaluation stopped at line 'print = 2' because of" in str(agent.logs)
-
 
     def test_setup_agent_with_empty_toolbox(self):
         ReactJsonAgent(llm_engine=fake_react_json_llm, tools=[])
