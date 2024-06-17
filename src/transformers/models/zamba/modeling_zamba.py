@@ -264,7 +264,7 @@ class ZambaAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        layer_id_num: int,
+        layer_idx: int,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[HybridMambaAttentionDynamicCache] = None,
@@ -284,7 +284,7 @@ class ZambaAttention(nn.Module):
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         if past_key_value is not None:
-            key_states, value_states = past_key_value.update(key_states, value_states, layer_id_num)
+            key_states, value_states = past_key_value.update(key_states, value_states, layer_idx)
 
         # repeat k/v heads if n_kv_heads < n_heads
         key_states = repeat_kv(key_states, self.num_key_value_groups)
@@ -342,7 +342,7 @@ class ZambaFlashAttention2(ZambaAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        layer_id_num: int,
+        layer_idx: int,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[HybridMambaAttentionDynamicCache] = None,
@@ -365,7 +365,7 @@ class ZambaFlashAttention2(ZambaAttention):
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         if past_key_value is not None:
-            key_states, value_states = past_key_value.update(key_states, value_states, layer_id_num)
+            key_states, value_states = past_key_value.update(key_states, value_states, layer_idx)
 
         # repeat k/v heads if n_kv_heads < n_heads
         key_states = repeat_kv(key_states, self.num_key_value_groups)
@@ -575,7 +575,7 @@ class ZambaSdpaAttention(ZambaAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        layer_id_num: int,
+        layer_idx: int,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[HybridMambaAttentionDynamicCache] = None,
@@ -609,7 +609,7 @@ class ZambaSdpaAttention(ZambaAttention):
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         if past_key_value is not None:
-            key_states, value_states = past_key_value.update(key_states, value_states, layer_id_num)
+            key_states, value_states = past_key_value.update(key_states, value_states, layer_idx)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
@@ -955,7 +955,7 @@ class ZambaAttentionDecoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         x_orig: torch.Tensor,
-        layer_id_num: int,
+        layer_idx: int,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[HybridMambaAttentionDynamicCache] = None,
@@ -984,7 +984,7 @@ class ZambaAttentionDecoderLayer(nn.Module):
         hidden_states = self.input_layernorm(hidden_states)
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
-            layer_id_num=layer_id_num,
+            layer_idx=layer_idx,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_value=past_key_value,
@@ -1289,14 +1289,14 @@ class ZambaModel(ZambaPreTrainedModel):
         mamba_layers = iter(self.mamba_layers)
         linear_layers = iter(self.linear_layers)
 
-        for layer_id_num, layer_type in enumerate(self.layers_block_type):
+        for layer_idx, layer_type in enumerate(self.layers_block_type):
             if layer_type == "attention+mamba":
                 if self.gradient_checkpointing and self.training:
                     layer_outputs = self._gradient_checkpointing_func(
                         self.block.__call__,
                         hidden_states,
                         x_orig,
-                        layer_id_num,
+                        layer_idx,
                         causal_mask,
                         position_ids,
                         past_key_values,
@@ -1308,7 +1308,7 @@ class ZambaModel(ZambaPreTrainedModel):
                     layer_outputs = self.block(
                         hidden_states,
                         x_orig=x_orig,
-                        layer_id_num=layer_id_num,
+                        layer_idx=layer_idx,
                         attention_mask=causal_mask,
                         position_ids=position_ids,
                         past_key_value=past_key_values,
