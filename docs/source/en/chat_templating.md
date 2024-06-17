@@ -592,6 +592,13 @@ isn't printing extra spaces where it shouldn't be!
 {{ eos_token }}
 ```
 
+<Tip>
+A good way to ensure that your template isn't printing unwanted whitespaces or newlines is to use `{{-` and `{%` instead
+of `{{` and `{%`. This will strip any whitespace or newlines that come before the block or statement. If you use these,
+you can actually write your template with proper indentation and newlines and still have it render correctly!
+</Tip>
+
+
 If you've never seen one of these before, this is a [Jinja template](https://jinja.palletsprojects.com/en/3.1.x/templates/).
 Jinja is a templating language that allows you to write simple code that generates text. In many ways, the code and
 syntax resembles Python. In pure Python, this template would look something like this:
@@ -758,21 +765,27 @@ it's time to put an end to them!
 If you're unfamiliar with Jinja, we generally find that the easiest way to write a chat template is to first
 write a short Python script that formats messages the way you want, and then convert that script into a template.
 
-Remember that the template handler will receive the conversation history as a variable called `messages`. Each
-message is a dictionary with two keys, `role` and `content`. You will be able to access `messages` in your template
-just like you can in Python, which means you can loop over it with `{% for message in messages %}` or access
-individual messages with, for example, `{{ messages[0] }}`.
+Remember that the template handler will receive the conversation history as a variable called `messages`.  
+You will be able to access `messages` in your template just like you can in Python, which means you can loop over 
+it with `{% for message in messages %}` or access  individual messages with, for example, `{{ messages[0] }}`.
 
 You can also use the following tips to convert your code to Jinja:
+
+### Trimming whitespace
+
+By default, Jinja will print any whitespace that comes before or after a block. This can be a problem for chat
+templates, which generally want to be very precise with whitespace! To avoid this, we strongly recommend writing
+your templates with `{{-` and `{%-` blocks instead of `{{` and `{%`. This will strip any whitespace that comes
+before the block, ensuring that your template doesn't print extra spaces where it shouldn't.
 
 ### For loops
 
 For loops in Jinja look like this:
 
 ```
-{% for message in messages %}
-{{ message['content'] }}
-{% endfor %}
+{%- for message in messages %}
+    {{- message['content'] }}
+{%- endfor %}
 ```
 
 Note that whatever's inside the {{ expression block }} will be printed to the output. You can use operators like
@@ -783,9 +796,9 @@ Note that whatever's inside the {{ expression block }} will be printed to the ou
 If statements in Jinja look like this:
 
 ```
-{% if message['role'] == 'user' %}
-{{ message['content'] }}
-{% endif %}
+{%- if message['role'] == 'user' %}
+    {{- message['content'] }}
+{%- endif %}
 ```
 
 Note how where Python uses whitespace to mark the beginnings and ends of `for` and `if` blocks, Jinja requires you
@@ -801,14 +814,24 @@ conversation. Here's an example that puts these ideas together to add a generati
 conversation if add_generation_prompt is `True`:
 
 ```
-{% if loop.last and add_generation_prompt %}
-{{ bos_token + 'Assistant:\n' }}
-{% endif %}
+{%- if loop.last and add_generation_prompt %}
+    {{- bos_token + 'Assistant:\n' }}
+{%- endif %}
 ```
 
-### Notes on whitespace
+### Compatibility with non-Python Jinja
 
-As much as possible, we've tried to get Jinja to ignore whitespace outside of {{ expressions }}. However, be aware
-that Jinja is a general-purpose templating engine, and it may treat whitespace between blocks on the same line
-as significant and print it to the output. We **strongly** recommend checking that your template isn't printing extra
-spaces where it shouldn't be before you upload it!
+There are multiple implementations of Jinja in various languages. They generally have the same syntax,
+but a key difference is that when you're writing a template in Python you can use Python methods, such as
+`.lower()` on strings or `.items()` on dicts. This will break if someone tries to use your template on a non-Python
+implementation of Jinja. Non-Python implementations are particularly common in deployment environments, where JS
+and Rust are very popular. 
+
+Don't panic, though! There are a few easy changes you can make to your templates to ensure they're compatible across
+all implementations of Jinja:
+
+- Replace Python methods with Jinja filters. These usually have the same name, for example `string.lower()` becomes
+  `string|lower`, and `dict.items()` becomes `dict|items`. One notable change is that `string.strip()` becomes `string|trim`.
+  See the [list of built-in filters](https://jinja.palletsprojects.com/en/3.1.x/templates/#builtin-filters)
+  in the Jinja documentation for more.
+- Replace `True`, `False` and `None`, which are Python-specific, with `true`, `false` and `none`.
