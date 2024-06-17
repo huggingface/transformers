@@ -767,7 +767,7 @@ write a short Python script that formats messages the way you want, and then con
 
 Remember that the template handler will receive the conversation history as a variable called `messages`.  
 You will be able to access `messages` in your template just like you can in Python, which means you can loop over 
-it with `{% for message in messages %}` or access  individual messages with, for example, `{{ messages[0] }}`.
+it with `{% for message in messages %}` or access individual messages with `{{ messages[0] }}`, for example.
 
 You can also use the following tips to convert your code to Jinja:
 
