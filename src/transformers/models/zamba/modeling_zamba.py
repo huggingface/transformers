@@ -225,7 +225,7 @@ class HybridMambaAttentionDynamicCache(DynamicCache):
 
 # Adapted from transformers.models.mistral.modeling_mistral.MistralAttention:
 # The input dimension here is twice the hidden_size, and head_dim = 2 * hidden_size // num_heads.
-# The extra factor of 2 comes from the input being the concatenation of x_orig with the output of the previous (mamba) layer
+# The extra factor of 2 comes from the input being the concatenation of original_hidden_states with the output of the previous (mamba) layer
 # (see fig. 2 in https://arxiv.org/pdf/2405.16712).
 # Additionally, replaced
 # attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim) with
@@ -951,10 +951,12 @@ class ZambaAttentionDecoderLayer(nn.Module):
         self.input_layernorm = ZambaRMSNorm(2 * config.hidden_size, eps=config.rms_norm_eps)
         self.pre_ff_layernorm = ZambaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
+    # The argument original_hidden_states is concatenated with hidden_states (which is the output of the previous (mamba) layer)
+    # The concatenated tensor is then used as input of the pre-attention RMSNorm (see fig. 2 in https://arxiv.org/pdf/2405.16712).
     def forward(
         self,
         hidden_states: torch.Tensor,
-        x_orig: torch.Tensor,
+        original_hidden_states: torch.Tensor,
         layer_idx: int,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -967,7 +969,7 @@ class ZambaAttentionDecoderLayer(nn.Module):
         """
         Args:
             hidden_states (`torch.FloatTensor`): output of previous Mamba layer of shape `(batch, seq_len, embed_dim)`
-            x_orig (`torch.FloatTensor`): word embedding output of shape `(batch, seq_len, embed_dim)`
+            original_hidden_states (`torch.FloatTensor`): word embedding output of shape `(batch, seq_len, embed_dim)`
             attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
                 `(batch, sequence_length)` where padding elements are indicated by 0.
             past_key_value (`HybridMambaAttentionDynamicCache`, *optional*): cached past key and value projection states
@@ -980,7 +982,7 @@ class ZambaAttentionDecoderLayer(nn.Module):
             cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
                 Indices depicting the position of the input sequence tokens in the sequence.
         """
-        hidden_states = torch.concatenate([hidden_states, x_orig], dim=-1)
+        hidden_states = torch.concatenate([hidden_states, original_hidden_states], dim=-1)
         hidden_states = self.input_layernorm(hidden_states)
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
@@ -1264,8 +1266,8 @@ class ZambaModel(ZambaPreTrainedModel):
 
         hidden_states = inputs_embeds
 
-        x_orig = torch.clone(inputs_embeds)
-        # x_orig: word embedding output that will be concatenated with hidden activations to form the input of the shared transformer layer
+        original_hidden_states = torch.clone(inputs_embeds)
+        # original_hidden_states: word embedding output that will be concatenated with hidden activations to form the input of the shared transformer layer
 
         if use_cache and past_key_values is None:
             logger.warning_once(
@@ -1295,7 +1297,7 @@ class ZambaModel(ZambaPreTrainedModel):
                     layer_outputs = self._gradient_checkpointing_func(
                         self.block.__call__,
                         hidden_states,
-                        x_orig,
+                        original_hidden_states,
                         layer_idx,
                         causal_mask,
                         position_ids,
@@ -1307,7 +1309,7 @@ class ZambaModel(ZambaPreTrainedModel):
                 else:
                     layer_outputs = self.block(
                         hidden_states,
-                        x_orig=x_orig,
+                        original_hidden_states=original_hidden_states,
                         layer_idx=layer_idx,
                         attention_mask=causal_mask,
                         position_ids=position_ids,
