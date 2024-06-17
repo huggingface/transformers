@@ -775,7 +775,7 @@ You can also use the following tips to convert your code to Jinja:
 
 By default, Jinja will print any whitespace that comes before or after a block. This can be a problem for chat
 templates, which generally want to be very precise with whitespace! To avoid this, we strongly recommend writing
-your templates with `{{-` and `{%-` blocks instead of `{{` and `{%`. This will strip any whitespace that comes
+your templates with **{{-** and **{%-** blocks instead of **{{** and **{%**. This will strip any whitespace that comes
 before the block, ensuring that your template doesn't print extra spaces where it shouldn't.
 
 ### For loops
