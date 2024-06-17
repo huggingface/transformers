@@ -21,20 +21,37 @@ logging.set_verbosity_info()
 logger = logging.get_logger("transformers.models.dac")
 
 
+def match_pattern(string, pattern ):
+    # Split the pattern into parts
+    pattern_parts = pattern.split('.')
+    string_parts = string.split('.')
+
+    pattern_block_count = string_block_count = 0
+
+    for part in pattern_parts:
+        if part.startswith('block'):
+            pattern_block_count += 1
+
+    for part in string_parts:
+        if part.startswith('block'):
+            string_block_count += 1
+
+    return fnmatch.fnmatch(string, pattern) and string_block_count == pattern_block_count
+
 MAPPING_ENCODER = {
-    'encoder.block.*': "", 
-    'encoder.block.*.block.*': "", 
-    'encoder.block.*.block.*.block.*': "", 
+    'encoder.block.*.block.*.block.*': ['encoder.block', '.block.', '.block.'], 
+    'encoder.block.*.block.*': ['encoder.block', '.block.'], 
+    'encoder.block.*': ['encoder.block.'], 
 }
 
 MAPPING_QUANTIZER = {
-    'quantizer.quantizers.': '', 
+    'quantizer.quantizers.': [], 
 }
 
 MAPPING_DECODER = {
-    'decoder.model.*': '', 
-    'decoder.model.*.block.*': '', 
-    'decoder.model.*.block.*.block.*': "", 
+    'decoder.model.*': ['encoder.block.'], 
+    'decoder.model.*.block.*': ['encoder.block', '.block.'], 
+    'decoder.model.*.block.*.block.*': ['encoder.block', '.block.', '.block.'], 
 }
 
 
@@ -71,31 +88,8 @@ def set_recursively(hf_pointer, key, value, full_name, weight_type):
         hf_pointer.weight_v.data = value
     elif weight_type == "bias":
         hf_pointer.bias.data = value
-    elif weight_type == "running_mean":
-        hf_pointer.running_mean.data = value
-    elif weight_type == "running_var":
-        hf_pointer.running_var.data = value
-    elif weight_type == "num_batches_tracked":
-        hf_pointer.num_batches_tracked.data = value
-    elif weight_type == "weight_ih_l0":
-        hf_pointer.weight_ih_l0.data = value
-    elif weight_type == "weight_hh_l0":
-        hf_pointer.weight_hh_l0.data = value
-    elif weight_type == "bias_ih_l0":
-        hf_pointer.bias_ih_l0.data = value
-    elif weight_type == "bias_hh_l0":
-        hf_pointer.bias_hh_l0.data = value
-    elif weight_type == "weight_ih_l1":
-        hf_pointer.weight_ih_l1.data = value
-    elif weight_type == "weight_hh_l1":
-        hf_pointer.weight_hh_l1.data = value
-    elif weight_type == "bias_ih_l1":
-        hf_pointer.bias_ih_l1.data = value
-    elif weight_type == "bias_hh_l1":
-        hf_pointer.bias_hh_l1.data = value
-    else:
-        hf_pointer.data = value
-
+    elif weight_type == "alpha":
+        hf_pointer.alpha.data = value
     logger.info(f"{key + ('.' + weight_type if weight_type is not None else '')} was initialized from {full_name}.")
 
 
@@ -126,47 +120,41 @@ def recursively_load_weights(orig_dict, hf_model, model_name):
             logger.info(f"{name} was ignored")
             continue
 
-        is_used = False
-       
-        for key, mapped_key in MAPPING.items():
-
-            if "quantizers" in key: 
-                ##mapped_key = ###
-                key = key  + '.'.join(name.split('.')[-3:-1]) + '.*'
-                pass
-
-            if fnmatch.fnmatch(name, key): 
-                is_used = True
-                if "weight_g" in name:
-                    weight_type = "weight_g"
-                elif "weight_v" in name:
-                    weight_type = "weight_v"
-                elif "bias" in name:
-                    weight_type = "bias"
-                elif "alpha" in name:
-                    weight_type = "alpha"
-                elif "weight" in name:
-                    weight_type = "weight"
-                # set_recursively(hf_model, mapped_key, value, name, weight_type)
-            continue
+        mapped_key = '.'.join(name.split('.')[:-1])
+        if "weight_g" in name:
+            weight_type = "weight_g"
+        elif "weight_v" in name:
+            weight_type = "weight_v"
+        elif "bias" in name:
+            weight_type = "bias"
+        elif "alpha" in name:
+            weight_type = "alpha"
+        elif "weight" in name:
+            weight_type = "weight"
+        set_recursively(hf_model, mapped_key, value, name, weight_type)
         
-        if not is_used:
-            last_point = name.rfind('.')
-            name = name[:last_point]
-            if name not in unused_weights: 
-                unused_weights.append(name)
+        # if not is_used:
+        #     last_point = name.rfind('.')
+        #     name = name[:last_point]
+        #     if name not in unused_weights: 
+        #         unused_weights.append(name)
 
     logger.warning(f"Unused weights: {unused_weights}")
 
 
-if __name__ == "__main__": 
 
-    model_name = "dac_16khz"
+@torch.no_grad()
+def convert_checkpoint(
+    model_name,
+    checkpoint_path,
+    pytorch_dump_folder_path,
+    repo_id=None,
+):
 
     if model_name == "dac_16khz": 
         location = "/home/kamil/.cache/descript/dac/weights_16khz_8kbps_0.0.5.pth"
         
-        model_dict = torch.load(location, "cpu")
+        model_dict = torch.load(checkpoint_path, "cpu")
 
         config = DacConfig()
 
@@ -183,17 +171,22 @@ if __name__ == "__main__":
 
         model = DacModel(config)
 
-        # for name, layer in model.named_children():
-        #     print(name, layer)
-
         original_checkpoint = model_dict['state_dict']
 
         recursively_load_weights(original_checkpoint, model, model_name)
+        model.save_pretrained(pytorch_dump_folder_path)
+
+        if repo_id:
+            print("Pushing to the hub...")
+            # feature_extractor.push_to_hub(repo_id)
+            model.push_to_hub(repo_id)
 
 
+if __name__ == "__main__":
 
+    pytorch_dump_folder_path = '/home/kamil/.cache/transformers_dac'
+    model_name = "dac_16khz"
+    checkpoint_path = "/home/kamil/.cache/descript/dac/weights_16khz_8kbps_0.0.5.pth"
 
-
-
-
+    convert_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_path, "kamilakesbi/dac_test")
 

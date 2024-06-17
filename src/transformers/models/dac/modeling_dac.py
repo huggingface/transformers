@@ -232,9 +232,12 @@ class DacEncoderBlock(nn.Module):
                 padding=math.ceil(stride / 2),
             ),
         )
+       
 
     def forward(self, x):
         return self.block(x)
+    
+
 
 
 class DacDecoderBlock(nn.Module):
@@ -483,7 +486,7 @@ class DacEncoder(nn.Module):
         ]
 
         # Wrap black into nn.Sequential
-        self.block = nn.Sequential(*self.block)
+        self.block = nn.Sequential(self.block)
         self.enc_dim = d_model
 
     def forward(self, x):
