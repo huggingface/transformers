@@ -1336,7 +1336,7 @@ class ZambaModel(ZambaPreTrainedModel):
                 if output_hidden_states:
                     all_hidden_states += (transformer_hidden_states,)
             else:
-                 = None
+                transformer_hidden_states = None
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
