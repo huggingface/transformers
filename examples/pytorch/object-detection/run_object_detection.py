@@ -195,11 +195,11 @@ def compute_metrics(
         # here we will convert them to Pascal VOC format (x_min, y_min, x_max, y_max)
         for image_target in batch:
             batch_image_sizes.append(image_target["orig_size"])
-            batch_image_sizes = torch.tensor(batch_image_sizes)
             boxes = torch.tensor(image_target["boxes"])
             boxes = convert_bbox_yolo_to_pascal(boxes, image_target["orig_size"])
             labels = torch.tensor(image_target["class_labels"])
             post_processed_targets.append({"boxes": boxes, "labels": labels})
+        batch_image_sizes = torch.tensor(batch_image_sizes)
         image_sizes.append(batch_image_sizes)
 
     # Collect predictions in the required format for metric computation,
