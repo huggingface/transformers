@@ -40,6 +40,7 @@ from .utils import (
     ExplicitEnum,
     cached_property,
     is_accelerate_available,
+    is_ipex_available,
     is_safetensors_available,
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
@@ -2136,6 +2137,8 @@ class TrainingArguments:
             if self.use_cpu:
                 device = torch.device("cpu")
             elif is_torch_xpu_available():
+                if not is_ipex_available() and not is_accelerate_available("0.32.0.dev"):
+                    raise ImportError("Using the XPU PyTorch backend requires `accelerate>=0.32.0.dev`")
                 device = torch.device("xpu:0")
                 torch.xpu.set_device(device)
             elif is_torch_mlu_available():
