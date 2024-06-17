@@ -46,7 +46,6 @@ if is_vision_available():
 
 @require_torch
 @require_vision
-@require_torch
 class ProcessorTesterMixin:
     processor_class = None
 
