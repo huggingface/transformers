@@ -112,14 +112,32 @@ def create_function(func_def, state, tools):
     def new_func(*args, **kwargs):
         func_state = state.copy()
         arg_names = [arg.arg for arg in func_def.args.args]
+        default_values = [evaluate_ast(d, state, tools) for d in func_def.args.defaults]
+
+        # Apply default values
+        defaults = dict(zip(arg_names[-len(default_values) :], default_values))
+
+        # Set positional arguments
         for name, value in zip(arg_names, args):
             func_state[name] = value
+
+        # # Set keyword arguments
+        for name, value in kwargs.items():
+            func_state[name] = value
+
+        # Handle variable arguments
         if func_def.args.vararg:
             vararg_name = func_def.args.vararg.arg
             func_state[vararg_name] = args
+
         if func_def.args.kwarg:
             kwarg_name = func_def.args.kwarg.arg
             func_state[kwarg_name] = kwargs
+
+        # Set default values for arguments that were not provided
+        for name, value in defaults.items():
+            if name not in func_state:
+                func_state[name] = value
 
         # Update function state with self and __class__
         if func_def.args.args and func_def.args.args[0].arg == "self":
@@ -733,6 +751,8 @@ def evaluate_ast(
         return evaluate_assert(expression, state, tools)
     elif isinstance(expression, ast.With):
         return evaluate_with(expression, state, tools)
+    elif isinstance(expression, ast.Set):
+        return {evaluate_ast(elt, state, tools) for elt in expression.elts}
     else:
         # For now we refuse anything else. Let's add things as we need them.
         raise InterpreterError(f"{expression.__class__.__name__} is not supported.")

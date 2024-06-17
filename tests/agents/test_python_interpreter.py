@@ -596,3 +596,24 @@ assert lock.locked == False
         state = {}
         tools = {}
         evaluate_python_code(code, tools, state)
+
+    def test_default_arg_in_function(self):
+        code = """
+def f(a, b=333, n=1000):
+    return b + n
+n = f(1, n=667)
+"""
+        res = evaluate_python_code(code, {}, {})
+        assert res == 1000
+
+    def test_set(self):
+        code = """
+S1 = {'a', 'b', 'c'}
+S2 = {'b', 'c', 'd'}
+S3 = S1.difference(S2)
+S4 = S1.intersection(S2)
+"""
+        state = {}
+        evaluate_python_code(code, {}, state=state)
+        assert state["S3"] == {"a"}
+        assert state["S4"] == {"b", "c"}
