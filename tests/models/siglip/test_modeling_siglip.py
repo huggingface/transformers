@@ -146,6 +146,12 @@ class SiglipVisionModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    # MP works but offload doesn't work when the MultiheadAttention is offloaded
+    # TODO: One potential solution would be to add to set preload_module_classes = ["SiglipMultiheadAttentionPoolingHead"]
+    # in the dispatch_model function
+    test_cpu_offload = False
+    test_disk_offload_safetensors = False
+    test_disk_offload_bin = False
 
     def setUp(self):
         self.model_tester = SiglipVisionModelTester(self)
@@ -160,7 +166,7 @@ class SiglipVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -463,8 +469,8 @@ class SiglipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="SiglipModel does not have input/output embeddings")
-    # Copied from tests.models.clip.test_modeling_clip.CLIPModelTest.test_model_common_attributes
-    def test_model_common_attributes(self):
+    # Copied from tests.models.clip.test_modeling_clip.CLIPModelTest.test_model_get_set_embeddings
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip(reason="SiglipModel does not support training")
@@ -621,7 +627,7 @@ class SiglipForImageClassificationModelTest(ModelTesterMixin, PipelineTesterMixi
         pass
 
     @unittest.skip(reason="SiglipForImageClassification does not support inputs_embeds")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip(reason="SiglipForImageClassification does not support gradient checkpointing yet")

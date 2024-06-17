@@ -432,7 +432,9 @@ class BertSdpaSelfAttention(BertSelfAttention):
         # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
         # The tgt_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create
         # a causal mask in case tgt_len == 1.
-        is_causal = True if self.is_decoder and attention_mask is None and tgt_len > 1 else False
+        is_causal = (
+            True if self.is_decoder and not is_cross_attention and attention_mask is None and tgt_len > 1 else False
+        )
 
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_layer,
@@ -964,7 +966,7 @@ class BertModel(BertPreTrainedModel):
     `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
     """
 
-    _no_split_modules = ["BertEmbeddings"]
+    _no_split_modules = ["BertEmbeddings", "BertLayer"]
 
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)

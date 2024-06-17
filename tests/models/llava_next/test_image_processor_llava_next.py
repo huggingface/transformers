@@ -105,6 +105,7 @@ class LlavaNextImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest.setUp with CLIP->LlavaNext
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = LlavaNextImageProcessingTester(self)
 
     @property

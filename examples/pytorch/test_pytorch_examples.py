@@ -49,6 +49,7 @@ SRC_DIRS = [
         "image-pretraining",
         "semantic-segmentation",
         "object-detection",
+        "instance-segmentation",
     ]
 ]
 sys.path.extend(SRC_DIRS)
@@ -60,6 +61,7 @@ if SRC_DIRS is not None:
     import run_generation
     import run_glue
     import run_image_classification
+    import run_instance_segmentation
     import run_mae
     import run_mlm
     import run_ner
@@ -637,5 +639,35 @@ class ExamplesTests(TestCasePlus):
 
         with patch.object(sys, "argv", testargs):
             run_object_detection.main()
+            result = get_results(tmp_dir)
+            self.assertGreaterEqual(result["test_map"], 0.1)
+
+    @patch.dict(os.environ, {"WANDB_DISABLED": "true"})
+    def test_run_instance_segmentation(self):
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        testargs = f"""
+            run_instance_segmentation.py
+            --model_name_or_path qubvel-hf/finetune-instance-segmentation-ade20k-mini-mask2former
+            --output_dir {tmp_dir}
+            --dataset_name qubvel-hf/ade20k-nano
+            --do_reduce_labels
+            --image_height 256
+            --image_width 256
+            --do_train
+            --num_train_epochs 1
+            --learning_rate 1e-5
+            --lr_scheduler_type constant
+            --per_device_train_batch_size 2
+            --per_device_eval_batch_size 1
+            --do_eval
+            --evaluation_strategy epoch
+            --seed 32
+        """.split()
+
+        if is_torch_fp16_available_on_device(torch_device):
+            testargs.append("--fp16")
+
+        with patch.object(sys, "argv", testargs):
+            run_instance_segmentation.main()
             result = get_results(tmp_dir)
             self.assertGreaterEqual(result["test_map"], 0.1)

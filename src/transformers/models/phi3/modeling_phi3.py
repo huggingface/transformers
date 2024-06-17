@@ -1391,7 +1391,7 @@ class Phi3ForCausalLM(Phi3PreTrainedModel):
                 position_ids = position_ids[:, -input_ids.shape[1] :]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and past_key_values is None:
+        if inputs_embeds is not None and past_length == 0:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             # The `contiguous()` here is necessary to have a static stride during decoding. torchdynamo otherwise

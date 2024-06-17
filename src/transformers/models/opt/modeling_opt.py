@@ -1275,7 +1275,7 @@ class OPTForSequenceClassification(OPTPreTrainedModel):
                 sequence_lengths = sequence_lengths.to(logits.device)
             else:
                 sequence_lengths = -1
-                logger.warning(
+                logger.warning_once(
                     f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
                     "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
                 )
@@ -1427,8 +1427,8 @@ class OPTForQuestionAnswering(OPTPreTrainedModel):
                 end_positions = end_positions.squeeze(-1)
             # sometimes the start/end positions are outside our model inputs, we ignore these terms
             ignored_index = start_logits.size(1)
-            start_positions = start_positions.clamp(0, ignored_index)
-            end_positions = end_positions.clamp(0, ignored_index)
+            start_positions = start_positions.clamp(0, ignored_index).to(logits.device)
+            end_positions = end_positions.clamp(0, ignored_index).to(logits.device)
 
             loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
             start_loss = loss_fct(start_logits, start_positions)
