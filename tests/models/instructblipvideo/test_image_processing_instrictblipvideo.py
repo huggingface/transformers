@@ -76,7 +76,7 @@ class InstructBlipVideoProcessingTester(unittest.TestCase):
         }
 
     def expected_output_image_shape(self, images):
-        return self.frames, self.num_channels, self.crop_size["height"], self.crop_size["width"]
+        return self.frames, self.num_channels, self.size["height"], self.size["width"]
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         images = prepare_image_inputs(
@@ -112,6 +112,7 @@ class InstructBlipVideoProcessingTest(ImageProcessingTestMixin, unittest.TestCas
     image_processing_class = InstructBlipVideoImageProcessor if is_vision_available() else None
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = InstructBlipVideoProcessingTester(self)
 
     @property
