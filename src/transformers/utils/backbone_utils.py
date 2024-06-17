@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, Iterable, List, Optional, Tuple, Union
 
 
 if TYPE_CHECKING:
-    from .configuration_utils import PretrainedConfig
+    from ..configuration_utils import PretrainedConfig
 
 
 class BackboneType(enum.Enum):

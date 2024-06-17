@@ -71,7 +71,7 @@ model_id = "TheBloke/zephyr-7B-alpha-AWQ"
 model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float32)
 ```
 
-AWQ quantization can also be combined with [FlashAttention-2](perf_infer_gpu_one#flashattention-2) to further accelerate inference:
+AWQ quantization can also be combined with [FlashAttention-2](../perf_infer_gpu_one#flashattention-2) to further accelerate inference:
 
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer
