@@ -266,6 +266,8 @@ class BloomAttention(nn.Module):
             query_layer = self.query(hidden_states)
             key_layer = self.key(encoder_hidden_states)
             value_layer = self.value(encoder_hidden_states)
+            attention_mask = encoder_attention_mask
+            self.beta = 0  # ignore alibi when computing the matmul in the cross attention case
 
             # Shape them as self._split_heads(fused_qkv) outputs
             query_layer = query_layer.view(*query_layer.shape[:2], self.num_heads, self.head_dim)
@@ -278,10 +280,6 @@ class BloomAttention(nn.Module):
             query_layer = query_layer.transpose(1, 2).reshape(batch_size * self.num_heads, q_length, self.head_dim)
             key_layer = key_layer.permute(0, 2, 3, 1).reshape(batch_size * self.num_heads, self.head_dim, kv_length)
             value_layer = value_layer.transpose(1, 2).reshape(batch_size * self.num_heads, kv_length, self.head_dim)
-
-            if encoder_attention_mask is None:
-                encoder_attention_mask = torch.ones((batch_size, kv_length), device=key_layer.device)
-            alibi = build_alibi_tensor(encoder_attention_mask, self.num_heads, key_layer.dtype)
 
         else:
             fused_qkv = self.query_key_value(hidden_states)  # [batch_size, seq_length, 3 x hidden_size]
@@ -312,23 +310,12 @@ class BloomAttention(nn.Module):
 
         # [batch_size * num_heads, q_length, kv_length]
         # we use `torch.Tensor.baddbmm` instead of `torch.baddbmm` as the latter isn't supported by TorchScript v1.11
-        if self.is_cross_attention:
-            key_layer = key_layer.transpose(1, 2)
-            query_layer = query_layer.transpose(1, 2)
-            matmul_result = alibi.baddbmm(
-                batch1=key_layer,
-                batch2=query_layer,
-                beta=self.beta,
-                alpha=self.inv_norm_factor,
-            )
-            matmul_result = matmul_result.transpose(1, 2)
-        else:
-            matmul_result = alibi.baddbmm(
-                batch1=query_layer,
-                batch2=key_layer,
-                beta=self.beta,
-                alpha=self.inv_norm_factor,
-            )
+        matmul_result = alibi.baddbmm(
+            batch1=query_layer,
+            batch2=key_layer,
+            beta=self.beta,
+            alpha=self.inv_norm_factor,
+        )
 
         # change view to [batch_size, num_heads, q_length, kv_length]
         attention_scores = matmul_result.view(batch_size, self.num_heads, q_length, kv_length)
