@@ -88,7 +88,7 @@ class DABDETRDecoderOutput(BaseModelOutputWithCrossAttentions):
             Intermediate decoder activations, i.e. the output of each decoder layer, each of them gone through a
             layernorm.
         reference_points (`torch.FloatTensor` of shape `(config.decoder_layers, batch_size, num_queries, 4 (anchor points))`):
-            Intermediate reference points (reference points of each layer of the decoder).
+            Reference points (reference points of each layer of the decoder).
     """
 
     intermediate_hidden_states: Optional[torch.FloatTensor] = None
@@ -133,7 +133,7 @@ class DABDETRModelOutput(Seq2SeqModelOutput):
             Intermediate decoder activations, i.e. the output of each decoder layer, each of them gone through a
             layernorm.
         reference_points (`torch.FloatTensor` of shape `(config.decoder_layers, batch_size, num_queries, 4 (anchor points))`):
-            Intermediate reference points (reference points of each layer of the decoder).
+            Reference points (reference points of each layer of the decoder).
         outputs_coord (`torch.FloatTensor` of shape `(config.decoder_layers, batch_size, num_queries, 4 (anchor points))`):
             The predicted bounding box coordinates for each decoder layer. We only use the last layer for inference.
     """
@@ -438,7 +438,7 @@ class DABDETRSinePositionEmbedding(nn.Module):
     need paper, generalized to work on images.
     """
 
-    def __init__(self, embedding_dim=64, temperatureW=10000, temperatureH=10000, normalize=False, scale=None):
+    def __init__(self, embedding_dim=64, temperatureH=10000, temperatureW=10000, normalize=False, scale=None):
         super().__init__()
         self.embedding_dim = embedding_dim
         self.temperatureH = temperatureH
@@ -453,9 +453,8 @@ class DABDETRSinePositionEmbedding(nn.Module):
     def forward(self, pixel_values, pixel_mask):
         if pixel_mask is None:
             raise ValueError("No pixel mask provided")
-        not_mask = pixel_mask # ~pixel_mask
-        y_embed = not_mask.cumsum(1, dtype=torch.float32)
-        x_embed = not_mask.cumsum(2, dtype=torch.float32)
+        y_embed = pixel_mask.cumsum(1, dtype=torch.float32)
+        x_embed = pixel_mask.cumsum(2, dtype=torch.float32)
         if self.normalize:
             y_embed = y_embed / (y_embed[:, -1:, :] + 1e-6) * self.scale
             x_embed = x_embed / (x_embed[:, :, -1:] + 1e-6) * self.scale
@@ -502,7 +501,6 @@ class DABDETRLearnedPositionEmbedding(nn.Module):
 def build_position_encoding(config):
     n_steps = config.d_model // 2
     if config.position_embedding_type == "sine":
-        # TODO find a better way of exposing other arguments
         position_embedding = DABDETRSinePositionEmbedding(n_steps, temperatureH=config.temperatureH, 
                                                           temperatureW=config.temperatureW, normalize=True)
     elif config.position_embedding_type == "learned":
@@ -702,9 +700,9 @@ class DABDETREncoderLayer(nn.Module):
     ):
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
             attention_mask (`torch.FloatTensor`): attention mask of size
-                `(batch, 1, target_len, source_len)` where padding elements are indicated by very large negative
+                `(batch, source_len)` where padding elements are indicated by very large negative
                 values.
             object_queries (`torch.FloatTensor`, *optional*):
                 Object queries (also called content embeddings), to be added to the hidden states.
@@ -839,6 +837,9 @@ class DABDETRDecoderLayer(nn.Module):
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
+            is_first (`bool`, *optional*, default: False):
+                Whether or not to concatenate the positional embedding predicted from the object query in the first decoder layer into the original query.
+
         """
         position_embeddings = kwargs.pop("position_embeddings", None)
 
@@ -1007,12 +1008,6 @@ class DABDETRPreTrainedModel(PreTrainedModel):
                 nn.init.zeros_(module.q_linear.bias)
                 nn.init.xavier_uniform_(module.k_linear.weight, gain=xavier_std)
                 nn.init.xavier_uniform_(module.q_linear.weight, gain=xavier_std)
-            # elif isinstance(module, nn.MultiheadAttention):
-            #     module._reset_parameters()
-            #     # nn.init.zeros_(module.in_proj_bias)
-            #     # nn.init.zeros_(module.out_proj.bias)
-            #     # nn.init.xavier_uniform_(module.in_proj_weight)
-            #     # nn.init.xavier_uniform_(module.out_proj.weight)
             elif isinstance(module, DABDETRLearnedPositionEmbedding):
                 nn.init.uniform_(module.row_embeddings.weight)
                 nn.init.uniform_(module.column_embeddings.weight)
@@ -1123,7 +1118,7 @@ class DABDETREncoder(DABDETRPreTrainedModel):
     ):
         r"""
         Args:
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            inputs_embeds (`torch.FloatTensor` of shape `(sequence_length, batch_size, hidden_size)`):
                 Flattened feature map (output of the backbone + projection layer) that is passed to the encoder.
 
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1134,7 +1129,7 @@ class DABDETREncoder(DABDETRPreTrainedModel):
 
                 [What are attention masks?](../glossary#attention-mask)
 
-            object_queries (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            object_queries (`torch.FloatTensor` of shape `(sequence_length, batch_size, hidden_size)`):
                 Object queries that are added to the queries in each self-attention layer.
 
             output_attentions (`bool`, *optional*):
@@ -1279,7 +1274,6 @@ class DABDETRDecoder(DABDETRPreTrainedModel):
         encoder_hidden_states=None,
         memory_key_padding_mask=None,
         object_queries=None,
-        refpoints_unsigmoid=None,
         query_position_embeddings=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -1288,30 +1282,18 @@ class DABDETRDecoder(DABDETRPreTrainedModel):
     ):
         r"""
         Args:
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            inputs_embeds (`torch.FloatTensor` of shape `(sequence_length, batch_size, hidden_size)`):
                 The query embeddings that are passed into the decoder.
-
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on certain queries. Mask values selected in `[0, 1]`:
-
-                - 1 for queries that are **not masked**,
-                - 0 for queries that are **masked**.
-
-                [What are attention masks?](../glossary#attention-mask)
-            encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
+            encoder_hidden_states (`torch.FloatTensor` of shape `(encoder_sequence_length, batch_size, hidden_size)`, *optional*):
                 Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
                 of the decoder.
-            encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, encoder_sequence_length)`, *optional*):
-                Mask to avoid performing cross-attention on padding pixel_values of the encoder. Mask values selected
-                in `[0, 1]`:
-
-                - 1 for pixels that are real (i.e. **not masked**),
-                - 0 for pixels that are padding (i.e. **masked**).
-
-            object_queries (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            memory_key_padding_mask (`torch.Tensor.bool` of shape `(batch_size, sequence_length)`):
+                The memory_key_padding_mask indicates which positions in the memory (encoder outputs) should be ignored during the attention computation, 
+                ensuring padding tokens do not influence the attention mechanism.
+            object_queries (`torch.FloatTensor` of shape `(sequence_length, batch_size, hidden_size)`, *optional*):
                 Position embeddings that are added to the queries and keys in each cross-attention layer.
-            query_position_embeddings (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
-                , *optional*): Position embeddings that are added to the queries and keys in each self-attention layer.
+            query_position_embeddings (`torch.FloatTensor` of shape `(num_queries, batch_size, number_of_anchor_points)`):
+                Position embeddings that are added to the queries and keys in each self-attention layer.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -1352,7 +1334,7 @@ class DABDETRDecoder(DABDETRPreTrainedModel):
         all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
 
         intermediate = []
-        reference_points = refpoints_unsigmoid.sigmoid()
+        reference_points = query_position_embeddings.sigmoid()
         ref_points = [reference_points]
 
         for layer_id, decoder_layer in enumerate(self.layers):
@@ -1466,7 +1448,7 @@ class DABDETRDecoder(DABDETRPreTrainedModel):
 @add_start_docstrings(
     """
     The bare DAB-DETR Model (consisting of a backbone and encoder-decoder Transformer) outputting raw
-    hidden-states without any specific head on top.
+    hidden-states, intermediate hidden states, reference points, output coordinates without any specific head on top.
     """,
     DAB_DETR_START_DOCSTRING,
 )
@@ -1614,7 +1596,7 @@ class DABDETRModel(DABDETRPreTrainedModel):
         projected_feature_map = self.input_projection(feature_map)
 
         # Third, flatten the feature map + object_queries of shape NxCxHxW to HWxNxC, and permute it to NxHWxC
-        # In other words, turn their shape into (batch_size, sequence_length, hidden_size)
+        # In other words, turn their shape into ( sequence_length, batch_size, hidden_size)
         flattened_features = projected_feature_map.flatten(2).permute(2, 0, 1)
         object_queries = object_queries_list[-1].flatten(2).permute(2, 0, 1) # pos embed
         reference_position_embeddings = self.query_refpoint_embeddings.weight.unsqueeze(1).repeat(1, batch_size, 1)
@@ -1623,7 +1605,7 @@ class DABDETRModel(DABDETRPreTrainedModel):
         flattened_mask = ~flattened_mask
 
         # Fourth, sent flattened_features + flattened_mask + object_queries through encoder
-        # flattened_features is a Tensor of shape (batch_size, heigth*width, hidden_size)
+        # flattened_features is a Tensor of shape (heigth*width, batch_size, hidden_size)
         # flattened_mask is a Tensor of shape (batch_size, heigth*width)
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
@@ -1653,7 +1635,7 @@ class DABDETRModel(DABDETRPreTrainedModel):
         # decoder outputs consists of (dec_features, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
             inputs_embeds=queries,
-            refpoints_unsigmoid=reference_position_embeddings,
+            query_position_embeddings=reference_position_embeddings,
             object_queries=object_queries,
             encoder_hidden_states=encoder_outputs[0],
             memory_key_padding_mask=flattened_mask,
@@ -1881,7 +1863,7 @@ class DABDETRForObjectDetection(DABDETRPreTrainedModel):
             encoder_hidden_states=model_outputs.encoder_hidden_states if output_hidden_states else None,
             encoder_attentions=model_outputs.encoder_attentions if output_attentions else None,
         )
-
+    
 
 @add_start_docstrings(
     """

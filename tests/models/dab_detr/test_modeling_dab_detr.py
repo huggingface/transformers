@@ -615,9 +615,6 @@ class DABDETRModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         encoder_hidden_states = outputs.encoder_hidden_states[0]
         encoder_hidden_states.retain_grad()
 
-        encoder_attentions = outputs.encoder_attentions[0]
-        encoder_attentions.retain_grad()
-
         decoder_attentions = outputs.decoder_attentions[0]
         decoder_attentions.retain_grad()
 
@@ -629,8 +626,6 @@ class DABDETRModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         self.assertIsNotNone(encoder_hidden_states.grad)
         self.assertIsNotNone(decoder_attentions.grad)
         self.assertIsNotNone(cross_attentions.grad)
-        # Because in nn.MultiHeadAttention Module attention is not a leaf module.
-        # self.assertIsNone(encoder_attentions.grad)
         
 
     def test_forward_auxiliary_loss(self):
@@ -811,9 +806,7 @@ class DABDETRModelIntegrationTests(unittest.TestCase):
         )[0]
         expected_scores = torch.tensor([0.8732, 0.8563, 0.8554, 0.6079, 0.5896]).to(torch_device)
         expected_labels = [17, 75, 17, 75, 63]
-        # expected_slice_boxes = torch.tensor([ 29.5950, -22.1846, 263.6487, 170.0586]).to(torch_device)
 
         self.assertEqual(len(results["scores"]), 5)
         self.assertTrue(torch.allclose(results["scores"], expected_scores, atol=1e-4))
         self.assertSequenceEqual(results["labels"].tolist(), expected_labels)
-        # self.assertTrue(torch.allclose(results["boxes"][0, :], expected_slice_boxes, atol=1e-4))
