@@ -573,31 +573,22 @@ default template for that model class is used instead. Let's take a look at the 
 "{% for message in messages %}{% if message['role'] == 'user' %}{{ ' ' }}{% endif %}{{ message['content'] }}{% if not loop.last %}{{ '  ' }}{% endif %}{% endfor %}{{ eos_token }}"
 ```
 
-That's kind of intimidating. Let's add some newlines and indentation to make it more readable. Note that the first
-newline after each block as well as any preceding whitespace before a block are ignored by default, using the 
-Jinja `trim_blocks` and `lstrip_blocks` flags. However, be cautious - although leading whitespace on each
-line is stripped, spaces between blocks on the same line are not. We strongly recommend checking that your template
-isn't printing extra spaces where it shouldn't be!
+That's kind of intimidating. Let's clean it up a little to make it more readable. In the process, though, we also make
+sure that the newlines and indentation we add don't end up being included in the template output - see the tip on
+[trimming whitespace](#trimming-whitespace) below!
 
 ```
-{% for message in messages %}
-    {% if message['role'] == 'user' %}
-        {{ ' ' }}
-    {% endif %}
-    {{ message['content'] }}
-    {% if not loop.last %}
-        {{ '  ' }}
-    {% endif %}
-{% endfor %}
-{{ eos_token }}
+{%- for message in messages %}
+    {%- if message['role'] == 'user' %}
+        {{- ' ' }}
+    {%- endif %}
+    {{- message['content'] }}
+    {%- if not loop.last %}
+        {{- '  ' }}
+    {%- endif %}
+{%- endfor %}
+{{- eos_token }}
 ```
-
-<Tip>
-A good way to ensure that your template isn't printing unwanted whitespaces or newlines is to use **{{-** and **{%-** instead
-of **{{** and **{%**. This will strip any whitespace or newlines that come before the block or statement. If you use these,
-you can write your template with proper indentation and newlines and still have it render correctly!
-</Tip>
-
 
 If you've never seen one of these before, this is a [Jinja template](https://jinja.palletsprojects.com/en/3.1.x/templates/).
 Jinja is a templating language that allows you to write simple code that generates text. In many ways, the code and
@@ -625,15 +616,15 @@ similarly to the way LLaMA formats them (note that the real LLaMA template inclu
 messages and slightly different system message handling in general - don't use this one in your actual code!)
 
 ```
-{% for message in messages %}
-    {% if message['role'] == 'user' %}
-        {{ bos_token + '[INST] ' + message['content'] + ' [/INST]' }}
-    {% elif message['role'] == 'system' %}
-        {{ '<<SYS>>\\n' + message['content'] + '\\n<</SYS>>\\n\\n' }}
-    {% elif message['role'] == 'assistant' %}
-        {{ ' '  + message['content'] + ' ' + eos_token }}
-    {% endif %}
-{% endfor %}
+{%- for message in messages %}
+    {%- if message['role'] == 'user' %}
+        {{- bos_token + '[INST] ' + message['content'] + ' [/INST]' }}
+    {%- elif message['role'] == 'system' %}
+        {{- '<<SYS>>\\n' + message['content'] + '\\n<</SYS>>\\n\\n' }}
+    {%- elif message['role'] == 'assistant' %}
+        {{- ' '  + message['content'] + ' ' + eos_token }}
+    {%- endif %}
+{%- endfor %}
 ```
 
 Hopefully if you stare at this for a little bit you can see what this template is doing - it adds specific tokens based
@@ -649,15 +640,15 @@ existing template from another model and simply edit it for your needs! For exam
 above and add "[ASST]" and "[/ASST]" to assistant messages:
 
 ```
-{% for message in messages %}
-    {% if message['role'] == 'user' %}
-        {{ bos_token + '[INST] ' + message['content'].strip() + ' [/INST]' }}
-    {% elif message['role'] == 'system' %}
-        {{ '<<SYS>>\\n' + message['content'].strip() + '\\n<</SYS>>\\n\\n' }}
-    {% elif message['role'] == 'assistant' %}
-        {{ '[ASST] '  + message['content'] + ' [/ASST]' + eos_token }}
-    {% endif %}
-{% endfor %}
+{%- for message in messages %}
+    {%- if message['role'] == 'user' %}
+        {{- bos_token + '[INST] ' + message['content'].strip() + ' [/INST]' }}
+    {%- elif message['role'] == 'system' %}
+        {{- '<<SYS>>\\n' + message['content'].strip() + '\\n<</SYS>>\\n\\n' }}
+    {%- elif message['role'] == 'assistant' %}
+        {{- '[ASST] '  + message['content'] + ' [/ASST]' + eos_token }}
+    {%- endif %}
+{%- endfor %}
 ```
 
 Now, simply set the `tokenizer.chat_template` attribute. Next time you use [`~PreTrainedTokenizer.apply_chat_template`], it will
@@ -715,9 +706,9 @@ input formats. One popular choice is the `ChatML` format, and this is a good, fl
 It looks like this:
 
 ```
-{% for message in messages %}
-    {{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}
-{% endfor %}
+{%- for message in messages %}
+    {{- '<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n' }}
+{%- endfor %}
 ```
 
 If you like this one, here it is in one-liner form, ready to copy into your code. The one-liner also includes
@@ -775,8 +766,24 @@ You can also use the following tips to convert your code to Jinja:
 
 By default, Jinja will print any whitespace that comes before or after a block. This can be a problem for chat
 templates, which generally want to be very precise with whitespace! To avoid this, we strongly recommend writing
-your templates with **{{-** and **{%-** blocks instead of **{{** and **{%**. This will strip any whitespace that comes
-before the block, ensuring that your template doesn't print extra spaces where it shouldn't.
+your templates like this:
+
+```
+{%- for message in messages %}
+    {{- message['role'] + message['content'] }}
+{%- endfor %}
+```
+
+rather than like this:
+
+```
+{% for message in messages %}
+    {{ message['role'] + message['content'] }}
+{% endfor %}
+```
+
+Adding `-` will strip any whitespace that comes before the block. The second example looks innocent, but the newline
+and indentation may end up being included in the output, which is probably not what you want!
 
 ### For loops
 
