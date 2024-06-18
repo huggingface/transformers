@@ -1,3 +1,19 @@
+# coding=utf-8
+# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
 import unittest
 
 import numpy as np
@@ -21,7 +37,6 @@ class AltClipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_id = "BAAI/AltCLIP"
-        pass
 
     def get_tokenizer(self, **kwargs):
         return XLMRobertaTokenizer.from_pretrained(self.model_id, **kwargs)
@@ -31,9 +46,6 @@ class AltClipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def get_image_processor(self, **kwargs):
         return CLIPImageProcessor.from_pretrained(self.model_id, **kwargs)
-
-    def tearDown(self):
-        pass
 
     def prepare_image_inputs(self):
         """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
