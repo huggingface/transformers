@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Zamba model. """
+"""Testing suite for the PyTorch Zamba model."""
+
 import math
 import tempfile
 import unittest
@@ -59,7 +60,8 @@ class ZambaModelTester:
         use_input_mask=True,
         use_labels=True,
         vocab_size=99,
-        hidden_size=32,
+        hidden_size=64,
+        mamba_dt_rank=32,
         num_hidden_layers=5,
         attn_layer_offset=1,
         attn_layer_period=8,
@@ -87,6 +89,7 @@ class ZambaModelTester:
         self.use_labels = use_labels
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
+        self.mamba_dt_rank = mamba_dt_rank
         self.num_hidden_layers = num_hidden_layers
         self.attn_layer_offset = attn_layer_offset
         self.attn_layer_period = attn_layer_period
@@ -129,6 +132,7 @@ class ZambaModelTester:
         return ZambaConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
+            mamba_dt_rank=self.mamba_dt_rank,
             num_hidden_layers=self.num_hidden_layers,
             attn_layer_offset=self.attn_layer_offset,
             attn_layer_period=self.attn_layer_period,
@@ -344,6 +348,12 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                     elif "D" in name:
                         # check if it's a ones like
                         self.assertTrue(torch.allclose(param.data, torch.ones_like(param.data), atol=1e-5, rtol=1e-5))
+                    elif "x_proj" in name or "dt_proj_weight" in name:
+                        self.assertIn(
+                            ((param.data.mean() * 1e2).round() / 1e2).item(),
+                            [0.0, 1.0],
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized (raw value {param.data.mean()})",
+                        )
                     else:
                         self.assertIn(
                             ((param.data.mean() * 1e9).round() / 1e9).item(),
@@ -369,10 +379,13 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
         encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
 
-        expected_num_attentions = math.ceil(
-            (self.model_tester.num_hidden_layers - self.model_tester.attn_layer_offset)
-            / self.model_tester.attn_layer_period
-        ) + 1
+        expected_num_attentions = (
+            math.ceil(
+                (self.model_tester.num_hidden_layers - self.model_tester.attn_layer_offset)
+                / self.model_tester.attn_layer_period
+            )
+            + 1
+        )
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
