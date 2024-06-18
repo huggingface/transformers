@@ -17,7 +17,7 @@
 import math
 import warnings
 from dataclasses import dataclass
-from typing import Any, Optional, Tuple, Union, Dict
+from typing import Any, Dict, Optional, Tuple, Union
 
 import numpy as np
 import torch
