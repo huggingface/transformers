@@ -30,7 +30,6 @@ from transformers.utils.generic import ModelOutput
 from ...test_modeling_tf_common import ids_tensor
 from ..bert.test_modeling_tf_bert import TFBertModelTester
 from ..gpt2.test_modeling_tf_gpt2 import TFGPT2ModelTester
-from ..rembert.test_modeling_tf_rembert import TFRemBertModelTester
 from ..roberta.test_modeling_tf_roberta import TFRobertaModelTester
 
 
@@ -952,48 +951,6 @@ class TFRoBertaEncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase)
             "encoder_hidden_states": encoder_hidden_states,
             "labels": decoder_token_labels,
         }
-
-
-@require_tf
-class TFRembertEncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase):
-    def setUp(self):
-        self.encoder_model_tester = TFRemBertModelTester(self)
-        self.decoder_model_tester = TFRemBertModelTester(self)
-
-    def get_pretrained_model(self):
-        return TFEncoderDecoderModel.from_encoder_decoder_pretrained(
-            "hf-internal-testing/tiny-random-rembert",
-            "hf-internal-testing/tiny-random-rembert",
-        )
-
-    def get_encoder_decoder_model(self, config, decoder_config):
-        encoder_model = TFRemBertModel(config, name="encoder")
-        decoder_model = TFRemBertForCausalLM(decoder_config, name="decoder")
-        return encoder_model, decoder_model
-
-    def prepare_config_and_inputs(self):
-        encoder_config_and_inputs = self.encoder_model_tester.prepare_config_and_inputs()
-        decoder_config_and_inputs = self.decoder_model_tester.prepare_config_and_inputs_for_decoder()
-        (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = encoder_config_and_inputs
-        (
-            decoder_config,
-            decoder_input_ids,
-            decoder_token_type_ids,
-            decoder_input_mask,
-            decoder_sequence_labels,
-            decoder_token_labels,
-            decoder_choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
-        ) = decoder_config_and_inputs
 
 
 @require_tf
