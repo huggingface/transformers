@@ -64,8 +64,8 @@ class VideoLlavaProcessor(ProcessorMixin):
         image_token="<image>",  # set the default and let users change if they have peculiar special tokens in rare cases
         video_token="<video>",
     ):
-        self._patch_size = patch_size
-        self._vision_feature_select_strategy = vision_feature_select_strategy
+        self.patch_size = patch_size
+        self.vision_feature_select_strategy = vision_feature_select_strategy
         self.image_token = image_token
         self.video_token = video_token
         super().__init__(image_processor, tokenizer)
