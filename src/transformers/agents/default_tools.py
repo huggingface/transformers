@@ -157,9 +157,9 @@ class PythonInterpreterTool(Tool):
 
     def __init__(self, *args, authorized_imports=None, **kwargs):
         if authorized_imports is None:
-            authorized_imports = list(set(LIST_SAFE_MODULES))
+            self.authorized_imports = list(set(LIST_SAFE_MODULES))
         else:
-            authorized_imports = list(set(LIST_SAFE_MODULES) | set(authorized_imports))
+            self.authorized_imports = list(set(LIST_SAFE_MODULES) | set(authorized_imports))
         self.inputs = {
             "code": {
                 "type": "text",
@@ -172,7 +172,9 @@ class PythonInterpreterTool(Tool):
         super().__init__(*args, **kwargs)
 
     def forward(self, code):
-        output = str(evaluate_python_code(code, tools=self.available_tools))
+        output = str(
+            evaluate_python_code(code, tools=self.available_tools, authorized_imports=self.authorized_imports)
+        )
         return output
 
 
