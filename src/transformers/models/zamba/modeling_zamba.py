@@ -1048,7 +1048,9 @@ class ZambaMambaDecoderLayer(nn.Module):
 
         # `transformer_hidden_states` is the output from shared transformer + linear layer (see fig. 2 in https://arxiv.org/pdf/2405.16712).
         # `transformer_hidden_states` is then added to the input to the mamba layer below (as described in eq. (6) of https://arxiv.org/pdf/2405.16712).
-        hidden_states = hidden_states + transformer_hidden_states if transformer_hidden_states is not None else hidden_states
+        hidden_states = (
+            hidden_states + transformer_hidden_states if transformer_hidden_states is not None else hidden_states
+        )
         hidden_states = self.input_layernorm(hidden_states)
 
         hidden_states = self.mamba(
@@ -1285,13 +1287,13 @@ class ZambaModel(ZambaPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
 
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
-
         mamba_layers = iter(self.mamba_layers)
         linear_layers = iter(self.linear_layers)
 
         for layer_idx, layer_type in enumerate(self.layers_block_type):
+            if output_hidden_states:
+                all_hidden_states += (hidden_states,)
+
             if layer_type == "attention+mamba":
                 if self.gradient_checkpointing and self.training:
                     layer_outputs = self._gradient_checkpointing_func(
@@ -1319,8 +1321,6 @@ class ZambaModel(ZambaPreTrainedModel):
                         cache_position=cache_position,
                     )
                 transformer_hidden_states = layer_outputs[0]
-                if output_hidden_states:
-                    all_hidden_states += (transformer_hidden_states,)
                 if output_attentions:
                     if layer_outputs[1] is not None:
                         all_self_attns += (layer_outputs[1],)
@@ -1333,8 +1333,6 @@ class ZambaModel(ZambaPreTrainedModel):
                     transformer_hidden_states = next(linear_layers)(
                         transformer_hidden_states,
                     )
-                if output_hidden_states:
-                    all_hidden_states += (transformer_hidden_states,)
             else:
                 transformer_hidden_states = None
 
@@ -1362,8 +1360,6 @@ class ZambaModel(ZambaPreTrainedModel):
                     cache_position=cache_position,
                 )
             hidden_states = layer_outputs[0]
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
 
         hidden_states = self.final_layernorm(hidden_states)
 
