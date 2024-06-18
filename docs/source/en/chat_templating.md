@@ -842,3 +842,5 @@ all implementations of Jinja:
   See the [list of built-in filters](https://jinja.palletsprojects.com/en/3.1.x/templates/#builtin-filters)
   in the Jinja documentation for more.
 - Replace `True`, `False` and `None`, which are Python-specific, with `true`, `false` and `none`.
+- Directly rendering a dict or list may give different results in other implementations (for example, string entries
+  might change from single-quoted to double-quoted). Adding the `tojson` filter can help to ensure consistency here.
