@@ -2432,6 +2432,10 @@ if is_torch_available():
     BACKEND_MANUAL_SEED = {"cuda": torch.cuda.manual_seed, "cpu": torch.manual_seed, "default": torch.manual_seed}
     BACKEND_EMPTY_CACHE = {"cuda": torch.cuda.empty_cache, "cpu": None, "default": None}
     BACKEND_DEVICE_COUNT = {"cuda": torch.cuda.device_count, "cpu": lambda: 0, "default": lambda: 1}
+else:
+    BACKEND_MANUAL_SEED = {"default": None}
+    BACKEND_EMPTY_CACHE = {"default": None}
+    BACKEND_DEVICE_COUNT = {"default": lambda: 0}
 
 
 def backend_manual_seed(device: str, seed: int):
