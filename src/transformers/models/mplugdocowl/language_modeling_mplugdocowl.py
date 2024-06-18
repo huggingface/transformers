@@ -355,6 +355,7 @@ class MultiwayAttention(nn.Module):
             kv_seq_len += past_key_value[0].shape[-2]
         #cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
         cos, sin = self.rotary_emb(value_states, position_ids)
+        
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
         if past_key_value is not None:
@@ -397,9 +398,10 @@ class MultiwayAttention(nn.Module):
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
         #FIXME look here
         attn_output = self.o_proj(attn_output)
+
         if not output_attentions:
             attn_weights = None
-
+     
         return attn_output, attn_weights, past_key_value
 
 
@@ -720,10 +722,15 @@ class MPLUGDocOwlModel(MPLUGDocOwlPreTrainedModel):
        # attention_mask = self._prepare_decoder_attention_mask(
        #     attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
        # )
-        attention_mask = _prepare_4d_attention_mask(attention_mask, dtype=torch.float32)
-
+       # breakpoint()
+        #try:
+        attention_mask = _prepare_4d_causal_attention_mask(attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length)
+        #except RuntimeError as e:
+            #raise(e)
+        #attention_mask = _prepare_4d_attention_mask(attention_mask, dtype=torch.float32)
+        #breakpoint()
         hidden_states = inputs_embeds
-
+      
         if self.gradient_checkpointing and self.training:
             if use_cache:
                 logger.warning_once(
@@ -735,7 +742,9 @@ class MPLUGDocOwlModel(MPLUGDocOwlPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
         next_decoder_cache = () if use_cache else None
+        
         for idx, decoder_layer in enumerate(self.layers):
+            #breakpoint()
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
@@ -769,7 +778,7 @@ class MPLUGDocOwlModel(MPLUGDocOwlPreTrainedModel):
                 )
 
             hidden_states = layer_outputs[0]
-
+            
             if use_cache:
                 next_decoder_cache += (layer_outputs[2 if output_attentions else 1],)
 

@@ -100,63 +100,6 @@ class MPLUGDocOwlMultiModalProjector(nn.Module):
 
 '''
 
-class MPLUGDocOwlHReducer(nn.Module):
-    def __init__(self, config: MPLUGDocOwlConfig, language_hidden_size):
-        super().__init__()
-        self.config = config
-        self.ln_q = torch.nn.LayerNorm(self.config.hreducer_hidden_size, eps=1e-6)
-        self.conv_shape = (int(self.config.hreducer_conv_shape.split('x')[0]), int(self.config.hreducer_conv_shape.split('x')[1])) # 
-        self.conv_patch=self.conv_shape[0]*self.conv_shape[1]
-        ## feature interaction with a conv layer
-        self.reducer_before = torch.nn.Sequential(
-            nn.Conv2d(self.config.hreducer_hidden_size, self.conv_patch*self.config.hreducer_hidden_size, kernel_size=self.conv_shape, stride=self.conv_shape, bias=True),
-            nn.GELU()
-        )
-        ## reduce visual feature length with a conv layer
-        self.reducer = nn.Conv2d(self.config.hreducer_hidden_size, self.config.hreducer_hidden_size, kernel_size=self.conv_shape, stride=self.conv_shape, bias=True)    
-        ## align visual features with language embedding with fc
-        self.visual_fc = torch.nn.Linear(self.config.hreducer_hidden_size, language_hidden_size)
-        self.vit_eos = torch.nn.Parameter(torch.randn(1, 1, language_hidden_size))
-
-        #self.post_init()
-    
-    def forward(
-        self,
-        encoder_hidden_states=None
-    ):
-        r"""
-        encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, `optional`):
-            batch_size is the number of all images (global+crop) in a batch
-            Sequence of hidden-states at the output of the last layer of the encoder.
-        """
-        encoder_hidden_states = encoder_hidden_states[:,1:,:] # remove the first cls token 
-        B, L, C = encoder_hidden_states.shape # B, 1024=(448/14)^2, 1024
-        H = int(torch.sqrt(torch.tensor(L)))
-        ## feature interaction with a conv layer
-        #encoder_hidden_states = rearrange(encoder_hidden_states, 'B (H W) D -> B D H W', H=int(math.sqrt(L)))
-        encoder_hidden_states = encoder_hidden_states.view(B, C, H, H) #(BCHH)
-        hidden_states = self.reducer_before(encoder_hidden_states)  # B 4D H W/4
-        ## reduce seq length with a conv layer
-        B, XD, H, W_div_X = hidden_states.shape
-        X = self.conv_patch
-        D = XD // X 
-        #hidden_states = rearrange(hidden_states, 'B (X D) H W -> B D H (W X)', X=self.conv_patch) # B 4D H W/4 -> B D H W
-        hidden_states = hidden_states.view(B, X, D, H, W_div_X)
-        # Permute to [B, D, H, W_div_X, X]
-        hidden_states = hidden_states.permute(0, 2, 3, 4, 1)
-
-        # Reshape to [B, D, H, W]
-        hidden_states = hidden_states.reshape(B, D, H, W_div_X * X)
-        sequence_output = self.reducer(hidden_states) # B,C,H,W -> B,C,H/conv_shape[0],W/(conv_shape[1])
-        sequence_output = sequence_output.flatten(2).transpose(1, 2)  # B,C,H/conv_shape[0],W/(conv_shape[1]) -> B,C,L/conv_patch -> B,L/conv_patch,C
-        sequence_output = sequence_output.transpose(0, 1).contiguous() # L/conv_patch, B, C
-        ## align visual features with language embedding with fc
-        sequence_output = self.visual_fc(sequence_output) # L/conv_patch, B, h
-        sequence_output = sequence_output.transpose(0, 1).contiguous() # B, s/4, h
-        sequence_output = torch.cat([sequence_output, self.vit_eos.repeat(B, 1, 1)], dim=1)
-
-        return sequence_output
-
 MPLUGDOCOWL_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -183,10 +126,10 @@ class MPLUGDocOwlPreTrainedModel(PreTrainedModel):
     config_class = MPLUGDocOwlConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["MPLUGDocOwlVisionAttention"]
+    _no_split_modules = ["MPLUGDocOwlAttention"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
-
+    '''
     def _init_weights(self, module):
         # important: this ported version of MPLUGDocOwl isn't meant for training from scratch - only
         # inference and fine-tuning - so the proper init weights code has been removed - the original codebase
@@ -208,7 +151,7 @@ class MPLUGDocOwlPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-
+    '''
     @property
     def _supports_sdpa(self):
         """
@@ -288,6 +231,63 @@ MPLUGDOCOWL_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
+class MPLUGDocOwlHReducer(MPLUGDocOwlPreTrainedModel):
+    def __init__(self, config, language_hidden_size):
+        super().__init__(config)
+        self.config = config
+        self.ln_q = torch.nn.LayerNorm(self.config.hreducer_hidden_size, eps=1e-6)
+        self.conv_shape = (int(self.config.hreducer_conv_shape.split('x')[0]), int(self.config.hreducer_conv_shape.split('x')[1])) # 
+        self.conv_patch=self.conv_shape[0]*self.conv_shape[1]
+        ## feature interaction with a conv layer
+        self.reducer_before = torch.nn.Sequential(
+            nn.Conv2d(self.config.hreducer_hidden_size, self.conv_patch*self.config.hreducer_hidden_size, kernel_size=self.conv_shape, stride=self.conv_shape, bias=True),
+            nn.GELU()
+        )
+        ## reduce visual feature length with a conv layer
+        self.reducer = nn.Conv2d(self.config.hreducer_hidden_size, self.config.hreducer_hidden_size, kernel_size=self.conv_shape, stride=self.conv_shape, bias=True)    
+        ## align visual features with language embedding with fc
+        self.visual_fc = torch.nn.Linear(self.config.hreducer_hidden_size, language_hidden_size)
+        self.vit_eos = torch.nn.Parameter(torch.randn(1, 1, language_hidden_size))
+        self.post_init()
+        #self.init_weights()
+        #self._backward_compatibility_gradient_checkpointing()
+    
+    def forward(
+        self,
+        encoder_hidden_states=None
+    ):
+        r"""
+        encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, `optional`):
+            batch_size is the number of all images (global+crop) in a batch
+            Sequence of hidden-states at the output of the last layer of the encoder.
+        """
+        encoder_hidden_states = encoder_hidden_states[:,1:,:] # remove the first cls token 
+        B, L, C = encoder_hidden_states.shape # B, 1024=(448/14)^2, 1024
+        H = int(torch.sqrt(torch.tensor(L)))
+        ## feature interaction with a conv layer
+        #encoder_hidden_states = rearrange(encoder_hidden_states, 'B (H W) D -> B D H W', H=int(math.sqrt(L)))
+        encoder_hidden_states = encoder_hidden_states.view(B, C, H, H) #(BCHH)
+        hidden_states = self.reducer_before(encoder_hidden_states)  # B 4D H W/4
+        ## reduce seq length with a conv layer
+        B, XD, H, W_div_X = hidden_states.shape
+        X = self.conv_patch
+        D = XD // X 
+        #hidden_states = rearrange(hidden_states, 'B (X D) H W -> B D H (W X)', X=self.conv_patch) # B 4D H W/4 -> B D H W
+        hidden_states = hidden_states.view(B, X, D, H, W_div_X)
+        # Permute to [B, D, H, W_div_X, X]
+        hidden_states = hidden_states.permute(0, 2, 3, 4, 1)
+
+        # Reshape to [B, D, H, W]
+        hidden_states = hidden_states.reshape(B, D, H, W_div_X * X)
+        sequence_output = self.reducer(hidden_states) # B,C,H,W -> B,C,H/conv_shape[0],W/(conv_shape[1])
+        sequence_output = sequence_output.flatten(2).transpose(1, 2)  # B,C,H/conv_shape[0],W/(conv_shape[1]) -> B,C,L/conv_patch -> B,L/conv_patch,C
+        sequence_output = sequence_output.transpose(0, 1).contiguous() # L/conv_patch, B, C
+        ## align visual features with language embedding with fc
+        sequence_output = self.visual_fc(sequence_output) # L/conv_patch, B, h
+        sequence_output = sequence_output.transpose(0, 1).contiguous() # B, s/4, h
+        sequence_output = torch.cat([sequence_output, self.vit_eos.repeat(B, 1, 1)], dim=1)
+
+        return sequence_output
 
 @add_start_docstrings(
     """The MPLUGDOCOWL model which consists of a vision backbone and a language model.""",
@@ -299,8 +299,9 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
         super().__init__(config)
         #self.vision_tower = AutoModel.from_config(config.vision_config)
         self.vision_tower = MPLUGDocOwlVisionModel(config.vision_config)
+        breakpoint()
         language_hidden_size = config.text_config.hidden_size
-        self.multi_modal_projector = MPLUGDocOwlHReducer(config, language_hidden_size)
+        self.multi_modal_projector = MPLUGDocOwlHReducer(config, config.text_config.hidden_size)
         self.vocab_size = config.text_config.vocab_size
         #initialize LlamaAttention
         #replace_llama_modality_adaptive()
@@ -466,7 +467,6 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
         return None, new_modality_indicators, attention_mask, past_key_values, new_input_embeds, new_labels
     '''
     def _merge_input_ids_with_image_features(self, image_features, inputs_embeds, input_ids, attention_mask, labels):
-        breakpoint()
         num_images, num_image_patches, embed_dim = image_features.shape
         batch_size, sequence_length = input_ids.shape
         left_padding = not torch.sum(input_ids[:, -1] == torch.tensor(self.pad_token_id))
@@ -617,8 +617,11 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
             # 2. Merge text and images
             if pixel_values is not None and input_ids.shape[1] != 1:
                 image_outputs = self.vision_tower(pixel_values, output_hidden_states=True).last_hidden_state
+                torch.save(image_outputs,'image_outputs.pt')
+                breakpoint()
                 #try:
                 image_features = self.multi_modal_projector(encoder_hidden_states=image_outputs)
+                breakpoint()
                 #except RuntimeError as e:
                     #raise(e)
                 # this is not memory efficient at all (output_hidden_states=True) will save all the hidden stated.
@@ -639,7 +642,9 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
                 image_features = self.multi_modal_projector(selected_image_feature)
 
                 '''
+                
                 inputs_embeds = inputs_embeds.to(image_features.dtype)
+
                 #input_ids, modality_indicators, attention_mask, past_key_values, inputs_embeds, labels  = self._merge_input_ids_with_image_features(
                  #    input_ids, image_features, attention_mask, past_key_values, labels
                 #)
@@ -680,7 +685,7 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
 
                 attention_mask = torch.cat((extended_attention_mask, attention_mask[:, -target_length:]), dim=1)
                 position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
-
+        breakpoint()
         outputs = self.language_model(
             attention_mask=attention_mask,
             modality_indicators=modality_indicators,
@@ -758,7 +763,7 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
             position_ids.masked_fill_(attention_mask == 0, 1)
             if past_key_values:
                 position_ids = position_ids[:, -input_ids.shape[1] :]
-
+        breakpoint()
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
             model_inputs = {"inputs_embeds": inputs_embeds}

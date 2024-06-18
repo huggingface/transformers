@@ -27,6 +27,7 @@ from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _create_4d_causal_attention_mask, _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...modeling_utils import PreTrainedModel
+
 from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -157,18 +158,56 @@ class MPLUGDocOwlVisionEmbeddings(nn.Module):
         patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
 
-        class_embeds = self.class_embedding.expand(batch_size, 1, -1)
+        class_embeds = self.class_embedding.expand(batch_size, 1, -1).to(patch_embeds.dtype)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
         #embeddings = embeddings + self.position_embeddings[self.position_ids]
         embeddings = embeddings + self.position_embedding[:, : embeddings.size(1)].to(patch_embeds.dtype)
         embeddings = self.pre_layernorm(embeddings)
         return embeddings
 
-class MPLUGDocOwlAttention(nn.Module):
+class MPLUGDocOwlPreTrainedModel(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    config_class = MPLUGDocOwlConfig
+    base_model_prefix = "MPLUGDocOwl"
+    supports_gradient_checkpointing = True
+    '''
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        factor = self.config.initializer_factor
+        if isinstance(module, MPLUGDocOwlVisionEmbeddings):
+            factor = self.config.initializer_factor
+            nn.init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
+            nn.init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
+            #nn.init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
+        elif isinstance(module, MPLUGDocOwlAttention):
+            factor = self.config.initializer_factor
+            in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
+            out_proj_std = (module.embed_dim**-0.5) * factor
+            nn.init.normal_(module.q_v_k_proj.weight, std=in_proj_std)
+            #nn.init.normal_(module.k_proj.weight, std=in_proj_std)
+            #nn.init.normal_(module.v_proj.weight, std=in_proj_std)
+            nn.init.normal_(module.out_proj.weight, std=out_proj_std)
+        elif isinstance(module, MPLUGDocOwlMLP):
+            factor = self.config.initializer_factor
+            in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
+            fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
+            nn.init.normal_(module.fc1.weight, std=fc_std)
+            nn.init.normal_(module.fc2.weight, std=in_proj_std)
+        if isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+        if isinstance(module, nn.Linear) and module.bias is not None:
+            module.bias.data.zero_()
+    '''
+class MPLUGDocOwlAttention(MPLUGDocOwlPreTrainedModel):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config):
-        super().__init__()
+        super().__init__(config)
         self.config = config
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
@@ -193,8 +232,8 @@ class MPLUGDocOwlAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
-        causal_attention_mask: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        #causal_attention_mask: Optional[torch.Tensor] = None,
+        #attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
@@ -303,7 +342,7 @@ class MPLUGDocOwlAttention(nn.Module):
         output = self.out_proj(context_layer)
 
         outputs = (output, attention_probs) if output_attentions else (output, None)
-
+   
         return outputs
 
 class MPLUGDocOwlMLP(nn.Module):
@@ -334,7 +373,7 @@ class MPLUGDocOwlEncoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        causal_attention_mask: torch.Tensor,
+        #causal_attention_mask: torch.Tensor,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.FloatTensor]:
         """
@@ -352,16 +391,16 @@ class MPLUGDocOwlEncoderLayer(nn.Module):
         hidden_states = self.layer_norm1(hidden_states)
         hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            causal_attention_mask=causal_attention_mask,
+            head_mask=attention_mask,
+            #causal_attention_mask=causal_attention_mask,
             output_attentions=output_attentions,
         )
-        hidden_states = residual + hidden_states
+        hidden_states = hidden_states + residual 
 
         residual = hidden_states
         hidden_states = self.layer_norm2(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
+        hidden_states = hidden_states + residual 
 
         outputs = (hidden_states,)
 
@@ -369,46 +408,6 @@ class MPLUGDocOwlEncoderLayer(nn.Module):
             outputs += (attn_weights,)
 
         return outputs
-
-
-class MPLUGDocOwlPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = MPLUGDocOwlConfig
-    base_model_prefix = "MPLUGDocOwl"
-    supports_gradient_checkpointing = True
-
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        factor = self.config.initializer_factor
-        if isinstance(module, MPLUGDocOwlVisionEmbeddings):
-            factor = self.config.initializer_factor
-            nn.init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
-            nn.init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
-            #nn.init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
-        elif isinstance(module, MPLUGDocOwlAttention):
-            factor = self.config.initializer_factor
-            in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
-            out_proj_std = (module.embed_dim**-0.5) * factor
-            nn.init.normal_(module.q_v_k_proj.weight, std=in_proj_std)
-            #nn.init.normal_(module.k_proj.weight, std=in_proj_std)
-            #nn.init.normal_(module.v_proj.weight, std=in_proj_std)
-            nn.init.normal_(module.out_proj.weight, std=out_proj_std)
-        elif isinstance(module, MPLUGDocOwlMLP):
-            factor = self.config.initializer_factor
-            in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
-            fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
-            nn.init.normal_(module.fc1.weight, std=fc_std)
-            nn.init.normal_(module.fc2.weight, std=in_proj_std)
-        if isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        if isinstance(module, nn.Linear) and module.bias is not None:
-            module.bias.data.zero_()
-
 
 MPLUGDocOwl_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
@@ -490,7 +489,7 @@ class MPLUGDocOwlEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layers = nn.ModuleList([MPLUGDocOwlEncoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
+        self.gradient_checkpointing = True
 
     def forward(
         self,
@@ -543,6 +542,7 @@ class MPLUGDocOwlEncoder(nn.Module):
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
+            '''
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
                     encoder_layer.__call__,
@@ -550,6 +550,20 @@ class MPLUGDocOwlEncoder(nn.Module):
                     attention_mask,
                     causal_attention_mask,
                     output_attentions,
+                )
+            '''
+            if self.gradient_checkpointing and self.training:
+
+                def create_custom_forward(module):
+                    def custom_forward(*inputs):
+                        return module(*inputs, output_attentions)
+
+                    return custom_forward
+
+                layer_outputs = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(encoder_layer),
+                    hidden_states,
+                    attention_mask,
                 )
             else:
                 layer_outputs = encoder_layer(
@@ -560,7 +574,8 @@ class MPLUGDocOwlEncoder(nn.Module):
                 )
 
             hidden_states = layer_outputs[0]
-
+            if idx == 23:
+                breakpoint()
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
 
@@ -583,7 +598,7 @@ class MPLUGDocOwlVisionTransformer(nn.Module):
         #self.pre_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self.encoder = MPLUGDocOwlEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-
+        #self.post_init()
     @add_start_docstrings_to_model_forward(MPLUGDocOwl_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=MPLUGDocOwlConfig)
     def forward(
@@ -617,6 +632,8 @@ class MPLUGDocOwlVisionTransformer(nn.Module):
         )
 
         last_hidden_state = encoder_outputs[0]
+        #FIXME added this
+        last_hidden_state = self.post_layernorm(last_hidden_state)
         pooled_output = last_hidden_state[:, 0, :]
         pooled_output = self.post_layernorm(pooled_output)
 
@@ -635,7 +652,7 @@ class MPLUGDocOwlVisionTransformer(nn.Module):
     """The vision model from MPLUGDocOwl without any head or projection on top.""",
     MPLUGDocOwl_START_DOCSTRING,
 )
-class MPLUGDocOwlVisionModel(MPLUGDocOwlPreTrainedModel):
+class MPLUGDocOwlVisionModel(PreTrainedModel):
     config_class = MPLUGDocOwlConfig
     main_input_name = "pixel_values"
     _no_split_modules = ["MPLUGDocOwlEncoderLayer"]
@@ -647,7 +664,7 @@ class MPLUGDocOwlVisionModel(MPLUGDocOwlPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
-        return self.vision_model.embeddings.patch_embedding
+        return self.vision_model.embeddings#.patch_embedding
 
     @add_start_docstrings_to_model_forward(MPLUGDocOwl_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=MPLUGDocOwlConfig)

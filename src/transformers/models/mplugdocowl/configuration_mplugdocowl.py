@@ -122,14 +122,14 @@ class MPLUGDocOwlConfig(PretrainedConfig):
         ignore_index=-100,
         image_token_index=32000,
         projector_hidden_act="gelu",
-        vision_feature_select_strategy="default",
+        vision_feature_select_strategy="full",
         vision_feature_layer=-2,
         **kwargs,
     ):
         self.ignore_index = ignore_index
         self.image_token_index = image_token_index
         self.projector_hidden_act = projector_hidden_act
-
+        
         if vision_feature_select_strategy not in ["default", "full"]:
             raise ValueError(
                 "vision_feature_select_strategy should be one of 'default', 'full'."
@@ -160,6 +160,11 @@ class MPLUGDocOwlConfig(PretrainedConfig):
                 num_attention_heads=16,
                 vocab_size=32000,
                 projection_dim=768,
+                layer_norm_eps=1e-6,
+                attention_dropout=0.0,
+                initializer_range=0.02,
+                initializer_factor=1.0,
+                hidden_act="quick_gelu"
             )
 
         self.vision_config = vision_config

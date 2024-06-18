@@ -96,24 +96,24 @@ def convert_mplugdocowl_llama_to_hf(text_model_id, vision_model_id, output_hub_p
     processor = MPLUGDocOwlProcessor(tokenizer=tokenizer, image_processor=image_processor)
     config = MPLUGDocOwlConfig(text_config=text_config)
     config.pad_token_id = 32001
-
-    with torch.device("cuda:3"):
+    breakpoint()
+    with torch.device("cuda:0"):
         model = MPLUGDocOwlForConditionalGeneration(config)
-
+    breakpoint()
     # Pad to 64 for performance reasons
     pad_shape = 64
 
     state_dict_path = hf_hub_download(old_state_dict_id, "pytorch_model.bin")
 
     state_dict = torch.load(state_dict_path, map_location="cpu")
-    #breakpoint()
+    #state_dict = {k:v.to(torch.float16) for k, v in state_dict.items()}
     state_dict = convert_state_dict_to_hf(state_dict)
-    #breakpoint()
+
     state_dict['multi_modal_projector.reducer_before.0.weight'] = state_dict['multi_modal_projector.reducer_before.0.weight'].contiguous()
     state_dict['multi_modal_projector.reducer.weight'] = state_dict['multi_modal_projector.reducer.weight'].contiguous()
     #breakpoint()
     model.load_state_dict(state_dict, strict=True, assign=True)
-    
+   
     pre_expansion_embeddings = model.language_model.model.embed_tokens.weight.data
     mu = torch.mean(pre_expansion_embeddings, dim=0).float()
     n = pre_expansion_embeddings.size()[0]
@@ -131,19 +131,25 @@ def convert_mplugdocowl_llama_to_hf(text_model_id, vision_model_id, output_hub_p
         tuple((dist.sample() for _ in range(model.language_model.lm_head.weight.data[32000:].shape[0]))),
         dim=0,
     )
- 
+    breakpoint()
+    model.to(torch.float16)
     from PIL import Image
     image = Image.open("/raid/dana/test_image.tif")
     query = "<image>Recognize text in the image."
     output = processor(images=image, text=query)
     breakpoint()
-    device = torch.device("cuda:3")
+    device = torch.device("cuda:0")
     output.to(device)
     model.to(device)
-    try:
-        model.forward(input_ids=output['input_ids'], pixel_values = output['pixel_values'],attention_mask=output['attention_mask'], patch_positions=output['patch_positions'])
-    except TypeError as e:
-        raise(e)
+    torch.set_default_dtype(torch.float16)
+    outputs = model.forward(input_ids=output['input_ids'], pixel_values = output['pixel_values'],attention_mask=output['attention_mask'], patch_positions=output['patch_positions'])
+    breakpoint()
+    #try:
+    #    output_s = model.generate(output['input_ids'], output['pixel_values'], temperature=1.0,max_new_tokens=512,use_cache=True,)
+    #except UnboundLocalError as e:
+    #    raise(e)
+    #breakpoint
+
     #image_outputs = model.vision_tower(output['pixel_values'], output_hidden_states=True)
     
     breakpoint()
@@ -176,3 +182,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
+output_s = model.generate(output['input_ids'],output['pixel_values'], output['patch_positions'],do_sample=False,temperature=1.0,max_new_tokens=512,use_cache=True,)

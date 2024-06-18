@@ -143,7 +143,9 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
         anchor_max = pixel_values['anchor_max']
         #breakpoint()
         text_list = text.split(media_token)
-        text = text_list[0]
+       
+        text = 'USER: '
+        #text = text_list[0]
         image_token_ptr = 0
         for next_text in text_list[1:]:
             if add_textual_crop_indicator:
@@ -163,6 +165,7 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
             text += next_text
             image_token_ptr += 1
         print(text)
+        text = text + " ASSISTANT:"
         #breakpoint()
         #input_ids = tokenizer_image_token(text, self.tokenizer, IMAGE_TOKEN_INDEX, return_tensors=return_tensors).unsqueeze(0)
         text_inputs = self.tokenizer(
