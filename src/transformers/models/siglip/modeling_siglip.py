@@ -17,7 +17,7 @@
 import math
 import warnings
 from dataclasses import dataclass
-from typing import Any, Optional, Tuple, Union
+from typing import Any, Optional, Tuple, Union, Dict
 
 import numpy as np
 import torch
@@ -660,8 +660,6 @@ class SiglipEncoderLayer(nn.Module):
     def __init__(self, config: SiglipConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
-        # self.self_attn = SiglipAttention(config)
-        config._attn_implementation = "flash_attention_2"
         self.self_attn = SIGLIP_ATTENTION_CLASSES[config._attn_implementation](config=config)
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = SiglipMLP(config)
@@ -770,6 +768,31 @@ class SiglipPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+
+    @classmethod
+    def _autoset_attn_implementation(
+        cls,
+        config,
+        use_flash_attention_2: bool = False,
+        torch_dtype: Optional[torch.dtype] = None,
+        device_map: Optional[Union[str, Dict[str, int]]] = None,
+        check_device_map: bool = True,
+        **kwargs,
+    ):
+        """
+        Overrides the method in `PreTrainedModel` to update the vision config with the correct attention implementation
+        """
+        config = super()._autoset_attn_implementation(
+            config=config,
+            use_flash_attention_2=use_flash_attention_2,
+            torch_dtype=torch_dtype,
+            device_map=device_map,
+            check_device_map=check_device_map,
+            **kwargs,
+        )
+        config.vision_config._attn_implementation = config._attn_implementation
+        config.text_config._attn_implementation = config._attn_implementation
+        return config
 
 
 SIGLIP_START_DOCSTRING = r"""
