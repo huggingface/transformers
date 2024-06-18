@@ -1590,7 +1590,7 @@ class WhisperModel(WhisperPreTrainedModel):
 
          >>> model = WhisperModel.from_pretrained("openai/whisper-base")
          >>> feature_extractor = AutoFeatureExtractor.from_pretrained("openai/whisper-base")
-         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True)
          >>> inputs = feature_extractor(ds[0]["audio"]["array"], return_tensors="pt")
          >>> input_features = inputs.input_features
          >>> decoder_input_ids = torch.tensor([[1, 1]]) * model.config.decoder_start_token_id
@@ -1731,7 +1731,7 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
         >>> processor = AutoProcessor.from_pretrained("openai/whisper-tiny.en")
         >>> model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
 
-        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True)
 
         >>> inputs = processor(ds[0]["audio"]["array"], return_tensors="pt")
         >>> input_features = inputs.input_features
@@ -1983,7 +1983,7 @@ class WhisperForCausalLM(WhisperPreTrainedModel):
 
         >>> assistant_model = WhisperForCausalLM.from_pretrained("distil-whisper/distil-large-v2")
 
-        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True)
         >>> sample = ds[0]["audio"]
         >>> input_features = processor(
         ...     sample["array"], sampling_rate=sample["sampling_rate"], return_tensors="pt"
