@@ -486,11 +486,13 @@ class DacEncoder(nn.Module):
         ]
 
         # Wrap black into nn.Sequential
-        self.block = nn.Sequential(self.block)
+        self.block = nn.ModuleList(self.block)
         self.enc_dim = d_model
 
     def forward(self, x):
-        return self.block(x)
+        for module in self.block: 
+            x = module(x)
+        return x
 
 
 class DacPreTrainedModel(PreTrainedModel):
@@ -635,3 +637,10 @@ class DacModel(DacPreTrainedModel):
 
         return DacOutput(audio, **encoder_output)
     
+
+
+if __name__ == '__main__': 
+
+    model = DacModel.from_pretrained('kamilakesbi/dac_16khz')
+    input_ids = [0, 4, 4, 3, 2, 4, 1, 7, 19]
+    output = model(input_ids)

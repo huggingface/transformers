@@ -38,28 +38,28 @@ def match_pattern(string, pattern ):
 
     return fnmatch.fnmatch(string, pattern) and string_block_count == pattern_block_count
 
-MAPPING_ENCODER = {
-    'encoder.block.*.block.*.block.*': ['encoder.block', '.block.', '.block.'], 
-    'encoder.block.*.block.*': ['encoder.block', '.block.'], 
-    'encoder.block.*': ['encoder.block.'], 
-}
+# MAPPING_ENCODER = {
+#     'encoder.block.*.block.*.block.*': ['encoder.block', '.block.', '.block.'], 
+#     'encoder.block.*.block.*': ['encoder.block', '.block.'], 
+#     'encoder.block.*': ['encoder.block.'], 
+# }
 
-MAPPING_QUANTIZER = {
-    'quantizer.quantizers.': [], 
-}
+# MAPPING_QUANTIZER = {
+#     'quantizer.quantizers.': [], 
+# }
 
-MAPPING_DECODER = {
-    'decoder.model.*': ['encoder.block.'], 
-    'decoder.model.*.block.*': ['encoder.block', '.block.'], 
-    'decoder.model.*.block.*.block.*': ['encoder.block', '.block.', '.block.'], 
-}
+# MAPPING_DECODER = {
+#     'decoder.model.*': ['encoder.block.'], 
+#     'decoder.model.*.block.*': ['encoder.block', '.block.'], 
+#     'decoder.model.*.block.*.block.*': ['encoder.block', '.block.', '.block.'], 
+# }
 
 
-MAPPING_16K = {
-    **MAPPING_ENCODER,
-    **MAPPING_QUANTIZER,
-    **MAPPING_DECODER,
-}
+# MAPPING = {
+#     **MAPPING_ENCODER,
+#     **MAPPING_QUANTIZER,
+#     **MAPPING_DECODER,
+# }
 
 TOP_LEVEL_KEYS = []
 IGNORE_KEYS = []
@@ -110,8 +110,8 @@ def should_ignore(name, ignore_keys):
 def recursively_load_weights(orig_dict, hf_model, model_name):
     unused_weights = []
 
-    if model_name == "dac_16khz":
-        MAPPING = MAPPING_16K
+    if model_name in ["dac_16khz", "dac_24khz","dac_44khz"] :
+        print('supported model')
     else:
         raise ValueError(f"Unsupported model: {model_name}")
 
@@ -132,12 +132,6 @@ def recursively_load_weights(orig_dict, hf_model, model_name):
         elif "weight" in name:
             weight_type = "weight"
         set_recursively(hf_model, mapped_key, value, name, weight_type)
-        
-        # if not is_used:
-        #     last_point = name.rfind('.')
-        #     name = name[:last_point]
-        #     if name not in unused_weights: 
-        #         unused_weights.append(name)
 
     logger.warning(f"Unused weights: {unused_weights}")
 
@@ -150,43 +144,57 @@ def convert_checkpoint(
     pytorch_dump_folder_path,
     repo_id=None,
 ):
-
-    if model_name == "dac_16khz": 
-        location = "/home/kamil/.cache/descript/dac/weights_16khz_8kbps_0.0.5.pth"
         
-        model_dict = torch.load(checkpoint_path, "cpu")
+        
+    model_dict = torch.load(checkpoint_path, "cpu")
 
-        config = DacConfig()
+    config = DacConfig()
 
-        metadata = model_dict['metadata']['kwargs']
-        config.encoder_dim = metadata['encoder_dim']
-        config.encoder_rates = metadata['encoder_rates']
-        config.codebook_size = metadata['codebook_size']
-        config.n_codebooks = metadata['n_codebooks']
-        config.codebook_dim = metadata['codebook_dim']
-        config.decoder_dim = metadata['decoder_dim']
-        config.decoder_rates = metadata['decoder_rates']
-        config.quantizer_dropout = metadata['quantizer_dropout']
-        config.sample_rate = metadata['sample_rate']
+    metadata = model_dict['metadata']['kwargs']
+    config.encoder_dim = metadata['encoder_dim']
+    config.encoder_rates = metadata['encoder_rates']
+    config.codebook_size = metadata['codebook_size']
+    config.n_codebooks = metadata['n_codebooks']
+    config.codebook_dim = metadata['codebook_dim']
+    config.decoder_dim = metadata['decoder_dim']
+    config.decoder_rates = metadata['decoder_rates']
+    config.quantizer_dropout = metadata['quantizer_dropout']
+    config.sample_rate = metadata['sample_rate']
 
-        model = DacModel(config)
+    model = DacModel(config)
 
-        original_checkpoint = model_dict['state_dict']
+    original_checkpoint = model_dict['state_dict']
 
-        recursively_load_weights(original_checkpoint, model, model_name)
-        model.save_pretrained(pytorch_dump_folder_path)
+    recursively_load_weights(original_checkpoint, model, model_name)
+    model.save_pretrained(pytorch_dump_folder_path)
 
-        if repo_id:
-            print("Pushing to the hub...")
-            # feature_extractor.push_to_hub(repo_id)
-            model.push_to_hub(repo_id)
+    if repo_id:
+        print("Pushing to the hub...")
+        # feature_extractor.push_to_hub(repo_id)
+        model.push_to_hub(repo_id)
 
 
 if __name__ == "__main__":
 
-    pytorch_dump_folder_path = '/home/kamil/.cache/transformers_dac'
-    model_name = "dac_16khz"
-    checkpoint_path = "/home/kamil/.cache/descript/dac/weights_16khz_8kbps_0.0.5.pth"
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--model",
+        default="dac_16khz",
+        type=str,
+        help="The model to convert. Should be one of 'encodec_24khz', 'encodec_32khz', 'encodec_48khz'.",
+    )
 
-    convert_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_path, "kamilakesbi/dac_test")
+    args = parser.parse_args()
+
+    args.model="dac_44khz"
+
+    if args.model == "dac_16khz": 
+        checkpoint_path = "/home/kamil/.cache/descript/dac/weights_16khz_8kbps_0.0.5.pth"
+    if args.model == "dac_24khz": 
+        checkpoint_path = "/home/kamil/.cache/descript/dac/weights_24khz_8kbps_0.0.4.pth"
+    if args.model == "dac_44khz": 
+        checkpoint_path = "/home/kamil/.cache/descript/dac/weights_44khz_8kbps_0.0.1.pth"
+
+    pytorch_dump_folder_path = '/home/kamil/.cache/transformers_dac'
+    convert_checkpoint(args.model, checkpoint_path, pytorch_dump_folder_path, "kamilakesbi/" + str(args.model))
 
