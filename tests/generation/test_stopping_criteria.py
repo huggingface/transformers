@@ -222,9 +222,9 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         scores = None
         criteria = StopStringCriteria(tokenizer=tokenizer, stop_strings=stop_strings)
         for input_ids in true_input_ids["input_ids"]:
-            self.assertTrue(criteria(input_ids, scores))
+            self.assertTrue(criteria(input_ids.unsqueeze(0), scores))
         for input_ids in false_input_ids["input_ids"]:
-            self.assertFalse(criteria(input_ids, scores))
+            self.assertFalse(criteria(input_ids.unsqueeze(0), scores))
 
     def test_criterias_per_row(self):
         text = "They completed the challenging puzzle, revealing the hidden image at the end"
