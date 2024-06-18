@@ -1108,20 +1108,20 @@ class ChameleonVQModel(nn.Module):
         super().__init__()
 
         self.config = config
-        self.image_key = config.image_key
-        self.encoder = ChameleonVQModelEncoder(**config.ddconfig)
+        self.image_key = config.get("image_key", "image")
+        self.encoder = ChameleonVQModelEncoder(**config["ddconfig"])
         self.quantize = ChameleonVQModelVectorQuantizer(
-            config.n_embed,
-            config.embed_dim,
+            config["n_embed"],
+            config["embed_dim"],
             beta=0.25,
-            remap=config.remap,
-            sane_index_shape=config.sane_index_shape,
+            remap=config.get("remap"),
+            sane_index_shape=config.get("sane_index_shape", False),
         )
-        self.quant_conv = torch.nn.Conv2d(config.ddconfig["z_channels"], config.embed_dim, 1)
-        self.post_quant_conv = torch.nn.Conv2d(config.embed_dim, config.ddconfig["z_channels"], 1)
-        if config.colorize_nlabels is not None:
-            assert isinstance(config.colorize_nlabels, int)
-            self.register_buffer("colorize", torch.randn(3, config.colorize_nlabels, 1, 1))
+        self.quant_conv = torch.nn.Conv2d(config["ddconfig"]["z_channels"], config["embed_dim"], 1)
+        self.post_quant_conv = torch.nn.Conv2d(config["embed_dim"], config["ddconfig"]["z_channels"], 1)
+        if config.get("colorize_nlabels") is not None:
+            assert isinstance(config.get("colorize_nlabels"), int)
+            self.register_buffer("colorize", torch.randn(3, config.get("colorize_nlabels"), 1, 1))
 
         self.eval()  # Chameleon's VQ model is frozen
 

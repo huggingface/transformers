@@ -19,6 +19,7 @@ import shutil
 import warnings
 
 import torch
+import yaml
 
 from transformers import ChameleonConfig, ChameleonForCausalLM
 
@@ -76,17 +77,17 @@ def write_json(text, path):
 
 
 def write_model(model_path, input_base_path, model_size, safe_serialization=True, chameleon_version=1):
-    # for backward compatibility, before you needed the repo to be called `my_repo/model_size`
-    if not os.path.isfile(os.path.join(input_base_path, "params.json")):
-        input_base_path = os.path.join(input_base_path, model_size)
-
     os.makedirs(model_path, exist_ok=True)
     tmp_model_path = os.path.join(model_path, "tmp")
     os.makedirs(tmp_model_path, exist_ok=True)
 
-    params = read_json(os.path.join(input_base_path, "params.json"))
-    if os.path.isfile(os.path.join(input_base_path, "consolidate_params.json")):
-        params = {**params, **read_json(os.path.join(input_base_path, "consolidate_params.json"))}
+    input_model_path = os.path.join(input_base_path, "models", model_size.lower())
+    params_path = os.path.join(input_model_path, "params.json")
+    consolidate_params_path = os.path.join(input_model_path, "consolidate_params.json")
+
+    params = read_json(params_path)
+    if os.path.isfile(consolidate_params_path):
+        params = {**params, **read_json(consolidate_params_path)}
     num_shards = NUM_SHARDS[model_size]
     params = params.get("model", params)
     n_layers = params["n_layers"]
@@ -119,14 +120,14 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
         num_local_key_value_heads = n_heads_per_shard
         key_value_dim = dim
 
-    print(f"Fetching all parameters from the checkpoint at {input_base_path}.")
+    print(f"Fetching all parameters from the checkpoint at {input_model_path}.")
     # Load weights
     if num_shards == 1:
         # Not sharded
         # (The sharded implementation would also work, but this is simpler.)
         loaded = None
         for possible_name in ["consolidated.pth", "consolidated.00.pth"]:
-            possible_path = os.path.join(input_base_path, possible_name)
+            possible_path = os.path.join(input_model_path, possible_name)
             if os.path.exists(possible_path):
                 loaded = torch.load(possible_path, map_location="cpu")
                 break
@@ -134,7 +135,7 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
     else:
         # Sharded
         loaded = [
-            torch.load(os.path.join(input_base_path, f"consolidated.{i:02d}.pth"), map_location="cpu")
+            torch.load(os.path.join(input_model_path, f"consolidated.{i:02d}.pth"), map_location="cpu")
             for i in range(num_shards)
         ]
     param_count = 0
@@ -264,6 +265,13 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
     write_json(index_dict, os.path.join(tmp_model_path, "pytorch_model.bin.index.json"))
     ffn_dim_multiplier = params["ffn_dim_multiplier"] if "ffn_dim_multiplier" in params else 1
     multiple_of = params["multiple_of"] if "multiple_of" in params else 256
+
+    with open(os.path.join(input_base_path, "tokenizer/text_tokenizer.json")) as tokenizer_file:
+        vocabulary_map = json.load(tokenizer_file)["model"]["vocab"]
+
+    with open(os.path.join(input_base_path, "tokenizer/vqgan.yaml")) as vqgan_cfg_file:
+        vq_config = yaml.safe_load(vqgan_cfg_file)["model"]["params"]
+
     config = ChameleonConfig(
         hidden_size=dim,
         intermediate_size=compute_intermediate_size(dim, ffn_dim_multiplier, multiple_of),
@@ -276,6 +284,8 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
         max_position_embeddings=max_position_embeddings,
         qk_layernorm=qk_layernorm,
         swin_norm=swin_norm,
+        vq_config=vq_config,
+        vocabulary_map=vocabulary_map,
     )
     config.save_pretrained(tmp_model_path)
 
