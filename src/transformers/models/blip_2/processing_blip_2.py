@@ -120,12 +120,12 @@ class Blip2Processor(ProcessorMixin):
         # add pixel_values
         encoding_image_processor = self.image_processor(images, return_tensors=return_tensors)
 
-        if isinstance(text, str):
-            text = [text]
-        elif not isinstance(text, list) and not isinstance(text[0], str):
-            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
-
         if text is not None:
+            if isinstance(text, str):
+                text = [text]
+            elif not isinstance(text, list) and not isinstance(text[0], str):
+                raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+
             text_encoding = {}
             _text_encoding = self.tokenizer(
                 text=text,
