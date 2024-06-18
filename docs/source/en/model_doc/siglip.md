@@ -84,7 +84,8 @@ If you want to do the pre- and postprocessing yourself, here's how to do that:
 >>> image = Image.open(requests.get(url, stream=True).raw)
 
 >>> candidate_labels = ["2 cats", "2 dogs"]
->>> candidate_labels = [f'This is a photo of {label}.' for label in candidate_labels]  # follows the pipeline prompt template to get same results
+# follows the pipeline prompt template to get same results
+>>> candidate_labels = [f'This is a photo of {label}.' for label in candidate_labels]
 >>> # important: we pass `padding=max_length` since the model was trained with this
 >>> inputs = processor(text=texts, images=image, padding="max_length", return_tensors="pt")
 
