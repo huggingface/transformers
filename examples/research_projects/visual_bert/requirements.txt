@@ -21,7 +21,7 @@ entrypoints==0.3
 filelock==3.0.12
 future==0.18.3
 html5lib==1.0.1
-idna==2.8
+idna==3.7
 ipaddr==2.2.0
 ipykernel==5.3.4
 ipython

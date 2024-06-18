@@ -1636,8 +1636,6 @@ class GenerationMixin:
             else:
                 synced_gpus = False
 
-        tokenizer = kwargs.pop("tokenizer", None)
-
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
 

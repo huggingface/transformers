@@ -543,7 +543,7 @@ class GPTQConfig(QuantizationConfigMixin):
                     using the [`~PreTrainedTokenizer.save_pretrained`] method, e.g., `./my_model_directory/`.
         dataset (`Union[List[str]]`, *optional*):
             The dataset used for quantization. You can provide your own dataset in a list of string or just use the
-            original datasets used in GPTQ paper ['wikitext2','c4','c4-new','ptb','ptb-new']
+            original datasets used in GPTQ paper ['wikitext2','c4','c4-new']
         group_size (`int`, *optional*, defaults to 128):
             The group size to use for quantization. Recommended value is 128 and -1 uses per-column quantization.
         damp_percent (`float`, *optional*, defaults to 0.1):
@@ -652,15 +652,20 @@ class GPTQConfig(QuantizationConfigMixin):
             raise ValueError("damp_percent must between 0 and 1.")
         if self.dataset is not None:
             if isinstance(self.dataset, str):
-                if self.dataset not in ["wikitext2", "c4", "c4-new", "ptb", "ptb-new"]:
+                if self.dataset in ["ptb", "ptb-new"]:
+                    raise ValueError(
+                        f"""{self.dataset} dataset was deprecated. You can only choose between
+                        ['wikitext2','c4','c4-new']"""
+                    )
+                if self.dataset not in ["wikitext2", "c4", "c4-new"]:
                     raise ValueError(
                         f"""You have entered a string value for dataset. You can only choose between
-                        ['wikitext2','c4','c4-new','ptb','ptb-new'], but we found {self.dataset}"""
+                        ['wikitext2','c4','c4-new'], but we found {self.dataset}"""
                     )
             elif not isinstance(self.dataset, list):
                 raise ValueError(
                     f"""dataset needs to be either a list of string or a value in
-                    ['wikitext2','c4','c4-new','ptb','ptb-new'], but we found {self.dataset}"""
+                    ['wikitext2','c4','c4-new'], but we found {self.dataset}"""
                 )
 
         if self.disable_exllama is None and self.use_exllama is None:
