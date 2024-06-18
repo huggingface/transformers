@@ -68,6 +68,16 @@ class Arguments:
             "help": "Name of a dataset from the hub (could be your own, possibly private dataset hosted on the hub)."
         },
     )
+    trust_remote_code: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Whether to trust the execution of code from datasets/models defined on the Hub."
+                " This option should only be set to `True` for repositories you trust and in which you have read the"
+                " code, as it will execute code present on the Hub on your local machine."
+            )
+        },
+    )
     image_height: Optional[int] = field(default=512, metadata={"help": "Image height after resizing."})
     image_width: Optional[int] = field(default=512, metadata={"help": "Image width after resizing."})
     token: str = field(
@@ -364,7 +374,7 @@ def main():
     # Load dataset, prepare splits
     # ------------------------------------------------------------------------------------------------
 
-    dataset = load_dataset(args.dataset_name)
+    dataset = load_dataset(args.dataset_name, trust_remote_code=args.trust_remote_code)
 
     # We need to specify the label2id mapping for the model
     # it is a mapping from semantic class name to class index.

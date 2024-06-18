@@ -348,8 +348,11 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
             final_labels = torch.where(input_ids != self.pad_token_id, labels, final_labels)
         else:
             causal_mask = attention_mask.unsqueeze(1).unsqueeze(2) * attention_mask.unsqueeze(1).unsqueeze(-1)
+            # invert causal mask
+            causal_mask = torch.where(causal_mask == 0, min_dtype, 0)
             causal_mask = causal_mask.to(dtype).expand(-1, self.config.text_config.num_key_value_heads, -1, -1)
             final_labels = None
+
         return final_embedding, causal_mask, final_labels, position_ids
 
     @add_start_docstrings_to_model_forward(PALIGEMMA_INPUTS_DOCSTRING)
