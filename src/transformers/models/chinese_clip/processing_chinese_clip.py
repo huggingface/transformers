@@ -20,10 +20,7 @@ import warnings
 from typing import List, Union
 
 from ...image_utils import ImageInput
-from ...processing_utils import (
-    ProcessingKwargs,
-    ProcessorMixin,
-)
+from ...processing_utils import ProcessingKwargs, ProcessorMixin
 
 
 try:
