@@ -344,7 +344,7 @@ class FeaturesManager:
             onnx_config_cls="models.ibert.IBertOnnxConfig",
         ),
         "imagegpt": supported_features_mapping(
-            "default", "image-classification", onnx_config_cls="models.imagegpt.ImageGPTOnnxConfig"
+            "default", "image-classification", onnx_config_cls="models.deprecated.imagegpt.ImageGPTOnnxConfig"
         ),
         "layoutlm": supported_features_mapping(
             "default",
@@ -448,7 +448,7 @@ class FeaturesManager:
             onnx_config_cls="models.perceiver.PerceiverOnnxConfig",
         ),
         "poolformer": supported_features_mapping(
-            "default", "image-classification", onnx_config_cls="models.poolformer.PoolFormerOnnxConfig"
+            "default", "image-classification", onnx_config_cls="models.deprecated.poolformer.PoolFormerOnnxConfig"
         ),
         "rembert": supported_features_mapping(
             "default",
@@ -458,7 +458,7 @@ class FeaturesManager:
             "multiple-choice",
             "token-classification",
             "question-answering",
-            onnx_config_cls="models.rembert.RemBertOnnxConfig",
+            onnx_config_cls="models.deprecated.rembert.RemBertOnnxConfig",
         ),
         "resnet": supported_features_mapping(
             "default",
