@@ -240,6 +240,7 @@ def recursively_load_weights(orig_dict, hf_model, model_name):
                 elif "weight_v" in name:
                     weight_type = "weight_v"
                 elif "weight_ih_l0" in name:
+                    print('ok')
                     weight_type = "weight_ih_l0"
                 elif "weight_hh_l0" in name:
                     weight_type = "weight_hh_l0"
