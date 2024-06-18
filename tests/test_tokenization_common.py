@@ -26,7 +26,6 @@ import unittest
 from collections import OrderedDict
 from itertools import takewhile
 from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Union
-from unittest import mock
 from unittest.mock import patch
 
 from parameterized import parameterized
@@ -60,7 +59,6 @@ from transformers.testing_utils import (
     slow,
 )
 from transformers.tokenization_utils import AddedToken
-from transformers.utils import is_sentencepiece_available
 
 if is_torch_available():
     import torch.nn as nn

@@ -952,7 +952,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
         elif self._tokenizer.pre_tokenizer is None:
             update_pre_tokenizer = self._update_normalizer()
-            # If the pre-tokenizer is not set, set it to Metaspace with the desired prepend_scheme (check llama2-7b)
+            # If the pre-tokenizer is not set, set it to Metaspace with the desired prepend_scheme
             if update_pre_tokenizer is not False:
                 self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(
                     replacement="▁", prepend_scheme=prepend_scheme, split=False
