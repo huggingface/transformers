@@ -202,7 +202,9 @@ class PTtoTFCommand(BaseTransformersCLICommand):
         """
 
         def _get_audio_input():
-            ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+            ds = load_dataset(
+                "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
+            )
             speech_samples = ds.sort("id").select(range(2))[:2]["audio"]
             raw_samples = [x["array"] for x in speech_samples]
             return raw_samples
@@ -234,7 +236,7 @@ class PTtoTFCommand(BaseTransformersCLICommand):
                 }
             )
         if "pixel_values" in model_forward_signature:
-            sample_images = load_dataset("cifar10", "plain_text", split="test")[:2]["img"]
+            sample_images = load_dataset("uoft-cs/cifar10", "plain_text", split="test")[:2]["img"]  # no-script
             processor_inputs.update({"images": sample_images})
         if "input_features" in model_forward_signature:
             feature_extractor_signature = inspect.signature(processor.feature_extractor).parameters

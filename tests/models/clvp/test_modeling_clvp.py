@@ -371,7 +371,9 @@ class ClvpModelForConditionalGenerationTester:
     def prepare_config_and_inputs(self):
         _, input_ids, attention_mask = self.clvp_encoder_tester.prepare_config_and_inputs()
 
-        ds = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        ds = datasets.load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
+        )
         ds = ds.cast_column("audio", datasets.Audio(sampling_rate=22050))
         _, audio, sr = ds.sort("id").select(range(1))[:1]["audio"][0].values()
 
@@ -553,7 +555,9 @@ class ClvpModelForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase)
 class ClvpIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.text = "This is an example text."
-        ds = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        ds = datasets.load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
+        )
         ds = ds.cast_column("audio", datasets.Audio(sampling_rate=22050))
         _, self.speech_samples, self.sr = ds.sort("id").select(range(1))[:1]["audio"][0].values()
 

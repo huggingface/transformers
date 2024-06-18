@@ -16,7 +16,7 @@
 import unittest
 
 from transformers import CohereTokenizerFast
-from transformers.testing_utils import require_jinja, require_tokenizers
+from transformers.testing_utils import require_jinja, require_tokenizers, require_torch_multi_gpu
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -45,6 +45,11 @@ class CohereTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def get_rust_tokenizer(self, **kwargs):
         kwargs.update(self.special_tokens_map)
         return CohereTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
+
+    # This gives CPU OOM on a single-gpu runner (~60G RAM). On multi-gpu runner, it has ~180G RAM which is enough.
+    @require_torch_multi_gpu
+    def test_torch_encode_plus_sent_to_model(self):
+        super().test_torch_encode_plus_sent_to_model()
 
     @unittest.skip("This needs a slow tokenizer. Cohere does not have one!")
     def test_encode_decode_with_spaces(self):

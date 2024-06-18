@@ -47,6 +47,8 @@ class LlavaProcessor(ProcessorMixin):
             Shoudl be same as in model's config
         image_token (`str`, *optional*, defaults to `"<image>"`):
             Special token used to denote image location.
+        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
+            in a chat into a tokenizable string.
     """
 
     attributes = ["image_processor", "tokenizer"]
@@ -59,12 +61,13 @@ class LlavaProcessor(ProcessorMixin):
         tokenizer=None,
         patch_size=None,
         vision_feature_select_strategy=None,
+        chat_template=None,
         image_token="<image>",  # set the default and let users change if they have peculiar special tokens in rare cases
     ):
         self.patch_size = patch_size
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.image_token = image_token
-        super().__init__(image_processor, tokenizer)
+        super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
         self,

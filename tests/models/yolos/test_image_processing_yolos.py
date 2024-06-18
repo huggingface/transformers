@@ -143,6 +143,7 @@ class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMix
     image_processing_class = YolosImageProcessor if is_vision_available() else None
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = YolosImageProcessingTester(self)
 
     @property
