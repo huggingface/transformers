@@ -686,7 +686,7 @@ def has_file(
         ) from e
     except EntryNotFoundError:
         return False  # File does not exist
-    except requests.HTTPError:
+    except (requests.HTTPError, requests.exceptions.ConnectionError):
         # Any authentication/authorization error will be caught here => default to cache
         return has_file_in_cache
 
