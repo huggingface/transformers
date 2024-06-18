@@ -204,21 +204,25 @@ class BloomAttention(nn.Module):
         self.dense = nn.Linear(self.hidden_size, self.hidden_size)
         self.attention_dropout = nn.Dropout(config.attention_dropout)
 
-    def _split_heads(self, fused_qkv: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def _shape(self, fused_qkv: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
-        Split the last dimension into (num_heads, head_dim) without making any copies, results share same memory
-        storage as `fused_qkv`
+        Split the last dimension into (num_heads, head_dim) and reshapes to (bs, heads, len, dim) shape
+        without making any copies, results share same memory storage as `fused_qkv`
 
         Args:
             fused_qkv (`torch.tensor`, *required*): [batch_size, seq_length, num_heads * 3 * head_dim]
 
         Returns:
-            query: [batch_size, seq_length, num_heads, head_dim] key: [batch_size, seq_length, num_heads, head_dim]
-            value: [batch_size, seq_length, num_heads, head_dim]
+            query: [batch_size, num_heads, seq_length, head_dim]
+            key: [batch_size, num_heads, seq_length, head_dim]
+            value: [batch_size, num_heads, seq_length, head_dim]
         """
         batch_size, seq_length, three_times_hidden_size = fused_qkv.shape
         fused_qkv = fused_qkv.view(batch_size, seq_length, self.num_heads, 3, self.head_dim)
-        return fused_qkv[..., 0, :], fused_qkv[..., 1, :], fused_qkv[..., 2, :]
+        query_layer = fused_qkv[..., 0, :].transpose(1, 2)
+        key_layer = fused_qkv[..., 1, :].transpose(1, 2)
+        value_layer = fused_qkv[..., 2, :].transpose(1, 2)
+        return query_layer, key_layer, value_layer
 
     def _merge_heads(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -256,23 +260,21 @@ class BloomAttention(nn.Module):
         use_cache: bool = False,
         output_attentions: bool = False,
     ):
+        batch_size, q_length, _ = hidden_states.shape
         fused_qkv = self.query_key_value(hidden_states)  # [batch_size, seq_length, 3 x hidden_size]
-
-        # 3 x [batch_size, seq_length, num_heads, head_dim]
-        (query_layer, key_layer, value_layer) = self._split_heads(fused_qkv)
-
-        batch_size, q_length, _, _ = query_layer.shape
-
-        query_layer = query_layer.transpose(1, 2).reshape(batch_size * self.num_heads, q_length, self.head_dim)
-        key_layer = key_layer.transpose(1, 2).reshape(batch_size * self.num_heads, q_length, self.head_dim)
-        value_layer = value_layer.transpose(1, 2).reshape(batch_size * self.num_heads, q_length, self.head_dim)
+        (query_layer, key_layer, value_layer) = self._shape(
+            fused_qkv
+        )  # 3 x [batch_size, num_heads, seq_length, head_dim]
 
         if layer_past is not None:
             key_layer, value_layer = layer_past.update(key_layer, value_layer, self.layer_idx)
 
-        # transpose to get key: [batch_size * self.num_heads, head_dim, kv_length]
-        key_layer = key_layer.transpose(1, 2)
-        _, _, kv_length = key_layer.shape
+        # reshape qkv for further computations
+        query_layer = query_layer.reshape(batch_size * self.num_heads, -1, self.head_dim)
+        key_layer = key_layer.reshape(batch_size * self.num_heads, -1, self.head_dim).transpose(1, 2)
+        value_layer = value_layer.reshape(batch_size * self.num_heads, -1, self.head_dim)
+
+        kv_length = key_layer.shape[-1]
 
         # [batch_size * num_heads, q_length, kv_length]
         # we use `torch.Tensor.baddbmm` instead of `torch.baddbmm` as the latter isn't supported by TorchScript v1.11
@@ -459,65 +461,6 @@ class BloomPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    @staticmethod
-    def _convert_to_standard_cache(
-        past_key_value: Tuple[Tuple[torch.Tensor, torch.Tensor]], batch_size: int
-    ) -> Tuple[Tuple[torch.Tensor, torch.Tensor]]:
-        """
-        Standardizes the format of the cache so as to match most implementations, i.e. to tuple(tuple([batch_size,
-        num_heads, ...]))
-        """
-        use_legacy_cache = not isinstance(past_key_value, Cache)
-        batch_size_times_num_heads, seq_length, head_dim = past_key_value[0][0].shape
-        num_heads = batch_size_times_num_heads // batch_size
-        if use_legacy_cache:
-            past_key_value = tuple(
-                (
-                    layer_past[0].view(batch_size, num_heads, seq_length, head_dim),
-                    layer_past[1].view(batch_size, num_heads, seq_length, head_dim),
-                )
-                for layer_past in past_key_value
-            )
-        else:
-            # in-place in case of DynamicCache, because we don't assume cache will become a new object after `prepare_input_for_generation`
-            for layer_idx in range(len(past_key_value)):
-                past_key_value.key_cache[layer_idx] = past_key_value.key_cache[layer_idx].view(
-                    batch_size, num_heads, seq_length, head_dim
-                )
-                past_key_value.value_cache[layer_idx] = past_key_value.value_cache[layer_idx].view(
-                    batch_size, num_heads, seq_length, head_dim
-                )
-        return past_key_value
-
-    @staticmethod
-    def _convert_to_bloom_cache(
-        past_key_value: Tuple[Tuple[torch.Tensor, torch.Tensor]],
-    ) -> Tuple[Tuple[torch.Tensor, torch.Tensor]]:
-        """
-        Converts the cache to the format expected by Bloom, i.e. to tuple(tuple([batch_size * num_heads, ...]))
-        """
-        use_legacy_cache = not isinstance(past_key_value, Cache)
-        batch_size, num_heads, seq_length, head_dim = past_key_value[0][0].shape
-        batch_size_times_num_heads = batch_size * num_heads
-        if use_legacy_cache:
-            past_key_value = tuple(
-                (
-                    layer_past[0].view(batch_size_times_num_heads, seq_length, head_dim),
-                    layer_past[1].view(batch_size_times_num_heads, seq_length, head_dim),
-                )
-                for layer_past in past_key_value
-            )
-        else:
-            # in-place in case of DynamicCache, because we don't assume cache will become a new object after `prepare_input_for_generation`
-            for layer_idx in range(len(past_key_value)):
-                past_key_value.key_cache[layer_idx] = past_key_value.key_cache[layer_idx].view(
-                    batch_size_times_num_heads, seq_length, head_dim
-                )
-                past_key_value.value_cache[layer_idx] = past_key_value.value_cache[layer_idx].view(
-                    batch_size_times_num_heads, seq_length, head_dim
-                )
-        return past_key_value
-
 
 BLOOM_START_DOCSTRING = r"""
 
@@ -547,14 +490,23 @@ BLOOM_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        past_key_values (`Cache` or `Tuple[Tuple[torch.Tensor]]` of length `config.n_layers`):
-            Contains precomputed hidden-states (key and values in the attention blocks) as computed by the model (see
-            `past_key_values` output below). Can be used to speed up sequential decoding. The `input_ids` which have
-            their past given to this model should not be passed as `input_ids` as they have already been computed.
+        past_key_values (`Cache` or `tuple(tuple(torch.FloatTensor))`, *optional*):
+            Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
+            blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
+            returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
 
-            Each element of `past_key_values` is a tuple (past_key, past_value):
-            - past_key: [batch_size * num_heads, head_dim, kv_length]
-            - past_value: [batch_size * num_heads, kv_length, head_dim]
+            Two formats are allowed:
+            - a [`~cache_utils.Cache`] instance;
+            - Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
+            shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`). This is also known as the legacy
+            cache format.
+
+            The model will output the same cache format that is fed as input. If no `past_key_values` are passed, the
+            legacy cache format will be returned.
+
+            If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that don't
+            have their past key value states given to this model) of shape `(batch_size, 1)` instead of all `input_ids`
+            of shape `(batch_size, sequence_length)`.
         attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -660,14 +612,10 @@ class BloomModel(BloomPreTrainedModel):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
-            batch_size, seq_length = input_ids.shape
-        elif inputs_embeds is not None:
-            batch_size, seq_length, _ = inputs_embeds.shape
-        else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError(
+                "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
+            )
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
@@ -676,22 +624,23 @@ class BloomModel(BloomPreTrainedModel):
                 )
                 use_cache = False
 
+        if inputs_embeds is None:
+            inputs_embeds = self.word_embeddings(input_ids)
+
+        batch_size, seq_length, _ = inputs_embeds.shape
         past_length = 0
         if use_cache:
             use_legacy_cache = not isinstance(past_key_values, Cache)
             if use_legacy_cache:
                 past_key_values = DynamicCache.from_legacy_cache(past_key_values)
             past_length = past_key_values.get_seq_length()
+        seq_length_with_past = seq_length + past_length
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
         # attention_probs has shape batch_size x num_heads x N x N
         # head_mask has shape n_layer x batch x num_heads x N x N
         head_mask = self.get_head_mask(head_mask, self.config.n_layer)
-
-        if inputs_embeds is None:
-            inputs_embeds = self.word_embeddings(input_ids)
-
         hidden_states = self.word_embeddings_layernorm(inputs_embeds)
 
         next_decoder_cache = None
@@ -699,7 +648,6 @@ class BloomModel(BloomPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
 
         # Compute alibi tensor: check build_alibi_tensor documentation
-        seq_length_with_past = seq_length + past_length
         if attention_mask is None:
             attention_mask = torch.ones((batch_size, seq_length_with_past), device=hidden_states.device)
         else:
@@ -825,10 +773,6 @@ class BloomForCausalLM(BloomPreTrainedModel):
                 and cache_length + input_ids.shape[1] > max_cache_length
             ):
                 attention_mask = attention_mask[:, -max_cache_length:]
-
-            # the cache may be in the stardard format (e.g. in contrastive search), convert to bloom's format if needed
-            if past_length != 0 and past_key_values[0][0].shape[0] == input_ids.shape[0]:
-                past_key_values = self._convert_to_bloom_cache(past_key_values)
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_length == 0:
