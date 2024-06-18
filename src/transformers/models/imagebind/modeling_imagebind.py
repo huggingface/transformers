@@ -1229,6 +1229,8 @@ class ImageBindVisionTransformer(nn.Module):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
+        # For video inputs we take multiple clips and average the embeddings
+        # See https://github.com/facebookresearch/ImageBind/blob/main/imagebind/models/imagebind_model.py#L470
         reduce_clips = pixel_values.ndim >= 5
         if reduce_clips:
             batch_size, num_clips = pixel_values.shape[:2]
@@ -1351,6 +1353,8 @@ class ImageBindAudioTransformer(nn.Module):
         if input_features is None:
             raise ValueError("You have to specify input_features")
 
+        # If audio is chunked (i.e. same audio is split into multiple clips), reduce embedding over clips dimension
+        # See https://github.com/facebookresearch/ImageBind/blob/main/imagebind/models/imagebind_model.py#L470
         reduce_clips = input_features.ndim >= 5
         if reduce_clips:
             batch_size, num_clips = input_features.shape[:2]
@@ -1645,6 +1649,8 @@ class ImageBindModel(ImageBindPreTrainedModel):
         pooled_output = audio_outputs[1]  # pooled_output
         audio_features = self.audio_projection(pooled_output)
 
+        # If audio is chunked (i.e. same audio is split into multiple clips), reduce embedding over clips dimension
+        # See https://github.com/facebookresearch/ImageBind/blob/main/imagebind/models/imagebind_model.py#L470
         if input_features.ndim >= 5:
             num_clips = input_features.shape[1]
             audio_features = audio_features.reshape(batch_size, num_clips, -1)
@@ -1719,7 +1725,8 @@ class ImageBindModel(ImageBindPreTrainedModel):
         image_embeds = self.vision_projection(image_embeds)
         image_embeds = self.vision_postprocessor(image_embeds)
 
-        # If modality input was batched and clipped, reduce embedding over clips dimension
+        # For video inputs we take multiple clips and average the embeddings
+        # See https://github.com/facebookresearch/ImageBind/blob/main/imagebind/models/imagebind_model.py#L470
         if pixel_values.ndim >= 5:
             image_num_clips = pixel_values.shape[1]
             image_embeds = image_embeds.reshape(image_batch_size, image_num_clips, -1)
