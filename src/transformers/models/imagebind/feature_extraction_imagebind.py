@@ -52,11 +52,16 @@ def valid_batched_clipped_audio(raw_speech):
         if isinstance(first_elem, np.ndarray):
             return 1 <= first_elem.ndim <= 2
         if isinstance(first_elem, (list, tuple)):
-            return isinstance(first_elem[0], (float, np.ndarray))
+            second_elem = first_elem[0]
+            if isinstance(second_elem, (float, np.ndarray)):
+                return True
+            if isinstance(second_elem, (list, tuple)):
+                return isinstance(second_elem[0], float)
+
     return False
 
 
-def convert_to_numpy_array(raw_speech):
+def convert_raw_speech_to_numpy_array(raw_speech):
     """If not already in numpy array format, convert raw_speech to a numpy array."""
     if isinstance(raw_speech, (list, tuple)) and isinstance(raw_speech[0], float):
         raw_speech = [[np.asarray(raw_speech, dtype=np.float32)]]
@@ -177,8 +182,6 @@ class ImageBindFeatureExtractor(SequenceFeatureExtractor):
             The duration of each chunk in seconds.
         num_chunks (`int`, *optional*, defaults to 3):
             The number of chunks to sample from the input audio.
-        return_attention_mask (`bool`, *optional*, defaults to `False`):
-            Whether or not [`~ImageBindAudioFeatureExtractor.__call__`] should return `attention_mask`.
     """
 
     model_input_names = ["input_features"]
@@ -196,7 +199,6 @@ class ImageBindFeatureExtractor(SequenceFeatureExtractor):
         do_chunk=True,
         chunk_duration=2.0,
         num_chunks=3,
-        return_attention_mask=False,
         **kwargs,
     ):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
@@ -208,7 +210,6 @@ class ImageBindFeatureExtractor(SequenceFeatureExtractor):
         self.do_chunk = do_chunk
         self.chunk_duration = chunk_duration
         self.num_chunks = num_chunks
-        self.return_attention_mask = return_attention_mask
 
         if not is_speech_available():
             mel_filters = mel_filter_bank(
@@ -384,7 +385,7 @@ class ImageBindFeatureExtractor(SequenceFeatureExtractor):
         chunk_duration = chunk_duration if chunk_duration is not None else self.chunk_duration
         num_chunks = num_chunks if num_chunks is not None else self.num_chunks
 
-        raw_speech = convert_to_numpy_array(raw_speech)
+        raw_speech = convert_raw_speech_to_numpy_array(raw_speech)
         raw_speech = batch_and_clip_ndarray(raw_speech, data_dim=1, dtype=np.float32)
 
         if do_chunk and len(raw_speech[0]) == 1:

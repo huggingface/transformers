@@ -845,9 +845,7 @@ class ImageBindModelIntegrationTest(unittest.TestCase):
         processor = ImageBindProcessor.from_pretrained(model_name)
 
         images, texts, audios = prepare_inputs()
-        inputs = processor(text=texts, images=images, audios=audios, padding=True, return_tensors="pt").to(
-            torch_device
-        )
+        inputs = processor(text=texts, images=images, audio=audios, padding=True, return_tensors="pt").to(torch_device)
 
         expected_input_features = torch.tensor(
             [

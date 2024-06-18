@@ -43,17 +43,15 @@ from .configuration_imagebind import (
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "EduardoPacheco/imagebind-huge"
-
 
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
-    Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
+    Expands attention_mask from `[batch_size, seq_len]` to `[batch_size, 1, tgt_seq_len, src_seq_len]`.
     """
-    bsz, src_len = mask.size()
+    batch_size, src_len = mask.size()
     tgt_len = tgt_len if tgt_len is not None else src_len
 
-    expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
+    expanded_mask = mask[:, None, None, :].expand(batch_size, 1, tgt_len, src_len).to(dtype)
 
     inverted_mask = 1.0 - expanded_mask
 
@@ -280,11 +278,11 @@ class ImageBindGenericPatchEmbedding(nn.Module):
         self.projection = projection
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps) if use_layernorm else None
 
-    def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
-        if pixel_values.ndim not in [4, 5]:
-            raise ValueError(f"Input tensor shape should have length 4 or 5 but got {pixel_values.ndim}.")
+    def forward(self, input_values: torch.FloatTensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
+        if input_values.ndim not in [4, 5]:
+            raise ValueError(f"Input tensor shape should have length 4 or 5 but got {input_values.ndim}.")
 
-        _, num_channels, *spatial_shape = pixel_values.shape
+        _, num_channels, *spatial_shape = input_values.shape
         height, width = spatial_shape[-2:]
 
         if num_channels != self.num_channels:
@@ -299,7 +297,7 @@ class ImageBindGenericPatchEmbedding(nn.Module):
                     f" ({self.image_size[0]}*{self.image_size[1]})."
                 )
 
-        embeddings = self.projection(pixel_values).flatten(2).transpose(1, 2)
+        embeddings = self.projection(input_values).flatten(2).transpose(1, 2)
         if self.layernorm is not None:
             embeddings = self.layernorm(embeddings)
 
@@ -510,7 +508,6 @@ class ImageBindAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        causal_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
@@ -544,16 +541,6 @@ class ImageBindAttention(nn.Module):
                 f"Attention weights should be of size {(batch_size * self.num_heads, seq_len, src_len)}, but is"
                 f" {attn_weights.size()}"
             )
-
-        # apply the causal_attention_mask first
-        if causal_attention_mask is not None:
-            if causal_attention_mask.size() != (batch_size, 1, seq_len, src_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(batch_size, 1, seq_len, src_len)}, but is"
-                    f" {causal_attention_mask.size()}"
-                )
-            attn_weights = attn_weights.view(batch_size, self.num_heads, seq_len, src_len) + causal_attention_mask
-            attn_weights = attn_weights.view(batch_size * self.num_heads, seq_len, src_len)
 
         if attention_mask is not None:
             if attention_mask.size() != (batch_size, 1, seq_len, src_len):
@@ -669,7 +656,6 @@ class ImageBindEncoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        causal_attention_mask: torch.Tensor,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.FloatTensor]:
         """
@@ -688,7 +674,6 @@ class ImageBindEncoderLayer(nn.Module):
         hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            causal_attention_mask=causal_attention_mask,
             output_attentions=output_attentions,
         )
         hidden_states = self.drop_path(hidden_states)
@@ -988,7 +973,6 @@ class ImageBindEncoder(nn.Module):
         self,
         inputs_embeds,
         attention_mask: Optional[torch.Tensor] = None,
-        causal_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1006,13 +990,7 @@ class ImageBindEncoder(nn.Module):
                 - 0 for tokens that are **masked**.
 
                 [What are attention masks?](../glossary#attention-mask)
-            causal_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Causal mask for the text model. Mask values selected in `[0, 1]`:
 
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                [What are attention masks?](../glossary#attention-mask)
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -1047,13 +1025,11 @@ class ImageBindEncoder(nn.Module):
                     create_custom_forward(encoder_layer),
                     hidden_states,
                     attention_mask,
-                    causal_attention_mask,
                 )
             else:
                 layer_outputs = encoder_layer(
                     hidden_states,
                     attention_mask,
-                    causal_attention_mask,
                     output_attentions=output_attentions,
                 )
 
@@ -1111,20 +1087,14 @@ class ImageBindTextTransformer(nn.Module):
         hidden_states = self.embeddings(input_ids=input_ids, position_ids=position_ids)
 
         batch_size, seq_len = input_shape
-        # ImageBind's text model uses causal mask, prepare it here.
-        # https://github.com/facebookresearch/ImageBind/blob/95d27c7fd5a8362f3527e176c3a80ae5a4d880c0/imagebind/models/imagebind_model.py#L172
-        causal_attention_mask = self._build_causal_attention_mask(
-            batch_size, seq_len, hidden_states.dtype, device=hidden_states.device
+
+        attention_mask = self._build_attention_mask(
+            attention_mask, batch_size, seq_len, hidden_states.dtype, hidden_states.device
         )
-        # expand attention_mask
-        if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _expand_mask(attention_mask, hidden_states.dtype)
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
             attention_mask=attention_mask,
-            causal_attention_mask=causal_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1151,13 +1121,17 @@ class ImageBindTextTransformer(nn.Module):
             attentions=encoder_outputs.attentions,
         )
 
-    def _build_causal_attention_mask(self, bsz, seq_len, dtype, device=None):
-        # lazily create causal attention mask, with full attention between the vision tokens
-        # pytorch uses additive attention mask; fill with -inf
-        mask = torch.empty(bsz, seq_len, seq_len, dtype=dtype, device=device)
+    def _build_attention_mask(self, attention_mask, batch_size, seq_len, dtype, device=None):
+        # Build causal mask
+        mask = torch.empty(batch_size, seq_len, seq_len, dtype=dtype, device=device)
         mask.fill_(torch.finfo(dtype).min)
-        mask.triu_(1)  # zero out the lower diagonal
+        mask.triu_(1)
         mask = mask.unsqueeze(1)  # expand mask
+
+        # If attention_mask update causal mask
+        if attention_mask is not None:
+            attention_mask = _expand_mask(attention_mask, dtype)
+            return mask + attention_mask
         return mask
 
 

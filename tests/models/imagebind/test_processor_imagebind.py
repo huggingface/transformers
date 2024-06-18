@@ -153,7 +153,7 @@ class ImageBindProcessorTest(unittest.TestCase):
         raw_speech = self.prepare_audio_inputs()
 
         input_feat_extract = feature_extractor(raw_speech, return_tensors="np")
-        input_processor = processor(audios=raw_speech, return_tensors="np")
+        input_processor = processor(audio=raw_speech, return_tensors="np")
 
         for key in input_feat_extract.keys():
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
@@ -225,6 +225,6 @@ class ImageBindProcessorTest(unittest.TestCase):
         image_input = self.prepare_image_inputs()
         audio_input = self.prepare_audio_inputs()
 
-        inputs = processor(text=input_str, images=image_input, audios=audio_input)
+        inputs = processor(text=input_str, images=image_input, audio=audio_input)
 
         self.assertListEqual(list(inputs.keys()), processor.model_input_names)

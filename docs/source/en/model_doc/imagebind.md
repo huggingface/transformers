@@ -65,6 +65,7 @@ with torch.no_grad():
     image_embeds = model.get_image_features(pixel_values=inputs.pixel_values)
     text_embeds = model.get_text_features(input_ids=inputs.input_ids, attention_mask=inputs.attention_mask)
 
+# we can compute probs to use for retrieval or zero-shot workflows.
 probs_image_text = (image_embeds @ text_embeds.T).softmax(dim=-1)
 probs_text_audio = (text_embeds @ audio_embeds.T).softmax(dim=-1)
 probs_image_audio = (image_embeds @ audio_embeds.T).softmax(dim=-1)

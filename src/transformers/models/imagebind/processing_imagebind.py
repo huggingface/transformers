@@ -15,8 +15,18 @@
 Image/Text processor class for ImageBind
 """
 
-from ...processing_utils import ProcessorMixin
+from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
+
+
+class ImageBindProcessorKwargs(ProcessingKwargs, total=False):
+    # see processing_utils.ProcessingKwargs documentation for usage.
+    _defaults = {
+        "text_kwargs": {
+            "padding": "max_length",
+            "max_length": 64,
+        },
+    }
 
 
 class ImageBindProcessor(ProcessorMixin):
@@ -85,7 +95,7 @@ class ImageBindProcessor(ProcessorMixin):
         """
 
         if text is None and images is None and audio is None:
-            raise ValueError("You have to specify either text or images. Both cannot be none.")
+            raise ValueError("You have to specify either text, images or audio. Both cannot be none.")
 
         data = {}
 
