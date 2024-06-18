@@ -86,7 +86,7 @@ def load_balancing_loss_func(
     experts is too unbalanced.
 
     Args:
-        gate_logits (Union[`torch.Tensor`, Tuple[torch.Tensor]]):
+        gate_logits (Union[`torch.Tensor`, Tuple[torch.Tensor]):
             Logits from the `gate`, should be a tuple of model.config.num_hidden_layers tensors of
             shape [batch_size X sequence_length, num_experts].
         attention_mask (`torch.Tensor`, None):
@@ -112,10 +112,10 @@ def load_balancing_loss_func(
     expert_mask = torch.nn.functional.one_hot(selected_experts, num_experts)
 
     if attention_mask is None:
-        # Compute the percentage of tokens routed to each expert across all layers
+        # Compute the percentage of tokens routed to each experts
         tokens_per_expert = torch.mean(expert_mask.float(), dim=0)
 
-        # Compute the average probability of routing to these experts across all layers
+        # Compute the average probability of routing to these experts
         router_prob_per_expert = torch.mean(routing_weights, dim=0)
     else:
         batch_size, sequence_length = attention_mask.shape
@@ -129,7 +129,7 @@ def load_balancing_loss_func(
             .to(compute_device)
         )
 
-        # Compute the percentage of tokens routed to each expert across all layers
+        # Compute the percentage of tokens routed to each experts
         tokens_per_expert = torch.sum(expert_mask.float() * expert_attention_mask, dim=0) / torch.sum(
             expert_attention_mask, dim=0
         )
@@ -147,10 +147,9 @@ def load_balancing_loss_func(
             router_per_expert_attention_mask, dim=0
         )
 
-    # Ensure the loss calculation balances each expert's load correctly
-    overall_loss = torch.sum(tokens_per_expert * router_prob_per_expert)
-
+    overall_loss = torch.sum(tokens_per_expert * router_prob_per_expert.unsqueeze(0))
     return overall_loss * num_experts
+
 
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
 def _get_unpad_data(attention_mask):
@@ -1629,7 +1628,7 @@ class MixtralForTokenClassification(MixtralPreTrainedModel):
     @add_start_docstrings_to_model_forward(MIXTRAL_INPUTS_DOCSTRING)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
@@ -1639,7 +1638,7 @@ class MixtralForTokenClassification(MixtralPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SequenceClassifierOutputWithPast]:
+    ) -> Union[Tuple, TokenClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
