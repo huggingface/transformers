@@ -5819,6 +5819,7 @@ if TYPE_CHECKING:
             QuantoQuantizedCache,
             SinkCache,
             StaticCache,
+            EncoderDecoderCache,
         )
         from .data.datasets import (
             GlueDataset,

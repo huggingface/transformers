@@ -27,12 +27,11 @@ from torch import nn
 from ..cache_utils import (
     Cache,
     DynamicCache,
-    EncoderDecoderCache,
     HQQQuantizedCache,
     QuantizedCacheConfig,
     QuantoQuantizedCache,
     SlidingWindowCache,
-    StaticCache,
+    StaticCache, EncoderDecoderCache,
 )
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..modeling_outputs import CausalLMOutputWithPast, Seq2SeqLMOutput
@@ -1350,9 +1349,7 @@ class GenerationMixin:
         past_length = 0
         if "past_key_values" in model_kwargs:
             past_key_values = model_kwargs["past_key_values"]
-            if self.config.is_encoder_decoder and isinstance(past_key_values[0], Cache):
-                past_key_values = past_key_values[0]
-            if isinstance(past_key_values, Cache):
+            if isinstance(past_key_values, (Cache, EncoderDecoderCache)):
                 past_length = past_key_values.get_seq_length()
             else:
                 past_length = past_key_values[0][0].shape[2]
@@ -1406,11 +1403,7 @@ class GenerationMixin:
                 encoder_kwargs["max_cache_len"] = model_kwargs["encoder_outputs"][0].shape[1]
                 self._cache = EncoderDecoderCache(self._cache, cache_cls(**encoder_kwargs))
         else:
-            if self.config.is_encoder_decoder:
-                self._cache.self_attention_cache.reset()
-                self._cache.cross_attention_cache.reset()
-            else:
-                self._cache.reset()
+            self._cache.reset()
         return self._cache
 
     def _get_decoder_start_token_id(
