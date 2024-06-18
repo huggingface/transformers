@@ -56,7 +56,7 @@ impact performance. Here's a breakdown of your options:
 If your model can comfortably fit onto a single GPU, you have two primary options:
 
 1. DDP - Distributed DataParallel
-2. [ZeRO](https://arxiv.org/pdf/1910.02054) - depending on the situation and configuration used, this method may or may not be faster, however, it's worth experimenting with it.
+2. [Zero Redundancy Optimizer (ZeRO)](https://arxiv.org/abs/1910.02054) - depending on the situation and configuration used, this method may or may not be faster, however, it's worth experimenting with it.
 
 **Case 2: Your model doesn't fit onto a single GPU:**
 
