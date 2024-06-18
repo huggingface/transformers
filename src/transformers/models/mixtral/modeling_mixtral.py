@@ -86,7 +86,7 @@ def load_balancing_loss_func(
     experts is too unbalanced.
 
     Args:
-        gate_logits (Union[`torch.Tensor`, Tuple[torch.Tensor]):
+        gate_logits (Union[`torch.Tensor`, Tuple[torch.Tensor]]):
             Logits from the `gate`, should be a tuple of model.config.num_hidden_layers tensors of
             shape [batch_size X sequence_length, num_experts].
         attention_mask (`torch.Tensor`, None):
@@ -112,10 +112,10 @@ def load_balancing_loss_func(
     expert_mask = torch.nn.functional.one_hot(selected_experts, num_experts)
 
     if attention_mask is None:
-        # Compute the percentage of tokens routed to each experts
+        # Compute the percentage of tokens routed to each expert across all layers
         tokens_per_expert = torch.mean(expert_mask.float(), dim=0)
 
-        # Compute the average probability of routing to these experts
+        # Compute the average probability of routing to these experts across all layers
         router_prob_per_expert = torch.mean(routing_weights, dim=0)
     else:
         batch_size, sequence_length = attention_mask.shape
@@ -129,7 +129,7 @@ def load_balancing_loss_func(
             .to(compute_device)
         )
 
-        # Compute the percentage of tokens routed to each experts
+        # Compute the percentage of tokens routed to each expert across all layers
         tokens_per_expert = torch.sum(expert_mask.float() * expert_attention_mask, dim=0) / torch.sum(
             expert_attention_mask, dim=0
         )
@@ -147,9 +147,10 @@ def load_balancing_loss_func(
             router_per_expert_attention_mask, dim=0
         )
 
-    overall_loss = torch.sum(tokens_per_expert * router_prob_per_expert.unsqueeze(0))
-    return overall_loss * num_experts
+    # Ensure the loss calculation balances each expert's load correctly
+    overall_loss = torch.sum(tokens_per_expert * router_prob_per_expert)
 
+    return overall_loss * num_experts
 
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
 def _get_unpad_data(attention_mask):
