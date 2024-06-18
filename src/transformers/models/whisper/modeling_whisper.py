@@ -24,9 +24,8 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-from ...cache_utils import Cache, DynamicCache, StaticCache, EncoderDecoderCache
-
 from ...activations import ACT2FN
+from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache, StaticCache
 from ...modeling_attn_mask_utils import (
     AttentionMaskConverter,
 )
@@ -307,7 +306,11 @@ class WhisperAttention(nn.Module):
 
         # use key_value_states if cross attention
         current_states = key_value_states if key_value_states is not None else hidden_states
-        if is_cross_attention and isinstance(past_key_value, DynamicCache) and past_key_value.get_seq_length(self.layer_idx):
+        if (
+            is_cross_attention
+            and isinstance(past_key_value, DynamicCache)
+            and past_key_value.get_seq_length(self.layer_idx)
+        ):
             # reuse k,v, cross_attentions
             key_states, value_states = past_key_value[self.layer_idx]
         else:
@@ -401,7 +404,11 @@ class WhisperFlashAttention2(WhisperAttention):
 
         # use key_value_states if cross attention
         current_states = key_value_states if key_value_states is not None else hidden_states
-        if is_cross_attention and isinstance(past_key_value, DynamicCache) and past_key_value.get_seq_length(self.layer_idx):
+        if (
+            is_cross_attention
+            and isinstance(past_key_value, DynamicCache)
+            and past_key_value.get_seq_length(self.layer_idx)
+        ):
             # reuse k,v, cross_attentions
             key_states, value_states = past_key_value[self.layer_idx]
         else:
@@ -601,7 +608,11 @@ class WhisperSdpaAttention(WhisperAttention):
 
         # use key_value_states if cross attention
         current_states = key_value_states if key_value_states is not None else hidden_states
-        if is_cross_attention and isinstance(past_key_value, DynamicCache) and past_key_value.get_seq_length(self.layer_idx):
+        if (
+            is_cross_attention
+            and isinstance(past_key_value, DynamicCache)
+            and past_key_value.get_seq_length(self.layer_idx)
+        ):
             # reuse k,v, cross_attentions
             key_states, value_states = past_key_value[self.layer_idx]
         else:
@@ -1855,7 +1866,7 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
                 past_length, past_length + decoder_input_ids.shape[1], device=decoder_input_ids.device
             )
         elif use_cache:
-            cache_position = cache_position[-decoder_input_ids.shape[1]:]
+            cache_position = cache_position[-decoder_input_ids.shape[1] :]
 
         return {
             "encoder_outputs": encoder_outputs,

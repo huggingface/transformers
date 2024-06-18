@@ -27,11 +27,12 @@ from torch import nn
 from ..cache_utils import (
     Cache,
     DynamicCache,
+    EncoderDecoderCache,
     HQQQuantizedCache,
     QuantizedCacheConfig,
     QuantoQuantizedCache,
     SlidingWindowCache,
-    StaticCache, EncoderDecoderCache,
+    StaticCache,
 )
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..modeling_outputs import CausalLMOutputWithPast, Seq2SeqLMOutput
@@ -1383,7 +1384,10 @@ class GenerationMixin:
         elif cache_implementation == "static":
             need_new_cache = need_new_cache or cache_to_check.max_cache_len < max_cache_len
             if self.config.is_encoder_decoder and hasattr(self, "_cache"):
-                need_new_cache = need_new_cache or self._cache.cross_attention_cache.max_cache_len != model_kwargs["encoder_outputs"][0].shape[1]
+                need_new_cache = (
+                    need_new_cache
+                    or self._cache.cross_attention_cache.max_cache_len != model_kwargs["encoder_outputs"][0].shape[1]
+                )
 
         if need_new_cache:
             if hasattr(self.config, "_pre_quantization_dtype"):

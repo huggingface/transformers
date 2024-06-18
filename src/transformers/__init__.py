@@ -1186,13 +1186,13 @@ else:
         "Cache",
         "CacheConfig",
         "DynamicCache",
+        "EncoderDecoderCache",
         "HQQQuantizedCache",
         "QuantizedCache",
         "QuantizedCacheConfig",
         "QuantoQuantizedCache",
         "SinkCache",
         "StaticCache",
-        "EncoderDecoderCache",
     ]
     _import_structure["data.datasets"] = [
         "GlueDataset",
@@ -5819,7 +5819,6 @@ if TYPE_CHECKING:
             QuantoQuantizedCache,
             SinkCache,
             StaticCache,
-            EncoderDecoderCache,
         )
         from .data.datasets import (
             GlueDataset,

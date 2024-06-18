@@ -24,12 +24,12 @@ import time
 import unittest
 
 import numpy as np
-from parameterized import parameterized
 import pytest
 from huggingface_hub import hf_hub_download
+from parameterized import parameterized
 
 import transformers
-from transformers import WhisperConfig, DynamicCache, EncoderDecoderCache
+from transformers import DynamicCache, EncoderDecoderCache, WhisperConfig
 from transformers.testing_utils import (
     is_pt_flax_cross_test,
     require_flash_attn,
@@ -1551,7 +1551,9 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             position_ids_shared_prefix,
         ) = self._get_custom_4d_mask_test_data()
 
-        logits = model.forward(decoder_input_ids=input_ids, input_features=input_dict["input_features"], decoder_position_ids=position_ids).logits
+        logits = model.forward(
+            decoder_input_ids=input_ids, input_features=input_dict["input_features"], decoder_position_ids=position_ids
+        ).logits
         # logits.shape == torch.Size([3, 4, ...])
 
         logits_shared_prefix = model(
@@ -1572,7 +1574,6 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         normalized_0 = torch.nn.functional.softmax(out_last_tokens)
         normalized_1 = torch.nn.functional.softmax(out_shared_prefix_last_tokens)
         torch.testing.assert_close(normalized_0, normalized_1, rtol=1e-3, atol=1e-4)
-
 
     @parameterized.expand([(1, False), (1, True), (4, False)])
     def test_new_cache_format(self, num_beams=1, do_sample=False):

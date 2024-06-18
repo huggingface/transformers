@@ -955,6 +955,7 @@ class SlidingWindowCache(Cache):
         self.key_cache.zero_()
         self.value_cache.zero_()
 
+
 @dataclass
 class EncoderDecoderCache:
     self_attention_cache: Cache
@@ -966,7 +967,12 @@ class EncoderDecoderCache:
         sequence length.
         """
         if layer_idx < len(self):
-            return (self.self_attention_cache.key_cache[layer_idx], self.self_attention_cache.value_cache[layer_idx], self.cross_attention_cache.key_cache[layer_idx], self.cross_attention_cache.key_cache[layer_idx])
+            return (
+                self.self_attention_cache.key_cache[layer_idx],
+                self.self_attention_cache.value_cache[layer_idx],
+                self.cross_attention_cache.key_cache[layer_idx],
+                self.cross_attention_cache.key_cache[layer_idx],
+            )
         else:
             raise KeyError(f"Cache only has {len(self)} layers, attempted to access layer with index {layer_idx}")
 
@@ -981,25 +987,13 @@ class EncoderDecoderCache:
         """Converts the `DynamicCache` instance into  its equivalent in the legacy cache format."""
         legacy_cache = ()
         if len(self.cross_attention_cache) > 0:
-            for self_attn, cross_attn in zip(self.self_attention_cache.to_legacy_cache(), self.cross_attention_cache.to_legacy_cache()):
+            for self_attn, cross_attn in zip(
+                self.self_attention_cache.to_legacy_cache(), self.cross_attention_cache.to_legacy_cache()
+            ):
                 legacy_cache += (self_attn + cross_attn,)
         else:
             legacy_cache = self.self_attention_cache.to_legacy_cache()
         return legacy_cache
-
-    @classmethod
-    def from_legacy_cache(cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None) -> "EncoderDecoderCache":
-        """Converts a cache in the legacy cache format into an equivalent `EncoderDecoderCache`."""
-        if past_key_values is None:
-            self_attn = cross_attn = None
-        else:
-            self_attn = [key_values[:2] for key_values in past_key_values]
-            cross_attn = [key_values[2:] for key_values in past_key_values] if len(past_key_values) == 4 else None
-
-        self_attention_cache = DynamicCache.from_legacy_cache(self_attn)
-        cross_attn_cache = DynamicCache.from_legacy_cache(cross_attn)
-
-        return cls(self_attention_cache, cross_attn_cache)
 
     @classmethod
     def from_legacy_cache(cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None) -> "DynamicCache":
@@ -1032,3 +1026,8 @@ class EncoderDecoderCache:
                 f"Got {self.self_attention_cache.__str__()} for the self attention cache and "
                 f"{self.cross_attention_cache.__str__()} for the cross attention cache."
             )
+
+    def reorder_cache(self, beam_idx: torch.LongTensor):
+        """Reorders the cache for beam search, given the selected beam indices."""
+        self.self_attention_cache.reorder_cache(beam_idx)
+        self.cross_attention_cache.reorder_cache(beam_idx)
