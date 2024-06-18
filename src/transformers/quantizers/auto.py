@@ -17,6 +17,7 @@ from typing import Dict, Optional, Union
 from ..models.auto.configuration_auto import AutoConfig
 from ..utils.quantization_config import (
     AqlmConfig,
+    AutoRoundConfig,
     AwqConfig,
     BitsAndBytesConfig,
     EetqConfig,
@@ -27,6 +28,7 @@ from ..utils.quantization_config import (
     QuantoConfig,
 )
 from .quantizer_aqlm import AqlmHfQuantizer
+from .quantizer_auto_round import AutoRoundQuantizer
 from .quantizer_awq import AwqQuantizer
 from .quantizer_bnb_4bit import Bnb4BitHfQuantizer
 from .quantizer_bnb_8bit import Bnb8BitHfQuantizer
@@ -45,6 +47,7 @@ AUTO_QUANTIZER_MAPPING = {
     "quanto": QuantoHfQuantizer,
     "eetq": EetqHfQuantizer,
     "hqq": HqqHfQuantizer,
+    "intel/auto-round": AutoRoundQuantizer,
 }
 
 AUTO_QUANTIZATION_CONFIG_MAPPING = {
@@ -56,6 +59,7 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "aqlm": AqlmConfig,
     "quanto": QuantoConfig,
     "hqq": HqqConfig,
+    "intel/auto-round": AutoRoundConfig,
 }
 
 
@@ -156,7 +160,7 @@ class AutoHfQuantizer:
         if isinstance(quantization_config, dict):
             quantization_config = AutoQuantizationConfig.from_dict(quantization_config)
 
-        if isinstance(quantization_config, (GPTQConfig, AwqConfig)) and quantization_config_from_args is not None:
+        if isinstance(quantization_config, (GPTQConfig, AwqConfig, AutoRoundConfig)) and quantization_config_from_args is not None:
             # special case for GPTQ / AWQ config collision
             loading_attr_dict = quantization_config_from_args.get_loading_attributes()
             for attr, val in loading_attr_dict.items():

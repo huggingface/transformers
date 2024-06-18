@@ -42,6 +42,7 @@ class QuantizationMethod(str, Enum):
     QUANTO = "quanto"
     EETQ = "eetq"
     HQQ = "hqq"
+    AUTOROUND = "intel/auto-round"
 
 
 class AWQLinearVersion(str, Enum):
@@ -288,6 +289,60 @@ class HqqConfig(QuantizationConfigMixin):
                 serializable_config_dict[key] = value
 
         return serializable_config_dict
+
+@dataclass
+class AutoRoundConfig(QuantizationConfigMixin):
+    """
+    Configuration for AutoRound quantization.
+
+    Args:
+        bits (`int`, *optional*, defaults to 4):
+            Number of bits for quantization. Default is 4.
+        group_size (`int`, *optional*, defaults to 128):
+            Size of the group for quantization. Default is 128.
+        sym (`bool`, *optional*, defaults to `False`):
+            Whether to use symmetric quantization. Default is False.
+        data_type (`str`, *optional*, defaults to `"int"`):
+            Data type for quantization. Default is "int".
+        backend (`str`, *optional*, defaults to `"autoround:exllamav2"`):
+            Backend to use for quantization. Default is "autoround:exllamav2".
+        extra_config (`Dict`, *optional*, defaults to `{}`):
+            Additional configuration parameters. Default is an empty dictionary. This is mainly for mixed bitwidth or group size
+        kwargs (`Dict[str, Any]`, *optional*):
+            Additional parameters from which to initialize the configuration object.
+    """
+
+    def __init__(
+        self,
+        bits: int = 4,
+        group_size: int = 128,
+        sym: bool = False,
+        data_type: str = "int",
+        backend: str = "autoround:exllamav2",
+        extra_config: dict = {},
+        **kwargs,
+    ):
+        self.quant_method = QuantizationMethod.AUTOROUND
+        self.bits = bits
+        self.sym = sym
+        self.group_size = group_size
+        self.data_type = data_type
+        self.backend = backend
+        self.extra_config = extra_config
+
+    def post_init(self):
+        if self.bits not in [2, 4, 8]:
+            raise ValueError(f"Only support quantization to [2,4,8] bits but found {self.bits}")
+        if self.group_size != -1 and self.group_size <= 0:
+            raise ValueError("group_size must be greater than 0 or equal to -1")
+        if self.data_type not in ["int"]:
+            raise ValueError("Only support int data type")
+
+    def get_loading_attributes(self):
+        attibutes_dict = copy.deepcopy(self.__dict__)
+        loading_attibutes = ["backend"]
+        loading_attibutes_dict = {i: j for i, j in attibutes_dict.items() if i in loading_attibutes}
+        return loading_attibutes_dict
 
 
 @dataclass

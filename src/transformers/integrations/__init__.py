@@ -18,6 +18,8 @@ from ..utils import _LazyModule
 
 _import_structure = {
     "aqlm": ["replace_with_aqlm_linear"],
+    "autoround": ["convert_auto_round_model",
+                  "post_init_auto_round_model"],
     "awq": [
         "fuse_awq_modules",
         "post_init_awq_exllama_modules",
@@ -99,6 +101,10 @@ _import_structure = {
 
 if TYPE_CHECKING:
     from .aqlm import replace_with_aqlm_linear
+    from .autoround import (
+        convert_auto_round_model,
+        post_init_auto_round_model,
+    )
     from .awq import (
         fuse_awq_modules,
         post_init_awq_exllama_modules,
