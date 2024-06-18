@@ -332,7 +332,7 @@ class FeaturesManager:
         ),
         "groupvit": supported_features_mapping(
             "default",
-            onnx_config_cls="models.groupvit.GroupViTOnnxConfig",
+            onnx_config_cls="models.deprecated.groupvit.GroupViTOnnxConfig",
         ),
         "ibert": supported_features_mapping(
             "default",
