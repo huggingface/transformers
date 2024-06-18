@@ -902,3 +902,16 @@ class ImageBindModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs_vision_text.text_embeds[:, :5], expected_text_embeds, atol=1e-4))
         self.assertTrue(torch.allclose(outputs_vision_audio.audio_embeds[:, :5], expected_audio_embeds, atol=1e-4))
         self.assertTrue(torch.allclose(outputs_vision_text.image_embeds, outputs_vision_audio.image_embeds, atol=1e-4))
+
+        expected_logits_per_audio = torch.tensor(
+            [[7.3541, 1.1908, 2.2897], [1.1930, 3.0097, 2.0238], [0.9584, 1.2224, 4.2325]]
+        )
+
+        expected_logits_per_image_with_text = torch.tensor(
+            [[23.6142, 19.1165, 13.2448], [12.1343, 23.4165, 11.8823], [15.8471, 20.1186, 24.8246]]
+        )
+
+        self.assertTrue(torch.allclose(outputs_vision_audio.logits_per_audio, expected_logits_per_audio, atol=1e-4))
+        self.assertTrue(
+            torch.allclose(outputs_vision_text.logits_per_image, expected_logits_per_image_with_text, atol=1e-4)
+        )
