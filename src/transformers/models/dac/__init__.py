@@ -40,6 +40,7 @@ if TYPE_CHECKING:
     from .configuration_dac import (
         DacConfig,
     )
+    from .feature_extraction_dac import DacFeatureExtractor
 
     try:
         if not is_torch_available():
