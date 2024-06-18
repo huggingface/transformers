@@ -528,7 +528,9 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
             # not very reliable, but we don't expect one to actually pass 500+ images for one prompt
             img_token_count = (input_ids == self.config.image_token_index).sum(1).max()
             video_token_count = (input_ids == self.config.video_token_index).sum(1).max()
-            inputs_expanded = img_token_count < self.image_seq_length and video_token_count < self.video_seq_length
+            inputs_expanded = (
+                img_token_count < self.config.image_seq_length and video_token_count < self.config.video_seq_length
+            )
             pixels_present = (
                 input_ids.shape[-1] == 1 and pixel_values_images is not None and pixel_values_videos is not None
             )
@@ -679,8 +681,8 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
     ):
         # Trigger the new behavior if we have more than image embeddings seq length tokens for images
         legacy_processing = input_ids is not None and (
-            (input_ids == self.config.image_token_index).sum(1).max() < self.image_seq_length
-            and (input_ids == self.config.video_token_index).sum(1).max() < self.video_seq_length
+            (input_ids == self.config.image_token_index).sum(1).max() < self.config.image_seq_length
+            and (input_ids == self.config.video_token_index).sum(1).max() < self.config.video_seq_length
         )
 
         model_inputs = self.language_model.prepare_inputs_for_generation(

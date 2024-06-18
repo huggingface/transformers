@@ -440,7 +440,7 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
             # not very reliable, but we don't expect one to actually pass 500+ images for one prompt
             # In case we're in decoding stage, legacy behavior is checked by presence of pixel values even if use_cache=True
             legacy_processing = (
-                (input_ids == self.config.image_token_index).sum(1).max() < self.image_seq_length
+                (input_ids == self.config.image_token_index).sum(1).max() < self.config.image_seq_length
             ) or (input_ids.shape[-1] == 1 and pixel_values is not None)
 
         if pixel_values is not None:
@@ -554,7 +554,8 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
     ):
         # Trigger the new behavior if we have more than image embeddings seq length tokens for images
         legacy_processing = (
-            input_ids is not None and (input_ids == self.config.image_token_index).sum(1).max() < self.image_seq_length
+            input_ids is not None
+            and (input_ids == self.config.image_token_index).sum(1).max() < self.config.image_seq_length
         )
 
         model_inputs = self.language_model.prepare_inputs_for_generation(
