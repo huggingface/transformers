@@ -63,7 +63,7 @@ If your model can comfortably fit onto a single GPU, you have two primary option
 If your model is too large for a single GPU, you have several alternatives to consider:
 
 1. PipelineParallel (PP)
-2. [ZeRO](https://arxiv.org/pdf/1910.02054)
+2. [ZeRO](https://arxiv.org/abs/1910.02054)
 3. [TensorParallel](#tensor-parallelism) (TP)
 
 With very fast inter-node connectivity (e.g., NVLINK or NVSwitch) all three strategies (PP, ZeRO, TP) should result in 
