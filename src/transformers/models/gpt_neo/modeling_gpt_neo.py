@@ -165,7 +165,7 @@ def load_tf_weights_in_gpt_neo(model, config, gpt_neo_checkpoint_path):
 
 
 class GPTNeoSelfAttention(nn.Module):
-    def __init__(self, config, attention_type, layer_idx=None):
+    def __init__(self, config, attention_type, layer_id=None):
         super().__init__()
         self.config = config
 
@@ -186,7 +186,7 @@ class GPTNeoSelfAttention(nn.Module):
         self.attn_dropout = nn.Dropout(float(config.attention_dropout))
         self.resid_dropout = nn.Dropout(float(config.resid_dropout))
         self.is_causal = True
-        self.layer_idx = layer_idx
+        self.layer_id = layer_id
 
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_heads
@@ -267,7 +267,7 @@ class GPTNeoSelfAttention(nn.Module):
         value = self._split_heads(value, self.num_heads, self.head_dim)
 
         if layer_past is not None:
-            key, value = layer_past.update(key, value, self.layer_idx)
+            key, value = layer_past.update(key, value, self.layer_id)
 
         attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
 
@@ -318,7 +318,7 @@ class GPTNeoFlashAttention2(GPTNeoSelfAttention):
         value = self._split_heads(value, self.num_heads, self.head_dim)
 
         if layer_past is not None:
-            key, value = layer_past.update(key, value, self.layer_idx)
+            key, value = layer_past.update(key, value, self.layer_id)
 
         query_length = query.shape[2]
         tgt_len = key.shape[2]
@@ -477,22 +477,15 @@ GPT_NEO_ATTENTION_CLASSES = {
 
 
 class GPTNeoAttention(nn.Module):
-    def __init__(self, config, layer_idx=None):
+    def __init__(self, config, layer_id=0):
         super().__init__()
-        self.layer_idx = layer_id = layer_idx
-        if layer_idx is None:
-            logger.warning_once(
-                f"Instantiating {self.__class__.__name__} without passing a `layer_idx` is not recommended and will "
-                "lead to errors during the forward call if caching is used. Please make sure to provide a `layer_idx` "
-                "when creating this class."
-            )
-            layer_id = 0  # keep 0 for BC when used to get attention_type
+        self.layer_id = layer_id
         self.attention_layers = config.attention_layers
         self.attention_type = self.attention_layers[layer_id]
 
         if self.attention_type in ["global", "local"]:
             self.attention = GPT_NEO_ATTENTION_CLASSES[config._attn_implementation](
-                config, self.attention_type, layer_idx
+                config, self.attention_type, layer_id
             )
         else:
             raise NotImplementedError(
@@ -537,12 +530,12 @@ class GPTNeoMLP(nn.Module):
 
 
 class GPTNeoBlock(nn.Module):
-    def __init__(self, config, layer_idx=None):
+    def __init__(self, config, layer_id=None):
         super().__init__()
         hidden_size = config.hidden_size
         inner_dim = config.intermediate_size if config.intermediate_size is not None else 4 * hidden_size
         self.ln_1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
-        self.attn = GPTNeoAttention(config, layer_idx)
+        self.attn = GPTNeoAttention(config, layer_id)
         self.ln_2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
         self.mlp = GPTNeoMLP(inner_dim, config)
 
@@ -649,10 +642,23 @@ GPT_NEO_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        past_key_values (`Cache` or `Tuple[Tuple[torch.Tensor]]` of length `config.num_layers`):
-            Contains precomputed hidden-states (key and values in the attention blocks) as computed by the model (see
-            `past_key_values` output below). Can be used to speed up sequential decoding. The `input_ids` which have
-            their past given to this model should not be passed as `input_ids` as they have already been computed.
+        past_key_values (`Cache` or `tuple(tuple(torch.FloatTensor))`, *optional*):
+            Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
+            blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
+            returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
+
+            Two formats are allowed:
+            - a [`~cache_utils.Cache`] instance;
+            - Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
+            shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`). This is also known as the legacy
+            cache format.
+
+            The model will output the same cache format that is fed as input. If no `past_key_values` are passed, the
+            legacy cache format will be returned.
+
+            If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that don't
+            have their past key value states given to this model) of shape `(batch_size, 1)` instead of all `input_ids`
+            of shape `(batch_size, sequence_length)`.
         attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -712,7 +718,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
         self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
         self.drop = nn.Dropout(float(config.embed_dropout))
-        self.h = nn.ModuleList([GPTNeoBlock(config, layer_idx=i) for i in range(config.num_layers)])
+        self.h = nn.ModuleList([GPTNeoBlock(config, layer_id=i) for i in range(config.num_layers)])
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
