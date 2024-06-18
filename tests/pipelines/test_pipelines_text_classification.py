@@ -14,8 +14,6 @@
 
 import unittest
 
-import torch
-
 from transformers import (
     MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
     TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
@@ -24,6 +22,7 @@ from transformers import (
 )
 from transformers.testing_utils import (
     is_pipeline_test,
+    is_torch_available,
     nested_simplify,
     require_tf,
     require_torch,
@@ -34,6 +33,10 @@ from transformers.testing_utils import (
 )
 
 from .test_pipelines_common import ANY
+
+
+if is_torch_available():
+    import torch
 
 
 # These 2 model types require different inputs than those of the usual text models.

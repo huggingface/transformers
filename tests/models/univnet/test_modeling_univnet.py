@@ -163,7 +163,7 @@ class UnivNetModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="UnivNetModel does not use input embeddings and thus has no get_input_embeddings method.")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip(reason="UnivNetModel does not support all arguments tested, such as output_hidden_states.")
@@ -220,7 +220,9 @@ class UnivNetModelIntegrationTests(unittest.TestCase):
         torch.cuda.empty_cache()
 
     def _load_datasamples(self, num_samples, sampling_rate=24000):
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        ds = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
+        )
         ds = ds.cast_column("audio", Audio(sampling_rate=sampling_rate))
         # automatic decoding with librispeech
         speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]

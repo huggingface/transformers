@@ -47,10 +47,6 @@ from .agent_types import handle_agent_inputs, handle_agent_outputs
 logger = logging.get_logger(__name__)
 
 
-if is_vision_available():
-    import PIL.Image
-    import PIL.ImageOps
-
 if is_torch_available():
     import torch
 
@@ -623,20 +619,20 @@ def launch_gradio_demo(tool_class: Tool):
         return tool(*args, **kwargs)
 
     gradio_inputs = []
-    for input_type in [tool_input["type"] for tool_input in tool_class.inputs.values()]:
-        if input_type in [str, int, float]:
-            gradio_inputs += "text"
-        elif is_vision_available() and input_type == PIL.Image.Image:
-            gradio_inputs += "image"
+    for input_name, input_details in tool_class.inputs.items():
+        input_type = input_details["type"]
+        if input_type == "text":
+            gradio_inputs.append(gr.Textbox(label=input_name))
+        elif input_type == "image":
+            gradio_inputs.append(gr.Image(label=input_name))
+        elif input_type == "audio":
+            gradio_inputs.append(gr.Audio(label=input_name))
         else:
-            gradio_inputs += "audio"
+            error_message = f"Input type '{input_type}' not supported."
+            raise ValueError(error_message)
 
-    if tool_class.output_type in [str, int, float]:
-        gradio_output = "text"
-    elif is_vision_available() and tool_class.output_type == PIL.Image.Image:
-        gradio_output = "image"
-    else:
-        gradio_output = "audio"
+    gradio_output = tool_class.output_type
+    assert gradio_output in ["text", "image", "audio"], f"Output type '{gradio_output}' not supported."
 
     gr.Interface(
         fn=fn,
