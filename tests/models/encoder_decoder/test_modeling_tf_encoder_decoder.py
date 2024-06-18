@@ -995,25 +995,6 @@ class TFRembertEncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase)
             encoder_attention_mask,
         ) = decoder_config_and_inputs
 
-        # make sure that cross attention layers are added
-        decoder_config.add_cross_attention = True
-        #  disable cache for now
-        decoder_config.use_cache = False
-        return {
-            "config": config,
-            "input_ids": input_ids,
-            "attention_mask": input_mask,
-            "decoder_config": decoder_config,
-            "decoder_input_ids": decoder_input_ids,
-            "decoder_token_type_ids": decoder_token_type_ids,
-            "decoder_attention_mask": decoder_input_mask,
-            "decoder_sequence_labels": decoder_sequence_labels,
-            "decoder_token_labels": decoder_token_labels,
-            "decoder_choice_labels": decoder_choice_labels,
-            "encoder_hidden_states": encoder_hidden_states,
-            "labels": decoder_token_labels,
-        }
-
 
 @require_tf
 class TFEncoderDecoderModelTest(unittest.TestCase):
