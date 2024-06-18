@@ -128,6 +128,13 @@ class RealmTokenizerFast(metaclass=DummyObject):
         requires_backends(self, ["tokenizers"])
 
 
+class RemBertTokenizerFast(metaclass=DummyObject):
+    _backends = ["tokenizers"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tokenizers"])
+
+
 class RetriBertTokenizerFast(metaclass=DummyObject):
     _backends = ["tokenizers"]
 
@@ -360,13 +367,6 @@ class Qwen2TokenizerFast(metaclass=DummyObject):
 
 
 class ReformerTokenizerFast(metaclass=DummyObject):
-    _backends = ["tokenizers"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["tokenizers"])
-
-
-class RemBertTokenizerFast(metaclass=DummyObject):
     _backends = ["tokenizers"]
 
     def __init__(self, *args, **kwargs):

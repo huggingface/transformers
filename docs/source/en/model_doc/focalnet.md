@@ -16,6 +16,14 @@ rendered properly in your Markdown viewer.
 
 # FocalNet
 
+<Tip warning={true}>
+
+This model is in maintenance mode only, we don't accept any new PRs changing its code.
+If you run into any issues running this model, please reinstall the last version that supported this model: v4.41.2.
+You can do so by running the following command: `pip install -U transformers==4.41.2`.
+
+</Tip>
+
 ## Overview
 
 The FocalNet model was proposed in [Focal Modulation Networks](https://arxiv.org/abs/2203.11926) by Jianwei Yang, Chunyuan Li, Xiyang Dai, Lu Yuan, Jianfeng Gao.

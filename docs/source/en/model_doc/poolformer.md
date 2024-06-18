@@ -16,6 +16,14 @@ rendered properly in your Markdown viewer.
 
 # PoolFormer
 
+<Tip warning={true}>
+
+This model is in maintenance mode only, we don't accept any new PRs changing its code.
+If you run into any issues running this model, please reinstall the last version that supported this model: v4.41.2.
+You can do so by running the following command: `pip install -U transformers==4.41.2`.
+
+</Tip>
+
 ## Overview
 
 The PoolFormer model was proposed in [MetaFormer is Actually What You Need for Vision](https://arxiv.org/abs/2111.11418)  by Sea AI Labs. Instead of designing complicated token mixer to achieve SOTA performance, the target of this work is to demonstrate the competence of transformer models largely stem from the general architecture MetaFormer.

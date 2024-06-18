@@ -15,6 +15,14 @@ specific language governing permissions and limitations under the License. -->
 
 # ImageGPT
 
+<Tip warning={true}>
+
+This model is in maintenance mode only, we don't accept any new PRs changing its code.
+If you run into any issues running this model, please reinstall the last version that supported this model: v4.41.2.
+You can do so by running the following command: `pip install -U transformers==4.41.2`.
+
+</Tip>
+
 ## Overview
 
 The ImageGPT model was proposed in [Generative Pretraining from Pixels](https://openai.com/blog/image-gpt) by Mark

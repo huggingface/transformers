@@ -16,6 +16,14 @@ rendered properly in your Markdown viewer.
 
 # RoCBert
 
+<Tip warning={true}>
+
+This model is in maintenance mode only, we don't accept any new PRs changing its code.
+If you run into any issues running this model, please reinstall the last version that supported this model: v4.41.2.
+You can do so by running the following command: `pip install -U transformers==4.41.2`.
+
+</Tip>
+
 ## Overview
 
 The RoCBert model was proposed in [RoCBert: Robust Chinese Bert with Multimodal Contrastive Pretraining](https://aclanthology.org/2022.acl-long.65.pdf)  by HuiSu, WeiweiShi, XiaoyuShen, XiaoZhou, TuoJi, JiaruiFang, JieZhou.

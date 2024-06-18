@@ -1230,7 +1230,6 @@ class SeamlessM4TAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-# Copied from transformers.models.nllb_moe.modeling_nllb_moe.NllbMoeDenseActDense with NllbMoe->SeamlessM4T,DenseActDense->FeedForwardNetwork, d_model->hidden_size
 class SeamlessM4TFeedForwardNetwork(nn.Module):
     def __init__(self, config: SeamlessM4TConfig, ffn_dim: int):
         super().__init__()

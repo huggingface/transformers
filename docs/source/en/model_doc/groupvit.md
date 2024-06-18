@@ -16,6 +16,14 @@ rendered properly in your Markdown viewer.
 
 # GroupViT
 
+<Tip warning={true}>
+
+This model is in maintenance mode only, we don't accept any new PRs changing its code.
+If you run into any issues running this model, please reinstall the last version that supported this model: v4.41.2.
+You can do so by running the following command: `pip install -U transformers==4.41.2`.
+
+</Tip>
+
 ## Overview
 
 The GroupViT model was proposed in [GroupViT: Semantic Segmentation Emerges from Text Supervision](https://arxiv.org/abs/2202.11094) by Jiarui Xu, Shalini De Mello, Sifei Liu, Wonmin Byeon, Thomas Breuel, Jan Kautz, Xiaolong Wang.

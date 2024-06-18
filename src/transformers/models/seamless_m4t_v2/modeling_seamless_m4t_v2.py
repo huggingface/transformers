@@ -1132,7 +1132,7 @@ class SeamlessM4Tv2Attention(nn.Module):
             return attn_output, None, past_key_value
 
 
-# Copied from transformers.models.nllb_moe.modeling_nllb_moe.NllbMoeDenseActDense with NllbMoe->SeamlessM4Tv2,DenseActDense->FeedForwardNetwork, d_model->hidden_size
+# Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TFeedForwardNetwork with SeamlessM4T->SeamlessM4Tv2
 class SeamlessM4Tv2FeedForwardNetwork(nn.Module):
     def __init__(self, config: SeamlessM4Tv2Config, ffn_dim: int):
         super().__init__()
