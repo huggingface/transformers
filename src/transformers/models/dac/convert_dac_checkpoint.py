@@ -38,28 +38,6 @@ def match_pattern(string, pattern ):
 
     return fnmatch.fnmatch(string, pattern) and string_block_count == pattern_block_count
 
-# MAPPING_ENCODER = {
-#     'encoder.block.*.block.*.block.*': ['encoder.block', '.block.', '.block.'], 
-#     'encoder.block.*.block.*': ['encoder.block', '.block.'], 
-#     'encoder.block.*': ['encoder.block.'], 
-# }
-
-# MAPPING_QUANTIZER = {
-#     'quantizer.quantizers.': [], 
-# }
-
-# MAPPING_DECODER = {
-#     'decoder.model.*': ['encoder.block.'], 
-#     'decoder.model.*.block.*': ['encoder.block', '.block.'], 
-#     'decoder.model.*.block.*.block.*': ['encoder.block', '.block.', '.block.'], 
-# }
-
-
-# MAPPING = {
-#     **MAPPING_ENCODER,
-#     **MAPPING_QUANTIZER,
-#     **MAPPING_DECODER,
-# }
 
 TOP_LEVEL_KEYS = []
 IGNORE_KEYS = []
