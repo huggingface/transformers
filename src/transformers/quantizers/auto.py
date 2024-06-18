@@ -160,7 +160,10 @@ class AutoHfQuantizer:
         if isinstance(quantization_config, dict):
             quantization_config = AutoQuantizationConfig.from_dict(quantization_config)
 
-        if isinstance(quantization_config, (GPTQConfig, AwqConfig, AutoRoundConfig)) and quantization_config_from_args is not None:
+        if (
+            isinstance(quantization_config, (GPTQConfig, AwqConfig, AutoRoundConfig))
+            and quantization_config_from_args is not None
+        ):
             # special case for GPTQ / AWQ config collision
             loading_attr_dict = quantization_config_from_args.get_loading_attributes()
             for attr, val in loading_attr_dict.items():

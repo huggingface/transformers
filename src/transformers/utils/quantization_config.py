@@ -290,6 +290,7 @@ class HqqConfig(QuantizationConfigMixin):
 
         return serializable_config_dict
 
+
 @dataclass
 class AutoRoundConfig(QuantizationConfigMixin):
     """
