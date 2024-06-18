@@ -4320,7 +4320,7 @@ class TokenizerTesterMixin:
                     )
                     self.assertEqual(tokenizer_2.additional_special_tokens, ["<other>", "<another>", "<tok>"])
 
-    def test_tokenizer_save_pretrained_with_conflicting_key(self):
+    def test_tokenizer_initialization_with_conflicting_key(self):
         if self.test_rust_tokenizer:
             tokenizer = self.get_rust_tokenizer(add_special_tokens=True)
         else:
@@ -4329,4 +4329,7 @@ class TokenizerTesterMixin:
         with tempfile.TemporaryDirectory() as tmp_dir_1:
             tokenizer.save_pretrained(tmp_dir_1)
             loaded_tokenizer = tokenizer.from_pretrained(tmp_dir_1)
-            assert loaded_tokenizer.init_kwargs.get("add_special_tokens")
+            assert loaded_tokenizer.init_kwargs.get("_add_special_tokens")
+
+        with self.assertRaises(AttributeError, msg="conflicts with the method"):
+            self.get_tokenizer(get_vocab=True)

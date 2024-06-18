@@ -1569,6 +1569,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
     def __init__(self, **kwargs):
         # inputs and kwargs for saving and re-loading (see ``from_pretrained`` and ``save_pretrained``)
         self.init_inputs = ()
+        if "add_special_tokens" in kwargs:
+            kwargs["_add_special_tokens"] = kwargs.pop("add_special_tokens")
+
+        for key in kwargs:
+            if hasattr(self, key) and callable(getattr(self, key)):
+                raise AttributeError(f"{key} conflicts with the method {key} in {self.__class__.__name__}")
+
         self.init_kwargs = copy.deepcopy(kwargs)
         self.name_or_path = kwargs.pop("name_or_path", "")
         self._processor_class = kwargs.pop("processor_class", None)
@@ -2518,7 +2525,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         target_keys.update(["model_max_length", "clean_up_tokenization_spaces"])
 
         for k in target_keys:
-            if hasattr(self, k) and not callable(getattr(self, k)):
+            if hasattr(self, k):
                 tokenizer_config[k] = getattr(self, k)
 
         # Let's make sure we properly save the special tokens.
