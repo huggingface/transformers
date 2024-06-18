@@ -18,8 +18,10 @@ from ..utils import _LazyModule
 
 _import_structure = {
     "aqlm": ["replace_with_aqlm_linear"],
-    "autoround": ["convert_auto_round_model",
-                  "post_init_auto_round_model"],
+    "autoround": [
+        "convert_auto_round_model",
+        "post_init_auto_round_model",
+    ],
     "awq": [
         "fuse_awq_modules",
         "post_init_awq_exllama_modules",
