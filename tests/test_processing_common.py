@@ -60,9 +60,9 @@ class ProcessorTesterMixin:
             component_class_name = component_class_name[0]
 
         component_class = processor_class_from_name(component_class_name)
-        try:
+        if hasattr(self, "tmpdirname"):
             component = component_class.from_pretrained(self.tmpdirname, **kwargs)  # noqa
-        except AttributeError:
+        elif hasattr(self, "model_id"):
             component = component_class.from_pretrained(self.model_id, **kwargs)  # noqa
 
         return component
