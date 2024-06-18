@@ -16,7 +16,6 @@
 Image/Text processor class for AltCLIP
 """
 
-import warnings
 from typing import List, Union
 
 
@@ -32,6 +31,7 @@ from ...processing_utils import (
 )
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
 from ...utils import is_torch_available, is_vision_available
+from ...utils.deprecation import deprecate_kwarg
 
 
 # TODO (@molbap) This is a bother, forward references from TypedDict are resolved and need this to work
@@ -66,13 +66,8 @@ class AltCLIPProcessor(ProcessorMixin):
     image_processor_class = "CLIPImageProcessor"
     tokenizer_class = ("XLMRobertaTokenizer", "XLMRobertaTokenizerFast")
 
+    @deprecate_kwarg(old_name="feature_extractor", version="5.0.0", new_name="image_processor")
     def __init__(self, image_processor=None, tokenizer=None, feature_extractor=None):
-        if "feature_extractor":
-            warnings.warn(
-                "The `feature_extractor` argument is deprecated and will be removed in v5, use `image_processor`"
-                " instead.",
-                FutureWarning,
-            )
         image_processor = image_processor if image_processor is not None else feature_extractor
         if image_processor is None:
             raise ValueError("You need to specify an `image_processor`.")
