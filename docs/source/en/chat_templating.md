@@ -677,6 +677,24 @@ template. This will ensure that text generation tools can correctly figure out w
 </Tip>
 
 
+### Why do some models have multiple templates?
+
+Some models use different templates for different use cases. For example, they might use one template for normal chat
+and another for tool-use, or retrieval-augmented generation. In these cases, `tokenizer.chat_template` is a dictionary.
+This can cause some confusion, and where possible, we recommend using a single template for all use-cases. You can use
+Jinja statements like `if tools is defined` and `{% macro %}` definitions to easily wrap multiple code paths in a
+single template.
+
+When a tokenizer has multiple templates, `tokenizer.chat_template` will be a `dict`, where each key is the name
+of a template. The `apply_chat_template` method has special handling for certain template names: Specifically, it will
+look for a template named `default` in most cases, and will raise an error if it can't find one. However, if a template
+named `tool_use` exists when the user has passed a `tools` argument, it will use that instead. To access templates
+with other names, pass the name of the template you want to the `chat_template` argument of
+`apply_chat_template()`.
+
+We find that this can be a bit confusing for users, though - so if you're writing a template yourself, we recommend
+trying to put it all in a single template where possible!
+
 ### What are "default" templates?
 
 Before the introduction of chat templates, chat handling was hardcoded at the model class level. For backwards 
