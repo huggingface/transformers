@@ -26,6 +26,8 @@ import unittest
 from collections import OrderedDict
 from itertools import takewhile
 from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Union
+from unittest import mock
+from unittest.mock import patch
 
 from parameterized import parameterized
 
@@ -58,7 +60,7 @@ from transformers.testing_utils import (
     slow,
 )
 from transformers.tokenization_utils import AddedToken
-
+from transformers.utils import is_sentencepiece_available
 
 if is_torch_available():
     import torch.nn as nn
@@ -3011,40 +3013,42 @@ class TokenizerTesterMixin:
             return
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+            for return_val in [True, False]:
+                with patch('transformers.tokenization_utils_fast.is_sentencepiece_available', return_value=return_val):
+                    with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name}), sentencepiece={return_val}"):
+                        tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                        tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
-                # Ensure basic input match
-                input_p = tokenizer_p.encode_plus(self._data)
-                input_r = tokenizer_r.encode_plus(self._data)
+                        # Ensure basic input match
+                        input_p = tokenizer_p.encode_plus(self._data)
+                        input_r = tokenizer_r.encode_plus(self._data)
 
-                for key in filter(lambda x: x in ["input_ids", "token_type_ids", "attention_mask"], input_p.keys()):
-                    self.assertSequenceEqual(input_p[key], input_r[key])
+                        for key in filter(lambda x: x in ["input_ids", "token_type_ids", "attention_mask"], input_p.keys()):
+                            self.assertSequenceEqual(input_p[key], input_r[key])
 
-                input_pairs_p = tokenizer_p.encode_plus(self._data, self._data)
-                input_pairs_r = tokenizer_r.encode_plus(self._data, self._data)
+                        input_pairs_p = tokenizer_p.encode_plus(self._data, self._data)
+                        input_pairs_r = tokenizer_r.encode_plus(self._data, self._data)
 
-                for key in filter(lambda x: x in ["input_ids", "token_type_ids", "attention_mask"], input_p.keys()):
-                    self.assertSequenceEqual(input_pairs_p[key], input_pairs_r[key])
+                        for key in filter(lambda x: x in ["input_ids", "token_type_ids", "attention_mask"], input_p.keys()):
+                            self.assertSequenceEqual(input_pairs_p[key], input_pairs_r[key])
 
-                # Ensure truncation match
-                input_p = tokenizer_p.encode_plus(self._data, max_length=512, truncation=True)
-                input_r = tokenizer_r.encode_plus(self._data, max_length=512, truncation=True)
+                        # Ensure truncation match
+                        input_p = tokenizer_p.encode_plus(self._data, max_length=512, truncation=True)
+                        input_r = tokenizer_r.encode_plus(self._data, max_length=512, truncation=True)
 
-                for key in filter(lambda x: x in ["input_ids", "token_type_ids", "attention_mask"], input_p.keys()):
-                    self.assertSequenceEqual(input_p[key], input_r[key])
+                        for key in filter(lambda x: x in ["input_ids", "token_type_ids", "attention_mask"], input_p.keys()):
+                            self.assertSequenceEqual(input_p[key], input_r[key])
 
-                # Ensure truncation with stride match
-                input_p = tokenizer_p.encode_plus(
-                    self._data, max_length=512, truncation=True, stride=3, return_overflowing_tokens=True
-                )
-                input_r = tokenizer_r.encode_plus(
-                    self._data, max_length=512, truncation=True, stride=3, return_overflowing_tokens=True
-                )
+                        # Ensure truncation with stride match
+                        input_p = tokenizer_p.encode_plus(
+                            self._data, max_length=512, truncation=True, stride=3, return_overflowing_tokens=True
+                        )
+                        input_r = tokenizer_r.encode_plus(
+                            self._data, max_length=512, truncation=True, stride=3, return_overflowing_tokens=True
+                        )
 
-                for key in filter(lambda x: x in ["input_ids", "token_type_ids", "attention_mask"], input_p.keys()):
-                    self.assertSequenceEqual(input_p[key], input_r[key][0])
+                        for key in filter(lambda x: x in ["input_ids", "token_type_ids", "attention_mask"], input_p.keys()):
+                            self.assertSequenceEqual(input_p[key], input_r[key][0])
 
     def test_num_special_tokens_to_add_equal(self):
         if not self.test_slow_tokenizer:
