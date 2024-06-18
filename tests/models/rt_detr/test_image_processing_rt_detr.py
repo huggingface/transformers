@@ -34,19 +34,27 @@ if is_torch_available():
 class RTDetrImageProcessingTester(unittest.TestCase):
     def __init__(
         self,
+        parent,
+        batch_size=4,
+        num_channels=3,
         do_resize=True,
         size=None,
         do_rescale=True,
         rescale_factor=1 / 255,
+        do_normalize=False,
+        do_pad=False,
         return_tensors="pt",
     ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.num_channels = num_channels
         self.do_resize = do_resize
         self.size = size if size is not None else {"height": 640, "width": 640}
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
+        self.do_normalize = do_normalize
+        self.do_pad = do_pad
         self.return_tensors = return_tensors
-        self.num_channels = 3
-        self.batch_size = 4
 
     def prepare_image_processor_dict(self):
         return {
@@ -54,14 +62,15 @@ class RTDetrImageProcessingTester(unittest.TestCase):
             "size": self.size,
             "do_rescale": self.do_rescale,
             "rescale_factor": self.rescale_factor,
+            "do_normalize": self.do_normalize,
+            "do_pad": self.do_pad,
             "return_tensors": self.return_tensors,
-            "num_channels": self.num_channels,
         }
 
     def get_expected_values(self):
         return self.size["height"], self.size["width"]
 
-    def expected_output_image_shape(self, image):
+    def expected_output_image_shape(self, images):
         height, width = self.get_expected_values()
         return self.num_channels, height, width
 
