@@ -8,7 +8,10 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
+import torch.nn.functional as F
 
+
+from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -23,6 +26,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
     is_flash_attn_2_available,
+    is_flash_attn_greater_or_equal_2_10,
     replace_return_docstrings,
 )
 
@@ -36,6 +40,17 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = Kosmos2_5Config
 
+# Copied from transformers.models.llama.modeling_llama._get_unpad_data
+def _get_unpad_data(attention_mask):
+    seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
+    indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
+    max_seqlen_in_batch = seqlens_in_batch.max().item()
+    cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
+    return (
+        indices,
+        cu_seqlens,
+        max_seqlen_in_batch,
+    )
 
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
@@ -51,6 +66,18 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), -100.0)
 
     # return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
+
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
 
 def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, device: torch.device, past_key_values_length: int = 0):
     """
@@ -272,83 +299,6 @@ class Kosmos2_5VisionEmbeddings(nn.Module):
 
         return embeddings
 
-# Copied from ...models.pix2struct.modeling_pix2struct.Pix2StructVisionAttention -> Kosmos2_5VisionAttention
-class Kosmos2_5VisionAttention(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.hidden_size = config.hidden_size
-        self.key_value_proj_dim = config.d_kv
-        self.n_heads = config.num_attention_heads
-        self.dropout = config.attention_dropout
-        self.inner_dim = self.n_heads * self.key_value_proj_dim
-
-        # Mesh TensorFlow initialization to avoid scaling before softmax
-        self.query = nn.Linear(self.hidden_size, self.inner_dim, bias=False)
-        self.key = nn.Linear(self.hidden_size, self.inner_dim, bias=False)
-        self.value = nn.Linear(self.hidden_size, self.inner_dim, bias=False)
-        self.output = nn.Linear(self.inner_dim, self.hidden_size, bias=False)
-
-        self.gradient_checkpointing = False
-
-    def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        position_bias=None,
-        layer_head_mask=None,
-        output_attentions=False,
-    ):
-        """
-        Self-attention block
-        """
-        # Input is (batch_size, seq_length, dim)
-        # Mask is (batch_size, key_length) (non-causal) or (batch_size, key_length, key_length)
-        # past_key_value[0] is (batch_size, n_heads, q_len - 1, dim_per_head)
-        batch_size, seq_length = hidden_states.shape[:2]
-
-        def to_projection_shape(states):
-            """projection"""
-            return states.contiguous().view(batch_size, -1, self.n_heads, self.key_value_proj_dim)
-
-        # get query states
-        # (batch_size, n_heads, seq_length, dim_per_head)
-        query_states = to_projection_shape(self.query(hidden_states))
-
-        # get key/value states
-        key_states = to_projection_shape(self.key(hidden_states))
-        value_states = to_projection_shape(self.value(hidden_states))
-
-        if position_bias is None:
-            position_bias = torch.zeros(
-                (1, self.n_heads, seq_length, seq_length), device=value_states.device, dtype=value_states.dtype
-            )
-            if self.gradient_checkpointing and self.training:
-                position_bias.requires_grad = True
-
-            if attention_mask is None:
-                attention_mask = torch.ones((batch_size, seq_length), device=value_states.device, dtype=value_states.dtype)
-
-            if attention_mask.dim() == 2:
-                position_bias = position_bias + attention_mask[:, None, None, :].to(position_bias.device)
-            else:
-                # (batch_size, n_heads, seq_length, key_length)
-                position_bias = position_bias + attention_mask.to(position_bias.device)
-            position_bias = 1 - position_bias
-
-        position_bias_masked = position_bias.masked_fill(position_bias == 1, torch.finfo(value_states.dtype).min)
-
-        # need to be modified
-        attn_weights = flash_attn_func(q=query_states, k=key_states, v=value_states)
-        attn_output = attn_weights.view(batch_size, -1, self.inner_dim)
-        attn_output = self.output(attn_output)
-
-        outputs = (attn_output,) + (position_bias,)
-
-        if output_attentions:
-            outputs = outputs + (attn_weights,)
-        return outputs
-
-
 # Copied from ...models.pix2struct.modeling_pix2struct.Pix2StructVisionMlp -> Kosmos2_5VisionMlp
 class Kosmos2_5VisionMlp(nn.Module):
     def __init__(self, config: Kosmos2_5VisionConfig):
@@ -378,13 +328,271 @@ class Kosmos2_5VisionMlp(nn.Module):
         hidden_states = self.wo(hidden_states)
         return hidden_states
 
+
+# Copied from ...models.pix2struct.modeling_pix2struct.Pix2StructVisionAttention -> Kosmos2_5VisionAttention
+class Kosmos2_5VisionAttention(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.hidden_size = config.hidden_size
+        self.key_value_proj_dim = config.d_kv
+        self.n_heads = config.num_attention_heads
+        self.dropout = config.attention_dropout
+        self.inner_dim = self.n_heads * self.key_value_proj_dim
+        self.is_causal = False
+
+        # Mesh TensorFlow initialization to avoid scaling before softmax
+        self.query = nn.Linear(self.hidden_size, self.inner_dim, bias=False)
+        self.key = nn.Linear(self.hidden_size, self.inner_dim, bias=False)
+        self.value = nn.Linear(self.hidden_size, self.inner_dim, bias=False)
+        self.output = nn.Linear(self.inner_dim, self.hidden_size, bias=False)
+
+        self.gradient_checkpointing = False
+    
+    def forward(
+        self,
+        hidden_states,
+        attention_mask=None,
+        position_bias=None,
+        layer_head_mask=None,
+        output_attentions=False,
+    ):
+        """
+        Self-attention block
+        """
+        # Input is (batch_size, seq_length, dim)
+        # Mask is (batch_size, key_length) (non-causal) or (batch_size, key_length, key_length)
+        # past_key_value[0] is (batch_size, n_heads, q_len - 1, dim_per_head)
+        batch_size, seq_length, _ = hidden_states.size()
+
+        query_states = self.query(hidden_states)
+        key_states = self.key(hidden_states)
+        value_states = self.value(hidden_states)
+
+        # get query states
+        # (batch_size, n_heads, seq_length, dim_per_head)
+        query_states = query_states.view(batch_size, seq_length, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
+        key_states = key_states.view(batch_size, seq_length, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
+        value_states = value_states.view(batch_size, seq_length, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
+
+        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.key_value_proj_dim)
+
+        # if attention_mask is not None:  # no matter the length, we just slice it
+        #     causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+        #     attn_weights = attn_weights + causal_mask
+
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
+        attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+        attn_output = torch.matmul(attn_weights, value_states)
+        attn_output = attn_output.transpose(1, 2).contiguous()
+        attn_output = attn_output.reshape(batch_size, seq_length, -1)
+        attn_output = self.output(attn_output)
+
+        if not output_attentions:
+            attn_weights = None
+
+        return attn_output, attn_weights
+
+class Kosmos2_5VisionFlashAttention2(Kosmos2_5VisionAttention):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
+        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
+        # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
+        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+
+    def forward(
+        self,
+        hidden_states,
+        attention_mask=None,
+        position_bias=None,
+        layer_head_mask=None,
+        output_attentions=False,
+    ):
+        """
+        Flash attn Self-attention block
+        """
+        output_attentions = False
+        # Input is (batch_size, seq_length, dim)
+        # Mask is (batch_size, key_length) (non-causal) or (batch_size, key_length, key_length)
+        batch_size, seq_length, _ = hidden_states.size()
+        # (batch_size, seq_length, inner_dim)
+        query_states = self.query(hidden_states)
+        key_states = self.key(hidden_states)
+        value_states = self.value(hidden_states)
+
+        # (batch_size, seq_length, self.n_heads , self.key_value_proj_dim)
+        query_states = query_states.view(batch_size, seq_length, self.n_heads, self.key_value_proj_dim)
+        key_states = key_states.view(batch_size, seq_length, self.n_heads, self.key_value_proj_dim)
+        value_states = value_states.view(batch_size, seq_length, self.n_heads, self.key_value_proj_dim)
+
+        input_dtype = query_states.dtype
+        if input_dtype == torch.float32:
+            if torch.is_autocast_enabled():
+                target_dtype = torch.get_autocast_gpu_dtype()
+            # Handle the case where the model is quantized
+            elif hasattr(self.config, "_pre_quantization_dtype"):
+                target_dtype = self.config._pre_quantization_dtype
+            else:
+                target_dtype = self.q_proj.weight.dtype
+
+            logger.warning_once(
+                f"The input hidden states seems to be silently casted in float32, this might be related to"
+                f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
+                f" {target_dtype}."
+            )
+
+            query_states = query_states.to(target_dtype)
+            key_states = key_states.to(target_dtype)
+            value_states = value_states.to(target_dtype)
+
+        attn_output = self._flash_attention_forward(
+            query_states, key_states, value_states, attention_mask, seq_length, dropout=self.dropout
+        )
+
+        attn_output = attn_output.view(batch_size, -1, self.inner_dim)
+        attn_output = self.output(attn_output)
+
+        if not output_attentions:
+            attn_weights = None
+
+        return attn_output, attn_weights
+    
+    def _flash_attention_forward(
+        self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
+    ):
+        """
+        Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
+        first unpad the input, then computes the attention scores and pad the final attention scores.
+
+        Args:
+            query_states (`torch.Tensor`):
+                Input query states to be passed to Flash Attention API
+            key_states (`torch.Tensor`):
+                Input key states to be passed to Flash Attention API
+            value_states (`torch.Tensor`):
+                Input value states to be passed to Flash Attention API
+            attention_mask (`torch.Tensor`):
+                The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
+                position of padding tokens and 1 for the position of non-padding tokens.
+            dropout (`float`):
+                Attention dropout
+            softmax_scale (`float`, *optional*):
+                The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
+        """
+        if not self._flash_attn_uses_top_left_mask:
+            causal = self.is_causal
+        else:
+            # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in LlamaFlashAttention2 __init__.
+            causal = self.is_causal and query_length != 1
+
+        # Contains at least one padding token in the sequence
+        if attention_mask is not None:
+            batch_size = query_states.shape[0]
+            query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
+                query_states, key_states, value_states, attention_mask, query_length
+            )
+
+            cu_seqlens_q, cu_seqlens_k = cu_seq_lens
+            max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
+
+            attn_output_unpad = flash_attn_varlen_func(
+                query_states,
+                key_states,
+                value_states,
+                cu_seqlens_q=cu_seqlens_q,
+                cu_seqlens_k=cu_seqlens_k,
+                max_seqlen_q=max_seqlen_in_batch_q,
+                max_seqlen_k=max_seqlen_in_batch_k,
+                dropout_p=dropout,
+                softmax_scale=softmax_scale,
+                causal=causal,
+            )
+
+            attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
+        else:
+            attn_output = flash_attn_func(
+                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=causal
+            )
+
+        return attn_output
+    
+    def _upad_input(self, query_layer, key_layer, value_layer, attention_mask, query_length):
+        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
+        batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
+
+        key_layer = index_first_axis(
+            key_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
+        )
+        value_layer = index_first_axis(
+            value_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
+        )
+        if query_length == kv_seq_len:
+            query_layer = index_first_axis(
+                query_layer.reshape(batch_size * kv_seq_len, self.n_heads, head_dim), indices_k
+            )
+            cu_seqlens_q = cu_seqlens_k
+            max_seqlen_in_batch_q = max_seqlen_in_batch_k
+            indices_q = indices_k
+        elif query_length == 1:
+            max_seqlen_in_batch_q = 1
+            cu_seqlens_q = torch.arange(
+                batch_size + 1, dtype=torch.int32, device=query_layer.device
+            )  # There is a memcpy here, that is very bad.
+            indices_q = cu_seqlens_q[:-1]
+            query_layer = query_layer.squeeze(1)
+        else:
+            # The -q_len: slice assumes left padding.
+            attention_mask = attention_mask[:, -query_length:]
+            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_layer, attention_mask)
+
+        return (
+            query_layer,
+            key_layer,
+            value_layer,
+            indices_q,
+            (cu_seqlens_q, cu_seqlens_k),
+            (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
+        )
+
+class Kosmos2_5VisionSdpaAttention(Kosmos2_5VisionAttention):
+    def forward(
+        self,
+        hidden_states,
+        attention_mask=None,
+        position_bias=None,
+        layer_head_mask=None,
+        output_attentions=False,
+    ):
+        if output_attentions:
+            # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
+            logger.warning_once(
+                "LlamaModel is using LlamaSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
+                'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+            )
+            return super().forward(
+                hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                position_bias=position_bias,
+                layer_head_mask=layer_head_mask,
+                output_attentions=output_attentions,
+            )
+        pass
+
+
+
+KOSMOS2_5_VISION_ATTENTION_CLASSES = {
+    "eager": Kosmos2_5VisionAttention,
+    "flash_attention_2": Kosmos2_5VisionFlashAttention2,
+    # "sdpa": Kosmos2_5VisionSdpaAttention,
+}
+
 # Copied from ...models.pix2struct.modeling_pix2struct.Pix2StructVisionLayer -> Kosmos2_5VisionLayer
 class Kosmos2_5VisionLayer(nn.Module):
     def __init__(self, config:  Kosmos2_5Config) -> None:
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention =  Kosmos2_5VisionAttention(config)
+        self.attention = KOSMOS2_5_VISION_ATTENTION_CLASSES[config._attn_implementation](config)
         self.mlp =  Kosmos2_5VisionMlp(config)
         self.pre_mlp_layer_norm = Kosmos2_5LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.pre_attention_layer_norm = Kosmos2_5LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -401,7 +609,7 @@ class Kosmos2_5VisionLayer(nn.Module):
         # in  Kosmos2_5Vision, layernorm is applied before self-attention
         hidden_states = self.pre_attention_layer_norm(hidden_states)
 
-        self_attention_outputs = self.attention(
+        self_attention_outputs, _ = self.attention(
             hidden_states,
             attention_mask=attention_mask,
             layer_head_mask=head_mask,
@@ -416,10 +624,7 @@ class Kosmos2_5VisionLayer(nn.Module):
         # in  Kosmos2_5Vision, layernorm is also applied after self-attention
         layer_output = self.pre_mlp_layer_norm(hidden_states)
         layer_output = self.mlp(layer_output) + hidden_states  # second residual connection
-
-        outputs = (layer_output,) + outputs
-
-        return outputs
+        return layer_output, outputs
 
 # Copied from ...models.pix2struct.modeling_pix2struct.Pix2StructVisionEncoder -> Kosmos2_5VisionEncoder
 class Kosmos2_5VisionEncoder(nn.Module):
@@ -635,7 +840,28 @@ class Kosmos2_5TextSinusoidalPositionalEmbedding(nn.Module):
         )
         return position_ids.unsqueeze(0).expand(input_shape).contiguous() + past_key_values_length
 
-# multohead attention
+class Kosmos2_5TextFFN(nn.Module):
+    def __init__(self, config: Kosmos2_5TextConfig):
+        super().__init__()
+
+        self.dropout = config.dropout
+        self.activation_fn = ACT2FN[config.activation_function]
+        self.activation_dropout = config.activation_dropout
+
+        self.fc1 = nn.Linear(config.embed_dim, config.ffn_dim)
+        self.fc2 = nn.Linear(config.ffn_dim, config.embed_dim)
+
+        self.ffn_layernorm = nn.LayerNorm(config.ffn_dim, eps=config.layer_norm_eps)
+
+    def forward(self, hidden_states):
+        hidden_states = self.activation_fn(self.fc1(hidden_states))
+        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        hidden_states = self.ffn_layernorm(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+
+        return hidden_states
+
 class Kosmos2_5TextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -668,6 +894,7 @@ class Kosmos2_5TextAttention(nn.Module):
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.is_causal = True
 
         # End opy
         self.inner_attn_ln = None
@@ -734,53 +961,227 @@ class Kosmos2_5TextAttention(nn.Module):
                 )
             attn_weights = attn_weights + attention_mask
 
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-        # Mask heads if we want to
-        if layer_head_mask is not None:
-            attn_weights = attn_weights * layer_head_mask
-
+        # upcast attention to fp32
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
         attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+        attn_output = torch.matmul(attn_weights, value_states)
 
-        #  attn_output = torch.bmm(attn_probs, value_states) ?
-        context_states = torch.matmul(attn_weights, value_states)
-        # attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim) ?
-        context_states = context_states.permute(0, 2, 1, 3).contiguous().view(batch_size, seq_length, -1)
+        if attn_output.size() != (batch_size, self.num_heads, seq_length, self.head_dim):
+            raise ValueError(
+                f"`attn_output` should be of size {(batch_size, self.num_heads, seq_length, self.head_dim)}, but is"
+                f" {attn_output.size()}"
+            )
+        
+        attn_output = attn_output.permute(0, 2, 1, 3).contiguous().view(batch_size, seq_length, -1)
 
         if self.inner_attn_ln is not None:
-            context_states = self.inner_attn_ln(context_states)
+            attn_output = self.inner_attn_ln(attn_output)
 
-        attn_output = self.out_proj(context_states)
+        attn_output = self.out_proj(attn_output)
+
+        if not output_attentions:
+            attn_weights = None
 
         return attn_output, attn_weights, past_key_value
 
-class Kosmos2_5TextFFN(nn.Module):
-    def __init__(self, config: Kosmos2_5TextConfig):
-        super().__init__()
+class Kosmos2_5TextFlashAttention2(Kosmos2_5TextAttention):
+    """
+    Kosmos2_5 text flash attention module. This module inherits from `Kosmos2_5TextAttention` as the weights of the module stays
+    untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
+    flash attention and deal with padding tokens in case the input contains any of them.
+    """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
-        self.dropout = config.dropout
-        self.activation_fn = ACT2FN[config.activation_function]
-        self.activation_dropout = config.activation_dropout
+        # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
+        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
+        # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
+        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+    
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        layer_head_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        """Input shape: Batch x Length x Channel"""
+        output_attentions = False
+        is_cross_attention = encoder_hidden_states is not None
+        batch_size, seq_length, _ = hidden_states.size()
+        
+        # (batch_size, seq_length, self.n_heads , self.key_value_proj_dim)
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
 
-        self.fc1 = nn.Linear(config.embed_dim, config.ffn_dim)
-        self.fc2 = nn.Linear(config.ffn_dim, config.embed_dim)
+        query_states = query_states.view(batch_size, seq_length, self.num_heads, self.head_dim)
+        key_states = key_states.view(batch_size, seq_length, self.num_heads, self.head_dim)
+        value_states = value_states.view(batch_size, seq_length, self.num_heads, self.head_dim)
 
-        self.ffn_layernorm = nn.LayerNorm(config.ffn_dim, eps=config.layer_norm_eps)
+        if past_key_value is not None:
+            key_states = torch.cat([past_key_value[0], key_states], dim=2)
+            value_states = torch.cat([past_key_value[1], value_states], dim=2)
+        else:
+            key_states = key_states
+            value_states = value_states
+        
+        if self.is_decoder:
+            past_key_value = (key_states, value_states)
+        
+        query_states = self._shape(self.q_proj(hidden_states))
 
-    def forward(self, hidden_states):
-        hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
-        hidden_states = self.ffn_layernorm(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        input_dtype = query_states.dtype
 
-        return hidden_states
+        if input_dtype == torch.float32:
+            if torch.is_autocast_enabled():
+                target_dtype = torch.get_autocast_gpu_dtype()
+            # Handle the case where the model is quantized
+            elif hasattr(self.config, "_pre_quantization_dtype"):
+                target_dtype = self.config._pre_quantization_dtype
+            else:
+                target_dtype = self.q_proj.weight.dtype
+
+            logger.warning_once(
+                f"The input hidden states seems to be silently casted in float32, this might be related to"
+                f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
+                f" {target_dtype}."
+            )
+
+            query_states = query_states.to(target_dtype)
+            key_states = key_states.to(target_dtype)
+            value_states = value_states.to(target_dtype)
+        
+        attn_output = self._flash_attention_forward(
+            query_states, key_states, value_states, attention_mask, seq_length, dropout=self.dropout
+        )
+        attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
+
+
+        if self.inner_attn_ln is not None:
+            attn_output = self.inner_attn_ln(attn_output)
+
+        attn_output = self.out_proj(attn_output)
+
+        if not output_attentions:
+            attn_weights = None
+
+        return attn_output, attn_weights, past_key_value
+
+    def _flash_attention_forward(
+        self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
+    ):
+        """
+        Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
+        first unpad the input, then computes the attention scores and pad the final attention scores.
+
+        Args:
+            query_states (`torch.Tensor`):
+                Input query states to be passed to Flash Attention API
+            key_states (`torch.Tensor`):
+                Input key states to be passed to Flash Attention API
+            value_states (`torch.Tensor`):
+                Input value states to be passed to Flash Attention API
+            attention_mask (`torch.Tensor`):
+                The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
+                position of padding tokens and 1 for the position of non-padding tokens.
+            dropout (`float`):
+                Attention dropout
+            softmax_scale (`float`, *optional*):
+                The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
+        """
+        if not self._flash_attn_uses_top_left_mask:
+            causal = self.is_causal
+        else:
+            # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in LlamaFlashAttention2 __init__.
+            causal = self.is_causal and query_length != 1
+
+        # Contains at least one padding token in the sequence
+        if attention_mask is not None:
+            batch_size = query_states.shape[0]
+            query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
+                query_states, key_states, value_states, attention_mask, query_length
+            )
+
+            cu_seqlens_q, cu_seqlens_k = cu_seq_lens
+            max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
+
+            attn_output_unpad = flash_attn_varlen_func(
+                query_states,
+                key_states,
+                value_states,
+                cu_seqlens_q=cu_seqlens_q,
+                cu_seqlens_k=cu_seqlens_k,
+                max_seqlen_q=max_seqlen_in_batch_q,
+                max_seqlen_k=max_seqlen_in_batch_k,
+                dropout_p=dropout,
+                softmax_scale=softmax_scale,
+                causal=causal,
+            )
+
+            attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
+        else:
+            attn_output = flash_attn_func(
+                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=causal
+            )
+
+        return attn_output
+    
+    def _upad_input(self, query_layer, key_layer, value_layer, attention_mask, query_length):
+        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
+        batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
+
+        key_layer = index_first_axis(
+            key_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
+        )
+        value_layer = index_first_axis(
+            value_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
+        )
+        if query_length == kv_seq_len:
+            query_layer = index_first_axis(
+                query_layer.reshape(batch_size * kv_seq_len, self.num_heads, head_dim), indices_k
+            )
+            cu_seqlens_q = cu_seqlens_k
+            max_seqlen_in_batch_q = max_seqlen_in_batch_k
+            indices_q = indices_k
+        elif query_length == 1:
+            max_seqlen_in_batch_q = 1
+            cu_seqlens_q = torch.arange(
+                batch_size + 1, dtype=torch.int32, device=query_layer.device
+            )  # There is a memcpy here, that is very bad.
+            indices_q = cu_seqlens_q[:-1]
+            query_layer = query_layer.squeeze(1)
+        else:
+            # The -q_len: slice assumes left padding.
+            attention_mask = attention_mask[:, -query_length:]
+            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_layer, attention_mask)
+
+        return (
+            query_layer,
+            key_layer,
+            value_layer,
+            indices_q,
+            (cu_seqlens_q, cu_seqlens_k),
+            (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
+        )
+
+
+KOSMOS2_5_TEXT_ATTENTION_CLASSES = {
+    "eager": Kosmos2_5TextAttention,
+    "flash_attention_2": Kosmos2_5TextFlashAttention2,
+    # "sdpa": Kosmos2_5TextSdpaAttention,
+}
 
 class Kosmos2_5TextBlock(nn.Module):
     def __init__(self, config: Kosmos2_5TextConfig):
         super().__init__()
         self.embed_dim = config.embed_dim
 
-        self.self_attn = Kosmos2_5TextAttention(
+        # trying flash_attention_2
+        # self.self_attn = KOSMOS2_5_TEXT_ATTENTION_CLASSES["flash_attention_2"](
+        self.self_attn = KOSMOS2_5_TEXT_ATTENTION_CLASSES[config._attn_implementation](
             config,
             embed_dim=self.embed_dim,
             num_heads=config.attention_heads,
@@ -792,7 +1193,7 @@ class Kosmos2_5TextBlock(nn.Module):
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
         if config.add_cross_attention:
-            self.encoder_attn = Kosmos2_5TextAttention(
+            self.encoder_attn = KOSMOS2_5_TEXT_ATTENTION_CLASSES[config._attn_implementation](
                 config,
                 embed_dim=self.embed_dim,
                 num_heads=config.attention_heads,
@@ -1139,8 +1540,7 @@ class Kosmos2_5ImageToTextProjection(nn.Module):
         super().__init__()
         self.dense = nn.Linear(config.vision_config.hidden_size, config.text_config.embed_dim)
         self.latent_query = nn.Parameter(torch.randn(config.latent_query_num, config.text_config.embed_dim))
-
-        self.x_attn = Kosmos2_5TextAttention(
+        self.x_attn = KOSMOS2_5_TEXT_ATTENTION_CLASSES[config._attn_implementation](
             config.text_config,
             config.text_config.embed_dim,
             config.text_config.attention_heads,
