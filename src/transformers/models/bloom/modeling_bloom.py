@@ -890,7 +890,7 @@ class BloomForCausalLM(BloomPreTrainedModel):
                 "past_key_values": past_key_values,
                 "use_cache": use_cache,
                 "attention_mask": attention_mask,
-                "cache_position": cache_position
+                "cache_position": cache_position,
             }
         )
         return model_inputs
