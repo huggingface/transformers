@@ -95,8 +95,8 @@ class Kosmos2_5Processor(ProcessorMixin):
         return {
             "flattened_patches": encoding_image_processor.flattened_patches.to(torch.bfloat16),
             "input_ids": input_ids,
-            "attention_mask": attention_mask.to(torch.bfloat16),
-            "image_attention_mask" : encoding_image_processor.attention_mask.to(torch.bfloat16),
+            "attention_mask": attention_mask,
+            "image_attention_mask" : encoding_image_processor.attention_mask,
             "image_embeds_position_mask": image_embeds_position_mask,
             "image_embeds": None,
             "height": encoding_image_processor.height,
