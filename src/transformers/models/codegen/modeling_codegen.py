@@ -431,8 +431,6 @@ class CodeGenModel(CodeGenPreTrainedModel):
         self.drop = nn.Dropout(config.embd_pdrop)
         self.h = nn.ModuleList([CodeGenBlock(config, layer_idx=i) for i in range(config.n_layer)])
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
-        self.rotary_dim = min(config.rotary_dim, config.n_ctx // config.num_attention_heads)
-
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -496,12 +494,10 @@ class CodeGenModel(CodeGenPreTrainedModel):
                 "Please use an appropriate `Cache` class (https://huggingface.co/docs/transformers/v4.41.3/en/internal/generation_utils#transformers.Cache)"
             )
 
-        input_shape = inputs_embeds.shape[:-1]
+        seq_length = inputs_embeds.shape[1]
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + input_shape[-1], device=inputs_embeds.device
-            )
+            cache_position = torch.arange(past_seen_tokens, past_seen_tokens + seq_length, device=inputs_embeds.device)
 
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
@@ -518,12 +514,12 @@ class CodeGenModel(CodeGenPreTrainedModel):
         hidden_states = inputs_embeds
 
         if token_type_ids is not None:
-            token_type_ids = token_type_ids.view(-1, input_shape[-1])
+            token_type_ids = token_type_ids.view(-1, seq_length)
             token_type_embeds = self.wte(token_type_ids)
             hidden_states = hidden_states + token_type_embeds
 
         hidden_states = self.drop(hidden_states)
-        output_shape = input_shape + (hidden_states.size(-1),)
+        output_shape = (-1, seq_length, hidden_states.size(-1))
 
         next_decoder_cache = None
         all_self_attentions = () if output_attentions else None
@@ -586,6 +582,7 @@ class CodeGenModel(CodeGenPreTrainedModel):
             attentions=all_self_attentions,
         )
 
+    # Copied from transformers.models.llama.modeling_llama.LlamaModel._update_causal_mask
     def _update_causal_mask(
         self,
         attention_mask: torch.Tensor,

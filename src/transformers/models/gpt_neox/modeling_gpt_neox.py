@@ -897,7 +897,6 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_in(input_ids)
 
-        input_shape = inputs_embeds.shape[:-1]
         use_legacy_cache = False
         if use_cache and not isinstance(past_key_values, Cache):  # kept for BC (non `Cache` `past_key_values` inputs)
             use_legacy_cache = True
@@ -907,11 +906,10 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
                 "Please use an appropriate `Cache` class (https://huggingface.co/docs/transformers/v4.41.3/en/internal/generation_utils#transformers.Cache)"
             )
 
+        seq_length = inputs_embeds.shape[1]
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + input_shape[-1], device=inputs_embeds.device
-            )
+            cache_position = torch.arange(past_seen_tokens, past_seen_tokens + seq_length, device=inputs_embeds.device)
 
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
@@ -985,6 +983,7 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
             attentions=all_attentions,
         )
 
+    # Copied from transformers.models.llama.modeling_llama.LlamaModel._update_causal_mask
     def _update_causal_mask(
         self,
         attention_mask: torch.Tensor,

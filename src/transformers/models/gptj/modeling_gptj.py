@@ -1009,6 +1009,7 @@ class GPTJModel(GPTJPreTrainedModel):
             attentions=all_self_attentions,
         )
 
+    # Copied from transformers.models.llama.modeling_llama.LlamaModel._update_causal_mask
     def _update_causal_mask(
         self,
         attention_mask: torch.Tensor,
