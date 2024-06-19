@@ -209,7 +209,7 @@ Instantiate the image processor from the same checkpoint as the model you want t
 >>> image_processor = AutoImageProcessor.from_pretrained(
 ...     MODEL_NAME,
 ...     do_resize=True,
-...     size={"max_height": MAX_SIZE, "max_width": MAX_SIZE},
+...     size={"height": MAX_SIZE, "width": MAX_SIZE},
 ...     do_pad=True,
 ...     pad_size={"height": MAX_SIZE, "width": MAX_SIZE},
 ... )
