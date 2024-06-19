@@ -448,7 +448,6 @@ class SiglipFlashAttention2(SiglipAttention):
     untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
     flash attention and deal with padding tokens in case the input contains any of them.
     """
-
     is_causal = False
 
     # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
@@ -553,14 +552,17 @@ class SiglipFlashAttention2(SiglipAttention):
             attention_mask (`torch.Tensor`):
                 The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
                 position of padding tokens and 1 for the position of non-padding tokens.
-            dropout (`int`, *optional*):
+            dropout (`float`):
                 Attention dropout
             softmax_scale (`float`, *optional*):
                 The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
         """
 
-        # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in LlamaFlashAttention2 __init__.
-        causal = self.is_causal and query_length != 1
+        if not self._flash_attn_uses_top_left_mask:
+            causal = self.is_causal
+        else:
+            # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in LlamaFlashAttention2 __init__.
+            causal = self.is_causal and query_length != 1
 
         # Contains at least one padding token in the sequence
         if attention_mask is not None:
@@ -790,8 +792,10 @@ class SiglipPreTrainedModel(PreTrainedModel):
             check_device_map=check_device_map,
             **kwargs,
         )
-        config.vision_config._attn_implementation = config._attn_implementation
-        config.text_config._attn_implementation = config._attn_implementation
+        if hasattr(config, "vision_config"):
+            config.vision_config._attn_implementation = config._attn_implementation
+        if hasattr(config, "text_config"):
+            config.text_config._attn_implementation = config._attn_implementation
         return config
 
 
