@@ -445,7 +445,7 @@ class MixtralFlashAttention2(MixtralAttention):
 
         # Because the input can be padded, the absolute sequence length depends on the max position id.
         if position_ids is not None:
-            rotary_seq_len = max(kv_seq_len, position_ids.max().item())
+            rotary_seq_len = max(kv_seq_len, position_ids[:, -1].max().item()+1)
         else:
             rotary_seq_len = kv_seq_len
         cos, sin = self.rotary_emb(value_states, seq_len=rotary_seq_len)
