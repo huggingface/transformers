@@ -357,7 +357,9 @@ Here are the rules you should always follow to solve your task:
 4. Take care to not chain too many sequential tool calls in the same code block, especially when the output format is unpredictable. For instance, a call to search has an unpredictable return format, so do not have another tool call that depends on its output in the same block: rather output results with print() to use them in the next block.
 5. Call a tool only when needed, and never re-do a tool call that you previously did with the exact same parameters.
 6. Don't name any new variable with the same name as a tool: for instance don't name a variable 'final_answer'.
-7. You can use imports in your code, but only from the following list of modules: <<authorized_imports>>
+7. Never create any notional variables in our code, as having these in your logs might derail you from the true variables.
+8. You can use imports in your code, but only from the following list of modules: <<authorized_imports>>
+9. Don't give up! You're in charge of solving the task, not providing directions to solve it.
 
 Now Begin! If you solve the task correctly, you will receive a reward of $1,000,000.
 """

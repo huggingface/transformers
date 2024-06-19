@@ -99,12 +99,19 @@ def parse_json_blob(json_blob: str) -> Dict[str, str]:
 
 def parse_code_blob(code_blob: str) -> str:
     try:
-        pattern = r"```(?:py|python)?\n(.*?)```"
+        pattern = r"```(?:py|python)?\n(.*?)\n```"
         match = re.search(pattern, code_blob, re.DOTALL)
         return match.group(1).strip()
     except Exception as e:
         raise ValueError(
-            f"The code blob you used is invalid: due to the following error: {e}. This means that the regex pattern {pattern} was not respected. Make sure to correct its formatting. Code blob was: {code_blob}"
+            f"""
+The code blob you used is invalid: due to the following error: {e}
+This means that the regex pattern {pattern} was not respected: make sure to include code with the correct pattern, for instance:
+Thoughts: Your thoughts
+Code:
+```py
+# Your python code here
+```<end_action>"""
         )
 
 
@@ -113,6 +120,8 @@ def parse_json_tool_call(json_blob: str) -> Tuple[str, Dict[str, str]]:
     tool_call = parse_json_blob(json_blob)
     if "action" in tool_call and "action_input" in tool_call:
         return tool_call["action"], tool_call["action_input"]
+    elif "action" in tool_call:
+        return tool_call["action"], None
     else:
         raise ValueError(
             f"Missing keys: {[key for key in ['action', 'action_input'] if key not in tool_call]} in blob {tool_call}"
@@ -379,7 +388,7 @@ class Agent:
         self.logger.debug("System prompt is as follows:")
         self.logger.debug(self.system_prompt)
 
-    def write_inner_memory_from_logs(self) -> List[Dict[str, str]]:
+    def write_inner_memory_from_logs(self, summary_mode: Optional[bool] = None, only_tool_calls=False) -> List[Dict[str, str]]:
         """
         Reads past llm_outputs, actions, and observations or errors from the logs into a series of messages
         that can be used as input to the LLM.
@@ -389,43 +398,38 @@ class Agent:
             "role": MessageRole.USER,
             "content": "Task: " + self.logs[0]["task"],
         }
-        memory = [prompt_message, task_message]
+        if summary_mode:
+            memory = [task_message]
+        else:
+            memory = [prompt_message, task_message]
         for i, step_log in enumerate(self.logs[1:]):
-            if "llm_output" in step_log:
-                thought_message = {"role": MessageRole.ASSISTANT, "content": step_log["llm_output"] + "\n"}
+            if "llm_output" in step_log and not (summary_mode or only_tool_calls):
+                thought_message = {"role": MessageRole.ASSISTANT, "content": step_log["llm_output"].strip()}
+                memory.append(thought_message)
+            if "facts" in step_log:
+                thought_message = {"role": MessageRole.ASSISTANT, "content": f"[FACTS LIST]:\n" + step_log["facts"].strip()}
                 memory.append(thought_message)
 
-            if "error" in step_log:
-                message_content = (
-                    "Error: "
-                    + str(step_log["error"])
-                    + "\nNow let's retry: take care not to repeat previous errors! If you have retried several times, try a completely different approach.\n"
-                )
-            elif "observation" in step_log:
-                message_content = f"Observation: {step_log['observation']}"
-            tool_response_message = {"role": MessageRole.TOOL_RESPONSE, "content": message_content}
-            memory.append(tool_response_message)
+            if "plan" in step_log and not (summary_mode or only_tool_calls):
+                thought_message = {"role": MessageRole.ASSISTANT, "content": f"[PLAN]:\n" + step_log["plan"].strip()}
+                memory.append(thought_message)
 
-            if len(memory) % 3 == 0:
-                reminder_content = (
-                    "Reminder: you are working towards solving the following task: " + self.logs[0]["task"]
-                )
-                reminder_content += "\nHere is a summary of your past tool calls and their results:"
-                for j in range(i + 1):
-                    reminder_content += "\nStep " + str(j + 1)
-                    if "tool_call" in self.logs[j]:
-                        reminder_content += "\nTool call:" + str(self.logs[j]["tool_call"])
-                    if self.memory_verbose:
-                        if "observation" in self.logs[j]:
-                            reminder_content += "\nObservation:" + str(self.logs[j]["observation"])
-                    if "error" in self.logs[j]:
-                        reminder_content += "\nError:" + str(self.logs[j]["error"])
-                memory.append(
-                    {
-                        "role": MessageRole.USER,
-                        "content": reminder_content,
-                    }
-                )
+            if "tool_call" in step_log and (summary_mode or only_tool_calls):
+                tool_call_message = {"role": MessageRole.ASSISTANT, "content": f"[STEP {i} TOOL CALL]: " + str(step_log["tool_call"]).strip()}
+                memory.append(tool_call_message)
+
+            if "error" in step_log or "observation" in step_log:
+                if "error" in step_log:
+                    message_content = (
+                        f"[OUTPUT OF STEP {i}] Error: "
+                        + str(step_log["error"])
+                        + "\nNow let's retry: take care not to repeat previous errors! If you have retried several times, try a completely different approach.\n"
+                    )
+                elif "observation" in step_log:
+                    message_content = f"[OUTPUT OF STEP {i}] Observation:\n{step_log['observation']}"
+                tool_response_message = {"role": MessageRole.TOOL_RESPONSE, "content": message_content}
+                memory.append(tool_response_message)
+
         return memory
 
     def get_succinct_logs(self):
@@ -458,7 +462,7 @@ class Agent:
         This method replaces arguments with the actual values from the state if they refer to state variables.
 
         Args:
-            tool_name (`str`): Name of the Tool to execute (shoulde be one from self.toolbox).
+            tool_name (`str`): Name of the Tool to execute (should be one from self.toolbox).
             arguments (Dict[str, str]): Arguments passed to the Tool.
         """
         if tool_name not in self.toolbox.tools:
@@ -622,6 +626,7 @@ class ReactAgent(Agent):
         llm_engine: Callable = HfEngine(),
         system_prompt: str = DEFAULT_REACT_CODE_SYSTEM_PROMPT,
         tool_description_template: str = DEFAULT_TOOL_DESCRIPTION_TEMPLATE,
+        planning_interval: Optional[int] = None,
         **kwargs,
     ):
         super().__init__(
@@ -633,6 +638,7 @@ class ReactAgent(Agent):
         )
         if "final_answer" not in self._toolbox.tools:
             self._toolbox.add_tool(FinalAnswerTool())
+        self.planning_interval = planning_interval
 
     def provide_final_answer(self, task) -> str:
         """
@@ -708,6 +714,8 @@ class ReactAgent(Agent):
         iteration = 0
         while final_answer is None and iteration < self.max_iterations:
             try:
+                if self.planning_interval is not None and iteration % self.planning_interval == 0:
+                    self.planning_step(task, is_first_step=(iteration == 0), iteration=iteration)
                 step_logs = self.step()
                 if "final_answer" in step_logs:
                     final_answer = step_logs["final_answer"]
@@ -728,6 +736,168 @@ class ReactAgent(Agent):
         return final_answer
 
 
+    def planning_step(self, task, is_first_step=False, iteration: int = None):
+        """
+        Plan the next steps to reach the objective.
+        """
+        if is_first_step:
+            prompt_facts = f"""Below I will present you a task.
+            
+You will now build a comprehensive preparatory survey of which facts we have at our disposal and which ones we still need.
+To do so, you will have to read the task and identify things that must be discovered in order to successfully complete it.
+Don't make any assumptions. For each item, provide a thorough reasoning. Here is how you will structure this survey:
+
+---
+### 1. Facts given in the task
+List here the specific facts given in the task that could help you (there might be nothing here).
+
+### 2. Facts to look up
+List here any facts that we may need to look up.
+Also list where to find each of these, for instance a website, a file... - maybe the task contains some sources that you should re-use here.
+
+### 3. Facts to derive
+List here anything that we want to derive from the above by logical reasoning, for instance computation or simulation.
+
+Keep in mind that "facts" will typically be specific names, dates, values, etc. Your answer should use the below headings:
+### 1. Facts given in the task
+### 2. Facts to look up
+### 3. Facts to derive
+Do not add anything else.
+"""
+            message_prompt_facts = {"role": MessageRole.SYSTEM, "content": prompt_facts}
+            message_task = {"role": MessageRole.USER, "content": f"""Here is the task:
+```
+{task}
+```
+Now begin!""".strip()}
+
+            answer_facts = self.llm_engine([message_prompt_facts, message_task])
+            self.facts = answer_facts
+
+            prompt_plan = f"""You are a world expert at making efficient plans to solve any task using a set of carefully crafted tools.
+
+Now for the given task, develop a step-by-step high-level plan taking into account the above inputs and list of facts.
+This plan should involve individual tasks based on the avilable tools, that if executed correctly will yield the correct answer. 
+Do not skip steps, do not add any superfluous steps. Only write the high-level plan, DO NOT DETAIL INDIVIDUAL TOOL CALLS.
+After writing the final step of the plan, write the '\n<end_plan>' tag and stop there.
+"""
+            prompt_plan_user = f"""
+Here is your task:
+
+Task:
+```
+{task}
+```
+
+Your plan can leverage any of these tools:
+{self._toolbox.show_tool_descriptions(self.tool_description_template)}
+
+List of facts that you know:
+```
+{answer_facts}
+```
+
+Now begin! Write your plan below:
+""".strip()
+            message_prompt_plan = {"role": MessageRole.SYSTEM, "content": prompt_plan}
+            message_prompt_plan_user = {"role": MessageRole.USER, "content": prompt_plan_user}
+            answer_plan = self.llm_engine([message_prompt_plan, message_prompt_plan_user], stop_sequences=['<end_plan>'])
+
+            final_plan_redaction = f"""Here is the plan of action that I will follow to solve the task:
+```
+{answer_plan}
+```"""
+            final_facts_redaction = f"""Here are the facts that I know so far:
+```
+{answer_facts}
+```""".strip()
+            self.logs.append({"plan": final_plan_redaction, "facts": final_facts_redaction})
+            self.progressing = True
+            print("PLAN:\n", final_plan_redaction)
+        else:  # update plan
+            agent_memory = self.write_inner_memory_from_logs(summary_mode=False) # This will not log the plan but will log facts
+
+            facts_update_system_prompt = {
+                "role": MessageRole.SYSTEM,
+                "content": """
+You are a world expert at gathering known and unknown facts based on a conversation.
+Below you will find a task, and ahistory of attempts made to solve the task. You will have to produce a list of these:
+### 1. Facts given in the task
+### 2. Facts that we have learned
+### 3. Facts still to look up
+### 4. Facts still to derive
+Find the task and history below.
+""".strip()}
+            facts_update_message = {
+                "role": MessageRole.USER,
+                "content": """Earlier we've built a list of facts.
+But since in your previous steps you may have learned useful new facts or invalidated some false ones.
+Please update your list of facts based on the previous history, and provide these headings:
+### 1. Facts given in the task
+### 2. Facts that we have learned
+### 3. Facts still to look up
+### 4. Facts still to derive
+
+Now write your new list of facts below.""".strip(),
+            }
+            facts_update = self.llm_engine([facts_update_system_prompt] + agent_memory + [facts_update_message])
+            plan_update_message = {
+                "role": MessageRole.SYSTEM,
+                "content": f"""You are a world expert at making efficient plans to solve any task using a set of carefully crafted tools.
+
+You have been given a task:
+```
+{task}
+```
+
+Find below the record of what has been tried so far to solve it. Then you will be asked to make an updated plan to solve the task.
+If the previous tries so far have met some success, you can make an updated plan based on these actions.
+If you are stalled, you can make a completely new plan starting from scratch.
+""",
+            }
+            plan_update_message_user = {
+                "role": MessageRole.USER,
+                "content": f"""
+You're still working towards solving this task:
+```
+{task}
+```
+
+You have access to these tools:
+{self._toolbox.show_tool_descriptions(self.tool_description_template)}
+
+Here is the up to date list of facts that you know:
+```
+{facts_update}
+```
+
+Now for the given task, develop a step-by-step high-level plan taking into account the above inputs and list of facts.
+This plan should involve individual tasks based on the avilable tools, that if executed correctly will yield the correct answer. 
+Do not skip steps, do not add any superfluous steps. Only write the high-level plan, DO NOT DETAIL INDIVIDUAL TOOL CALLS.
+After writing the final step of the plan, write the '\n<end_plan>' tag and stop there.
+
+Now write your new plan below.""".strip()}
+            plan_update = self.llm_engine([plan_update_message] + agent_memory + [plan_update_message_user], stop_sequences=['<end_plan>'])
+            final_plan_redaction = f"""I still need to solve the task I was given:
+```
+{task}
+```
+
+Here is my new/updated plan of action to solve the task:
+```
+{plan_update}
+```
+""".strip()
+            final_facts_redaction = f"""Here is the updated list of the facts that I know:
+```
+{facts_update}
+```""".strip()
+            self.logs.append(
+                {"plan": final_plan_redaction, "facts": final_facts_redaction}
+            )
+            print("UPDATED PLAN", self.logs[-1]["plan"])
+
+
 class ReactJsonAgent(ReactAgent):
     """
     This agent that solves the given task step by step, using the ReAct framework:
@@ -741,6 +911,7 @@ class ReactJsonAgent(ReactAgent):
         llm_engine: Callable = HfEngine(),
         system_prompt: str = DEFAULT_REACT_JSON_SYSTEM_PROMPT,
         tool_description_template: str = DEFAULT_TOOL_DESCRIPTION_TEMPLATE,
+        planning_interval: Optional[int] = None,
         **kwargs,
     ):
         super().__init__(
@@ -748,6 +919,7 @@ class ReactJsonAgent(ReactAgent):
             llm_engine=llm_engine,
             system_prompt=system_prompt,
             tool_description_template=tool_description_template,
+            planning_interval=planning_interval,
             **kwargs,
         )
 
@@ -793,11 +965,14 @@ class ReactJsonAgent(ReactAgent):
         self.logger.warning(f"Calling tool: '{tool_name}' with arguments: {arguments}")
         if tool_name == "final_answer":
             if isinstance(arguments, dict):
-                answer = arguments["answer"]
+                if "answer" in arguments:
+                    answer = arguments["answer"]
+                    if isinstance(answer, str) and answer in self.state.keys():  # if the answer is a state variable, return the value
+                        answer = self.state[answer]
+                else:
+                    answer = arguments
             else:
                 answer = arguments
-            if answer in self.state:  # if the answer is a state variable, return the value
-                answer = self.state[answer]
             current_step_logs["final_answer"] = answer
             return current_step_logs
         else:
@@ -836,6 +1011,7 @@ class ReactCodeAgent(ReactAgent):
         system_prompt: str = DEFAULT_REACT_CODE_SYSTEM_PROMPT,
         tool_description_template: str = DEFAULT_TOOL_DESCRIPTION_TEMPLATE,
         additional_authorized_imports: Optional[List[str]] = None,
+        planning_interval: Optional[int] = None,
         **kwargs,
     ):
         super().__init__(
@@ -843,6 +1019,7 @@ class ReactCodeAgent(ReactAgent):
             llm_engine=llm_engine,
             system_prompt=system_prompt,
             tool_description_template=tool_description_template,
+            planning_interval=planning_interval,
             **kwargs,
         )
 
@@ -918,7 +1095,7 @@ class ReactCodeAgent(ReactAgent):
             self.logger.log(32, information)
             current_step_logs["observation"] = information
         except Exception as e:
-            error_msg = f"Failed while trying to execute the code below:\n{CustomFormatter.reset + code_action + CustomFormatter.reset}\nThis failed due to the following error:\n{str(e)}"
+            error_msg = f"Failed while trying to execute the code above, due to the following error:\n{str(e)}"
             if "'dict' object has no attribute 'read'" in str(e):
                 error_msg += "\nYou get this error because you passed a dict as input for one of the arguments instead of a string."
             raise AgentExecutionError(error_msg)

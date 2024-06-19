@@ -16,7 +16,8 @@ import os
 import pathlib
 import tempfile
 import uuid
-
+import torch
+from torch import Tensor
 import numpy as np
 
 from ..utils import is_soundfile_availble, is_torch_available, is_vision_available, logging
@@ -251,4 +252,4 @@ def handle_agent_outputs(output, output_type=None):
         for _k, _v in INSTANCE_TYPE_MAPPING.items():
             if isinstance(output, _k):
                 return _v(output)
-        return AgentType(output)
+        return output

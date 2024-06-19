@@ -17,9 +17,10 @@
 import ast
 import builtins
 import difflib
+import numpy as np
+import pandas as pd
 from collections.abc import Mapping
 from typing import Any, Callable, Dict, List, Optional
-
 
 class InterpreterError(ValueError):
     """
@@ -50,8 +51,8 @@ LIST_SAFE_MODULES = [
     "unicodedata",
 ]
 
-PRINT_OUTPUTS = ""
-
+PRINT_OUTPUTS, MAX_LEN_OUTPUT = "", 50000
+OPERATIONS_COUNT, MAX_OPERATIONS = 0, 10000000
 
 class BreakException(Exception):
     pass
@@ -316,7 +317,13 @@ def evaluate_assign(assign, state, tools):
     else:
         if len(assign.targets) != len(result):
             raise InterpreterError(f"Assign failed: expected {len(result)} values but got {len(assign.targets)}.")
-        for tgt, val in zip(assign.targets, result):
+        expanded_values = []
+        for tgt in assign.targets:
+            if isinstance(tgt, ast.Starred):
+                expanded_values.extend(result)
+            else:
+                expanded_values.append(result)
+        for tgt, val in zip(assign.targets, expanded_values):
             set_value(tgt, val, state, tools)
     return result
 
@@ -328,7 +335,10 @@ def set_value(target, value, state, tools):
         state[target.id] = value
     elif isinstance(target, ast.Tuple):
         if not isinstance(value, tuple):
-            raise InterpreterError("Cannot unpack non-tuple value")
+            if hasattr(value, '__iter__') and not isinstance(value, (str, bytes)):
+                value = tuple(value)
+            else:
+                raise InterpreterError("Cannot unpack non-tuple value")
         if len(target.elts) != len(value):
             raise InterpreterError("Cannot unpack tuple of wrong size")
         for i, elem in enumerate(target.elts):
@@ -345,7 +355,7 @@ def set_value(target, value, state, tools):
 def evaluate_call(call, state, tools):
     if not (isinstance(call.func, ast.Attribute) or isinstance(call.func, ast.Name)):
         raise InterpreterError(
-            f"It is not permitted to evaluate other functions than the provided tools (tried to execute {call.func})."
+            f"This is not a correct function: {call.func})."
         )
     if isinstance(call.func, ast.Attribute):
         obj = evaluate_ast(call.func.value, state, tools)
@@ -353,6 +363,7 @@ def evaluate_call(call, state, tools):
         if not hasattr(obj, func_name):
             raise InterpreterError(f"Object {obj} has no attribute {func_name}")
         func = getattr(obj, func_name)
+    
     elif isinstance(call.func, ast.Name):
         func_name = call.func.id
         if func_name in state:
@@ -363,10 +374,27 @@ def evaluate_call(call, state, tools):
             func = ERRORS[func_name]
         else:
             raise InterpreterError(
-                f"It is not permitted to evaluate other functions than the provided tools or imported functions (tried to execute {call.func.id})."
+                f"It is not permitted to evaluate other functions than the provided tools or defined functions (tried to execute {call.func.id})."
             )
 
-    args = [evaluate_ast(arg, state, tools) for arg in call.args]
+    args = []
+    for arg in call.args:
+        if isinstance(arg, ast.Starred):
+            args.extend(evaluate_ast(arg.value, state, tools))
+        else:
+            args.append(evaluate_ast(arg, state, tools))
+
+    args = []
+    for arg in call.args:
+        if isinstance(arg, ast.Starred):
+            unpacked = evaluate_ast(arg.value, state, tools)
+            if not hasattr(unpacked, '__iter__') or isinstance(unpacked, (str, bytes)):
+                raise InterpreterError(f"Cannot unpack non-iterable value {unpacked}")
+            args.extend(unpacked)
+        else:
+            args.append(evaluate_ast(arg, state, tools))
+
+
     kwargs = {keyword.arg: evaluate_ast(keyword.value, state, tools) for keyword in call.keywords}
 
     if isinstance(func, type) and len(func.__module__.split(".")) > 1:  # Check for user-defined classes
@@ -397,6 +425,7 @@ def evaluate_call(call, state, tools):
                 output = " ".join(map(str, args))
                 global PRINT_OUTPUTS
                 PRINT_OUTPUTS += output + "\n"
+                # cap the number of lines
                 return output
             else:  # Assume it's a callable object
                 output = func(*args, **kwargs)
@@ -406,15 +435,19 @@ def evaluate_call(call, state, tools):
 def evaluate_subscript(subscript, state, tools):
     index = evaluate_ast(subscript.slice, state, tools)
     value = evaluate_ast(subscript.value, state, tools)
-    if isinstance(index, slice):
+
+    if isinstance(value, pd.core.indexing._LocIndexer):
+        parent_object = value.obj
+        return parent_object.loc[index]
+    if isinstance(value, (pd.DataFrame, pd.Series, np.ndarray)):
+        return value[index]
+    elif isinstance(index, slice):
         return value[index]
     elif isinstance(value, (list, tuple)):
-        # Ensure the index is within bounds
         if not (-len(value) <= index < len(value)):
             raise InterpreterError(f"Index {index} out of bounds for list of length {len(value)}")
         return value[int(index)]
     elif isinstance(value, str):
-        # Ensure the index is within bounds
         if not (-len(value) <= index < len(value)):
             raise InterpreterError(f"Index {index} out of bounds for string of length {len(value)}")
         return value[index]
@@ -439,7 +472,6 @@ def evaluate_name(name, state, tools):
         return state[close_matches[0]]
     raise InterpreterError(f"The variable `{name.id}` is not defined.")
 
-
 def evaluate_condition(condition, state, tools):
     left = evaluate_ast(condition.left, state, tools)
     comparators = [evaluate_ast(c, state, tools) for c in condition.comparators]
@@ -450,33 +482,35 @@ def evaluate_condition(condition, state, tools):
 
     for op, comparator in zip(ops, comparators):
         if op == ast.Eq:
-            result = result and (current_left == comparator)
+            current_result = current_left == comparator
         elif op == ast.NotEq:
-            result = result and (current_left != comparator)
+            current_result = current_left != comparator
         elif op == ast.Lt:
-            result = result and (current_left < comparator)
+            current_result = current_left < comparator
         elif op == ast.LtE:
-            result = result and (current_left <= comparator)
+            current_result = current_left <= comparator
         elif op == ast.Gt:
-            result = result and (current_left > comparator)
+            current_result = current_left > comparator
         elif op == ast.GtE:
-            result = result and (current_left >= comparator)
+            current_result = current_left >= comparator
         elif op == ast.Is:
-            result = result and (current_left is comparator)
+            current_result = current_left is comparator
         elif op == ast.IsNot:
-            result = result and (current_left is not comparator)
+            current_result = current_left is not comparator
         elif op == ast.In:
-            result = result and (current_left in comparator)
+            current_result = current_left in comparator
         elif op == ast.NotIn:
-            result = result and (current_left not in comparator)
+            current_result = current_left not in comparator
         else:
             raise InterpreterError(f"Operator not supported: {op}")
 
+        result = result & current_result
         current_left = comparator
-        if not result:
+
+        if isinstance(result, bool) and not result:
             break
 
-    return result
+    return result if isinstance(result, (bool, pd.Series)) else result.all()
 
 
 def evaluate_if(if_statement, state, tools):
@@ -499,11 +533,7 @@ def evaluate_for(for_loop, state, tools):
     result = None
     iterator = evaluate_ast(for_loop.iter, state, tools)
     for counter in iterator:
-        if isinstance(for_loop.target, ast.Tuple):
-            for i, elem in enumerate(for_loop.target.elts):
-                state[elem.id] = counter[i]
-        else:
-            state[for_loop.target.id] = counter
+        set_value(for_loop.target, counter, state, tools)
         for node in for_loop.body:
             try:
                 line_result = evaluate_ast(node, state, tools)
@@ -520,19 +550,24 @@ def evaluate_for(for_loop, state, tools):
 
 
 def evaluate_listcomp(listcomp, state, tools):
-    result = []
-    for generator in listcomp.generators:
-        iter_value = evaluate_ast(generator.iter, state, tools)
+    def inner_evaluate(generators, index, current_state):
+        if index >= len(generators):
+            return [evaluate_ast(listcomp.elt, current_state, tools)]
+        generator = generators[index]
+        iter_value = evaluate_ast(generator.iter, current_state, tools)
+        result = []
         for value in iter_value:
-            new_state = state.copy()
+            new_state = current_state.copy()
             if isinstance(generator.target, ast.Tuple):
                 for idx, elem in enumerate(generator.target.elts):
                     new_state[elem.id] = value[idx]
             else:
                 new_state[generator.target.id] = value
             if all(evaluate_ast(if_clause, new_state, tools) for if_clause in generator.ifs):
-                result.append(evaluate_ast(listcomp.elt, new_state, tools))
-    return result
+                result.extend(inner_evaluate(generators, index + 1, new_state))
+        return result
+
+    return inner_evaluate(listcomp.generators, 0, state)
 
 
 def evaluate_try(try_node, state, tools):
@@ -614,6 +649,43 @@ def evaluate_with(with_node, state, tools):
             context.__exit__(None, None, None)
 
 
+def import_modules(expression, state, authorized_imports):
+    def check_module_authorized(module_name):
+        module_path = module_name.split('.')
+        module_subpaths = ['.'.join(module_path[:i]) for i in range(1, len(module_path) + 1)]
+        return any(subpath in authorized_imports for subpath in module_subpaths)
+
+    if isinstance(expression, ast.Import):
+        for alias in expression.names:
+            if check_module_authorized(alias.name):
+                module = __import__(alias.name)
+                state[alias.asname or alias.name] = module
+            else:
+                raise InterpreterError(f"Import of {alias.name} is not allowed. Authorized imports are: {str(authorized_imports)}")
+        return None
+    elif isinstance(expression, ast.ImportFrom):
+        if check_module_authorized(expression.module):
+            module = __import__(expression.module, fromlist=[alias.name for alias in expression.names])
+            for alias in expression.names:
+                state[alias.asname or alias.name] = getattr(module, alias.name)
+        else:
+            raise InterpreterError(f"Import from {expression.module} is not allowed.")
+        return None
+
+def evaluate_dictcomp(dictcomp, state, tools):
+    result = {}
+    for gen in dictcomp.generators:
+        iter_value = evaluate_ast(gen.iter, state, tools)
+        for value in iter_value:
+            new_state = state.copy()
+            set_value(gen.target, value, new_state, tools)
+            if all(evaluate_ast(if_clause, new_state, tools) for if_clause in gen.ifs):
+                key = evaluate_ast(dictcomp.key, new_state, tools)
+                val = evaluate_ast(dictcomp.value, new_state, tools)
+                result[key] = val
+    return result
+
+
 def evaluate_ast(
     expression: ast.AST,
     state: Dict[str, Any],
@@ -639,6 +711,10 @@ def evaluate_ast(
             The list of modules that can be imported by the code. By default, only a few safe modules are allowed.
             Add more at your own risk!
     """
+    global OPERATIONS_COUNT
+    if OPERATIONS_COUNT >= MAX_OPERATIONS:
+        raise InterpreterError(f"Reached the max number of operations of {MAX_OPERATIONS}. Maybe there is an infinite loop somewhere in the code, or you're just asking too many calculations.")
+    OPERATIONS_COUNT += 1
     if isinstance(expression, ast.Assign):
         # Assignement -> we evaluate the assignement which should update the state
         # We return the variable assigned as it may be used to determine the final result.
@@ -653,10 +729,12 @@ def evaluate_ast(
         return expression.value
     elif isinstance(expression, ast.Tuple):
         return tuple(evaluate_ast(elt, state, tools) for elt in expression.elts)
-    elif isinstance(expression, ast.ListComp):
+    elif isinstance(expression, (ast.ListComp, ast.GeneratorExp)):
         return evaluate_listcomp(expression, state, tools)
     elif isinstance(expression, ast.UnaryOp):
         return evaluate_unaryop(expression, state, tools)
+    elif isinstance(expression, ast.Starred):
+        return evaluate_ast(expression.value, state, tools)
     elif isinstance(expression, ast.BoolOp):
         # Boolean operation -> evaluate the operation
         return evaluate_boolop(expression, state, tools)
@@ -711,53 +789,20 @@ def evaluate_ast(
         else:
             return evaluate_ast(expression.orelse, state, tools)
     elif isinstance(expression, ast.Attribute):
-        obj = evaluate_ast(expression.value, state, tools)
-        return getattr(obj, expression.attr)
+        value = evaluate_ast(expression.value, state, tools)
+        return getattr(value, expression.attr)
     elif isinstance(expression, ast.Slice):
         return slice(
             evaluate_ast(expression.lower, state, tools) if expression.lower is not None else None,
             evaluate_ast(expression.upper, state, tools) if expression.upper is not None else None,
             evaluate_ast(expression.step, state, tools) if expression.step is not None else None,
         )
-    elif isinstance(expression, ast.ListComp) or isinstance(expression, ast.GeneratorExp):
-        result = []
-        vars = {}
-        for generator in expression.generators:
-            var_name = generator.target.id
-            iter_value = evaluate_ast(generator.iter, state, tools)
-            for value in iter_value:
-                vars[var_name] = value
-                if all(evaluate_ast(if_clause, {**state, **vars}, tools) for if_clause in generator.ifs):
-                    elem = evaluate_ast(expression.elt, {**state, **vars}, tools)
-                    result.append(elem)
-        return result
     elif isinstance(expression, ast.DictComp):
-        result = {}
-        for gen in expression.generators:
-            for container in get_iterable(evaluate_ast(gen.iter, state, tools)):
-                state[gen.target.id] = container
-                key = evaluate_ast(expression.key, state, tools)
-                value = evaluate_ast(expression.value, state, tools)
-                result[key] = value
-        return result
-    elif isinstance(expression, ast.Import):
-        for alias in expression.names:
-            if alias.name in authorized_imports:
-                module = __import__(alias.name)
-                state[alias.asname or alias.name] = module
-            else:
-                raise InterpreterError(f"Import of {alias.name} is not allowed.")
-        return None
+        return evaluate_dictcomp(expression, state, tools)
     elif isinstance(expression, ast.While):
         return evaluate_while(expression, state, tools)
-    elif isinstance(expression, ast.ImportFrom):
-        if expression.module in authorized_imports:
-            module = __import__(expression.module)
-            for alias in expression.names:
-                state[alias.asname or alias.name] = getattr(module, alias.name)
-        else:
-            raise InterpreterError(f"Import from {expression.module} is not allowed.")
-        return None
+    elif isinstance(expression, (ast.Import, ast.ImportFrom)):
+        return import_modules(expression, state, authorized_imports)
     elif isinstance(expression, ast.ClassDef):
         return evaluate_class_def(expression, state, tools)
     elif isinstance(expression, ast.Try):
@@ -806,15 +851,24 @@ def evaluate_python_code(
     result = None
     global PRINT_OUTPUTS
     PRINT_OUTPUTS = ""
+    global OPERATIONS_COUNT
+    OPERATIONS_COUNT = 0
     for node in expression.body:
         try:
             result = evaluate_ast(node, state, tools, authorized_imports)
         except InterpreterError as e:
-            msg = f"Evaluation stopped at line '{ast.get_source_segment(code, node)}' because of the following error:\n{e}"
+            msg=""
             if len(PRINT_OUTPUTS) > 0:
-                msg += f"Executing code yielded these outputs:\n{PRINT_OUTPUTS}\n====\n"
+                if len(PRINT_OUTPUTS) < MAX_LEN_OUTPUT:
+                    msg += f"Print outputs:\n{PRINT_OUTPUTS}\n====\n"
+                else:
+                    msg += f"Print outputs:\n{PRINT_OUTPUTS[:MAX_LEN_OUTPUT]}\n_Print outputs were over {MAX_LEN_OUTPUT} characters, so they have been truncated._\n====\n"
+            msg += f"EXECUTION FAILED:\nEvaluation stopped at line '{ast.get_source_segment(code, node)}' because of the following error:\n{e}"
             raise InterpreterError(msg)
         finally:
-            state["print_outputs"] = PRINT_OUTPUTS
+            if len(PRINT_OUTPUTS) < MAX_LEN_OUTPUT:
+                state["print_outputs"] = PRINT_OUTPUTS
+            else:
+                state["print_outputs"] = PRINT_OUTPUTS[:MAX_LEN_OUTPUT] + f"\n_Print outputs were over {MAX_LEN_OUTPUT} characters, so they have been truncated._"
 
     return result
