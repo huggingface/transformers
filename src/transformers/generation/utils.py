@@ -31,7 +31,6 @@ from ..cache_utils import (
     QuantizedCacheConfig,
     QuantoQuantizedCache,
     SlidingWindowCache,
-    SinkCache,
     StaticCache,
 )
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
@@ -1396,9 +1395,7 @@ class GenerationMixin:
 
         past_length = 0
         if "past_key_values" in model_kwargs:
-            if isinstance(model_kwargs["past_key_values"], SinkCache):
-                past_length = model_kwargs["past_key_values"].seen_tokens
-            elif isinstance(model_kwargs["past_key_values"], Cache):
+            if isinstance(model_kwargs["past_key_values"], Cache):
                 past_length = model_kwargs["past_key_values"].get_seq_length()
             else:
                 past_length = model_kwargs["past_key_values"][0][0].shape[2]
