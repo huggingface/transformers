@@ -30,7 +30,9 @@ from transformers.testing_utils import (
     require_auto_gptq,
     require_quanto,
     require_torch,
+    require_torch_gpu,
     require_torch_multi_accelerator,
+    require_torch_multi_gpu,
     slow,
     torch_device,
 )
@@ -3091,7 +3093,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
 
     @slow
     @require_torch_gpu
-    def test_assisted_decoding_in_different_gpu(self):
+    def test_assisted_decoding_in_gpu_cpu(self):
         # PT-only test: TF doesn't support assisted decoding yet.
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM").to("cuda")
         assistant = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM").to("cpu")
