@@ -610,7 +610,7 @@ class Pop2PianoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         model = Pop2PianoForConditionalGeneration.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
-    @require_onnx
+    @unittest.skip("ONNX support deprecated")
     def test_export_to_onnx(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         model = Pop2PianoForConditionalGeneration(config_and_inputs[0]).to(torch_device)
