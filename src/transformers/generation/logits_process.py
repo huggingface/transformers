@@ -1760,7 +1760,7 @@ class SuppressTokensAtBeginLogitsProcessor(LogitsProcessor):
 
     >>> processor = AutoProcessor.from_pretrained("openai/whisper-tiny.en")
     >>> model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
-    >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+    >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True)
     >>> inputs = processor(ds[0]["audio"]["array"], return_tensors="pt")
 
     >>> # Whisper has `begin_suppress_tokens` set by default (= `[220, 50256]`). 50256 is the EOS token, so this means
@@ -1812,7 +1812,7 @@ class SuppressTokensLogitsProcessor(LogitsProcessor):
 
     >>> processor = AutoProcessor.from_pretrained("openai/whisper-tiny.en")
     >>> model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
-    >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+    >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True)
     >>> inputs = processor(ds[0]["audio"]["array"], return_tensors="pt")
 
     >>> # Whisper has a long list of suppressed tokens. For instance, in this case, the token 1 is suppressed by default.
@@ -1901,7 +1901,7 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
 
     >>> processor = AutoProcessor.from_pretrained("openai/whisper-tiny.en")
     >>> model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
-    >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+    >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True)
     >>> inputs = processor(ds[3]["audio"]["array"], return_tensors="pt")
     >>> input_features = inputs.input_features
 

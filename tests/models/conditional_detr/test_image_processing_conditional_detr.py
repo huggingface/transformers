@@ -131,6 +131,7 @@ class ConditionalDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcess
     image_processing_class = ConditionalDetrImageProcessor if is_vision_available() else None
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = ConditionalDetrImageProcessingTester(self)
 
     @property
