@@ -79,6 +79,7 @@ from . import (
     efficientnet,
     electra,
     encodec,
+    dac,
     encoder_decoder,
     ernie,
     esm,
