@@ -167,6 +167,8 @@ class TextGenerationPipeline(Pipeline):
             preprocess_params["handle_long_generation"] = handle_long_generation
 
         preprocess_params.update(generate_kwargs)
+        for preprocess_only_key in ["add_special_tokens", "padding"]:
+            generate_kwargs.pop(preprocess_only_key, False)
         forward_params = generate_kwargs
 
         postprocess_params = {}
