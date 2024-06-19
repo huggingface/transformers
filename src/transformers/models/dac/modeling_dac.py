@@ -512,14 +512,14 @@ class DacModel(DacPreTrainedModel):
 
     def encode(
         self,
-        audio_data: torch.Tensor,
+        input_values: torch.Tensor,
         n_quantizers: int = None,
     ):
         """Encode given audio data and return quantized latent codes
 
         Parameters
         ----------
-        audio_data : Tensor[B x 1 x T]
+        input_values : Tensor[B x 1 x T]
             Audio data to encode
         n_quantizers : int, optional
             Number of quantizers to use, by default None
@@ -544,7 +544,7 @@ class DacModel(DacPreTrainedModel):
             "length" : int
                 Number of samples in input audio
         """
-        z = self.encoder(audio_data)
+        z = self.encoder(input_values)
         z, codes, latents, commitment_loss, codebook_loss = self.quantizer(z, n_quantizers)
         return DacEncoderOutput(z, codes, latents, commitment_loss, codebook_loss)
 
@@ -569,14 +569,14 @@ class DacModel(DacPreTrainedModel):
 
     def forward(
         self,
-        audio_data: torch.Tensor,
+        input_values: torch.Tensor,
         n_quantizers: int = None,
     ):
         """Model forward pass
 
         Parameters
         ----------
-        audio_data : Tensor[B x 1 x T]
+        input_values : Tensor[B x 1 x T]
             Audio data to encode
         sample_rate : int, optional
             Sample rate of audio data in Hz, by default None
@@ -606,8 +606,8 @@ class DacModel(DacPreTrainedModel):
             "audio" : Tensor[B x 1 x length]
                 Decoded audio data.
         """
-        length = audio_data.shape[-1]
-        encoder_output = self.encode(audio_data, n_quantizers)
+        length = input_values.shape[-1]
+        encoder_output = self.encode(input_values, n_quantizers)
         x = self.decode(encoder_output.z)
 
         audio = x[..., :length]
