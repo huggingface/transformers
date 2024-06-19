@@ -37,23 +37,6 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 [[autodoc]] GraniteConfig
 
-## GraniteTokenizer
-
-[[autodoc]] GraniteTokenizer
-    - build_inputs_with_special_tokens
-    - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
-    - save_vocabulary
-
-## GraniteTokenizerFast
-
-[[autodoc]] GraniteTokenizerFast
-    - build_inputs_with_special_tokens
-    - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
-    - update_post_processor
-    - save_vocabulary
-
 ## GraniteModel
 
 [[autodoc]] GraniteModel
