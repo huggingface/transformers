@@ -2084,7 +2084,7 @@ class GenerationMixin:
         # Convert to legacy cache if needed
         if use_dynamic_cache_by_default and generation_config.return_legacy_cache:
             if isinstance(result, ModelOutput) and hasattr(result, "past_key_values"):
-                if isinstance(result.past_key_values, DynamicCache):
+                if isinstance(result.past_key_values, (DynamicCache, EncoderDecoderCache)):
                     result.past_key_values = result.past_key_values.to_legacy_cache()
         return result
 
@@ -2343,7 +2343,7 @@ class GenerationMixin:
                 # Replicates the new past_key_values to match the `top_k` candidates
                 past = model_kwargs["past_key_values"]
                 # If it is a static cache, modify it in-place layer after layer to save memory
-                if isinstance(past, DynamicCache):
+                if isinstance(past, (DynamicCache, EncoderDecoderCache)):
                     past.batch_repeat_interleave(top_k)
                 else:
                     new_key_values = []
@@ -2370,7 +2370,7 @@ class GenerationMixin:
                         output_hidden_states=True,
                         output_attentions=output_attentions,
                     )
-                    if isinstance(outputs["past_key_values"], DynamicCache):
+                    if isinstance(outputs["past_key_values"], (DynamicCache, EncoderDecoderCache)):
                         # Remove past K-V from output since we don't need to stack later
                         outputs["past_key_values"] = None
                         # Remove last token from past K-V since we don't want to append it at this point
@@ -2445,7 +2445,7 @@ class GenerationMixin:
             else:
                 _, next_past_key_values = self._extract_past_from_model_output(outputs, standardize_cache_format=True)
                 # Do it in-place layer per layer to save memory
-                if isinstance(next_past_key_values, DynamicCache):
+                if isinstance(next_past_key_values, (DynamicCache, EncoderDecoderCache)):
                     next_past_key_values.batch_select_indices(augmented_idx)
                 else:
                     new_key_values = []
@@ -2518,7 +2518,7 @@ class GenerationMixin:
             # Contrastive search works by forward looking at the next token, so we need to exclude it from
             # `past_key_values` to be consistent with the other decoding methods
             if model_kwargs.get("past_key_values") is not None:
-                if isinstance(model_kwargs["past_key_values"], DynamicCache):
+                if isinstance(model_kwargs["past_key_values"], (DynamicCache, EncoderDecoderCache)):
                     model_kwargs["past_key_values"].crop(-1)
                 else:
                     past_key_values = []
@@ -2777,7 +2777,7 @@ class GenerationMixin:
         # Exception 2: models with different cache formats. These are limited to `DynamicCache` until their
         # cache format is standardized, to avoid adding complexity to the codebase.
         elif "bloom" in model_class or "gptbigcode" in model_class:
-            if not isinstance(past_key_values, DynamicCache):
+            if not isinstance(past_key_values, (DynamicCache, EncoderDecoderCache)):
                 raise ValueError(
                     f"Using an unsupported cache format with {model_class}. Currently, it only supports the "
                     "legacy tuple format or `DynamicCache`"
@@ -3722,7 +3722,7 @@ class GenerationMixin:
         model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
 
         # This is needed if return_dict_in_generate is True
-        if isinstance(model_kwargs.get("past_key_values", None), DynamicCache):
+        if isinstance(model_kwargs.get("past_key_values", None), (DynamicCache, EncoderDecoderCache)):
             if len(model_kwargs["past_key_values"]) == 0:
                 start_from_empty_dynamic_cache = True
         else:
@@ -4043,7 +4043,7 @@ def _split(data, full_batch_size: int, split_size: int = None):
     if isinstance(data, torch.Tensor):
         return [data[i : i + split_size] for i in range(0, full_batch_size, split_size)]
     # New cache format
-    elif isinstance(data, DynamicCache):
+    elif isinstance(data, (DynamicCache, EncoderDecoderCache)):
         return data.batch_split(full_batch_size, split_size)
     elif isinstance(data, tuple):
         # If the elements of the tuple are also tuples (e.g., past_key_values in our earlier example)
@@ -4149,7 +4149,7 @@ def stack_model_outputs(model_outputs: List[ModelOutput]) -> ModelOutput:
         if isinstance(data[0], torch.Tensor):
             return torch.cat(data, dim=0)
         # New cache format
-        elif isinstance(data[0], DynamicCache):
+        elif isinstance(data[0], (DynamicCache, EncoderDecoderCache)):
             return DynamicCache.from_batch_splits(data)
         elif isinstance(data[0], tuple):
             # If the elements of the tuple are also tuples (e.g., past_key_values in our earlier example)
