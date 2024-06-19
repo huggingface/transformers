@@ -21,7 +21,7 @@ with extra methods beings exposed
 from array import array
 
 import numpy as np
-from tokenizers import Tokenizer, decoders
+from tokenizers import Tokenizer, decoders, pre_tokenizers
 from tokenizers.models import BPE
 
 from .. import AddedToken
@@ -607,6 +607,9 @@ class GGUFLlamaConverter(LlamaConverter):
         self.additional_kwargs["unk_token"] = unk_token
         self.additional_kwargs["eos_token"] = bos_token
         self.additional_kwargs["bos_token"] = eos_token
+
+        if self.uses_byte_level_decoding:
+            tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=True)
 
         return tokenizer
 
