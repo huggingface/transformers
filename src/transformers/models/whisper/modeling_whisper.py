@@ -306,13 +306,13 @@ class WhisperAttention(nn.Module):
 
         # use key_value_states if cross attention
         current_states = key_value_states if key_value_states is not None else hidden_states
-        if (
-            is_cross_attention
-            and isinstance(past_key_value, DynamicCache)
-            and past_key_value.get_seq_length(self.layer_idx)
+        if is_cross_attention and (
+            (isinstance(past_key_value, DynamicCache) and past_key_value.get_seq_length(self.layer_idx))
+            or (isinstance(past_key_value, StaticCache) and past_key_value.is_updated[self.layer_idx])
         ):
             # reuse k,v, cross_attentions
-            key_states, value_states = past_key_value[self.layer_idx]
+            key_states = past_key_value.key_cache[self.layer_idx]
+            value_states = past_key_value.value_cache[self.layer_idx]
         else:
             key_states = self._shape(self.k_proj(current_states), -1, bsz)
             value_states = self._shape(self.v_proj(current_states), -1, bsz)
@@ -608,13 +608,13 @@ class WhisperSdpaAttention(WhisperAttention):
 
         # use key_value_states if cross attention
         current_states = key_value_states if key_value_states is not None else hidden_states
-        if (
-            is_cross_attention
-            and isinstance(past_key_value, DynamicCache)
-            and past_key_value.get_seq_length(self.layer_idx)
+        if is_cross_attention and (
+            (isinstance(past_key_value, DynamicCache) and past_key_value.get_seq_length(self.layer_idx))
+            or (isinstance(past_key_value, StaticCache) and past_key_value.is_updated[self.layer_idx])
         ):
             # reuse k,v, cross_attentions
-            key_states, value_states = past_key_value[self.layer_idx]
+            key_states = past_key_value.key_cache[self.layer_idx]
+            value_states = past_key_value.value_cache[self.layer_idx]
         else:
             key_states = self._shape(self.k_proj(current_states), -1, bsz)
             value_states = self._shape(self.v_proj(current_states), -1, bsz)
@@ -1345,7 +1345,11 @@ class WhisperDecoder(WhisperPreTrainedModel):
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         causal_mask = self._update_causal_mask(
-            attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
+            attention_mask,
+            inputs_embeds,
+            cache_position,
+            past_key_values.self_attention_cache if past_key_values is not None else None,
+            output_attentions,
         )
 
         if self.gradient_checkpointing and self.training:

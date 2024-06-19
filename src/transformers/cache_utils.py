@@ -765,6 +765,7 @@ class StaticCache(Cache):
 
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
+        self.is_updated = []
         cache_shape = (max_batch_size, self.num_key_value_heads, self.max_cache_len, self.head_dim)
         for _ in range(config.num_hidden_layers):
             # Note: `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
@@ -775,6 +776,7 @@ class StaticCache(Cache):
             torch._dynamo.mark_static_address(new_layer_value_cache)
             self.key_cache.append(new_layer_key_cache)
             self.value_cache.append(new_layer_value_cache)
+            self.is_updated.append(False)
 
     def update(
         self,
@@ -812,6 +814,8 @@ class StaticCache(Cache):
             k_out[:, :, cache_position] = key_states
             v_out[:, :, cache_position] = value_states
 
+        self.is_updated[layer_idx] = True
+
         return k_out, v_out
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
@@ -831,6 +835,7 @@ class StaticCache(Cache):
             # In-place ops prevent breaking the static address
             self.key_cache[layer_idx].zero_()
             self.value_cache[layer_idx].zero_()
+            self.is_updated[layer_idx] = False
 
 
 class SlidingWindowCache(Cache):
@@ -994,7 +999,9 @@ class EncoderDecoderCache:
         return legacy_cache
 
     @classmethod
-    def from_legacy_cache(cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None) -> "EncoderDecoderCache":
+    def from_legacy_cache(
+        cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    ) -> "EncoderDecoderCache":
         """Converts a cache in the legacy cache format into an equivalent `DynamicCache`."""
         cache = cls(self_attention_cache=DynamicCache(), cross_attention_cache=DynamicCache())
         if past_key_values is not None:
@@ -1015,9 +1022,9 @@ class EncoderDecoderCache:
     def reset(self):
         if hasattr(self.self_attention_cache, "reset"):
             self.self_attention_cache.reset()
-        elif hasattr(self.cross_attention_cache, "reset"):
+        if hasattr(self.cross_attention_cache, "reset"):
             self.cross_attention_cache.reset()
-        else:
+        elif not hasattr(self.self_attention_cache, "reset") and not hasattr(self.cross_attention_cache, "reset"):
             raise ValueError(
                 "Neither self nor cross-attention cache have valid `.reset()` methods. `.reset()` should "
                 "only be called on compatible cache classes, such as `StaticCache` or `SlidingWindowCache`. "
