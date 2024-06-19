@@ -1830,6 +1830,12 @@ class GenerationMixin:
                 raise ValueError("assisted generate requires `use_cache=True`")
             if generation_config.cache_implementation == "static":
                 raise ValueError("assisted generate is not supported with `static_cache`")
+            if self._is_stateful:
+                # In assisted generation we need the ability to confirm whether the model would pick certain tokens,
+                # which is not possible with stateful models (they can't reset to a previous subset of generated text)
+                raise ValueError(
+                    f"assisted generation is not supported with stateful models, such as {self.__class__.__name__}"
+                )
 
             # 11. Get the candidate generator, given the parameterization
             candidate_generator = self._get_candidate_generator(
@@ -1867,6 +1873,11 @@ class GenerationMixin:
         elif generation_mode == GenerationMode.CONTRASTIVE_SEARCH:
             if not model_kwargs["use_cache"]:
                 raise ValueError("Contrastive search requires `use_cache=True`")
+            if self._is_stateful:
+                # Just like assisted generation, we need to be able to rollback to a previous state (see comment above)
+                raise ValueError(
+                    f"contrastive search is not supported with stateful models, such as {self.__class__.__name__}"
+                )
 
             result = self._contrastive_search(
                 input_ids,
