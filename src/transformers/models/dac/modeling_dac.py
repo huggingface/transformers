@@ -615,7 +615,3 @@ class DacModel(DacPreTrainedModel):
         return DacOutput(audio, **encoder_output)
 
 
-if __name__ == "__main__":
-    model = DacModel.from_pretrained("kamilakesbi/dac_16khz")
-    input_ids = [0, 4, 4, 3, 2, 4, 1, 7, 19]
-    output = model(input_ids)
