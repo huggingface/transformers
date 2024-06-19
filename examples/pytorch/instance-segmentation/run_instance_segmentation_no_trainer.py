@@ -72,6 +72,15 @@ def parse_args():
         default="qubvel-hf/ade20k-mini",
     )
     parser.add_argument(
+        "--trust_remote_code",
+        action="store_true",
+        help=(
+            "Whether to trust the execution of code from datasets/models defined on the Hub."
+            " This option should only be set to `True` for repositories you trust and in which you have read the"
+            " code, as it will execute code present on the Hub on your local machine."
+        ),
+    )
+    parser.add_argument(
         "--image_height",
         type=int,
         default=384,
@@ -425,7 +434,7 @@ def main():
 
     # In distributed training, the load_dataset function guarantees that only one local process can concurrently
     # download the dataset.
-    dataset = load_dataset(args.dataset_name, cache_dir=args.cache_dir)
+    dataset = load_dataset(args.dataset_name, cache_dir=args.cache_dir, trust_remote_code=args.trust_remote_code)
 
     # We need to specify the label2id mapping for the model
     # it is a mapping from semantic class name to class index.

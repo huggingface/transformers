@@ -545,7 +545,7 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         >>> processor = AutoProcessor.from_pretrained("patrickvonplaten/wav2vec2-base-100h-with-lm")
 
         >>> # load first sample of English common_voice
-        >>> dataset = load_dataset("mozilla-foundation/common_voice_11_0", "en", split="train", streaming=True)
+        >>> dataset = load_dataset("mozilla-foundation/common_voice_11_0", "en", split="train", streaming=True, trust_remote_code=True)
         >>> dataset = dataset.cast_column("audio", datasets.Audio(sampling_rate=16_000))
         >>> dataset_iter = iter(dataset)
         >>> sample = next(dataset_iter)
