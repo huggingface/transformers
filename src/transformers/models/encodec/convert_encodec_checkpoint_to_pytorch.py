@@ -25,6 +25,7 @@ from transformers import (
     logging,
 )
 
+
 # checkpoints downloaded from:
 # https://dl.fbaipublicfiles.com/encodec/v0/encodec_24khz-d7cc33bc.th
 # https://huggingface.co/facebook/musicgen-small/resolve/main/compression_state_dict.bin
@@ -238,7 +239,7 @@ def recursively_load_weights(orig_dict, hf_model, model_name):
                 elif "weight_v" in name:
                     weight_type = "weight_v"
                 elif "weight_ih_l0" in name:
-                    print('ok')
+                    print("ok")
                     weight_type = "weight_ih_l0"
                 elif "weight_hh_l0" in name:
                     weight_type = "weight_hh_l0"

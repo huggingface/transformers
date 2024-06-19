@@ -305,10 +305,7 @@ _import_structure = {
         "CTRLTokenizer",
     ],
     "models.cvt": ["CvtConfig"],
-    "models.dac": [
-        'DacConfig', 
-        'DacFeatureExtractor'
-    ],
+    "models.dac": ["DacConfig", "DacFeatureExtractor"],
     "models.data2vec": [
         "Data2VecAudioConfig",
         "Data2VecTextConfig",
@@ -6270,9 +6267,9 @@ if TYPE_CHECKING:
             CvtPreTrainedModel,
         )
         from .models.dac import (
+            DacFeatureExtractor,
             DacModel,
             DacPreTrainedModel,
-            DacFeatureExtractor, 
         )
         from .models.data2vec import (
             Data2VecAudioForAudioFrameClassification,

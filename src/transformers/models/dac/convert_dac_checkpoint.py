@@ -1,7 +1,7 @@
 import argparse
+import fnmatch
 
 import torch
-import fnmatch
 
 from transformers import (
     DacConfig,
@@ -9,31 +9,32 @@ from transformers import (
     logging,
 )
 
+
 # checkpoints downloaded using:
 # pip install descript-audio-codec
 # python3 -m dac download # downloads the default 44kHz variant
 # python3 -m dac download --model_type 44khz # downloads the 44kHz variant
 # python3 -m dac download --model_type 24khz # downloads the 24kHz variant
 # python3 -m dac download --model_type 16khz # downloads the 16kHz variant
-# More informations: https://github.com/descriptinc/descript-audio-codec/tree/main 
+# More informations: https://github.com/descriptinc/descript-audio-codec/tree/main
 
 logging.set_verbosity_info()
 logger = logging.get_logger("transformers.models.dac")
 
 
-def match_pattern(string, pattern ):
+def match_pattern(string, pattern):
     # Split the pattern into parts
-    pattern_parts = pattern.split('.')
-    string_parts = string.split('.')
+    pattern_parts = pattern.split(".")
+    string_parts = string.split(".")
 
     pattern_block_count = string_block_count = 0
 
     for part in pattern_parts:
-        if part.startswith('block'):
+        if part.startswith("block"):
             pattern_block_count += 1
 
     for part in string_parts:
-        if part.startswith('block'):
+        if part.startswith("block"):
             string_block_count += 1
 
     return fnmatch.fnmatch(string, pattern) and string_block_count == pattern_block_count
@@ -88,8 +89,8 @@ def should_ignore(name, ignore_keys):
 def recursively_load_weights(orig_dict, hf_model, model_name):
     unused_weights = []
 
-    if model_name in ["dac_16khz", "dac_24khz","dac_44khz"] :
-        print('supported model')
+    if model_name in ["dac_16khz", "dac_24khz", "dac_44khz"]:
+        print("supported model")
     else:
         raise ValueError(f"Unsupported model: {model_name}")
 
@@ -98,7 +99,7 @@ def recursively_load_weights(orig_dict, hf_model, model_name):
             logger.info(f"{name} was ignored")
             continue
 
-        mapped_key = '.'.join(name.split('.')[:-1])
+        mapped_key = ".".join(name.split(".")[:-1])
         if "weight_g" in name:
             weight_type = "weight_g"
         elif "weight_v" in name:
@@ -114,7 +115,6 @@ def recursively_load_weights(orig_dict, hf_model, model_name):
     logger.warning(f"Unused weights: {unused_weights}")
 
 
-
 @torch.no_grad()
 def convert_checkpoint(
     model_name,
@@ -122,26 +122,24 @@ def convert_checkpoint(
     pytorch_dump_folder_path,
     repo_id=None,
 ):
-        
-        
     model_dict = torch.load(checkpoint_path, "cpu")
 
     config = DacConfig()
 
-    metadata = model_dict['metadata']['kwargs']
-    config.encoder_dim = metadata['encoder_dim']
-    config.encoder_rates = metadata['encoder_rates']
-    config.codebook_size = metadata['codebook_size']
-    config.n_codebooks = metadata['n_codebooks']
-    config.codebook_dim = metadata['codebook_dim']
-    config.decoder_dim = metadata['decoder_dim']
-    config.decoder_rates = metadata['decoder_rates']
-    config.quantizer_dropout = metadata['quantizer_dropout']
-    config.sample_rate = metadata['sample_rate']
+    metadata = model_dict["metadata"]["kwargs"]
+    config.encoder_dim = metadata["encoder_dim"]
+    config.encoder_rates = metadata["encoder_rates"]
+    config.codebook_size = metadata["codebook_size"]
+    config.n_codebooks = metadata["n_codebooks"]
+    config.codebook_dim = metadata["codebook_dim"]
+    config.decoder_dim = metadata["decoder_dim"]
+    config.decoder_rates = metadata["decoder_rates"]
+    config.quantizer_dropout = metadata["quantizer_dropout"]
+    config.sample_rate = metadata["sample_rate"]
 
     model = DacModel(config)
 
-    original_checkpoint = model_dict['state_dict']
+    original_checkpoint = model_dict["state_dict"]
 
     recursively_load_weights(original_checkpoint, model, model_name)
     model.save_pretrained(pytorch_dump_folder_path)
@@ -153,7 +151,6 @@ def convert_checkpoint(
 
 
 if __name__ == "__main__":
-
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--model",
@@ -164,15 +161,14 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    args.model="dac_44khz"
+    args.model = "dac_44khz"
 
-    if args.model == "dac_16khz": 
+    if args.model == "dac_16khz":
         checkpoint_path = "/home/kamil/.cache/descript/dac/weights_16khz_8kbps_0.0.5.pth"
-    if args.model == "dac_24khz": 
+    if args.model == "dac_24khz":
         checkpoint_path = "/home/kamil/.cache/descript/dac/weights_24khz_8kbps_0.0.4.pth"
-    if args.model == "dac_44khz": 
+    if args.model == "dac_44khz":
         checkpoint_path = "/home/kamil/.cache/descript/dac/weights_44khz_8kbps_0.0.1.pth"
 
-    pytorch_dump_folder_path = '/home/kamil/.cache/transformers_dac'
+    pytorch_dump_folder_path = "/home/kamil/.cache/transformers_dac"
     convert_checkpoint(args.model, checkpoint_path, pytorch_dump_folder_path, "kamilakesbi/" + str(args.model))
-

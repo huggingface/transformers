@@ -1,17 +1,17 @@
 import math
+from dataclasses import dataclass
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from dataclasses import dataclass
-
 from einops import rearrange
 from torch.nn.utils import weight_norm
-from ...utils import ModelOutput
 
 from ...modeling_utils import PreTrainedModel
+from ...utils import ModelOutput
 from .configuration_dac import DacConfig
+
 
 @dataclass
 class DacOutput(ModelOutput):
@@ -34,6 +34,7 @@ class DacOutput(ModelOutput):
         "audio" : Tensor[B x 1 x length]
             Decoded audio data.
     """
+
     audio: torch.FloatTensor = None
     z: torch.FloatTensor = None
     codes: torch.FloatTensor = None
@@ -61,6 +62,7 @@ class DacEncoderOutput(ModelOutput):
         "vq/codebook_loss" : Tensor[1]
             Codebook loss to update the codebook
     """
+
     z: torch.FloatTensor = None
     codes: torch.FloatTensor = None
     latents: torch.FloatTensor = None
@@ -75,6 +77,7 @@ class DacDecoderOutput(ModelOutput):
         "audio" : Tensor[B x 1 x length]
                 Decoded audio data.
     """
+
     audio: torch.FloatTensor = None
 
 
@@ -156,9 +159,7 @@ class DacVectorQuantize(nn.Module):
         commitment_loss = F.mse_loss(z_e, z_q.detach(), reduction="none").mean([1, 2])
         codebook_loss = F.mse_loss(z_q, z_e.detach(), reduction="none").mean([1, 2])
 
-        z_q = (
-            z_e + (z_q - z_e).detach()
-        )  # noop in forward pass, straight-through gradient estimator in backward pass
+        z_q = z_e + (z_q - z_e).detach()  # noop in forward pass, straight-through gradient estimator in backward pass
 
         z_q = self.out_proj(z_q)
 
@@ -189,12 +190,10 @@ class DacVectorQuantize(nn.Module):
         return z_q, indices
 
 
-
 def init_weights(m):
     if isinstance(m, nn.Conv1d):
         nn.init.trunc_normal_(m.weight, std=0.02)
         nn.init.constant_(m.bias, 0)
-
 
 
 class DacResidualUnit(nn.Module):
@@ -232,12 +231,9 @@ class DacEncoderBlock(nn.Module):
                 padding=math.ceil(stride / 2),
             ),
         )
-       
 
     def forward(self, x):
         return self.block(x)
-    
-
 
 
 class DacDecoderBlock(nn.Module):
@@ -261,7 +257,6 @@ class DacDecoderBlock(nn.Module):
         return self.block(x)
 
 
-
 class DacResidualVectorQuantize(nn.Module):
     """
     Introduced in SoundStream: An end2end neural audio codec
@@ -274,11 +269,11 @@ class DacResidualVectorQuantize(nn.Module):
     ):
         super().__init__()
 
-        input_dim=config.latent_dim
-        n_codebooks=config.n_codebooks
-        codebook_size= config.codebook_size
-        codebook_dim=config.codebook_dim
-        quantizer_dropout= config.quantizer_dropout
+        input_dim = config.latent_dim
+        n_codebooks = config.n_codebooks
+        codebook_size = config.codebook_size
+        codebook_dim = config.codebook_dim
+        quantizer_dropout = config.quantizer_dropout
 
         if isinstance(codebook_dim, int):
             codebook_dim = [codebook_dim for _ in range(n_codebooks)]
@@ -288,10 +283,7 @@ class DacResidualVectorQuantize(nn.Module):
         self.codebook_size = codebook_size
 
         self.quantizers = nn.ModuleList(
-            [
-                DacVectorQuantize(input_dim, codebook_size, codebook_dim[i])
-                for i in range(n_codebooks)
-            ]
+            [DacVectorQuantize(input_dim, codebook_size, codebook_dim[i]) for i in range(n_codebooks)]
         )
         self.quantizer_dropout = quantizer_dropout
 
@@ -345,14 +337,10 @@ class DacResidualVectorQuantize(nn.Module):
             if self.training is False and i >= n_quantizers:
                 break
 
-            z_q_i, commitment_loss_i, codebook_loss_i, indices_i, z_e_i = quantizer(
-                residual
-            )
+            z_q_i, commitment_loss_i, codebook_loss_i, indices_i, z_e_i = quantizer(residual)
 
             # Create mask to apply quantizer dropout
-            mask = (
-                torch.full((z.shape[0],), fill_value=i, device=z.device) < n_quantizers
-            )
+            mask = torch.full((z.shape[0],), fill_value=i, device=z.device) < n_quantizers
             z_q = z_q + z_q_i * mask[:, None, None]
             residual = residual - z_q_i
 
@@ -411,9 +399,7 @@ class DacResidualVectorQuantize(nn.Module):
         codes = []
         dims = np.cumsum([0] + [q.codebook_dim for q in self.quantizers])
 
-        n_codebooks = np.where(dims <= latents.shape[1])[0].max(axis=0, keepdims=True)[
-            0
-        ]
+        n_codebooks = np.where(dims <= latents.shape[1])[0].max(axis=0, keepdims=True)[0]
         for i in range(n_codebooks):
             j, k = dims[i], dims[i + 1]
             z_p_i, codes_i = self.quantizers[i].decode_latents(latents[:, j:k, :])
@@ -460,12 +446,8 @@ class DacDecoder(nn.Module):
         return self.model(x)
 
 
-
 class DacEncoder(nn.Module):
-    def __init__(
-        self,
-        config : DacConfig
-    ):
+    def __init__(self, config: DacConfig):
         super().__init__()
 
         d_model = config.encoder_dim
@@ -490,7 +472,7 @@ class DacEncoder(nn.Module):
         self.enc_dim = d_model
 
     def forward(self, x):
-        for module in self.block: 
+        for module in self.block:
             x = module(x)
         return x
 
@@ -506,7 +488,6 @@ class DacPreTrainedModel(PreTrainedModel):
     main_input_name = "input_values"
 
     def _init_weights(self, module):
-
         if isinstance(module, nn.Conv1d):
             nn.init.trunc_normal_(module.weight, std=0.02)
             nn.init.constant_(module.bias, 0)
@@ -564,9 +545,7 @@ class DacModel(DacPreTrainedModel):
                 Number of samples in input audio
         """
         z = self.encoder(audio_data)
-        z, codes, latents, commitment_loss, codebook_loss = self.quantizer(
-            z, n_quantizers
-        )
+        z, codes, latents, commitment_loss, codebook_loss = self.quantizer(z, n_quantizers)
         return DacEncoderOutput(z, codes, latents, commitment_loss, codebook_loss)
 
     def decode(self, z: torch.Tensor):
@@ -628,19 +607,15 @@ class DacModel(DacPreTrainedModel):
                 Decoded audio data.
         """
         length = audio_data.shape[-1]
-        encoder_output = self.encode(
-            audio_data, n_quantizers
-        )
+        encoder_output = self.encode(audio_data, n_quantizers)
         x = self.decode(encoder_output.z)
 
         audio = x[..., :length]
 
         return DacOutput(audio, **encoder_output)
-    
 
 
-if __name__ == '__main__': 
-
-    model = DacModel.from_pretrained('kamilakesbi/dac_16khz')
+if __name__ == "__main__":
+    model = DacModel.from_pretrained("kamilakesbi/dac_16khz")
     input_ids = [0, 4, 4, 3, 2, 4, 1, 7, 19]
     output = model(input_ids)
