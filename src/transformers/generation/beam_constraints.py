@@ -196,9 +196,14 @@ class PhrasalConstraint(Constraint):
             self.completed = completed
         else:
             # failed to make progress.
-            reset = True
+
             new_fulfilled_idx = self.get_qkstart(token_id)  # use KMP to find longest suffix which fulfilled
-            self.fulfilled_idx = new_fulfilled_idx
+            if new_fulfilled_idx == -1:
+                reset = True
+                self.reset()
+            else:
+                self.fulfilled_idx = new_fulfilled_idx
+
         return stepped, completed, reset
 
     def get_qkstart(self, token_id: int):
