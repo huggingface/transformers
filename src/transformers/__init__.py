@@ -799,8 +799,6 @@ _import_structure = {
     "pipelines": [
         "AudioClassificationPipeline",
         "AutomaticSpeechRecognitionPipeline",
-        "Conversation",
-        "ConversationalPipeline",
         "CsvPipelineDataFormat",
         "DepthEstimationPipeline",
         "DocumentQuestionAnsweringPipeline",
@@ -1106,7 +1104,8 @@ except OptionalDependencyNotAvailable:
         name for name in dir(dummy_vision_objects) if not name.startswith("_")
     ]
 else:
-    _import_structure["image_processing_utils"] = ["ImageProcessingMixin"]
+    _import_structure["image_processing_base"] = ["ImageProcessingMixin"]
+    _import_structure["image_processing_utils"] = ["BaseImageProcessor"]
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
     _import_structure["models.beit"].extend(["BeitFeatureExtractor", "BeitImageProcessor"])
     _import_structure["models.bit"].extend(["BitImageProcessor"])
@@ -1169,6 +1168,18 @@ else:
     _import_structure["models.vivit"].append("VivitImageProcessor")
     _import_structure["models.yolos"].extend(["YolosFeatureExtractor", "YolosImageProcessor"])
 
+try:
+    if not is_torchvision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    from .utils import dummy_torchvision_objects
+
+    _import_structure["utils.dummy_torchvision_objects"] = [
+        name for name in dir(dummy_torchvision_objects) if not name.startswith("_")
+    ]
+else:
+    _import_structure["image_processing_utils_fast"] = ["BaseImageProcessorFast"]
+    _import_structure["models.vit"].append("ViTImageProcessorFast")
 
 # PyTorch-backed objects
 try:
@@ -5429,8 +5440,6 @@ if TYPE_CHECKING:
     from .pipelines import (
         AudioClassificationPipeline,
         AutomaticSpeechRecognitionPipeline,
-        Conversation,
-        ConversationalPipeline,
         CsvPipelineDataFormat,
         DepthEstimationPipeline,
         DocumentQuestionAnsweringPipeline,
@@ -5708,7 +5717,8 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         from .utils.dummy_vision_objects import *
     else:
-        from .image_processing_utils import ImageProcessingMixin
+        from .image_processing_base import ImageProcessingMixin
+        from .image_processing_utils import BaseImageProcessor
         from .image_utils import ImageFeatureExtractionMixin
         from .models.beit import BeitFeatureExtractor, BeitImageProcessor
         from .models.bit import BitImageProcessor
@@ -5797,6 +5807,15 @@ if TYPE_CHECKING:
         from .models.vitmatte import VitMatteImageProcessor
         from .models.vivit import VivitImageProcessor
         from .models.yolos import YolosFeatureExtractor, YolosImageProcessor
+
+    try:
+        if not is_torchvision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        from .utils.dummy_torchvision_objects import *
+    else:
+        from .image_processing_utils_fast import BaseImageProcessorFast
+        from .models.vit import ViTImageProcessorFast
 
     # Modeling
     try:
