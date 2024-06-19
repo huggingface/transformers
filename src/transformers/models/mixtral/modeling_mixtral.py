@@ -447,7 +447,7 @@ class MixtralFlashAttention2(MixtralAttention):
         rotary_seq_len = max(
             kv_seq_len, position_ids[:, -1].max().item() + 1
         ) if position_ids is not None else kv_seq_len
-        
+
         cos, sin = self.rotary_emb(value_states, seq_len=rotary_seq_len)
 
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
