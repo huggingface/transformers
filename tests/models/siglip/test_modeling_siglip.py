@@ -40,6 +40,7 @@ from ...test_modeling_common import (
     _config_zero_init,
     floats_tensor,
     ids_tensor,
+    is_flaky,
     random_attention_mask,
 )
 from ...test_pipeline_mixin import PipelineTesterMixin
