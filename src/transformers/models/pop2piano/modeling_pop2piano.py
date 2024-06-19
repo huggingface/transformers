@@ -591,9 +591,7 @@ class Pop2PianoSdpaAttention(Pop2PianoAttention):
         # .contiguous() does not behave correctly for tensors with singleton dimensions
         # the following is a workaround as suggested in https://github.com/pytorch/pytorch/issues/127523
         if position_bias_masked.stride(-1) != 1:
-            position_bias_masked = torch.empty_like(position_bias_masked, memory_format=torch.contiguous_format).copy_(
-                position_bias_masked
-            )
+            position_bias_masked = torch.clone(position_bias_masked, memory_format=torch.contiguous_format)
 
         attn_output = self._unshape(
             torch.nn.functional.scaled_dot_product_attention(
