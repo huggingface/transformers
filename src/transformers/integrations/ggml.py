@@ -625,7 +625,7 @@ class GGUFLlamaConverter(LlamaConverter):
         return tokenizer
 
     def decoder(self, replacement, add_prefix_space):
-        if not self.uses_byte_level_encoding:
+        if not self.is_llama_3_tokenizer:
             sequence = [
                 decoders.ByteFallback(),
                 decoders.Fuse(),
