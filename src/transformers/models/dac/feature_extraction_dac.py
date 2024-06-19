@@ -165,7 +165,7 @@ class DacFeatureExtractor(SequenceFeatureExtractor):
 
         padded_inputs = None
         input_values = BatchFeature({"input_values": raw_audio})
-        
+
         # if self.chunk_stride is not None and self.chunk_length is not None and max_length is None:
         #     if truncation:
         #         max_length = min(array.shape[0] for array in raw_audio)
