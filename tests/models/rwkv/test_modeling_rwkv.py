@@ -269,7 +269,10 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     pipeline_model_mapping = (
         {"feature-extraction": RwkvModel, "text-generation": RwkvForCausalLM} if is_torch_available() else {}
     )
-    # all_generative_model_classes = (RwkvForCausalLM,) if is_torch_available() else ()
+    all_generative_model_classes = (RwkvForCausalLM,) if is_torch_available() else ()
+    # Attention input support is not implemented; attention output has model-specific shapes (bsz, seq_len,
+    # hidden_size), as opposed to (bsz, num_heads, seq_len, embed_size_per_head), and has custom tests (see below)
+    has_attentions = False
     fx_compatible = False
     test_missing_keys = False
     test_model_parallel = False
