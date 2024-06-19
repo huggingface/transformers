@@ -1789,10 +1789,18 @@ class GenerationMixin:
         elif generation_config.cache_implementation is None and self._supports_default_dynamic_cache():
             past = model_kwargs.get("past_key_values", None)
             if past is None:
-                model_kwargs["past_key_values"] = DynamicCache()
+                model_kwargs["past_key_values"] = (
+                    DynamicCache()
+                    if not self.config.is_encoder_decoder
+                    else EncoderDecoderCache(DynamicCache(), DynamicCache())
+                )
                 use_dynamic_cache_by_default = True
             elif isinstance(past, tuple):
-                model_kwargs["past_key_values"] = DynamicCache.from_legacy_cache(past)
+                model_kwargs["past_key_values"] = (
+                    DynamicCache.from_legacy_cache(past)
+                    if not self.config.is_encoder_decoder
+                    else EncoderDecoderCache.from_legacy_cache(past)
+                )
                 use_dynamic_cache_by_default = True
 
         self._validate_generated_length(generation_config, input_ids_length, has_default_max_length)
