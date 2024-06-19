@@ -93,7 +93,7 @@ class Kosmos2_5Processor(ProcessorMixin):
         image_embeds_position_mask = torch.LongTensor(image_embeds_position_mask).unsqueeze(0)
 
         return {
-            "flattened_patches": encoding_image_processor.flattened_patches.to(torch.bfloat16),
+            "flattened_patches": encoding_image_processor.flattened_patches,
             "input_ids": input_ids,
             "attention_mask": attention_mask,
             "image_attention_mask" : encoding_image_processor.attention_mask,
