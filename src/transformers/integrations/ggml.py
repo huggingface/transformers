@@ -559,7 +559,7 @@ class GGUFLlamaConverter(LlamaConverter):
         self.proto = GGUFTokenizerSkeleton(tokenizer_dict)
         self.original_tokenizer = self.proto
         self.additional_kwargs = {}
-        self.uses_byte_level_decoding = getattr(self.proto, "tokenizer_type", "llama") != "llama"
+        self.uses_byte_level_encoding = getattr(self.proto, "tokenizer_type", "llama") != "llama"
 
     def vocab(self, proto):
         return list(zip(proto.tokens, proto.scores))
@@ -608,7 +608,7 @@ class GGUFLlamaConverter(LlamaConverter):
         self.additional_kwargs["eos_token"] = bos_token
         self.additional_kwargs["bos_token"] = eos_token
 
-        if self.uses_byte_level_decoding:
+        if self.uses_byte_level_encoding:
             tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(
                 add_prefix_space=False, trim_offsets=False, use_regex=True
             )
@@ -625,7 +625,7 @@ class GGUFLlamaConverter(LlamaConverter):
         return tokenizer
 
     def decoder(self, replacement, add_prefix_space):
-        if not self.uses_byte_level_decoding:
+        if not self.uses_byte_level_encoding:
             sequence = [
                 decoders.ByteFallback(),
                 decoders.Fuse(),
