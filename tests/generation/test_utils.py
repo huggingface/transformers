@@ -3067,6 +3067,50 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         self.assertTrue(y_prob > 0.001 and n_prob > 0.001)
         self.assertTrue(y_prob <= 1.0 and n_prob <= 1.0)
 
+    @slow
+    @require_torch_multi_gpu
+    def test_assisted_decoding_in_different_gpu(self):
+        # PT-only test: TF doesn't support assisted decoding yet.
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM").to("cuda:0")
+        assistant = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM").to("cuda:1")
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
+        model.config.pad_token_id = tokenizer.eos_token_id
+        assistant.config.pad_token_id = tokenizer.eos_token_id
+
+        text = "Hello world"
+        tokenized_inputs = tokenizer([text], return_tensors="pt")
+        input_ids = tokenized_inputs.input_ids.to(torch_device)
+        input_length = input_ids.shape[-1]
+
+        out = model.generate(
+            input_ids,
+            assistant_model=assistant,
+            max_new_tokens=20,
+        )
+        self.assertTrue(input_length <= out.shape[-1] <= 20)
+
+    @slow
+    @require_torch_gpu
+    def test_assisted_decoding_in_different_gpu(self):
+        # PT-only test: TF doesn't support assisted decoding yet.
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM").to("cuda")
+        assistant = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM").to("cpu")
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
+        model.config.pad_token_id = tokenizer.eos_token_id
+        assistant.config.pad_token_id = tokenizer.eos_token_id
+
+        text = "Hello world"
+        tokenized_inputs = tokenizer([text], return_tensors="pt")
+        input_ids = tokenized_inputs.input_ids.to(torch_device)
+        input_length = input_ids.shape[-1]
+
+        out = model.generate(
+            input_ids,
+            assistant_model=assistant,
+            max_new_tokens=20,
+        )
+        self.assertTrue(input_length <= out.shape[-1] <= 20)
+
 
 @require_torch
 class TokenHealingTestCase(unittest.TestCase):
