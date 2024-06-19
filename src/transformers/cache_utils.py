@@ -994,7 +994,7 @@ class EncoderDecoderCache:
         return legacy_cache
 
     @classmethod
-    def from_legacy_cache(cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None) -> "DynamicCache":
+    def from_legacy_cache(cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None) -> "EncoderDecoderCache":
         """Converts a cache in the legacy cache format into an equivalent `DynamicCache`."""
         cache = cls(self_attention_cache=DynamicCache(), cross_attention_cache=DynamicCache())
         if past_key_values is not None:
@@ -1010,7 +1010,7 @@ class EncoderDecoderCache:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         if len(self.self_attention_cache.key_cache) <= layer_idx:
             return 0
-        return self.self_attention_cache.key_cache[layer_idx].shape[-2]
+        return (self.self_attention_cache.key_cache[layer_idx][0, 0].any(dim=-1)).sum()
 
     def reset(self):
         if hasattr(self.self_attention_cache, "reset"):
