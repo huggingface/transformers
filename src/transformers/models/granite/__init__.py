@@ -16,8 +16,6 @@ from typing import TYPE_CHECKING
 from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
-    is_sentencepiece_available,
-    is_tokenizers_available,
     is_torch_available,
 )
 
@@ -25,22 +23,6 @@ from ...utils import (
 _import_structure = {
     "configuration_granite": ["GraniteConfig"],
 }
-
-try:
-    if not is_sentencepiece_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tokenization_granite"] = ["GraniteTokenizer"]
-
-try:
-    if not is_tokenizers_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tokenization_granite_fast"] = ["GraniteTokenizerFast"]
 
 try:
     if not is_torch_available():
@@ -59,22 +41,6 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_granite import GraniteConfig
-
-    try:
-        if not is_sentencepiece_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .tokenization_granite import GraniteTokenizer
-
-    try:
-        if not is_tokenizers_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .tokenization_granite_fast import GraniteTokenizerFast
 
     try:
         if not is_torch_available():
