@@ -431,6 +431,8 @@ class CodeGenModel(CodeGenPreTrainedModel):
         self.drop = nn.Dropout(config.embd_pdrop)
         self.h = nn.ModuleList([CodeGenBlock(config, layer_idx=i) for i in range(config.n_layer)])
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
+        self.rotary_dim = min(config.rotary_dim, config.n_ctx // config.num_attention_heads)
+
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
