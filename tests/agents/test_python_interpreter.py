@@ -19,7 +19,7 @@ import pytest
 
 from transformers import load_tool
 from transformers.agents.agent_types import AGENT_TYPE_MAPPING
-from transformers.agents.default_tools import BASE_PYTHON_TOOLS
+from transformers.agents.default_tools import BASE_PYTHON_TOOLS, LIST_SAFE_MODULES
 from transformers.agents.python_interpreter import InterpreterError, evaluate_python_code
 
 from .test_tools_common import ToolTesterMixin
@@ -341,7 +341,7 @@ if char.isalpha():
         result = evaluate_python_code(code, BASE_PYTHON_TOOLS, state={})
         assert result == "lose"
 
-        code = "import time\ntime.sleep(0.1)"
+        code = "import time, re\ntime.sleep(0.1)"
         result = evaluate_python_code(code, BASE_PYTHON_TOOLS, state={})
         assert result is None
 
@@ -368,6 +368,17 @@ if char.isalpha():
         code = "import unicodedata\nunicodedata.name('A')"
         result = evaluate_python_code(code, BASE_PYTHON_TOOLS, state={})
         assert result == "LATIN CAPITAL LETTER A"
+
+    def test_additional_imports(self):
+        code = "import numpy as np"
+        evaluate_python_code(code, authorized_imports=["numpy"], state={})
+
+        code = "import matplotlib.pyplot as plt"
+        evaluate_python_code(code, authorized_imports=["matplotlib.pyplot"], state={})
+        evaluate_python_code(code, authorized_imports=["matplotlib"], state={})
+        with pytest.raises(InterpreterError) as e:
+            evaluate_python_code(code, authorized_imports=["pyplot"], state={})
+
 
     def test_multiple_comparators(self):
         code = "0 <= -1 < 4 and 0 <= -5 < 4"

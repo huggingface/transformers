@@ -50,8 +50,8 @@ LIST_SAFE_MODULES = [
     "unicodedata",
 ]
 
-PRINT_OUTPUTS = ""
-
+PRINT_OUTPUTS, MAX_LEN_OUTPUT = "", 50000
+OPERATIONS_COUNT, MAX_OPERATIONS = 0, 1000000
 
 class BreakException(Exception):
     pass
@@ -397,6 +397,7 @@ def evaluate_call(call, state, tools):
                 output = " ".join(map(str, args))
                 global PRINT_OUTPUTS
                 PRINT_OUTPUTS += output + "\n"
+                # cap the number of lines
                 return output
             else:  # Assume it's a callable object
                 output = func(*args, **kwargs)
@@ -614,6 +615,30 @@ def evaluate_with(with_node, state, tools):
             context.__exit__(None, None, None)
 
 
+def import_modules(expression, state, authorized_imports):
+    def check_module_authorized(module_name):
+        module_path = module_name.split('.')
+        module_subpaths = ['.'.join(module_path[:i]) for i in range(1, len(module_path) + 1)]
+        return any(subpath in authorized_imports for subpath in module_subpaths)
+
+    if isinstance(expression, ast.Import):
+        for alias in expression.names:
+            if check_module_authorized(alias.name):
+                module = __import__(alias.name)
+                state[alias.asname or alias.name] = module
+            else:
+                raise InterpreterError(f"Import of {alias.name} is not allowed.")
+        return None
+    elif isinstance(expression, ast.ImportFrom):
+        if check_module_authorized(expression.module):
+            module = __import__(expression.module, fromlist=[alias.name for alias in expression.names])
+            for alias in expression.names:
+                state[alias.asname or alias.name] = getattr(module, alias.name)
+        else:
+            raise InterpreterError(f"Import from {expression.module} is not allowed.")
+        return None
+
+
 def evaluate_ast(
     expression: ast.AST,
     state: Dict[str, Any],
@@ -639,6 +664,10 @@ def evaluate_ast(
             The list of modules that can be imported by the code. By default, only a few safe modules are allowed.
             Add more at your own risk!
     """
+    global OPERATIONS_COUNT
+    if OPERATIONS_COUNT >= MAX_OPERATIONS:
+        raise InterpreterError(f"Reached {MAX_OPERATIONS} operations: this is too much, there is probably an infinite loop somewhere in the code.")
+    OPERATIONS_COUNT += 1
     if isinstance(expression, ast.Assign):
         # Assignement -> we evaluate the assignement which should update the state
         # We return the variable assigned as it may be used to determine the final result.
@@ -740,24 +769,10 @@ def evaluate_ast(
                 value = evaluate_ast(expression.value, state, tools)
                 result[key] = value
         return result
-    elif isinstance(expression, ast.Import):
-        for alias in expression.names:
-            if alias.name in authorized_imports:
-                module = __import__(alias.name)
-                state[alias.asname or alias.name] = module
-            else:
-                raise InterpreterError(f"Import of {alias.name} is not allowed.")
-        return None
     elif isinstance(expression, ast.While):
         return evaluate_while(expression, state, tools)
-    elif isinstance(expression, ast.ImportFrom):
-        if expression.module in authorized_imports:
-            module = __import__(expression.module)
-            for alias in expression.names:
-                state[alias.asname or alias.name] = getattr(module, alias.name)
-        else:
-            raise InterpreterError(f"Import from {expression.module} is not allowed.")
-        return None
+    elif isinstance(expression, (ast.Import, ast.ImportFrom)):
+        return import_modules(expression, state, authorized_imports)
     elif isinstance(expression, ast.ClassDef):
         return evaluate_class_def(expression, state, tools)
     elif isinstance(expression, ast.Try):
@@ -806,15 +821,24 @@ def evaluate_python_code(
     result = None
     global PRINT_OUTPUTS
     PRINT_OUTPUTS = ""
+    global OPERATIONS_COUNT
+    OPERATIONS_COUNT = 0
     for node in expression.body:
         try:
             result = evaluate_ast(node, state, tools, authorized_imports)
         except InterpreterError as e:
-            msg = f"Evaluation stopped at line '{ast.get_source_segment(code, node)}' because of the following error:\n{e}"
+            msg=""
             if len(PRINT_OUTPUTS) > 0:
-                msg += f"Executing code yielded these outputs:\n{PRINT_OUTPUTS}\n====\n"
+                if len(PRINT_OUTPUTS) < MAX_LEN_OUTPUT:
+                    msg += f"Print outputs:\n{PRINT_OUTPUTS}\n====\n"
+                else:
+                    msg += f"Print outputs:\n{PRINT_OUTPUTS[:MAX_LEN_OUTPUT]}\n_Print outputs were over {MAX_LEN_OUTPUT} characters, so they have been truncated._\n====\n"
+            msg += f"EXECUTION FAILED:\nEvaluation stopped at line '{ast.get_source_segment(code, node)}' because of the following error:\n{e}"
             raise InterpreterError(msg)
         finally:
-            state["print_outputs"] = PRINT_OUTPUTS
+            if len(PRINT_OUTPUTS) < MAX_LEN_OUTPUT:
+                state["print_outputs"] = PRINT_OUTPUTS
+            else:
+                state["print_outputs"] = PRINT_OUTPUTS[:MAX_LEN_OUTPUT] + f"\n_Print outputs were over {MAX_LEN_OUTPUT} characters, so they have been truncated._"
 
     return result
