@@ -632,12 +632,7 @@ class GGUFLlamaConverter(LlamaConverter):
                 decoders.Replace("▁", " "),
             ]
         else:
-            sequence = [
-                # decoders.ByteFallback(),
-                # decoders.Fuse(),
-                # decoders.Replace("_", " "),
-                decoders.ByteLevel(add_prefix_space=False, trim_offsets=False, use_regex=True)
-            ]
+            sequence = [decoders.ByteLevel(add_prefix_space=False, trim_offsets=False, use_regex=True)]
 
         if add_prefix_space:
             sequence += [decoders.Strip(content=" ", left=1)]
