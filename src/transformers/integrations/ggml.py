@@ -21,7 +21,7 @@ with extra methods beings exposed
 from array import array
 
 import numpy as np
-from tokenizers import Tokenizer, decoders, pre_tokenizers
+from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers
 from tokenizers.models import BPE
 
 from .. import AddedToken
@@ -609,7 +609,18 @@ class GGUFLlamaConverter(LlamaConverter):
         self.additional_kwargs["bos_token"] = eos_token
 
         if self.uses_byte_level_decoding:
-            tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=True)
+            tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(
+                add_prefix_space=False, trim_offsets=False, use_regex=True
+            )
+            self.additional_kwargs["add_prefix_space"] = False
+            self.additional_kwargs["clean_up_tokenization_spaces"] = True
+
+            self.additional_kwargs["legacy"] = False
+            self.original_tokenizer.legacy = False
+
+            # This is tricky as the additional kwargs are passed after legacy is force-set in LlamaTokenizer's
+            # init.
+            tokenizer.normalizer = normalizers.Sequence([])
 
         return tokenizer
 
@@ -621,7 +632,12 @@ class GGUFLlamaConverter(LlamaConverter):
                 decoders.Replace("▁", " "),
             ]
         else:
-            sequence = [decoders.ByteLevel(add_prefix_space=True, trim_offsets=True, use_regex=True)]
+            sequence = [
+                # decoders.ByteFallback(),
+                # decoders.Fuse(),
+                # decoders.Replace("_", " "),
+                decoders.ByteLevel(add_prefix_space=False, trim_offsets=False, use_regex=True)
+            ]
 
         if add_prefix_space:
             sequence += [decoders.Strip(content=" ", left=1)]
