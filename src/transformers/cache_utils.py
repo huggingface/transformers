@@ -991,6 +991,7 @@ class EncoderDecoderCache:
     Base, abstract class for all encoder-decoder caches. Can be used to hold combinations of self-attention and
     cross-attention caches.
     """
+
     self_attention_cache: Cache
     cross_attention_cache: Cache
 

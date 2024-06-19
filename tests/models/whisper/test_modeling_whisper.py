@@ -3053,7 +3053,6 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         torch.manual_seed(0)
         model.generate(**inputs, **gen_kwargs)
 
-
     @slow
     def test_tiny_static_generation(self):
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
@@ -3074,7 +3073,9 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         # check the compiled graph can be re-used and that the cache is correctly reset
         # reverse the ordering of the input features
-        permutation_idx = torch.arange(input_features.shape[0], 0, step=-1, dtype=torch.long, device=input_features.device) - 1
+        permutation_idx = (
+            torch.arange(input_features.shape[0], 0, step=-1, dtype=torch.long, device=input_features.device) - 1
+        )
         input_features = input_features[permutation_idx, ...]
         static_generated_ids = model.generate(input_features, max_new_tokens=64)
         # assert re-ordered generations match those from eager

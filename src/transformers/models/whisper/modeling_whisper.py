@@ -968,9 +968,9 @@ WHISPER_INPUTS_DOCSTRING = r"""
             `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
             hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
         past_key_values (`EncoderDecoderCache` or `tuple(tuple(torch.FloatTensor))`, *optional*):
-            Pre-computed hidden-states that can be used to speed up auto-regressive (sequential) decoding. There are 
-            four sets of pre-computed hidden-states: key and values states in the self-attention blocks (2) and  
-            in the cross-attention blocks (2). The `past_key_values` are returned when `use_cache=True` is passed or 
+            Pre-computed hidden-states that can be used to speed up auto-regressive (sequential) decoding. There are
+            four sets of pre-computed hidden-states: key and values states in the self-attention blocks (2) and
+            in the cross-attention blocks (2). The `past_key_values` are returned when `use_cache=True` is passed or
             when `config.use_cache=True`
 
             Two formats are allowed:
@@ -999,7 +999,7 @@ WHISPER_INPUTS_DOCSTRING = r"""
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-            Indices depicting the position of the input sequence tokens in the sequence. It is used to update the cache 
+            Indices depicting the position of the input sequence tokens in the sequence. It is used to update the cache
             in the correct position and to infer the complete sequence length.
 """
 

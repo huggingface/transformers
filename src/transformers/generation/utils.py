@@ -1429,9 +1429,12 @@ class GenerationMixin:
             or cache_to_check.max_batch_size != max_batch_size
             or cache_to_check.max_cache_len < max_cache_len
         )
-        
+
         if self.config.is_encoder_decoder and hasattr(self, "_cache"):
-            need_new_cache = need_new_cache or self._cache.cross_attention_cache.max_cache_len != model_kwargs["encoder_outputs"][0].shape[1]
+            need_new_cache = (
+                need_new_cache
+                or self._cache.cross_attention_cache.max_cache_len != model_kwargs["encoder_outputs"][0].shape[1]
+            )
 
         if need_new_cache:
             if hasattr(self.config, "_pre_quantization_dtype"):
