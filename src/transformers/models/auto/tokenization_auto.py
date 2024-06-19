@@ -240,12 +240,6 @@ else:
                     "LlamaTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
-            (
-                "granite",
-                (
-                    "GraniteTokenizer" if is_sentencepiece_available() else None,
-                    "GraniteTokenizerFast" if is_tokenizers_available() else None,
-                ),
             ("llava", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
             ("llava_next", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
             ("longformer", ("LongformerTokenizer", "LongformerTokenizerFast" if is_tokenizers_available() else None)),
