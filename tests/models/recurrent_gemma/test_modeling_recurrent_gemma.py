@@ -332,10 +332,6 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip("RecurrentGemma does not return pkv")
-    def test_past_key_values_format(self):
-        pass
-
     @unittest.skip("RecurrentGemma only supports sdpa")
     def test_eager_matches_sdpa_generate(self):
         pass
@@ -357,10 +353,6 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
 
     def _check_past_key_values_for_generate(self, *args, **kwargs):
         return True
-
-    @unittest.skip("RecurrentGemma's output different if you pad left or right. This is expected")
-    def test_left_padding_compatibility(self):
-        pass
 
     def _check_hidden_states_for_generate(
         self, batch_size, hidden_states, min_length, max_length, config, use_cache=False, num_beam_groups=1
