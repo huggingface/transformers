@@ -3054,6 +3054,33 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model.generate(**inputs, **gen_kwargs)
 
 
+    @slow
+    def test_tiny_static_generation(self):
+        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
+        model.to(torch_device)
+
+        input_speech = self._load_datasamples(4)
+        input_features = processor(input_speech, return_tensors="pt", sampling_rate=16_000).input_features
+        input_features = input_features.to(torch_device)
+        eager_generated_ids = model.generate(input_features, max_new_tokens=64)
+
+        model.generation_config.cache_implementation = "static"
+        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
+
+        # compile the forward pass and assert equivalence
+        static_generated_ids = model.generate(input_features, max_new_tokens=64)
+        assert (eager_generated_ids == static_generated_ids).all()
+
+        # check the compiled graph can be re-used and that the cache is correctly reset
+        # reverse the ordering of the input features
+        permutation_idx = torch.arange(input_features.shape[0], 0, step=-1, dtype=torch.long, device=input_features.device) - 1
+        input_features = input_features[permutation_idx, ...]
+        static_generated_ids = model.generate(input_features, max_new_tokens=64)
+        # assert re-ordered generations match those from eager
+        assert (eager_generated_ids[permutation_idx, :] == static_generated_ids).all()
+
+
 def prepare_whisper_encoder_inputs_dict(config, input_features, head_mask=None):
     if head_mask is None:
         head_mask = torch.ones(config.encoder_layers, config.encoder_attention_heads, device=torch_device)
