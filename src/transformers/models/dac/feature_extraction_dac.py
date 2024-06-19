@@ -17,6 +17,7 @@
 from typing import List, Optional, Union
 
 import numpy as np
+import math
 
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
@@ -47,7 +48,7 @@ class DacFeatureExtractor(SequenceFeatureExtractor):
             formulae : `int((1.0 - self.overlap) * self.chunk_length)`.
     """
 
-    model_input_names = ["input_values", "padding_mask"]
+    model_input_names = ["input_values", "n_quantizers"]
 
     def __init__(
         self,
@@ -55,12 +56,14 @@ class DacFeatureExtractor(SequenceFeatureExtractor):
         sampling_rate: int = 16000,
         padding_value: float = 0.0,
         chunk_length_s: float = None,
+        hop_length: int = 512, 
         overlap: float = None,
         **kwargs,
     ):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
         self.chunk_length_s = chunk_length_s
         self.overlap = overlap
+        self.hop_length = hop_length
 
     # This is a property because you might want to change the chunk_length_s on the fly
     @property
@@ -84,7 +87,7 @@ class DacFeatureExtractor(SequenceFeatureExtractor):
         padding: Optional[Union[bool, str, PaddingStrategy]] = None,
         truncation: Optional[bool] = False,
         max_length: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        return_tensors: Optional[Union[str, TensorType]] = 'pt',
         sampling_rate: Optional[int] = None,
     ) -> BatchFeature:
         """
@@ -162,19 +165,23 @@ class DacFeatureExtractor(SequenceFeatureExtractor):
                 raise ValueError(f"Expected mono audio but example has {example.shape[-1]} channels")
             if self.feature_size == 2 and example.shape[-1] != 2:
                 raise ValueError(f"Expected stereo audio but example has {example.shape[-1]} channels")
+            if self.feature_size == 2 :
+                raise ValueError(f"Stereo audio isn't supported for now")
 
-        padded_inputs = None
         input_values = BatchFeature({"input_values": raw_audio})
 
         # normal padding on batch
-        if padded_inputs is None:
-            padded_inputs = self.pad(
-                input_values,
-                max_length=max_length,
-                truncation=truncation,
-                padding=padding,
-                return_attention_mask=False,
-            )
+        padded_inputs = self.pad(
+            input_values,
+            max_length=max_length,
+            truncation=truncation,
+            padding=padding,
+            return_attention_mask=False,
+        )
+    
+        length = padded_inputs.input_values.shape[0]
+        right_pad = math.ceil(length / self.hop_length) * self.hop_length - length
+        padded_inputs.input_values = np.pad(padded_inputs.input_values, (0, right_pad))
 
         input_values = []
         for example in padded_inputs.pop("input_values"):
@@ -182,6 +189,7 @@ class DacFeatureExtractor(SequenceFeatureExtractor):
                 example = example[..., None]
             input_values.append(example.T)
 
+    
         padded_inputs["input_values"] = input_values
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
