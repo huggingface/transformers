@@ -22,13 +22,13 @@ from ...utils import (
 
 _import_structure = {
     "configuration_florence2": [
-        "Florence2VisionConfig",
-        "Florence2LanguageConfig",
         "Florence2Config",
+        "Florence2LanguageConfig",
+        "Florence2VisionConfig",
     ],
     "processing_florence2": [
-        "Florence2Processor",
         "Florence2PostProcesser",
+        "Florence2Processor",
     ],
 }
 
@@ -49,13 +49,13 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_florence2 import (
-        Florence2VisionConfig,
-        Florence2LanguageConfig,
         Florence2Config,
+        Florence2LanguageConfig,
+        Florence2VisionConfig,
     )
     from .processing_florence2 import (
-        Florence2Processor,
         Florence2PostProcesser,
+        Florence2Processor,
     )
 
     try:
@@ -65,10 +65,10 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_florence2 import (
+            Florence2ForConditionalGeneration,
             Florence2PreTrainedModel,
             Florence2VisionModel,
             Florence2VisionModelWithProjection,
-            Florence2ForConditionalGeneration,
         )
 
 else:

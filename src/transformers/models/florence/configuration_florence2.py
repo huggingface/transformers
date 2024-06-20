@@ -12,19 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import warnings
+
+
 """ Florence-2 configuration"""
 
-from typing import Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
+
 logger = logging.get_logger(__name__)
+
 
 class Florence2VisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Florence2VisionModel`]. It is used to instantiate a Florence2VisionModel
-    according to the specified arguments, defining the model architecture. Instantiating a configuration with the 
+    according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the Florence2VisionModel architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -271,7 +274,7 @@ class Florence2LanguageConfig(PretrainedConfig):
 class Florence2Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Florence2ForConditionalGeneration`]. It is used to instantiate an
-    Florence-2 model according to the specified arguments, defining the model architecture. 
+    Florence-2 model according to the specified arguments, defining the model architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -280,7 +283,7 @@ class Florence2Config(PretrainedConfig):
         vision_config (`Florence2VisionConfig`,  *optional*):
             Custom vision config or dict
         text_config (`Union[AutoConfig, dict]`, *optional*):
-            The config object of the text backbone. 
+            The config object of the text backbone.
         ignore_index (`int`, *optional*, defaults to -100):
             The ignore index for the loss function.
         vocab_size (`int`, *optional*, defaults to 51289):
@@ -334,6 +337,4 @@ class Florence2Config(PretrainedConfig):
         if text_config is not None:
             self.text_config = Florence2LanguageConfig(**text_config)
 
-
         super().__init__(**kwargs)
-

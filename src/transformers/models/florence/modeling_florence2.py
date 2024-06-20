@@ -13,38 +13,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-""" PyTorch Florence-2 model."""
-from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+"""PyTorch Florence-2 model."""
 
 import math
 import warnings
-import torch
-import torch.utils.checkpoint
-from torch import nn
-import torch.nn.functional as F
-import torch.utils.checkpoint as checkpoint
-from torch.nn import CrossEntropyLoss 
 from collections import OrderedDict
-# from einops import rearrange
+from dataclasses import dataclass
+from typing import List, Optional, Tuple, Union
 
-from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    is_flash_attn_2_available,
-    logging,
-    replace_return_docstrings,
-    is_flash_attn_2_available,
-    is_flash_attn_greater_or_equal_2_10,
-)
-from .configuration_florence2 import (
-    Florence2Config,
-    Florence2LanguageConfig,
-    Florence2VisionConfig,
-)
-
+import torch
+import torch.nn.functional as F
+import torch.utils.checkpoint
+import torch.utils.checkpoint as checkpoint
+from torch import nn
+from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import (
@@ -60,6 +42,23 @@ from ...modeling_outputs import (
     Seq2SeqModelOutput,
 )
 
+# from einops import rearrange
+from ...modeling_utils import PreTrainedModel
+from ...utils import (
+    ModelOutput,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    is_flash_attn_2_available,
+    is_flash_attn_greater_or_equal_2_10,
+    logging,
+    replace_return_docstrings,
+)
+from .configuration_florence2 import (
+    Florence2Config,
+    Florence2LanguageConfig,
+    Florence2VisionConfig,
+)
+
 
 if is_flash_attn_2_available():
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
@@ -67,6 +66,7 @@ if is_flash_attn_2_available():
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "Florence2Config"
+
 
 class LearnedAbsolutePositionEmbedding2D(nn.Module):
     """
@@ -80,11 +80,11 @@ class LearnedAbsolutePositionEmbedding2D(nn.Module):
 
     def forward(self, pixel_values):
         """
-        pixel_values: (batch_size, height, width, num_channels) 
+        pixel_values: (batch_size, height, width, num_channels)
         returns: (batch_size, height, width, embedding_dim * 2)
         """
         if len(pixel_values.shape) != 4:
-            raise ValueError('pixel_values must be a 4D tensor')
+            raise ValueError("pixel_values must be a 4D tensor")
         height, width = pixel_values.shape[1:3]
         width_values = torch.arange(width, device=pixel_values.device)
         height_values = torch.arange(height, device=pixel_values.device)
@@ -101,6 +101,7 @@ class LearnedAbsolutePositionEmbedding2D(nn.Module):
         pos = pos.permute(0, 2, 3, 1)
         return pos
 
+
 class PositionalEmbeddingCosine1D(nn.Module):
     """
     This class implements a very simple positional encoding. It follows closely
@@ -112,22 +113,17 @@ class PositionalEmbeddingCosine1D(nn.Module):
         dropout_prob: The dropout probability.
         max_seq_len: The maximum length to precompute the positional encodings.
     """
-    def __init__(
-            self,
-            embed_dim: int = 512,
-            max_seq_len: int = 1024) -> None:
+
+    def __init__(self, embed_dim: int = 512, max_seq_len: int = 1024) -> None:
         super(PositionalEmbeddingCosine1D, self).__init__()
         self.embed_dim = embed_dim
         self.max_seq_len = max_seq_len
         # Generate the sinusoidal arrays.
         factor = math.log(10000)
-        denominator = torch.exp(
-            -factor * torch.arange(0, self.embed_dim, 2) / self.embed_dim)
+        denominator = torch.exp(-factor * torch.arange(0, self.embed_dim, 2) / self.embed_dim)
         # Matrix where rows correspond to a positional embedding as a function
         # of the position index (i.e., the row index).
-        frequencies = \
-            torch.arange(0, self.max_seq_len) \
-            .reshape(self.max_seq_len, 1) * denominator
+        frequencies = torch.arange(0, self.max_seq_len).reshape(self.max_seq_len, 1) * denominator
         pos_idx_to_embed = torch.zeros((self.max_seq_len, self.embed_dim))
         # Populate uneven entries.
         pos_idx_to_embed[:, 0::2] = torch.sin(frequencies)
@@ -151,11 +147,10 @@ class PositionalEmbeddingCosine1D(nn.Module):
         assert 2 <= shape_len <= 3
         len_seq = seq_embeds.size(-2)
         assert len_seq <= self.max_seq_len
-        pos_embeds = self.pos_idx_to_embed[0:seq_embeds.size(-2), :]
+        pos_embeds = self.pos_idx_to_embed[0 : seq_embeds.size(-2), :]
         # Adapt pre-computed positional embeddings to the input.
         if shape_len == 3:
-            pos_embeds = pos_embeds.view(
-                (1, pos_embeds.size(0), pos_embeds.size(1)))
+            pos_embeds = pos_embeds.view((1, pos_embeds.size(0), pos_embeds.size(1)))
         return pos_embeds
 
 
@@ -167,10 +162,8 @@ class LearnedAbsolutePositionEmbedding1D(nn.Module):
         embed_dim: The dimension of the embeddings.
         max_seq_len: The maximum length to precompute the positional encodings.
     """
-    def __init__(
-            self,
-            embedding_dim: int = 512,
-            num_pos: int = 1024) -> None:
+
+    def __init__(self, embedding_dim: int = 512, num_pos: int = 1024) -> None:
         super(LearnedAbsolutePositionEmbedding1D, self).__init__()
         self.embeddings = nn.Embedding(num_pos, embedding_dim)
         self.num_pos = num_pos
@@ -195,10 +188,8 @@ class LearnedAbsolutePositionEmbedding1D(nn.Module):
         pos_embeds = self.embeddings(torch.arange(len_seq).to(seq_embeds.device))
         # Adapt pre-computed positional embeddings to the input.
         if shape_len == 3:
-            pos_embeds = pos_embeds.view(
-                (1, pos_embeds.size(0), pos_embeds.size(1)))
+            pos_embeds = pos_embeds.view((1, pos_embeds.size(0), pos_embeds.size(1)))
         return pos_embeds
-
 
 
 class MySequential(nn.Sequential):
@@ -244,11 +235,15 @@ class Mlp(nn.Module):
         super().__init__()
         out_features = out_features or in_features
         hidden_features = hidden_features or in_features
-        self.net = nn.Sequential(OrderedDict([
-            ("fc1", nn.Linear(in_features, hidden_features)),
-            ("act", act_layer()),
-            ("fc2", nn.Linear(hidden_features, out_features))
-        ]))
+        self.net = nn.Sequential(
+            OrderedDict(
+                [
+                    ("fc1", nn.Linear(in_features, hidden_features)),
+                    ("act", act_layer()),
+                    ("fc2", nn.Linear(hidden_features, out_features)),
+                ]
+            )
+        )
 
     def forward(self, x, size):
         return self.net(x), size
@@ -265,12 +260,7 @@ class DepthWiseConv2d(nn.Module):
     ):
         super().__init__()
         self.dw = nn.Conv2d(
-            dim_in, dim_in,
-            kernel_size=kernel_size,
-            padding=padding,
-            groups=dim_in,
-            stride=stride,
-            bias=bias
+            dim_in, dim_in, kernel_size=kernel_size, padding=padding, groups=dim_in, stride=stride, bias=bias
         )
 
     def forward(self, x, size):
@@ -285,28 +275,13 @@ class DepthWiseConv2d(nn.Module):
 
 
 class ConvEmbed(nn.Module):
-    """ Image to Patch Embedding
-    """
+    """Image to Patch Embedding"""
 
-    def __init__(
-        self,
-        patch_size=7,
-        in_chans=3,
-        embed_dim=64,
-        stride=4,
-        padding=2,
-        norm_layer=None,
-        pre_norm=True
-    ):
+    def __init__(self, patch_size=7, in_chans=3, embed_dim=64, stride=4, padding=2, norm_layer=None, pre_norm=True):
         super().__init__()
         self.patch_size = patch_size
 
-        self.proj = nn.Conv2d(
-            in_chans, embed_dim,
-            kernel_size=patch_size,
-            stride=stride,
-            padding=padding
-        )
+        self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=stride, padding=padding)
 
         dim_norm = in_chans if pre_norm else embed_dim
         self.norm = norm_layer(dim_norm) if norm_layer else None
@@ -328,7 +303,7 @@ class ConvEmbed(nn.Module):
 
         _, _, H, W = x.shape
         # TODO: check if this is correct
-        #x = rearrange(x, 'b c h w -> b (h w) c')
+        # x = rearrange(x, 'b c h w -> b (h w) c')
         x = x.permute(0, 2, 3, 1).contiguous()
         B, H, W, C = x.size()
         x = x.view(B, -1, C)
@@ -340,7 +315,6 @@ class ConvEmbed(nn.Module):
 
 
 class ChannelAttention(nn.Module):
-
     def __init__(self, dim, groups=8, qkv_bias=True):
         super().__init__()
 
@@ -363,17 +337,17 @@ class ChannelAttention(nn.Module):
         return x, size
 
 
-#https://github.com/huggingface/pytorch-image-models/blob/main/timm/layers/drop.py
+# https://github.com/huggingface/pytorch-image-models/blob/main/timm/layers/drop.py
 class DropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample  (when applied in main path of residual blocks).
-    """
-    def __init__(self, drop_prob: float = 0., scale_by_keep: bool = True):
+    """Drop paths (Stochastic Depth) per sample  (when applied in main path of residual blocks)."""
+
+    def __init__(self, drop_prob: float = 0.0, scale_by_keep: bool = True):
         super(DropPath, self).__init__()
         self.drop_prob = drop_prob
         self.scale_by_keep = scale_by_keep
 
     def forward(self, x):
-        if self.drop_prob == 0. or not self.training:
+        if self.drop_prob == 0.0 or not self.training:
             return x
         keep_prob = 1 - self.drop_prob
         shape = (x.shape[0],) + (1,) * (x.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
@@ -383,12 +357,12 @@ class DropPath(nn.Module):
         return x * random_tensor
 
     def extra_repr(self):
-        return f'drop_prob={round(self.drop_prob,3):0.3f}'
+        return f"drop_prob={round(self.drop_prob,3):0.3f}"
 
 
 # TODO: can this be replaced with torch.nn.init.trunc_normal_?
-#https://github.com/huggingface/pytorch-image-models/blob/b28945ff056d454b174f0fb8682e362b87150141/timm/layers/weight_init.py
-def trunc_normal_(tensor: torch.Tensor, mean=0., std=1., a=-2., b=2.) -> torch.Tensor:
+# https://github.com/huggingface/pytorch-image-models/blob/b28945ff056d454b174f0fb8682e362b87150141/timm/layers/weight_init.py
+def trunc_normal_(tensor: torch.Tensor, mean=0.0, std=1.0, a=-2.0, b=2.0) -> torch.Tensor:
     r"""Fills the input Tensor with values drawn from a truncated
     normal distribution. The values are effectively drawn from the
     normal distribution :math:`\mathcal{N}(\text{mean}, \text{std}^2)`
@@ -407,17 +381,20 @@ def trunc_normal_(tensor: torch.Tensor, mean=0., std=1., a=-2., b=2.) -> torch.T
         a: the minimum cutoff value
         b: the maximum cutoff value
     """
+
     # Method based on https://people.sc.fsu.edu/~jburkardt/presentations/truncated_normal.pdf
     def norm_cdf(x):
         # Computes standard normal cumulative distribution function
-        return (1. + math.erf(x / math.sqrt(2.))) / 2.
-    
+        return (1.0 + math.erf(x / math.sqrt(2.0))) / 2.0
+
     with torch.no_grad():
         # Cut & paste from PyTorch official master until it's in a few official releases - RW
         if (mean < a - 2 * std) or (mean > b + 2 * std):
-            warnings.warn("mean is more than 2 std from [a, b] in nn.init.trunc_normal_. "
-                          "The distribution of values may be incorrect.",
-                          stacklevel=2)
+            warnings.warn(
+                "mean is more than 2 std from [a, b] in nn.init.trunc_normal_. "
+                "The distribution of values may be incorrect.",
+                stacklevel=2,
+            )
 
         # Values are generated by using a truncated uniform distribution and
         # then using the inverse CDF for the normal distribution.
@@ -434,7 +411,7 @@ def trunc_normal_(tensor: torch.Tensor, mean=0., std=1., a=-2., b=2.) -> torch.T
         tensor.erfinv_()
 
         # Transform to proper mean, std
-        tensor.mul_(std * math.sqrt(2.))
+        tensor.mul_(std * math.sqrt(2.0))
         tensor.add_(mean)
 
         # Clamp to ensure it's in the proper range
@@ -443,25 +420,29 @@ def trunc_normal_(tensor: torch.Tensor, mean=0., std=1., a=-2., b=2.) -> torch.T
 
 
 class ChannelBlock(nn.Module):
-
-    def __init__(self, dim, groups, mlp_ratio=4., qkv_bias=True,
-                 drop_path_rate=0., act_layer=nn.GELU, norm_layer=nn.LayerNorm,
-                 conv_at_attn=True, conv_at_ffn=True):
+    def __init__(
+        self,
+        dim,
+        groups,
+        mlp_ratio=4.0,
+        qkv_bias=True,
+        drop_path_rate=0.0,
+        act_layer=nn.GELU,
+        norm_layer=nn.LayerNorm,
+        conv_at_attn=True,
+        conv_at_ffn=True,
+    ):
         super().__init__()
 
-        drop_path = DropPath(drop_path_rate) if drop_path_rate > 0. else nn.Identity()
+        drop_path = DropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
 
         self.conv1 = PreNorm(None, DepthWiseConv2d(dim, 3, 1, 1)) if conv_at_attn else None
         self.channel_attn = PreNorm(
-            norm_layer(dim),
-            ChannelAttention(dim, groups=groups, qkv_bias=qkv_bias),
-            drop_path
+            norm_layer(dim), ChannelAttention(dim, groups=groups, qkv_bias=qkv_bias), drop_path
         )
         self.conv2 = PreNorm(None, DepthWiseConv2d(dim, 3, 1, 1)) if conv_at_ffn else None
         self.ffn = PreNorm(
-            norm_layer(dim),
-            Mlp(in_features=dim, hidden_features=int(dim*mlp_ratio), act_layer=act_layer),
-            drop_path
+            norm_layer(dim), Mlp(in_features=dim, hidden_features=int(dim * mlp_ratio), act_layer=act_layer), drop_path
         )
 
     def forward(self, x, size):
@@ -484,9 +465,9 @@ def window_partition(x, window_size: int):
 
 
 def window_reverse(windows, batch_size: int, window_size: int, H: int, W: int):
-    B = batch_size 
+    B = batch_size
     # this will cause onnx conversion failed for dynamic axis, because treated as constant
-    # int(windows.shape[0] / (H * W / window_size / window_size)) 
+    # int(windows.shape[0] / (H * W / window_size / window_size))
     x = windows.view(B, H // window_size, W // window_size, window_size, window_size, -1)
     x = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(B, H, W, -1)
     return x
@@ -494,7 +475,6 @@ def window_reverse(windows, batch_size: int, window_size: int, H: int, W: int):
 
 class WindowAttention(nn.Module):
     def __init__(self, dim, num_heads, window_size, qkv_bias=True):
-
         super().__init__()
         self.dim = dim
         self.window_size = window_size
@@ -508,7 +488,6 @@ class WindowAttention(nn.Module):
         self.softmax = nn.Softmax(dim=-1)
 
     def forward(self, x, size):
-
         H, W = size
         B, L, C = x.shape
         assert L == H * W, "input feature has wrong size"
@@ -532,16 +511,14 @@ class WindowAttention(nn.Module):
         q, k, v = qkv[0], qkv[1], qkv[2]
 
         q = q * self.scale
-        attn = (q @ k.transpose(-2, -1))
+        attn = q @ k.transpose(-2, -1)
         attn = self.softmax(attn)
 
         x = (attn @ v).transpose(1, 2).reshape(B_, N, C)
         x = self.proj(x)
 
         # merge windows
-        x = x.view(
-            -1, self.window_size, self.window_size, C
-        )
+        x = x.view(-1, self.window_size, self.window_size, C)
         x = window_reverse(x, B, self.window_size, Hp, Wp)
 
         if pad_r > 0 or pad_b > 0:
@@ -553,25 +530,30 @@ class WindowAttention(nn.Module):
 
 
 class SpatialBlock(nn.Module):
-
-    def __init__(self, dim, num_heads, window_size,
-                 mlp_ratio=4., qkv_bias=True, drop_path_rate=0., act_layer=nn.GELU,
-                 norm_layer=nn.LayerNorm, conv_at_attn=True, conv_at_ffn=True):
+    def __init__(
+        self,
+        dim,
+        num_heads,
+        window_size,
+        mlp_ratio=4.0,
+        qkv_bias=True,
+        drop_path_rate=0.0,
+        act_layer=nn.GELU,
+        norm_layer=nn.LayerNorm,
+        conv_at_attn=True,
+        conv_at_ffn=True,
+    ):
         super().__init__()
 
-        drop_path = DropPath(drop_path_rate) if drop_path_rate > 0. else nn.Identity()
+        drop_path = DropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
 
         self.conv1 = PreNorm(None, DepthWiseConv2d(dim, 3, 1, 1)) if conv_at_attn else None
         self.window_attn = PreNorm(
-            norm_layer(dim),
-            WindowAttention(dim, num_heads, window_size, qkv_bias=qkv_bias),
-            drop_path
+            norm_layer(dim), WindowAttention(dim, num_heads, window_size, qkv_bias=qkv_bias), drop_path
         )
         self.conv2 = PreNorm(None, DepthWiseConv2d(dim, 3, 1, 1)) if conv_at_ffn else None
         self.ffn = PreNorm(
-            norm_layer(dim),
-            Mlp(in_features=dim, hidden_features=int(dim*mlp_ratio), act_layer=act_layer),
-            drop_path
+            norm_layer(dim), Mlp(in_features=dim, hidden_features=int(dim * mlp_ratio), act_layer=act_layer), drop_path
         )
 
     def forward(self, x, size):
@@ -586,7 +568,7 @@ class SpatialBlock(nn.Module):
 
 
 class DaViT(nn.Module):
-    """ DaViT: Dual-Attention Transformer
+    """DaViT: Dual-Attention Transformer
 
     Args:
         in_chans (int): Number of input image channels. Default: 3.
@@ -621,14 +603,14 @@ class DaViT(nn.Module):
         num_heads=(3, 6, 12, 24),
         num_groups=(3, 6, 12, 24),
         window_size=7,
-        mlp_ratio=4.,
+        mlp_ratio=4.0,
         qkv_bias=True,
         drop_path_rate=0.1,
         norm_layer=nn.LayerNorm,
         enable_checkpoint=False,
         conv_at_attn=True,
         conv_at_ffn=True,
-     ):
+    ):
         super().__init__()
 
         self.num_classes = num_classes
@@ -640,7 +622,7 @@ class DaViT(nn.Module):
         assert self.num_stages == len(self.num_heads) == len(self.num_groups)
 
         num_stages = len(embed_dims)
-        dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(depths)*2)]
+        dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(depths) * 2)]
 
         depth_offset = 0
         convs = []
@@ -653,41 +635,48 @@ class DaViT(nn.Module):
                 in_chans=in_chans if i == 0 else self.embed_dims[i - 1],
                 embed_dim=self.embed_dims[i],
                 norm_layer=norm_layer,
-                pre_norm=patch_prenorm[i]
+                pre_norm=patch_prenorm[i],
             )
             convs.append(conv_embed)
 
             block = MySequential(
                 *[
-                    MySequential(OrderedDict([
-                        (
-                            'spatial_block', SpatialBlock(
-                                embed_dims[i],
-                                num_heads[i],
-                                window_size,
-                                drop_path_rate=dpr[depth_offset+j*2],
-                                qkv_bias=qkv_bias,
-                                mlp_ratio=mlp_ratio,
-                                conv_at_attn=conv_at_attn,
-                                conv_at_ffn=conv_at_ffn,
-                            )
-                        ),
-                        (
-                            'channel_block', ChannelBlock(
-                                embed_dims[i],
-                                num_groups[i],
-                                drop_path_rate=dpr[depth_offset+j*2+1],
-                                qkv_bias=qkv_bias,
-                                mlp_ratio=mlp_ratio,
-                                conv_at_attn=conv_at_attn,
-                                conv_at_ffn=conv_at_ffn,
-                            )
+                    MySequential(
+                        OrderedDict(
+                            [
+                                (
+                                    "spatial_block",
+                                    SpatialBlock(
+                                        embed_dims[i],
+                                        num_heads[i],
+                                        window_size,
+                                        drop_path_rate=dpr[depth_offset + j * 2],
+                                        qkv_bias=qkv_bias,
+                                        mlp_ratio=mlp_ratio,
+                                        conv_at_attn=conv_at_attn,
+                                        conv_at_ffn=conv_at_ffn,
+                                    ),
+                                ),
+                                (
+                                    "channel_block",
+                                    ChannelBlock(
+                                        embed_dims[i],
+                                        num_groups[i],
+                                        drop_path_rate=dpr[depth_offset + j * 2 + 1],
+                                        qkv_bias=qkv_bias,
+                                        mlp_ratio=mlp_ratio,
+                                        conv_at_attn=conv_at_attn,
+                                        conv_at_ffn=conv_at_ffn,
+                                    ),
+                                ),
+                            ]
                         )
-                    ])) for j in range(depths[i])
+                    )
+                    for j in range(depths[i])
                 ]
             )
             blocks.append(block)
-            depth_offset += depths[i]*2
+            depth_offset += depths[i] * 2
 
         self.convs = nn.ModuleList(convs)
         self.blocks = nn.ModuleList(blocks)
@@ -710,7 +699,7 @@ class DaViT(nn.Module):
         elif isinstance(m, nn.Conv2d):
             nn.init.normal_(m.weight, std=0.02)
             for name, _ in m.named_parameters():
-                if name in ['bias']:
+                if name in ["bias"]:
                     nn.init.constant_(m.bias, 0)
         elif isinstance(m, nn.LayerNorm):
             nn.init.constant_(m.weight, 1.0)
@@ -721,7 +710,7 @@ class DaViT(nn.Module):
 
     def forward_features_unpool(self, x):
         """
-        forward until avg pooling 
+        forward until avg pooling
         Args:
             x (_type_): input image tensor
         """
@@ -749,7 +738,7 @@ class DaViT(nn.Module):
         x = self.forward_features(x)
         x = self.head(x)
         return x
-    
+
     @classmethod
     def from_config(cls, config):
         return cls(
@@ -766,11 +755,10 @@ class DaViT(nn.Module):
         )
 
 
-
-
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
+
 
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
 def _get_unpad_data(attention_mask):
@@ -1514,7 +1502,6 @@ class Florence2DecoderLayer(nn.Module):
             outputs += (present_key_value,)
 
         return outputs
-
 
 
 class Florence2LanguagePreTrainedModel(PreTrainedModel):
@@ -2320,6 +2307,7 @@ class Florence2LanguageForConditionalGeneration(Florence2LanguagePreTrainedModel
             )
         return reordered_past
 
+
 @dataclass
 class Florence2Seq2SeqLMOutput(ModelOutput):
     """
@@ -2495,6 +2483,7 @@ FLORENCE2_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
+
 @add_start_docstrings(
     """The FLORENCE2 vision model without any head""",
     FLORENCE2_START_DOCSTRING,
@@ -2502,16 +2491,16 @@ FLORENCE2_INPUTS_DOCSTRING = r"""
 class Florence2VisionModel(Florence2PreTrainedModel):
     def __init__(self, config: Florence2VisionConfig):
         super().__init__(config)
-        assert config.model_type == 'davit', 'only DaViT is supported for now'
+        assert config.model_type == "davit", "only DaViT is supported for now"
         self.vision_tower = DaViT.from_config(config=config)
 
         self.post_init()
-    
+
     def forward(self, pixel_values):
         if len(pixel_values.shape) == 4:
             x = self.vision_tower.forward_features_unpool(pixel_values)
         else:
-            raise ValueError(f'invalid image shape {pixel_values.shape}')
+            raise ValueError(f"invalid image shape {pixel_values.shape}")
         return x
 
 
@@ -2522,40 +2511,36 @@ class Florence2VisionModel(Florence2PreTrainedModel):
 class Florence2VisionModelWithProjection(Florence2PreTrainedModel):
     def __init__(self, config: Florence2VisionConfig):
         super().__init__(config)
-        assert config.model_type == 'davit', 'only DaViT is supported for now'
+        assert config.model_type == "davit", "only DaViT is supported for now"
         self.vision_tower = DaViT.from_config(config=config)
 
         self._build_image_projection_layers(config)
 
         self.post_init()
-    
+
     def _build_image_projection_layers(self, config):
         image_dim_out = config.dim_embed[-1]
         dim_projection = config.projection_dim
-        self.image_projection = nn.Parameter(
-            torch.empty(image_dim_out, dim_projection)
-        )
+        self.image_projection = nn.Parameter(torch.empty(image_dim_out, dim_projection))
         self.image_proj_norm = nn.LayerNorm(dim_projection)
         image_pos_embed_config = config.image_pos_embed
-        if image_pos_embed_config['type'] == 'learned_abs_2d':
+        if image_pos_embed_config["type"] == "learned_abs_2d":
             self.image_pos_embed = LearnedAbsolutePositionEmbedding2D(
-                embedding_dim=image_dim_out,
-                num_pos=image_pos_embed_config['max_pos_embeddings']
+                embedding_dim=image_dim_out, num_pos=image_pos_embed_config["max_pos_embeddings"]
             )
         else:
-            raise NotImplementedError('Not implemented yet')
+            raise NotImplementedError("Not implemented yet")
 
         self.image_feature_source = config.image_feature_source
 
         # temporal embedding
         visual_temporal_embedding_config = config.visual_temporal_embedding
-        if visual_temporal_embedding_config['type'] == 'COSINE':
+        if visual_temporal_embedding_config["type"] == "COSINE":
             self.visual_temporal_embed = PositionalEmbeddingCosine1D(
-                embed_dim=image_dim_out,
-                max_seq_len=visual_temporal_embedding_config['max_temporal_embeddings']
+                embed_dim=image_dim_out, max_seq_len=visual_temporal_embedding_config["max_temporal_embeddings"]
             )
         else:
-            raise NotImplementedError('Not implemented yet')
+            raise NotImplementedError("Not implemented yet")
 
     def forward(self, pixel_values):
         if len(pixel_values.shape) == 4:
@@ -2563,17 +2548,17 @@ class Florence2VisionModelWithProjection(Florence2PreTrainedModel):
             T = 1
             x = self.vision_tower.forward_features_unpool(pixel_values)
         else:
-            raise ValueError(f'invalid image shape {pixel_values.shape}')
-        
+            raise ValueError(f"invalid image shape {pixel_values.shape}")
+
         if self.image_pos_embed is not None:
             x = x.view(batch_size * T, -1, x.shape[-1])
             num_tokens = x.shape[-2]
-            h, w = int(num_tokens ** 0.5), int(num_tokens ** 0.5)
-            assert h * w == num_tokens, 'only support square feature maps for now'
+            h, w = int(num_tokens**0.5), int(num_tokens**0.5)
+            assert h * w == num_tokens, "only support square feature maps for now"
             x = x.view(batch_size * T, h, w, x.shape[-1])
             pos_embed = self.image_pos_embed(x)
             x = x + pos_embed
-            x = x.view(batch_size, T * h*w, x.shape[-1])
+            x = x.view(batch_size, T * h * w, x.shape[-1])
 
         if self.visual_temporal_embed is not None:
             visual_temporal_embed = self.visual_temporal_embed(x.view(batch_size, T, -1, x.shape[-1])[:, :, 0])
@@ -2582,18 +2567,18 @@ class Florence2VisionModelWithProjection(Florence2PreTrainedModel):
         x_feat_dict = {}
 
         spatial_avg_pool_x = x.view(batch_size, T, -1, x.shape[-1]).mean(dim=2)
-        x_feat_dict['spatial_avg_pool'] = spatial_avg_pool_x
+        x_feat_dict["spatial_avg_pool"] = spatial_avg_pool_x
 
         temporal_avg_pool_x = x.view(batch_size, T, -1, x.shape[-1]).mean(dim=1)
-        x_feat_dict['temporal_avg_pool'] = temporal_avg_pool_x
+        x_feat_dict["temporal_avg_pool"] = temporal_avg_pool_x
 
         x = x.view(batch_size, T, -1, x.shape[-1])[:, -1]
-        x_feat_dict['last_frame'] = x
+        x_feat_dict["last_frame"] = x
 
         new_x = []
         for _image_feature_source in self.image_feature_source:
             if _image_feature_source not in x_feat_dict:
-                raise ValueError('invalid image feature source: {}'.format(_image_feature_source))
+                raise ValueError("invalid image feature source: {}".format(_image_feature_source))
             new_x.append(x_feat_dict[_image_feature_source])
 
         x = torch.cat(new_x, dim=1)
@@ -2601,9 +2586,7 @@ class Florence2VisionModelWithProjection(Florence2PreTrainedModel):
         x = x @ self.image_projection
         x = self.image_proj_norm(x)
 
-
         return x
-
 
 
 @add_start_docstrings(
@@ -2613,10 +2596,10 @@ class Florence2VisionModelWithProjection(Florence2PreTrainedModel):
 class Florence2ForConditionalGeneration(Florence2PreTrainedModel):
     def __init__(self, config: Florence2Config):
         super().__init__(config)
-        assert config.vision_config.model_type == 'davit', 'only DaViT is supported for now'
+        assert config.vision_config.model_type == "davit", "only DaViT is supported for now"
         del config.vision_config.model_type
         self.vision_tower = DaViT.from_config(config=config.vision_config)
-        # remove unused layers 
+        # remove unused layers
         del self.vision_tower.head
         del self.vision_tower.norms
 
@@ -2632,34 +2615,30 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel):
 
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.post_init()
-    
+
     def _build_image_projection_layers(self, config):
         image_dim_out = config.vision_config.dim_embed[-1]
         dim_projection = config.vision_config.projection_dim
-        self.image_projection = nn.Parameter(
-            torch.empty(image_dim_out, dim_projection)
-        )
+        self.image_projection = nn.Parameter(torch.empty(image_dim_out, dim_projection))
         self.image_proj_norm = nn.LayerNorm(dim_projection)
         image_pos_embed_config = config.vision_config.image_pos_embed
-        if image_pos_embed_config['type'] == 'learned_abs_2d':
+        if image_pos_embed_config["type"] == "learned_abs_2d":
             self.image_pos_embed = LearnedAbsolutePositionEmbedding2D(
-                embedding_dim=image_dim_out,
-                num_pos=image_pos_embed_config['max_pos_embeddings']
+                embedding_dim=image_dim_out, num_pos=image_pos_embed_config["max_pos_embeddings"]
             )
         else:
-            raise NotImplementedError('Not implemented yet')
+            raise NotImplementedError("Not implemented yet")
 
         self.image_feature_source = config.vision_config.image_feature_source
 
         # temporal embedding
         visual_temporal_embedding_config = config.vision_config.visual_temporal_embedding
-        if visual_temporal_embedding_config['type'] == 'COSINE':
+        if visual_temporal_embedding_config["type"] == "COSINE":
             self.visual_temporal_embed = PositionalEmbeddingCosine1D(
-                embed_dim=image_dim_out,
-                max_seq_len=visual_temporal_embedding_config['max_temporal_embeddings']
+                embed_dim=image_dim_out, max_seq_len=visual_temporal_embedding_config["max_temporal_embeddings"]
             )
         else:
-            raise NotImplementedError('Not implemented yet')
+            raise NotImplementedError("Not implemented yet")
 
     def get_encoder(self):
         return self.language_model.get_encoder()
@@ -2677,24 +2656,24 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel):
         self.config.vocab_size = model_embeds.num_embeddings
         self.vocab_size = model_embeds.num_embeddings
         return model_embeds
-    
+
     def _encode_image(self, pixel_values):
         if len(pixel_values.shape) == 4:
             batch_size, C, H, W = pixel_values.shape
             T = 1
             x = self.vision_tower.forward_features_unpool(pixel_values)
         else:
-            raise ValueError(f'invalid image shape {pixel_values.shape}')
-        
+            raise ValueError(f"invalid image shape {pixel_values.shape}")
+
         if self.image_pos_embed is not None:
             x = x.view(batch_size * T, -1, x.shape[-1])
             num_tokens = x.shape[-2]
-            h, w = int(num_tokens ** 0.5), int(num_tokens ** 0.5)
-            assert h * w == num_tokens, 'only support square feature maps for now'
+            h, w = int(num_tokens**0.5), int(num_tokens**0.5)
+            assert h * w == num_tokens, "only support square feature maps for now"
             x = x.view(batch_size * T, h, w, x.shape[-1])
             pos_embed = self.image_pos_embed(x)
             x = x + pos_embed
-            x = x.view(batch_size, T * h*w, x.shape[-1])
+            x = x.view(batch_size, T * h * w, x.shape[-1])
 
         if self.visual_temporal_embed is not None:
             visual_temporal_embed = self.visual_temporal_embed(x.view(batch_size, T, -1, x.shape[-1])[:, :, 0])
@@ -2703,18 +2682,18 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel):
         x_feat_dict = {}
 
         spatial_avg_pool_x = x.view(batch_size, T, -1, x.shape[-1]).mean(dim=2)
-        x_feat_dict['spatial_avg_pool'] = spatial_avg_pool_x
+        x_feat_dict["spatial_avg_pool"] = spatial_avg_pool_x
 
         temporal_avg_pool_x = x.view(batch_size, T, -1, x.shape[-1]).mean(dim=1)
-        x_feat_dict['temporal_avg_pool'] = temporal_avg_pool_x
+        x_feat_dict["temporal_avg_pool"] = temporal_avg_pool_x
 
         x = x.view(batch_size, T, -1, x.shape[-1])[:, -1]
-        x_feat_dict['last_frame'] = x
+        x_feat_dict["last_frame"] = x
 
         new_x = []
         for _image_feature_source in self.image_feature_source:
             if _image_feature_source not in x_feat_dict:
-                raise ValueError('invalid image feature source: {}'.format(_image_feature_source))
+                raise ValueError("invalid image feature source: {}".format(_image_feature_source))
             new_x.append(x_feat_dict[_image_feature_source])
 
         x = torch.cat(new_x, dim=1)
@@ -2722,11 +2701,9 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel):
         x = x @ self.image_projection
         x = self.image_proj_norm(x)
 
-        return x 
+        return x
 
-    def _merge_input_ids_with_image_features(
-        self, image_features, inputs_embeds 
-    ):
+    def _merge_input_ids_with_image_features(self, image_features, inputs_embeds):
         batch_size, image_token_length = image_features.size()[:-1]
         device = image_features.device
         image_attention_mask = torch.ones(batch_size, image_token_length, device=device)
@@ -2747,7 +2724,6 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel):
         attention_mask = torch.cat([image_attention_mask, task_prefix_attention_mask], dim=1)
 
         return inputs_embeds, attention_mask
-
 
     @add_start_docstrings_to_model_forward(FLORENCE2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Florence2Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
@@ -2816,7 +2792,9 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel):
             if pixel_values is not None:
                 # (batch_size, num_image_tokens, hidden_size)
                 image_features = self._encode_image(pixel_values)
-                inputs_embeds, attention_mask = self._merge_input_ids_with_image_features(image_features, inputs_embeds)
+                inputs_embeds, attention_mask = self._merge_input_ids_with_image_features(
+                    image_features, inputs_embeds
+                )
 
         attention_mask = attention_mask.to(inputs_embeds.dtype)
         outputs = self.language_model(
@@ -2854,17 +2832,10 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel):
             encoder_last_hidden_state=outputs.encoder_last_hidden_state,
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
-            image_hidden_states=image_features
+            image_hidden_states=image_features,
         )
 
-    def generate(
-        self,
-        input_ids, 
-        inputs_embeds=None,
-        pixel_values=None,
-        **kwargs
-        ):
-
+    def generate(self, input_ids, inputs_embeds=None, pixel_values=None, **kwargs):
         if inputs_embeds is None:
             # 1. Extra the input embeddings
             if input_ids is not None:
@@ -2872,13 +2843,11 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel):
             # 2. Merge text and images
             if pixel_values is not None:
                 image_features = self._encode_image(pixel_values)
-                inputs_embeds, attention_mask = self._merge_input_ids_with_image_features(image_features, inputs_embeds)
-        
-        return self.language_model.generate(
-            input_ids=None,
-            inputs_embeds=inputs_embeds,
-            **kwargs
-        )
+                inputs_embeds, attention_mask = self._merge_input_ids_with_image_features(
+                    image_features, inputs_embeds
+                )
+
+        return self.language_model.generate(input_ids=None, inputs_embeds=inputs_embeds, **kwargs)
 
     def prepare_inputs_for_generation(
         self,
@@ -2906,7 +2875,7 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel):
                 remove_prefix_length = decoder_input_ids.shape[1] - 1
 
             decoder_input_ids = decoder_input_ids[:, remove_prefix_length:]
-        
+
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
             "encoder_outputs": encoder_outputs,
@@ -2920,7 +2889,7 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel):
             "cross_attn_head_mask": cross_attn_head_mask,
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
         }
-    
+
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return self.language_model.shift_tokens_right(labels)
 
