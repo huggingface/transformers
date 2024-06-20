@@ -991,11 +991,13 @@ class BarkSemanticModel(BarkCausalModel):
             list(range(semantic_generation_config.semantic_pad_token + 1, self.config.output_vocab_size))
         )
 
-        suppress_tokens_logits_processor = SuppressTokensLogitsProcessor(tokens_to_suppress)
+        suppress_tokens_logits_processor = SuppressTokensLogitsProcessor(
+            tokens_to_suppress, device=input_embeds.device
+        )
 
         min_eos_p = kwargs.get("min_eos_p", semantic_generation_config.min_eos_p)
         early_stopping_logits_processor = BarkEosPrioritizerLogitsProcessor(
-            eos_token_id=semantic_generation_config.eos_token_id, min_eos_p=min_eos_p
+            eos_token_id=semantic_generation_config.eos_token_id, min_eos_p=min_eos_p, device=input_embeds.device
         )
 
         # pass input_ids in order to stay consistent with the transformers generate method even though it is not used
