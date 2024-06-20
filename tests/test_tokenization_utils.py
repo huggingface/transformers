@@ -30,6 +30,7 @@ from transformers import (
     BertTokenizer,
     BertTokenizerFast,
     GPT2TokenizerFast,
+    LlamaTokenizerFast,
     is_tokenizers_available,
 )
 from transformers.testing_utils import TOKEN, USER, is_staging_test, require_tokenizers
@@ -107,6 +108,14 @@ class TokenizerUtilTester(unittest.TestCase):
 
         finally:
             os.remove("tokenizer.json")
+
+    def test_tokenize_without_sentencepiece(self):
+        pretrained_name = "huggyllama/llama-7b"
+        with mock.patch.dict("sys.modules", {"sentencepiece": None}):
+            with mock.patch("transformers.tokenization_utils_fast.is_sentencepiece_available", return_value=False):
+                tokenizer_p = LlamaTokenizerFast.from_pretrained(pretrained_name, legacy=False, add_prefix_space=False)
+                tokens = tokenizer_p.tokenize("hello")
+                self.assertTrue(len(tokens) > 0)
 
 
 @is_staging_test
