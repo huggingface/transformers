@@ -679,7 +679,7 @@ class SiglipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @require_torch_gpu
     @mark.flash_attn_test
     def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest("SigLIP flash attention does not support right padding")
+        self.skipTest("SigLIP does not support right padding")
 
 
 class SiglipForImageClassificationModelTester(SiglipModelTester):
