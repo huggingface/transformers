@@ -193,7 +193,7 @@ class AlignVisionConfig(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in each block. If string, `"gelu"`, `"relu"`,
             `"selu", `"gelu_new"`, `"silu"` and `"mish"` are supported.
-        hiddem_dim (`int`, *optional*, defaults to 1280):
+        hidden_dim (`int`, *optional*, defaults to 1280):
             The hidden dimension of the layer before the classification head.
         pooling_type (`str` or `function`, *optional*, defaults to `"mean"`):
             Type of final pooling to be applied before the dense classification head. Available options are [`"mean"`,
@@ -307,9 +307,9 @@ class AlignConfig(PretrainedConfig):
         vision_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`AlignVisionConfig`].
         projection_dim (`int`, *optional*, defaults to 640):
-            Dimentionality of text and vision projection layers.
+            Dimensionality of text and vision projection layers.
         temperature_init_value (`float`, *optional*, defaults to 1.0):
-            The inital value of the *temperature* paramter. Default is used as per the original ALIGN implementation.
+            The initial value of the *temperature* parameter. Default is used as per the original ALIGN implementation.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         kwargs (*optional*):
