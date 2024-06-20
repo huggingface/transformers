@@ -46,8 +46,6 @@ if is_tf_available():
         TFBertModel,
         TFEncoderDecoderModel,
         TFGPT2LMHeadModel,
-        TFRemBertForCausalLM,
-        TFRemBertModel,
         TFRobertaForCausalLM,
         TFRobertaModel,
     )
