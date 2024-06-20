@@ -3837,19 +3837,19 @@ class Trainer:
                 all_losses.add(losses)
             if inputs_decode is not None:
                 inputs_decode = self.accelerator.pad_across_processes(inputs_decode, dim=1, pad_index=-100)
-                inputs_decode = self.gather_function((inputs_decode))
+                inputs_decode = self.gather_function((inputs_decode), use_gather_object=self.args.use_gather_object)
                 if not self.args.batch_eval_metrics or description == "Prediction":
                     all_inputs.add(inputs_decode)
             if logits is not None:
                 logits = self.accelerator.pad_across_processes(logits, dim=1, pad_index=-100)
                 if self.preprocess_logits_for_metrics is not None:
                     logits = self.preprocess_logits_for_metrics(logits, labels)
-                logits = self.gather_function((logits))
+                logits = self.gather_function((logits), use_gather_object=self.args.use_gather_object)
                 if not self.args.batch_eval_metrics or description == "Prediction":
                     all_preds.add(logits)
             if labels is not None:
                 labels = self.accelerator.pad_across_processes(labels, dim=1, pad_index=-100)
-                labels = self.gather_function((labels))
+                labels = self.gather_function((labels), use_gather_object=self.args.use_gather_object)
                 if not self.args.batch_eval_metrics or description == "Prediction":
                     all_labels.add(labels)
 
