@@ -1180,7 +1180,7 @@ class DABDETREncoder(DABDETRPreTrainedModel):
         for i, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description) TODO this is unused. delete or keep?
+            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             to_drop = False
             if self.training:
                 dropout_probability = torch.rand([])
