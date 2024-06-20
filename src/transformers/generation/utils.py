@@ -1726,9 +1726,11 @@ class GenerationMixin:
         )
 
         use_dynamic_cache_by_default = False
-        if generation_config.cache_implementation is not None and model_kwargs.get("past_key_values") is not None:
+        if generation_config.cache_implementation is not None and (
+            model_kwargs.get("past_key_values") is not None or model_kwargs.get("cache_params") is not None
+        ):
             raise ValueError(
-                "Passing both `cache_implementation` (used to initialize certain caches) and `past_key_values` (a "
+                "Passing both `cache_implementation` (used to initialize certain caches) and `past_key_values`/`cache_params` (a "
                 "Cache object) is unsupported. Please use only one of the two."
             )
         elif generation_config.cache_implementation is not None:
@@ -1741,6 +1743,27 @@ class GenerationMixin:
                 model_kwargs["past_key_values"] = self._get_cache(
                     generation_config.cache_implementation, batch_size, generation_config.max_length
                 )
+            elif generation_config.cache_implementation == "mamba":
+                from ..models.mamba.modeling_mamba import MambaCache, MambaConfig
+
+                if not isinstance(self.config, MambaConfig):
+                    raise ValueError(
+                        "You can only specify `cache_implementation` to `mamba` if you are using mamba model"
+                    )
+
+                if hasattr(self, "_cache"):
+                    assert isinstance(self._cache, MambaCache), "Only `MambaCache` can be used on mamba model"
+                    need_new_cache = self._cache.conv_states.shape[1] != batch_size
+                else:
+                    need_new_cache = True
+
+                if need_new_cache:
+                    self._cache = MambaCache(
+                        config=self.config, batch_size=batch_size, dtype=self.dtype, device=self.device
+                    )
+                else:
+                    self._cache.reset()
+                model_kwargs["cache_params"] = self._cache
             elif generation_config.cache_implementation == "quantized":
                 if not self._supports_quantized_cache:
                     raise ValueError(

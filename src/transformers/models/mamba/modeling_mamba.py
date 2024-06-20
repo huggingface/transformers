@@ -343,7 +343,7 @@ class MambaMixer(nn.Module):
         cache_params: Optional[MambaCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
     ):
-        if is_fast_path_available and "cuda" in self.x_proj.weight.device.type:
+        if is_fast_path_available and "cuda" in self.x_proj.weight.device.type and not torch._dynamo.is_compiling():
             return self.cuda_kernels_forward(hidden_states, cache_params, cache_position)
         return self.slow_forward(hidden_states, cache_params, cache_position)
 
@@ -625,7 +625,7 @@ class MambaModel(MambaPreTrainedModel):
                 # cases when we do manual forward instead of using `model.generate` which will initiate
                 # `cache_position` and makes sure it is not None, throw error here instead of doing some
                 # hack to conjecture the current cache position
-                raise RuntimeError(
+                raise ValueError(
                     "You have to specify the `cache_position` manually when `use_cache=True` and `cache_params` is passed, "
                     "you don't have to pass a `cache_params` if you are in prefilling stage because in that case it will "
                     "be initialized for you automatically"
@@ -712,24 +712,13 @@ class MambaForCausalLM(MambaPreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ):
-        if cache_params is None and use_cache:
-            batch_size, *_ = input_ids.size()
-            # we need to reuse the cache as much as possible because changing cache will lead to
-            # recompile between generations, which is very slow for mamba
-            if hasattr(self, "_cache") and self._cache.conv_states.shape[1] == batch_size:
-                self._cache.reset()
+        if use_cache:
+            # `cache_position` should have been initialized in `generate`
+            assert cache_position is not None
+            if cache_position[0] > 0:
+                input_ids = input_ids[:, -1].unsqueeze(-1)
             else:
-                self._cache = MambaCache(
-                    self.config,
-                    batch_size,
-                    dtype=self.backbone.embeddings.weight.dtype,
-                    device=input_ids.device,
-                )
-            cache_position = torch.arange(0, self.config.conv_kernel, device=input_ids.device)
-            cache_params = self._cache
-        # only last token for inputs_ids if the state is passed along.
-        elif cache_params is not None and cache_position[0] > 0:
-            input_ids = input_ids[:, -1].unsqueeze(-1)
+                cache_position = torch.arange(0, self.config.conv_kernel, device=input_ids.device)
 
         if inputs_embeds is not None and cache_params is None:
             model_inputs = {"inputs_embeds": inputs_embeds}

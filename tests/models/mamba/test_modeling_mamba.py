@@ -522,7 +522,7 @@ class MambaIntegrationTests(unittest.TestCase):
         self.assertEqual(output_sentence, expected_output)
 
     @slow
-    def test_compile(self):
+    def test_compile_mamba_cache(self):
         expected_output = "Hello my name is John and I am a\n\nI am a single father of a beautiful daughter. I am a"
 
         input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(torch_device)
@@ -530,11 +530,11 @@ class MambaIntegrationTests(unittest.TestCase):
             torch_device
         )
 
-        output = model.generate(input_ids, max_new_tokens=20)
+        output = model.generate(input_ids, max_new_tokens=20, cache_implementation="mamba")
         output_sentence = self.tokenizer.decode(output[0].tolist())
         self.assertEqual(output_sentence, expected_output)
 
         model.forward = torch.compile(model.forward, fullgraph=True, mode="reduce-overhead")
-        output = model.generate(input_ids, max_new_tokens=20)
+        output = model.generate(input_ids, max_new_tokens=20, cache_implementation="mamba")
         output_sentence = self.tokenizer.decode(output[0].tolist())
         self.assertEqual(output_sentence, expected_output)
