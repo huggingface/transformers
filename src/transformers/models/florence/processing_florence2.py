@@ -23,6 +23,11 @@ import numpy as np
 
 import torch
 
+from ...models.bart.tokenization_bart import BartTokenizer
+from ...models.bart.tokenization_bart_fast import BartTokenizerFast
+from ...models.t5.tokenization_t5 import T5Tokenizer
+from ...models.t5.tokenization_t5_fast import T5TokenizerFast
+
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image, ChannelDimension
 from ...processing_utils import ProcessorMixin
