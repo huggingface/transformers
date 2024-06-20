@@ -24,7 +24,7 @@ import numpy as np
 import torch
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, is_valid_image
+from ...image_utils import ImageInput, is_valid_image, ChannelDimension
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import (
     PaddingStrategy,
@@ -166,9 +166,9 @@ class Florence2Processor(ProcessorMixin):
         do_normalize: bool = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
-        data_format: Optional["ChannelDimension"] = "channels_first",  # noqa: F821
+        data_format: Optional[ChannelDimension] = "channels_first",  # noqa: F821
         input_data_format: Optional[
-            Union[str, "ChannelDimension"]  # noqa: F821
+            Union[str, ChannelDimension]  # noqa: F821
         ] = None,
         resample: "PILImageResampling" = None,  # noqa: F821
         do_convert_rgb: bool = None,
