@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert MobileNetV1 checkpoints from the tensorflow/models library."""
 
-
 import argparse
 import json
 import re

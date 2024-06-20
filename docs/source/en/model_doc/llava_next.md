@@ -68,6 +68,8 @@ The original code can be found [here](https://github.com/haotian-liu/LLaVA/tree/
 
 ## Usage example
 
+### Single image inference
+
 Here's how to load the model and perform inference in half-precision (`torch.float16`):
 
 ```python
@@ -92,6 +94,45 @@ inputs = processor(prompt, image, return_tensors="pt").to("cuda:0")
 output = model.generate(**inputs, max_new_tokens=100)
 
 print(processor.decode(output[0], skip_special_tokens=True))
+```
+
+### Multi image inference
+
+LLaVa-Next can perform inference with multiple images as input, where images either belong to the same prompt or different prompts (in batched inference). Here is how you can do it:
+
+```python
+import requests
+from PIL import Image
+import torch
+from transformers import AutoProcessor, LlavaNextForConditionalGeneration
+
+# Load the model in half-precision
+model = LlavaNextForConditionalGeneration.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf", torch_dtype=torch.float16, device_map="auto")
+processor = AutoProcessor.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")
+
+# Get three different images
+url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+image_stop = Image.open(requests.get(url, stream=True).raw)
+
+url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+image_cats = Image.open(requests.get(url, stream=True).raw)
+
+url = "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/snowman.jpg"
+image_snowman = Image.open(requests.get(url, stream=True).raw)
+
+# Prepare a batched prompt, where the first one is a multi-turn conversation and the second is not
+prompt = [
+    "[INST] <image>\nWhat is shown in this image? [/INST] There is a red stop sign in the image. [INST] <image>\nWhat about this image? How many cats do you see [/INST]",
+    "[INST] <image>\nWhat is shown in this image? [/INST]"
+]
+
+# We can simply feed images in the order they have to be used in the text prompt
+# Each "<image>" token uses one image leaving the next for the subsequent "<image>" tokens
+inputs = processor(text=prompt, images=[image_stop, image_cats, image_snowman], padding=True, return_tensors="pt").to(model.device)
+
+# Generate
+generate_ids = model.generate(**inputs, max_new_tokens=30)
+processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
 ```
 
 ## Model optimization

@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch FLAVA model. """
-
+"""Testing suite for the PyTorch FLAVA model."""
 
 import inspect
 import os
@@ -181,7 +180,7 @@ class FlavaImageModelTest(ModelTesterMixin, unittest.TestCase):
         # FLAVA does not use inputs_embeds
         pass
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -620,7 +619,7 @@ class FlavaMultimodalModelTest(ModelTesterMixin, unittest.TestCase):
             expected_arg_names = ["hidden_states"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         # No embedding in multimodal model
         pass
 
@@ -743,7 +742,7 @@ class FlavaImageCodebookTest(ModelTesterMixin, unittest.TestCase):
     def test_attention_outputs(self):
         pass
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         # No embedding in multimodal model
         pass
 
@@ -945,7 +944,7 @@ class FlavaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pass
 
     # FlavaModel does not have input/output embeddings
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     # override as the `logit_scale` parameter initilization is different for FLAVA
@@ -1286,7 +1285,7 @@ class FlavaModelIntegrationTest(unittest.TestCase):
         # verify the embeddings
         self.assertAlmostEqual(outputs.image_embeddings.sum().item(), -1352.53540, places=4)
         self.assertAlmostEqual(outputs.text_embeddings.sum().item(), -198.98225, places=4)
-        self.assertAlmostEqual(outputs.multimodal_embeddings.sum().item(), -4030.4602050, places=4)
+        self.assertAlmostEqual(outputs.multimodal_embeddings.sum().item(), -4030.4604492, places=4)
 
 
 @require_vision

@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch NLLB-MoE model. """
-
+"""Testing suite for the PyTorch NLLB-MoE model."""
 
 import copy
 import tempfile
@@ -251,7 +250,6 @@ class NllbMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     all_generative_model_classes = (NllbMoeForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "conversational": NllbMoeForConditionalGeneration,
             "feature-extraction": NllbMoeModel,
             "summarization": NllbMoeForConditionalGeneration,
             "text2text-generation": NllbMoeForConditionalGeneration,

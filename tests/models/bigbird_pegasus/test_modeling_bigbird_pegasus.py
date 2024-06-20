@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch BigBirdPegasus model. """
-
+"""Testing suite for the PyTorch BigBirdPegasus model."""
 
 import copy
 import tempfile
@@ -254,7 +253,6 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     all_generative_model_classes = (BigBirdPegasusForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "conversational": BigBirdPegasusForConditionalGeneration,
             "feature-extraction": BigBirdPegasusModel,
             "question-answering": BigBirdPegasusForQuestionAnswering,
             "summarization": BigBirdPegasusForConditionalGeneration,

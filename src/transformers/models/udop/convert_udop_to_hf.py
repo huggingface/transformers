@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert UDOP checkpoints from the original repository. URL: https://github.com/microsoft/i-Code/tree/main/i-Code-Doc"""
 
-
 import argparse
 
 import torch

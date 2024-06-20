@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Audio Spectrogram Transformer (AST) model."""
+"""PyTorch Audio Spectrogram Transformer (AST) model."""
 
 import math
 from typing import Dict, List, Optional, Set, Tuple, Union
@@ -169,6 +169,38 @@ class ASTSelfAttention(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.vit.modeling_vit.ViTSdpaSelfAttention with ViT->AST
+class ASTSdpaSelfAttention(ASTSelfAttention):
+    def __init__(self, config: ASTConfig) -> None:
+        super().__init__(config)
+        self.attention_probs_dropout_prob = config.attention_probs_dropout_prob
+
+    def forward(
+        self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False
+    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+        mixed_query_layer = self.query(hidden_states)
+
+        key_layer = self.transpose_for_scores(self.key(hidden_states))
+        value_layer = self.transpose_for_scores(self.value(hidden_states))
+        query_layer = self.transpose_for_scores(mixed_query_layer)
+
+        context_layer = torch.nn.functional.scaled_dot_product_attention(
+            query_layer,
+            key_layer,
+            value_layer,
+            head_mask,
+            self.attention_probs_dropout_prob if self.training else 0.0,
+            is_causal=False,
+            scale=None,
+        )
+
+        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
+        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
+        context_layer = context_layer.view(new_context_layer_shape)
+
+        return context_layer, None
+
+
 # Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->AST
 class ASTSelfOutput(nn.Module):
     """
@@ -228,6 +260,13 @@ class ASTAttention(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.vit.modeling_vit.ViTSdpaAttention with ViT->AST
+class ASTSdpaAttention(ASTAttention):
+    def __init__(self, config: ASTConfig) -> None:
+        super().__init__(config)
+        self.attention = ASTSdpaSelfAttention(config)
+
+
 # Copied from transformers.models.vit.modeling_vit.ViTIntermediate with ViT->AST
 class ASTIntermediate(nn.Module):
     def __init__(self, config: ASTConfig) -> None:
@@ -261,7 +300,13 @@ class ASTOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->AST
+AST_ATTENTION_CLASSES = {
+    "eager": ASTAttention,
+    "sdpa": ASTSdpaAttention,
+}
+
+
+# Copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->AST,VIT->AST
 class ASTLayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
@@ -269,7 +314,7 @@ class ASTLayer(nn.Module):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = ASTAttention(config)
+        self.attention = AST_ATTENTION_CLASSES[config._attn_implementation](config)
         self.intermediate = ASTIntermediate(config)
         self.output = ASTOutput(config)
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -366,6 +411,7 @@ class ASTPreTrainedModel(PreTrainedModel):
     base_model_prefix = "audio_spectrogram_transformer"
     main_input_name = "input_values"
     supports_gradient_checkpointing = True
+    _supports_sdpa = True
 
     # Copied from transformers.models.deit.modeling_deit.DeiTPreTrainedModel._init_weights
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:

@@ -394,6 +394,7 @@ class RwkvPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["RwkvBlock"]
     _keep_in_fp32_modules = ["time_decay", "time_first"]
     supports_gradient_checkpointing = True
+    _is_stateful = True
 
     def _init_weights(self, module):
         """Initialize the weights."""

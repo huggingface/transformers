@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" GPTNeoX Japanese model configuration"""
+"""GPTNeoX Japanese model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging

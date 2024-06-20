@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 LayoutLM model."""
-
+"""TF 2.0 LayoutLM model."""
 
 from __future__ import annotations
 
@@ -1602,7 +1601,7 @@ class TFLayoutLMForQuestionAnswering(TFLayoutLMPreTrainedModel, TFQuestionAnswer
         >>> tokenizer = AutoTokenizer.from_pretrained("impira/layoutlm-document-qa", add_prefix_space=True)
         >>> model = TFLayoutLMForQuestionAnswering.from_pretrained("impira/layoutlm-document-qa", revision="1e3ebac")
 
-        >>> dataset = load_dataset("nielsr/funsd", split="train")
+        >>> dataset = load_dataset("nielsr/funsd", split="train", trust_remote_code=True)
         >>> example = dataset[0]
         >>> question = "what's his name?"
         >>> words = example["words"]

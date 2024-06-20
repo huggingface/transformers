@@ -2,7 +2,7 @@ FROM python:3.10-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 USER root
 RUN apt-get update && apt-get install -y libsndfile1-dev espeak-ng time git cmake wget xz-utils build-essential g++5 libprotobuf-dev protobuf-compiler
-ENV VIRTUAL_ENV=/usr/local
+ENV UV_PYTHON=/usr/local/bin/python
 RUN pip --no-cache-dir install uv && uv venv && uv pip install --no-cache-dir -U pip setuptools
 
 RUN wget https://github.com/ku-nlp/jumanpp/releases/download/v2.0.0-rc3/jumanpp-2.0.0-rc3.tar.xz

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch ViLT model. """
+"""Testing suite for the PyTorch ViLT model."""
 
 import unittest
 
@@ -637,7 +637,7 @@ class ViltModelIntegrationTest(unittest.TestCase):
 
         processor = self.default_processor
 
-        dataset = load_dataset("hf-internal-testing/fixtures_nlvr2", split="test")
+        dataset = load_dataset("hf-internal-testing/fixtures_nlvr2", split="test", trust_remote_code=True)
         image1 = Image.open(dataset[0]["file"]).convert("RGB")
         image2 = Image.open(dataset[1]["file"]).convert("RGB")
 

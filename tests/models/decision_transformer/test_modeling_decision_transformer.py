@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch DecisionTransformer model. """
-
+"""Testing suite for the PyTorch DecisionTransformer model."""
 
 import inspect
 import unittest
@@ -144,7 +143,6 @@ class DecisionTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
     test_attention_outputs = False
     test_hidden_states_output = False
     test_inputs_embeds = False
-    test_model_common_attributes = False
     test_gradient_checkpointing = False
     test_torchscript = False
 
@@ -184,6 +182,10 @@ class DecisionTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
             ]
 
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+
+    @unittest.skip(reason="Model does not have input embeddings")
+    def test_model_get_set_embeddings(self):
+        pass
 
 
 @require_torch

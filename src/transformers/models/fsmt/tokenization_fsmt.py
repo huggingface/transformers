@@ -14,7 +14,6 @@
 # limitations under the License.
 """Tokenization classes for FSMT."""
 
-
 import json
 import os
 import re

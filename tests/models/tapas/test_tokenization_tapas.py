@@ -143,7 +143,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
 
     def get_input_output_texts(self, tokenizer):
-        input_text = "UNwant\u00E9d,running"
+        input_text = "UNwant\u00e9d,running"
         output_text = "unwanted, running"
         return input_text, output_text
 
@@ -189,7 +189,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = self.get_tokenizer()
         rust_tokenizer = self.get_rust_tokenizer()
 
-        sequence = "UNwant\u00E9d,running"
+        sequence = "UNwant\u00e9d,running"
 
         tokens = tokenizer.tokenize(sequence)
         rust_tokens = rust_tokenizer.tokenize(sequence)
@@ -208,7 +208,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = self.get_tokenizer(do_lower_case=True)
         rust_tokenizer = self.get_rust_tokenizer(do_lower_case=True)
 
-        sequence = "UNwant\u00E9d,running"
+        sequence = "UNwant\u00e9d,running"
 
         tokens = tokenizer.tokenize(sequence)
         rust_tokens = rust_tokenizer.tokenize(sequence)
@@ -230,7 +230,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_chinese(self):
         tokenizer = BasicTokenizer()
 
-        self.assertListEqual(tokenizer.tokenize("ah\u535A\u63A8zz"), ["ah", "\u535A", "\u63A8", "zz"])
+        self.assertListEqual(tokenizer.tokenize("ah\u535a\u63a8zz"), ["ah", "\u535a", "\u63a8", "zz"])
 
     def test_basic_tokenizer_lower(self):
         tokenizer = BasicTokenizer(do_lower_case=True)
@@ -238,7 +238,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(
             tokenizer.tokenize(" \tHeLLo!how  \n Are yoU?  "), ["hello", "!", "how", "are", "you", "?"]
         )
-        self.assertListEqual(tokenizer.tokenize("H\u00E9llo"), ["hello"])
+        self.assertListEqual(tokenizer.tokenize("H\u00e9llo"), ["hello"])
 
     def test_basic_tokenizer_lower_strip_accents_false(self):
         tokenizer = BasicTokenizer(do_lower_case=True, strip_accents=False)
@@ -246,7 +246,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(
             tokenizer.tokenize(" \tHäLLo!how  \n Are yoU?  "), ["hällo", "!", "how", "are", "you", "?"]
         )
-        self.assertListEqual(tokenizer.tokenize("H\u00E9llo"), ["h\u00E9llo"])
+        self.assertListEqual(tokenizer.tokenize("H\u00e9llo"), ["h\u00e9llo"])
 
     def test_basic_tokenizer_lower_strip_accents_true(self):
         tokenizer = BasicTokenizer(do_lower_case=True, strip_accents=True)
@@ -254,7 +254,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(
             tokenizer.tokenize(" \tHäLLo!how  \n Are yoU?  "), ["hallo", "!", "how", "are", "you", "?"]
         )
-        self.assertListEqual(tokenizer.tokenize("H\u00E9llo"), ["hello"])
+        self.assertListEqual(tokenizer.tokenize("H\u00e9llo"), ["hello"])
 
     def test_basic_tokenizer_lower_strip_accents_default(self):
         tokenizer = BasicTokenizer(do_lower_case=True)
@@ -262,7 +262,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(
             tokenizer.tokenize(" \tHäLLo!how  \n Are yoU?  "), ["hallo", "!", "how", "are", "you", "?"]
         )
-        self.assertListEqual(tokenizer.tokenize("H\u00E9llo"), ["hello"])
+        self.assertListEqual(tokenizer.tokenize("H\u00e9llo"), ["hello"])
 
     def test_basic_tokenizer_no_lower(self):
         tokenizer = BasicTokenizer(do_lower_case=False)
@@ -311,7 +311,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertTrue(_is_whitespace("\t"))
         self.assertTrue(_is_whitespace("\r"))
         self.assertTrue(_is_whitespace("\n"))
-        self.assertTrue(_is_whitespace("\u00A0"))
+        self.assertTrue(_is_whitespace("\u00a0"))
 
         self.assertFalse(_is_whitespace("A"))
         self.assertFalse(_is_whitespace("-"))
@@ -935,7 +935,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 table = self.get_table(tokenizer, length=0)
                 tmpdirname = tempfile.mkdtemp()
 
-                sample_text = " He is very happy, UNwant\u00E9d,running"
+                sample_text = " He is very happy, UNwant\u00e9d,running"
                 before_tokens = tokenizer.encode(table, sample_text, add_special_tokens=False)
                 before_vocab = tokenizer.get_vocab()
                 tokenizer.save_pretrained(tmpdirname)
