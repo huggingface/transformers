@@ -212,7 +212,7 @@ class CLIPTextEmbeddings(nn.Module):
         seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-2]
 
         if position_ids is None:
-            position_ids = self.position_ids[:, : min(seq_length, self.max_position_embeddings)]
+            position_ids = self.position_ids[:, :min(seq_length, self.max_position_embeddings)]
 
         if inputs_embeds is None:
             inputs_embeds = self.token_embedding(input_ids)
