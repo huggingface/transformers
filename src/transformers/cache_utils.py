@@ -1083,7 +1083,7 @@ class EncoderDecoderCache:
         self.self_attention_cache.crop(maximum_length)
         self.cross_attention_cache.crop(maximum_length)
 
-    def batch_split(self, full_batch_size: int, split_size: int) -> "EncoderDecoderCache":
+    def batch_split(self, full_batch_size: int, split_size: int) -> "List[EncoderDecoderCache]":
         """Split the current instance into a list of `DynamicCache` by the batch size. This will be used by
         `_split_model_inputs()` in `generation.utils`"""
         if not (
@@ -1094,8 +1094,13 @@ class EncoderDecoderCache:
                 f"`batch_split` is only defined for dynamic cache, got {self.self_attention_cache.__str__()} for the self "
                 f"attention cache and {self.cross_attention_cache.__str__()} for the cross attention cache."
             )
-        self.self_attention_cache.batch_split(full_batch_size, split_size)
-        self.cross_attention_cache.batch_split(full_batch_size, split_size)
+        self_attention_cache = self.self_attention_cache.batch_split(full_batch_size, split_size)
+        cross_attention_cache = self.cross_attention_cache.batch_split(full_batch_size, split_size)
+
+        out = []
+        for self_attn, cross_attn in zip(self_attention_cache, cross_attention_cache):
+            out.append(EncoderDecoderCache(self_attn, cross_attn))
+        return out
 
     @classmethod
     def from_batch_splits(cls, splits: List["EncoderDecoderCache"]) -> "EncoderDecoderCache":

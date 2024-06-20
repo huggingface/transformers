@@ -1980,6 +1980,7 @@ class WhisperForCausalLM(WhisperPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
         r"""
         Args:
@@ -2034,6 +2035,9 @@ class WhisperForCausalLM(WhisperPreTrainedModel):
                 for more detail.
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+                Indices depicting the position of the input sequence tokens in the sequence. It is used to update the cache
+                in the correct position and to infer the complete sequence length.
 
         Returns:
 
@@ -2085,6 +2089,7 @@ class WhisperForCausalLM(WhisperPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            cache_position=cache_position,
         )
 
         logits = self.proj_out(outputs[0])
@@ -2115,10 +2120,15 @@ class WhisperForCausalLM(WhisperPreTrainedModel):
         use_cache=None,
         encoder_outputs=None,
         attention_mask=None,
+        cache_position=None,
         **kwargs,
     ):
+        past_length = 0
         if past_key_values is not None:
-            past_length = past_key_values[0][0].shape[2]
+            if isinstance(past_key_values, EncoderDecoderCache):
+                past_length = cache_position[0] if cache_position is not None else past_key_values.get_seq_length()
+            else:
+                past_length = past_key_values[0][0].shape[2]
 
             # Some generation methods already pass only the last input ID
             if input_ids.shape[1] > past_length:
@@ -2129,12 +2139,20 @@ class WhisperForCausalLM(WhisperPreTrainedModel):
 
             input_ids = input_ids[:, remove_prefix_length:]
 
+        if cache_position is None:
+            cache_position = torch.arange(
+                past_length, past_length + input_ids.shape[1], device=input_ids.device
+            )
+        elif use_cache:
+            cache_position = cache_position[-input_ids.shape[1] :]
+
         return {
             "encoder_outputs": encoder_outputs,
             "past_key_values": past_key_values,
             "input_ids": input_ids,
             "use_cache": use_cache,
             "attention_mask": attention_mask,
+            "cache_position": cache_position,
         }
 
     @staticmethod

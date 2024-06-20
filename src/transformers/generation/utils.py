@@ -1416,9 +1416,10 @@ class GenerationMixin:
         Returns the resulting cache object.
         """
         cache_cls: Cache = NEED_SETUP_CACHE_CLASSES_MAPPING[cache_implementation]
+        requires_cross_attention_cache = self.config.is_encoder_decoder or model_kwargs.get("encoder_outputs") is not None
 
         if hasattr(self, "_cache"):
-            cache_to_check = self._cache.self_attention_cache if self.config.is_encoder_decoder else self._cache
+            cache_to_check = self._cache.self_attention_cache if requires_cross_attention_cache else self._cache
 
         if cache_implementation == "sliding_window":
             max_cache_len = min(self.config.sliding_window, max_cache_len)
@@ -1430,7 +1431,7 @@ class GenerationMixin:
             or cache_to_check.max_cache_len < max_cache_len
         )
 
-        if self.config.is_encoder_decoder and hasattr(self, "_cache"):
+        if requires_cross_attention_cache and hasattr(self, "_cache"):
             need_new_cache = (
                 need_new_cache
                 or self._cache.cross_attention_cache.max_cache_len != model_kwargs["encoder_outputs"][0].shape[1]
@@ -1449,7 +1450,7 @@ class GenerationMixin:
                 "dtype": cache_dtype,
             }
             self._cache = cache_cls(**cache_kwargs)
-            if self.config.is_encoder_decoder:
+            if requires_cross_attention_cache:
                 encoder_kwargs = cache_kwargs.copy()
                 encoder_kwargs["max_cache_len"] = model_kwargs["encoder_outputs"][0].shape[1]
                 self._cache = EncoderDecoderCache(self._cache, cache_cls(**encoder_kwargs))
@@ -1788,19 +1789,12 @@ class GenerationMixin:
         # keeps copying the cache thus using much more memory
         elif generation_config.cache_implementation is None and self._supports_default_dynamic_cache():
             past = model_kwargs.get("past_key_values", None)
+            requires_cross_attention_cache = self.config.is_encoder_decoder or model_kwargs.get("encoder_outputs") is not None
             if past is None:
-                model_kwargs["past_key_values"] = (
-                    DynamicCache()
-                    if not self.config.is_encoder_decoder
-                    else EncoderDecoderCache(DynamicCache(), DynamicCache())
-                )
+                model_kwargs["past_key_values"] = DynamicCache() if not requires_cross_attention_cache else EncoderDecoderCache(DynamicCache(), DynamicCache())
                 use_dynamic_cache_by_default = True
             elif isinstance(past, tuple):
-                model_kwargs["past_key_values"] = (
-                    DynamicCache.from_legacy_cache(past)
-                    if not self.config.is_encoder_decoder
-                    else EncoderDecoderCache.from_legacy_cache(past)
-                )
+                model_kwargs["past_key_values"] = DynamicCache.from_legacy_cache(past) if not requires_cross_attention_cache else EncoderDecoderCache.from_legacy_cache(past)
                 use_dynamic_cache_by_default = True
 
         self._validate_generated_length(generation_config, input_ids_length, has_default_max_length)
@@ -2254,7 +2248,7 @@ class GenerationMixin:
             # if the first step in the loop, encode all the prefix and obtain: (1) past_key_values;
             # (2) last_hidden_states; (3) logit_for_next_step; (4) update model kwargs for the next step
             if model_kwargs.get("past_key_values") is None or (
-                isinstance(model_kwargs["past_key_values"], Cache)
+                isinstance(model_kwargs["past_key_values"], (Cache, EncoderDecoderCache))
                 and model_kwargs["past_key_values"].get_seq_length() == 0
             ):
                 # prepare inputs
@@ -4149,8 +4143,10 @@ def stack_model_outputs(model_outputs: List[ModelOutput]) -> ModelOutput:
         if isinstance(data[0], torch.Tensor):
             return torch.cat(data, dim=0)
         # New cache format
-        elif isinstance(data[0], (DynamicCache, EncoderDecoderCache)):
+        elif isinstance(data[0], DynamicCache):
             return DynamicCache.from_batch_splits(data)
+        elif isinstance(data[0], EncoderDecoderCache):
+            return EncoderDecoderCache.from_batch_splits(data)
         elif isinstance(data[0], tuple):
             # If the elements of the tuple are also tuples (e.g., past_key_values in our earlier example)
             if isinstance(data[0][0], tuple):
