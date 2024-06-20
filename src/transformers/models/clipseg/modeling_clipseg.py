@@ -204,10 +204,10 @@ class CLIPSegVisionEmbeddings(nn.Module):
 class CLIPSegTextEmbeddings(nn.Module):
     def __init__(self, config: CLIPSegTextConfig):
         super().__init__()
-        embed_dim = config.hidden_size
-
-        self.token_embedding = nn.Embedding(config.vocab_size, embed_dim)
-        self.position_embedding = nn.Embedding(config.max_position_embeddings, embed_dim)
+        self.embed_dim = config.hidden_size
+        self.max_position_embeddings = config.max_position_embeddings
+        self.token_embedding = nn.Embedding(config.vocab_size, self.embed_dim)
+        self.position_embedding = nn.Embedding(self.max_position_embeddings, self.embed_dim)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.register_buffer(
@@ -223,12 +223,21 @@ class CLIPSegTextEmbeddings(nn.Module):
         seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-2]
 
         if position_ids is None:
-            position_ids = self.position_ids[:, :seq_length]
+            position_ids = self.position_ids[:, : min(seq_length, self.max_position_embeddings)]
 
         if inputs_embeds is None:
             inputs_embeds = self.token_embedding(input_ids)
 
+        # Shape: BATCH x MAX POSITION EMBEDDING X EMBEDDING DIMENSION
         position_embeddings = self.position_embedding(position_ids)
+
+        # Bi-Linear Interpolation
+        # Shape: BATCH x SEQUENCE LENGTH X EMBEDDING DIMENSION
+        if seq_length > self.max_position_embeddings:
+            position_embeddings = nn.functional.interpolate(
+                position_embeddings.unsqueeze(0), size=(seq_length, self.embed_dim), mode="bilinear"
+            ).squeeze(0)
+
         embeddings = inputs_embeds + position_embeddings
 
         return embeddings
