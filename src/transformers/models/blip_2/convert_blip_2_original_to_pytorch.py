@@ -319,7 +319,7 @@ def convert_blip2_checkpoint(
         set_seed(42)
 
         original_outputs = original_model.generate(
-            {"image": original_pixel_values, "prompt": prompt}, use_nucleus_sampling=True
+            {"image": original_pixel_values, "prompt": prompt}, use_nucleus_sampling=True, max_length=50
         )
         outputs = hf_model.generate(
             pixel_values,
