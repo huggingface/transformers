@@ -50,6 +50,9 @@ else:
         "Florence2VisionModel",
         "Florence2VisionModelWithProjection",
         "Florence2ForConditionalGeneration",
+        "Florence2LanguageModel",
+        "Florence2LanguagePreTrainedModel",
+        "Florence2LanguageForConditionalGeneration",
     ]
 
 
@@ -79,6 +82,9 @@ if TYPE_CHECKING:
     else:
         from .modeling_florence2 import (
             Florence2ForConditionalGeneration,
+            Florence2LanguageForConditionalGeneration,
+            Florence2LanguageModel,
+            Florence2LanguagePreTrainedModel,
             Florence2PreTrainedModel,
             Florence2VisionModel,
             Florence2VisionModelWithProjection,

@@ -2128,6 +2128,9 @@ else:
     _import_structure["models.florence"].extend(
         [
             "Florence2ForConditionalGeneration",
+            "Florence2LanguageForConditionalGeneration",
+            "Florence2LanguageModel",
+            "Florence2LanguagePreTrainedModel",
             "Florence2PreTrainedModel",
             "Florence2VisionModel",
             "Florence2VisionModelWithProjection",
@@ -6615,6 +6618,9 @@ if TYPE_CHECKING:
         )
         from .models.florence import (
             Florence2ForConditionalGeneration,
+            Florence2LanguageForConditionalGeneration,
+            Florence2LanguageModel,
+            Florence2LanguagePreTrainedModel,
             Florence2PreTrainedModel,
             Florence2VisionModel,
             Florence2VisionModelWithProjection,
