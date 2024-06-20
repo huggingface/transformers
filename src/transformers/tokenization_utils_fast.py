@@ -879,6 +879,9 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         """
         Updates the underlying post processor with the current `bos_token` and `eos_token`.
         """
+        if not isinstance(self._tokenizer.post_processor, processors.Sequence):
+            return
+
         bos = self.bos_token
         bos_token_id = self.bos_token_id
         if bos is None and self.add_bos_token:
@@ -918,4 +921,3 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     def add_bos_token(self, value):
         self._add_bos_token = value
         self._update_bos_eos_tokens()
-

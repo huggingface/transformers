@@ -685,10 +685,16 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                     )
         # ["This is something", "<special_token_1>", "else"]
         tokenized_text = []
-        for token in tokens:
+        for idx, token in enumerate(tokens):
             # Need to skip eventual empty (fully stripped) tokens
+            kwargs["add_bos_token"] = kwargs.get("add_bos_token", None)
+            kwargs["add_eos_token"] = kwargs.get("add_eos_token", None)
             if not token:
                 continue
+            if idx == 0 and kwargs.get("add_special_tokens", None) is True:
+                kwargs["add_bos_token"] = getattr(self, "add_bos_token", None)
+            elif idx == len(tokens) - 1 and kwargs.get("add_special_tokens", None) is True:
+                kwargs["add_eos_token"] = getattr(self, "add_eos_token", None)
             if token in no_split_token:
                 tokenized_text.append(token)
             else:
@@ -1025,10 +1031,12 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         return [0] * ((len(token_ids_1) if token_ids_1 else 0) + len(token_ids_0))
 
     @overload
-    def convert_ids_to_tokens(self, ids: int, skip_special_tokens: bool = False) -> str: ...
+    def convert_ids_to_tokens(self, ids: int, skip_special_tokens: bool = False) -> str:
+        ...
 
     @overload
-    def convert_ids_to_tokens(self, ids: List[int], skip_special_tokens: bool = False) -> List[str]: ...
+    def convert_ids_to_tokens(self, ids: List[int], skip_special_tokens: bool = False) -> List[str]:
+        ...
 
     def convert_ids_to_tokens(
         self, ids: Union[int, List[int]], skip_special_tokens: bool = False
