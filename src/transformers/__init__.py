@@ -1135,7 +1135,7 @@ else:
     _import_structure["models.dpt"].extend(["DPTFeatureExtractor", "DPTImageProcessor"])
     _import_structure["models.efficientnet"].append("EfficientNetImageProcessor")
     _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaImageProcessor", "FlavaProcessor"])
-    _import_structure["models.florence"].extend(["Florence2PostProcesser", "Florence2Processor"])
+    _import_structure["models.florence"].extend(["Florence2PostProcessor", "Florence2Processor"])
     _import_structure["models.fuyu"].extend(["FuyuImageProcessor", "FuyuProcessor"])
     _import_structure["models.glpn"].extend(["GLPNFeatureExtractor", "GLPNImageProcessor"])
     _import_structure["models.grounding_dino"].extend(["GroundingDinoImageProcessor"])
@@ -2127,10 +2127,10 @@ else:
     )
     _import_structure["models.florence"].extend(
         [
+            "Florence2ForConditionalGeneration",
             "Florence2PreTrainedModel",
             "Florence2VisionModel",
             "Florence2VisionModelWithProjection",
-            "Florence2ForConditionalGeneration",
         ]
     )
     _import_structure["models.fnet"].extend(
@@ -5770,7 +5770,7 @@ if TYPE_CHECKING:
             FlavaImageProcessor,
             FlavaProcessor,
         )
-        from .models.florence import Florence2Processor, Florence2PostProcesser
+        from .models.florence import Florence2PostProcessor, Florence2Processor
         from .models.fuyu import FuyuImageProcessor, FuyuProcessor
         from .models.glpn import GLPNFeatureExtractor, GLPNImageProcessor
         from .models.grounding_dino import GroundingDinoImageProcessor

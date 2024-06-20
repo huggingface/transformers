@@ -240,14 +240,14 @@ class FlavaProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
-class Florence2Processor(metaclass=DummyObject):
+class Florence2PostProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["vision"])
 
 
-class Florence2PostProcesser(metaclass=DummyObject):
+class Florence2Processor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):

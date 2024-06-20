@@ -27,9 +27,7 @@ _import_structure = {
         "Florence2LanguageConfig",
         "Florence2VisionConfig",
     ],
-    "processing_florence2": [
-        "Florence2PostProcesser"
-    ],
+    "processing_florence2": ["Florence2PostProcessor"],
 }
 
 try:
@@ -62,7 +60,7 @@ if TYPE_CHECKING:
         Florence2VisionConfig,
     )
     from .processing_florence2 import (
-        Florence2PostProcesser,
+        Florence2PostProcessor,
     )
 
     try:
