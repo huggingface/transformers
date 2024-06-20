@@ -609,18 +609,11 @@ class GGUFLlamaConverter(LlamaConverter):
         self.additional_kwargs["bos_token"] = eos_token
 
         if self.is_llama_3_tokenizer:
-            tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(
-                add_prefix_space=False, trim_offsets=False, use_regex=True
-            )
             self.additional_kwargs["add_prefix_space"] = False
             self.additional_kwargs["clean_up_tokenization_spaces"] = True
 
             self.additional_kwargs["legacy"] = False
             self.original_tokenizer.legacy = False
-
-            # This is tricky as the additional kwargs are passed after legacy is force-set in LlamaTokenizer's
-            # init.
-            tokenizer.normalizer = normalizers.Sequence([])
 
         return tokenizer
 
@@ -637,6 +630,21 @@ class GGUFLlamaConverter(LlamaConverter):
         if add_prefix_space:
             sequence += [decoders.Strip(content=" ", left=1)]
         return decoders.Sequence(sequence)
+
+    def converted(self):
+        tokenizer = super().converted()
+
+        # HACK: patch the llama-3 tokenizer to use the correspinding pre-tokenizer
+        # and normalizer
+        if self.is_llama_3_tokenizer:
+            tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(
+                add_prefix_space=False, trim_offsets=False, use_regex=True
+            )
+            # This is tricky as the additional kwargs are passed after legacy is force-set in LlamaTokenizer's
+            # init.
+            tokenizer.normalizer = normalizers.Sequence([])
+
+        return tokenizer
 
 
 class GGUFQwen2Converter(Qwen2Converter):
