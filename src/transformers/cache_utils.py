@@ -1078,6 +1078,7 @@ class EncoderDecoderCache:
                 f"attention cache and {self.cross_attention_cache.__str__()} for the cross attention cache."
             )
 
+    # TODO(gante, sanchit-gandhi): move following functionality into `.generate`
     def crop(self, maximum_length: int):
         """Crop the past key values up to a new `maximum_length` in terms of tokens. `maximum_length` can also be
         negative to remove `maximum_length` tokens. This is used in assisted decoding and contrastive search."""
