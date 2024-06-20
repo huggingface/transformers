@@ -1416,7 +1416,9 @@ class GenerationMixin:
         Returns the resulting cache object.
         """
         cache_cls: Cache = NEED_SETUP_CACHE_CLASSES_MAPPING[cache_implementation]
-        requires_cross_attention_cache = self.config.is_encoder_decoder or model_kwargs.get("encoder_outputs") is not None
+        requires_cross_attention_cache = (
+            self.config.is_encoder_decoder or model_kwargs.get("encoder_outputs") is not None
+        )
 
         if hasattr(self, "_cache"):
             cache_to_check = self._cache.self_attention_cache if requires_cross_attention_cache else self._cache
@@ -1789,12 +1791,22 @@ class GenerationMixin:
         # keeps copying the cache thus using much more memory
         elif generation_config.cache_implementation is None and self._supports_default_dynamic_cache():
             past = model_kwargs.get("past_key_values", None)
-            requires_cross_attention_cache = self.config.is_encoder_decoder or model_kwargs.get("encoder_outputs") is not None
+            requires_cross_attention_cache = (
+                self.config.is_encoder_decoder or model_kwargs.get("encoder_outputs") is not None
+            )
             if past is None:
-                model_kwargs["past_key_values"] = DynamicCache() if not requires_cross_attention_cache else EncoderDecoderCache(DynamicCache(), DynamicCache())
+                model_kwargs["past_key_values"] = (
+                    DynamicCache()
+                    if not requires_cross_attention_cache
+                    else EncoderDecoderCache(DynamicCache(), DynamicCache())
+                )
                 use_dynamic_cache_by_default = True
             elif isinstance(past, tuple):
-                model_kwargs["past_key_values"] = DynamicCache.from_legacy_cache(past) if not requires_cross_attention_cache else EncoderDecoderCache.from_legacy_cache(past)
+                model_kwargs["past_key_values"] = (
+                    DynamicCache.from_legacy_cache(past)
+                    if not requires_cross_attention_cache
+                    else EncoderDecoderCache.from_legacy_cache(past)
+                )
                 use_dynamic_cache_by_default = True
 
         self._validate_generated_length(generation_config, input_ids_length, has_default_max_length)

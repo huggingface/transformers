@@ -2147,9 +2147,7 @@ class WhisperForCausalLM(WhisperPreTrainedModel):
             input_ids = input_ids[:, remove_prefix_length:]
 
         if cache_position is None:
-            cache_position = torch.arange(
-                past_length, past_length + input_ids.shape[1], device=input_ids.device
-            )
+            cache_position = torch.arange(past_length, past_length + input_ids.shape[1], device=input_ids.device)
         elif use_cache:
             cache_position = cache_position[-input_ids.shape[1] :]
 

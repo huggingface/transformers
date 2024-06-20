@@ -1553,7 +1553,9 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         with torch.no_grad():
             logits = model.forward(
-                decoder_input_ids=input_ids, input_features=input_dict["input_features"], decoder_position_ids=position_ids
+                decoder_input_ids=input_ids,
+                input_features=input_dict["input_features"],
+                decoder_position_ids=position_ids,
             ).logits
             # logits.shape == torch.Size([3, 4, ...])
 
