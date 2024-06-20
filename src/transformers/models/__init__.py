@@ -86,6 +86,7 @@ from . import (
     fastspeech2_conformer,
     flaubert,
     flava,
+    florence,
     fnet,
     focalnet,
     fsmt,
