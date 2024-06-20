@@ -46,22 +46,39 @@ class CohereConfig(GemmaConfig):
 
     def __init__(
         self,
+        hidden_size=8192,
+        intermediate_size=22528,
+        num_hidden_layers=40,
+        hidden_act="silu",
         use_qk_norm=False,
         layer_norm_eps=1e-05,
         num_attention_heads=64,
         num_key_value_heads=None,
         logit_scale=0.0625,
+        rms_norm_eps=1e-05,
+        bos_token_id=5,
+        eos_token_id=255001,
         **super_kwargs,
     ):
         self.use_qk_norm = use_qk_norm
         self.layer_norm_eps = layer_norm_eps
         self.rms_norm_eps = layer_norm_eps
+
+        self.hidden_size = hidden_size
+        self.itermediate_size = intermediate_size
+        self.num_hidden_layers = num_hidden_layers
+
+        self.hidden_act = hidden_act
+
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+
+        self.logit_scale = logit_scale
+
         super().__init__(self, **super_kwargs)
 
         if num_key_value_heads is None:
             self.num_key_value_heads = num_attention_heads
-
-        self.logit_scale = logit_scale
 
 
 class CohereRMSNorm(nn.Module):

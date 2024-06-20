@@ -18,9 +18,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-
-from transformers import PretrainedConfig
+from ...configuration_utils import PretrainedConfig
 
 
 class CohereConfig(PretrainedConfig):
@@ -97,21 +95,21 @@ class CohereConfig(PretrainedConfig):
     def __init__(
         self,
         vocab_size=256000,
-        hidden_size=3072,
-        intermediate_size=24576,
-        num_hidden_layers=28,
+        hidden_size=8192,
+        intermediate_size=22528,
+        num_hidden_layers=40,
         num_attention_heads=64,
         num_key_value_heads=None,
         head_dim=256,
-        hidden_act="gelu_pytorch_tanh",
+        hidden_act="silu",
         hidden_activation=None,
         max_position_embeddings=8192,
         initializer_range=0.02,
-        rms_norm_eps=1e-6,
+        rms_norm_eps=1e-05,
         use_cache=True,
         pad_token_id=0,
-        eos_token_id=1,
-        bos_token_id=2,
+        eos_token_id=255001,
+        bos_token_id=5,
         tie_word_embeddings=True,
         rope_theta=10000.0,
         attention_bias=False,
@@ -124,15 +122,23 @@ class CohereConfig(PretrainedConfig):
         self.use_qk_norm = use_qk_norm
         self.layer_norm_eps = layer_norm_eps
         self.rms_norm_eps = layer_norm_eps
+
+        self.hidden_size = hidden_size
+        self.itermediate_size = intermediate_size
+        self.num_hidden_layers = num_hidden_layers
+
+        self.hidden_act = hidden_act
+
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+
+        self.logit_scale = logit_scale
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.head_dim = head_dim
         self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
         self.hidden_activation = hidden_activation
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
@@ -151,5 +157,3 @@ class CohereConfig(PretrainedConfig):
 
         if num_key_value_heads is None:
             self.num_key_value_heads = num_attention_heads
-
-        self.logit_scale = logit_scale
