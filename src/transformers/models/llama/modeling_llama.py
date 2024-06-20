@@ -1201,21 +1201,19 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         hidden_states = outputs[0]
         if self.config.pretraining_tp > 1:
             lm_head_slices = self.lm_head.weight.split(self.vocab_size // self.config.pretraining_tp, dim=0)
-            # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-            if num_logits_to_keep is None:
-                logits = [F.linear(hidden_states, lm_head_slices[i]) for i in range(self.config.pretraining_tp)]
-            else:
-                logits = [
-                    F.linear(hidden_states[:, -num_logits_to_keep:, :], lm_head_slices[i])
-                    for i in range(self.config.pretraining_tp)
-                ]
+            logits = [F.linear(hidden_states, lm_head_slices[i]) for i in range(self.config.pretraining_tp)]
             logits = torch.cat(logits, dim=-1)
         else:
+            if labels is None:
+                logger.warning_once(
+                    'Starting from v4.44, the `logits` model output will have the same type as the model (except at train time, where it will always be FP32)'
+                )
             # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+            # TODO: remove those 2 float() operations in v4.44
             if num_logits_to_keep is None:
-                logits = self.lm_head(hidden_states)
+                logits = self.lm_head(hidden_states).float()
             else:
-                logits = self.lm_head(hidden_states[:, -num_logits_to_keep:, :])
+                logits = self.lm_head(hidden_states[:, -num_logits_to_keep:, :]).float()
 
         loss = None
         if labels is not None:
