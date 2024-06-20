@@ -41,8 +41,6 @@ from ...modeling_outputs import (
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
 )
-
-# from einops import rearrange
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
@@ -211,7 +209,7 @@ class PreNorm(nn.Module):
 
     def forward(self, x, *args, **kwargs):
         shortcut = x
-        if self.norm != None:
+        if self.norm is not None:
             x, size = self.fn(self.norm(x), *args, **kwargs)
         else:
             x, size = self.fn(x, *args, **kwargs)
@@ -293,17 +291,11 @@ class ConvEmbed(nn.Module):
         if len(x.size()) == 3:
             if self.norm and self.pre_norm:
                 x = self.norm(x)
-            # x = rearrange(
-            #     x, 'b (h w) c -> b c h w',
-            #     h=H, w=W
-            # )
             x = x.view(-1, H, W, x.size(-1)).permute(0, 3, 1, 2)
 
         x = self.proj(x)
 
         _, _, H, W = x.shape
-        # TODO: check if this is correct
-        # x = rearrange(x, 'b c h w -> b (h w) c')
         x = x.permute(0, 2, 3, 1).contiguous()
         B, H, W, C = x.size()
         x = x.view(B, -1, C)
