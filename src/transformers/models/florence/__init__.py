@@ -17,6 +17,7 @@ from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
     is_torch_available,
+    is_vision_available,
 )
 
 
@@ -27,10 +28,17 @@ _import_structure = {
         "Florence2VisionConfig",
     ],
     "processing_florence2": [
-        "Florence2PostProcesser",
-        "Florence2Processor",
+        "Florence2PostProcesser"
     ],
 }
+
+try:
+    if not is_vision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["processing_florence2"].append("Florence2Processor")
 
 
 try:
@@ -55,8 +63,15 @@ if TYPE_CHECKING:
     )
     from .processing_florence2 import (
         Florence2PostProcesser,
-        Florence2Processor,
     )
+
+    try:
+        if not is_vision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .processing_florence2 import Florence2Processor
 
     try:
         if not is_torch_available():

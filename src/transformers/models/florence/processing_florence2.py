@@ -24,7 +24,7 @@ import numpy as np
 import torch
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ChannelDimension, ImageInput, PILImageResampling, is_valid_image
+from ...image_utils import ChannelDimension, ImageInput, is_valid_image
 from ...models.bart.tokenization_bart import BartTokenizer
 from ...models.bart.tokenization_bart_fast import BartTokenizerFast
 from ...models.t5.tokenization_t5 import T5Tokenizer
@@ -36,7 +36,14 @@ from ...tokenization_utils_base import (
     TextInput,
     TruncationStrategy,
 )
-from ...utils import TensorType
+from ...utils import (
+    TensorType,
+    is_vision_available,
+)
+
+
+if is_vision_available():
+    from ...image_utils import PILImageResampling
 
 
 logger = logging.getLogger(__name__)
@@ -192,10 +199,8 @@ class Florence2Processor(ProcessorMixin):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         data_format: Optional[ChannelDimension] = "channels_first",
-        input_data_format: Optional[
-            Union[str, ChannelDimension]
-        ] = None,
-        resample: PILImageResampling = None,  # noqa: F821 # type: ignore
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        resample: PILImageResampling = None,  # noqa: F821
         do_convert_rgb: bool = None,
         do_thumbnail: bool = None,
         do_align_long_axis: bool = None,
