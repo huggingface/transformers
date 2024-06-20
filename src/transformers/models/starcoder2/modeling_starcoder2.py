@@ -610,6 +610,15 @@ class Starcoder2SdpaAttention(Starcoder2Attention):
     SDPA API.
     """
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # TODO: We can make it support sdpa
+        if is_accelerate_available() and mpu.sequence_parallel_is_enabled():
+            raise ValueError(
+                "SDPA is not supported with sequence parallelism. Please use the `flash_attention_2` implementation instead."
+            )
+
     # Ignore copy
     def forward(
         self,

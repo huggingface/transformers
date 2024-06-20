@@ -45,9 +45,13 @@ from ...utils import (
     is_flash_attn_greater_or_equal_2_10,
     logging,
     replace_return_docstrings,
+    is_accelerate_available,
 )
 from .configuration_llama import LlamaConfig
 
+if is_accelerate_available():
+    from accelerate.utils import parallel_state as mpu
+    from ...layer import DistributedAttention
 
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
@@ -390,6 +394,13 @@ class LlamaFlashAttention2(LlamaAttention):
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
 
+        if is_accelerate_available() and mpu.sequence_parallel_is_enabled():
+            self.attn_func = DistributedAttention(self._flash_attention_forward, mpu.get_sequence_parallel_group())
+            self.q_len_multiplier = mpu.get_sequence_parallel_world_size()
+        else:
+            self.attn_func = self._flash_attention_forward
+            self.q_len_multiplier = 1
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -463,8 +474,8 @@ class LlamaFlashAttention2(LlamaAttention):
             key_states = key_states.to(target_dtype)
             value_states = value_states.to(target_dtype)
 
-        attn_output = self._flash_attention_forward(
-            query_states, key_states, value_states, attention_mask, q_len, dropout=dropout_rate
+        attn_output = self.attn_func(
+            query_states, key_states, value_states, attention_mask, q_len * self.q_len_multiplier, dropout=dropout_rate
         )
 
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
@@ -579,6 +590,15 @@ class LlamaSdpaAttention(LlamaAttention):
     `LlamaAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
     SDPA API.
     """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # TODO: We can make it support sdpa
+        if is_accelerate_available() and mpu.sequence_parallel_is_enabled():
+            raise ValueError(
+                "SDPA is not supported with sequence parallelism. Please use the `flash_attention_2` implementation instead."
+            )
 
     # Adapted from LlamaAttention.forward
     def forward(
