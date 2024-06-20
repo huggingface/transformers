@@ -217,7 +217,7 @@ class CLIPTextEmbeddings(nn.Module):
         if inputs_embeds is None:
             inputs_embeds = self.token_embedding(input_ids)
 
-        # Shape: BATCH x SEQUENCE LENGTH X EMBEDDING DIMENSION
+        # Shape: BATCH x MAX POSITION EMBEDDING X EMBEDDING DIMENSION
         position_embeddings = self.position_embedding(position_ids)
 
         # Bi-Linear Interpolation
