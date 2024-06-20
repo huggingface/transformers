@@ -635,7 +635,7 @@ def spectrogram_batch(
     Note: This function is designed for efficient batch processing of multiple waveforms but retains compatibility with individual waveform processing methods like `librosa.stft`.
 
     Args:
-        waveform_list (List[`np.ndarray` of shape `(length,)`]):
+        waveform_list (`List[np.ndarray]` with arrays of shape `(length,)`):
             The list of input waveforms, each a single-channel (mono) signal.
         window (`np.ndarray` of shape `(frame_length,)`):
             The windowing function to apply, including zero-padding if necessary.
@@ -643,33 +643,33 @@ def spectrogram_batch(
             The length of each frame for analysis.
         hop_length (`int`):
             The step size between successive frames.
-        fft_length (`int`, optional):
+        fft_length (`int`, *optional*):
             The size of the FFT buffer, defining frequency bin resolution.
-        power (`float`, optional, default=1.0):
+        power (`float`, *optional*, defaults to 1.0):
             Determines the type of spectrogram: 1.0 for amplitude, 2.0 for power, None for complex.
-        center (`bool`, optional, default=True):
+        center (`bool`, *optional*, defaults to `True`):
             Whether to center-pad the waveform frames.
-        pad_mode (`str`, optional, default="reflect"):
-            The padding strategy when `center` is True.
-        onesided (`bool`, optional, default=True):
+        pad_mode (`str`, *optional*, defaults to `"reflect"`):
+            The padding strategy when `center` is `True`.
+        onesided (`bool`, *optional*, defaults to `True`):
             If True, returns a one-sided spectrogram for real input signals.
-        preemphasis (`float`, optional):
+        preemphasis (`float`, *optional*):
             Applies a pre-emphasis filter to each frame.
-        mel_filters (`np.ndarray`, optional):
+        mel_filters (`np.ndarray`, *optional*):
             Mel filter bank for converting to mel spectrogram.
-        mel_floor (`float`, optional, default=1e-10):
+        mel_floor (`float`, *optional*, defaults to 1e-10):
             Floor value for mel spectrogram to avoid log(0).
-        log_mel (`str`, optional):
+        log_mel (`str`, *optional*):
             Specifies log scaling strategy; options are None, "log", "log10", "dB".
-        reference (`float`, optional, default=1.0):
+        reference (`float`, *optional*, defaults to 1.0):
             Reference value for dB conversion in log_mel.
-        min_value (`float`, optional, default=1e-10):
+        min_value (`float`, °optional*, defaults to 1e-10):
             Minimum floor value for log scale conversions.
-        db_range (`float`, optional):
+        db_range (`float`, *optional*):
             Dynamic range for dB scale spectrograms.
-        remove_dc_offset (`bool`, optional):
+        remove_dc_offset (`bool`, *optional*):
             Whether to remove the DC offset from each frame.
-        dtype (`np.dtype`, optional, default=np.float32):
+        dtype (`np.dtype`, *optional*, defaults to `np.float32`):
             Data type of the output spectrogram.
 
     Returns:
