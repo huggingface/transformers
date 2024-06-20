@@ -293,6 +293,10 @@ class DABDETRModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         pass
 
     @unittest.skip(reason="DETR does not use inputs_embeds")
+    def test_model_get_set_embeddings(self):
+        pass
+
+    @unittest.skip(reason="DETR does not use inputs_embeds")
     def test_inputs_embeds_matches_input_ids(self):
         pass
 
