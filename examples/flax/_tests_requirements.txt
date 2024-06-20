@@ -1,4 +1,4 @@
-datasets >= 1.13.3,<2.20.0 # Temporary upper version
+datasets >= 1.13.3
 pytest<8.0.1
 conllu
 nltk

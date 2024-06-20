@@ -2409,7 +2409,7 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
 
         >>> tokenizer = AutoTokenizer.from_pretrained("google/bigbird-roberta-base")
         >>> model = BigBirdForMaskedLM.from_pretrained("google/bigbird-roberta-base")
-        >>> squad_ds = load_dataset("squad_v2", split="train")  # doctest: +IGNORE_RESULT
+        >>> squad_ds = load_dataset("rajpurkar/squad_v2", split="train")  # doctest: +IGNORE_RESULT
 
         >>> # select random long article
         >>> LONG_ARTICLE_TARGET = squad_ds[81514]["context"]
@@ -2711,7 +2711,7 @@ class BigBirdForSequenceClassification(BigBirdPreTrainedModel):
 
         >>> tokenizer = AutoTokenizer.from_pretrained("l-yohai/bigbird-roberta-base-mnli")
         >>> model = BigBirdForSequenceClassification.from_pretrained("l-yohai/bigbird-roberta-base-mnli")
-        >>> squad_ds = load_dataset("squad_v2", split="train")  # doctest: +IGNORE_RESULT
+        >>> squad_ds = load_dataset("rajpurkar/squad_v2", split="train")  # doctest: +IGNORE_RESULT
 
         >>> LONG_ARTICLE = squad_ds[81514]["context"]
         >>> inputs = tokenizer(LONG_ARTICLE, return_tensors="pt")
@@ -3040,7 +3040,7 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
 
         >>> tokenizer = AutoTokenizer.from_pretrained("google/bigbird-roberta-base")
         >>> model = BigBirdForQuestionAnswering.from_pretrained("google/bigbird-roberta-base")
-        >>> squad_ds = load_dataset("squad_v2", split="train")  # doctest: +IGNORE_RESULT
+        >>> squad_ds = load_dataset("rajpurkar/squad_v2", split="train")  # doctest: +IGNORE_RESULT
 
         >>> # select random article and question
         >>> LONG_ARTICLE = squad_ds[81514]["context"]
