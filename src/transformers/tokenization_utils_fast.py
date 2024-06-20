@@ -897,7 +897,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 ):
                     self.add_prefix_space = True
                     return True
-        return False
+            return False
+        return True
 
     def _update_pre_tokenizer(self):
         """Updates the underlying pre-tokenizer with the current `add_prefix_space` setting."""
@@ -921,7 +922,9 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
             for i, pt in enumerate(curr_state["pretokenizers"]):
                 if pt["type"] == "Metaspace":
-                    curr_state["pretokenizers"][i]["prepend_scheme"] = prepend_scheme
+                    # 'always' and 'first' are equivalent for Metaspace, don't update if already set
+                    if prepend_scheme == "never" or curr_state["pretokenizers"][i]["prepend_scheme"] == "never":
+                        curr_state["pretokenizers"][i]["prepend_scheme"] = prepend_scheme
 
                 elif pt["type"] == "ByteLevel":
                     curr_state["pretokenizers"][i]["add_prefix_space"] = self.add_prefix_space
