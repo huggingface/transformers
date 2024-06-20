@@ -1327,9 +1327,14 @@ class WhisperDecoder(WhisperPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         return_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, EncoderDecoderCache):
-            return_legacy_cache = True
-            past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
+        return_self_attention_cache = False
+        if use_cache or past_key_values is not None:
+            if isinstance(past_key_values, Cache):
+                return_self_attention_cache = True
+                past_key_values = EncoderDecoderCache(past_key_values, DynamicCache())
+            elif not isinstance(past_key_values, EncoderDecoderCache):
+                return_legacy_cache = True
+                past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
 
         past_key_values_length = 0
         if cache_position is not None:
@@ -1416,7 +1421,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
                     cross_attn_layer_head_mask=(
                         cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None
                     ),
-                    past_key_value=past_key_values,
+                    past_key_value=past_key_values if use_cache else None,
                     output_attentions=output_attentions,
                     use_cache=use_cache,
                     cache_position=cache_position,
@@ -1435,6 +1440,8 @@ class WhisperDecoder(WhisperPreTrainedModel):
             all_hidden_states += (hidden_states,)
 
         next_cache = past_key_values if use_cache else None
+        if return_self_attention_cache:
+            next_cache = past_key_values.self_attention_cache
         if return_legacy_cache:
             next_cache = past_key_values.to_legacy_cache()
         if not return_dict:
@@ -2125,7 +2132,7 @@ class WhisperForCausalLM(WhisperPreTrainedModel):
     ):
         past_length = 0
         if past_key_values is not None:
-            if isinstance(past_key_values, EncoderDecoderCache):
+            if isinstance(past_key_values, (Cache, EncoderDecoderCache)):
                 past_length = cache_position[0] if cache_position is not None else past_key_values.get_seq_length()
             else:
                 past_length = past_key_values[0][0].shape[2]
