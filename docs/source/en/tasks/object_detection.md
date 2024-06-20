@@ -45,6 +45,17 @@ pip install -q datasets transformers accelerate timm
 pip install -q -U albumentations>=1.4.5 torchmetrics pycocotools
 ```
 
+Now, make sure that the installed `transformers` version meets the mininal requirement: 
+```py
+>>> from transformers.utils import check_min_version
+>>> check_min_version("4.42.0.dev0")
+```
+If the distributed version is under 4.42.0.dev0, you may consider install the library from source:
+```bash
+pip install git+https://github.com/huggingface/transformers
+```
+A version under 4.42.0.dev0 may cause errors. Remove at your own risks.
+
 You'll use 🤗 Datasets to load a dataset from the Hugging Face Hub, 🤗 Transformers to train your model,
 and `albumentations` to augment the data.
 
