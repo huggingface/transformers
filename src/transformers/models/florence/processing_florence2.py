@@ -307,7 +307,7 @@ class Florence2Processor(ProcessorMixin):
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Florence2
     def batch_decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to BartTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
+        This method forwards all its arguments to Florence2TokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
         refer to the docstring of this method for more information.
         """
         return self.tokenizer.batch_decode(*args, **kwargs)
@@ -315,7 +315,7 @@ class Florence2Processor(ProcessorMixin):
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.decode with CLIP->Florence2
     def decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to BartTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
+        This method forwards all its arguments to Florence2TokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
         the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
