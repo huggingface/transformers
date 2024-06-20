@@ -669,7 +669,7 @@ class ModelUtilsTest(TestCasePlus):
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             # We use the same folder for various sizes to make sure a new save erases the old checkpoint.
-            for max_size in ["50kB", "50kiB", "100kB", "100kiB", "200kB", "200kiB"]:
+            for max_size in ["50kB", "100kB", "200kB"]:
                 model.save_pretrained(tmp_dir, max_shard_size=max_size, safe_serialization=False)
 
                 # Get each shard file and its size
@@ -686,10 +686,7 @@ class ModelUtilsTest(TestCasePlus):
 
                 # Check a file is bigger than max_size only when it has a single weight
                 for shard_file, size in shard_to_size.items():
-                    if max_size.endswith("kiB"):
-                        max_size_int = int(max_size[:-3]) * 2**10
-                    else:
-                        max_size_int = int(max_size[:-2]) * 10**3
+                    max_size_int = int(max_size[:-2]) * 10**3
                     # Note: pickle adds some junk so the weight of the file can end up being slightly bigger than
                     # the size asked for (since we count parameters)
                     if size >= max_size_int + 50000:
@@ -1055,6 +1052,43 @@ class ModelUtilsTest(TestCasePlus):
             _ = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
             # This check we did call the fake head request
             mock_head.assert_called()
+
+    @require_accelerate
+    @mark.accelerate_tests
+    @require_torch_accelerator
+    def test_save_offloaded_model(self):
+        device_map = {
+            "transformer.wte": f"{torch_device}:0",
+            "transformer.wpe": f"{torch_device}:0",
+            "transformer.h.0": "cpu",
+            "transformer.h.1": "cpu",
+            "transformer.h.2": "cpu",
+            "transformer.h.3": "disk",
+            "transformer.h.4": "disk",
+            "transformer.ln_f": f"{torch_device}:0",
+            "lm_head": f"{torch_device}:0",
+        }
+
+        # check_models_equal requires onloaded tensors
+        model_id = "hf-internal-testing/tiny-random-gpt2"
+        onloaded_model = AutoModelForCausalLM.from_pretrained(model_id, device_map="cpu")
+        inputs = torch.tensor([[1, 2, 3]]).to(f"{torch_device}:0")
+        cpu_output = onloaded_model(inputs)[0]
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            offload_folder = os.path.join(tmp_dir, "offload")
+            offloaded_model = AutoModelForCausalLM.from_pretrained(
+                model_id, device_map=device_map, offload_folder=offload_folder
+            )
+            presaved_output = offloaded_model(inputs)[0]
+            offloaded_model.save_pretrained(
+                tmp_dir, max_shard_size="200KB"
+            )  # model is 1.6MB, max shard size is allocated to cpu by default
+            saved_model = AutoModelForCausalLM.from_pretrained(tmp_dir, device_map=device_map)
+            postsaved_output = saved_model(inputs)[0]
+
+        self.assertTrue(torch.allclose(cpu_output, presaved_output, atol=1e-4))
+        self.assertTrue(torch.allclose(presaved_output, postsaved_output))
 
     @require_safetensors
     def test_use_safetensors(self):

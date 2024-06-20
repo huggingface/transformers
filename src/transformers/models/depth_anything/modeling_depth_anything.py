@@ -28,7 +28,7 @@ from ...file_utils import (
 from ...modeling_outputs import DepthEstimatorOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
-from ..auto import AutoBackbone
+from ...utils.backbone_utils import load_backbone
 from .configuration_depth_anything import DepthAnythingConfig
 
 
@@ -365,9 +365,7 @@ class DepthAnythingForDepthEstimation(DepthAnythingPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.backbone = AutoBackbone.from_config(
-            config.backbone_config, attn_implementation=config._attn_implementation
-        )
+        self.backbone = load_backbone(config)
         self.neck = DepthAnythingNeck(config)
         self.head = DepthAnythingDepthEstimationHead(config)
 
