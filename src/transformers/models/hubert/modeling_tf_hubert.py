@@ -1471,7 +1471,7 @@ class TFHubertModel(TFHubertPreTrainedModel):
         ...     return batch
 
 
-        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True)
         >>> ds = ds.map(map_to_array)
 
         >>> input_values = processor(ds["speech"][0], return_tensors="tf").input_values  # Batch size 1
@@ -1583,7 +1583,7 @@ class TFHubertForCTC(TFHubertPreTrainedModel):
         ...     return batch
 
 
-        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True)
         >>> ds = ds.map(map_to_array)
 
         >>> input_values = processor(ds["speech"][0], return_tensors="tf").input_values  # Batch size 1

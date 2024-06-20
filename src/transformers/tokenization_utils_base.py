@@ -1781,16 +1781,20 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 chat_template = template_dict[chat_template]
                 if using_default_dict:
                     using_default_template = True
-            elif chat_template is None and "default" in template_dict:
-                chat_template = template_dict["default"]
+            elif chat_template is None:
+                if tools is not None and "tool_use" in template_dict:
+                    chat_template = template_dict["tool_use"]
+                elif "default" in template_dict:
+                    chat_template = template_dict["default"]
+                else:
+                    raise ValueError(
+                        "This model has multiple chat templates with no default specified! Please either pass a chat "
+                        "template or the name of the template you wish to use to the `chat_template` argument. Available "
+                        f"template names are {sorted(template_dict.keys())}."
+                    )
                 if using_default_dict:
                     using_default_template = True
-            elif chat_template is None:
-                raise ValueError(
-                    "This model has multiple chat templates with no default specified! Please either pass a chat "
-                    "template or the name of the template you wish to use to the `chat_template` argument. Available "
-                    f"template names are {sorted(template_dict.keys())}."
-                )
+
         elif chat_template is None:
             # These are the cases when the model has a single template
             # priority: `chat_template` argument > `tokenizer.chat_template` > `tokenizer.default_chat_template
@@ -1886,9 +1890,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         except ImportError:
             raise ImportError("apply_chat_template requires jinja2 to be installed.")
 
-        if version.parse(jinja2.__version__) < version.parse("3.0.0"):
+        if version.parse(jinja2.__version__) < version.parse("3.1.0"):
             raise ImportError(
-                "apply_chat_template requires jinja2>=3.0.0 to be installed. Your version is " f"{jinja2.__version__}."
+                "apply_chat_template requires jinja2>=3.1.0 to be installed. Your version is " f"{jinja2.__version__}."
             )
 
         def raise_exception(message):
