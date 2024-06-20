@@ -445,7 +445,6 @@ class CohereFlashAttention2(CohereAttention):
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
 
-    # Ignore copy
     def forward(
         self,
         hidden_states: torch.Tensor,
