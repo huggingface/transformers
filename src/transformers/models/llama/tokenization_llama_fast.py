@@ -150,9 +150,6 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             legacy = True
         self.legacy = legacy
 
-        if add_prefix_space is not None:
-            kwargs["from_slow"] = True
-
         super().__init__(
             vocab_file=vocab_file,
             tokenizer_file=tokenizer_file,
