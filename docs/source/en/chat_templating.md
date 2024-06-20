@@ -573,23 +573,21 @@ default template for that model class is used instead. Let's take a look at the 
 "{% for message in messages %}{% if message['role'] == 'user' %}{{ ' ' }}{% endif %}{{ message['content'] }}{% if not loop.last %}{{ '  ' }}{% endif %}{% endfor %}{{ eos_token }}"
 ```
 
-That's kind of intimidating. Let's add some newlines and indentation to make it more readable. Note that the first
-newline after each block as well as any preceding whitespace before a block are ignored by default, using the 
-Jinja `trim_blocks` and `lstrip_blocks` flags. However, be cautious - although leading whitespace on each
-line is stripped, spaces between blocks on the same line are not. We strongly recommend checking that your template
-isn't printing extra spaces where it shouldn't be!
+That's kind of intimidating. Let's clean it up a little to make it more readable. In the process, though, we also make
+sure that the newlines and indentation we add don't end up being included in the template output - see the tip on
+[trimming whitespace](#trimming-whitespace) below!
 
 ```
-{% for message in messages %}
-    {% if message['role'] == 'user' %}
-        {{ ' ' }}
-    {% endif %}
-    {{ message['content'] }}
-    {% if not loop.last %}
-        {{ '  ' }}
-    {% endif %}
-{% endfor %}
-{{ eos_token }}
+{%- for message in messages %}
+    {%- if message['role'] == 'user' %}
+        {{- ' ' }}
+    {%- endif %}
+    {{- message['content'] }}
+    {%- if not loop.last %}
+        {{- '  ' }}
+    {%- endif %}
+{%- endfor %}
+{{- eos_token }}
 ```
 
 If you've never seen one of these before, this is a [Jinja template](https://jinja.palletsprojects.com/en/3.1.x/templates/).
@@ -618,15 +616,15 @@ similarly to the way LLaMA formats them (note that the real LLaMA template inclu
 messages and slightly different system message handling in general - don't use this one in your actual code!)
 
 ```
-{% for message in messages %}
-    {% if message['role'] == 'user' %}
-        {{ bos_token + '[INST] ' + message['content'] + ' [/INST]' }}
-    {% elif message['role'] == 'system' %}
-        {{ '<<SYS>>\\n' + message['content'] + '\\n<</SYS>>\\n\\n' }}
-    {% elif message['role'] == 'assistant' %}
-        {{ ' '  + message['content'] + ' ' + eos_token }}
-    {% endif %}
-{% endfor %}
+{%- for message in messages %}
+    {%- if message['role'] == 'user' %}
+        {{- bos_token + '[INST] ' + message['content'] + ' [/INST]' }}
+    {%- elif message['role'] == 'system' %}
+        {{- '<<SYS>>\\n' + message['content'] + '\\n<</SYS>>\\n\\n' }}
+    {%- elif message['role'] == 'assistant' %}
+        {{- ' '  + message['content'] + ' ' + eos_token }}
+    {%- endif %}
+{%- endfor %}
 ```
 
 Hopefully if you stare at this for a little bit you can see what this template is doing - it adds specific tokens based
@@ -642,15 +640,15 @@ existing template from another model and simply edit it for your needs! For exam
 above and add "[ASST]" and "[/ASST]" to assistant messages:
 
 ```
-{% for message in messages %}
-    {% if message['role'] == 'user' %}
-        {{ bos_token + '[INST] ' + message['content'].strip() + ' [/INST]' }}
-    {% elif message['role'] == 'system' %}
-        {{ '<<SYS>>\\n' + message['content'].strip() + '\\n<</SYS>>\\n\\n' }}
-    {% elif message['role'] == 'assistant' %}
-        {{ '[ASST] '  + message['content'] + ' [/ASST]' + eos_token }}
-    {% endif %}
-{% endfor %}
+{%- for message in messages %}
+    {%- if message['role'] == 'user' %}
+        {{- bos_token + '[INST] ' + message['content'].strip() + ' [/INST]' }}
+    {%- elif message['role'] == 'system' %}
+        {{- '<<SYS>>\\n' + message['content'].strip() + '\\n<</SYS>>\\n\\n' }}
+    {%- elif message['role'] == 'assistant' %}
+        {{- '[ASST] '  + message['content'] + ' [/ASST]' + eos_token }}
+    {%- endif %}
+{%- endfor %}
 ```
 
 Now, simply set the `tokenizer.chat_template` attribute. Next time you use [`~PreTrainedTokenizer.apply_chat_template`], it will
@@ -676,6 +674,24 @@ should also set the tokenizer's `eos_token` attribute to the token that marks th
 template. This will ensure that text generation tools can correctly figure out when to stop generating text.
 </Tip>
 
+
+### Why do some models have multiple templates?
+
+Some models use different templates for different use cases. For example, they might use one template for normal chat
+and another for tool-use, or retrieval-augmented generation. In these cases, `tokenizer.chat_template` is a dictionary.
+This can cause some confusion, and where possible, we recommend using a single template for all use-cases. You can use
+Jinja statements like `if tools is defined` and `{% macro %}` definitions to easily wrap multiple code paths in a
+single template.
+
+When a tokenizer has multiple templates, `tokenizer.chat_template` will be a `dict`, where each key is the name
+of a template. The `apply_chat_template` method has special handling for certain template names: Specifically, it will
+look for a template named `default` in most cases, and will raise an error if it can't find one. However, if a template
+named `tool_use` exists when the user has passed a `tools` argument, it will use that instead. To access templates
+with other names, pass the name of the template you want to the `chat_template` argument of
+`apply_chat_template()`.
+
+We find that this can be a bit confusing for users, though - so if you're writing a template yourself, we recommend
+trying to put it all in a single template where possible!
 
 ### What are "default" templates?
 
@@ -708,9 +724,9 @@ input formats. One popular choice is the `ChatML` format, and this is a good, fl
 It looks like this:
 
 ```
-{% for message in messages %}
-    {{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}
-{% endfor %}
+{%- for message in messages %}
+    {{- '<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n' }}
+{%- endfor %}
 ```
 
 If you like this one, here it is in one-liner form, ready to copy into your code. The one-liner also includes
@@ -758,21 +774,43 @@ it's time to put an end to them!
 If you're unfamiliar with Jinja, we generally find that the easiest way to write a chat template is to first
 write a short Python script that formats messages the way you want, and then convert that script into a template.
 
-Remember that the template handler will receive the conversation history as a variable called `messages`. Each
-message is a dictionary with two keys, `role` and `content`. You will be able to access `messages` in your template
-just like you can in Python, which means you can loop over it with `{% for message in messages %}` or access
-individual messages with, for example, `{{ messages[0] }}`.
+Remember that the template handler will receive the conversation history as a variable called `messages`.  
+You will be able to access `messages` in your template just like you can in Python, which means you can loop over 
+it with `{% for message in messages %}` or access individual messages with `{{ messages[0] }}`, for example.
 
 You can also use the following tips to convert your code to Jinja:
+
+### Trimming whitespace
+
+By default, Jinja will print any whitespace that comes before or after a block. This can be a problem for chat
+templates, which generally want to be very precise with whitespace! To avoid this, we strongly recommend writing
+your templates like this:
+
+```
+{%- for message in messages %}
+    {{- message['role'] + message['content'] }}
+{%- endfor %}
+```
+
+rather than like this:
+
+```
+{% for message in messages %}
+    {{ message['role'] + message['content'] }}
+{% endfor %}
+```
+
+Adding `-` will strip any whitespace that comes before the block. The second example looks innocent, but the newline
+and indentation may end up being included in the output, which is probably not what you want!
 
 ### For loops
 
 For loops in Jinja look like this:
 
 ```
-{% for message in messages %}
-{{ message['content'] }}
-{% endfor %}
+{%- for message in messages %}
+    {{- message['content'] }}
+{%- endfor %}
 ```
 
 Note that whatever's inside the {{ expression block }} will be printed to the output. You can use operators like
@@ -783,9 +821,9 @@ Note that whatever's inside the {{ expression block }} will be printed to the ou
 If statements in Jinja look like this:
 
 ```
-{% if message['role'] == 'user' %}
-{{ message['content'] }}
-{% endif %}
+{%- if message['role'] == 'user' %}
+    {{- message['content'] }}
+{%- endif %}
 ```
 
 Note how where Python uses whitespace to mark the beginnings and ends of `for` and `if` blocks, Jinja requires you
@@ -801,14 +839,26 @@ conversation. Here's an example that puts these ideas together to add a generati
 conversation if add_generation_prompt is `True`:
 
 ```
-{% if loop.last and add_generation_prompt %}
-{{ bos_token + 'Assistant:\n' }}
-{% endif %}
+{%- if loop.last and add_generation_prompt %}
+    {{- bos_token + 'Assistant:\n' }}
+{%- endif %}
 ```
 
-### Notes on whitespace
+### Compatibility with non-Python Jinja
 
-As much as possible, we've tried to get Jinja to ignore whitespace outside of {{ expressions }}. However, be aware
-that Jinja is a general-purpose templating engine, and it may treat whitespace between blocks on the same line
-as significant and print it to the output. We **strongly** recommend checking that your template isn't printing extra
-spaces where it shouldn't be before you upload it!
+There are multiple implementations of Jinja in various languages. They generally have the same syntax,
+but a key difference is that when you're writing a template in Python you can use Python methods, such as
+`.lower()` on strings or `.items()` on dicts. This will break if someone tries to use your template on a non-Python
+implementation of Jinja. Non-Python implementations are particularly common in deployment environments, where JS
+and Rust are very popular. 
+
+Don't panic, though! There are a few easy changes you can make to your templates to ensure they're compatible across
+all implementations of Jinja:
+
+- Replace Python methods with Jinja filters. These usually have the same name, for example `string.lower()` becomes
+  `string|lower`, and `dict.items()` becomes `dict|items`. One notable change is that `string.strip()` becomes `string|trim`.
+  See the [list of built-in filters](https://jinja.palletsprojects.com/en/3.1.x/templates/#builtin-filters)
+  in the Jinja documentation for more.
+- Replace `True`, `False` and `None`, which are Python-specific, with `true`, `false` and `none`.
+- Directly rendering a dict or list may give different results in other implementations (for example, string entries
+  might change from single-quoted to double-quoted). Adding the `tojson` filter can help to ensure consistency here.

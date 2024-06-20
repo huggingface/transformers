@@ -891,7 +891,7 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
             self.assertEqual(b, b1)
             self.check_trainer_state_are_the_same(state, state1)
 
-    def test_config_object(self):
+    def test_ds_config_object(self):
         # test that we can switch from zero2 to zero3 in the same process for example
         # test is_zero, etc.
         output_dir = self.get_auto_remove_tmp_dir()
