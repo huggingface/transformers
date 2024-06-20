@@ -140,7 +140,7 @@ class DacVectorQuantize(nn.Module):
                 Codebook loss to update the codebook, shape `(1)`.
             codebook_indices (`torch.Tensor` of shape `(batch_size, time_steps)`): 
                 Codebook indices for each codebook, quantized discrete representation of input,
-            projected_latents (torch.Tensor of shape `(batch_size, num_codebooks * dimension, time_steps)`): 
+            projected_latents : torch.Tensor of shape `(batch_size, num_codebooks * dimension, time_steps)`
                 Projected latents (continuous representation of input before quantization),
         """
 
@@ -150,7 +150,7 @@ class DacVectorQuantize(nn.Module):
         commitment_loss = F.mse_loss(projected_latents, quantized_representation.detach(), reduction="none").mean([1, 2])
         codebook_loss = F.mse_loss(quantized_representation, projected_latents.detach(), reduction="none").mean([1, 2])
 
-        quantized_representation = projected_latents + (quantized_representation - projected_latents).detach()  
+        quantized_representation = projected_latents + (quantized_representation - projected_latents).detach()  # noop in forward pass, straight-through gradient estimator in backward pass
 
         quantized_representation = self.out_proj(quantized_representation)
 
@@ -192,11 +192,13 @@ class DacResidualUnit(nn.Module):
     def __init__(self, dimension: int = 16, dilation: int = 1):
         super().__init__()
         pad = ((7 - 1) * dilation) // 2
-        self.block = nn.Sequential(
-            Snake1d(dimension),
-            WNConv1d(dimension, dimension, kernel_size=7, dilation=dilation, padding=pad),
-            Snake1d(dimension),
-            WNConv1d(dimension, dimension, kernel_size=1),
+        self.block = nn.ModuleList(
+            [
+                Snake1d(dimension),
+                WNConv1d(dimension, dimension, kernel_size=7, dilation=dilation, padding=pad),
+                Snake1d(dimension),
+                WNConv1d(dimension, dimension, kernel_size=1),
+            ]
         )
 
     def forward(self, input_tensor):
@@ -211,7 +213,10 @@ class DacResidualUnit(nn.Module):
             output_tensor (`torch.Tensor` of shape `(batch_size, channels, time_steps)`)
                 Input tensor after passing through the residual unit.
         """
-        output_tensor = self.block(input_tensor)
+        output_tensor = input_tensor
+        for block in self.block: 
+            output_tensor = block(output_tensor)
+
         padding = (input_tensor.shape[-1] - output_tensor.shape[-1]) // 2
         if padding > 0:
             input_tensor = input_tensor[..., padding:-padding]
@@ -223,44 +228,52 @@ class DacEncoderBlock(nn.Module):
     """Encoder block used in DAC encoder."""
     def __init__(self, dimension: int = 16, stride: int = 1):
         super().__init__()
-        self.block = nn.Sequential(
-            DacResidualUnit(dimension // 2, dilation=1),
-            DacResidualUnit(dimension // 2, dilation=3),
-            DacResidualUnit(dimension // 2, dilation=9),
-            Snake1d(dimension // 2),
-            WNConv1d(
-                dimension // 2,
-                dimension,
-                kernel_size=2 * stride,
-                stride=stride,
-                padding=math.ceil(stride / 2),
-            ),
+        self.block = nn.ModuleList(
+            [
+                DacResidualUnit(dimension // 2, dilation=1),
+                DacResidualUnit(dimension // 2, dilation=3),
+                DacResidualUnit(dimension // 2, dilation=9),
+                Snake1d(dimension // 2),
+                WNConv1d(
+                    dimension // 2,
+                    dimension,
+                    kernel_size=2 * stride,
+                    stride=stride,
+                    padding=math.ceil(stride / 2),
+                ),
+            ]
         )
 
     def forward(self, input):
-        return self.block(input)
+        for block in self.block: 
+            input = block(input)
+        return input
 
 
 class DacDecoderBlock(nn.Module):
     """Decoder block used in DAC decoder."""
     def __init__(self, input_dim: int = 16, output_dim: int = 8, stride: int = 1):
         super().__init__()
-        self.block = nn.Sequential(
-            Snake1d(input_dim),
-            WNConvTranspose1d(
-                input_dim,
-                output_dim,
-                kernel_size=2 * stride,
-                stride=stride,
-                padding=math.ceil(stride / 2),
-            ),
-            DacResidualUnit(output_dim, dilation=1),
-            DacResidualUnit(output_dim, dilation=3),
-            DacResidualUnit(output_dim, dilation=9),
+        self.block = nn.ModuleList(
+            [
+                Snake1d(input_dim),
+                WNConvTranspose1d(
+                    input_dim,
+                    output_dim,
+                    kernel_size=2 * stride,
+                    stride=stride,
+                    padding=math.ceil(stride / 2),
+                ),
+                DacResidualUnit(output_dim, dilation=1),
+                DacResidualUnit(output_dim, dilation=3),
+                DacResidualUnit(output_dim, dilation=9),
+            ]
         )
 
     def forward(self, input):
-        return self.block(input)
+        for block in self.block: 
+            input = block(input)
+        return input
 
 
 class DacResidualVectorQuantize(nn.Module):
@@ -441,10 +454,12 @@ class DacDecoder(nn.Module):
             nn.Tanh(),
         ]
 
-        self.model = nn.Sequential(*layers)
+        self.model = nn.ModuleList(layers)
 
     def forward(self, input):
-        return self.model(input)
+        for model in self.model: 
+            input = model(input)
+        return input
 
 
 class DacEncoder(nn.Module):
@@ -473,9 +488,10 @@ class DacEncoder(nn.Module):
         self.enc_dim = d_model
 
     def forward(self, input):
+        output = input
         for module in self.block:
-            input = module(input)
-        return input
+            output = module(output)
+        return output
 
 
 class DacPreTrainedModel(PreTrainedModel):

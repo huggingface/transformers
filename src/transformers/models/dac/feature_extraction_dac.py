@@ -37,12 +37,14 @@ class DacFeatureExtractor(SequenceFeatureExtractor):
     Args:
         feature_size (`int`, *optional*, defaults to 1):
             The feature dimension of the extracted features. Use 1 for mono, 2 for stereo.
-        sampling_rate (`int`, *optional*, defaults to 24000):
+        sampling_rate (`int`, *optional*, defaults to 16000):
             The sampling rate at which the audio waveform should be digitalized expressed in hertz (Hz).
         padding_value (`float`, *optional*, defaults to 0.0):
             The value that is used to fill the padding values.
         chunk_length_s (`float`, *optional*):
             If defined the audio is pre-processed into chunks of lengths `chunk_length_s` and then encoded.
+        hop_length (`int`, *optional*, defaults to 512):
+            Overlap length between successive windows. 
         overlap (`float`, *optional*):
             Defines the overlap between each chunk. It is used to compute the `chunk_stride` using the following
             formulae : `int((1.0 - self.overlap) * self.chunk_length)`.
@@ -113,7 +115,7 @@ class DacFeatureExtractor(SequenceFeatureExtractor):
                 Activates truncation to cut input sequences longer than `max_length` to `max_length`.
             max_length (`int`, *optional*):
                 Maximum length of the returned list and optionally padding length (see above).
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
+            return_tensors (`str` or [`~utils.TensorType`], *optional*, default to 'pt'):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
                 - `'tf'`: Return TensorFlow `tf.constant` objects.
@@ -179,17 +181,16 @@ class DacFeatureExtractor(SequenceFeatureExtractor):
             return_attention_mask=False,
         )
     
-        length = padded_inputs.input_values.shape[0]
+        length = padded_inputs.input_values[0].shape[0]
         right_pad = math.ceil(length / self.hop_length) * self.hop_length - length
-        padded_inputs.input_values = np.pad(padded_inputs.input_values, (0, right_pad))
-
+        padded_inputs.input_values = np.pad(padded_inputs.input_values, ((0, 0), (0, right_pad)))
+        padded_inputs.input_values = padded_inputs.input_values[:,np.newaxis, :] 
         input_values = []
         for example in padded_inputs.pop("input_values"):
             if self.feature_size == 1:
                 example = example[..., None]
             input_values.append(example.T)
 
-    
         padded_inputs["input_values"] = input_values
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
