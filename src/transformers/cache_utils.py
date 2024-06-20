@@ -1068,32 +1068,27 @@ class EncoderDecoderCache:
         self.self_attention_cache.reorder_cache(beam_idx)
         self.cross_attention_cache.reorder_cache(beam_idx)
 
-    def crop(self, maximum_length: int):
-        """Crop the past key values up to a new `maximum_length` in terms of tokens. `maximum_length` can also be
-        negative to remove `maximum_length` tokens. This is used in assisted decoding and contrastive search."""
-
+    def check_dynamic_cache(self, method: str):
         if not (
             isinstance(self.self_attention_cache, DynamicCache)
             and isinstance(self.cross_attention_cache, DynamicCache)
         ):
             raise ValueError(
-                f"`crop` is only defined for dynamic cache, got {self.self_attention_cache.__str__()} for the self "
+                f"`{method}` is only defined for dynamic cache, got {self.self_attention_cache.__str__()} for the self "
                 f"attention cache and {self.cross_attention_cache.__str__()} for the cross attention cache."
             )
+
+    def crop(self, maximum_length: int):
+        """Crop the past key values up to a new `maximum_length` in terms of tokens. `maximum_length` can also be
+        negative to remove `maximum_length` tokens. This is used in assisted decoding and contrastive search."""
+        self.check_dynamic_cache(self.crop.__name__)
         self.self_attention_cache.crop(maximum_length)
         self.cross_attention_cache.crop(maximum_length)
 
     def batch_split(self, full_batch_size: int, split_size: int) -> "List[EncoderDecoderCache]":
         """Split the current instance into a list of `DynamicCache` by the batch size. This will be used by
         `_split_model_inputs()` in `generation.utils`"""
-        if not (
-            isinstance(self.self_attention_cache, DynamicCache)
-            and isinstance(self.cross_attention_cache, DynamicCache)
-        ):
-            raise ValueError(
-                f"`batch_split` is only defined for dynamic cache, got {self.self_attention_cache.__str__()} for the self "
-                f"attention cache and {self.cross_attention_cache.__str__()} for the cross attention cache."
-            )
+        self.check_dynamic_cache(self.batch_split.__name__)
         self_attention_cache = self.self_attention_cache.batch_split(full_batch_size, split_size)
         cross_attention_cache = self.cross_attention_cache.batch_split(full_batch_size, split_size)
 
@@ -1120,10 +1115,12 @@ class EncoderDecoderCache:
 
     def batch_repeat_interleave(self, repeats: int):
         """Repeat the cache `repeats` times in the batch dimension. Used in contrastive search."""
+        self.check_dynamic_cache(self.batch_repeat_interleave.__name__)
         self.self_attention_cache.batch_repeat_interleave(repeats)
         self.cross_attention_cache.batch_repeat_interleave(repeats)
 
     def batch_select_indices(self, indices: torch.Tensor):
         """Only keep the `indices` in the batch dimension of the cache. Used in contrastive search."""
+        self.check_dynamic_cache(self.batch_select_indices.__name__)
         self.self_attention_cache.batch_select_indices(indices)
         self.cross_attention_cache.batch_select_indices(indices)
