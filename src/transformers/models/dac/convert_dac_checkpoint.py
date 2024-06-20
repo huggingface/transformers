@@ -156,7 +156,7 @@ if __name__ == "__main__":
         "--model",
         default="dac_16khz",
         type=str,
-        help="The model to convert. Should be one of 'encodec_24khz', 'encodec_32khz', 'encodec_48khz'.",
+        help="The model to convert. Should be one of 'dac_16khz', 'dac_24khz', 'dac_44khz'.",
     )
 
     args = parser.parse_args()
