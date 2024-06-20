@@ -896,13 +896,16 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                     n["type"] == "Prepend" for n in curr_normalizer["normalizers"]
                 ):
                     self.add_prefix_space = True
+                    return True
+        return False
 
     def _update_pre_tokenizer(self):
         """Updates the underlying pre-tokenizer with the current `add_prefix_space` setting."""
         if getattr(self, "legacy", None) is not False:
             return
 
-        self._update_prefix_if_prepend_normalizer()
+        if not self._update_prefix_if_prepend_normalizer():
+            return
         prepend_scheme = "first" if getattr(self, "add_prefix_space", True) else "never"
 
         if isinstance(self._tokenizer.pre_tokenizer, pre_tokenizers.Metaspace):
