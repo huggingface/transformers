@@ -1018,7 +1018,7 @@ class EncoderDecoderCache:
         return len(self.self_attention_cache)
 
     def to_legacy_cache(self) -> Tuple[Tuple[torch.Tensor], Tuple[torch.Tensor]]:
-        """Converts the `DynamicCache` instance into  its equivalent in the legacy cache format."""
+        """Converts the `EncoderDecoderCache` instance into  its equivalent in the legacy cache format."""
         legacy_cache = ()
         if len(self.cross_attention_cache) > 0:
             for self_attn, cross_attn in zip(
@@ -1033,7 +1033,7 @@ class EncoderDecoderCache:
     def from_legacy_cache(
         cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     ) -> "EncoderDecoderCache":
-        """Converts a cache in the legacy cache format into an equivalent `DynamicCache`."""
+        """Converts a cache in the legacy cache format into an equivalent `EncoderDecoderCache`."""
         cache = cls(self_attention_cache=DynamicCache(), cross_attention_cache=DynamicCache())
         if past_key_values is not None:
             for layer_idx in range(len(past_key_values)):
