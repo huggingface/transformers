@@ -1428,7 +1428,7 @@ class GenerationMixin:
 
         need_new_cache = (
             not hasattr(self, "_cache")
-            or (not isinstance(self._cache, cache_cls))
+            or (not isinstance(cache_to_check, cache_cls))
             or cache_to_check.max_batch_size != max_batch_size
             or cache_to_check.max_cache_len < max_cache_len
         )
