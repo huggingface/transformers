@@ -3831,25 +3831,45 @@ class Trainer:
             if is_torch_xla_available():
                 xm.mark_step()
 
+            use_gather_object_in_gather_function = (
+                "use_gather_object" in inspect.signature(self.gather_function).parameters.keys()
+            )
+
             # Update containers
             if losses is not None:
-                losses = self.gather_function((losses.repeat(batch_size)))
+                if use_gather_object_in_gather_function:
+                    losses = self.gather_function(
+                        (losses.repeat(batch_size)), use_gather_object=self.args.eval_use_gather_object
+                    )
+                else:
+                    losses = self.gather_function((losses.repeat(batch_size)))
                 all_losses.add(losses)
             if inputs_decode is not None:
                 inputs_decode = self.accelerator.pad_across_processes(inputs_decode, dim=1, pad_index=-100)
-                inputs_decode = self.gather_function((inputs_decode), use_gather_object=self.args.use_gather_object)
+                if use_gather_object_in_gather_function:
+                    inputs_decode = self.gather_function(
+                        (inputs_decode), use_gather_object=self.args.eval_use_gather_object
+                    )
+                else:
+                    inputs_decode = self.gather_function((inputs_decode))
                 if not self.args.batch_eval_metrics or description == "Prediction":
                     all_inputs.add(inputs_decode)
             if logits is not None:
                 logits = self.accelerator.pad_across_processes(logits, dim=1, pad_index=-100)
                 if self.preprocess_logits_for_metrics is not None:
                     logits = self.preprocess_logits_for_metrics(logits, labels)
-                logits = self.gather_function((logits), use_gather_object=self.args.use_gather_object)
+                if use_gather_object_in_gather_function:
+                    logits = self.gather_function((logits), use_gather_object=self.args.eval_use_gather_object)
+                else:
+                    logits = self.gather_function((logits))
                 if not self.args.batch_eval_metrics or description == "Prediction":
                     all_preds.add(logits)
             if labels is not None:
                 labels = self.accelerator.pad_across_processes(labels, dim=1, pad_index=-100)
-                labels = self.gather_function((labels), use_gather_object=self.args.use_gather_object)
+                if use_gather_object_in_gather_function:
+                    labels = self.gather_function((labels), use_gather_object=self.args.eval_use_gather_object)
+                else:
+                    labels = self.gather_function((labels))
                 if not self.args.batch_eval_metrics or description == "Prediction":
                     all_labels.add(labels)
 
@@ -4669,6 +4689,4 @@ class Trainer:
                 and self.model.hf_quantizer.quantization_config.bnb_4bit_quant_storage.is_floating_point
                 and version.parse(accelerate_version) > version.parse("0.27.0")
             ):
-                fsdp_plugin.set_mixed_precision(
-                    self.model.hf_quantizer.quantization_config.bnb_4bit_quant_storage, override=True
-                )
+                fsdp_plugin.set_mixed_precisi

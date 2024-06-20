@@ -776,7 +776,7 @@ class TrainingArguments:
         eval_on_start(`bool`, *optional*, defaults to `False`):
             Whether to perform a evaluation step (sanity check) before the training to ensure the validation steps works correctly.
 
-        use_gather_object(`bool`, *optional*, defaults to `False`):
+        eval_use_gather_object(`bool`, *optional*, defaults to `False`):
             Whether to run recursively gather object in a nested list/tuple/dictionary of objects from all devices.
     """
 
@@ -1468,7 +1468,7 @@ class TrainingArguments:
         },
     )
 
-    use_gather_object: Optional[bool] = field(
+    eval_use_gather_object: Optional[bool] = field(
         default=False,
         metadata={
             "help": "Whether to run recursively gather object in a nested list/tuple/dictionary of objects from all devices."
