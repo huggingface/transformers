@@ -23,7 +23,7 @@ import numpy as np
 import pytest
 
 from transformers import BartTokenizer, BartTokenizerFast
-from transformers.models.roberta.tokenization_roberta import VOCAB_FILES_NAMES # TODO can I use this?
+from transformers.models.bart.tokenization_bart import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_vision
 from transformers.utils import IMAGE_PROCESSOR_NAME, is_vision_available
 
