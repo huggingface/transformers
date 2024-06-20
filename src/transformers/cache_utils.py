@@ -1084,7 +1084,6 @@ class EncoderDecoderCache:
         negative to remove `maximum_length` tokens. This is used in assisted decoding and contrastive search."""
         self.check_dynamic_cache(self.crop.__name__)
         self.self_attention_cache.crop(maximum_length)
-        self.cross_attention_cache.crop(maximum_length)
 
     def batch_split(self, full_batch_size: int, split_size: int) -> "List[EncoderDecoderCache]":
         """Split the current instance into a list of `DynamicCache` by the batch size. This will be used by
