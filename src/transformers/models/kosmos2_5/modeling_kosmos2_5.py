@@ -433,7 +433,6 @@ class Kosmos2_5VisionFlashAttention2(Kosmos2_5VisionAttention):
         attn_output = self._flash_attention_forward(
             query_states, key_states, value_states, attention_mask, seq_length, dropout=self.dropout
         )
-
         attn_output = attn_output.view(batch_size, -1, self.inner_dim)
         attn_output = self.output(attn_output)
 
@@ -567,14 +566,13 @@ class Kosmos2_5VisionSdpaAttention(Kosmos2_5VisionAttention):
         key_states = self.key(hidden_states)
         value_states = self.value(hidden_states)
 
-        query_states = query_states.view(batch_size, seq_length, self.n_heads, self.key_value_proj_dim)
-        key_states = key_states.view(batch_size, seq_length, self.n_heads, self.key_value_proj_dim)
-        value_states = value_states.view(batch_size, seq_length, self.n_heads, self.key_value_proj_dim)
-
+        query_states = query_states.view(batch_size, seq_length, self.n_heads, self.key_value_proj_dim).transpose(1,2)
+        key_states = key_states.view(batch_size, seq_length, self.n_heads, self.key_value_proj_dim).transpose(1,2)
+        value_states = value_states.view(batch_size, seq_length, self.n_heads, self.key_value_proj_dim).transpose(1,2)
         causal_mask = attention_mask
-        print(attention_mask.shape)
         if attention_mask is not None:
-            causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
+            # Slice the causal_mask to match key_states' last dimension
+            causal_mask = causal_mask[:, :, :, :key_states.shape[-2]]
 
         if query_states.device.type == "cuda" and causal_mask is not None:
             query_states = query_states.contiguous()
@@ -589,15 +587,14 @@ class Kosmos2_5VisionSdpaAttention(Kosmos2_5VisionAttention):
             query_states,
             key_states,
             value_states,
-            attn_mask=causal_mask,
+            attn_mask=attention_mask,
             dropout_p=self.attention_dropout if self.training else 0.0,
             is_causal=is_causal,
         )
-
         attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.view(batch_size, seq_length, -1)
 
-        attn_output = self.o_proj(attn_output)
+        attn_output = self.output(attn_output)
 
         return attn_output, None
 
@@ -615,8 +612,7 @@ class Kosmos2_5VisionLayer(nn.Module):
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
         self.config = config
-        # self.attention = KOSMOS2_5_VISION_ATTENTION_CLASSES[config._attn_implementation](config)
-        self.attention = KOSMOS2_5_VISION_ATTENTION_CLASSES["eager"](config)
+        self.attention = KOSMOS2_5_VISION_ATTENTION_CLASSES[config._attn_implementation](config)
         self.mlp =  Kosmos2_5VisionMlp(config)
         self.pre_mlp_layer_norm = Kosmos2_5LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.pre_attention_layer_norm = Kosmos2_5LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -626,8 +622,6 @@ class Kosmos2_5VisionLayer(nn.Module):
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
             return None
-
-        combined_attention_mask = None
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             expanded_attn_mask = _expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]).to(
@@ -789,7 +783,6 @@ class Kosmos2_5VisionModel(PreTrainedModel):
             attentions=encoder_outputs.attentions,
         )
 
-
 # Copied from ...models.kosmos2.modeling_kosmos2.Kosmos2TextSinusoidalPositionalEmbedding -> Kosmos2_5TextSinusoidalPositionalEmbedding
 class Kosmos2_5TextSinusoidalPositionalEmbedding(nn.Module):
     """This module produces sinusoidal positional embeddings of any length."""
@@ -913,6 +906,7 @@ class Kosmos2_5TextAttention(nn.Module):
         is_decoder: bool = False,
         add_inner_attn_layernorm: bool = False,
         bias: bool = True,
+        is_causal = True,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -932,7 +926,7 @@ class Kosmos2_5TextAttention(nn.Module):
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.is_causal = True
+        self.is_causal = is_causal
 
         # End opy
         self.inner_attn_ln = None
@@ -1290,7 +1284,6 @@ class Kosmos2_5TextSdpaAttention(Kosmos2_5TextAttention):
 
         # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
         # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
-        is_causal = True if causal_mask is None and q_len > 1 else False
 
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
@@ -1298,7 +1291,7 @@ class Kosmos2_5TextSdpaAttention(Kosmos2_5TextAttention):
             value_states,
             attn_mask=causal_mask,
             dropout_p=self.dropout if self.training else 0.0,
-            is_causal=is_causal,
+            is_causal=self.is_causal,
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
@@ -1676,7 +1669,7 @@ class Kosmos2_5TextTransformer(nn.Module):
             cross_attentions=all_cross_attentions,
         )
 
-# this is the resampler maybe
+# this is the resampler maybe #???
 class Kosmos2_5ImageToTextProjection(nn.Module):
     """The layer that transforms the image model's output to part of the text model's input (namely, image features)"""
 
@@ -1684,13 +1677,14 @@ class Kosmos2_5ImageToTextProjection(nn.Module):
         super().__init__()
         self.dense = nn.Linear(config.vision_config.hidden_size, config.text_config.embed_dim)
         self.latent_query = nn.Parameter(torch.randn(config.latent_query_num, config.text_config.embed_dim))
-        self.x_attn = KOSMOS2_5_TEXT_ATTENTION_CLASSES[config._attn_implementation](
+        self.x_attn = KOSMOS2_5_TEXT_ATTENTION_CLASSES["eager"](
             config.text_config,
             config.text_config.embed_dim,
             config.text_config.attention_heads,
             dropout=config.text_config.attention_dropout,
             is_decoder=False,
             add_inner_attn_layernorm=False,
+            is_causal=False,
         )
 
     def forward(self, features):
@@ -1718,6 +1712,9 @@ class Kosmos2_5PreTrainedModel(PreTrainedModel):
     config_class = Kosmos2_5Config
     supports_gradient_checkpointing = True
     _no_split_modules = ["Kosmos2_5VisionEncoderLayer", "Kosmos2_5TextBlock"]
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+    
     def _init_weights(self, module):
         pass
 

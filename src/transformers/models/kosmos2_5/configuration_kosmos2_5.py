@@ -18,7 +18,7 @@ import os
 from typing import Union
 from ...utils import logging
 from ...configuration_utils import PretrainedConfig
-from ...models.pix2struct import Pix2StructVisionModel, Pix2StructVisionConfig
+from ...models.pix2struct import Pix2StructVisionConfig
 
 logger = logging.get_logger(__name__)
 
@@ -180,6 +180,9 @@ class Kosmos2_5Config(PretrainedConfig):
 
     model_type = "kosmos-2.5"
     is_composition = True
+    _attn_implementation = "sdpa"
+    # _attn_implementation = "flash_attention_2"
+    # _attn_implementation = "eager"
 
     def __init__(
         self,
