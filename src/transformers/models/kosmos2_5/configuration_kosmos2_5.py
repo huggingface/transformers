@@ -180,9 +180,10 @@ class Kosmos2_5Config(PretrainedConfig):
 
     model_type = "kosmos-2.5"
     is_composition = True
-    _attn_implementation = "sdpa"
+    _attn_implementation = "eager"
+    # _attn_implementation = "sdpa"
     # _attn_implementation = "flash_attention_2"
-    # _attn_implementation = "eager"
+    
 
     def __init__(
         self,

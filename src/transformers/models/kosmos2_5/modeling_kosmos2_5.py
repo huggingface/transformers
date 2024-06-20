@@ -1035,15 +1035,9 @@ class Kosmos2_5TextFlashAttention2(Kosmos2_5TextAttention):
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        """Input shape: Batch x Length x Channel"""
         output_attentions = False
-        bsz, q_len, _ = hidden_states.size()
-
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states)
-
         is_cross_attention = encoder_hidden_states is not None
+        bsz, q_len, _ = hidden_states.size()
 
         # use encoder_hidden_states if cross attention
         current_states = encoder_hidden_states if encoder_hidden_states is not None else hidden_states
@@ -1054,17 +1048,16 @@ class Kosmos2_5TextFlashAttention2(Kosmos2_5TextAttention):
             key_states = past_key_value[0]
             value_states = past_key_value[1]
         else:
-            key_states = key_states.view(bsz, q_len, self.num_heads, self.head_dim)
-            value_states = value_states.view(bsz, q_len, self.num_heads, self.head_dim)
+            key_states = self._shape(self.k_proj(current_states)).transpose(1,2)
+            value_states =  self._shape(self.v_proj(current_states)).transpose(1,2)
             if past_key_value is not None and not is_cross_attention:
-                # reuse k, v, self_attention
                 key_states = torch.cat([past_key_value[0], key_states], dim=1)
                 value_states = torch.cat([past_key_value[1], value_states], dim=1)
 
+        query_states =  self._shape(self.q_proj(hidden_states)).transpose(1,2)
+
         if self.is_decoder:
             past_key_value = (key_states, value_states)
-
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim)
 
         input_dtype = query_states.dtype
 
@@ -1090,14 +1083,12 @@ class Kosmos2_5TextFlashAttention2(Kosmos2_5TextAttention):
         attn_output = self._flash_attention_forward(
             query_states, key_states, value_states, attention_mask, q_len, dropout=self.dropout
         )
-        attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
-
+        attn_output = attn_output.view(bsz, -1, self.embed_dim)
 
         if self.inner_attn_ln is not None:
             attn_output = self.inner_attn_ln(attn_output)
 
         attn_output = self.out_proj(attn_output)
-
         if not output_attentions:
             attn_weights = None
 
@@ -1158,7 +1149,7 @@ class Kosmos2_5TextFlashAttention2(Kosmos2_5TextAttention):
         else:
             attn_output = flash_attn_func(
                 query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=causal
-            )
+                )
 
         return attn_output
     
@@ -1234,14 +1225,8 @@ class Kosmos2_5TextSdpaAttention(Kosmos2_5TextAttention):
                 use_cache=use_cache,
                 cache_position=cache_position,
             )
-
-        bsz, q_len, _ = hidden_states.size()
-
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states)
-
         is_cross_attention = encoder_hidden_states is not None
+        bsz, q_len, _ = hidden_states.size()
 
         # use encoder_hidden_states if cross attention
         current_states = encoder_hidden_states if encoder_hidden_states is not None else hidden_states
@@ -1252,25 +1237,18 @@ class Kosmos2_5TextSdpaAttention(Kosmos2_5TextAttention):
             key_states = past_key_value[0]
             value_states = past_key_value[1]
         else:
-            key_states = key_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-            value_states = value_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+            key_states = self._shape(self.k_proj(current_states))
+            value_states = self._shape(self.v_proj(current_states))
             if past_key_value is not None and not is_cross_attention:
                 # reuse k, v, self_attention
                 key_states = torch.cat([past_key_value[0], key_states], dim=2)
                 value_states = torch.cat([past_key_value[1], value_states], dim=2)
-
+        
+        query_states = self._shape(self.q_proj(hidden_states))
+        
         if self.is_decoder:
-            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
-            # Further calls to cross_attention layer can then reuse all cross-attention
-            # key/value_states (first "if" case)
-            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
-            # all previous decoder key/value_states. Further calls to uni-directional self-attention
-            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
-            # if encoder bi-directional self-attention `past_key_value` is always `None`
             past_key_value = (key_states, value_states)
 
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-    
         causal_mask = attention_mask
         if attention_mask is not None:
             causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
@@ -1291,7 +1269,7 @@ class Kosmos2_5TextSdpaAttention(Kosmos2_5TextAttention):
             value_states,
             attn_mask=causal_mask,
             dropout_p=self.dropout if self.training else 0.0,
-            is_causal=self.is_causal,
+            is_causal = self.is_causal
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
@@ -1299,9 +1277,10 @@ class Kosmos2_5TextSdpaAttention(Kosmos2_5TextAttention):
 
         if self.inner_attn_ln is not None:
             attn_output = self.inner_attn_ln(attn_output)
-
+        
         attn_output = self.out_proj(attn_output)
-
+        print(attn_output)
+        breakpoint()
         return attn_output, None, past_key_value
 
 KOSMOS2_5_TEXT_ATTENTION_CLASSES = {
@@ -1314,7 +1293,6 @@ class Kosmos2_5TextBlock(nn.Module):
     def __init__(self, config: Kosmos2_5TextConfig):
         super().__init__()
         self.embed_dim = config.embed_dim
-
         self.self_attn = KOSMOS2_5_TEXT_ATTENTION_CLASSES[config._attn_implementation](
             config,
             embed_dim=self.embed_dim,
@@ -1322,6 +1300,7 @@ class Kosmos2_5TextBlock(nn.Module):
             dropout=config.attention_dropout,
             is_decoder=True,
             add_inner_attn_layernorm=False,
+            is_causal=True
         )
         self.dropout = config.dropout
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
@@ -1677,7 +1656,7 @@ class Kosmos2_5ImageToTextProjection(nn.Module):
         super().__init__()
         self.dense = nn.Linear(config.vision_config.hidden_size, config.text_config.embed_dim)
         self.latent_query = nn.Parameter(torch.randn(config.latent_query_num, config.text_config.embed_dim))
-        self.x_attn = KOSMOS2_5_TEXT_ATTENTION_CLASSES["eager"](
+        self.x_attn = KOSMOS2_5_TEXT_ATTENTION_CLASSES[config._attn_implementation](
             config.text_config,
             config.text_config.embed_dim,
             config.text_config.attention_heads,
