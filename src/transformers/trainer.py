@@ -861,6 +861,9 @@ class Trainer:
 
         else:
             return RandomSampler(self.train_dataset)
+    
+    def seed_worker(self, *args, **kwargs):
+        return seed_worker(*args, **kwargs)
 
     def get_train_dataloader(self) -> DataLoader:
         """
@@ -892,7 +895,7 @@ class Trainer:
         if not isinstance(train_dataset, torch.utils.data.IterableDataset):
             dataloader_params["sampler"] = self._get_train_sampler()
             dataloader_params["drop_last"] = self.args.dataloader_drop_last
-            dataloader_params["worker_init_fn"] = seed_worker
+            dataloader_params["worker_init_fn"] = self.seed_worker
             dataloader_params["prefetch_factor"] = self.args.dataloader_prefetch_factor
 
         return self.accelerator.prepare(DataLoader(train_dataset, **dataloader_params))
