@@ -137,7 +137,7 @@ def pad_images(images, pad_value=0, data_format: Optional[Union[str, ChannelDime
     return padded_images
 
 
-class SuperGlueImageProcessor(BaseImageProcessor):
+class LightGlueImageProcessor(BaseImageProcessor):
     r"""
     Constructs a SuperGlue image processor.
 

@@ -51,7 +51,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .image_processing_superglue import SuperGlueImageProcessor
+        from .image_processing_superglue import LightGlueImageProcessor
 
     try:
         if not is_torch_available():

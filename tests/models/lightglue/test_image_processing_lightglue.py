@@ -29,7 +29,7 @@ if is_vision_available():
     from transformers import LightGlueImageProcessor
 
 
-class SuperGlueImageProcessingTester(unittest.TestCase):
+class LightGlueImageProcessingTester(unittest.TestCase):
     def __init__(
         self,
         parent,
@@ -78,12 +78,12 @@ class SuperGlueImageProcessingTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class SuperGlueImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+class LightGlueImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = LightGlueImageProcessor if is_vision_available() else None
 
     def setUp(self) -> None:
         super().setUp()
-        self.image_processor_tester = SuperGlueImageProcessingTester(self)
+        self.image_processor_tester = LightGlueImageProcessingTester(self)
 
     @property
     def image_processor_dict(self):
@@ -131,7 +131,7 @@ class SuperGlueImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 self.assertTrue(np.all(image[0, ...] == image[1, ...]) and np.all(image[1, ...] == image[2, ...]))
 
     def test_call_numpy(self):
-        # Test overwritten because SuperGlueImageProcessor combines images by pair to feed it into SuperGlue
+        # Test overwritten because LightGlueImageProcessor combines images by pair to feed it into LightGlue
 
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
@@ -160,7 +160,7 @@ class SuperGlueImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             image_processing(image_pairs, return_tensors="pt").pixel_values
 
     def test_call_pil(self):
-        # Test overwritten because SuperGlueImageProcessor combines images by pair to feed it into SuperGlue
+        # Test overwritten because LightGlueImageProcessor combines images by pair to feed it into LightGlue
 
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
@@ -187,7 +187,7 @@ class SuperGlueImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             image_processing(image_pairs, return_tensors="pt").pixel_values
 
     def test_call_pytorch(self):
-        # Test overwritten because SuperGlueImageProcessor combines images by pair to feed it into SuperGlue
+        # Test overwritten because LightGlueImageProcessor combines images by pair to feed it into LightGlue
 
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)

@@ -23,7 +23,7 @@ from transformers import (
     AutoModelForKeypointDetection,
     SuperGlueConfig,
     SuperGlueForKeypointMatching,
-    SuperGlueImageProcessor,
+    LightGlueImageProcessor,
 )
 from transformers.models.superpoint.modeling_superpoint import SuperPointKeypointDescriptionOutput
 
@@ -205,7 +205,7 @@ def convert_superglue_checkpoint(checkpoint_url, pytorch_dump_folder_path, save_
     print("Successfully loaded weights in the model")
 
     images = prepare_imgs_for_image_processor()
-    preprocessor = SuperGlueImageProcessor()
+    preprocessor = LightGlueImageProcessor()
     inputs = preprocessor(images=images, return_tensors="pt")
     inputs.to("cuda")
 
