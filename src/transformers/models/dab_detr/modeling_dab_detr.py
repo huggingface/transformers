@@ -1683,9 +1683,15 @@ class DABDETRModel(DABDETRPreTrainedModel):
             outputs_coord = torch.stack(outputs_coords)
 
         if not return_dict:
-            return (
-                (outputs_coord,) + (intermediate_hidden_states,) + (reference_points,)
-            )  # TODO do we wanna return those ones? -> decoder_outputs + encoder_outputs
+            output = ()
+            if output_hidden_states:
+                output += (encoder_outputs[1], decoder_outputs[1])
+            if output_attentions:
+                output += (encoder_outputs[2], decoder_outputs[2], decoder_outputs[3])
+
+            output += (outputs_coord, intermediate_hidden_states, reference_points)
+
+            return output
 
         return DABDETRModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
@@ -1814,8 +1820,8 @@ class DABDETRForObjectDetection(DABDETRPreTrainedModel):
             return_dict=return_dict,
         )
 
-        outputs_coord = model_outputs[0] if not return_dict else model_outputs.outputs_coord
-        intermediate_hidden_states = model_outputs[1] if not return_dict else model_outputs.intermediate_hidden_states
+        outputs_coord = model_outputs[-3] if not return_dict else model_outputs.outputs_coord
+        intermediate_hidden_states = model_outputs[-2] if not return_dict else model_outputs.intermediate_hidden_states
 
         # class logits + predicted bounding boxes
         logits = self.class_labels_classifier(intermediate_hidden_states[-1])
@@ -1845,7 +1851,7 @@ class DABDETRForObjectDetection(DABDETRPreTrainedModel):
 
             if self.config.auxiliary_loss:
                 outputs_class = self.class_labels_classifier(intermediate_hidden_states)
-                auxiliary_outputs = self._set_aux_loss(outputs_class, model_outputs.outputs_coord)
+                auxiliary_outputs = self._set_aux_loss(outputs_class, outputs_coord)
                 outputs_loss["auxiliary_outputs"] = auxiliary_outputs
 
             loss_dict = criterion(outputs_loss, labels)
