@@ -46,9 +46,13 @@ from ...utils import (
     is_flash_attn_greater_or_equal_2_10,
     logging,
     replace_return_docstrings,
+    is_accelerate_available,
 )
 from .configuration_starcoder2 import Starcoder2Config
 
+if is_accelerate_available():
+    from accelerate.utils import parallel_state as mpu
+    from ...layer import DistributedAttention
 
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
@@ -319,6 +323,13 @@ class Starcoder2FlashAttention2(Starcoder2Attention):
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
 
+        if is_accelerate_available() and mpu.sequence_parallel_is_enabled():
+            self.attn_func = DistributedAttention(self._flash_attention_forward, mpu.get_sequence_parallel_group())
+            self.q_len_multiplier = mpu.get_sequence_parallel_world_size()
+        else:
+            self.attn_func = self._flash_attention_forward
+            self.q_len_multiplier = 1
+
     # Ignore copy
     def forward(
         self,
@@ -429,12 +440,12 @@ class Starcoder2FlashAttention2(Starcoder2Attention):
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
 
-        attn_output = self._flash_attention_forward(
+        attn_output = self.attn_func(
             query_states,
             key_states,
             value_states,
             attention_mask,
-            q_len,
+            q_len * self.q_len_multiplier,
             dropout=dropout_rate,
             use_sliding_windows=use_sliding_windows,
         )
@@ -786,6 +797,7 @@ class Starcoder2PreTrainedModel(PreTrainedModel):
     config_class = Starcoder2Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
+    supports_sequence_parallel = True
     _no_split_modules = ["Starcoder2DecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
