@@ -58,8 +58,7 @@ class LlavaNextVideoProcessor(ProcessorMixin):
     tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
 
     def __init__(self, video_processor=None, image_processor=None, tokenizer=None, chat_template=None):
-        self.chat_template = chat_template
-        super().__init__(video_processor, image_processor, tokenizer)
+        super().__init__(video_processor, image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
         self,

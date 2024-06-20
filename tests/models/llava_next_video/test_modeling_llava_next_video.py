@@ -302,11 +302,15 @@ class LlavaNextVideoForConditionalGenerationModelTest(ModelTesterMixin, Generati
     def test_cpu_offload(self):
         pass
 
-    @unittest.skip(reason="Compile not yet supported because in LLava models")
+    @unittest.skip(
+        reason="Compile not yet supported because in LLava models (https://github.com/huggingface/transformers/issues/29891)"
+    )
     def test_sdpa_can_compile_dynamic(self):
         pass
 
-    @unittest.skip(reason="Compile not yet supported because in LLava models")
+    @unittest.skip(
+        reason="Compile not yet supported because in LLava models (https://github.com/huggingface/transformers/issues/29891)"
+    )
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
