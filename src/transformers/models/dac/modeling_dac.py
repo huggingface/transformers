@@ -1,4 +1,5 @@
-"""PyTorch DAC model."""
+# Adapted from https://github.com/descriptinc/descript-audio-codec/tree/main
+"""Transformers DAC model."""
 import math
 from dataclasses import dataclass
 
