@@ -57,7 +57,7 @@ if is_torch_available():
         ImageGPTForCausalImageModeling,
         SpeechEncoderDecoderModel,
     )
-    from transformers.cache_utils import DynamicCache, QuantoQuantizedCache, EncoderDecoderCache
+    from transformers.cache_utils import DynamicCache, EncoderDecoderCache, QuantoQuantizedCache
     from transformers.generation import (
         BeamSampleDecoderOnlyOutput,
         BeamSampleEncoderDecoderOutput,

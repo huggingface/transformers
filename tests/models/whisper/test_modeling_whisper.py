@@ -26,10 +26,9 @@ import unittest
 import numpy as np
 import pytest
 from huggingface_hub import hf_hub_download
-from parameterized import parameterized
 
 import transformers
-from transformers import DynamicCache, EncoderDecoderCache, WhisperConfig
+from transformers import WhisperConfig
 from transformers.testing_utils import (
     is_pt_flax_cross_test,
     require_flash_attn,
