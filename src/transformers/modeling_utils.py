@@ -119,6 +119,7 @@ if is_accelerate_available():
         save_offload_index,
         set_module_tensor_to_device,
     )
+    from accelerate.utils import parallel_state as mpu
 
     accelerate_version = version.parse(importlib.metadata.version("accelerate"))
     if accelerate_version >= version.parse("0.31"):
@@ -3691,7 +3692,19 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             import deepspeed
 
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
-            init_contexts = [deepspeed.zero.Init(config_dict_or_path=deepspeed_config())] + init_contexts
+            if is_accelerate_available() and mpu.model_parallel_is_initialized():
+                mpu_module = mpu
+                sequence_data_parallel_group = mpu.get_sequence_data_parallel_group()
+            else:
+                mpu_module = None
+                sequence_data_parallel_group = None
+            init_contexts = [
+                deepspeed.zero.Init(
+                    sequence_data_parallel_group=sequence_data_parallel_group,
+                    config_dict_or_path=deepspeed_config(),
+                    mpu=mpu_module,
+                )
+            ] + init_contexts
         elif low_cpu_mem_usage:
             init_contexts.append(init_empty_weights())
 
@@ -3877,6 +3890,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "Generation config file not found, using a generation config created from the model config."
                 )
                 pass
+
+        if is_accelerate_available() and mpu.get_sequence_parallel_world_size_or_one() > 1:
+            if not getattr(model, "supports_sequence_parallel", False):
+                raise ValueError(
+                    "The model does not support sequence parallelism."
+                )
 
         # Dispatch model with hooks on all devices if necessary
         if device_map is not None:

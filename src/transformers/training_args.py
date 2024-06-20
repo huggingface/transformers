@@ -1221,6 +1221,15 @@ class TrainingArguments:
             )
         },
     )
+    sequence_parallel: int = field(
+        default=1,
+        metadata={
+            "help": (
+                "Enable sequence parallel provided by Deepspeed-Ulysses. Requires deepspeed to be enabled."
+                " This require handling dataset loader manually with DistributedSampler."
+            )
+        }
+    )
     label_smoothing_factor: float = field(
         default=0.0, metadata={"help": "The label smoothing epsilon to apply (zero means no label smoothing)."}
     )
@@ -1944,6 +1953,10 @@ class TrainingArguments:
             self.deepspeed_plugin.set_mixed_precision(mixed_precision)
             self.deepspeed_plugin.set_deepspeed_weakref()
 
+        if self.sequence_parallel > 1:
+            if self.deepspeed_plugin is None:
+                raise ValueError("sequence_parallel requires deepspeed enabled")
+
         if self.use_cpu:
             self.dataloader_pin_memory = False
 
@@ -2017,8 +2030,15 @@ class TrainingArguments:
                 "Using deprecated `--per_gpu_train_batch_size` argument which will be removed in a future "
                 "version. Using `--per_device_train_batch_size` is preferred."
             )
+
+        world_size = self.n_gpu
+        if is_accelerate_available():
+            from accelerate.utils import parallel_state as mpu
+            if mpu.model_parallel_is_initialized():
+                world_size = mpu.get_data_parallel_world_size()
+
         per_device_batch_size = self.per_gpu_train_batch_size or self.per_device_train_batch_size
-        train_batch_size = per_device_batch_size * max(1, self.n_gpu)
+        train_batch_size = per_device_batch_size * max(1, world_size)
         return train_batch_size
 
     @property

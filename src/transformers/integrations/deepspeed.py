@@ -137,9 +137,21 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
         Adjust the config with `TrainingArguments` values. This stage is run during `TrainingArguments` object
         creation.
         """
+
+        if getattr(args, 'sequence_parallel', 1) > 1:
+            assert is_accelerate_available(), "DeepSpeed sequence parallelism requires Accelerate, install it with 'pip install accelerate'"
+
+            from accelerate.utils import parallel_state as mpu
+            mpu.initialize_model_parallel(
+                sequence_parallel_size=args.sequence_parallel,
+            )
+            world_size = mpu.get_data_parallel_world_size()
+        else:
+            world_size = args.world_size
+
         # DeepSpeed does:
         # train_batch_size = world_size * train_micro_batch_size_per_gpu * gradient_accumulation_steps
-        train_batch_size = args.world_size * args.per_device_train_batch_size * args.gradient_accumulation_steps
+        train_batch_size = world_size * args.per_device_train_batch_size * args.gradient_accumulation_steps
         self.fill_match(
             "train_micro_batch_size_per_gpu",
             args.per_device_train_batch_size,
