@@ -21,6 +21,7 @@ import unittest
 
 import numpy as np
 import requests
+from parameterized import parameterized
 from pytest import mark
 
 from transformers import SiglipConfig, SiglipTextConfig, SiglipVisionConfig
@@ -28,11 +29,17 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_gpu,
+    require_torch_sdpa,
     require_vision,
     slow,
     torch_device,
 )
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import (
+    is_torch_available,
+    is_torch_bf16_available_on_device,
+    is_torch_fp16_available_on_device,
+    is_vision_available,
+)
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -680,6 +687,225 @@ class SiglipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @mark.flash_attn_test
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         self.skipTest("SigLIP does not support right padding")
+
+    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
+    @require_torch_sdpa
+    @slow
+    def test_eager_matches_sdpa_inference(
+        self,
+        torch_dtype: str,
+    ):
+        if not self.all_model_classes[0]._supports_sdpa:
+            self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
+
+        if torch_dtype == "float16" and not is_torch_fp16_available_on_device(torch_device):
+            self.skipTest(f"float16 not supported on {torch_device} (on the specific device currently used)")
+
+        if torch_dtype == "bfloat16" and not is_torch_bf16_available_on_device(torch_device):
+            self.skipTest(
+                f"bfloat16 not supported on {torch_device} (on the specific device currently used, e.g. Nvidia T4 GPU)"
+            )
+
+        # Not sure whether it's fine to put torch.XXX in a decorator if torch is not available so hacking it here instead.
+        if torch_dtype == "float16":
+            torch_dtype = torch.float16
+        elif torch_dtype == "bfloat16":
+            torch_dtype = torch.bfloat16
+        elif torch_dtype == "float32":
+            torch_dtype = torch.float32
+
+        atols = {
+            ("cpu", False, torch.float32): 1e-5,
+            ("cpu", False, torch.bfloat16): 1e-2,
+            ("cpu", True, torch.float32): 1e-5,
+            ("cpu", True, torch.bfloat16): 1e-2,
+            ("cuda", False, torch.float32): 1e-5,
+            ("cuda", False, torch.bfloat16): 1e-2,
+            ("cuda", False, torch.float16): 5e-3,
+            ("cuda", True, torch.float32): 1e-5,
+            ("cuda", True, torch.bfloat16): 1e-2,
+            ("cuda", True, torch.float16): 5e-3,
+        }
+        rtols = {
+            ("cpu", False, torch.float32): 1e-4,
+            ("cpu", False, torch.bfloat16): 1e-2,
+            ("cpu", True, torch.float32): 1e-4,
+            ("cpu", True, torch.bfloat16): 1e-2,
+            ("cuda", False, torch.float32): 1e-4,
+            ("cuda", False, torch.bfloat16): 1e-2,
+            ("cuda", False, torch.float16): 5e-3,
+            ("cuda", True, torch.float32): 1e-4,
+            ("cuda", True, torch.bfloat16): 3e-2,
+            ("cuda", True, torch.float16): 5e-3,
+        }
+
+        def get_mean_reldiff(msg, failcase, x, ref, atol, rtol):
+            return f"{msg} {failcase}: mean relative difference: {((x - ref).abs() / (ref.abs() + 1e-12)).mean():.3e}, torch atol = {atol}, torch rtol = {rtol}"
+
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                # Load the model with SDPA
+                model_sdpa = model_class.from_pretrained(tmpdirname, torch_dtype=torch_dtype)
+                model_sdpa = model_sdpa.eval().to(torch_device)
+
+                # Load model with eager attention
+                model_eager = model_class.from_pretrained(
+                    tmpdirname,
+                    torch_dtype=torch_dtype,
+                    attn_implementation="eager",
+                )
+                model_eager = model_eager.eval().to(torch_device)
+
+            self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
+            self.assertTrue(model_eager.config._attn_implementation == "eager")
+
+            for name, submodule in model_eager.named_modules():
+                class_name = submodule.__class__.__name__
+                if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                    raise ValueError("The eager model should not have SDPA attention layers")
+
+            has_sdpa = False
+            for name, submodule in model_sdpa.named_modules():
+                class_name = submodule.__class__.__name__
+                if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                    has_sdpa = True
+                    break
+            if not has_sdpa and model_sdpa.config.model_type != "falcon":
+                raise ValueError("The SDPA model should have SDPA attention layers")
+
+            # We use these for loops instead of parameterized.expand just for the interest of avoiding loading/saving the model each time,
+            # but it would be nicer to have an efficient way to use parameterized.expand
+            cases = []
+            for use_mask in [True, False]:
+                for output_attentions in [True, False]:
+                    for enable_kernels in [False, True]:
+                        for batch_size in [1, 5]:
+                            cases.append(
+                                {
+                                    "use_mask": use_mask,
+                                    "output_attentions": output_attentions,
+                                    "enable_kernels": enable_kernels,
+                                    "batch_size": batch_size,
+                                }
+                            )
+
+            fail_cases = []
+            for case in cases:
+                use_mask = case["use_mask"]
+                output_attentions = case["output_attentions"]
+                enable_kernels = case["enable_kernels"]
+                batch_size = case["batch_size"]
+
+                dummy_pixel_values = inputs_dict["pixel_values"].to(torch_dtype)
+                dummy_input_ids = inputs_dict["input_ids"]
+
+                dummy_pixel_values = dummy_pixel_values[:batch_size]
+                dummy_input_ids = dummy_input_ids[:batch_size]
+
+                if not use_mask:
+                    dummy_attention_mask = None
+                else:
+                    dummy_attention_mask = inputs_dict["attention_mask"]
+                    dummy_attention_mask = dummy_attention_mask[:batch_size]
+
+                    dummy_attention_mask[:] = 1
+                    dummy_attention_mask[-1, -4:] = 0
+
+                processed_inputs = {
+                    "pixel_values": dummy_pixel_values,
+                    "input_ids": dummy_input_ids,
+                    "attention_mask": dummy_attention_mask,
+                    "output_attentions": output_attentions,
+                    "output_hidden_states": True,
+                }
+
+                failcase = (
+                    f"padding_side=left, use_mask={use_mask}, batch_size={batch_size}, enable_kernels={enable_kernels}"
+                )
+
+                with torch.no_grad():
+                    with torch.backends.cuda.sdp_kernel(
+                        enable_flash=enable_kernels,
+                        enable_math=True,
+                        enable_mem_efficient=enable_kernels,
+                    ):
+                        prepared_inputs = self._prepare_for_class(processed_inputs, model_class)
+                        outputs_eager = model_eager(**prepared_inputs)
+                        outputs_sdpa = model_sdpa(**prepared_inputs)
+
+                if torch_device in ["cpu", "cuda"]:
+                    atol = atols[torch_device, enable_kernels, torch_dtype]
+                    rtol = rtols[torch_device, enable_kernels, torch_dtype]
+                else:
+                    atol = 1e-7
+                    rtol = 1e-4
+
+                is_image_logits_close = torch.allclose(
+                    outputs_eager.logits_per_image, outputs_sdpa.logits_per_image, atol=atol, rtol=rtol
+                )
+                is_text_logits_close = torch.allclose(
+                    outputs_eager.logits_per_text, outputs_sdpa.logits_per_text, atol=atol, rtol=rtol
+                )
+                is_vision_hidden_stated_close = torch.allclose(
+                    outputs_eager.image_embeds, outputs_sdpa.image_embeds, atol=atol, rtol=rtol
+                )
+
+                is_text_hidden_stated_close = torch.allclose(
+                    outputs_eager.text_embeds, outputs_sdpa.text_embeds, atol=atol, rtol=rtol
+                )
+
+                if not is_image_logits_close:
+                    fail_cases.append(
+                        get_mean_reldiff(
+                            "image logits",
+                            failcase,
+                            outputs_sdpa.logits_per_image,
+                            outputs_eager.logits_per_image,
+                            atol,
+                            rtol,
+                        )
+                    )
+                if not is_text_logits_close:
+                    fail_cases.append(
+                        get_mean_reldiff(
+                            "text_logits",
+                            failcase,
+                            outputs_sdpa.logits_per_text,
+                            outputs_eager.logits_per_text,
+                            atol,
+                            rtol,
+                        )
+                    )
+
+                if not is_vision_hidden_stated_close:
+                    fail_cases.append(
+                        get_mean_reldiff(
+                            "vision hidden states",
+                            failcase,
+                            outputs_sdpa.image_embeds,
+                            outputs_eager.image_embeds,
+                            atol,
+                            rtol,
+                        )
+                    )
+                if not is_text_hidden_stated_close:
+                    fail_cases.append(
+                        get_mean_reldiff(
+                            "text hidden states",
+                            failcase,
+                            outputs_sdpa.text_embeds,
+                            outputs_eager.text_embeds,
+                            atol,
+                            rtol,
+                        )
+                    )
+
+        self.assertTrue(len(fail_cases) == 0, "\n".join(fail_cases))
 
 
 class SiglipForImageClassificationModelTester(SiglipModelTester):
