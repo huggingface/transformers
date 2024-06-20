@@ -730,9 +730,8 @@ def spectrogram_batch(
 
     # Split waveform into frames of frame_length size
     num_frames = int(1 + np.floor((padded_waveform_batch.shape[1] - frame_length) / hop_length))
-    true_num_frames = [
-        int(1 + np.floor((length - frame_length) / hop_length)) for length in original_waveform_lengths
-    ]  # these lengths will be used to remove padding later
+    # these lengths will be used to remove padding later
+    true_num_frames = [int(1 + np.floor((length - frame_length) / hop_length)) for length in original_waveform_lengths]
     num_batches = padded_waveform_batch.shape[0]
 
     num_frequency_bins = (fft_length // 2) + 1 if onesided else fft_length
