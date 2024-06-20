@@ -122,7 +122,10 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             gguf_param = load_gguf_checkpoint(kwargs.get("vocab_file"))
             architecture = gguf_param["config"]["model_type"]
             tokenizer_dict = gguf_param["tokenizer"]
-            fast_tokenizer = convert_gguf_tokenizer(architecture, tokenizer_dict)
+            fast_tokenizer, additional_kwargs = convert_gguf_tokenizer(architecture, tokenizer_dict)
+
+            if len(additional_kwargs) > 0:
+                kwargs.update(additional_kwargs)
         elif self.slow_tokenizer_class is not None:
             # We need to create and convert a slow tokenizer to build the backend
             slow_tokenizer = self.slow_tokenizer_class(*args, **kwargs)
