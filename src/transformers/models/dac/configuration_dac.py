@@ -24,7 +24,7 @@ logger = logging.get_logger(__name__)
 
 class DacConfig(PretrainedConfig):
     r"""
-    ```"""
+    """
 
     model_type = "dac"
 
