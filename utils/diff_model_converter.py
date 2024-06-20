@@ -370,7 +370,6 @@ class DiffConverterTransformer(CSTTransformer):
         self.transformers_imports = {}      # maps the imports name like "from transformers.models.xxx" to the parsed AST module
         self.imported_mapping = {}          # stores the name of the imported classes, with their source {"LlamaModel":"transformers.model.llama.modeling_llama"}
         self.visited_module = {}            # modules visited like "transformers.models.llama.modeling_llama"
-        self.visited_module_config = {}     # modules visited like "transformers.models.llama.modeling_llama" in config file, needed to not mix config vs modeling imports
         self.new_body = {}                  # store the new body, all global scope nodes should be added here
         self.inserted_deps = []             # nodes inserted via super dependency
         self.all_imports = []               # just stores all of the imports
@@ -463,7 +462,7 @@ class DiffConverterTransformer(CSTTransformer):
                     f"Tried parsing the name of the imported package from {super_file_name}, could not extract the model name"
                 )
 
-            visited_module = self.visited_module_config if "Config" in class_name else self.visited_module
+            visited_module = self.visited_module
             if super_file_name not in visited_module:  # only extract classes once
                 class_finder = find_classes_in_file(
                     self.transformers_imports[super_file_name],
@@ -517,8 +516,19 @@ class DiffConverterTransformer(CSTTransformer):
         config_imports = []
         for visiter in self.visited_module.values():
             dependency_imports.update({self.python_module.code_for_node(k): k for k in visiter.imports.values()})
-        for visiter in self.visited_module_config.values():
-            config_imports += list(visiter.imports.values())
+
+        # manually clean up if it's importing a config from configuration file (ruff doesn't do that)
+        config_imports = []
+        for i in list(dependency_imports.values()):
+            if (
+                hasattr(i.body[0], "module")
+                and isinstance(i.body[0].module, cst.Name)
+                and f"configuration_{self.model_name}" in i.body[0].module.value
+            ):
+                pass
+            else:
+                config_imports.append(i)
+
         if hasattr(self, "config_body"):
             self.config_body = list(imports.values()) + config_imports + self.config_body
         dependency_imports.update(imports)
