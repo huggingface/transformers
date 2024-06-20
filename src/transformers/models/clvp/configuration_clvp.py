@@ -351,9 +351,9 @@ class ClvpConfig(PretrainedConfig):
         decoder_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`ClvpDecoderConfig`].
         projection_dim (`int`, *optional*, defaults to 768):
-            Dimentionality of text and speech projection layers.
+            Dimensionality of text and speech projection layers.
         logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
-            The inital value of the *logit_scale* paramter. Default is used as per the original CLVP implementation.
+            The initial value of the *logit_scale* parameter. Default is used as per the original CLVP implementation.
         initializer_factor (`float`, *optional*, defaults to 1.0):
             A factor for initializing all weight matrices (should be kept to 1.0, used internally for initialization
             testing).

@@ -704,7 +704,7 @@ class TFWhisperModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
 
 def _load_datasamples(num_samples):
-    ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+    ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True)
     # automatic decoding with librispeech
     speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
 
@@ -795,7 +795,7 @@ def _test_large_generation_multilingual(in_queue, out_queue, timeout):
         processor = WhisperProcessor.from_pretrained("openai/whisper-large")
         model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
 
-        ds = load_dataset("common_voice", "ja", split="test", streaming=True)
+        ds = load_dataset("legacy-datasets/common_voice", "ja", split="test", streaming=True, trust_remote_code=True)
         ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
         input_speech = next(iter(ds))["audio"]["array"]
         input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="tf").input_features

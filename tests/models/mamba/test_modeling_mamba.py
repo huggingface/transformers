@@ -250,6 +250,8 @@ class MambaModelTester:
 @require_torch
 class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (MambaModel, MambaForCausalLM) if is_torch_available() else ()
+    all_generative_model_classes = (MambaForCausalLM,) if is_torch_available() else ()
+    has_attentions = False  # Mamba does not support attentions
     fx_compatible = False  # FIXME let's try to support this @ArthurZucker
     test_torchscript = False  # FIXME let's try to support this @ArthurZucker
     test_missing_keys = False
@@ -291,10 +293,6 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
     def test_config(self):
         self.config_tester.run_common_tests()
-
-    @unittest.skip("No attention in mamba")
-    def test_retain_grad_hidden_states_attentions(self):
-        pass
 
     @require_torch_multi_gpu
     def test_multi_gpu_data_parallel_forward(self):
@@ -363,14 +361,6 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                     if param.requires_grad:
                         # check if it's a ones like
                         self.assertTrue(torch.allclose(param.data, torch.ones_like(param.data), atol=1e-5, rtol=1e-5))
-
-    @unittest.skip("Mamba does not use attention")
-    def test_attention_outputs(self):
-        r"""
-        Overriding the test_attention_outputs test as the attention outputs of Mamba are different from other models
-        it has a shape `batch_size, seq_len, hidden_size`.
-        """
-        pass
 
     @slow
     def test_model_from_pretrained(self):
