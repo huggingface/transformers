@@ -625,14 +625,14 @@ class GGUFLlamaConverter(LlamaConverter):
         return tokenizer
 
     def decoder(self, replacement, add_prefix_space):
-        if not self.is_llama_3_tokenizer:
-            sequence = [
-                decoders.ByteFallback(),
-                decoders.Fuse(),
-                decoders.Replace("▁", " "),
-            ]
-        else:
-            sequence = [decoders.ByteLevel(add_prefix_space=False, trim_offsets=False, use_regex=True)]
+        sequence = [
+            decoders.ByteFallback(),
+            decoders.Fuse(),
+            decoders.Replace("▁", " "),
+        ]
+
+        if self.is_llama_3_tokenizer:
+            sequence += [decoders.ByteLevel(add_prefix_space=False, trim_offsets=False, use_regex=True)]
 
         if add_prefix_space:
             sequence += [decoders.Strip(content=" ", left=1)]
