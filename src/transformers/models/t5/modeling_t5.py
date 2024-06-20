@@ -591,6 +591,24 @@ class T5SdpaAttention(T5Attention):
         # Input is (batch_size, seq_length, dim)
         # Mask is (batch_size, key_length) (non-causal) or (batch_size, key_length, key_length)
         # past_key_value[0] is (batch_size, n_heads, q_len - 1, dim_per_head)
+
+        if output_attentions:
+            logger.warning_once(
+                "T5Model is using T5SdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
+                'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+            )
+            return super().forward(
+                hidden_states=hidden_states,
+                mask=mask,
+                key_value_states=key_value_states,
+                position_bias=position_bias,
+                past_key_value=past_key_value,
+                layer_head_mask=layer_head_mask,
+                query_length=query_length,
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+            )
+
         batch_size, seq_length = hidden_states.shape[:2]
 
         real_seq_length = seq_length
@@ -693,8 +711,6 @@ class T5SdpaAttention(T5Attention):
         present_key_value_state = (key_states, value_states) if (self.is_decoder and use_cache) else None
         outputs = (attn_output,) + (present_key_value_state,) + (position_bias,)
 
-        if output_attentions:
-            outputs = outputs + (attn_weights,)
         return outputs
 
 
