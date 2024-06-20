@@ -11,7 +11,6 @@ from torch.nn import CrossEntropyLoss
 import torch.nn.functional as F
 
 
-from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -51,7 +50,7 @@ def _get_unpad_data(attention_mask):
         cu_seqlens,
         max_seqlen_in_batch,
     )
-
+    
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
@@ -63,21 +62,7 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
 
     inverted_mask = 1.0 - expanded_mask
 
-    return inverted_mask.masked_fill(inverted_mask.to(torch.bool), -100.0)
-
-    # return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
-
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
+    return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, device: torch.device, past_key_values_length: int = 0):
     """
@@ -376,9 +361,9 @@ class Kosmos2_5VisionAttention(nn.Module):
 
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.key_value_proj_dim)
 
-        # if attention_mask is not None:  # no matter the length, we just slice it
-        #     causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        #     attn_weights = attn_weights + causal_mask
+        if attention_mask is not None:
+            causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+            attn_weights = attn_weights + causal_mask
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
         attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
@@ -576,14 +561,51 @@ class Kosmos2_5VisionSdpaAttention(Kosmos2_5VisionAttention):
                 layer_head_mask=layer_head_mask,
                 output_attentions=output_attentions,
             )
-        pass
+        batch_size, seq_length, _ = hidden_states.size()
 
+        query_states = self.query(hidden_states)
+        key_states = self.key(hidden_states)
+        value_states = self.value(hidden_states)
+
+        query_states = query_states.view(batch_size, seq_length, self.n_heads, self.key_value_proj_dim)
+        key_states = key_states.view(batch_size, seq_length, self.n_heads, self.key_value_proj_dim)
+        value_states = value_states.view(batch_size, seq_length, self.n_heads, self.key_value_proj_dim)
+
+        causal_mask = attention_mask
+        print(attention_mask.shape)
+        if attention_mask is not None:
+            causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
+
+        if query_states.device.type == "cuda" and causal_mask is not None:
+            query_states = query_states.contiguous()
+            key_states = key_states.contiguous()
+            value_states = value_states.contiguous()
+
+        # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
+        # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
+        is_causal = True if causal_mask is None and seq_length > 1 else False
+
+        attn_output = torch.nn.functional.scaled_dot_product_attention(
+            query_states,
+            key_states,
+            value_states,
+            attn_mask=causal_mask,
+            dropout_p=self.attention_dropout if self.training else 0.0,
+            is_causal=is_causal,
+        )
+
+        attn_output = attn_output.transpose(1, 2).contiguous()
+        attn_output = attn_output.view(batch_size, seq_length, -1)
+
+        attn_output = self.o_proj(attn_output)
+
+        return attn_output, None
 
 
 KOSMOS2_5_VISION_ATTENTION_CLASSES = {
     "eager": Kosmos2_5VisionAttention,
     "flash_attention_2": Kosmos2_5VisionFlashAttention2,
-    # "sdpa": Kosmos2_5VisionSdpaAttention,
+    "sdpa": Kosmos2_5VisionSdpaAttention,
 }
 
 # Copied from ...models.pix2struct.modeling_pix2struct.Pix2StructVisionLayer -> Kosmos2_5VisionLayer
@@ -592,10 +614,26 @@ class Kosmos2_5VisionLayer(nn.Module):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = KOSMOS2_5_VISION_ATTENTION_CLASSES[config._attn_implementation](config)
+        self.config = config
+        # self.attention = KOSMOS2_5_VISION_ATTENTION_CLASSES[config._attn_implementation](config)
+        self.attention = KOSMOS2_5_VISION_ATTENTION_CLASSES["eager"](config)
         self.mlp =  Kosmos2_5VisionMlp(config)
         self.pre_mlp_layer_norm = Kosmos2_5LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.pre_attention_layer_norm = Kosmos2_5LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+    
+    def _prepare_attention_mask(self, attention_mask, input_shape, inputs_embeds):
+        if self.config._attn_implementation == "flash_attention_2":
+            if attention_mask is not None and 0.0 in attention_mask:
+                return attention_mask
+            return None
+
+        combined_attention_mask = None
+        if attention_mask is not None:
+            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+            expanded_attn_mask = _expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]).to(
+                inputs_embeds.device
+            )
+        return expanded_attn_mask
 
     def forward(
         self,
@@ -608,7 +646,7 @@ class Kosmos2_5VisionLayer(nn.Module):
 
         # in  Kosmos2_5Vision, layernorm is applied before self-attention
         hidden_states = self.pre_attention_layer_norm(hidden_states)
-
+        attention_mask = self._prepare_attention_mask(attention_mask, hidden_states.shape[:2], hidden_states)
         self_attention_outputs, _ = self.attention(
             hidden_states,
             attention_mask=attention_mask,
@@ -952,14 +990,10 @@ class Kosmos2_5TextAttention(nn.Module):
             # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
             # if encoder bi-directional self-attention `past_key_value` is always `None`
             past_key_value = (key_states, value_states)
-
-        src_len = key_states.size(2)
+        
         if attention_mask is not None:
-            if attention_mask.size() != (batch_size, 1, seq_length, src_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(batch_size, 1, seq_length, src_len)}, but is {attention_mask.size()}"
-                )
-            attn_weights = attn_weights + attention_mask
+            causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+            attn_weights = attn_weights + causal_mask
 
         # upcast attention to fp32
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
@@ -1009,29 +1043,34 @@ class Kosmos2_5TextFlashAttention2(Kosmos2_5TextAttention):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Length x Channel"""
         output_attentions = False
-        is_cross_attention = encoder_hidden_states is not None
-        batch_size, seq_length, _ = hidden_states.size()
-        
-        # (batch_size, seq_length, self.n_heads , self.key_value_proj_dim)
+        bsz, q_len, _ = hidden_states.size()
+
         query_states = self.q_proj(hidden_states)
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
-        query_states = query_states.view(batch_size, seq_length, self.num_heads, self.head_dim)
-        key_states = key_states.view(batch_size, seq_length, self.num_heads, self.head_dim)
-        value_states = value_states.view(batch_size, seq_length, self.num_heads, self.head_dim)
+        is_cross_attention = encoder_hidden_states is not None
 
-        if past_key_value is not None:
-            key_states = torch.cat([past_key_value[0], key_states], dim=2)
-            value_states = torch.cat([past_key_value[1], value_states], dim=2)
+        # use encoder_hidden_states if cross attention
+        current_states = encoder_hidden_states if encoder_hidden_states is not None else hidden_states
+        # checking that the `sequence_length` of the `past_key_value` is the same as the he provided
+        # `encoder_hidden_states` to support prefix tuning
+        if is_cross_attention and past_key_value and past_key_value[0].shape[2] == current_states.shape[1]:
+            # reuse k,v, cross_attentions
+            key_states = past_key_value[0]
+            value_states = past_key_value[1]
         else:
-            key_states = key_states
-            value_states = value_states
-        
+            key_states = key_states.view(bsz, q_len, self.num_heads, self.head_dim)
+            value_states = value_states.view(bsz, q_len, self.num_heads, self.head_dim)
+            if past_key_value is not None and not is_cross_attention:
+                # reuse k, v, self_attention
+                key_states = torch.cat([past_key_value[0], key_states], dim=1)
+                value_states = torch.cat([past_key_value[1], value_states], dim=1)
+
         if self.is_decoder:
             past_key_value = (key_states, value_states)
-        
-        query_states = self._shape(self.q_proj(hidden_states))
+
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim)
 
         input_dtype = query_states.dtype
 
@@ -1055,9 +1094,9 @@ class Kosmos2_5TextFlashAttention2(Kosmos2_5TextAttention):
             value_states = value_states.to(target_dtype)
         
         attn_output = self._flash_attention_forward(
-            query_states, key_states, value_states, attention_mask, seq_length, dropout=self.dropout
+            query_states, key_states, value_states, attention_mask, q_len, dropout=self.dropout
         )
-        attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
+        attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
 
 
         if self.inner_attn_ln is not None:
@@ -1167,11 +1206,115 @@ class Kosmos2_5TextFlashAttention2(Kosmos2_5TextAttention):
             (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
         )
 
+class Kosmos2_5TextSdpaAttention(Kosmos2_5TextAttention):
+    """
+    Llama attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
+    `LlamaAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
+    SDPA API.
+    """
+    # Adapted from LlamaAttention.forward
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        layer_head_mask: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Cache] = None,
+        output_attentions: bool = False,
+        use_cache: bool = False,
+        cache_position: Optional[torch.LongTensor] = None,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        if output_attentions:
+            # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
+            logger.warning_once(
+                "LlamaModel is using LlamaSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
+                'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+            )
+            return super().forward(
+                hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                past_key_value=past_key_value,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                cache_position=cache_position,
+            )
+
+        bsz, q_len, _ = hidden_states.size()
+
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
+
+        is_cross_attention = encoder_hidden_states is not None
+
+        # use encoder_hidden_states if cross attention
+        current_states = encoder_hidden_states if encoder_hidden_states is not None else hidden_states
+        # checking that the `sequence_length` of the `past_key_value` is the same as the he provided
+        # `encoder_hidden_states` to support prefix tuning
+        if is_cross_attention and past_key_value and past_key_value[0].shape[2] == current_states.shape[1]:
+            # reuse k,v, cross_attentions
+            key_states = past_key_value[0]
+            value_states = past_key_value[1]
+        else:
+            key_states = key_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+            value_states = value_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+            if past_key_value is not None and not is_cross_attention:
+                # reuse k, v, self_attention
+                key_states = torch.cat([past_key_value[0], key_states], dim=2)
+                value_states = torch.cat([past_key_value[1], value_states], dim=2)
+
+        if self.is_decoder:
+            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
+            # Further calls to cross_attention layer can then reuse all cross-attention
+            # key/value_states (first "if" case)
+            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
+            # all previous decoder key/value_states. Further calls to uni-directional self-attention
+            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
+            # if encoder bi-directional self-attention `past_key_value` is always `None`
+            past_key_value = (key_states, value_states)
+
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+    
+        causal_mask = attention_mask
+        if attention_mask is not None:
+            causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
+
+        # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
+        # Reference: https://github.com/pytorch/pytorch/issues/112577.
+        if query_states.device.type == "cuda" and causal_mask is not None:
+            query_states = query_states.contiguous()
+            key_states = key_states.contiguous()
+            value_states = value_states.contiguous()
+
+        # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
+        # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
+        is_causal = True if causal_mask is None and q_len > 1 else False
+
+        attn_output = torch.nn.functional.scaled_dot_product_attention(
+            query_states,
+            key_states,
+            value_states,
+            attn_mask=causal_mask,
+            dropout_p=self.dropout if self.training else 0.0,
+            is_causal=is_causal,
+        )
+
+        attn_output = attn_output.transpose(1, 2).contiguous()
+        attn_output = attn_output.view(bsz, q_len, -1)
+
+        if self.inner_attn_ln is not None:
+            attn_output = self.inner_attn_ln(attn_output)
+
+        attn_output = self.out_proj(attn_output)
+
+        return attn_output, None, past_key_value
 
 KOSMOS2_5_TEXT_ATTENTION_CLASSES = {
     "eager": Kosmos2_5TextAttention,
     "flash_attention_2": Kosmos2_5TextFlashAttention2,
-    # "sdpa": Kosmos2_5TextSdpaAttention,
+    "sdpa": Kosmos2_5TextSdpaAttention,
 }
 
 class Kosmos2_5TextBlock(nn.Module):
@@ -1179,8 +1322,6 @@ class Kosmos2_5TextBlock(nn.Module):
         super().__init__()
         self.embed_dim = config.embed_dim
 
-        # trying flash_attention_2
-        # self.self_attn = KOSMOS2_5_TEXT_ATTENTION_CLASSES["flash_attention_2"](
         self.self_attn = KOSMOS2_5_TEXT_ATTENTION_CLASSES[config._attn_implementation](
             config,
             embed_dim=self.embed_dim,
@@ -1315,6 +1456,10 @@ class Kosmos2_5TextTransformer(nn.Module):
         self.gradient_checkpointing = False
 
     def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
+        if self.config._attn_implementation == "flash_attention_2":
+            if attention_mask is not None and 0.0 in attention_mask:
+                return attention_mask
+            return None
         # create causal mask
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
         combined_attention_mask = None
@@ -1370,8 +1515,8 @@ class Kosmos2_5TextTransformer(nn.Module):
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
-        return hidden_states
-
+        return hidden_states    
+ 
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1423,8 +1568,7 @@ class Kosmos2_5TextTransformer(nn.Module):
             past_key_values_length=past_key_values_length,
             position_ids=position_ids,
         )
-
-        attention_mask = self._prepare_decoder_attention_mask(
+        causal_mask  = self._prepare_decoder_attention_mask(
             attention_mask, input_shape, hidden_states, past_key_values_length
         )
 
@@ -1472,7 +1616,7 @@ class Kosmos2_5TextTransformer(nn.Module):
                 layer_outputs = self._gradient_checkpointing_func(
                     decoder_layer.__call__,
                     hidden_states,
-                    attention_mask,
+                    causal_mask,
                     encoder_hidden_states,
                     encoder_attention_mask,
                     head_mask[idx] if head_mask is not None else None,
@@ -1484,7 +1628,7 @@ class Kosmos2_5TextTransformer(nn.Module):
             else:
                 layer_outputs = decoder_layer(
                     hidden_states,
-                    attention_mask=attention_mask,
+                    attention_mask=causal_mask,
                     encoder_hidden_states=encoder_hidden_states,
                     encoder_attention_mask=encoder_attention_mask,
                     layer_head_mask=(head_mask[idx] if head_mask is not None else None),
