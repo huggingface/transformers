@@ -1,3 +1,17 @@
+# coding=utf-8
+# Copyright 2024 Descript and The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """Feature extractor class for DAC"""
 
 from typing import List, Optional, Union
@@ -27,13 +41,8 @@ class DacFeatureExtractor(SequenceFeatureExtractor):
             The sampling rate at which the audio waveform should be digitalized expressed in hertz (Hz).
         padding_value (`float`, *optional*, defaults to 0.0):
             The value that is used to fill the padding values.
-        chunk_length_s (`float`, *optional*):
-            If defined the audio is pre-processed into chunks of lengths `chunk_length_s` and then encoded.
         hop_length (`int`, *optional*, defaults to 512):
             Overlap length between successive windows. 
-        overlap (`float`, *optional*):
-            Defines the overlap between each chunk. It is used to compute the `chunk_stride` using the following
-            formulae : `int((1.0 - self.overlap) * self.chunk_length)`.
     """
 
     model_input_names = ["input_values", "n_quantizers"]
@@ -43,31 +52,11 @@ class DacFeatureExtractor(SequenceFeatureExtractor):
         feature_size: int = 1,
         sampling_rate: int = 16000,
         padding_value: float = 0.0,
-        chunk_length_s: float = None,
         hop_length: int = 512, 
-        overlap: float = None,
         **kwargs,
     ):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
-        self.chunk_length_s = chunk_length_s
-        self.overlap = overlap
         self.hop_length = hop_length
-
-    # This is a property because you might want to change the chunk_length_s on the fly
-    @property
-    def chunk_length(self) -> Optional[int]:
-        if self.chunk_length_s is None:
-            return None
-        else:
-            return int(self.chunk_length_s * self.sampling_rate)
-
-    # This is a property because you might want to change the chunk_length_s on the fly
-    @property
-    def chunk_stride(self) -> Optional[int]:
-        if self.chunk_length_s is None or self.overlap is None:
-            return None
-        else:
-            return max(1, int((1.0 - self.overlap) * self.chunk_length))
 
     def __call__(
         self,
@@ -171,6 +160,7 @@ class DacFeatureExtractor(SequenceFeatureExtractor):
         right_pad = math.ceil(length / self.hop_length) * self.hop_length - length
         padded_inputs.input_values = np.pad(padded_inputs.input_values, ((0, 0), (0, right_pad)))
         padded_inputs.input_values = padded_inputs.input_values[:,np.newaxis, :] 
+        
         input_values = []
         for example in padded_inputs.pop("input_values"):
             if self.feature_size == 1:
