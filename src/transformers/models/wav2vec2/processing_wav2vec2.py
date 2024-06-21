@@ -80,8 +80,8 @@ class Wav2Vec2Processor(ProcessorMixin):
 
     def __call__(
         self,
-        text: Optional[Union[str, List[str], TextInput, PreTokenizedInput]] = None,
         audio: AudioInput = None,
+        text: Optional[Union[str, List[str], TextInput, PreTokenizedInput]] = None,
         images=None,
         videos=None,
         **kwargs: Unpack[Wav2Vec2ProcessorKwargs],
