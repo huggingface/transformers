@@ -854,6 +854,12 @@ class WhisperTokenizer(PreTrainedTokenizer):
     def _strip_prompt(self, token_ids: List[int], prompt_token_id: int, decoder_start_token_id: int):
         if not isinstance(token_ids, list):
             token_ids = self._convert_to_list(token_ids)
+
+        # handle case of empty token_ids for decoding with timestamps.
+        # at this point token_ids is a list, so it is safe to use if not check.
+        if not token_ids:
+            return token_ids
+
         has_prompt = token_ids[0] == prompt_token_id
         if has_prompt:
             if decoder_start_token_id in token_ids:
