@@ -622,7 +622,7 @@ class SpmConverter(Converter):
     def converted(self) -> Tokenizer:
         tokenizer = self.tokenizer(self.proto)
 
-        # Add user defined symbols
+        # Add user defined symbols (type == 4) from sentnecepiece (https://github.com/google/sentencepiece/blob/6225e08edb2577757163b3f5dbba4c0b670ef445/src/sentencepiece_model.proto#L299C29-L299C33)
         user_defined_symbols = [
             AddedToken(token, normalized=False, special=False)
             for token in [p.piece for p in self.proto.pieces if p.type == 4]
