@@ -193,6 +193,19 @@ class GemmaIntegrationTest(unittest.TestCase):
             },
         )
 
+    def test_user_added_tokens(self):
+        # Ensure that user added tokens are not split in the fast tokenizer
+        slow_tokenizer = self.tokenizer
+        fast_tokenizer = self.rust_tokenizer
+
+        user_added_token = "<mask>"
+
+        slow_tokens = slow_tokenizer.convert_ids_to_tokens(slow_tokenizer.encode(user_added_token))
+        fast_tokens = slow_tokenizer.convert_ids_to_tokens(fast_tokenizer.encode(user_added_token))
+
+        self.assertTrue(user_added_token in fast_tokens)
+        self.assertEqual(slow_tokens, fast_tokens)
+
     def test_fast_special_tokens(self):
         slow_tokenizer = self.tokenizer
         fast_tokenizer = self.rust_tokenizer
@@ -314,7 +327,7 @@ class GemmaIntegrationTest(unittest.TestCase):
         pyth_tokenizer = self.tokenizer
         rust_tokenizer = self.rust_tokenizer
 
-        dataset = load_dataset("code_x_glue_ct_code_to_text", "go")
+        dataset = load_dataset("google/code_x_glue_ct_code_to_text", "go")
         for item in tqdm.tqdm(dataset["validation"]):
             string = item["code"]
             encoded1 = pyth_tokenizer.encode(string)
@@ -333,7 +346,7 @@ class GemmaIntegrationTest(unittest.TestCase):
 
             self.assertEqual(decoded1, decoded2)
 
-        dataset = load_dataset("xnli", "all_languages")
+        dataset = load_dataset("facebook/xnli", "all_languages")
 
         for item in tqdm.tqdm(dataset["train"]):
             for string in item["premise"].values():
