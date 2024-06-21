@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 SenseTime and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 Baidu Inc and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,13 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch Deformable DETR model."""
+"""PyTorch RT-DETR model."""
 
-import copy
 import math
 import os
 import warnings
 from dataclasses import dataclass
+from functools import lru_cache, partial
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -28,34 +28,34 @@ from torch import Tensor, nn
 from torch.autograd import Function
 from torch.autograd.function import once_differentiable
 
-from ...activations import ACT2FN
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...activations import ACT2CLS, ACT2FN
+from ...image_transforms import center_to_corners_format, corners_to_center_format
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import meshgrid
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_accelerate_available,
     is_ninja_available,
     is_scipy_available,
-    is_timm_available,
     is_torch_cuda_available,
-    is_vision_available,
     logging,
     replace_return_docstrings,
     requires_backends,
 )
 from ...utils.backbone_utils import load_backbone
-from .configuration_deformable_detr import DeformableDetrConfig
+from .configuration_rt_detr import RTDetrConfig
 
+
+if is_scipy_available():
+    from scipy.optimize import linear_sum_assignment
 
 logger = logging.get_logger(__name__)
 
 MultiScaleDeformableAttention = None
 
 
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.load_cuda_kernels
 def load_cuda_kernels():
     from torch.utils.cpp_extension import load
 
@@ -86,29 +86,7 @@ def load_cuda_kernels():
     )
 
 
-if is_vision_available():
-    from transformers.image_transforms import center_to_corners_format
-
-
-if is_accelerate_available():
-    from accelerate import PartialState
-    from accelerate.utils import reduce
-
-
-if is_timm_available():
-    from timm import create_model
-
-
-if is_scipy_available():
-    from scipy.optimize import linear_sum_assignment
-
-
-logger = logging.get_logger(__name__)
-
-_CONFIG_FOR_DOC = "DeformableDetrConfig"
-_CHECKPOINT_FOR_DOC = "sensetime/deformable-detr"
-
-
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.MultiScaleDeformableAttentionFunction
 class MultiScaleDeformableAttentionFunction(Function):
     @staticmethod
     def forward(
@@ -157,10 +135,17 @@ class MultiScaleDeformableAttentionFunction(Function):
         return grad_value, None, None, grad_sampling_loc, grad_attn_weight, None
 
 
+logger = logging.get_logger(__name__)
+
+_CONFIG_FOR_DOC = "RTDetrConfig"
+# TODO: Replace all occurrences of the checkpoint with the final one
+_CHECKPOINT_FOR_DOC = "PekingU/rtdetr_r50vd"
+
+
 @dataclass
-class DeformableDetrDecoderOutput(ModelOutput):
+class RTDetrDecoderOutput(ModelOutput):
     """
-    Base class for outputs of the DeformableDetrDecoder. This class adds two attributes to
+    Base class for outputs of the RTDetrDecoder. This class adds two attributes to
     BaseModelOutputWithCrossAttentions, namely:
     - a stacked tensor of intermediate decoder hidden states (i.e. the output of each decoder layer)
     - a stacked tensor of intermediate reference points.
@@ -170,6 +155,8 @@ class DeformableDetrDecoderOutput(ModelOutput):
             Sequence of hidden-states at the output of the last layer of the model.
         intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
             Stacked intermediate hidden states (output of each layer of the decoder).
+        intermediate_logits (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, sequence_length, config.num_labels)`):
+            Stacked intermediate logits (logits of each layer of the decoder).
         intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, sequence_length, hidden_size)`):
             Stacked intermediate reference points (reference points of each layer of the decoder).
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
@@ -188,6 +175,7 @@ class DeformableDetrDecoderOutput(ModelOutput):
 
     last_hidden_state: torch.FloatTensor = None
     intermediate_hidden_states: torch.FloatTensor = None
+    intermediate_logits: torch.FloatTensor = None
     intermediate_reference_points: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -195,17 +183,17 @@ class DeformableDetrDecoderOutput(ModelOutput):
 
 
 @dataclass
-class DeformableDetrModelOutput(ModelOutput):
+class RTDetrModelOutput(ModelOutput):
     """
-    Base class for outputs of the Deformable DETR encoder-decoder model.
+    Base class for outputs of the RT-DETR encoder-decoder model.
 
     Args:
-        init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
-            Initial reference points sent through the Transformer decoder.
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the decoder of the model.
         intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
             Stacked intermediate hidden states (output of each layer of the decoder).
+        intermediate_logits (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, sequence_length, config.num_labels)`):
+            Stacked intermediate logits (logits of each layer of the decoder).
         intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
             Stacked intermediate reference points (reference points of each layer of the decoder).
         decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
@@ -230,17 +218,27 @@ class DeformableDetrModelOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_queries, num_heads, 4, 4)`.
             Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
             self-attention heads.
+        init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
+            Initial reference points sent through the Transformer decoder.
+        enc_topk_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`):
+            Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
+            picked as region proposals in the encoder stage. Output of bounding box binary classification (i.e.
+            foreground and background).
+        enc_topk_bboxes (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`):
+            Logits of predicted bounding boxes coordinates in the encoder stage.
         enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
             Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
             picked as region proposals in the first stage. Output of bounding box binary classification (i.e.
             foreground and background).
         enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
             Logits of predicted bounding boxes coordinates in the first stage.
+        denoising_meta_values (`dict`):
+            Extra dictionary for the denoising related values
     """
 
-    init_reference_points: torch.FloatTensor = None
     last_hidden_state: torch.FloatTensor = None
     intermediate_hidden_states: torch.FloatTensor = None
+    intermediate_logits: torch.FloatTensor = None
     intermediate_reference_points: torch.FloatTensor = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -248,14 +246,18 @@ class DeformableDetrModelOutput(ModelOutput):
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    init_reference_points: torch.FloatTensor = None
+    enc_topk_logits: Optional[torch.FloatTensor] = None
+    enc_topk_bboxes: Optional[torch.FloatTensor] = None
     enc_outputs_class: Optional[torch.FloatTensor] = None
     enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
+    denoising_meta_values: Optional[Dict] = None
 
 
 @dataclass
-class DeformableDetrObjectDetectionOutput(ModelOutput):
+class RTDetrObjectDetectionOutput(ModelOutput):
     """
-    Output type of [`DeformableDetrForObjectDetection`].
+    Output type of [`RTDetrForObjectDetection`].
 
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
@@ -269,14 +271,20 @@ class DeformableDetrObjectDetectionOutput(ModelOutput):
         pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding). You can use [`~DeformableDetrProcessor.post_process_object_detection`] to retrieve the
-            unnormalized bounding boxes.
+            possible padding). You can use [`~RTDetrImageProcessor.post_process_object_detection`] to retrieve the
+            unnormalized (absolute) bounding boxes.
         auxiliary_outputs (`list[Dict]`, *optional*):
-            Optional, only returned when auxilary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
+            Optional, only returned when auxiliary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
             and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
             `pred_boxes`) for each decoder layer.
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the decoder of the model.
+        intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
+            Stacked intermediate hidden states (output of each layer of the decoder).
+        intermediate_logits (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, config.num_labels)`):
+            Stacked intermediate logits (logits of each layer of the decoder).
+        intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+            Stacked intermediate reference points (reference points of each layer of the decoder).
         decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, num_queries, hidden_size)`. Hidden-states of the decoder at the output of each layer
@@ -296,21 +304,23 @@ class DeformableDetrObjectDetectionOutput(ModelOutput):
             shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the encoder at the output of each
             layer plus the initial embedding outputs.
         encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length, num_heads, 4,
-            4)`. Attentions weights of the encoder, after the attention softmax, used to compute the weighted average
-            in the self-attention heads.
-        intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
-            Stacked intermediate hidden states (output of each layer of the decoder).
-        intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
-            Stacked intermediate reference points (reference points of each layer of the decoder).
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_queries, num_heads, 4, 4)`.
+            Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
+            self-attention heads.
         init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
             Initial reference points sent through the Transformer decoder.
+        enc_topk_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+            Logits of predicted bounding boxes coordinates in the encoder.
+        enc_topk_bboxes (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+            Logits of predicted bounding boxes coordinates in the encoder.
         enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
             Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
             picked as region proposals in the first stage. Output of bounding box binary classification (i.e.
             foreground and background).
         enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
             Logits of predicted bounding boxes coordinates in the first stage.
+        denoising_meta_values (`dict`):
+            Extra dictionary for the denoising related values
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -318,24 +328,29 @@ class DeformableDetrObjectDetectionOutput(ModelOutput):
     logits: torch.FloatTensor = None
     pred_boxes: torch.FloatTensor = None
     auxiliary_outputs: Optional[List[Dict]] = None
-    init_reference_points: Optional[torch.FloatTensor] = None
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    intermediate_hidden_states: Optional[torch.FloatTensor] = None
-    intermediate_reference_points: Optional[torch.FloatTensor] = None
+    last_hidden_state: torch.FloatTensor = None
+    intermediate_hidden_states: torch.FloatTensor = None
+    intermediate_logits: torch.FloatTensor = None
+    intermediate_reference_points: torch.FloatTensor = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    enc_outputs_class: Optional = None
-    enc_outputs_coord_logits: Optional = None
+    init_reference_points: Optional[Tuple[torch.FloatTensor]] = None
+    enc_topk_logits: Optional[torch.FloatTensor] = None
+    enc_topk_bboxes: Optional[torch.FloatTensor] = None
+    enc_outputs_class: Optional[torch.FloatTensor] = None
+    enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
+    denoising_meta_values: Optional[Dict] = None
 
 
-def _get_clones(module, N):
-    return nn.ModuleList([copy.deepcopy(module) for i in range(N)])
+def _get_clones(partial_module, N):
+    return nn.ModuleList([partial_module() for i in range(N)])
 
 
+# Copied from transformers.models.conditional_detr.modeling_conditional_detr.inverse_sigmoid
 def inverse_sigmoid(x, eps=1e-5):
     x = x.clamp(min=0, max=1)
     x1 = x.clamp(min=eps)
@@ -343,8 +358,8 @@ def inverse_sigmoid(x, eps=1e-5):
     return torch.log(x1 / x2)
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrFrozenBatchNorm2d with Detr->DeformableDetr
-class DeformableDetrFrozenBatchNorm2d(nn.Module):
+# Copied from transformers.models.detr.modeling_detr.DetrFrozenBatchNorm2d with Detr->RTDetr
+class RTDetrFrozenBatchNorm2d(nn.Module):
     """
     BatchNorm2d where the batch statistics and the affine parameters are fixed.
 
@@ -383,10 +398,10 @@ class DeformableDetrFrozenBatchNorm2d(nn.Module):
         return x * scale + bias
 
 
-# Copied from transformers.models.detr.modeling_detr.replace_batch_norm with Detr->DeformableDetr
+# Copied from transformers.models.detr.modeling_detr.replace_batch_norm with Detr->RTDetr
 def replace_batch_norm(model):
     r"""
-    Recursively replace all `torch.nn.BatchNorm2d` with `DeformableDetrFrozenBatchNorm2d`.
+    Recursively replace all `torch.nn.BatchNorm2d` with `RTDetrFrozenBatchNorm2d`.
 
     Args:
         model (torch.nn.Module):
@@ -394,7 +409,7 @@ def replace_batch_norm(model):
     """
     for name, module in model.named_children():
         if isinstance(module, nn.BatchNorm2d):
-            new_module = DeformableDetrFrozenBatchNorm2d(module.num_features)
+            new_module = RTDetrFrozenBatchNorm2d(module.num_features)
 
             if not module.weight.device == torch.device("meta"):
                 new_module.weight.data.copy_(module.weight)
@@ -408,70 +423,151 @@ def replace_batch_norm(model):
             replace_batch_norm(module)
 
 
-class DeformableDetrConvEncoder(nn.Module):
+def get_contrastive_denoising_training_group(
+    targets,
+    num_classes,
+    num_queries,
+    class_embed,
+    num_denoising_queries=100,
+    label_noise_ratio=0.5,
+    box_noise_scale=1.0,
+):
     """
-    Convolutional backbone, using either the AutoBackbone API or one from the timm library.
+    Creates a contrastive denoising training group using ground-truth samples. It adds noise to labels and boxes.
 
-    nn.BatchNorm2d layers are replaced by DeformableDetrFrozenBatchNorm2d as defined above.
+    Args:
+        targets (`List[dict]`):
+            The target objects, each containing 'class_labels' and 'boxes' for objects in an image.
+        num_classes (`int`):
+            Total number of classes in the dataset.
+        num_queries (`int`):
+            Number of query slots in the transformer.
+        class_embed (`callable`):
+            A function or a model layer to embed class labels.
+        num_denoising_queries (`int`, *optional*, defaults to 100):
+            Number of denoising queries.
+        label_noise_ratio (`float`, *optional*, defaults to 0.5):
+            Ratio of noise applied to labels.
+        box_noise_scale (`float`, *optional*, defaults to 1.0):
+            Scale of noise applied to bounding boxes.
+    Returns:
+        `tuple` comprising various elements:
+        - **input_query_class** (`torch.FloatTensor`) --
+          Class queries with applied label noise.
+        - **input_query_bbox** (`torch.FloatTensor`) --
+          Bounding box queries with applied box noise.
+        - **attn_mask** (`torch.FloatTensor`) --
+           Attention mask for separating denoising and reconstruction queries.
+        - **denoising_meta_values** (`dict`) --
+          Metadata including denoising positive indices, number of groups, and split sizes.
+    """
 
+    if num_denoising_queries <= 0:
+        return None, None, None, None
+
+    num_ground_truths = [len(t["class_labels"]) for t in targets]
+    device = targets[0]["class_labels"].device
+
+    max_gt_num = max(num_ground_truths)
+    if max_gt_num == 0:
+        return None, None, None, None
+
+    num_groups_denoising_queries = num_denoising_queries // max_gt_num
+    num_groups_denoising_queries = 1 if num_groups_denoising_queries == 0 else num_groups_denoising_queries
+    # pad gt to max_num of a batch
+    batch_size = len(num_ground_truths)
+
+    input_query_class = torch.full([batch_size, max_gt_num], num_classes, dtype=torch.int32, device=device)
+    input_query_bbox = torch.zeros([batch_size, max_gt_num, 4], device=device)
+    pad_gt_mask = torch.zeros([batch_size, max_gt_num], dtype=torch.bool, device=device)
+
+    for i in range(batch_size):
+        num_gt = num_ground_truths[i]
+        if num_gt > 0:
+            input_query_class[i, :num_gt] = targets[i]["class_labels"]
+            input_query_bbox[i, :num_gt] = targets[i]["boxes"]
+            pad_gt_mask[i, :num_gt] = 1
+    # each group has positive and negative queries.
+    input_query_class = input_query_class.tile([1, 2 * num_groups_denoising_queries])
+    input_query_bbox = input_query_bbox.tile([1, 2 * num_groups_denoising_queries, 1])
+    pad_gt_mask = pad_gt_mask.tile([1, 2 * num_groups_denoising_queries])
+    # positive and negative mask
+    negative_gt_mask = torch.zeros([batch_size, max_gt_num * 2, 1], device=device)
+    negative_gt_mask[:, max_gt_num:] = 1
+    negative_gt_mask = negative_gt_mask.tile([1, num_groups_denoising_queries, 1])
+    positive_gt_mask = 1 - negative_gt_mask
+    # contrastive denoising training positive index
+    positive_gt_mask = positive_gt_mask.squeeze(-1) * pad_gt_mask
+    denoise_positive_idx = torch.nonzero(positive_gt_mask)[:, 1]
+    denoise_positive_idx = torch.split(
+        denoise_positive_idx, [n * num_groups_denoising_queries for n in num_ground_truths]
+    )
+    # total denoising queries
+    num_denoising_queries = int(max_gt_num * 2 * num_groups_denoising_queries)
+
+    if label_noise_ratio > 0:
+        mask = torch.rand_like(input_query_class, dtype=torch.float) < (label_noise_ratio * 0.5)
+        # randomly put a new one here
+        new_label = torch.randint_like(mask, 0, num_classes, dtype=input_query_class.dtype)
+        input_query_class = torch.where(mask & pad_gt_mask, new_label, input_query_class)
+
+    if box_noise_scale > 0:
+        known_bbox = center_to_corners_format(input_query_bbox)
+        diff = torch.tile(input_query_bbox[..., 2:] * 0.5, [1, 1, 2]) * box_noise_scale
+        rand_sign = torch.randint_like(input_query_bbox, 0, 2) * 2.0 - 1.0
+        rand_part = torch.rand_like(input_query_bbox)
+        rand_part = (rand_part + 1.0) * negative_gt_mask + rand_part * (1 - negative_gt_mask)
+        rand_part *= rand_sign
+        known_bbox += rand_part * diff
+        known_bbox.clip_(min=0.0, max=1.0)
+        input_query_bbox = corners_to_center_format(known_bbox)
+        input_query_bbox = inverse_sigmoid(input_query_bbox)
+
+    input_query_class = class_embed(input_query_class)
+
+    target_size = num_denoising_queries + num_queries
+    attn_mask = torch.full([target_size, target_size], False, dtype=torch.bool, device=device)
+    # match query cannot see the reconstruction
+    attn_mask[num_denoising_queries:, :num_denoising_queries] = True
+
+    # reconstructions cannot see each other
+    for i in range(num_groups_denoising_queries):
+        idx_block_start = max_gt_num * 2 * i
+        idx_block_end = max_gt_num * 2 * (i + 1)
+        attn_mask[idx_block_start:idx_block_end, :idx_block_start] = True
+        attn_mask[idx_block_start:idx_block_end, idx_block_end:num_denoising_queries] = True
+
+    denoising_meta_values = {
+        "dn_positive_idx": denoise_positive_idx,
+        "dn_num_group": num_groups_denoising_queries,
+        "dn_num_split": [num_denoising_queries, num_queries],
+    }
+
+    return input_query_class, input_query_bbox, attn_mask, denoising_meta_values
+
+
+class RTDetrConvEncoder(nn.Module):
+    """
+    Convolutional backbone using the modeling_rt_detr_resnet.py.
+
+    nn.BatchNorm2d layers are replaced by RTDetrFrozenBatchNorm2d as defined above.
+    https://github.com/lyuwenyu/RT-DETR/blob/main/rtdetr_pytorch/src/nn/backbone/presnet.py#L142
     """
 
     def __init__(self, config):
         super().__init__()
 
-        self.config = config
-
-        # For backwards compatibility we have to use the timm library directly instead of the AutoBackbone API
-        if config.use_timm_backbone:
-            # We default to values which were previously hard-coded. This enables configurability from the config
-            # using backbone arguments, while keeping the default behavior the same.
-            requires_backends(self, ["timm"])
-            kwargs = getattr(config, "backbone_kwargs", {})
-            kwargs = {} if kwargs is None else kwargs.copy()
-            out_indices = kwargs.pop("out_indices", (2, 3, 4) if config.num_feature_levels > 1 else (4,))
-            num_channels = kwargs.pop("in_chans", config.num_channels)
-            if config.dilation:
-                kwargs["output_stride"] = kwargs.get("output_stride", 16)
-            backbone = create_model(
-                config.backbone,
-                pretrained=config.use_pretrained_backbone,
-                features_only=True,
-                out_indices=out_indices,
-                in_chans=num_channels,
-                **kwargs,
-            )
-        else:
-            backbone = load_backbone(config)
+        backbone = load_backbone(config)
 
         # replace batch norm by frozen batch norm
         with torch.no_grad():
             replace_batch_norm(backbone)
         self.model = backbone
-        self.intermediate_channel_sizes = (
-            self.model.feature_info.channels() if config.use_timm_backbone else self.model.channels
-        )
+        self.intermediate_channel_sizes = self.model.channels
 
-        backbone_model_type = None
-        if config.backbone is not None:
-            backbone_model_type = config.backbone
-        elif config.backbone_config is not None:
-            backbone_model_type = config.backbone_config.model_type
-        else:
-            raise ValueError("Either `backbone` or `backbone_config` should be provided in the config")
-
-        if "resnet" in backbone_model_type:
-            for name, parameter in self.model.named_parameters():
-                if config.use_timm_backbone:
-                    if "layer2" not in name and "layer3" not in name and "layer4" not in name:
-                        parameter.requires_grad_(False)
-                else:
-                    if "stage.1" not in name and "stage.2" not in name and "stage.3" not in name:
-                        parameter.requires_grad_(False)
-
-    # Copied from transformers.models.detr.modeling_detr.DetrConvEncoder.forward with Detr->DeformableDetr
     def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
         # send pixel_values through the model to get list of feature maps
-        features = self.model(pixel_values) if self.config.use_timm_backbone else self.model(pixel_values).feature_maps
+        features = self.model(pixel_values).feature_maps
 
         out = []
         for feature_map in features:
@@ -481,104 +577,160 @@ class DeformableDetrConvEncoder(nn.Module):
         return out
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrConvModel with Detr->DeformableDetr
-class DeformableDetrConvModel(nn.Module):
-    """
-    This module adds 2D position embeddings to all intermediate feature maps of the convolutional encoder.
-    """
-
-    def __init__(self, conv_encoder, position_embedding):
+class RTDetrConvNormLayer(nn.Module):
+    def __init__(self, config, in_channels, out_channels, kernel_size, stride, padding=None, activation=None):
         super().__init__()
-        self.conv_encoder = conv_encoder
-        self.position_embedding = position_embedding
+        self.conv = nn.Conv2d(
+            in_channels,
+            out_channels,
+            kernel_size,
+            stride,
+            padding=(kernel_size - 1) // 2 if padding is None else padding,
+            bias=False,
+        )
+        self.norm = nn.BatchNorm2d(out_channels, config.batch_norm_eps)
+        self.activation = nn.Identity() if activation is None else ACT2CLS[activation]()
 
-    def forward(self, pixel_values, pixel_mask):
-        # send pixel_values and pixel_mask through backbone to get list of (feature_map, pixel_mask) tuples
-        out = self.conv_encoder(pixel_values, pixel_mask)
-        pos = []
-        for feature_map, mask in out:
-            # position encoding
-            pos.append(self.position_embedding(feature_map, mask).to(feature_map.dtype))
-
-        return out, pos
+    def forward(self, hidden_state):
+        hidden_state = self.conv(hidden_state)
+        hidden_state = self.norm(hidden_state)
+        hidden_state = self.activation(hidden_state)
+        return hidden_state
 
 
-class DeformableDetrSinePositionEmbedding(nn.Module):
-    """
-    This is a more standard version of the position embedding, very similar to the one used by the Attention is all you
-    need paper, generalized to work on images.
-    """
-
-    def __init__(self, embedding_dim=64, temperature=10000, normalize=False, scale=None):
+class RTDetrEncoderLayer(nn.Module):
+    def __init__(self, config: RTDetrConfig):
         super().__init__()
-        self.embedding_dim = embedding_dim
-        self.temperature = temperature
-        self.normalize = normalize
-        if scale is not None and normalize is False:
-            raise ValueError("normalize should be True if scale is passed")
-        if scale is None:
-            scale = 2 * math.pi
-        self.scale = scale
+        self.normalize_before = config.normalize_before
 
-    def forward(self, pixel_values, pixel_mask):
-        if pixel_mask is None:
-            raise ValueError("No pixel mask provided")
-        y_embed = pixel_mask.cumsum(1, dtype=torch.float32)
-        x_embed = pixel_mask.cumsum(2, dtype=torch.float32)
-        if self.normalize:
-            eps = 1e-6
-            y_embed = (y_embed - 0.5) / (y_embed[:, -1:, :] + eps) * self.scale
-            x_embed = (x_embed - 0.5) / (x_embed[:, :, -1:] + eps) * self.scale
+        # self-attention
+        self.self_attn = RTDetrMultiheadAttention(
+            embed_dim=config.encoder_hidden_dim,
+            num_heads=config.num_attention_heads,
+            dropout=config.dropout,
+        )
+        self.self_attn_layer_norm = nn.LayerNorm(config.encoder_hidden_dim, eps=config.layer_norm_eps)
+        self.dropout = config.dropout
+        self.activation_fn = ACT2FN[config.encoder_activation_function]
+        self.activation_dropout = config.activation_dropout
+        self.fc1 = nn.Linear(config.encoder_hidden_dim, config.encoder_ffn_dim)
+        self.fc2 = nn.Linear(config.encoder_ffn_dim, config.encoder_hidden_dim)
+        self.final_layer_norm = nn.LayerNorm(config.encoder_hidden_dim, eps=config.layer_norm_eps)
 
-        dim_t = torch.arange(self.embedding_dim, dtype=torch.int64, device=pixel_values.device).float()
-        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.embedding_dim)
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor,
+        position_embeddings: torch.Tensor = None,
+        output_attentions: bool = False,
+        **kwargs,
+    ):
+        """
+        Args:
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.FloatTensor`): attention mask of size
+                `(batch, 1, target_len, source_len)` where padding elements are indicated by very large negative
+                values.
+            position_embeddings (`torch.FloatTensor`, *optional*):
+                Object queries (also called content embeddings), to be added to the hidden states.
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+        """
+        residual = hidden_states
+        if self.normalize_before:
+            hidden_states = self.self_attn_layer_norm(hidden_states)
 
-        pos_x = x_embed[:, :, :, None] / dim_t
-        pos_y = y_embed[:, :, :, None] / dim_t
-        pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
-        pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
-        pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
-        return pos
+        hidden_states, attn_weights = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            position_embeddings=position_embeddings,
+            output_attentions=output_attentions,
+        )
+
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = residual + hidden_states
+        if not self.normalize_before:
+            hidden_states = self.self_attn_layer_norm(hidden_states)
+
+        if self.normalize_before:
+            hidden_states = self.final_layer_norm(hidden_states)
+        residual = hidden_states
+
+        hidden_states = self.activation_fn(self.fc1(hidden_states))
+        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+
+        hidden_states = self.fc2(hidden_states)
+
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+
+        hidden_states = residual + hidden_states
+        if not self.normalize_before:
+            hidden_states = self.final_layer_norm(hidden_states)
+
+        if self.training:
+            if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
+                clamp_value = torch.finfo(hidden_states.dtype).max - 1000
+                hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
+
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (attn_weights,)
+
+        return outputs
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrLearnedPositionEmbedding
-class DeformableDetrLearnedPositionEmbedding(nn.Module):
+class RTDetrRepVggBlock(nn.Module):
     """
-    This module learns positional embeddings up to a fixed maximum size.
+    RepVGG architecture block introduced by the work "RepVGG: Making VGG-style ConvNets Great Again".
     """
 
-    def __init__(self, embedding_dim=256):
+    def __init__(self, config: RTDetrConfig):
         super().__init__()
-        self.row_embeddings = nn.Embedding(50, embedding_dim)
-        self.column_embeddings = nn.Embedding(50, embedding_dim)
 
-    def forward(self, pixel_values, pixel_mask=None):
-        height, width = pixel_values.shape[-2:]
-        width_values = torch.arange(width, device=pixel_values.device)
-        height_values = torch.arange(height, device=pixel_values.device)
-        x_emb = self.column_embeddings(width_values)
-        y_emb = self.row_embeddings(height_values)
-        pos = torch.cat([x_emb.unsqueeze(0).repeat(height, 1, 1), y_emb.unsqueeze(1).repeat(1, width, 1)], dim=-1)
-        pos = pos.permute(2, 0, 1)
-        pos = pos.unsqueeze(0)
-        pos = pos.repeat(pixel_values.shape[0], 1, 1, 1)
-        return pos
+        activation = config.activation_function
+        hidden_channels = int(config.encoder_hidden_dim * config.hidden_expansion)
+        self.conv1 = RTDetrConvNormLayer(config, hidden_channels, hidden_channels, 3, 1, padding=1)
+        self.conv2 = RTDetrConvNormLayer(config, hidden_channels, hidden_channels, 1, 1, padding=0)
+        self.activation = nn.Identity() if activation is None else ACT2CLS[activation]()
+
+    def forward(self, x):
+        y = self.conv1(x) + self.conv2(x)
+        return self.activation(y)
 
 
-# Copied from transformers.models.detr.modeling_detr.build_position_encoding with Detr->DeformableDetr
-def build_position_encoding(config):
-    n_steps = config.d_model // 2
-    if config.position_embedding_type == "sine":
-        # TODO find a better way of exposing other arguments
-        position_embedding = DeformableDetrSinePositionEmbedding(n_steps, normalize=True)
-    elif config.position_embedding_type == "learned":
-        position_embedding = DeformableDetrLearnedPositionEmbedding(n_steps)
-    else:
-        raise ValueError(f"Not supported {config.position_embedding_type}")
+class RTDetrCSPRepLayer(nn.Module):
+    """
+    Cross Stage Partial (CSP) network layer with RepVGG blocks.
+    """
 
-    return position_embedding
+    def __init__(self, config: RTDetrConfig):
+        super().__init__()
+
+        in_channels = config.encoder_hidden_dim * 2
+        out_channels = config.encoder_hidden_dim
+        num_blocks = 3
+        activation = config.activation_function
+
+        hidden_channels = int(out_channels * config.hidden_expansion)
+        self.conv1 = RTDetrConvNormLayer(config, in_channels, hidden_channels, 1, 1, activation=activation)
+        self.conv2 = RTDetrConvNormLayer(config, in_channels, hidden_channels, 1, 1, activation=activation)
+        self.bottlenecks = nn.Sequential(*[RTDetrRepVggBlock(config) for _ in range(num_blocks)])
+        if hidden_channels != out_channels:
+            self.conv3 = RTDetrConvNormLayer(config, hidden_channels, out_channels, 1, 1, activation=activation)
+        else:
+            self.conv3 = nn.Identity()
+
+    def forward(self, hidden_state):
+        device = hidden_state.device
+        hidden_state_1 = self.conv1(hidden_state)
+        hidden_state_1 = self.bottlenecks(hidden_state_1).to(device)
+        hidden_state_2 = self.conv2(hidden_state).to(device)
+        return self.conv3(hidden_state_1 + hidden_state_2)
 
 
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.multi_scale_deformable_attention
 def multi_scale_deformable_attention(
     value: Tensor, value_spatial_shapes: Tensor, sampling_locations: Tensor, attention_weights: Tensor
 ) -> Tensor:
@@ -618,12 +770,13 @@ def multi_scale_deformable_attention(
     return output.transpose(1, 2).contiguous()
 
 
-class DeformableDetrMultiscaleDeformableAttention(nn.Module):
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrMultiscaleDeformableAttention with DeformableDetr->RTDetr
+class RTDetrMultiscaleDeformableAttention(nn.Module):
     """
     Multiscale deformable attention as proposed in Deformable DETR.
     """
 
-    def __init__(self, config: DeformableDetrConfig, num_heads: int, n_points: int):
+    def __init__(self, config: RTDetrConfig, num_heads: int, n_points: int):
         super().__init__()
 
         kernel_loaded = MultiScaleDeformableAttention is not None
@@ -641,7 +794,7 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
         # check if dim_per_head is power of 2
         if not ((dim_per_head & (dim_per_head - 1) == 0) and dim_per_head != 0):
             warnings.warn(
-                "You'd better set embed_dim (d_model) in DeformableDetrMultiscaleDeformableAttention to make the"
+                "You'd better set embed_dim (d_model) in RTDetrMultiscaleDeformableAttention to make the"
                 " dimension of each attention head a power of 2 which is more efficient in the authors' CUDA"
                 " implementation."
             )
@@ -761,7 +914,7 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
         return output, attention_weights
 
 
-class DeformableDetrMultiheadAttention(nn.Module):
+class RTDetrMultiheadAttention(nn.Module):
     """
     Multi-headed attention from 'Attention Is All You Need' paper.
 
@@ -792,7 +945,7 @@ class DeformableDetrMultiheadAttention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
-    def _shape(self, tensor: torch.Tensor, seq_len: int, batch_size: int):
+    def _reshape(self, tensor: torch.Tensor, seq_len: int, batch_size: int):
         return tensor.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
     def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Optional[Tensor]):
@@ -815,11 +968,11 @@ class DeformableDetrMultiheadAttention(nn.Module):
 
         # get queries, keys and values
         query_states = self.q_proj(hidden_states) * self.scaling
-        key_states = self._shape(self.k_proj(hidden_states), -1, batch_size)
-        value_states = self._shape(self.v_proj(hidden_states_original), -1, batch_size)
+        key_states = self._reshape(self.k_proj(hidden_states), -1, batch_size)
+        value_states = self._reshape(self.v_proj(hidden_states_original), -1, batch_size)
 
         proj_shape = (batch_size * self.num_heads, -1, self.head_dim)
-        query_states = self._shape(query_states, target_len, batch_size).view(*proj_shape)
+        query_states = self._reshape(query_states, target_len, batch_size).view(*proj_shape)
         key_states = key_states.view(*proj_shape)
         value_states = value_states.view(*proj_shape)
 
@@ -835,8 +988,8 @@ class DeformableDetrMultiheadAttention(nn.Module):
 
         # expand attention_mask
         if attention_mask is not None:
-            # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
+            # [seq_len, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
+            attention_mask = attention_mask.expand(batch_size, 1, *attention_mask.size())
 
         if attention_mask is not None:
             if attention_mask.size() != (batch_size, 1, target_len, source_len):
@@ -878,118 +1031,31 @@ class DeformableDetrMultiheadAttention(nn.Module):
         return attn_output, attn_weights_reshaped
 
 
-class DeformableDetrEncoderLayer(nn.Module):
-    def __init__(self, config: DeformableDetrConfig):
+class RTDetrDecoderLayer(nn.Module):
+    def __init__(self, config: RTDetrConfig):
         super().__init__()
-        self.embed_dim = config.d_model
-        self.self_attn = DeformableDetrMultiscaleDeformableAttention(
-            config, num_heads=config.encoder_attention_heads, n_points=config.encoder_n_points
-        )
-        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.dropout = config.dropout
-        self.activation_fn = ACT2FN[config.activation_function]
-        self.activation_dropout = config.activation_dropout
-        self.fc1 = nn.Linear(self.embed_dim, config.encoder_ffn_dim)
-        self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = nn.LayerNorm(self.embed_dim)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
-        position_embeddings: torch.Tensor = None,
-        reference_points=None,
-        spatial_shapes=None,
-        level_start_index=None,
-        output_attentions: bool = False,
-    ):
-        """
-        Args:
-            hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                Input to the layer.
-            attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-                Attention mask.
-            position_embeddings (`torch.FloatTensor`, *optional*):
-                Position embeddings, to be added to `hidden_states`.
-            reference_points (`torch.FloatTensor`, *optional*):
-                Reference points.
-            spatial_shapes (`torch.LongTensor`, *optional*):
-                Spatial shapes of the backbone feature maps.
-            level_start_index (`torch.LongTensor`, *optional*):
-                Level start index.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-        """
-        residual = hidden_states
-
-        # Apply Multi-scale Deformable Attention Module on the multi-scale feature maps.
-        hidden_states, attn_weights = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            encoder_hidden_states=hidden_states,
-            encoder_attention_mask=attention_mask,
-            position_embeddings=position_embeddings,
-            reference_points=reference_points,
-            spatial_shapes=spatial_shapes,
-            level_start_index=level_start_index,
-            output_attentions=output_attentions,
-        )
-
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = residual + hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
-
-        residual = hidden_states
-        hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
-
-        hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-
-        hidden_states = residual + hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
-
-        if self.training:
-            if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
-                clamp_value = torch.finfo(hidden_states.dtype).max - 1000
-                hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
-
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs
-
-
-class DeformableDetrDecoderLayer(nn.Module):
-    def __init__(self, config: DeformableDetrConfig):
-        super().__init__()
-        self.embed_dim = config.d_model
-
         # self-attention
-        self.self_attn = DeformableDetrMultiheadAttention(
-            embed_dim=self.embed_dim,
+        self.self_attn = RTDetrMultiheadAttention(
+            embed_dim=config.d_model,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
         )
         self.dropout = config.dropout
-        self.activation_fn = ACT2FN[config.activation_function]
+        self.activation_fn = ACT2FN[config.decoder_activation_function]
         self.activation_dropout = config.activation_dropout
 
-        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.self_attn_layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
         # cross-attention
-        self.encoder_attn = DeformableDetrMultiscaleDeformableAttention(
+        self.encoder_attn = RTDetrMultiscaleDeformableAttention(
             config,
             num_heads=config.decoder_attention_heads,
             n_points=config.decoder_n_points,
         )
-        self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.encoder_attn_layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
         # feedforward neural networks
-        self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
-        self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.fc1 = nn.Linear(config.d_model, config.decoder_ffn_dim)
+        self.fc2 = nn.Linear(config.decoder_ffn_dim, config.d_model)
+        self.final_layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -1028,6 +1094,7 @@ class DeformableDetrDecoderLayer(nn.Module):
         # Self Attention
         hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
+            attention_mask=encoder_attention_mask,
             position_embeddings=position_embeddings,
             output_attentions=output_attentions,
         )
@@ -1042,9 +1109,7 @@ class DeformableDetrDecoderLayer(nn.Module):
         cross_attn_weights = None
         hidden_states, cross_attn_weights = self.encoder_attn(
             hidden_states=hidden_states,
-            attention_mask=encoder_attention_mask,
             encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
             position_embeddings=position_embeddings,
             reference_points=reference_points,
             spatial_shapes=spatial_shapes,
@@ -1074,40 +1139,34 @@ class DeformableDetrDecoderLayer(nn.Module):
         return outputs
 
 
-class DeformableDetrPreTrainedModel(PreTrainedModel):
-    config_class = DeformableDetrConfig
-    base_model_prefix = "model"
+class RTDetrPreTrainedModel(PreTrainedModel):
+    config_class = RTDetrConfig
+    base_model_prefix = "rt_detr"
     main_input_name = "pixel_values"
-    supports_gradient_checkpointing = True
-    _no_split_modules = [r"DeformableDetrConvEncoder", r"DeformableDetrEncoderLayer", r"DeformableDetrDecoderLayer"]
-    supports_gradient_checkpointing = True
+    _no_split_modules = [r"RTDetrConvEncoder", r"RTDetrEncoderLayer", r"RTDetrDecoderLayer"]
 
     def _init_weights(self, module):
-        std = self.config.init_std
+        """Initalize the weights"""
 
-        if isinstance(module, DeformableDetrLearnedPositionEmbedding):
-            nn.init.uniform_(module.row_embeddings.weight)
-            nn.init.uniform_(module.column_embeddings.weight)
-        elif isinstance(module, DeformableDetrMultiscaleDeformableAttention):
-            module._reset_parameters()
+        """initialize conv/fc bias value according to a given probability value."""
+        if isinstance(module, nn.Linear) and hasattr(module, "class_embed"):
+            prior_prob = self.config.initializer_range
+            bias = float(-math.log((1 - prior_prob) / prior_prob))
+            nn.init.xavier_uniform_(module.weight)
+            if module.bias is not None:
+                nn.init.constant_(module.bias, bias)
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        if hasattr(module, "reference_points") and not self.config.two_stage:
-            nn.init.xavier_uniform_(module.reference_points.weight.data, gain=1.0)
-            nn.init.constant_(module.reference_points.bias.data, 0.0)
-        if hasattr(module, "level_embed"):
-            nn.init.normal_(module.level_embed)
+
+        if hasattr(module, "weight_embedding") and self.config.learn_initial_query:
+            nn.init.xavier_uniform_(module.weight_embedding.weight)
+        if hasattr(module, "denoising_class_embed") and self.config.num_denoising > 0:
+            nn.init.xavier_uniform_(module.denoising_class_embed.weight)
 
 
-DEFORMABLE_DETR_START_DOCSTRING = r"""
+RTDETR_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
@@ -1117,20 +1176,17 @@ DEFORMABLE_DETR_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`DeformableDetrConfig`]):
+        config ([`RTDetrConfig`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-DEFORMABLE_DETR_INPUTS_DOCSTRING = r"""
+RTDETR_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Padding will be ignored by default should you provide it.
-
-            Pixel values can be obtained using [`AutoImageProcessor`]. See [`DeformableDetrImageProcessor.__call__`]
-            for details.
-
+            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
+            [`AutoImageProcessor`]. See [`RTDetrImageProcessor.__call__`] for details.
         pixel_mask (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Mask to avoid performing attention on padding pixel values. Mask values selected in `[0, 1]`:
 
@@ -1138,9 +1194,6 @@ DEFORMABLE_DETR_INPUTS_DOCSTRING = r"""
             - 0 for pixels that are padding (i.e. **masked**).
 
             [What are attention masks?](../glossary#attention-mask)
-
-        decoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*):
-            Not used by default. Can be used to mask object queries.
         encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
             Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
             `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
@@ -1151,6 +1204,11 @@ DEFORMABLE_DETR_INPUTS_DOCSTRING = r"""
         decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
             Optionally, instead of initializing the queries with a tensor of zeros, you can choose to directly pass an
             embedded representation.
+        labels (`List[Dict]` of len `(batch_size,)`, *optional*):
+            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
+            following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
+            respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
+            in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -1158,61 +1216,89 @@ DEFORMABLE_DETR_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
-class DeformableDetrEncoder(DeformableDetrPreTrainedModel):
-    """
-    Transformer encoder consisting of *config.encoder_layers* deformable attention layers. Each layer is a
-    [`DeformableDetrEncoderLayer`].
+class RTDetrEncoder(nn.Module):
+    def __init__(self, config: RTDetrConfig):
+        super().__init__()
 
-    The encoder updates the flattened multi-scale feature maps through multiple deformable attention layers.
+        self.layers = nn.ModuleList([RTDetrEncoderLayer(config) for _ in range(config.encoder_layers)])
+
+    def forward(self, src, src_mask=None, pos_embed=None, output_attentions: bool = False) -> torch.Tensor:
+        hidden_states = src
+        for layer in self.layers:
+            hidden_states = layer(
+                hidden_states,
+                attention_mask=src_mask,
+                position_embeddings=pos_embed,
+                output_attentions=output_attentions,
+            )
+        return hidden_states
+
+
+class RTDetrHybridEncoder(nn.Module):
+    """
+    Decoder consisting of a projection layer, a set of `RTDetrEncoder`, a top-down Feature Pyramid Network
+    (FPN) and a bottom-up Path Aggregation Network (PAN). More details on the paper: https://arxiv.org/abs/2304.08069
 
     Args:
-        config: DeformableDetrConfig
+        config: RTDetrConfig
     """
 
-    def __init__(self, config: DeformableDetrConfig):
-        super().__init__(config)
-        self.gradient_checkpointing = False
+    def __init__(self, config: RTDetrConfig):
+        super().__init__()
+        self.config = config
+        self.in_channels = config.encoder_in_channels
+        self.feat_strides = config.feat_strides
+        self.encoder_hidden_dim = config.encoder_hidden_dim
+        self.encode_proj_layers = config.encode_proj_layers
+        self.positional_encoding_temperature = config.positional_encoding_temperature
+        self.eval_size = config.eval_size
+        self.out_channels = [self.encoder_hidden_dim for _ in self.in_channels]
+        self.out_strides = self.feat_strides
+        activation_function = config.activation_function
 
-        self.dropout = config.dropout
-        self.layers = nn.ModuleList([DeformableDetrEncoderLayer(config) for _ in range(config.encoder_layers)])
+        # encoder transformer
+        self.encoder = nn.ModuleList([RTDetrEncoder(config) for _ in range(len(self.encode_proj_layers))])
+        # top-down fpn
+        self.lateral_convs = nn.ModuleList()
+        self.fpn_blocks = nn.ModuleList()
+        for _ in range(len(self.in_channels) - 1, 0, -1):
+            self.lateral_convs.append(
+                RTDetrConvNormLayer(
+                    config, self.encoder_hidden_dim, self.encoder_hidden_dim, 1, 1, activation=activation_function
+                )
+            )
+            self.fpn_blocks.append(RTDetrCSPRepLayer(config))
 
-        # Initialize weights and apply final processing
-        self.post_init()
+        # bottom-up pan
+        self.downsample_convs = nn.ModuleList()
+        self.pan_blocks = nn.ModuleList()
+        for _ in range(len(self.in_channels) - 1):
+            self.downsample_convs.append(
+                RTDetrConvNormLayer(
+                    config, self.encoder_hidden_dim, self.encoder_hidden_dim, 3, 2, activation=activation_function
+                )
+            )
+            self.pan_blocks.append(RTDetrCSPRepLayer(config))
 
     @staticmethod
-    def get_reference_points(spatial_shapes, valid_ratios, device):
-        """
-        Get reference points for each feature map. Used in decoder.
+    def build_2d_sincos_position_embedding(width, height, embed_dim=256, temperature=10000.0):
+        grid_w = torch.arange(int(width), dtype=torch.float32)
+        grid_h = torch.arange(int(height), dtype=torch.float32)
+        grid_w, grid_h = torch.meshgrid(grid_w, grid_h, indexing="ij")
+        if embed_dim % 4 != 0:
+            raise ValueError("Embed dimension must be divisible by 4 for 2D sin-cos position embedding")
+        pos_dim = embed_dim // 4
+        omega = torch.arange(pos_dim, dtype=torch.float32) / pos_dim
+        omega = 1.0 / (temperature**omega)
 
-        Args:
-            spatial_shapes (`torch.LongTensor` of shape `(num_feature_levels, 2)`):
-                Spatial shapes of each feature map.
-            valid_ratios (`torch.FloatTensor` of shape `(batch_size, num_feature_levels, 2)`):
-                Valid ratios of each feature map.
-            device (`torch.device`):
-                Device on which to create the tensors.
-        Returns:
-            `torch.FloatTensor` of shape `(batch_size, num_queries, num_feature_levels, 2)`
-        """
-        reference_points_list = []
-        for level, (height, width) in enumerate(spatial_shapes):
-            ref_y, ref_x = meshgrid(
-                torch.linspace(0.5, height - 0.5, height, dtype=valid_ratios.dtype, device=device),
-                torch.linspace(0.5, width - 0.5, width, dtype=valid_ratios.dtype, device=device),
-                indexing="ij",
-            )
-            # TODO: valid_ratios could be useless here. check https://github.com/fundamentalvision/Deformable-DETR/issues/36
-            ref_y = ref_y.reshape(-1)[None] / (valid_ratios[:, None, level, 1] * height)
-            ref_x = ref_x.reshape(-1)[None] / (valid_ratios[:, None, level, 0] * width)
-            ref = torch.stack((ref_x, ref_y), -1)
-            reference_points_list.append(ref)
-        reference_points = torch.cat(reference_points_list, 1)
-        reference_points = reference_points[:, :, None] * valid_ratios[:, None]
-        return reference_points
+        out_w = grid_w.flatten()[..., None] @ omega[None]
+        out_h = grid_h.flatten()[..., None] @ omega[None]
+
+        return torch.concat([out_w.sin(), out_w.cos(), out_h.sin(), out_h.cos()], dim=1)[None, :, :]
 
     def forward(
         self,
@@ -1259,73 +1345,72 @@ class DeformableDetrEncoder(DeformableDetrPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         hidden_states = inputs_embeds
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-
-        reference_points = self.get_reference_points(spatial_shapes, valid_ratios, device=inputs_embeds.device)
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
-        for i, encoder_layer in enumerate(self.layers):
-            if output_hidden_states:
-                encoder_states = encoder_states + (hidden_states,)
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    encoder_layer.__call__,
-                    hidden_states,
-                    attention_mask,
-                    position_embeddings,
-                    reference_points,
-                    spatial_shapes,
-                    level_start_index,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = encoder_layer(
-                    hidden_states,
-                    attention_mask,
-                    position_embeddings=position_embeddings,
-                    reference_points=reference_points,
-                    spatial_shapes=spatial_shapes,
-                    level_start_index=level_start_index,
+        # encoder
+        if self.config.encoder_layers > 0:
+            for i, enc_ind in enumerate(self.encode_proj_layers):
+                if output_hidden_states:
+                    encoder_states = encoder_states + (hidden_states[enc_ind],)
+                height, width = hidden_states[enc_ind].shape[2:]
+                # flatten [batch, channel, height, width] to [batch, height*width, channel]
+                src_flatten = hidden_states[enc_ind].flatten(2).permute(0, 2, 1)
+                if self.training or self.eval_size is None:
+                    pos_embed = self.build_2d_sincos_position_embedding(
+                        width, height, self.encoder_hidden_dim, self.positional_encoding_temperature
+                    ).to(src_flatten.device)
+                else:
+                    pos_embed = None
+
+                layer_outputs = self.encoder[i](
+                    src_flatten,
+                    pos_embed=pos_embed,
                     output_attentions=output_attentions,
                 )
+                hidden_states[enc_ind] = (
+                    layer_outputs[0].permute(0, 2, 1).reshape(-1, self.encoder_hidden_dim, height, width).contiguous()
+                )
 
-            hidden_states = layer_outputs[0]
+                if output_attentions:
+                    all_attentions = all_attentions + (layer_outputs[1],)
 
-            if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
+            if output_hidden_states:
+                encoder_states = encoder_states + (hidden_states[enc_ind],)
 
-        if output_hidden_states:
-            encoder_states = encoder_states + (hidden_states,)
+        # broadcasting and fusion
+        fpn_feature_maps = [hidden_states[-1]]
+        for idx in range(len(self.in_channels) - 1, 0, -1):
+            feat_high = fpn_feature_maps[0]
+            feat_low = hidden_states[idx - 1]
+            feat_high = self.lateral_convs[len(self.in_channels) - 1 - idx](feat_high)
+            fpn_feature_maps[0] = feat_high
+            upsample_feat = F.interpolate(feat_high, scale_factor=2.0, mode="nearest")
+            fps_map = self.fpn_blocks[len(self.in_channels) - 1 - idx](torch.concat([upsample_feat, feat_low], dim=1))
+            fpn_feature_maps.insert(0, fps_map)
+
+        fpn_states = [fpn_feature_maps[0]]
+        for idx in range(len(self.in_channels) - 1):
+            feat_low = fpn_states[-1]
+            feat_high = fpn_feature_maps[idx + 1]
+            downsample_feat = self.downsample_convs[idx](feat_low)
+            hidden_states = self.pan_blocks[idx](
+                torch.concat([downsample_feat, feat_high.to(downsample_feat.device)], dim=1)
+            )
+            fpn_states.append(hidden_states)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
-        )
+            return tuple(v for v in [fpn_states, encoder_states, all_attentions] if v is not None)
+        return BaseModelOutput(last_hidden_state=fpn_states, hidden_states=encoder_states, attentions=all_attentions)
 
 
-class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
-    """
-    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`DeformableDetrDecoderLayer`].
-
-    The decoder updates the query embeddings through multiple self-attention and cross-attention layers.
-
-    Some tweaks for Deformable DETR:
-
-    - `position_embeddings`, `reference_points`, `spatial_shapes` and `valid_ratios` are added to the forward pass.
-    - it also returns a stack of intermediate outputs and reference points from all decoding layers.
-
-    Args:
-        config: DeformableDetrConfig
-    """
-
-    def __init__(self, config: DeformableDetrConfig):
+class RTDetrDecoder(RTDetrPreTrainedModel):
+    def __init__(self, config: RTDetrConfig):
         super().__init__(config)
 
         self.dropout = config.dropout
-        self.layers = nn.ModuleList([DeformableDetrDecoderLayer(config) for _ in range(config.decoder_layers)])
-        self.gradient_checkpointing = False
+        self.layers = nn.ModuleList([RTDetrDecoderLayer(config) for _ in range(config.decoder_layers)])
+        self.query_pos_head = RTDetrMLPPredictionHead(config, 4, 2 * config.d_model, config.d_model, num_layers=2)
 
         # hack implementation for iterative bounding box refinement and two-stage Deformable DETR
         self.bbox_embed = None
@@ -1395,66 +1480,45 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
         all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
         intermediate = ()
         intermediate_reference_points = ()
+        intermediate_logits = ()
 
+        reference_points = F.sigmoid(reference_points)
+
+        # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/rtdetr_pytorch/src/zoo/rtdetr/rtdetr_decoder.py#L252
         for idx, decoder_layer in enumerate(self.layers):
-            num_coordinates = reference_points.shape[-1]
-            if num_coordinates == 4:
-                reference_points_input = (
-                    reference_points[:, :, None] * torch.cat([valid_ratios, valid_ratios], -1)[:, None]
-                )
-            elif reference_points.shape[-1] == 2:
-                reference_points_input = reference_points[:, :, None] * valid_ratios[:, None]
-            else:
-                raise ValueError("Reference points' last dimension must be of size 2")
+            reference_points_input = reference_points.unsqueeze(2)
+            position_embeddings = self.query_pos_head(reference_points)
 
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    position_embeddings,
-                    reference_points_input,
-                    spatial_shapes,
-                    level_start_index,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    position_embeddings=position_embeddings,
-                    encoder_hidden_states=encoder_hidden_states,
-                    reference_points=reference_points_input,
-                    spatial_shapes=spatial_shapes,
-                    level_start_index=level_start_index,
-                    encoder_attention_mask=encoder_attention_mask,
-                    output_attentions=output_attentions,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                position_embeddings=position_embeddings,
+                encoder_hidden_states=encoder_hidden_states,
+                reference_points=reference_points_input,
+                spatial_shapes=spatial_shapes,
+                level_start_index=level_start_index,
+                encoder_attention_mask=encoder_attention_mask,
+                output_attentions=output_attentions,
+            )
 
             hidden_states = layer_outputs[0]
 
             # hack implementation for iterative bounding box refinement
             if self.bbox_embed is not None:
                 tmp = self.bbox_embed[idx](hidden_states)
-                num_coordinates = reference_points.shape[-1]
-                if num_coordinates == 4:
-                    new_reference_points = tmp + inverse_sigmoid(reference_points)
-                    new_reference_points = new_reference_points.sigmoid()
-                elif num_coordinates == 2:
-                    new_reference_points = tmp
-                    new_reference_points[..., :2] = tmp[..., :2] + inverse_sigmoid(reference_points)
-                    new_reference_points = new_reference_points.sigmoid()
-                else:
-                    raise ValueError(
-                        f"Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}"
-                    )
+                new_reference_points = F.sigmoid(tmp + inverse_sigmoid(reference_points))
                 reference_points = new_reference_points.detach()
 
             intermediate += (hidden_states,)
-            intermediate_reference_points += (reference_points,)
+            intermediate_reference_points += (
+                (new_reference_points,) if self.bbox_embed is not None else (reference_points,)
+            )
+
+            if self.class_embed is not None:
+                logits = self.class_embed[idx](hidden_states)
+                intermediate_logits += (logits,)
 
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
@@ -1465,6 +1529,8 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
         # Keep batch_size as first dimension
         intermediate = torch.stack(intermediate, dim=1)
         intermediate_reference_points = torch.stack(intermediate_reference_points, dim=1)
+        if self.class_embed is not None:
+            intermediate_logits = torch.stack(intermediate_logits, dim=1)
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
@@ -1476,6 +1542,7 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
                 for v in [
                     hidden_states,
                     intermediate,
+                    intermediate_logits,
                     intermediate_reference_points,
                     all_hidden_states,
                     all_self_attns,
@@ -1483,9 +1550,10 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
                 ]
                 if v is not None
             )
-        return DeformableDetrDecoderOutput(
+        return RTDetrDecoderOutput(
             last_hidden_state=hidden_states,
             intermediate_hidden_states=intermediate,
+            intermediate_logits=intermediate_logits,
             intermediate_reference_points=intermediate_reference_points,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
@@ -1495,66 +1563,81 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
 
 @add_start_docstrings(
     """
-    The bare Deformable DETR Model (consisting of a backbone and encoder-decoder Transformer) outputting raw
-    hidden-states without any specific head on top.
+    RT-DETR Model (consisting of a backbone and encoder-decoder) outputting raw hidden states without any head on top.
     """,
-    DEFORMABLE_DETR_START_DOCSTRING,
+    RTDETR_START_DOCSTRING,
 )
-class DeformableDetrModel(DeformableDetrPreTrainedModel):
-    def __init__(self, config: DeformableDetrConfig):
+class RTDetrModel(RTDetrPreTrainedModel):
+    def __init__(self, config: RTDetrConfig):
         super().__init__(config)
 
-        # Create backbone + positional encoding
-        backbone = DeformableDetrConvEncoder(config)
-        position_embeddings = build_position_encoding(config)
-        self.backbone = DeformableDetrConvModel(backbone, position_embeddings)
+        # Create backbone
+        self.backbone = RTDetrConvEncoder(config)
+        intermediate_channel_sizes = self.backbone.intermediate_channel_sizes
 
-        # Create input projection layers
-        if config.num_feature_levels > 1:
-            num_backbone_outs = len(backbone.intermediate_channel_sizes)
-            input_proj_list = []
-            for _ in range(num_backbone_outs):
-                in_channels = backbone.intermediate_channel_sizes[_]
-                input_proj_list.append(
-                    nn.Sequential(
-                        nn.Conv2d(in_channels, config.d_model, kernel_size=1),
-                        nn.GroupNorm(32, config.d_model),
-                    )
+        # Create encoder input projection layers
+        # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/rtdetr_pytorch/src/zoo/rtdetr/hybrid_encoder.py#L212
+        num_backbone_outs = len(intermediate_channel_sizes)
+        encoder_input_proj_list = []
+        for _ in range(num_backbone_outs):
+            in_channels = intermediate_channel_sizes[_]
+            encoder_input_proj_list.append(
+                nn.Sequential(
+                    nn.Conv2d(in_channels, config.encoder_hidden_dim, kernel_size=1, bias=False),
+                    nn.BatchNorm2d(config.encoder_hidden_dim),
                 )
-            for _ in range(config.num_feature_levels - num_backbone_outs):
-                input_proj_list.append(
-                    nn.Sequential(
-                        nn.Conv2d(in_channels, config.d_model, kernel_size=3, stride=2, padding=1),
-                        nn.GroupNorm(32, config.d_model),
-                    )
-                )
-                in_channels = config.d_model
-            self.input_proj = nn.ModuleList(input_proj_list)
-        else:
-            self.input_proj = nn.ModuleList(
-                [
-                    nn.Sequential(
-                        nn.Conv2d(backbone.intermediate_channel_sizes[-1], config.d_model, kernel_size=1),
-                        nn.GroupNorm(32, config.d_model),
-                    )
-                ]
+            )
+        self.encoder_input_proj = nn.ModuleList(encoder_input_proj_list)
+
+        # Create encoder
+        self.encoder = RTDetrHybridEncoder(config)
+
+        # denoising part
+        if config.num_denoising > 0:
+            self.denoising_class_embed = nn.Embedding(
+                config.num_labels + 1, config.d_model, padding_idx=config.num_labels
             )
 
-        if not config.two_stage:
-            self.query_position_embeddings = nn.Embedding(config.num_queries, config.d_model * 2)
+        # decoder embedding
+        if config.learn_initial_query:
+            self.weight_embedding = nn.Embedding(config.num_queries, config.d_model)
 
-        self.encoder = DeformableDetrEncoder(config)
-        self.decoder = DeformableDetrDecoder(config)
+        # encoder head
+        self.enc_output = nn.Sequential(
+            nn.Linear(config.d_model, config.d_model),
+            nn.LayerNorm(config.d_model, eps=config.layer_norm_eps),
+        )
+        self.enc_score_head = nn.Linear(config.d_model, config.num_labels)
+        self.enc_bbox_head = RTDetrMLPPredictionHead(config, config.d_model, config.d_model, 4, num_layers=3)
 
-        self.level_embed = nn.Parameter(torch.Tensor(config.num_feature_levels, config.d_model))
+        # init encoder output anchors and valid_mask
+        if config.anchor_image_size:
+            self.anchors, self.valid_mask = self.generate_anchors()
 
-        if config.two_stage:
-            self.enc_output = nn.Linear(config.d_model, config.d_model)
-            self.enc_output_norm = nn.LayerNorm(config.d_model)
-            self.pos_trans = nn.Linear(config.d_model * 2, config.d_model * 2)
-            self.pos_trans_norm = nn.LayerNorm(config.d_model * 2)
-        else:
-            self.reference_points = nn.Linear(config.d_model, 2)
+        # Create decoder input projection layers
+        # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/rtdetr_pytorch/src/zoo/rtdetr/rtdetr_decoder.py#L412
+        num_backbone_outs = len(config.decoder_in_channels)
+        decoder_input_proj_list = []
+        for _ in range(num_backbone_outs):
+            in_channels = config.decoder_in_channels[_]
+            decoder_input_proj_list.append(
+                nn.Sequential(
+                    nn.Conv2d(in_channels, config.d_model, kernel_size=1, bias=False),
+                    nn.BatchNorm2d(config.d_model, config.batch_norm_eps),
+                )
+            )
+        for _ in range(config.num_feature_levels - num_backbone_outs):
+            decoder_input_proj_list.append(
+                nn.Sequential(
+                    nn.Conv2d(in_channels, config.d_model, kernel_size=3, stride=2, padding=1, bias=False),
+                    nn.BatchNorm2d(config.d_model, config.batch_norm_eps),
+                )
+            )
+            in_channels = config.d_model
+        self.decoder_input_proj = nn.ModuleList(decoder_input_proj_list)
+
+        # decoder
+        self.decoder = RTDetrDecoder(config)
 
         self.post_init()
 
@@ -1565,119 +1648,68 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         return self.decoder
 
     def freeze_backbone(self):
-        for name, param in self.backbone.conv_encoder.model.named_parameters():
+        for param in self.backbone.parameters():
             param.requires_grad_(False)
 
     def unfreeze_backbone(self):
-        for name, param in self.backbone.conv_encoder.model.named_parameters():
+        for param in self.backbone.parameters():
             param.requires_grad_(True)
 
-    def get_valid_ratio(self, mask, dtype=torch.float32):
-        """Get the valid ratio of all feature maps."""
-
-        _, height, width = mask.shape
-        valid_height = torch.sum(mask[:, :, 0], 1)
-        valid_width = torch.sum(mask[:, 0, :], 1)
-        valid_ratio_height = valid_height.to(dtype) / height
-        valid_ratio_width = valid_width.to(dtype) / width
-        valid_ratio = torch.stack([valid_ratio_width, valid_ratio_height], -1)
-        return valid_ratio
-
-    def get_proposal_pos_embed(self, proposals):
-        """Get the position embedding of the proposals."""
-
-        num_pos_feats = self.config.d_model // 2
-        temperature = 10000
-        scale = 2 * math.pi
-
-        dim_t = torch.arange(num_pos_feats, dtype=torch.int64, device=proposals.device).float()
-        dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_pos_feats)
-        # batch_size, num_queries, 4
-        proposals = proposals.sigmoid() * scale
-        # batch_size, num_queries, 4, 128
-        pos = proposals[:, :, :, None] / dim_t
-        # batch_size, num_queries, 4, 64, 2 -> batch_size, num_queries, 512
-        pos = torch.stack((pos[:, :, :, 0::2].sin(), pos[:, :, :, 1::2].cos()), dim=4).flatten(2)
-        return pos
-
-    def gen_encoder_output_proposals(self, enc_output, padding_mask, spatial_shapes):
-        """Generate the encoder output proposals from encoded enc_output.
-
-        Args:
-            enc_output (Tensor[batch_size, sequence_length, hidden_size]): Output of the encoder.
-            padding_mask (Tensor[batch_size, sequence_length]): Padding mask for `enc_output`.
-            spatial_shapes (Tensor[num_feature_levels, 2]): Spatial shapes of the feature maps.
-
-        Returns:
-            `tuple(torch.FloatTensor)`: A tuple of feature map and bbox prediction.
-                - object_query (Tensor[batch_size, sequence_length, hidden_size]): Object query features. Later used to
-                  directly predict a bounding box. (without the need of a decoder)
-                - output_proposals (Tensor[batch_size, sequence_length, 4]): Normalized proposals, after an inverse
-                  sigmoid.
-        """
-        batch_size = enc_output.shape[0]
-        proposals = []
-        _cur = 0
+    @lru_cache(maxsize=32)
+    def generate_anchors(self, spatial_shapes=None, grid_size=0.05, dtype=torch.float32, device="cpu"):
+        if spatial_shapes is None:
+            spatial_shapes = [
+                [int(self.config.anchor_image_size[0] / s), int(self.config.anchor_image_size[1] / s)]
+                for s in self.config.feat_strides
+            ]
+        anchors = []
         for level, (height, width) in enumerate(spatial_shapes):
-            mask_flatten_ = padding_mask[:, _cur : (_cur + height * width)].view(batch_size, height, width, 1)
-            valid_height = torch.sum(~mask_flatten_[:, :, 0, 0], 1)
-            valid_width = torch.sum(~mask_flatten_[:, 0, :, 0], 1)
-
-            grid_y, grid_x = meshgrid(
-                torch.linspace(0, height - 1, height, dtype=enc_output.dtype, device=enc_output.device),
-                torch.linspace(0, width - 1, width, dtype=enc_output.dtype, device=enc_output.device),
-                indexing="ij",
+            grid_y, grid_x = torch.meshgrid(
+                torch.arange(end=height, dtype=dtype), torch.arange(end=width, dtype=dtype), indexing="ij"
             )
-            grid = torch.cat([grid_x.unsqueeze(-1), grid_y.unsqueeze(-1)], -1)
+            grid_xy = torch.stack([grid_x, grid_y], -1)
+            valid_wh = torch.tensor([width, height]).to(dtype)
+            grid_xy = (grid_xy.unsqueeze(0) + 0.5) / valid_wh
+            wh = torch.ones_like(grid_xy) * grid_size * (2.0**level)
+            anchors.append(torch.concat([grid_xy, wh], -1).reshape(-1, height * width, 4))
+        # define the valid range for anchor coordinates
+        eps = 1e-2
+        anchors = torch.concat(anchors, 1).to(device)
+        valid_mask = ((anchors > eps) * (anchors < 1 - eps)).all(-1, keepdim=True)
+        anchors = torch.log(anchors / (1 - anchors))
+        anchors = torch.where(valid_mask, anchors, torch.inf)
 
-            scale = torch.cat([valid_width.unsqueeze(-1), valid_height.unsqueeze(-1)], 1).view(batch_size, 1, 1, 2)
-            grid = (grid.unsqueeze(0).expand(batch_size, -1, -1, -1) + 0.5) / scale
-            width_heigth = torch.ones_like(grid) * 0.05 * (2.0**level)
-            proposal = torch.cat((grid, width_heigth), -1).view(batch_size, -1, 4)
-            proposals.append(proposal)
-            _cur += height * width
-        output_proposals = torch.cat(proposals, 1)
-        output_proposals_valid = ((output_proposals > 0.01) & (output_proposals < 0.99)).all(-1, keepdim=True)
-        output_proposals = torch.log(output_proposals / (1 - output_proposals))  # inverse sigmoid
-        output_proposals = output_proposals.masked_fill(padding_mask.unsqueeze(-1), float("inf"))
-        output_proposals = output_proposals.masked_fill(~output_proposals_valid, float("inf"))
+        return anchors, valid_mask
 
-        # assign each pixel as an object query
-        object_query = enc_output
-        object_query = object_query.masked_fill(padding_mask.unsqueeze(-1), float(0))
-        object_query = object_query.masked_fill(~output_proposals_valid, float(0))
-        object_query = self.enc_output_norm(self.enc_output(object_query))
-        return object_query, output_proposals
-
-    @add_start_docstrings_to_model_forward(DEFORMABLE_DETR_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=DeformableDetrModelOutput, config_class=_CONFIG_FOR_DOC)
+    @add_start_docstrings_to_model_forward(RTDETR_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=RTDetrModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values: torch.FloatTensor,
         pixel_mask: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.FloatTensor] = None,
         encoder_outputs: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[List[dict]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], DeformableDetrModelOutput]:
+    ) -> Union[Tuple[torch.FloatTensor], RTDetrModelOutput]:
         r"""
         Returns:
 
         Examples:
 
         ```python
-        >>> from transformers import AutoImageProcessor, DeformableDetrModel
+        >>> from transformers import AutoImageProcessor, RTDetrModel
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("SenseTime/deformable-detr")
-        >>> model = DeformableDetrModel.from_pretrained("SenseTime/deformable-detr")
+        >>> image_processor = AutoImageProcessor.from_pretrained("PekingU/rtdetr_r50vd")
+        >>> model = RTDetrModel.from_pretrained("PekingU/rtdetr_r50vd")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
 
@@ -1697,74 +1729,15 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         device = pixel_values.device
 
         if pixel_mask is None:
-            pixel_mask = torch.ones(((batch_size, height, width)), dtype=torch.long, device=device)
+            pixel_mask = torch.ones(((batch_size, height, width)), device=device)
 
-        # Extract multi-scale feature maps of same resolution `config.d_model` (cf Figure 4 in paper)
-        # First, sent pixel_values + pixel_mask through Backbone to obtain the features
-        # which is a list of tuples
-        features, position_embeddings_list = self.backbone(pixel_values, pixel_mask)
+        features = self.backbone(pixel_values, pixel_mask)
 
-        # Then, apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
-        sources = []
-        masks = []
-        for level, (source, mask) in enumerate(features):
-            sources.append(self.input_proj[level](source))
-            masks.append(mask)
-            if mask is None:
-                raise ValueError("No attention mask was provided")
+        proj_feats = [self.encoder_input_proj[level](source) for level, (source, mask) in enumerate(features)]
 
-        # Lowest resolution feature maps are obtained via 3x3 stride 2 convolutions on the final stage
-        if self.config.num_feature_levels > len(sources):
-            _len_sources = len(sources)
-            for level in range(_len_sources, self.config.num_feature_levels):
-                if level == _len_sources:
-                    source = self.input_proj[level](features[-1][0])
-                else:
-                    source = self.input_proj[level](sources[-1])
-                mask = nn.functional.interpolate(pixel_mask[None].float(), size=source.shape[-2:]).to(torch.bool)[0]
-                pos_l = self.backbone.position_embedding(source, mask).to(source.dtype)
-                sources.append(source)
-                masks.append(mask)
-                position_embeddings_list.append(pos_l)
-
-        # Create queries
-        query_embeds = None
-        if not self.config.two_stage:
-            query_embeds = self.query_position_embeddings.weight
-
-        # Prepare encoder inputs (by flattening)
-        source_flatten = []
-        mask_flatten = []
-        lvl_pos_embed_flatten = []
-        spatial_shapes = []
-        for level, (source, mask, pos_embed) in enumerate(zip(sources, masks, position_embeddings_list)):
-            batch_size, num_channels, height, width = source.shape
-            spatial_shape = (height, width)
-            spatial_shapes.append(spatial_shape)
-            source = source.flatten(2).transpose(1, 2)
-            mask = mask.flatten(1)
-            pos_embed = pos_embed.flatten(2).transpose(1, 2)
-            lvl_pos_embed = pos_embed + self.level_embed[level].view(1, 1, -1)
-            lvl_pos_embed_flatten.append(lvl_pos_embed)
-            source_flatten.append(source)
-            mask_flatten.append(mask)
-        source_flatten = torch.cat(source_flatten, 1)
-        mask_flatten = torch.cat(mask_flatten, 1)
-        lvl_pos_embed_flatten = torch.cat(lvl_pos_embed_flatten, 1)
-        spatial_shapes = torch.as_tensor(spatial_shapes, dtype=torch.long, device=source_flatten.device)
-        level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
-        valid_ratios = torch.stack([self.get_valid_ratio(m, dtype=source_flatten.dtype) for m in masks], 1)
-
-        # Fourth, sent source_flatten + mask_flatten + lvl_pos_embed_flatten (backbone + proj layer output) through encoder
-        # Also provide spatial_shapes, level_start_index and valid_ratios
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
-                inputs_embeds=source_flatten,
-                attention_mask=mask_flatten,
-                position_embeddings=lvl_pos_embed_flatten,
-                spatial_shapes=spatial_shapes,
-                level_start_index=level_start_index,
-                valid_ratios=valid_ratios,
+                proj_feats,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
@@ -1773,70 +1746,130 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
             encoder_outputs = BaseModelOutput(
                 last_hidden_state=encoder_outputs[0],
-                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
-                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
+                hidden_states=encoder_outputs[1] if output_hidden_states else None,
+                attentions=encoder_outputs[2]
+                if len(encoder_outputs) > 2
+                else encoder_outputs[1]
+                if output_attentions
+                else None,
             )
 
-        # Fifth, prepare decoder inputs
-        batch_size, _, num_channels = encoder_outputs[0].shape
-        enc_outputs_class = None
-        enc_outputs_coord_logits = None
-        if self.config.two_stage:
-            object_query_embedding, output_proposals = self.gen_encoder_output_proposals(
-                encoder_outputs[0], ~mask_flatten, spatial_shapes
+        # Equivalent to def _get_encoder_input
+        # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/rtdetr_pytorch/src/zoo/rtdetr/rtdetr_decoder.py#L412
+        sources = []
+        for level, source in enumerate(encoder_outputs[0]):
+            sources.append(self.decoder_input_proj[level](source))
+
+        # Lowest resolution feature maps are obtained via 3x3 stride 2 convolutions on the final stage
+        if self.config.num_feature_levels > len(sources):
+            _len_sources = len(sources)
+            sources.append(self.decoder_input_proj[_len_sources](encoder_outputs[0])[-1])
+            for i in range(_len_sources + 1, self.config.num_feature_levels):
+                sources.append(self.decoder_input_proj[i](encoder_outputs[0][-1]))
+
+        # Prepare encoder inputs (by flattening)
+        source_flatten = []
+        spatial_shapes = []
+        for level, source in enumerate(sources):
+            batch_size, num_channels, height, width = source.shape
+            spatial_shape = (height, width)
+            spatial_shapes.append(spatial_shape)
+            source = source.flatten(2).transpose(1, 2)
+            source_flatten.append(source)
+        source_flatten = torch.cat(source_flatten, 1)
+        spatial_shapes = torch.as_tensor(spatial_shapes, dtype=torch.long, device=source_flatten.device)
+        level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
+
+        # prepare denoising training
+        if self.training and self.config.num_denoising > 0 and labels is not None:
+            (
+                denoising_class,
+                denoising_bbox_unact,
+                attention_mask,
+                denoising_meta_values,
+            ) = get_contrastive_denoising_training_group(
+                targets=labels,
+                num_classes=self.config.num_labels,
+                num_queries=self.config.num_queries,
+                class_embed=self.denoising_class_embed,
+                num_denoising_queries=self.config.num_denoising,
+                label_noise_ratio=self.config.label_noise_ratio,
+                box_noise_scale=self.config.box_noise_scale,
             )
-
-            # hack implementation for two-stage Deformable DETR
-            # apply a detection head to each pixel (A.4 in paper)
-            # linear projection for bounding box binary classification (i.e. foreground and background)
-            enc_outputs_class = self.decoder.class_embed[-1](object_query_embedding)
-            # 3-layer FFN to predict bounding boxes coordinates (bbox regression branch)
-            delta_bbox = self.decoder.bbox_embed[-1](object_query_embedding)
-            enc_outputs_coord_logits = delta_bbox + output_proposals
-
-            # only keep top scoring `config.two_stage_num_proposals` proposals
-            topk = self.config.two_stage_num_proposals
-            topk_proposals = torch.topk(enc_outputs_class[..., 0], topk, dim=1)[1]
-            topk_coords_logits = torch.gather(
-                enc_outputs_coord_logits, 1, topk_proposals.unsqueeze(-1).repeat(1, 1, 4)
-            )
-
-            topk_coords_logits = topk_coords_logits.detach()
-            reference_points = topk_coords_logits.sigmoid()
-            init_reference_points = reference_points
-            pos_trans_out = self.pos_trans_norm(self.pos_trans(self.get_proposal_pos_embed(topk_coords_logits)))
-            query_embed, target = torch.split(pos_trans_out, num_channels, dim=2)
         else:
-            query_embed, target = torch.split(query_embeds, num_channels, dim=1)
-            query_embed = query_embed.unsqueeze(0).expand(batch_size, -1, -1)
-            target = target.unsqueeze(0).expand(batch_size, -1, -1)
-            reference_points = self.reference_points(query_embed).sigmoid()
-            init_reference_points = reference_points
+            denoising_class, denoising_bbox_unact, attention_mask, denoising_meta_values = None, None, None, None
 
+        batch_size = len(source_flatten)
+        device = source_flatten.device
+
+        # prepare input for decoder
+        if self.training or self.config.anchor_image_size is None:
+            anchors, valid_mask = self.generate_anchors(spatial_shapes, device=device)
+        else:
+            anchors, valid_mask = self.anchors.to(device), self.valid_mask.to(device)
+
+        # use the valid_mask to selectively retain values in the feature map where the mask is `True`
+        memory = valid_mask.to(source_flatten.dtype) * source_flatten
+
+        output_memory = self.enc_output(memory)
+
+        enc_outputs_class = self.enc_score_head(output_memory)
+        enc_outputs_coord_logits = self.enc_bbox_head(output_memory) + anchors
+
+        _, topk_ind = torch.topk(enc_outputs_class.max(-1).values, self.config.num_queries, dim=1)
+
+        reference_points_unact = enc_outputs_coord_logits.gather(
+            dim=1, index=topk_ind.unsqueeze(-1).repeat(1, 1, enc_outputs_coord_logits.shape[-1])
+        )
+
+        enc_topk_bboxes = F.sigmoid(reference_points_unact)
+        if denoising_bbox_unact is not None:
+            reference_points_unact = torch.concat([denoising_bbox_unact, reference_points_unact], 1)
+
+        enc_topk_logits = enc_outputs_class.gather(
+            dim=1, index=topk_ind.unsqueeze(-1).repeat(1, 1, enc_outputs_class.shape[-1])
+        )
+
+        # extract region features
+        if self.config.learn_initial_query:
+            target = self.weight_embedding.tile([batch_size, 1, 1])
+        else:
+            target = output_memory.gather(dim=1, index=topk_ind.unsqueeze(-1).repeat(1, 1, output_memory.shape[-1]))
+            target = target.detach()
+
+        if denoising_class is not None:
+            target = torch.concat([denoising_class, target], 1)
+
+        init_reference_points = reference_points_unact.detach()
+
+        # decoder
         decoder_outputs = self.decoder(
             inputs_embeds=target,
-            position_embeddings=query_embed,
-            encoder_hidden_states=encoder_outputs[0],
-            encoder_attention_mask=mask_flatten,
-            reference_points=reference_points,
+            encoder_hidden_states=source_flatten,
+            encoder_attention_mask=attention_mask,
+            reference_points=init_reference_points,
             spatial_shapes=spatial_shapes,
             level_start_index=level_start_index,
-            valid_ratios=valid_ratios,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
 
         if not return_dict:
-            enc_outputs = tuple(value for value in [enc_outputs_class, enc_outputs_coord_logits] if value is not None)
-            tuple_outputs = (init_reference_points,) + decoder_outputs + encoder_outputs + enc_outputs
+            enc_outputs = tuple(
+                value
+                for value in [enc_topk_logits, enc_topk_bboxes, enc_outputs_class, enc_outputs_coord_logits]
+                if value is not None
+            )
+            dn_outputs = tuple(value if value is not None else None for value in [denoising_meta_values])
+            tuple_outputs = decoder_outputs + encoder_outputs + (init_reference_points,) + enc_outputs + dn_outputs
 
             return tuple_outputs
 
-        return DeformableDetrModelOutput(
-            init_reference_points=init_reference_points,
+        return RTDetrModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
             intermediate_hidden_states=decoder_outputs.intermediate_hidden_states,
+            intermediate_logits=decoder_outputs.intermediate_logits,
             intermediate_reference_points=decoder_outputs.intermediate_reference_points,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
@@ -1844,241 +1877,13 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
+            init_reference_points=init_reference_points,
+            enc_topk_logits=enc_topk_logits,
+            enc_topk_bboxes=enc_topk_bboxes,
             enc_outputs_class=enc_outputs_class,
             enc_outputs_coord_logits=enc_outputs_coord_logits,
+            denoising_meta_values=denoising_meta_values,
         )
-
-
-@add_start_docstrings(
-    """
-    Deformable DETR Model (consisting of a backbone and encoder-decoder Transformer) with object detection heads on
-    top, for tasks such as COCO detection.
-    """,
-    DEFORMABLE_DETR_START_DOCSTRING,
-)
-class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
-    # When using clones, all layers > 0 will be clones, but layer 0 *is* required
-    _tied_weights_keys = [r"bbox_embed\.[1-9]\d*", r"class_embed\.[1-9]\d*"]
-    # We can't initialize the model on meta device as some weights are modified during the initialization
-    _no_split_modules = None
-
-    def __init__(self, config: DeformableDetrConfig):
-        super().__init__(config)
-
-        # Deformable DETR encoder-decoder model
-        self.model = DeformableDetrModel(config)
-
-        # Detection heads on top
-        self.class_embed = nn.Linear(config.d_model, config.num_labels)
-        self.bbox_embed = DeformableDetrMLPPredictionHead(
-            input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
-        )
-
-        prior_prob = 0.01
-        bias_value = -math.log((1 - prior_prob) / prior_prob)
-        self.class_embed.bias.data = torch.ones(config.num_labels) * bias_value
-        nn.init.constant_(self.bbox_embed.layers[-1].weight.data, 0)
-        nn.init.constant_(self.bbox_embed.layers[-1].bias.data, 0)
-
-        # if two-stage, the last class_embed and bbox_embed is for region proposal generation
-        num_pred = (config.decoder_layers + 1) if config.two_stage else config.decoder_layers
-        if config.with_box_refine:
-            self.class_embed = _get_clones(self.class_embed, num_pred)
-            self.bbox_embed = _get_clones(self.bbox_embed, num_pred)
-            nn.init.constant_(self.bbox_embed[0].layers[-1].bias.data[2:], -2.0)
-            # hack implementation for iterative bounding box refinement
-            self.model.decoder.bbox_embed = self.bbox_embed
-        else:
-            nn.init.constant_(self.bbox_embed.layers[-1].bias.data[2:], -2.0)
-            self.class_embed = nn.ModuleList([self.class_embed for _ in range(num_pred)])
-            self.bbox_embed = nn.ModuleList([self.bbox_embed for _ in range(num_pred)])
-            self.model.decoder.bbox_embed = None
-        if config.two_stage:
-            # hack implementation for two-stage
-            self.model.decoder.class_embed = self.class_embed
-            for box_embed in self.bbox_embed:
-                nn.init.constant_(box_embed.layers[-1].bias.data[2:], 0.0)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    # taken from https://github.com/facebookresearch/detr/blob/master/models/detr.py
-    @torch.jit.unused
-    def _set_aux_loss(self, outputs_class, outputs_coord):
-        # this is a workaround to make torchscript happy, as torchscript
-        # doesn't support dictionary with non-homogeneous values, such
-        # as a dict having both a Tensor and a list.
-        return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class[:-1], outputs_coord[:-1])]
-
-    @add_start_docstrings_to_model_forward(DEFORMABLE_DETR_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=DeformableDetrObjectDetectionOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(
-        self,
-        pixel_values: torch.FloatTensor,
-        pixel_mask: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.FloatTensor] = None,
-        encoder_outputs: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[List[dict]] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], DeformableDetrObjectDetectionOutput]:
-        r"""
-        labels (`List[Dict]` of len `(batch_size,)`, *optional*):
-            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
-            following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
-            respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
-            in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
-
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> from transformers import AutoImageProcessor, DeformableDetrForObjectDetection
-        >>> from PIL import Image
-        >>> import requests
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> image_processor = AutoImageProcessor.from_pretrained("SenseTime/deformable-detr")
-        >>> model = DeformableDetrForObjectDetection.from_pretrained("SenseTime/deformable-detr")
-
-        >>> inputs = image_processor(images=image, return_tensors="pt")
-        >>> outputs = model(**inputs)
-
-        >>> # convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
-        >>> target_sizes = torch.tensor([image.size[::-1]])
-        >>> results = image_processor.post_process_object_detection(outputs, threshold=0.5, target_sizes=target_sizes)[
-        ...     0
-        ... ]
-        >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
-        ...     box = [round(i, 2) for i in box.tolist()]
-        ...     print(
-        ...         f"Detected {model.config.id2label[label.item()]} with confidence "
-        ...         f"{round(score.item(), 3)} at location {box}"
-        ...     )
-        Detected cat with confidence 0.8 at location [16.5, 52.84, 318.25, 470.78]
-        Detected cat with confidence 0.789 at location [342.19, 24.3, 640.02, 372.25]
-        Detected remote with confidence 0.633 at location [40.79, 72.78, 176.76, 117.25]
-        ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        # First, sent images through DETR base model to obtain encoder + decoder outputs
-        outputs = self.model(
-            pixel_values,
-            pixel_mask=pixel_mask,
-            decoder_attention_mask=decoder_attention_mask,
-            encoder_outputs=encoder_outputs,
-            inputs_embeds=inputs_embeds,
-            decoder_inputs_embeds=decoder_inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        hidden_states = outputs.intermediate_hidden_states if return_dict else outputs[2]
-        init_reference = outputs.init_reference_points if return_dict else outputs[0]
-        inter_references = outputs.intermediate_reference_points if return_dict else outputs[3]
-
-        # class logits + predicted bounding boxes
-        outputs_classes = []
-        outputs_coords = []
-
-        for level in range(hidden_states.shape[1]):
-            if level == 0:
-                reference = init_reference
-            else:
-                reference = inter_references[:, level - 1]
-            reference = inverse_sigmoid(reference)
-            outputs_class = self.class_embed[level](hidden_states[:, level])
-            delta_bbox = self.bbox_embed[level](hidden_states[:, level])
-            if reference.shape[-1] == 4:
-                outputs_coord_logits = delta_bbox + reference
-            elif reference.shape[-1] == 2:
-                delta_bbox[..., :2] += reference
-                outputs_coord_logits = delta_bbox
-            else:
-                raise ValueError(f"reference.shape[-1] should be 4 or 2, but got {reference.shape[-1]}")
-            outputs_coord = outputs_coord_logits.sigmoid()
-            outputs_classes.append(outputs_class)
-            outputs_coords.append(outputs_coord)
-        outputs_class = torch.stack(outputs_classes)
-        outputs_coord = torch.stack(outputs_coords)
-
-        logits = outputs_class[-1]
-        pred_boxes = outputs_coord[-1]
-
-        loss, loss_dict, auxiliary_outputs = None, None, None
-        if labels is not None:
-            # First: create the matcher
-            matcher = DeformableDetrHungarianMatcher(
-                class_cost=self.config.class_cost, bbox_cost=self.config.bbox_cost, giou_cost=self.config.giou_cost
-            )
-            # Second: create the criterion
-            losses = ["labels", "boxes", "cardinality"]
-            criterion = DeformableDetrLoss(
-                matcher=matcher,
-                num_classes=self.config.num_labels,
-                focal_alpha=self.config.focal_alpha,
-                losses=losses,
-            )
-            criterion.to(self.device)
-            # Third: compute the losses, based on outputs and labels
-            outputs_loss = {}
-            outputs_loss["logits"] = logits
-            outputs_loss["pred_boxes"] = pred_boxes
-            if self.config.auxiliary_loss:
-                auxiliary_outputs = self._set_aux_loss(outputs_class, outputs_coord)
-                outputs_loss["auxiliary_outputs"] = auxiliary_outputs
-            if self.config.two_stage:
-                enc_outputs_coord = outputs.enc_outputs_coord_logits.sigmoid()
-                outputs_loss["enc_outputs"] = {"logits": outputs.enc_outputs_class, "pred_boxes": enc_outputs_coord}
-
-            loss_dict = criterion(outputs_loss, labels)
-            # Fourth: compute total loss, as a weighted sum of the various losses
-            weight_dict = {"loss_ce": 1, "loss_bbox": self.config.bbox_loss_coefficient}
-            weight_dict["loss_giou"] = self.config.giou_loss_coefficient
-            if self.config.auxiliary_loss:
-                aux_weight_dict = {}
-                for i in range(self.config.decoder_layers - 1):
-                    aux_weight_dict.update({k + f"_{i}": v for k, v in weight_dict.items()})
-                weight_dict.update(aux_weight_dict)
-            loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
-
-        if not return_dict:
-            if auxiliary_outputs is not None:
-                output = (logits, pred_boxes) + auxiliary_outputs + outputs
-            else:
-                output = (logits, pred_boxes) + outputs
-            tuple_outputs = ((loss, loss_dict) + output) if loss is not None else output
-
-            return tuple_outputs
-
-        dict_outputs = DeformableDetrObjectDetectionOutput(
-            loss=loss,
-            loss_dict=loss_dict,
-            logits=logits,
-            pred_boxes=pred_boxes,
-            auxiliary_outputs=auxiliary_outputs,
-            last_hidden_state=outputs.last_hidden_state,
-            decoder_hidden_states=outputs.decoder_hidden_states,
-            decoder_attentions=outputs.decoder_attentions,
-            cross_attentions=outputs.cross_attentions,
-            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
-            encoder_hidden_states=outputs.encoder_hidden_states,
-            encoder_attentions=outputs.encoder_attentions,
-            intermediate_hidden_states=outputs.intermediate_hidden_states,
-            intermediate_reference_points=outputs.intermediate_reference_points,
-            init_reference_points=outputs.init_reference_points,
-            enc_outputs_class=outputs.enc_outputs_class,
-            enc_outputs_coord_logits=outputs.enc_outputs_coord_logits,
-        )
-
-        return dict_outputs
 
 
 # Copied from transformers.models.detr.modeling_detr.dice_loss
@@ -2133,71 +1938,104 @@ def sigmoid_focal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: f
     return loss.mean(1).sum() / num_boxes
 
 
-class DeformableDetrLoss(nn.Module):
+class RTDetrLoss(nn.Module):
     """
-    This class computes the losses for `DeformableDetrForObjectDetection`. The process happens in two steps: 1) we
-    compute hungarian assignment between ground truth boxes and the outputs of the model 2) we supervise each pair of
-    matched ground-truth / prediction (supervise class and box).
+    This class computes the losses for RTDetr. The process happens in two steps: 1) we compute hungarian assignment
+    between ground truth boxes and the outputs of the model 2) we supervise each pair of matched ground-truth /
+    prediction (supervise class and box).
 
     Args:
-        matcher (`DeformableDetrHungarianMatcher`):
+        matcher (`DetrHungarianMatcher`):
             Module able to compute a matching between targets and proposals.
-        num_classes (`int`):
-            Number of object categories, omitting the special no-object category.
-        focal_alpha (`float`):
-            Alpha parameter in focal loss.
+        weight_dict (`Dict`):
+            Dictionary relating each loss with its weights. These losses are configured in RTDetrConf as
+            `weight_loss_vfl`, `weight_loss_bbox`, `weight_loss_giou`
         losses (`List[str]`):
             List of all the losses to be applied. See `get_loss` for a list of all available losses.
+        alpha (`float`):
+            Parameter alpha used to compute the focal loss.
+        gamma (`float`):
+            Parameter gamma used to compute the focal loss.
+        eos_coef (`float`):
+            Relative classification weight applied to the no-object category.
+        num_classes (`int`):
+            Number of object categories, omitting the special no-object category.
     """
 
-    def __init__(self, matcher, num_classes, focal_alpha, losses):
+    def __init__(self, config):
         super().__init__()
-        self.matcher = matcher
-        self.num_classes = num_classes
-        self.focal_alpha = focal_alpha
-        self.losses = losses
 
-    # removed logging parameter, which was part of the original implementation
-    def loss_labels(self, outputs, targets, indices, num_boxes):
-        """
-        Classification loss (Binary focal loss) targets dicts must contain the key "class_labels" containing a tensor
-        of dim [nb_target_boxes]
+        self.matcher = RTDetrHungarianMatcher(config)
+        self.num_classes = config.num_labels
+        self.weight_dict = {
+            "loss_vfl": config.weight_loss_vfl,
+            "loss_bbox": config.weight_loss_bbox,
+            "loss_giou": config.weight_loss_giou,
+        }
+        self.losses = ["vfl", "boxes"]
+        self.eos_coef = config.eos_coefficient
+        empty_weight = torch.ones(config.num_labels + 1)
+        empty_weight[-1] = self.eos_coef
+        self.register_buffer("empty_weight", empty_weight)
+        self.alpha = config.focal_loss_alpha
+        self.gamma = config.focal_loss_gamma
+
+    def loss_labels_vfl(self, outputs, targets, indices, num_boxes, log=True):
+        if "pred_boxes" not in outputs:
+            raise KeyError("No predicted boxes found in outputs")
+        if "logits" not in outputs:
+            raise KeyError("No predicted logits found in outputs")
+        idx = self._get_source_permutation_idx(indices)
+
+        src_boxes = outputs["pred_boxes"][idx]
+        target_boxes = torch.cat([_target["boxes"][i] for _target, (_, i) in zip(targets, indices)], dim=0)
+        ious, _ = box_iou(center_to_corners_format(src_boxes), center_to_corners_format(target_boxes))
+        ious = torch.diag(ious).detach()
+
+        src_logits = outputs["logits"]
+        target_classes_original = torch.cat([_target["class_labels"][i] for _target, (_, i) in zip(targets, indices)])
+        target_classes = torch.full(
+            src_logits.shape[:2], self.num_classes, dtype=torch.int64, device=src_logits.device
+        )
+        target_classes[idx] = target_classes_original
+        target = F.one_hot(target_classes, num_classes=self.num_classes + 1)[..., :-1]
+
+        target_score_original = torch.zeros_like(target_classes, dtype=src_logits.dtype)
+        target_score_original[idx] = ious.to(target_score_original.dtype)
+        target_score = target_score_original.unsqueeze(-1) * target
+
+        pred_score = F.sigmoid(src_logits).detach()
+        weight = self.alpha * pred_score.pow(self.gamma) * (1 - target) + target_score
+
+        loss = F.binary_cross_entropy_with_logits(src_logits, target_score, weight=weight, reduction="none")
+        loss = loss.mean(1).sum() * src_logits.shape[1] / num_boxes
+        return {"loss_vfl": loss}
+
+    def loss_labels(self, outputs, targets, indices, num_boxes, log=True):
+        """Classification loss (NLL)
+        targets dicts must contain the key "class_labels" containing a tensor of dim [nb_target_boxes]
         """
         if "logits" not in outputs:
             raise KeyError("No logits were found in the outputs")
-        source_logits = outputs["logits"]
+
+        src_logits = outputs["logits"]
 
         idx = self._get_source_permutation_idx(indices)
-        target_classes_o = torch.cat([t["class_labels"][J] for t, (_, J) in zip(targets, indices)])
+        target_classes_original = torch.cat([_target["class_labels"][i] for _target, (_, i) in zip(targets, indices)])
         target_classes = torch.full(
-            source_logits.shape[:2], self.num_classes, dtype=torch.int64, device=source_logits.device
+            src_logits.shape[:2], self.num_classes, dtype=torch.int64, device=src_logits.device
         )
-        target_classes[idx] = target_classes_o
+        target_classes[idx] = target_classes_original
 
-        target_classes_onehot = torch.zeros(
-            [source_logits.shape[0], source_logits.shape[1], source_logits.shape[2] + 1],
-            dtype=source_logits.dtype,
-            layout=source_logits.layout,
-            device=source_logits.device,
-        )
-        target_classes_onehot.scatter_(2, target_classes.unsqueeze(-1), 1)
-
-        target_classes_onehot = target_classes_onehot[:, :, :-1]
-        loss_ce = (
-            sigmoid_focal_loss(source_logits, target_classes_onehot, num_boxes, alpha=self.focal_alpha, gamma=2)
-            * source_logits.shape[1]
-        )
+        loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.class_weight)
         losses = {"loss_ce": loss_ce}
-
         return losses
 
     @torch.no_grad()
-    # Copied from transformers.models.detr.modeling_detr.DetrLoss.loss_cardinality
     def loss_cardinality(self, outputs, targets, indices, num_boxes):
         """
-        Compute the cardinality error, i.e. the absolute error in the number of predicted non-empty boxes.
-
-        This is not really a loss, it is intended for logging purposes only. It doesn't propagate gradients.
+        Compute the cardinality error, i.e. the absolute error in the number of predicted non-empty boxes. This is not
+        really a loss, it is intended for logging purposes only. It doesn't propagate gradients.
         """
         logits = outputs["logits"]
         device = logits.device
@@ -2208,54 +2046,140 @@ class DeformableDetrLoss(nn.Module):
         losses = {"cardinality_error": card_err}
         return losses
 
-    # Copied from transformers.models.detr.modeling_detr.DetrLoss.loss_boxes
     def loss_boxes(self, outputs, targets, indices, num_boxes):
         """
-        Compute the losses related to the bounding boxes, the L1 regression loss and the GIoU loss.
-
-        Targets dicts must contain the key "boxes" containing a tensor of dim [nb_target_boxes, 4]. The target boxes
-        are expected in format (center_x, center_y, w, h), normalized by the image size.
+        Compute the losses related to the bounding boxes, the L1 regression loss and the GIoU loss. Targets dicts must
+        contain the key "boxes" containing a tensor of dim [nb_target_boxes, 4]. The target boxes are expected in
+        format (center_x, center_y, w, h), normalized by the image size.
         """
         if "pred_boxes" not in outputs:
             raise KeyError("No predicted boxes found in outputs")
         idx = self._get_source_permutation_idx(indices)
-        source_boxes = outputs["pred_boxes"][idx]
+        src_boxes = outputs["pred_boxes"][idx]
         target_boxes = torch.cat([t["boxes"][i] for t, (_, i) in zip(targets, indices)], dim=0)
 
-        loss_bbox = nn.functional.l1_loss(source_boxes, target_boxes, reduction="none")
-
         losses = {}
+
+        loss_bbox = F.l1_loss(src_boxes, target_boxes, reduction="none")
         losses["loss_bbox"] = loss_bbox.sum() / num_boxes
 
         loss_giou = 1 - torch.diag(
-            generalized_box_iou(center_to_corners_format(source_boxes), center_to_corners_format(target_boxes))
+            generalized_box_iou(center_to_corners_format(src_boxes), center_to_corners_format(target_boxes))
         )
         losses["loss_giou"] = loss_giou.sum() / num_boxes
         return losses
 
-    # Copied from transformers.models.detr.modeling_detr.DetrLoss._get_source_permutation_idx
+    def loss_masks(self, outputs, targets, indices, num_boxes):
+        """
+        Compute the losses related to the masks: the focal loss and the dice loss. Targets dicts must contain the key
+        "masks" containing a tensor of dim [nb_target_boxes, h, w].
+        """
+        if "pred_masks" not in outputs:
+            raise KeyError("No predicted masks found in outputs")
+
+        source_idx = self._get_source_permutation_idx(indices)
+        target_idx = self._get_target_permutation_idx(indices)
+        source_masks = outputs["pred_masks"]
+        source_masks = source_masks[source_idx]
+        masks = [t["masks"] for t in targets]
+        target_masks, valid = nested_tensor_from_tensor_list(masks).decompose()
+        target_masks = target_masks.to(source_masks)
+        target_masks = target_masks[target_idx]
+
+        # upsample predictions to the target size
+        source_masks = nn.functional.interpolate(
+            source_masks[:, None], size=target_masks.shape[-2:], mode="bilinear", align_corners=False
+        )
+        source_masks = source_masks[:, 0].flatten(1)
+
+        target_masks = target_masks.flatten(1)
+        target_masks = target_masks.view(source_masks.shape)
+        losses = {
+            "loss_mask": sigmoid_focal_loss(source_masks, target_masks, num_boxes),
+            "loss_dice": dice_loss(source_masks, target_masks, num_boxes),
+        }
+        return losses
+
+    def loss_labels_bce(self, outputs, targets, indices, num_boxes, log=True):
+        src_logits = outputs["logits"]
+        idx = self._get_source_permutation_idx(indices)
+        target_classes_original = torch.cat([_target["class_labels"][i] for _target, (_, i) in zip(targets, indices)])
+        target_classes = torch.full(
+            src_logits.shape[:2], self.num_classes, dtype=torch.int64, device=src_logits.device
+        )
+        target_classes[idx] = target_classes_original
+
+        target = F.one_hot(target_classes, num_classes=self.num_classes + 1)[..., :-1]
+        loss = F.binary_cross_entropy_with_logits(src_logits, target * 1.0, reduction="none")
+        loss = loss.mean(1).sum() * src_logits.shape[1] / num_boxes
+        return {"loss_bce": loss}
+
     def _get_source_permutation_idx(self, indices):
         # permute predictions following indices
         batch_idx = torch.cat([torch.full_like(source, i) for i, (source, _) in enumerate(indices)])
         source_idx = torch.cat([source for (source, _) in indices])
         return batch_idx, source_idx
 
-    # Copied from transformers.models.detr.modeling_detr.DetrLoss._get_target_permutation_idx
     def _get_target_permutation_idx(self, indices):
         # permute targets following indices
         batch_idx = torch.cat([torch.full_like(target, i) for i, (_, target) in enumerate(indices)])
         target_idx = torch.cat([target for (_, target) in indices])
         return batch_idx, target_idx
 
+    def loss_labels_focal(self, outputs, targets, indices, num_boxes, log=True):
+        if "logits" not in outputs:
+            raise KeyError("No logits found in outputs")
+
+        src_logits = outputs["logits"]
+
+        idx = self._get_source_permutation_idx(indices)
+        target_classes_original = torch.cat([_target["class_labels"][i] for _target, (_, i) in zip(targets, indices)])
+        target_classes = torch.full(
+            src_logits.shape[:2], self.num_classes, dtype=torch.int64, device=src_logits.device
+        )
+        target_classes[idx] = target_classes_original
+
+        target = F.one_hot(target_classes, num_classes=self.num_classes + 1)[..., :-1]
+        loss = sigmoid_focal_loss(src_logits, target, self.alpha, self.gamma, reduction="none")
+        loss = loss.mean(1).sum() * src_logits.shape[1] / num_boxes
+        return {"loss_focal": loss}
+
     def get_loss(self, loss, outputs, targets, indices, num_boxes):
         loss_map = {
             "labels": self.loss_labels,
             "cardinality": self.loss_cardinality,
             "boxes": self.loss_boxes,
+            "masks": self.loss_masks,
+            "bce": self.loss_labels_bce,
+            "focal": self.loss_labels_focal,
+            "vfl": self.loss_labels_vfl,
         }
         if loss not in loss_map:
             raise ValueError(f"Loss {loss} not supported")
         return loss_map[loss](outputs, targets, indices, num_boxes)
+
+    @staticmethod
+    def get_cdn_matched_indices(dn_meta, targets):
+        dn_positive_idx, dn_num_group = dn_meta["dn_positive_idx"], dn_meta["dn_num_group"]
+        num_gts = [len(t["class_labels"]) for t in targets]
+        device = targets[0]["class_labels"].device
+
+        dn_match_indices = []
+        for i, num_gt in enumerate(num_gts):
+            if num_gt > 0:
+                gt_idx = torch.arange(num_gt, dtype=torch.int64, device=device)
+                gt_idx = gt_idx.tile(dn_num_group)
+                assert len(dn_positive_idx[i]) == len(gt_idx)
+                dn_match_indices.append((dn_positive_idx[i], gt_idx))
+            else:
+                dn_match_indices.append(
+                    (
+                        torch.zeros(0, dtype=torch.int64, device=device),
+                        torch.zeros(0, dtype=torch.int64, device=device),
+                    )
+                )
+
+        return dn_match_indices
 
     def forward(self, outputs, targets):
         """
@@ -2268,63 +2192,75 @@ class DeformableDetrLoss(nn.Module):
                 List of dicts, such that `len(targets) == batch_size`. The expected keys in each dict depends on the
                 losses applied, see each loss' doc.
         """
-        outputs_without_aux = {k: v for k, v in outputs.items() if k != "auxiliary_outputs" and k != "enc_outputs"}
+        outputs_without_aux = {k: v for k, v in outputs.items() if "auxiliary_outputs" not in k}
 
         # Retrieve the matching between the outputs of the last layer and the targets
         indices = self.matcher(outputs_without_aux, targets)
 
-        # Compute the average number of target boxes accross all nodes, for normalization purposes
+        # Compute the average number of target boxes across all nodes, for normalization purposes
         num_boxes = sum(len(t["class_labels"]) for t in targets)
         num_boxes = torch.as_tensor([num_boxes], dtype=torch.float, device=next(iter(outputs.values())).device)
-        world_size = 1
-        if is_accelerate_available():
-            if PartialState._shared_state != {}:
-                num_boxes = reduce(num_boxes)
-                world_size = PartialState().num_processes
-        num_boxes = torch.clamp(num_boxes / world_size, min=1).item()
+        num_boxes = torch.clamp(num_boxes, min=1).item()
 
         # Compute all the requested losses
         losses = {}
         for loss in self.losses:
-            losses.update(self.get_loss(loss, outputs, targets, indices, num_boxes))
+            l_dict = self.get_loss(loss, outputs, targets, indices, num_boxes)
+            l_dict = {k: l_dict[k] * self.weight_dict[k] for k in l_dict if k in self.weight_dict}
+            losses.update(l_dict)
 
         # In case of auxiliary losses, we repeat this process with the output of each intermediate layer.
         if "auxiliary_outputs" in outputs:
             for i, auxiliary_outputs in enumerate(outputs["auxiliary_outputs"]):
                 indices = self.matcher(auxiliary_outputs, targets)
                 for loss in self.losses:
+                    if loss == "masks":
+                        # Intermediate masks losses are too costly to compute, we ignore them.
+                        continue
                     l_dict = self.get_loss(loss, auxiliary_outputs, targets, indices, num_boxes)
-                    l_dict = {k + f"_{i}": v for k, v in l_dict.items()}
+                    l_dict = {k: l_dict[k] * self.weight_dict[k] for k in l_dict if k in self.weight_dict}
+                    l_dict = {k + f"_aux_{i}": v for k, v in l_dict.items()}
                     losses.update(l_dict)
 
-        if "enc_outputs" in outputs:
-            enc_outputs = outputs["enc_outputs"]
-            bin_targets = copy.deepcopy(targets)
-            for bt in bin_targets:
-                bt["class_labels"] = torch.zeros_like(bt["class_labels"])
-            indices = self.matcher(enc_outputs, bin_targets)
-            for loss in self.losses:
-                l_dict = self.get_loss(loss, enc_outputs, bin_targets, indices, num_boxes)
-                l_dict = {k + "_enc": v for k, v in l_dict.items()}
-                losses.update(l_dict)
+        # In case of cdn auxiliary losses. For rtdetr
+        if "dn_auxiliary_outputs" in outputs:
+            if "denoising_meta_values" not in outputs:
+                raise ValueError(
+                    "The output must have the 'denoising_meta_values` key. Please, ensure that 'outputs' includes a 'denoising_meta_values' entry."
+                )
+            indices = self.get_cdn_matched_indices(outputs["denoising_meta_values"], targets)
+            num_boxes = num_boxes * outputs["denoising_meta_values"]["dn_num_group"]
+
+            for i, auxiliary_outputs in enumerate(outputs["dn_auxiliary_outputs"]):
+                # indices = self.matcher(auxiliary_outputs, targets)
+                for loss in self.losses:
+                    if loss == "masks":
+                        # Intermediate masks losses are too costly to compute, we ignore them.
+                        continue
+                    kwargs = {}
+                    l_dict = self.get_loss(loss, auxiliary_outputs, targets, indices, num_boxes, **kwargs)
+                    l_dict = {k: l_dict[k] * self.weight_dict[k] for k in l_dict if k in self.weight_dict}
+                    l_dict = {k + f"_dn_{i}": v for k, v in l_dict.items()}
+                    losses.update(l_dict)
 
         return losses
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrMLPPredictionHead
-class DeformableDetrMLPPredictionHead(nn.Module):
+# taken from https://github.com/facebookresearch/detr/blob/master/models/detr.py
+class RTDetrMLPPredictionHead(nn.Module):
     """
     Very simple multi-layer perceptron (MLP, also called FFN), used to predict the normalized center coordinates,
     height and width of a bounding box w.r.t. an image.
 
     Copied from https://github.com/facebookresearch/detr/blob/master/models/detr.py
+    Origin from https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/rtdetr_paddle/ppdet/modeling/transformers/utils.py#L453
 
     """
 
-    def __init__(self, input_dim, hidden_dim, output_dim, num_layers):
+    def __init__(self, config, input_dim, d_model, output_dim, num_layers):
         super().__init__()
         self.num_layers = num_layers
-        h = [hidden_dim] * (num_layers - 1)
+        h = [d_model] * (num_layers - 1)
         self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
 
     def forward(self, x):
@@ -2333,83 +2269,84 @@ class DeformableDetrMLPPredictionHead(nn.Module):
         return x
 
 
-class DeformableDetrHungarianMatcher(nn.Module):
-    """
-    This class computes an assignment between the targets and the predictions of the network.
+class RTDetrHungarianMatcher(nn.Module):
+    """This class computes an assignment between the targets and the predictions of the network
 
     For efficiency reasons, the targets don't include the no_object. Because of this, in general, there are more
     predictions than targets. In this case, we do a 1-to-1 matching of the best predictions, while the others are
     un-matched (and thus treated as non-objects).
 
     Args:
-        class_cost:
-            The relative weight of the classification error in the matching cost.
-        bbox_cost:
-            The relative weight of the L1 error of the bounding box coordinates in the matching cost.
-        giou_cost:
-            The relative weight of the giou loss of the bounding box in the matching cost.
+        config: RTDetrConfig
     """
 
-    def __init__(self, class_cost: float = 1, bbox_cost: float = 1, giou_cost: float = 1):
+    def __init__(self, config):
         super().__init__()
         requires_backends(self, ["scipy"])
 
-        self.class_cost = class_cost
-        self.bbox_cost = bbox_cost
-        self.giou_cost = giou_cost
-        if class_cost == 0 and bbox_cost == 0 and giou_cost == 0:
+        self.class_cost = config.matcher_class_cost
+        self.bbox_cost = config.matcher_bbox_cost
+        self.giou_cost = config.matcher_giou_cost
+
+        self.use_focal_loss = config.use_focal_loss
+        self.alpha = config.matcher_alpha
+        self.gamma = config.matcher_gamma
+
+        if self.class_cost == self.bbox_cost == self.giou_cost == 0:
             raise ValueError("All costs of the Matcher can't be 0")
 
     @torch.no_grad()
     def forward(self, outputs, targets):
-        """
-        Args:
-            outputs (`dict`):
-                A dictionary that contains at least these entries:
-                * "logits": Tensor of dim [batch_size, num_queries, num_classes] with the classification logits
-                * "pred_boxes": Tensor of dim [batch_size, num_queries, 4] with the predicted box coordinates.
-            targets (`List[dict]`):
-                A list of targets (len(targets) = batch_size), where each target is a dict containing:
-                * "class_labels": Tensor of dim [num_target_boxes] (where num_target_boxes is the number of
-                  ground-truth
-                 objects in the target) containing the class labels
-                * "boxes": Tensor of dim [num_target_boxes, 4] containing the target box coordinates.
+        """Performs the matching
+
+        Params:
+            outputs: This is a dict that contains at least these entries:
+                 "logits": Tensor of dim [batch_size, num_queries, num_classes] with the classification logits
+                 "pred_boxes": Tensor of dim [batch_size, num_queries, 4] with the predicted box coordinates
+
+            targets: This is a list of targets (len(targets) = batch_size), where each target is a dict containing:
+                 "class_labels": Tensor of dim [num_target_boxes] (where num_target_boxes is the number of ground-truth
+                           objects in the target) containing the class labels
+                 "boxes": Tensor of dim [num_target_boxes, 4] containing the target box coordinates
 
         Returns:
-            `List[Tuple]`: A list of size `batch_size`, containing tuples of (index_i, index_j) where:
-            - index_i is the indices of the selected predictions (in order)
-            - index_j is the indices of the corresponding selected targets (in order)
-            For each batch element, it holds: len(index_i) = len(index_j) = min(num_queries, num_target_boxes)
+            A list of size batch_size, containing tuples of (index_i, index_j) where:
+                - index_i is the indices of the selected predictions (in order)
+                - index_j is the indices of the corresponding selected targets (in order)
+            For each batch element, it holds:
+                len(index_i) = len(index_j) = min(num_queries, num_target_boxes)
         """
         batch_size, num_queries = outputs["logits"].shape[:2]
 
         # We flatten to compute the cost matrices in a batch
-        out_prob = outputs["logits"].flatten(0, 1).sigmoid()  # [batch_size * num_queries, num_classes]
         out_bbox = outputs["pred_boxes"].flatten(0, 1)  # [batch_size * num_queries, 4]
-
         # Also concat the target labels and boxes
         target_ids = torch.cat([v["class_labels"] for v in targets])
         target_bbox = torch.cat([v["boxes"] for v in targets])
-
-        # Compute the classification cost.
-        alpha = 0.25
-        gamma = 2.0
-        neg_cost_class = (1 - alpha) * (out_prob**gamma) * (-(1 - out_prob + 1e-8).log())
-        pos_cost_class = alpha * ((1 - out_prob) ** gamma) * (-(out_prob + 1e-8).log())
-        class_cost = pos_cost_class[:, target_ids] - neg_cost_class[:, target_ids]
+        # Compute the classification cost. Contrary to the loss, we don't use the NLL,
+        # but approximate it in 1 - proba[target class].
+        # The 1 is a constant that doesn't change the matching, it can be ommitted.
+        if self.use_focal_loss:
+            out_prob = F.sigmoid(outputs["logits"].flatten(0, 1))
+            out_prob = out_prob[:, target_ids]
+            neg_cost_class = (1 - self.alpha) * (out_prob**self.gamma) * (-(1 - out_prob + 1e-8).log())
+            pos_cost_class = self.alpha * ((1 - out_prob) ** self.gamma) * (-(out_prob + 1e-8).log())
+            class_cost = pos_cost_class - neg_cost_class
+        else:
+            out_prob = outputs["logits"].flatten(0, 1).softmax(-1)  # [batch_size * num_queries, num_classes]
+            class_cost = -out_prob[:, target_ids]
 
         # Compute the L1 cost between boxes
         bbox_cost = torch.cdist(out_bbox, target_bbox, p=1)
-
-        # Compute the giou cost between boxes
+        # Compute the giou cost betwen boxes
         giou_cost = -generalized_box_iou(center_to_corners_format(out_bbox), center_to_corners_format(target_bbox))
-
-        # Final cost matrix
+        # Compute the final cost matrix
         cost_matrix = self.bbox_cost * bbox_cost + self.class_cost * class_cost + self.giou_cost * giou_cost
         cost_matrix = cost_matrix.view(batch_size, num_queries, -1).cpu()
 
         sizes = [len(v["boxes"]) for v in targets]
         indices = [linear_sum_assignment(c[i]) for i, c in enumerate(cost_matrix.split(sizes, -1))]
+
         return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]
 
 
@@ -2529,3 +2466,210 @@ def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
     else:
         raise ValueError("Only 3-dimensional tensors are supported")
     return NestedTensor(tensor, mask)
+
+
+@add_start_docstrings(
+    """
+    RT-DETR Model (consisting of a backbone and encoder-decoder) outputting bounding boxes and logits to be further
+    decoded into scores and classes.
+    """,
+    RTDETR_START_DOCSTRING,
+)
+class RTDetrForObjectDetection(RTDetrPreTrainedModel):
+    # When using clones, all layers > 0 will be clones, but layer 0 *is* required
+    _tied_weights_keys = ["bbox_embed", "class_embed"]
+    # We can't initialize the model on meta device as some weights are modified during the initialization
+    _no_split_modules = None
+
+    def __init__(self, config: RTDetrConfig):
+        super().__init__(config)
+
+        # RTDETR encoder-decoder model
+        self.model = RTDetrModel(config)
+
+        # Detection heads on top
+        self.class_embed = partial(nn.Linear, config.d_model, config.num_labels)
+        self.bbox_embed = partial(RTDetrMLPPredictionHead, config, config.d_model, config.d_model, 4, num_layers=3)
+
+        # if two-stage, the last class_embed and bbox_embed is for region proposal generation
+        num_pred = config.decoder_layers
+        if config.with_box_refine:
+            self.class_embed = _get_clones(self.class_embed, num_pred)
+            self.bbox_embed = _get_clones(self.bbox_embed, num_pred)
+        else:
+            self.class_embed = nn.ModuleList([self.class_embed() for _ in range(num_pred)])
+            self.bbox_embed = nn.ModuleList([self.bbox_embed() for _ in range(num_pred)])
+
+        # hack implementation for iterative bounding box refinement
+        self.model.decoder.class_embed = self.class_embed
+        self.model.decoder.bbox_embed = self.bbox_embed
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @torch.jit.unused
+    def _set_aux_loss(self, outputs_class, outputs_coord):
+        # this is a workaround to make torchscript happy, as torchscript
+        # doesn't support dictionary with non-homogeneous values, such
+        # as a dict having both a Tensor and a list.
+        return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class, outputs_coord)]
+
+    @add_start_docstrings_to_model_forward(RTDETR_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=RTDetrObjectDetectionOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor,
+        pixel_mask: Optional[torch.LongTensor] = None,
+        encoder_outputs: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[List[dict]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.FloatTensor], RTDetrObjectDetectionOutput]:
+        r"""
+        labels (`List[Dict]` of len `(batch_size,)`, *optional*):
+            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
+            following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
+            respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
+            in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
+
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import RTDetrImageProcessor, RTDetrForObjectDetection
+        >>> from PIL import Image
+        >>> import requests
+        >>> import torch
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> image_processor = RTDetrImageProcessor.from_pretrained("PekingU/rtdetr_r50vd")
+        >>> model = RTDetrForObjectDetection.from_pretrained("PekingU/rtdetr_r50vd")
+
+        >>> # prepare image for the model
+        >>> inputs = image_processor(images=image, return_tensors="pt")
+
+        >>> # forward pass
+        >>> outputs = model(**inputs)
+
+        >>> logits = outputs.logits
+        >>> list(logits.shape)
+        [1, 300, 80]
+
+        >>> boxes = outputs.pred_boxes
+        >>> list(boxes.shape)
+        [1, 300, 4]
+
+        >>> # convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
+        >>> target_sizes = torch.tensor([image.size[::-1]])
+        >>> results = image_processor.post_process_object_detection(outputs, threshold=0.9, target_sizes=target_sizes)[
+        ...     0
+        ... ]
+
+        >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
+        ...     box = [round(i, 2) for i in box.tolist()]
+        ...     print(
+        ...         f"Detected {model.config.id2label[label.item()]} with confidence "
+        ...         f"{round(score.item(), 3)} at location {box}"
+        ...     )
+        Detected sofa with confidence 0.97 at location [0.14, 0.38, 640.13, 476.21]
+        Detected cat with confidence 0.96 at location [343.38, 24.28, 640.14, 371.5]
+        Detected cat with confidence 0.958 at location [13.23, 54.18, 318.98, 472.22]
+        Detected remote with confidence 0.951 at location [40.11, 73.44, 175.96, 118.48]
+        Detected remote with confidence 0.924 at location [333.73, 76.58, 369.97, 186.99]
+        ```"""
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.model(
+            pixel_values,
+            pixel_mask=pixel_mask,
+            encoder_outputs=encoder_outputs,
+            inputs_embeds=inputs_embeds,
+            decoder_inputs_embeds=decoder_inputs_embeds,
+            labels=labels,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        denoising_meta_values = (
+            outputs.denoising_meta_values if return_dict else outputs[-1] if self.training else None
+        )
+
+        outputs_class = outputs.intermediate_logits if return_dict else outputs[2]
+        outputs_coord = outputs.intermediate_reference_points if return_dict else outputs[3]
+
+        if self.training and denoising_meta_values is not None:
+            dn_out_coord, outputs_coord = torch.split(outputs_coord, denoising_meta_values["dn_num_split"], dim=2)
+            dn_out_class, outputs_class = torch.split(outputs_class, denoising_meta_values["dn_num_split"], dim=2)
+
+        logits = outputs_class[:, -1]
+        pred_boxes = outputs_coord[:, -1]
+
+        loss, loss_dict, auxiliary_outputs = None, None, None
+        if labels is not None:
+            # First: create the criterion
+            criterion = RTDetrLoss(self.config)
+            criterion.to(self.device)
+            # Second: compute the losses, based on outputs and labels
+            outputs_loss = {}
+            outputs_loss["logits"] = logits
+            outputs_loss["pred_boxes"] = pred_boxes
+            if self.config.auxiliary_loss:
+                enc_topk_logits = outputs.enc_topk_logits if return_dict else outputs[-5]
+                enc_topk_bboxes = outputs.enc_topk_bboxes if return_dict else outputs[-4]
+                auxiliary_outputs = self._set_aux_loss(
+                    outputs_class[:, :-1].transpose(0, 1), outputs_coord[:, :-1].transpose(0, 1)
+                )
+                outputs_loss["auxiliary_outputs"] = auxiliary_outputs
+                outputs_loss["auxiliary_outputs"].extend(self._set_aux_loss([enc_topk_logits], [enc_topk_bboxes]))
+                if self.training and denoising_meta_values is not None:
+                    outputs_loss["dn_auxiliary_outputs"] = self._set_aux_loss(
+                        dn_out_class.transpose(0, 1), dn_out_coord.transpose(0, 1)
+                    )
+                    outputs_loss["denoising_meta_values"] = denoising_meta_values
+
+            loss_dict = criterion(outputs_loss, labels)
+
+            loss = sum(loss_dict.values())
+
+        if not return_dict:
+            if auxiliary_outputs is not None:
+                output = (logits, pred_boxes) + (auxiliary_outputs,) + outputs
+            else:
+                output = (logits, pred_boxes) + outputs
+            return ((loss, loss_dict) + output) if loss is not None else output
+
+        return RTDetrObjectDetectionOutput(
+            loss=loss,
+            loss_dict=loss_dict,
+            logits=logits,
+            pred_boxes=pred_boxes,
+            auxiliary_outputs=auxiliary_outputs,
+            last_hidden_state=outputs.last_hidden_state,
+            intermediate_hidden_states=outputs.intermediate_hidden_states,
+            intermediate_logits=outputs.intermediate_logits,
+            intermediate_reference_points=outputs.intermediate_reference_points,
+            decoder_hidden_states=outputs.decoder_hidden_states,
+            decoder_attentions=outputs.decoder_attentions,
+            cross_attentions=outputs.cross_attentions,
+            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+            encoder_hidden_states=outputs.encoder_hidden_states,
+            encoder_attentions=outputs.encoder_attentions,
+            init_reference_points=outputs.init_reference_points,
+            enc_topk_logits=outputs.enc_topk_logits,
+            enc_topk_bboxes=outputs.enc_topk_bboxes,
+            enc_outputs_class=outputs.enc_outputs_class,
+            enc_outputs_coord_logits=outputs.enc_outputs_coord_logits,
+            denoising_meta_values=outputs.denoising_meta_values,
+        )
