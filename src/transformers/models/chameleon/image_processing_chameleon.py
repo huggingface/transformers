@@ -14,75 +14,315 @@
 # limitations under the License.
 """Image processor class for Chameleon."""
 
-from typing import Optional, Union
+from typing import Dict, Optional, Union
 
 import numpy as np
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature
-from ...image_utils import ImageInput
-from ...utils import TensorType, is_vision_available
+from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
+from ...image_transforms import (
+    get_resize_output_image_size,
+    resize,
+    to_channel_dimension_format,
+)
+from ...image_utils import (
+    ChannelDimension,
+    ImageInput,
+    PILImageResampling,
+    infer_channel_dimension_format,
+    is_scaled_image,
+    make_list_of_images,
+    to_numpy_array,
+    valid_images,
+    validate_kwargs,
+    validate_preprocess_arguments,
+)
+from ...utils import TensorType, is_vision_available, logging
 
+
+logger = logging.get_logger(__name__)
 
 if is_vision_available():
     import PIL
 
 
-# TODO: support batch? Rewrite code, use existing functionality to resize, ...
 class ChameleonImageProcessor(BaseImageProcessor):
     r"""
-    Constructs an Chameleon image processor.
+    Constructs a Chameleon image processor.
 
     Args:
-        kwargs (Dict, *optional*):
-            foo bar
+        do_resize (`bool`, *optional*, defaults to `True`):
+            Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by
+            `do_resize` in the `preprocess` method.
+        size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 224}`):
+            Size of the image after resizing. The shortest edge of the image is resized to size["shortest_edge"], with
+            the longest edge resized to keep the input aspect ratio. Can be overridden by `size` in the `preprocess`
+            method.
+        resample (`PILImageResampling`, *optional*, defaults to 1):
+            Resampling filter to use if resizing the image. Can be overridden by `resample` in the `preprocess` method.
+        do_center_crop (`bool`, *optional*, defaults to `True`):
+            Whether to center crop the image to the specified `crop_size`. Can be overridden by `do_center_crop` in the
+            `preprocess` method.
+        crop_size (`Dict[str, int]` *optional*, defaults to 224):
+            Size of the output image after applying `center_crop`. Can be overridden by `crop_size` in the `preprocess`
+            method.
+        do_rescale (`bool`, *optional*, defaults to `True`):
+            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by `do_rescale` in
+            the `preprocess` method.
+        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
+            Scale factor to use if rescaling the image. Can be overridden by `rescale_factor` in the `preprocess`
+            method.
+        do_convert_rgb (`bool`, *optional*, defaults to `True`):
+            Whether to convert the image to RGB.
     """
 
-    def __init__(self, **kwargs):
+    model_input_names = ["pixel_values"]
+
+    def __init__(
+        self,
+        do_resize: bool = True,
+        size: Dict[str, int] = None,
+        resample: PILImageResampling = PIL.Image.LANCZOS,
+        do_center_crop: bool = True,
+        crop_size: Dict[str, int] = None,
+        do_rescale: bool = True,
+        rescale_factor: Union[int, float] = 1 / 255,
+        do_convert_rgb: bool = True,
+        **kwargs,
+    ) -> None:
         super().__init__(**kwargs)
+        size = size if size is not None else {"shortest_edge": 512}
+        size = get_size_dict(size, default_to_square=False)
+        crop_size = crop_size if crop_size is not None else {"height": 512, "width": 512}
+        crop_size = get_size_dict(crop_size, default_to_square=True, param_name="crop_size")
+
+        self.do_resize = do_resize
+        self.size = size
+        self.resample = resample
+        self.do_center_crop = do_center_crop
+        self.crop_size = crop_size
+        self.do_rescale = do_rescale
+        self.rescale_factor = rescale_factor
+        self.do_convert_rgb = do_convert_rgb
+        self._valid_processor_keys = [
+            "images",
+            "do_resize",
+            "size",
+            "resample",
+            "do_center_crop",
+            "crop_size",
+            "do_rescale",
+            "rescale_factor",
+            "do_convert_rgb",
+            "return_tensors",
+            "data_format",
+            "input_data_format",
+        ]
+
+    def resize(
+        self,
+        image: np.ndarray,
+        size: Dict[str, int],
+        resample: PILImageResampling = PILImageResampling.BICUBIC,
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        **kwargs,
+    ) -> np.ndarray:
+        """
+        Resize an image. The shortest edge of the image is resized to size["shortest_edge"], with the longest edge
+        resized to keep the input aspect ratio.
+
+        Args:
+            image (`np.ndarray`):
+                Image to resize.
+            size (`Dict[str, int]`):
+                Size of the output image.
+            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
+                Resampling filter to use when resiizing the image.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format of the image. If not provided, it will be the same as the input image.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format of the input image. If not provided, it will be inferred.
+        """
+        default_to_square = True
+        if "shortest_edge" in size:
+            size = size["shortest_edge"]
+            default_to_square = False
+        elif "height" in size and "width" in size:
+            size = (size["height"], size["width"])
+        else:
+            raise ValueError("Size must contain either 'shortest_edge' or 'height' and 'width'.")
+
+        output_size = get_resize_output_image_size(
+            image,
+            size=size,
+            default_to_square=default_to_square,
+            input_data_format=input_data_format,
+        )
+        return resize(
+            image,
+            size=output_size,
+            resample=resample,
+            data_format=data_format,
+            input_data_format=input_data_format,
+            **kwargs,
+        )
 
     def preprocess(
         self,
         images: ImageInput,
+        do_resize: bool = None,
+        size: Dict[str, int] = None,
+        resample: PILImageResampling = None,
+        do_center_crop: bool = None,
+        crop_size: int = None,
+        do_rescale: bool = None,
+        rescale_factor: float = None,
+        do_convert_rgb: bool = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
-    ) -> BatchFeature:
-        images = self._whiten_transparency(images)
-        images = self._vqgan_input_from(images)
+        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        **kwargs,
+    ) -> PIL.Image.Image:
+        """
+        Preprocess an image or batch of images.
+
+        Args:
+            images (`ImageInput`):
+                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
+                passing in images with pixel values between 0 and 1, set `do_rescale=False`.
+            do_resize (`bool`, *optional*, defaults to `self.do_resize`):
+                Whether to resize the image.
+            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+                Size of the image after resizing. Shortest edge of the image is resized to size["shortest_edge"], with
+                the longest edge resized to keep the input aspect ratio.
+            resample (`int`, *optional*, defaults to `self.resample`):
+                Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`. Only
+                has an effect if `do_resize` is set to `True`.
+            do_center_crop (`bool`, *optional*, defaults to `self.do_center_crop`):
+                Whether to center crop the image.
+            crop_size (`Dict[str, int]`, *optional*, defaults to `self.crop_size`):
+                Size of the center crop. Only has an effect if `do_center_crop` is set to `True`.
+            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
+                Whether to rescale the image.
+            rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
+                Rescale factor to rescale the image by if `do_rescale` is set to `True`.
+            do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
+                Whether to convert the image to RGB.
+            return_tensors (`str` or `TensorType`, *optional*):
+                The type of tensors to return. Can be one of:
+                - Unset: Return a list of `np.ndarray`.
+                - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
+                - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
+                - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
+                - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
+            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
+                The channel dimension format for the output image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - Unset: Use the channel dimension format of the input image.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+        """
+        do_resize = do_resize if do_resize is not None else self.do_resize
+        size = size if size is not None else self.size
+        size = get_size_dict(size, param_name="size", default_to_square=False)
+        resample = resample if resample is not None else self.resample
+        do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
+        crop_size = crop_size if crop_size is not None else self.crop_size
+        crop_size = get_size_dict(crop_size, param_name="crop_size", default_to_square=True)
+        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
+        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
+
+        images = make_list_of_images(images)
+
+        if not valid_images(images):
+            raise ValueError(
+                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
+                "torch.Tensor, tf.Tensor or jax.ndarray."
+            )
+
+        validate_preprocess_arguments(
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_center_crop=do_center_crop,
+            crop_size=crop_size,
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+        )
+
+        if do_convert_rgb:
+            images = [self.blend_rgba(image) for image in images]
+
+        # All transformations expect numpy arrays.
+        images = [to_numpy_array(image) for image in images]
+
+        if is_scaled_image(images[0]) and do_rescale:
+            logger.warning_once(
+                "It looks like you are trying to rescale already rescaled images. If the input"
+                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
+            )
+
+        if input_data_format is None:
+            # We assume that all images have the same channel dimension format.
+            input_data_format = infer_channel_dimension_format(images[0])
+
+        if do_resize:
+            images = [
+                self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
+                for image in images
+            ]
+
+        if do_center_crop:
+            images = [
+                self.center_crop(image=image, size=crop_size, input_data_format=input_data_format) for image in images
+            ]
+
+        if do_rescale:
+            images = [
+                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+                for image in images
+            ]
+
+        images = [
+            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
+        ]
+
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
 
-    def _whiten_transparency(self, img: PIL.Image) -> PIL.Image:
-        # Check if it's already in RGB format.
-        if img.mode == "RGB":
-            return img
+    def blend_rgba(
+        self,
+        image: ImageInput,
+    ) -> ImageInput:
+        """
+        Convert image to RGB by blending the transparency layer if it's in RGBA format.
 
-        vals_rgba = np.array(img.convert("RGBA"))
+        Args:
+            image (`ImageInput`):
+                Image to convert.
+        """
+
+        if not isinstance(image, PIL.Image.Image):
+            return image
+        elif image.mode == "RGB":
+            return image
+
+        img_rgba = np.array(image.convert("RGBA"))
 
         # If there is no transparency layer, simple convert and return.
-        if not (vals_rgba[:, :, 3] < 255).any():
-            return img.convert("RGB")
+        if not (img_rgba[:, :, 3] < 255).any():
+            return image.convert("RGB")
 
         # There is a transparency layer, blend it with a white background.
-
         # Calculate the alpha proportion for blending.
-        alpha = vals_rgba[:, :, 3] / 255.0
-        # Blend with white background.
-        vals_rgb = (1 - alpha[:, :, np.newaxis]) * 255 + alpha[:, :, np.newaxis] * vals_rgba[:, :, :3]
-        return PIL.Image.fromarray(vals_rgb.astype("uint8"), "RGB")
-
-    def _vqgan_input_from(self, img: PIL.Image, target_image_size=512) -> np.array:
-        # Resize with aspect ratio preservation.
-        s = min(img.size)
-        scale = target_image_size / s
-        new_size = (round(scale * img.size[0]), round(scale * img.size[1]))
-        img = img.resize(new_size, PIL.Image.LANCZOS)
-
-        # Center crop.
-        x0 = (img.width - target_image_size) // 2
-        y0 = (img.height - target_image_size) // 2
-        img = img.crop((x0, y0, x0 + target_image_size, y0 + target_image_size))
-
-        # Convert to tensor.
-        np_img = np.array(img) / 255.0  # Normalize to [0, 1]
-        np_img = np_img * 2 - 1  # Scale to [-1, 1]
-        np_img = np.transpose(np_img, (2, 0, 1))  # CHW format.
-        return np_img
+        alpha = img_rgba[:, :, 3] / 255.0
+        img_rgb = (1 - alpha[:, :, np.newaxis]) * 255 + alpha[:, :, np.newaxis] * img_rgba[:, :, :3]
+        return PIL.Image.fromarray(img_rgb.astype("uint8"), "RGB")
