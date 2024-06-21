@@ -389,7 +389,6 @@ class MoTMLP(nn.Module):
                 self.d_ff += self.expert_size - (self.d_ff % self.expert_size)
                 warnings.warn("d_ff should be divisible by expert_size, padding d_ff to be divisible by expert_size")
             self.n_expert = self.d_ff // self.expert_size
-            
         else:
             raise ValueError("Either expert_size or n_expert should be provided")
 
