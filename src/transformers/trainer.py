@@ -3831,7 +3831,9 @@ class Trainer:
             if is_torch_xla_available():
                 xm.mark_step()
 
-            if "use_gather_object" in inspect.signature(self.gather_function).parameters.keys():
+            if "use_gather_object" in inspect.signature(
+                self.gather_function
+            ).parameters.keys() and is_accelerate_available("0.30.0"):
                 self.gather_function = functools.partial(
                     self.gather_function, use_gather_object=self.args.eval_use_gather_object
                 )
