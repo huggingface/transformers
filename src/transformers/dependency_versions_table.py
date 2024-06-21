@@ -31,7 +31,7 @@ deps = {
     "jax": "jax>=0.4.1,<=0.4.13",
     "jaxlib": "jaxlib>=0.4.1,<=0.4.13",
     "jieba": "jieba",
-    "jinja": "jinja>=3.1.0",
+    "jinja2": "jinja2>=3.1.0",
     "kenlm": "kenlm",
     "keras": "keras>2.9,<2.16",
     "keras-nlp": "keras-nlp>=0.3.1",
