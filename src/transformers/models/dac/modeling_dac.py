@@ -156,7 +156,6 @@ class DacVectorQuantize(nn.Module):
         codebook_loss = F.mse_loss(quantized_representation, projected_latents.detach(), reduction="none").mean([1, 2])
 
         quantized_representation = projected_latents + (quantized_representation - projected_latents).detach()  # noop in forward pass, straight-through gradient estimator in backward pass
-
         quantized_representation = self.out_proj(quantized_representation)
 
         return quantized_representation, commitment_loss, codebook_loss, codebook_indices, projected_latents
