@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch Chameleon model."""
+
 import math
 from functools import cached_property
 from typing import List, Optional, Tuple, Union
@@ -216,9 +217,9 @@ class ChameleonMLP(nn.Module):
         self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
         self.act_fn = ACT2FN[config.hidden_act]
 
     # Ignore copy
@@ -693,7 +694,10 @@ class ChameleonDecoderLayer(nn.Module):
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            hidden_states (`torch.FloatTensor`):
+                input to the layer of shape `(batch, seq_len, embed_dim)`
+            position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Indices of positions of each input sequence tokens in the position embeddings
             attention_mask (`torch.FloatTensor`, *optional*):
                 attention mask of size `(batch_size, sequence_length)` if flash attention is used or `(batch_size, 1,
                 query_sequence_length, key_sequence_length)` if default attention is used.
@@ -704,6 +708,8 @@ class ChameleonDecoderLayer(nn.Module):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
                 (see `past_key_values`).
             past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
+            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+                Indices depicting the position of the input sequence tokens in the sequence.
         """
         residual = hidden_states
 
@@ -759,75 +765,64 @@ class ChameleonDecoderLayer(nn.Module):
         return outputs
 
 
-# TODO: on all `ChameleonVQModel` classes, rewrite variables, docstrings, etc.
 class ChameleonVQModelVectorQuantizer(nn.Module):
     """
-    Improved version over VectorQuantizer, can be used as a drop-in replacement. Mostly
-    avoids costly matrix multiplications and allows for post-hoc remapping of indices.
+    A module for vector quantization using learned embedding vectors.
+
+    This module implements the quantization process similar to te one described in
+    the VQ-VAE (Vector Quantized Variational AutoEncoder) paper. It quantizes continuous
+    input vectors into discrete codebook vectors, which are learned during training.
+    Current implementation improves over previous ones by avoiding costly matrix multiplications
+    and allowing for post-hoc remapping of indices.
     """
 
-    # NOTE: due to a bug the beta term was applied to the wrong term. for
-    # backwards compatibility we use the buggy version by default, but you can
-    # specify legacy=False to fix it.
-    def __init__(
-        self,
-        n_e,
-        e_dim,
-        beta,
-        remap=None,
-        unknown_index="random",
-        sane_index_shape=False,
-        legacy=True,
-    ):
+    def __init__(self, config):
         super().__init__()
-        self.n_e = n_e
-        self.e_dim = e_dim
-        self.beta = beta
-        self.legacy = legacy
+        self.num_embeddings = config.num_embeddings
+        self.embedding_dim = config.embed_dim
+        self.beta = getattr(config, "beta", 0.25)
 
-        self.embedding = nn.Embedding(self.n_e, self.e_dim)
-        self.embedding.weight.data.uniform_(-1.0 / self.n_e, 1.0 / self.n_e)
+        self.embedding = nn.Embedding(self.num_embeddings, self.embedding_dim)
+        self.embedding.weight.data.uniform_(-1.0 / self.num_embeddings, 1.0 / self.num_embeddings)
 
-        self.remap = remap
+        self.remap = getattr(config, "remap", None)
         if self.remap is not None:
             self.register_buffer("used", torch.tensor(np.load(self.remap)))
             self.re_embed = self.used.shape[0]
-            self.unknown_index = unknown_index  # "random" or "extra" or integer
+            self.unknown_index = getattr(config, "unknown_index", "random")  # "random" or "extra" or integer
             if self.unknown_index == "extra":
                 self.unknown_index = self.re_embed
                 self.re_embed = self.re_embed + 1
-            print(
-                f"Remapping {self.n_e} indices to {self.re_embed} indices. "
+            logger.info(
+                f"Remapping {self.num_embeddings} indices to {self.re_embed} indices. "
                 f"Using {self.unknown_index} for unknown indices."
             )
         else:
-            self.re_embed = n_e
+            self.re_embed = self.num_embeddings
 
-        self.sane_index_shape = sane_index_shape
+        self.sane_index_shape = getattr(config, "remap", False)
 
-    def remap_to_used(self, inds):
-        ishape = inds.shape
-        assert len(ishape) > 1
-        inds = inds.reshape(ishape[0], -1)
-        used = self.used.to(inds)
-        match = (inds[:, :, None] == used[None, None, ...]).long()
+    def remap_to_used(self, indices: torch.Tensor):
+        index_shape = indices.shape
+        if not len(index_shape) > 1:
+            raise ValueError(f"Indicaes shape has to be 1D but found {index_shape} dimensions")
+
+        indices = indices.reshape(index_shape[0], -1)
+        used = self.used.to(indices)
+        match = (indices[:, :, None] == used[None, None, ...]).long()
         new = match.argmax(-1)
         unknown = match.sum(2) < 1
         if self.unknown_index == "random":
             new[unknown] = torch.randint(0, self.re_embed, size=new[unknown].shape).to(device=new.device)
         else:
             new[unknown] = self.unknown_index
-        return new.reshape(ishape)
+        return new.reshape(index_shape)
 
-    def forward(self, z, temp=None, rescale_logits=False, return_logits=False):
-        assert temp is None or temp == 1.0, "Only for interface compatible with Gumbel"
-        assert rescale_logits is False, "Only for interface compatible with Gumbel"
-        assert return_logits is False, "Only for interface compatible with Gumbel"
-        # reshape z -> (batch, height, width, channel) and flatten
+    def forward(self, z: torch.Tensor):
         z = z.permute(0, 2, 3, 1).contiguous()
         z_flattened = z.view(-1, self.e_dim)
-        # distances from z to embeddings e_j (z - e)^2 = z^2 + e^2 - 2 e * z
 
+        # distances from z to embeddings e_j (z - e)^2 = z^2 + e^2 - 2 e * z
         d = (
             torch.sum(z_flattened**2, dim=1, keepdim=True)
             + torch.sum(self.embedding.weight**2, dim=1)
@@ -836,14 +831,9 @@ class ChameleonVQModelVectorQuantizer(nn.Module):
 
         min_encoding_indices = torch.argmin(d, dim=1)
         z_q = self.embedding(min_encoding_indices).view(z.shape)
-        perplexity = None
-        min_encodings = None
 
         # compute loss for embedding
-        if not self.legacy:
-            loss = self.beta * torch.mean((z_q.detach() - z) ** 2) + torch.mean((z_q - z.detach()) ** 2)
-        else:
-            loss = torch.mean((z_q.detach() - z) ** 2) + self.beta * torch.mean((z_q - z.detach()) ** 2)
+        loss = torch.mean((z_q.detach() - z) ** 2) + self.beta * torch.mean((z_q - z.detach()) ** 2)
 
         # preserve gradients
         z_q = z + (z_q - z).detach()
@@ -859,47 +849,50 @@ class ChameleonVQModelVectorQuantizer(nn.Module):
         if self.sane_index_shape:
             min_encoding_indices = min_encoding_indices.reshape(z_q.shape[0], z_q.shape[2], z_q.shape[3])
 
-        return z_q, loss, (perplexity, min_encodings, min_encoding_indices)
+        return z_q, loss, min_encoding_indices
 
 
 class ChameleonVQModelEncoderDownsample(nn.Module):
-    def __init__(self, in_channels, with_conv):
+    def __init__(self, **kwargs):
         super().__init__()
-        self.with_conv = with_conv
-        if self.with_conv:
-            # no asymmetric padding in torch conv, must do it ourselves
-            self.conv = torch.nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=2, padding=0)
 
-    def forward(self, x):
-        if self.with_conv:
-            pad = (0, 1, 0, 1)
-            x = F.pad(x, pad, mode="constant", value=0)
-            x = self.conv(x)
-        else:
-            x = F.avg_pool2d(x, kernel_size=2, stride=2)
-        return x
+    def forward(self, hidden_states):
+        hidden_states = F.avg_pool2d(hidden_states, kernel_size=2, stride=2)
+        return hidden_states
+
+
+class ChameleonVQModelEncoderConvDownsample(nn.Module):
+    def __init__(self, in_channels):
+        super().__init__()
+        self.conv = nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=2, padding=0)
+        # no asymmetric padding in torch conv, must do it ourselves
+        self.pad = (0, 1, 0, 1)
+
+    def forward(self, hidden_states):
+        hidden_states = F.pad(hidden_states, self.pad, mode="constant", value=0)
+        hidden_states = self.conv(hidden_states)
+        return hidden_states
 
 
 class ChameleonVQModelEncoderResnetBlock(nn.Module):
     def __init__(
         self,
-        *,
         in_channels,
         out_channels=None,
         conv_shortcut=False,
-        dropout,
+        dropout=0.0,
         temb_channels=512,
     ):
         super().__init__()
         self.in_channels = in_channels
-        out_channels = in_channels if out_channels is None else out_channels
-        self.out_channels = out_channels
+        self.out_channels = in_channels if out_channels is None else out_channels
         self.use_conv_shortcut = conv_shortcut
 
         self.norm1 = torch.nn.GroupNorm(num_groups=32, num_channels=in_channels, eps=1e-6, affine=True)
         self.conv1 = torch.nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
         if temb_channels > 0:
             self.temb_proj = torch.nn.Linear(temb_channels, out_channels)
+
         self.norm2 = torch.nn.GroupNorm(num_groups=32, num_channels=out_channels, eps=1e-6, affine=True)
         self.dropout = torch.nn.Dropout(dropout)
         self.conv2 = torch.nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
@@ -909,27 +902,27 @@ class ChameleonVQModelEncoderResnetBlock(nn.Module):
             else:
                 self.nin_shortcut = torch.nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1, padding=0)
 
-    def forward(self, x, temb):
-        h = x
-        h = self.norm1(h)
-        h = h * torch.sigmoid(h)  # swish(h)
-        h = self.conv1(h)
+    def forward(self, hidden_states, temb):
+        residual = hidden_states
+        hidden_states = self.norm1(hidden_states)
+        hidden_states *= torch.sigmoid(hidden_states)
+        hidden_states = self.conv1(hidden_states)
 
         if temb is not None:
-            h = h + self.temb_proj(temb * torch.sigmoid(temb))[:, :, None, None]
+            hidden_states += self.temb_proj(temb * torch.sigmoid(temb))[:, :, None, None]
 
-        h = self.norm2(h)
-        h = h * torch.sigmoid(h)  # swish
-        h = self.dropout(h)
-        h = self.conv2(h)
+        hidden_states = self.norm2(hidden_states)
+        hidden_states *= torch.sigmoid(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.conv2(hidden_states)
 
         if self.in_channels != self.out_channels:
             if self.use_conv_shortcut:
-                x = self.conv_shortcut(x)
+                residual = self.conv_shortcut(residual)
             else:
-                x = self.nin_shortcut(x)
+                residual = self.nin_shortcut(residual)
 
-        return x + h
+        return residual + hidden_states
 
 
 class ChameleonVQModelEncoderAttnBlock(nn.Module):
@@ -943,102 +936,83 @@ class ChameleonVQModelEncoderAttnBlock(nn.Module):
         self.v = torch.nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
         self.proj_out = torch.nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
 
-    def forward(self, x):
-        h_ = x
-        h_ = self.norm(h_)
-        q = self.q(h_)
-        k = self.k(h_)
-        v = self.v(h_)
+    def forward(self, hidden_states):
+        residual = hidden_states
+        hidden_states = self.norm(hidden_states)
+        query_states = self.q(hidden_states)
+        key_states = self.k(hidden_states)
+        value_states = self.v(hidden_states)
 
         # compute attention
-        b, c, h, w = q.shape
-        q = q.reshape(b, c, h * w)
-        q = q.permute(0, 2, 1)  # b,hw,c
-        k = k.reshape(b, c, h * w)  # b,c,hw
-        w_ = torch.bmm(q, k)  # b,hw,hw    w[b,i,j]=sum_c q[b,i,c]k[b,c,j]
-        w_ = w_ * (int(c) ** (-0.5))
-        w_ = F.softmax(w_, dim=2)
+        batch_size, channels, height, width = query_states.shape
+        query_states = query_states.reshape(batch_size, channels, height * width).permute(0, 2, 1)
+        key_states = key_states.reshape(batch_size, channels, height * width)
+        attn_weights = torch.bmm(query_states, key_states)
+        attn_weights = attn_weights * (int(channels) ** (-0.5))
+        attn_weights = F.softmax(attn_weights, dim=2)
 
         # attend to values
-        v = v.reshape(b, c, h * w)
-        w_ = w_.permute(0, 2, 1)  # b,hw,hw (first hw of k, second of q)
-        h_ = torch.bmm(v, w_)  # b, c,hw (hw of q) h_[b,c,j] = sum_i v[b,c,i] w_[b,i,j]
-        h_ = h_.reshape(b, c, h, w)
+        value_states = value_states.reshape(batch_size, channels, height * width)
+        attn_weights = attn_weights.permute(0, 2, 1)
+        attn_output = torch.bmm(value_states, attn_weights).reshape(batch_size, channels, height, width)
 
-        h_ = self.proj_out(h_)
-
-        return x + h_
+        attn_output = self.proj_out(attn_output)
+        return residual + attn_output
 
 
-def make_attn(in_channels, attn_type="vanilla"):
-    assert attn_type in ["vanilla", "linear", "none"], f"attn_type {attn_type} unknown"
-    # print(f"making attention of type '{attn_type}' with {in_channels} in_channels")
-    if attn_type == "vanilla":
-        return ChameleonVQModelEncoderAttnBlock(in_channels)
-    elif attn_type == "none":
-        return nn.Identity(in_channels)
-    else:
-        raise ValueError("Unexpected attention type")
+ALL_VQ_DOWNSAMPLE_BLOCKS = {
+    "with_conv": ChameleonVQModelEncoderConvDownsample,
+    "without_conv": ChameleonVQModelEncoderDownsample,
+}
 
 
 class ChameleonVQModelEncoder(nn.Module):
-    def __init__(
-        self,
-        *,
-        ch,
-        out_ch,
-        ch_mult=(1, 2, 4, 8),
-        num_res_blocks,
-        attn_resolutions,
-        dropout=0.0,
-        resamp_with_conv=True,
-        in_channels,
-        resolution,
-        z_channels,
-        double_z=True,
-        use_linear_attn=False,
-        attn_type="vanilla",
-        **ignore_kwargs,
-    ):
+    def __init__(self, config):
         super().__init__()
-        if use_linear_attn:
-            attn_type = "linear"
-        self.ch = ch
-        self.temb_ch = 0
-        self.num_resolutions = len(ch_mult)
-        self.num_res_blocks = num_res_blocks
-        self.resolution = resolution
-        self.in_channels = in_channels
+
+        self.num_resolutions = len(config.channel_multiplier)
+        self.num_res_blocks = config.num_res_blocks
+        base_channels = config.base_channels
+        resolution = config.resolution
+        in_channels = config.in_channels
+        double_z = config.double_z
+        z_channels = config.z_channels
+        channel_multiplier = config.channel_multiplier
 
         # downsampling
-        self.conv_in = torch.nn.Conv2d(in_channels, self.ch, kernel_size=3, stride=1, padding=1)
+        self.conv_in = torch.nn.Conv2d(in_channels, base_channels, kernel_size=3, stride=1, padding=1)
 
         curr_res = resolution
-        in_ch_mult = (1,) + tuple(ch_mult)
-        self.in_ch_mult = in_ch_mult
+        in_channel_multiplier = (1,) + tuple(channel_multiplier)
+        self.in_channel_multiplier = in_channel_multiplier
         self.down = nn.ModuleList()
         for i_level in range(self.num_resolutions):
             block = nn.ModuleList()
             attn = nn.ModuleList()
-            block_in = ch * in_ch_mult[i_level]
-            block_out = ch * ch_mult[i_level]
+            block_in = base_channels * in_channel_multiplier[i_level]
+            block_out = base_channels * channel_multiplier[i_level]
             for i_block in range(self.num_res_blocks):
                 block.append(
                     ChameleonVQModelEncoderResnetBlock(
                         in_channels=block_in,
                         out_channels=block_out,
-                        temb_channels=self.temb_ch,
-                        dropout=dropout,
+                        temb_channels=0,
+                        dropout=config.dropout,
                     )
                 )
                 block_in = block_out
-                if curr_res in attn_resolutions:
-                    attn.append(make_attn(block_in, attn_type=attn_type))
+                if (
+                    config.attn_resolutions is not None
+                    and curr_res in config.attn_resolutions
+                    and config.attn_type == "vanilla"
+                ):
+                    attn.append(ChameleonVQModelEncoderAttnBlock(block_in))
+
             down = nn.Module()
             down.block = block
             down.attn = attn
             if i_level != self.num_resolutions - 1:
-                down.downsample = ChameleonVQModelEncoderDownsample(block_in, resamp_with_conv)
+                down.downsample = ALL_VQ_DOWNSAMPLE_BLOCKS[config.resamp_type](block_in)
                 curr_res = curr_res // 2
             self.down.append(down)
 
@@ -1047,15 +1021,17 @@ class ChameleonVQModelEncoder(nn.Module):
         self.mid.block_1 = ChameleonVQModelEncoderResnetBlock(
             in_channels=block_in,
             out_channels=block_in,
-            temb_channels=self.temb_ch,
-            dropout=dropout,
+            temb_channels=0,
+            dropout=config.dropout,
         )
-        self.mid.attn_1 = make_attn(block_in, attn_type=attn_type)
+        self.mid.attn_1 = (
+            ChameleonVQModelEncoderAttnBlock(block_in) if config.attn_type == "vanilla" else nn.Identity()
+        )
         self.mid.block_2 = ChameleonVQModelEncoderResnetBlock(
             in_channels=block_in,
             out_channels=block_in,
-            temb_channels=self.temb_ch,
-            dropout=dropout,
+            temb_channels=0,
+            dropout=config.dropout,
         )
 
         # end
@@ -1068,32 +1044,32 @@ class ChameleonVQModelEncoder(nn.Module):
             padding=1,
         )
 
-    def forward(self, x):
+    def forward(self, pixel_values: torch.LongTensor):
         # timestep embedding
         temb = None
 
         # downsampling
-        hs = [self.conv_in(x)]
+        hidden_states = [self.conv_in(pixel_values)]
         for i_level in range(self.num_resolutions):
             for i_block in range(self.num_res_blocks):
-                h = self.down[i_level].block[i_block](hs[-1], temb)
+                hidden_state = self.down[i_level].block[i_block](hidden_states[-1], temb)
                 if len(self.down[i_level].attn) > 0:
-                    h = self.down[i_level].attn[i_block](h)
-                hs.append(h)
+                    hidden_state = self.down[i_level].attn[i_block](hidden_state)
+                hidden_states.append(hidden_state)
             if i_level != self.num_resolutions - 1:
-                hs.append(self.down[i_level].downsample(hs[-1]))
+                hidden_states.append(self.down[i_level].downsample(hidden_states[-1]))
 
         # middle
-        h = hs[-1]
-        h = self.mid.block_1(h, temb)
-        h = self.mid.attn_1(h)
-        h = self.mid.block_2(h, temb)
+        last_hidden_state = hidden_states[-1]
+        last_hidden_state = self.mid.block_1(last_hidden_state, temb)
+        last_hidden_state = self.mid.attn_1(last_hidden_state)
+        last_hidden_state = self.mid.block_2(last_hidden_state, temb)
 
         # end
-        h = self.norm_out(h)
-        h = h * torch.sigmoid(h)  # swish
-        h = self.conv_out(h)
-        return h
+        last_hidden_state = self.norm_out(last_hidden_state)
+        last_hidden_state *= torch.sigmoid(last_hidden_state)
+        last_hidden_state = self.conv_out(last_hidden_state)
+        return last_hidden_state
 
 
 # TODO: use an existing VQGan backbone? use copied from on the resnet block?
@@ -1108,28 +1084,19 @@ class ChameleonVQModel(nn.Module):
         super().__init__()
 
         self.config = config
-        self.image_key = config.get("image_key", "image")
-        self.encoder = ChameleonVQModelEncoder(**config["ddconfig"])
-        self.quantize = ChameleonVQModelVectorQuantizer(
-            config["n_embed"],
-            config["embed_dim"],
-            beta=0.25,
-            remap=config.get("remap"),
-            sane_index_shape=config.get("sane_index_shape", False),
-        )
-        self.quant_conv = torch.nn.Conv2d(config["ddconfig"]["z_channels"], config["embed_dim"], 1)
-        self.post_quant_conv = torch.nn.Conv2d(config["embed_dim"], config["ddconfig"]["z_channels"], 1)
-        if config.get("colorize_nlabels") is not None:
-            assert isinstance(config.get("colorize_nlabels"), int)
-            self.register_buffer("colorize", torch.randn(3, config.get("colorize_nlabels"), 1, 1))
-
+        self.encoder = ChameleonVQModelEncoder(config)
+        self.quantize = ChameleonVQModelVectorQuantizer(config)
+        self.quant_conv = torch.nn.Conv2d(config.z_channels, config.embed_dim, 1)
+        self.post_quant_conv = torch.nn.Conv2d(config.embed_dim, config.z_channels, 1)
+        if config.colorize_nlabels is not None:
+            self.register_buffer("colorize", torch.randn(3, config.colorize_nlabels, 1, 1))
         self.eval()  # Chameleon's VQ model is frozen
 
-    def encode(self, x):
-        h = self.encoder(x)
-        h = self.quant_conv(h)
-        quant, emb_loss, info = self.quantize(h)
-        return quant, emb_loss, info
+    def encode(self, pixel_values: torch.LongTensor):
+        hidden_states = self.encoder(pixel_values)
+        hidden_states = self.quant_conv(hidden_states)
+        quant, emb_loss, indices = self.quantize(hidden_states)
+        return quant, emb_loss, indices
 
 
 class ChameleonImageVocabularyMapping:
@@ -1140,6 +1107,7 @@ class ChameleonImageVocabularyMapping:
         self.eos_id = vocab_map.get("</s>")
         self.pad_id = vocab_map.get("<pad>")
         self.image_start_id = vocab_map.get("<racm3:break>")
+        self.image_token_id = vocab_map.get("<image>")
         self.image_end_id = vocab_map.get("<eoss>")
         self.eot_id = vocab_map.get("<reserved08706>")
 
@@ -1208,7 +1176,9 @@ class ChameleonPreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = ["past_key_values", "causal_mask"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
+    _supports_quantized_cache = True
     _supports_cache_class = True
+    _supports_static_cache = True
 
     def _init_weights(self, module):
         std = self.config.initializer_range
@@ -1309,6 +1279,10 @@ CHAMELEON_INPUTS_DOCSTRING = r"""
             more detail.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+            Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
+            this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
+            the complete sequence length.
 """
 
 
@@ -1348,11 +1322,10 @@ class ChameleonModel(ChameleonPreTrainedModel):
         self.embed_tokens = value
 
     def get_image_tokens(self, pixel_values: torch.LongTensor):
-        # TODO: does it work batched?
-        _, _, [_, _, img_toks] = self.vqmodel.encode(pixel_values)
+        _, _, image_toks = self.vqmodel.encode(pixel_values)
         bpe_toks = (
             [self.vocabulary_mapping.image_start_id]
-            + self.vocabulary_mapping.convert_img2bp2(img_toks).tolist()
+            + self.vocabulary_mapping.convert_img2bp2(image_toks).tolist()
             + [self.vocabulary_mapping.image_end_id]
         )
         return bpe_toks
@@ -1385,25 +1358,35 @@ class ChameleonModel(ChameleonPreTrainedModel):
             )
             use_cache = False
 
-        if inputs_embeds is not None:
-            if input_ids is not None or pixel_values is not None:
-                raise ValueError("You cannot specify both input_ids/pixel_values and inputs_embeds at the same time")
-        else:
-            text_tokens = input_ids
-            image_tokens = self.get_image_tokens(pixel_values)
-            # all tokens: BOS + image tokens + text tokens
-            all_tokens = torch.cat((text_tokens[:, 0], image_tokens, text_tokens[:, 1:]), dim=1)
-            inputs_embeds = self.embed_tokens(all_tokens)
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError(
+                "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
+            )
 
-        past_seen_tokens = 0
-        if use_cache:  # kept for BC (cache positions)
-            if not isinstance(past_key_values, StaticCache):
-                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-                past_seen_tokens = past_key_values.get_seq_length()
+        if pixel_values is not None and inputs_embeds is not None:
+            raise ValueError(
+                "You cannot specify both pixel_values and inputs_embeds at the same time, and must specify either one"
+            )
+
+        if pixel_values is not None:
+            image_tokens = self.get_image_tokens(pixel_values)
+            special_image_mask = input_ids == self.vocabulary_mapping.image_token_id
+            input_ids[special_image_mask] = image_tokens
+
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
+
+        use_legacy_cache = False
+        if use_cache and not isinstance(past_key_values, Cache):  # kept for BC (non `Cache` `past_key_values` inputs)
+            use_legacy_cache = True
+            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+            logger.warning_once(
+                "We detected that you are passing `past_key_values` as a tuple and this is deprecated and will be removed in v4.43. "
+                "Please use an appropriate `Cache` class (https://huggingface.co/docs/transformers/v4.41.3/en/internal/generation_utils#transformers.Cache)"
+            )
 
         if cache_position is None:
-            if isinstance(past_key_values, StaticCache):
-                raise ValueError("cache_position is a required argument when using StaticCache.")
+            past_seen_tokens = past_key_values.get_seq_length() if use_cache else 0
             cache_position = torch.arange(
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
@@ -1463,9 +1446,7 @@ class ChameleonModel(ChameleonPreTrainedModel):
 
         next_cache = None
         if use_cache:
-            next_cache = (
-                next_decoder_cache.to_legacy_cache() if isinstance(next_decoder_cache, Cache) else next_decoder_cache
-            )
+            next_cache = next_decoder_cache.to_legacy_cache() if use_legacy_cache else next_decoder_cache
         if not return_dict:
             return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
         return BaseModelOutputWithPast(
@@ -1475,24 +1456,48 @@ class ChameleonModel(ChameleonPreTrainedModel):
             attentions=all_self_attns,
         )
 
-    # TODO: As of torch==2.2.0, the `attention_mask` passed to the model in `generate` is 2D and of dynamic length even when the static
-    # KV cache is used. This is an issue for torch.compile which then recaptures cudagraphs at each decode steps due to the dynamic shapes.
-    # (`recording cudagraph tree for symint key 13`, etc.), which is VERY slow. A workaround is `@torch.compiler.disable`, but this prevents using
-    # `fullgraph=True`. See more context in https://github.com/huggingface/transformers/pull/29114
-    def _update_causal_mask(self, attention_mask, input_tensor, cache_position):
+    # Copied from transformers.models.llama.modeling_llama.LlamaModel._update_causal_mask
+    def _update_causal_mask(
+        self,
+        attention_mask: torch.Tensor,
+        input_tensor: torch.Tensor,
+        cache_position: torch.Tensor,
+        past_key_values: Cache,
+    ):
+        # TODO: As of torch==2.2.0, the `attention_mask` passed to the model in `generate` is 2D and of dynamic length even when the static
+        # KV cache is used. This is an issue for torch.compile which then recaptures cudagraphs at each decode steps due to the dynamic shapes.
+        # (`recording cudagraph tree for symint key 13`, etc.), which is VERY slow. A workaround is `@torch.compiler.disable`, but this prevents using
+        # `fullgraph=True`. See more context in https://github.com/huggingface/transformers/pull/29114
+
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
             return None
 
+        # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
+        # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
+        # to infer the attention mask.
+        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+        using_static_cache = isinstance(past_key_values, StaticCache)
+        if self.config._attn_implementation == "sdpa" and not using_static_cache:
+            if AttentionMaskConverter._ignore_causal_mask_sdpa(
+                attention_mask,
+                inputs_embeds=input_tensor,
+                past_key_values_length=past_seen_tokens,
+                is_training=self.training,
+            ):
+                return None
+
         dtype, device = input_tensor.dtype, input_tensor.device
         min_dtype = torch.finfo(dtype).min
         sequence_length = input_tensor.shape[1]
-        if hasattr(self.layers[0].self_attn, "past_key_value"):  # static cache
-            target_length = self.config.max_position_embeddings
-        else:  # dynamic cache
+        if using_static_cache:
+            target_length = past_key_values.get_max_length()
+        else:
             target_length = (
-                attention_mask.shape[-1] if isinstance(attention_mask, torch.Tensor) else cache_position[-1] + 1
+                attention_mask.shape[-1]
+                if isinstance(attention_mask, torch.Tensor)
+                else past_seen_tokens + sequence_length + 1
             )
 
         causal_mask = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
@@ -1504,12 +1509,19 @@ class ChameleonModel(ChameleonPreTrainedModel):
             causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
             if attention_mask.dim() == 2:
                 mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[..., :mask_length].eq(0.0) * attention_mask[:, None, None, :].eq(0.0)
-                causal_mask[..., :mask_length] = causal_mask[..., :mask_length].masked_fill(padding_mask, min_dtype)
+                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
+                padding_mask = padding_mask == 0
+                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
+                    padding_mask, min_dtype
+                )
             elif attention_mask.dim() == 4:
                 # backwards compatibility: we allow passing a 4D attention mask shorter than the input length with
                 # cache. In that case, the 4D attention mask attends to the newest tokens only.
                 if attention_mask.shape[-2] < cache_position[0] + sequence_length:
+                    logger.warning_once(
+                        "Passing a 4d mask shorter than the input length is deprecated and will be removed in "
+                        "transformers v4.42.0"
+                    )
                     offset = cache_position[0]
                 else:
                     offset = 0
@@ -1659,15 +1671,15 @@ class ChameleonForCausalLM(ChameleonPreTrainedModel):
 
     # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.prepare_inputs_for_generation
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, cache_position=None, **kwargs
+        self,
+        input_ids,
+        past_key_values=None,
+        attention_mask=None,
+        inputs_embeds=None,
+        cache_position=None,
+        use_cache=True,
+        **kwargs,
     ):
-        # With static cache, the `past_key_values` is None
-        # TODO joao: standardize interface for the different Cache classes and remove of this if
-        has_static_cache = False
-        if past_key_values is None:
-            past_key_values = getattr(getattr(self.model.layers[0], "self_attn", {}), "past_key_value", None)
-            has_static_cache = past_key_values is not None
-
         past_length = 0
         if past_key_values is not None:
             if isinstance(past_key_values, Cache):
@@ -1685,8 +1697,7 @@ class ChameleonForCausalLM(ChameleonPreTrainedModel):
 
             # Keep only the unprocessed tokens:
             # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
-            # some of the inputs are exclusively passed as part of the cache (e.g. when passing input_embeds as
-            # input)
+            # some of the inputs are exclusively passed as part of the cache (e.g. when passing input_embeds as input)
             if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
                 input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
             # 2 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
@@ -1723,18 +1734,15 @@ class ChameleonForCausalLM(ChameleonPreTrainedModel):
         input_length = position_ids.shape[-1] if position_ids is not None else input_ids.shape[-1]
         if cache_position is None:
             cache_position = torch.arange(past_length, past_length + input_length, device=input_ids.device)
-        else:
+        elif use_cache:
             cache_position = cache_position[-input_length:]
-
-        if has_static_cache:
-            past_key_values = None
 
         model_inputs.update(
             {
                 "position_ids": position_ids,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values,
-                "use_cache": kwargs.get("use_cache"),
+                "use_cache": use_cache,
                 "attention_mask": attention_mask,
             }
         )

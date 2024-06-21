@@ -14,11 +14,90 @@
 # limitations under the License.
 """ chameleon model configuration"""
 
+from typing import List
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
+
+
+class ChameleonVQConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`ChameleonVQModel`]. It is used to instantiate a
+    `ChameleonVQModel` according to the specified arguments, defining the model architecture.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        embed_dim (`int`, *optional*, defaults to 256):
+            Dimensionality of each embedding vector.
+        n_embed (`int`, *optional*, defaults to 8192):
+            Number of codebook embeddings.
+        double_z (`bool`, *optional*, defaults to `False`):
+            Whether to use double z channels.
+        z_channels (`int`, *optional*, defaults to 256):
+            Number of channels for the latent space.
+        resolution (`int`, *optional*, defaults to 512):
+            Resolution of the input images.
+        in_channels (`int`, *optional*, defaults to 3):
+            Number of input channels.
+        out_ch (`int`, *optional*, defaults to 3):
+            Number of output channels.
+        ch (`int`, *optional*, defaults to 128):
+            Base channel count.
+        ch_mult (`List[int]`, *optional*, defaults to `[1, 1, 2, 2, 4]`):
+            Channel multipliers for each resolution.
+        num_res_blocks (`int`, *optional*, defaults to 2):
+            Number of residual blocks.
+        attn_resolutions (`List[int]`, *optional*):
+            Resolutions to apply attention.
+        dropout (`float`, *optional*, defaults to 0.0):
+            Dropout rate.
+        colorize_nlabels (`int`, *optional*):
+            Colorize nlabels
+        attn_type (`str`, *optional*, defaults to `"vanilla"`): <fill_docstring>
+        resamp_type (`str`, *optional*, defaults to `"with_conv"`): <fill_docstring>
+    """
+
+    model_type = "chameleon_vqgan"
+
+    def __init__(
+        self,
+        embed_dim: int = 256,
+        n_embed: int = 8192,
+        double_z: bool = False,
+        z_channels: int = 256,
+        resolution: int = 512,
+        in_channels: int = 3,
+        out_ch: int = 3,
+        ch: int = 128,
+        ch_mult: List[int] = [1, 1, 2, 2, 4],
+        num_res_blocks: int = 2,
+        attn_resolutions: List[int] = None,
+        dropout: float = 0.0,
+        colorize_nlabels: int = None,
+        attn_type: str = "vanilla",
+        resamp_type: str = "with_conv",
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.embed_dim = embed_dim
+        self.num_embeddings = n_embed
+        self.double_z = double_z
+        self.z_channels = z_channels
+        self.resolution = resolution
+        self.in_channels = in_channels
+        self.out_channels = out_ch
+        self.base_channels = ch
+        self.channel_multiplier = ch_mult
+        self.num_res_blocks = num_res_blocks
+        self.attn_resolutions = attn_resolutions
+        self.dropout = dropout
+        self.colorize_nlabels = colorize_nlabels
+        self.attn_type = attn_type
+        self.resamp_type = resamp_type
 
 
 class ChameleonConfig(PretrainedConfig):
@@ -90,9 +169,12 @@ class ChameleonConfig(PretrainedConfig):
         swin_norm (`bool`, *optional*, defaults to `False`):
             Use Swin Transformer normalization.
         vq_config (`dict`, *optional*):
-            Dictionary containing the configuration for the VQ-VAE model.
+            ChameleonVQConfig instance containing the configuration for the VQ-VAE model.
         vocabulary_map (`dict`, *optional*):
             A dictionary containing the vocabulary map from the tokenizer. Used to obtain tokens from the image inputs.
+        mlp_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
+
 
     ```python
     >>> from transformers import ChameleonModel, ChameleonConfig
@@ -108,6 +190,7 @@ class ChameleonConfig(PretrainedConfig):
     ```"""
 
     model_type = "chameleon"
+    is_composition = True
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
@@ -135,6 +218,7 @@ class ChameleonConfig(PretrainedConfig):
         swin_norm=False,
         vq_config=None,
         vocabulary_map=None,
+        mlp_bias=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -143,6 +227,7 @@ class ChameleonConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
+        self.mlp_bias = mlp_bias
 
         # for backward compatibility
         if num_key_value_heads is None:
@@ -160,7 +245,7 @@ class ChameleonConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.qk_layernorm = qk_layernorm
         self.swin_norm = swin_norm
-        self.vq_config = vq_config
+        self.vq_config = ChameleonVQConfig(**vq_config)
         self.vocabulary_map = vocabulary_map
 
         super().__init__(

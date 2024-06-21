@@ -24,7 +24,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_chameleon": ["ChameleonConfig"],
+    "configuration_chameleon": ["ChameleonConfig", "ChameleonVQConfig"],
     "processing_chameleon": ["ChameleonProcessor"],
 }
 
@@ -53,7 +53,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_chameleon import ChameleonConfig
+    from .configuration_chameleon import ChameleonConfig, ChameleonVQConfig
     from .processing_chameleon import ChameleonProcessor
 
     try:

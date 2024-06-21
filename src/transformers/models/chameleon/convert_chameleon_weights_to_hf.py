@@ -15,23 +15,27 @@ import argparse
 import gc
 import json
 import os
-import warnings
 
 import torch
 import yaml
 from accelerate import init_empty_weights
 
-from transformers import ChameleonConfig, ChameleonForCausalLM
+from transformers import (
+    AddedToken,
+    ChameleonConfig,
+    ChameleonForCausalLM,
+    ChameleonImageProcessor,
+    ChameleonProcessor,
+)
 
 
 try:
     from transformers import LlamaTokenizerFast
-except ImportError as e:
-    warnings.warn(e)
-    warnings.warn(
-        "The converted tokenizer will be the `slow` tokenizer. To use the fast, update your `tokenizers` library and re-run the tokenizer conversion"
+except ImportError:
+    raise ValueError(
+        "Chameleon conversion supports only FastTokenizer and LlamaTokenizerFast can't be imported! "
+        "Update your `tokenizers` library and re-run the tokenizer conversion."
     )
-    LlamaTokenizerFast = None
 
 """
 Sample usage:
@@ -271,9 +275,12 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
 
     with open(os.path.join(input_base_path, "tokenizer/text_tokenizer.json")) as tokenizer_file:
         vocabulary_map = json.load(tokenizer_file)["model"]["vocab"]
+        vocabulary_map["<image>"] = VOCAB_SIZE  # don't add 1 as it's 0-indexed mapping
 
     with open(os.path.join(input_base_path, "tokenizer/vqgan.yaml")) as vqgan_cfg_file:
         vq_config = yaml.safe_load(vqgan_cfg_file)["model"]["params"]
+        vq_config.update(**vq_config["ddconfig"])
+        del vq_config["ddconfig"]
 
     config = ChameleonConfig(
         hidden_size=dim,
@@ -294,7 +301,19 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
         model = ChameleonForCausalLM(config)
 
     model.load_state_dict(state_dict, assign=True, strict=False)
+
+    # resize embeds to account for special image token
+    # pad to miltiple of 64 for efficient computation
+    # see: https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html#requirements-tc
+    model.resize_token_embeddings(config.vocab_size + 1, pad_to_multiple_of=64)
     model.save_pretrained(model_path, safe_serialization=True)
+
+    # Load and save the processor
+    tokenizer = LlamaTokenizerFast(os.path.join(input_base_path, "tokenizer/text_tokenizer.json"))
+    tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False), special_tokens=True)
+    image_processor = ChameleonImageProcessor()
+    processor = ChameleonProcessor(tokenizer=tokenizer, image_processor=image_processor)
+    processor.save_pretrained(model_path)
 
     # Make space so we can load the model properly now.
     del state_dict

@@ -266,6 +266,7 @@ _import_structure = {
     "models.chameleon": [
         "ChameleonConfig",
         "ChameleonProcessor",
+        "ChameleonVQConfig",
     ],
     "models.chinese_clip": [
         "CHINESE_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -5264,6 +5265,7 @@ if TYPE_CHECKING:
     from .models.chameleon import (
         ChameleonConfig,
         ChameleonProcessor,
+        ChameleonVQConfig,
     )
     from .models.chinese_clip import (
         CHINESE_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
