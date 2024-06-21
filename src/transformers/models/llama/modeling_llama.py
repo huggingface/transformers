@@ -556,8 +556,9 @@ class LlamaFlashAttention2(LlamaAttention):
             value_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
         )
         if query_length == kv_seq_len:
+            _batch_size, _kv_seq_len, _num_heads, _head_dim = query_layer.shape
             query_layer = index_first_axis(
-                query_layer.reshape(batch_size * kv_seq_len, self.num_heads, head_dim), indices_k
+                query_layer.reshape(_batch_size * _kv_seq_len, _num_heads, _head_dim), indices_k
             )
             cu_seqlens_q = cu_seqlens_k
             max_seqlen_in_batch_q = max_seqlen_in_batch_k
