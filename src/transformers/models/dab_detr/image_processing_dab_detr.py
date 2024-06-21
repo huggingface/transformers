@@ -326,7 +326,7 @@ def convert_coco_poly_to_mask(segmentations, height: int, width: int) -> np.ndar
     return masks
 
 
-# Copied from transformers.models.detr.image_processing_detr.prepare_coco_detection_annotation with DETR->DabDetr
+# Modified from transformers.models.detr.image_processing_detr.prepare_coco_detection_annotation with DETR
 def prepare_coco_detection_annotation(
     image,
     target,

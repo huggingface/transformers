@@ -61,7 +61,7 @@ _CHECKPOINT_FOR_DOC = "IDEA/dab_detr-base"
 
 
 @dataclass
-# Copied from transformers.models.conditional_detr.modeling_conditional_detr.ConditionalDetrDecoderOutput with ConditionalDetr->DABDETR,Conditional DETR->DAB-DETR
+# Modified from transformers.models.conditional_detr.modeling_conditional_detr.ConditionalDetrDecoderOutput with ConditionalDetr->DABDETR,Conditional DETR->DAB-DETR
 class DABDETRDecoderOutput(BaseModelOutputWithCrossAttentions):
     """
     Base class for outputs of the DAB-DETR decoder. This class adds one attribute to
@@ -96,7 +96,7 @@ class DABDETRDecoderOutput(BaseModelOutputWithCrossAttentions):
 
 
 @dataclass
-# Copied from transformers.models.conditional_detr.modeling_conditional_detr.ConditionalDetrModelOutput with ConditionalDetr->DABDETR,Conditional DETR->DAB-DETR
+# Modified from transformers.models.conditional_detr.modeling_conditional_detr.ConditionalDetrModelOutput with ConditionalDetr->DABDETR,Conditional DETR->DAB-DETR
 class DABDETRModelOutput(Seq2SeqModelOutput):
     """
     Base class for outputs of the DAB-DETR encoder-decoder model. This class adds one attribute to
@@ -144,7 +144,7 @@ class DABDETRModelOutput(Seq2SeqModelOutput):
 
 
 @dataclass
-# Copied from transformers.models.detr.modeling_detr.DetrObjectDetectionOutput with Detr->DABDETR
+# Modified from transformers.models.detr.modeling_detr.DetrObjectDetectionOutput with Detr->DABDETR
 class DABDETRObjectDetectionOutput(ModelOutput):
     """
     Output type of [`DABDETRForObjectDetection`].
@@ -208,7 +208,7 @@ class DABDETRObjectDetectionOutput(ModelOutput):
 
 
 @dataclass
-# Copied from transformers.models.detr.modeling_detr.DetrSegmentationOutput with Detr->DABDETR
+# Modified from transformers.models.detr.modeling_detr.DetrSegmentationOutput with Detr->DABDETR
 class DABDETRSegmentationOutput(ModelOutput):
     """
     Output type of [`DABDETRForSegmentation`].
@@ -343,7 +343,7 @@ def replace_batch_norm(model):
             replace_batch_norm(module)
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrConvEncoder with Detr->DABDETR
+# Modified from transformers.models.detr.modeling_detr.DetrConvEncoder with Detr->DABDETR
 class DABDETRConvEncoder(nn.Module):
     """
     Convolutional backbone, using either the AutoBackbone API or one from the timm library.
@@ -431,7 +431,7 @@ class DABDETRConvModel(nn.Module):
         return out, pos
 
 
-# Copied from transformers.models.conditional_detr.modeling_conditional_detr.ConditionalDetrSinePositionEmbedding with ConditionalDetr->DABDETR
+# Modified from transformers.models.conditional_detr.modeling_conditional_detr.ConditionalDetrSinePositionEmbedding with ConditionalDetr->DABDETR
 class DABDETRSinePositionEmbedding(nn.Module):
     """
     This is a more standard version of the position embedding, very similar to the one used by the Attention is all you
@@ -497,7 +497,7 @@ class DABDETRLearnedPositionEmbedding(nn.Module):
         return pos
 
 
-# Copied from transformers.models.detr.modeling_detr.build_position_encoding with Detr->DABDETR
+# Modified from transformers.models.detr.modeling_detr.build_position_encoding with Detr->DABDETR
 def build_position_encoding(config):
     n_steps = config.d_model // 2
     if config.position_embedding_type == "sine":
@@ -679,7 +679,7 @@ class DABDETRAttention(nn.Module):
         return attn_output, attn_weights_reshaped
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrEncoderLayer with DetrEncoderLayer->DABDETREncoderLayer,DetrConfig->DABDETRConfig
+# Modified from transformers.models.detr.modeling_detr.DetrEncoderLayer with DetrEncoderLayer->DABDETREncoderLayer,DetrConfig->DABDETRConfig
 class DABDETREncoderLayer(nn.Module):
     def __init__(self, config: DABDETRConfig):
         super().__init__()
@@ -765,7 +765,7 @@ class DABDETREncoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.conditional_detr.modeling_conditional_detr.ConditionalDetrDecoderLayer with ConditionalDetr->DABDETR
+# Modified from transformers.models.conditional_detr.modeling_conditional_detr.ConditionalDetrDecoderLayer with ConditionalDetr->DABDETR
 class DABDETRDecoderLayer(nn.Module):
     def __init__(self, config: DABDETRConfig):
         super().__init__()
@@ -988,7 +988,7 @@ class MLP(nn.Module):
         return x
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrPreTrainedModel with Detr->DABDETR
+# Modified from transformers.models.detr.modeling_detr.DetrPreTrainedModel with Detr->DABDETR
 class DABDETRPreTrainedModel(PreTrainedModel):
     config_class = DABDETRConfig
     base_model_prefix = "model"
@@ -1086,7 +1086,7 @@ DAB_DETR_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrEncoder with Detr->DABDETR,DETR->ConditionalDETR
+# Modified from transformers.models.detr.modeling_detr.DetrEncoder with Detr->DABDETR,DETR->ConditionalDETR
 class DABDETREncoder(DABDETRPreTrainedModel):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
@@ -1218,7 +1218,7 @@ class DABDETREncoder(DABDETRPreTrainedModel):
         )
 
 
-# Copied from transformers.models.conditional_detr.modeling_conditional_detr.ConditionalDetrDecoder with ConditionalDetr->DABDETR,Conditional DETR->DAB-DETR
+# Modified from transformers.models.conditional_detr.modeling_conditional_detr.ConditionalDetrDecoder with ConditionalDetr->DABDETR,Conditional DETR->DAB-DETR
 class DABDETRDecoder(DABDETRPreTrainedModel):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`DABDETRDecoderLayer`].
@@ -1894,7 +1894,7 @@ class DABDETRForObjectDetection(DABDETRPreTrainedModel):
     """,
     DAB_DETR_START_DOCSTRING,
 )
-# Copied from transformers.models.conditional_detr.modeling_conditional_detr.ConditionalDetrForSegmentation with ConditionalDetr->DABDETR,conditional_detr->dab_detr,microsoft/conditional-detr-resnet-50->IDEA-Research/dab_detr-base
+# Modified from transformers.models.conditional_detr.modeling_conditional_detr.ConditionalDetrForSegmentation with ConditionalDetr->DABDETR,conditional_detr->dab_detr,microsoft/conditional-detr-resnet-50->IDEA-Research/dab_detr-base
 class DABDETRForSegmentation(DABDETRPreTrainedModel):
     def __init__(self, config: DABDETRConfig):
         super().__init__(config)
@@ -2297,7 +2297,7 @@ def sigmoid_focal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: f
     return loss.mean(1).sum() / num_boxes
 
 
-# Copied from transformers.models.conditional_detr.modeling_conditional_detr.ConditionalDetrLoss with ConditionalDetr->DABDETR
+# Modified from transformers.models.conditional_detr.modeling_conditional_detr.ConditionalDetrLoss with ConditionalDetr->DABDETR
 class DABDETRLoss(nn.Module):
     """
     This class computes the losses for DABDETRForObjectDetection/DABDETRForSegmentation. The process
