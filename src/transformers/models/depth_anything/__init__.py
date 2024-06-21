@@ -17,9 +17,7 @@ from ...file_utils import _LazyModule, is_torch_available
 from ...utils import OptionalDependencyNotAvailable
 
 
-_import_structure = {
-    "configuration_depth_anything": ["DEPTH_ANYTHING_PRETRAINED_CONFIG_ARCHIVE_MAP", "DepthAnythingConfig"]
-}
+_import_structure = {"configuration_depth_anything": ["DepthAnythingConfig"]}
 
 try:
     if not is_torch_available():
@@ -28,14 +26,13 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_depth_anything"] = [
-        "DEPTH_ANYTHING_PRETRAINED_MODEL_ARCHIVE_LIST",
         "DepthAnythingForDepthEstimation",
         "DepthAnythingPreTrainedModel",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_depth_anything import DEPTH_ANYTHING_PRETRAINED_CONFIG_ARCHIVE_MAP, DepthAnythingConfig
+    from .configuration_depth_anything import DepthAnythingConfig
 
     try:
         if not is_torch_available():
@@ -44,7 +41,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_depth_anything import (
-            DEPTH_ANYTHING_PRETRAINED_MODEL_ARCHIVE_LIST,
             DepthAnythingForDepthEstimation,
             DepthAnythingPreTrainedModel,
         )

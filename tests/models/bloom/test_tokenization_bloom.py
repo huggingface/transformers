@@ -123,7 +123,7 @@ class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             - https://huggingface.co/bigscience/tokenizer/
         """
         tokenizer = self.get_rust_tokenizer()
-        ds = load_dataset("xnli", "all_languages", split="test", streaming=True)
+        ds = load_dataset("facebook/xnli", "all_languages", split="test", streaming=True)
 
         sample_data = next(iter(ds))["premise"]  # pick up one data
         input_text = list(sample_data.values())

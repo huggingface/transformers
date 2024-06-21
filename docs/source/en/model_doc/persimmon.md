@@ -96,3 +96,8 @@ The `LlamaTokenizer` is used as it is a standard wrapper around sentencepiece. T
 
 [[autodoc]] PersimmonForSequenceClassification
     - forward
+
+## PersimmonForTokenClassification
+
+[[autodoc]] PersimmonForTokenClassification
+    - forward

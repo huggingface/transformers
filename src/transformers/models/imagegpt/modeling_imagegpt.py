@@ -43,9 +43,6 @@ _CHECKPOINT_FOR_DOC = "openai/imagegpt-small"
 _CONFIG_FOR_DOC = "ImageGPTConfig"
 
 
-from ..deprecated._archive_maps import IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 def load_tf_weights_in_imagegpt(model, config, imagegpt_checkpoint_path):
     """
     Load tf checkpoints in a pytorch model

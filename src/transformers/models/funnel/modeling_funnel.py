@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Funnel Transformer model."""
+"""PyTorch Funnel Transformer model."""
 
 import os
 from dataclasses import dataclass
@@ -48,9 +48,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "FunnelConfig"
 _CHECKPOINT_FOR_DOC = "funnel-transformer/small"
-
-
-from ..deprecated._archive_maps import FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 INF = 1e6

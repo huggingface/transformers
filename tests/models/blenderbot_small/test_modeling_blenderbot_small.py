@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch BlenderbotSmall model. """
+"""Testing suite for the PyTorch BlenderbotSmall model."""
 
 import tempfile
 import unittest
@@ -228,7 +228,6 @@ class BlenderbotSmallModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
     all_generative_model_classes = (BlenderbotSmallForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "conversational": BlenderbotSmallForConditionalGeneration,
             "feature-extraction": BlenderbotSmallModel,
             "summarization": BlenderbotSmallForConditionalGeneration,
             "text-generation": BlenderbotSmallForCausalLM,
@@ -247,7 +246,7 @@ class BlenderbotSmallModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
     def is_pipeline_test_to_skip(
         self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
     ):
-        return pipeline_test_casse_name in ("TextGenerationPipelineTests", "ConversationalPipelineTests")
+        return pipeline_test_casse_name == "TextGenerationPipelineTests"
 
     def setUp(self):
         self.model_tester = BlenderbotSmallModelTester(self)

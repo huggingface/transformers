@@ -204,7 +204,7 @@ Pass your text to the tokenizer:
 The tokenizer returns a dictionary containing:
 
 * [input_ids](./glossary#input-ids): numerical representations of your tokens.
-* [attention_mask](.glossary#attention-mask): indicates which tokens should be attended to.
+* [attention_mask](./glossary#attention-mask): indicates which tokens should be attended to.
 
 A tokenizer can also accept a list of inputs, and pad and truncate the text to return a batch with uniform length:
 
@@ -504,7 +504,7 @@ For tasks - like translation or summarization - that use a sequence-to-sequence 
 
 You can customize the training loop behavior by subclassing the methods inside [`Trainer`]. This allows you to customize features such as the loss function, optimizer, and scheduler. Take a look at the [`Trainer`] reference for which methods can be subclassed. 
 
-The other way to customize the training loop is by using [Callbacks](./main_classes/callbacks). You can use callbacks to integrate with other libraries and inspect the training loop to report on progress or stop the training early. Callbacks do not modify anything in the training loop itself. To customize something like the loss function, you need to subclass the [`Trainer`] instead.
+The other way to customize the training loop is by using [Callbacks](./main_classes/callback). You can use callbacks to integrate with other libraries and inspect the training loop to report on progress or stop the training early. Callbacks do not modify anything in the training loop itself. To customize something like the loss function, you need to subclass the [`Trainer`] instead.
 
 ## Train with TensorFlow
 

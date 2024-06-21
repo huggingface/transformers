@@ -514,7 +514,7 @@ class LlamaIntegrationTest(unittest.TestCase):
         pyth_tokenizer = self.tokenizer
         rust_tokenizer = self.rust_tokenizer
 
-        dataset = load_dataset("code_x_glue_ct_code_to_text", "go")
+        dataset = load_dataset("google/code_x_glue_ct_code_to_text", "go")
         for item in tqdm.tqdm(dataset["validation"]):
             string = item["code"]
             encoded1 = pyth_tokenizer.encode(string)
@@ -527,7 +527,7 @@ class LlamaIntegrationTest(unittest.TestCase):
 
             self.assertEqual(decoded1, decoded2)
 
-        dataset = load_dataset("xnli", "all_languages")
+        dataset = load_dataset("facebook/xnli", "all_languages")
 
         for item in tqdm.tqdm(dataset["train"]):
             for string in item["premise"].values():
@@ -602,6 +602,10 @@ class LlamaIntegrationTest(unittest.TestCase):
         self.assertEqual(decoded_tokens, "hello")
 
     def test_no_prefix_space(self):
+        tokenizer_no_prefix_space = LlamaTokenizerFast.from_pretrained("huggyllama/llama-7b", add_prefix_space=False)
+        no_prefix_space_tokens = tokenizer_no_prefix_space.tokenize("Hey")
+        self.assertEqual(no_prefix_space_tokens, ["H", "ey"])
+
         tokenizer = LlamaTokenizerFast.from_pretrained(
             "huggyllama/llama-7b", legacy=False, from_slow=True, add_prefix_space=False
         )

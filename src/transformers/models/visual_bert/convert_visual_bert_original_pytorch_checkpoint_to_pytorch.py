@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert VisualBert checkpoint."""
 
-
 import argparse
 from collections import OrderedDict
 from pathlib import Path

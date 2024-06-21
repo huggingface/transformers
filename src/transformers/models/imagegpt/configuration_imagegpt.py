@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" OpenAI ImageGPT configuration"""
+"""OpenAI ImageGPT configuration"""
 
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Any, Mapping, Optional
@@ -26,9 +26,6 @@ if TYPE_CHECKING:
     from ... import FeatureExtractionMixin, TensorType
 
 logger = logging.get_logger(__name__)
-
-
-from ..deprecated._archive_maps import IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class ImageGPTConfig(PretrainedConfig):

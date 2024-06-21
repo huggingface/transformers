@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch T5 model."""
-
+"""PyTorch T5 model."""
 
 import copy
 import math
@@ -59,8 +58,6 @@ _CHECKPOINT_FOR_DOC = "google-t5/t5-small"
 # This dict contains ids and associated url
 # for the pretrained weights provided with the models
 ####################################################
-
-from ..deprecated._archive_maps import T5_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 ####################################################

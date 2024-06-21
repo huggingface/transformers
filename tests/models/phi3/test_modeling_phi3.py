@@ -13,8 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-""" Testing suite for the PyTorch Phi-3 model. """
-
+"""Testing suite for the PyTorch Phi-3 model."""
 
 import unittest
 

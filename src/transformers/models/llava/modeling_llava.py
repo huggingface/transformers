@@ -40,9 +40,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "LlavaConfig"
 
 
-from ..deprecated._archive_maps import LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 @dataclass
 # Copied from transformers.models.idefics.modeling_idefics.IdeficsCausalLMOutputWithPast with Idefics->Llava
 class LlavaCausalLMOutputWithPast(ModelOutput):

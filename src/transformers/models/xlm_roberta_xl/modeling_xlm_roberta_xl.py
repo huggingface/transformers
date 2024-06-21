@@ -51,9 +51,6 @@ _CHECKPOINT_FOR_DOC = "facebook/xlm-roberta-xl"
 _CONFIG_FOR_DOC = "XLMRobertaXLConfig"
 
 
-from ..deprecated._archive_maps import XLM_ROBERTA_XL_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 class XLMRobertaXLEmbeddings(nn.Module):
     """
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing.
@@ -575,6 +572,7 @@ class XLMRobertaXLPreTrainedModel(PreTrainedModel):
 
     config_class = XLMRobertaXLConfig
     base_model_prefix = "roberta"
+    _no_split_modules = ["XLMRobertaXLEmbeddings", "XLMRobertaXLLayer"]
 
     # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
     def _init_weights(self, module):

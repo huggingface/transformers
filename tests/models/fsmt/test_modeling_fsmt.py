@@ -166,7 +166,6 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     all_generative_model_classes = (FSMTForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "conversational": FSMTForConditionalGeneration,
             "feature-extraction": FSMTModel,
             "summarization": FSMTForConditionalGeneration,
             "text2text-generation": FSMTForConditionalGeneration,
@@ -194,8 +193,8 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    # XXX: override test_model_common_attributes / different Embedding type
-    def test_model_common_attributes(self):
+    # XXX: override test_model_get_set_embeddings / different Embedding type
+    def test_model_get_set_embeddings(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
 
         for model_class in self.all_model_classes:

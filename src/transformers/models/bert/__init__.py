@@ -26,7 +26,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_bert": ["BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BertConfig", "BertOnnxConfig"],
+    "configuration_bert": ["BertConfig", "BertOnnxConfig"],
     "tokenization_bert": ["BasicTokenizer", "BertTokenizer", "WordpieceTokenizer"],
 }
 
@@ -45,7 +45,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_bert"] = [
-        "BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "BertForMaskedLM",
         "BertForMultipleChoice",
         "BertForNextSentencePrediction",
@@ -67,7 +66,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_bert"] = [
-        "TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFBertEmbeddings",
         "TFBertForMaskedLM",
         "TFBertForMultipleChoice",
@@ -109,7 +107,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig, BertOnnxConfig
+    from .configuration_bert import BertConfig, BertOnnxConfig
     from .tokenization_bert import BasicTokenizer, BertTokenizer, WordpieceTokenizer
 
     try:
@@ -127,7 +125,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_bert import (
-            BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             BertForMaskedLM,
             BertForMultipleChoice,
             BertForNextSentencePrediction,
@@ -149,7 +146,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_bert import (
-            TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFBertEmbeddings,
             TFBertForMaskedLM,
             TFBertForMultipleChoice,

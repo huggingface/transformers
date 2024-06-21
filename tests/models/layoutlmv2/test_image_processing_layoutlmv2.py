@@ -76,6 +76,7 @@ class LayoutLMv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
     image_processing_class = LayoutLMv2ImageProcessor if is_pytesseract_available() else None
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = LayoutLMv2ImageProcessingTester(self)
 
     @property
@@ -102,7 +103,7 @@ class LayoutLMv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
 
         from datasets import load_dataset
 
-        ds = load_dataset("hf-internal-testing/fixtures_docvqa", split="test")
+        ds = load_dataset("hf-internal-testing/fixtures_docvqa", split="test", trust_remote_code=True)
 
         image = Image.open(ds[0]["file"]).convert("RGB")
 

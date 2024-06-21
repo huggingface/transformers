@@ -14,9 +14,18 @@
 # limitations under the License.
 
 
+import inspect
 import json
 import tempfile
+
+
+try:
+    from typing import Unpack
+except ImportError:
+    from typing_extensions import Unpack
 import unittest
+
+import numpy as np
 
 from transformers import CLIPTokenizerFast, ProcessorMixin
 from transformers.models.auto.processing_auto import processor_class_from_name
@@ -30,9 +39,13 @@ from transformers.utils import is_vision_available
 
 
 if is_vision_available():
+    from PIL import Image
+
     from transformers import CLIPImageProcessor
 
 
+@require_torch
+@require_vision
 @require_torch
 class ProcessorTesterMixin:
     processor_class = None
@@ -64,6 +77,15 @@ class ProcessorTesterMixin:
         processor = self.processor_class(**components, **self.prepare_processor_dict())
         return processor
 
+    @require_vision
+    def prepare_image_inputs(self):
+        """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
+        or a list of PyTorch tensors if one specifies torchify=True.
+        """
+        image_inputs = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)]
+        image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
+        return image_inputs
+
     def test_processor_to_json_string(self):
         processor = self.get_processor()
         obj = json.loads(processor.to_json_string())
@@ -81,6 +103,214 @@ class ProcessorTesterMixin:
                 processor_second = self.processor_class.from_pretrained(tmpdirname)
 
                 self.assertEqual(processor_second.to_dict(), processor_first.to_dict())
+
+    # These kwargs-related tests ensure that processors are correctly instantiated.
+    # they need to be applied only if an image_processor exists.
+
+    def skip_processor_without_typed_kwargs(self, processor):
+        # TODO this signature check is to test only uniformized processors.
+        # Once all are updated, remove it.
+        is_kwargs_typed_dict = False
+        call_signature = inspect.signature(processor.__call__)
+        for param in call_signature.parameters.values():
+            if param.kind == param.VAR_KEYWORD and param.annotation != param.empty:
+                is_kwargs_typed_dict = (
+                    hasattr(param.annotation, "__origin__") and param.annotation.__origin__ == Unpack
+                )
+        if not is_kwargs_typed_dict:
+            self.skipTest(f"{self.processor_class} doesn't have typed kwargs.")
+
+    @require_vision
+    @require_torch
+    def test_tokenizer_defaults_preserved_by_kwargs(self):
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        image_processor = self.get_component("image_processor")
+        tokenizer = self.get_component("tokenizer", max_length=117)
+
+        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        self.skip_processor_without_typed_kwargs(processor)
+        input_str = "lower newer"
+        image_input = self.prepare_image_inputs()
+
+        inputs = processor(text=input_str, images=image_input, return_tensors="pt")
+        self.assertEqual(len(inputs["input_ids"][0]), 117)
+
+    @require_torch
+    @require_vision
+    def test_image_processor_defaults_preserved_by_image_kwargs(self):
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        image_processor = self.get_component("image_processor", crop_size=(234, 234))
+        tokenizer = self.get_component("tokenizer", max_length=117)
+
+        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        input_str = "lower newer"
+        image_input = self.prepare_image_inputs()
+
+        inputs = processor(text=input_str, images=image_input)
+        self.assertEqual(len(inputs["pixel_values"][0][0]), 234)
+
+    @require_vision
+    @require_torch
+    def test_kwargs_overrides_default_tokenizer_kwargs(self):
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        image_processor = self.get_component("image_processor")
+        tokenizer = self.get_component("tokenizer", max_length=117)
+
+        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        self.skip_processor_without_typed_kwargs(processor)
+        input_str = "lower newer"
+        image_input = self.prepare_image_inputs()
+
+        inputs = processor(text=input_str, images=image_input, return_tensors="pt", max_length=112)
+        self.assertEqual(len(inputs["input_ids"][0]), 112)
+
+    @require_torch
+    @require_vision
+    def test_kwargs_overrides_default_image_processor_kwargs(self):
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        image_processor = self.get_component("image_processor", crop_size=(234, 234))
+        tokenizer = self.get_component("tokenizer", max_length=117)
+
+        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        input_str = "lower newer"
+        image_input = self.prepare_image_inputs()
+
+        inputs = processor(text=input_str, images=image_input, crop_size=[224, 224])
+        self.assertEqual(len(inputs["pixel_values"][0][0]), 224)
+
+    @require_torch
+    @require_vision
+    def test_unstructured_kwargs(self):
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        image_processor = self.get_component("image_processor")
+        tokenizer = self.get_component("tokenizer")
+
+        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        input_str = "lower newer"
+        image_input = self.prepare_image_inputs()
+        inputs = processor(
+            text=input_str,
+            images=image_input,
+            return_tensors="pt",
+            crop_size={"height": 214, "width": 214},
+            padding="max_length",
+            max_length=76,
+        )
+
+        self.assertEqual(inputs["pixel_values"].shape[2], 214)
+        self.assertEqual(len(inputs["input_ids"][0]), 76)
+
+    @require_torch
+    @require_vision
+    def test_unstructured_kwargs_batched(self):
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        image_processor = self.get_component("image_processor")
+        tokenizer = self.get_component("tokenizer")
+
+        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        input_str = ["lower newer", "upper older longer string"]
+        image_input = self.prepare_image_inputs() * 2
+        inputs = processor(
+            text=input_str,
+            images=image_input,
+            return_tensors="pt",
+            crop_size={"height": 214, "width": 214},
+            padding="longest",
+            max_length=76,
+        )
+
+        self.assertEqual(inputs["pixel_values"].shape[2], 214)
+
+        self.assertEqual(len(inputs["input_ids"][0]), 6)
+
+    @require_torch
+    @require_vision
+    def test_doubly_passed_kwargs(self):
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        image_processor = self.get_component("image_processor")
+        tokenizer = self.get_component("tokenizer")
+
+        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        input_str = ["lower newer"]
+        image_input = self.prepare_image_inputs()
+        with self.assertRaises(ValueError):
+            _ = processor(
+                text=input_str,
+                images=image_input,
+                images_kwargs={"crop_size": {"height": 222, "width": 222}},
+                crop_size={"height": 214, "width": 214},
+            )
+
+    @require_torch
+    @require_vision
+    def test_structured_kwargs_nested(self):
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        image_processor = self.get_component("image_processor")
+        tokenizer = self.get_component("tokenizer")
+
+        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        input_str = "lower newer"
+        image_input = self.prepare_image_inputs()
+
+        # Define the kwargs for each modality
+        all_kwargs = {
+            "common_kwargs": {"return_tensors": "pt"},
+            "images_kwargs": {"crop_size": {"height": 214, "width": 214}},
+            "text_kwargs": {"padding": "max_length", "max_length": 76},
+        }
+
+        inputs = processor(text=input_str, images=image_input, **all_kwargs)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        self.assertEqual(inputs["pixel_values"].shape[2], 214)
+
+        self.assertEqual(len(inputs["input_ids"][0]), 76)
+
+    @require_torch
+    @require_vision
+    def test_structured_kwargs_nested_from_dict(self):
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+
+        image_processor = self.get_component("image_processor")
+        tokenizer = self.get_component("tokenizer")
+
+        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        self.skip_processor_without_typed_kwargs(processor)
+        input_str = "lower newer"
+        image_input = self.prepare_image_inputs()
+
+        # Define the kwargs for each modality
+        all_kwargs = {
+            "common_kwargs": {"return_tensors": "pt"},
+            "images_kwargs": {"crop_size": {"height": 214, "width": 214}},
+            "text_kwargs": {"padding": "max_length", "max_length": 76},
+        }
+
+        inputs = processor(text=input_str, images=image_input, **all_kwargs)
+        self.assertEqual(inputs["pixel_values"].shape[2], 214)
+
+        self.assertEqual(len(inputs["input_ids"][0]), 76)
 
 
 class MyProcessor(ProcessorMixin):
