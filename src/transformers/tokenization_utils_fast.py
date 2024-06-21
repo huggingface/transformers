@@ -126,6 +126,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
             if len(additional_kwargs) > 0:
                 kwargs.update(additional_kwargs)
+
         elif self.slow_tokenizer_class is not None:
             # We need to create and convert a slow tokenizer to build the backend
             slow_tokenizer = self.slow_tokenizer_class(*args, **kwargs)
