@@ -3833,7 +3833,7 @@ class Trainer:
 
             if "use_gather_object" in inspect.signature(self.gather_function).parameters.keys():
                 self.gather_function = functools.partial(
-                    self.gather_function, use_gather_objects=self.args.eval_use_gather_object
+                    self.gather_function, use_gather_object=self.args.eval_use_gather_object
                 )
 
             # Update containers
