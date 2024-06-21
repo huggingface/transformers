@@ -287,7 +287,7 @@ class WhisperAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_value: Optional[EncoderDecoderCache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
@@ -302,14 +302,19 @@ class WhisperAttention(nn.Module):
 
         # get query proj
         query_states = self._shape(self.q_proj(hidden_states) * self.scaling, tgt_len, bsz)
-        past_key_value = getattr(self, "past_key_value", past_key_value)
+
+        if past_key_value is not None:
+            is_updated = self.layer_idx in past_key_value.is_updated and past_key_value.is_updated[self.layer_idx]
+            past_key_value.is_updated[self.layer_idx] = (
+                True if is_updated or (not is_updated and is_cross_attention) else False
+            )
+            past_key_value = (
+                past_key_value.cross_attention_cache if is_cross_attention else past_key_value.self_attention_cache
+            )
 
         # use key_value_states if cross attention
         current_states = key_value_states if key_value_states is not None else hidden_states
-        if is_cross_attention and (
-            (isinstance(past_key_value, DynamicCache) and past_key_value.get_seq_length(self.layer_idx))
-            or (isinstance(past_key_value, StaticCache) and past_key_value.is_updated[self.layer_idx])
-        ):
+        if is_cross_attention and past_key_value and is_updated:
             # reuse k,v, cross_attentions
             key_states = past_key_value.key_cache[self.layer_idx]
             value_states = past_key_value.value_cache[self.layer_idx]
@@ -378,7 +383,7 @@ class WhisperFlashAttention2(WhisperAttention):
         self,
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_value: Optional[EncoderDecoderCache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
@@ -400,17 +405,21 @@ class WhisperFlashAttention2(WhisperAttention):
 
         # get query proj
         query_states = self._shape(self.q_proj(hidden_states), tgt_len, bsz)
-        past_key_value = getattr(self, "past_key_value", past_key_value)
+
+        if past_key_value is not None:
+            if is_cross_attention:
+                is_updated = past_key_value.is_updated.get(self.layer_idx)
+                past_key_value.is_updated[self.layer_idx] = True
+                past_key_value = past_key_value.cross_attention_cache
+            else:
+                past_key_value = past_key_value.self_attention_cache
 
         # use key_value_states if cross attention
         current_states = key_value_states if key_value_states is not None else hidden_states
-        if (
-            is_cross_attention
-            and isinstance(past_key_value, DynamicCache)
-            and past_key_value.get_seq_length(self.layer_idx)
-        ):
+        if is_cross_attention and past_key_value and is_updated:
             # reuse k,v, cross_attentions
-            key_states, value_states = past_key_value[self.layer_idx]
+            key_states = past_key_value.key_cache[self.layer_idx]
+            value_states = past_key_value.value_cache[self.layer_idx]
         else:
             key_states = self._shape(self.k_proj(current_states), -1, bsz)
             value_states = self._shape(self.v_proj(current_states), -1, bsz)
@@ -574,7 +583,7 @@ class WhisperSdpaAttention(WhisperAttention):
         self,
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_value: Optional[EncoderDecoderCache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
@@ -604,14 +613,18 @@ class WhisperSdpaAttention(WhisperAttention):
 
         # get query proj
         query_states = self._shape(self.q_proj(hidden_states), tgt_len, bsz)
-        past_key_value = getattr(self, "past_key_value", past_key_value)
+
+        if past_key_value is not None:
+            if is_cross_attention:
+                is_updated = past_key_value.is_updated.get(self.layer_idx)
+                past_key_value.is_updated[self.layer_idx] = True
+                past_key_value = past_key_value.cross_attention_cache
+            else:
+                past_key_value = past_key_value.self_attention_cache
 
         # use key_value_states if cross attention
         current_states = key_value_states if key_value_states is not None else hidden_states
-        if is_cross_attention and (
-            (isinstance(past_key_value, DynamicCache) and past_key_value.get_seq_length(self.layer_idx))
-            or (isinstance(past_key_value, StaticCache) and past_key_value.is_updated[self.layer_idx])
-        ):
+        if is_cross_attention and past_key_value and is_updated:
             # reuse k,v, cross_attentions
             key_states = past_key_value.key_cache[self.layer_idx]
             value_states = past_key_value.value_cache[self.layer_idx]
@@ -807,11 +820,9 @@ class WhisperDecoderLayer(nn.Module):
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Self Attention
-        self_attn_past_key_value = past_key_value.self_attention_cache if past_key_value is not None else None
-        # add present self-attn cache to positions 0 of present_key_value tuple
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
-            past_key_value=self_attn_past_key_value,
+            past_key_value=past_key_value,
             attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
@@ -825,13 +836,12 @@ class WhisperDecoderLayer(nn.Module):
         if encoder_hidden_states is not None:
             residual = hidden_states
             hidden_states = self.encoder_attn_layer_norm(hidden_states)
-            cross_attn_past_key_value = past_key_value.cross_attention_cache if past_key_value is not None else None
             hidden_states, cross_attn_weights, cross_attn_present_key_value = self.encoder_attn(
                 hidden_states=hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
                 layer_head_mask=cross_attn_layer_head_mask,
-                past_key_value=cross_attn_past_key_value,
+                past_key_value=past_key_value,
                 output_attentions=output_attentions,
             )
             hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
