@@ -595,11 +595,12 @@ class LlamaSdpaAttention(LlamaAttention):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # TODO: We can make it support sdpa
         if is_accelerate_available() and mpu.sequence_parallel_is_enabled():
-            raise ValueError(
-                "SDPA is not supported with sequence parallelism. Please use the `flash_attention_2` implementation instead."
-            )
+            self.attn_func = DistributedAttention(torch.nn.functional.scaled_dot_product_attention, mpu.get_sequence_parallel_group(), scatter_idx=1, gather_idx=2)
+            self.q_len_multiplier = mpu.get_sequence_parallel_world_size()
+        else:
+            self.attn_func = torch.nn.functional.scaled_dot_product_attention
+            self.q_len_multiplier = 1
 
     # Adapted from LlamaAttention.forward
     def forward(
@@ -651,7 +652,7 @@ class LlamaSdpaAttention(LlamaAttention):
 
         causal_mask = attention_mask
         if attention_mask is not None:
-            causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
+            causal_mask = causal_mask[:, :, :, : key_states.shape[-2] * self.q_len_multiplier]
 
         # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
         # Reference: https://github.com/pytorch/pytorch/issues/112577.
@@ -664,7 +665,7 @@ class LlamaSdpaAttention(LlamaAttention):
         # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
         is_causal = True if causal_mask is None and q_len > 1 else False
 
-        attn_output = torch.nn.functional.scaled_dot_product_attention(
+        attn_output = self.attn_func(
             query_states,
             key_states,
             value_states,
@@ -781,6 +782,7 @@ class LlamaPreTrainedModel(PreTrainedModel):
     config_class = LlamaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
+    supports_sequence_parallel = True
     _no_split_modules = ["LlamaDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn_2 = True
@@ -899,6 +901,11 @@ class LlamaModel(LlamaPreTrainedModel):
         self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
 
+        if is_accelerate_available() and mpu.sequence_parallel_is_enabled():
+            self.q_len_multiplier = mpu.get_sequence_parallel_world_size()
+        else:
+            self.q_len_multiplier = 1
+
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -951,7 +958,7 @@ class LlamaModel(LlamaPreTrainedModel):
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1] * self.q_len_multiplier, device=inputs_embeds.device
             )
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
@@ -1057,7 +1064,7 @@ class LlamaModel(LlamaPreTrainedModel):
 
         dtype, device = input_tensor.dtype, input_tensor.device
         min_dtype = torch.finfo(dtype).min
-        sequence_length = input_tensor.shape[1]
+        sequence_length = input_tensor.shape[1] * self.q_len_multiplier
         if using_static_cache:
             target_length = past_key_values.get_max_length()
         else:
