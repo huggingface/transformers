@@ -15,11 +15,11 @@ import argparse
 import gc
 import json
 import os
-import shutil
 import warnings
 
 import torch
 import yaml
+from accelerate import init_empty_weights
 
 from transformers import ChameleonConfig, ChameleonForCausalLM
 
@@ -78,9 +78,6 @@ def write_json(text, path):
 
 def write_model(model_path, input_base_path, model_size, safe_serialization=True, chameleon_version=1):
     os.makedirs(model_path, exist_ok=True)
-    tmp_model_path = os.path.join(model_path, "tmp")
-    os.makedirs(tmp_model_path, exist_ok=True)
-
     input_model_path = os.path.join(input_base_path, "models", model_size.lower())
     params_path = os.path.join(input_model_path, "params.json")
     consolidate_params_path = os.path.join(input_model_path, "consolidate_params.json")
@@ -138,23 +135,29 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
             torch.load(os.path.join(input_model_path, f"consolidated.{i:02d}.pth"), map_location="cpu")
             for i in range(num_shards)
         ]
-    param_count = 0
-    index_dict = {"weight_map": {}}
+
+    # Load weights to the state dict
+    state_dict = {}
     for layer_i in range(n_layers):
-        filename = f"pytorch_model-{layer_i + 1}-of-{n_layers + 1}.bin"
         if num_shards == 1:
             # Unsharded
-            state_dict = {
-                f"model.layers.{layer_i}.self_attn.q_proj.weight": loaded[f"layers.{layer_i}.attention.wq.weight"],
-                f"model.layers.{layer_i}.self_attn.k_proj.weight": loaded[f"layers.{layer_i}.attention.wk.weight"],
-                f"model.layers.{layer_i}.self_attn.v_proj.weight": loaded[f"layers.{layer_i}.attention.wv.weight"],
-                f"model.layers.{layer_i}.self_attn.o_proj.weight": loaded[f"layers.{layer_i}.attention.wo.weight"],
-                f"model.layers.{layer_i}.mlp.gate_proj.weight": loaded[f"layers.{layer_i}.feed_forward.w1.weight"],
-                f"model.layers.{layer_i}.mlp.down_proj.weight": loaded[f"layers.{layer_i}.feed_forward.w2.weight"],
-                f"model.layers.{layer_i}.mlp.up_proj.weight": loaded[f"layers.{layer_i}.feed_forward.w3.weight"],
-                f"model.layers.{layer_i}.input_layernorm.weight": loaded[f"layers.{layer_i}.attention_norm.weight"],
-                f"model.layers.{layer_i}.post_attention_layernorm.weight": loaded[f"layers.{layer_i}.ffn_norm.weight"],
-            }
+            state_dict.update(
+                {
+                    f"model.layers.{layer_i}.self_attn.q_proj.weight": loaded[f"layers.{layer_i}.attention.wq.weight"],
+                    f"model.layers.{layer_i}.self_attn.k_proj.weight": loaded[f"layers.{layer_i}.attention.wk.weight"],
+                    f"model.layers.{layer_i}.self_attn.v_proj.weight": loaded[f"layers.{layer_i}.attention.wv.weight"],
+                    f"model.layers.{layer_i}.self_attn.o_proj.weight": loaded[f"layers.{layer_i}.attention.wo.weight"],
+                    f"model.layers.{layer_i}.mlp.gate_proj.weight": loaded[f"layers.{layer_i}.feed_forward.w1.weight"],
+                    f"model.layers.{layer_i}.mlp.down_proj.weight": loaded[f"layers.{layer_i}.feed_forward.w2.weight"],
+                    f"model.layers.{layer_i}.mlp.up_proj.weight": loaded[f"layers.{layer_i}.feed_forward.w3.weight"],
+                    f"model.layers.{layer_i}.input_layernorm.weight": loaded[
+                        f"layers.{layer_i}.attention_norm.weight"
+                    ],
+                    f"model.layers.{layer_i}.post_attention_layernorm.weight": loaded[
+                        f"layers.{layer_i}.ffn_norm.weight"
+                    ],
+                }
+            )
             if qk_layernorm:
                 state_dict[f"model.layers.{layer_i}.self_attn.q_norm.weight"] = loaded[
                     f"layers.{layer_i}.attention.q_normalization.weight"
@@ -171,14 +174,16 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
 
         else:
             # Sharded
-            state_dict = {
-                f"model.layers.{layer_i}.input_layernorm.weight": torch.stack(
-                    [l[f"layers.{layer_i}.attention_norm.weight"] for l in loaded]
-                ).mean(dim=0),
-                f"model.layers.{layer_i}.post_attention_layernorm.weight": torch.stack(
-                    [l[f"layers.{layer_i}.ffn_norm.weight"] for l in loaded]
-                ).mean(dim=0),
-            }
+            state_dict.update(
+                {
+                    f"model.layers.{layer_i}.input_layernorm.weight": torch.stack(
+                        [l[f"layers.{layer_i}.attention_norm.weight"] for l in loaded]
+                    ).mean(dim=0),
+                    f"model.layers.{layer_i}.post_attention_layernorm.weight": torch.stack(
+                        [l[f"layers.{layer_i}.ffn_norm.weight"] for l in loaded]
+                    ).mean(dim=0),
+                }
+            )
             state_dict[f"model.layers.{layer_i}.self_attn.q_proj.weight"] = torch.cat(
                 [
                     loaded[i][f"layers.{layer_i}.attention.wq.weight"].view(n_heads_per_shard, dims_per_head, dim)
@@ -233,36 +238,34 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
             )
 
         state_dict[f"model.layers.{layer_i}.self_attn.rotary_emb.inv_freq"] = inv_freq
-        for k, v in state_dict.items():
-            index_dict["weight_map"][k] = filename
-            param_count += v.numel()
-        torch.save(state_dict, os.path.join(tmp_model_path, filename))
 
-    filename = f"pytorch_model-{n_layers + 1}-of-{n_layers + 1}.bin"
     if num_shards == 1:
         # Unsharded
-        state_dict = {
-            "model.embed_tokens.weight": loaded["tok_embeddings.weight"],
-            "model.norm.weight": loaded["norm.weight"],
-            "lm_head.weight": loaded["output.weight"],
-        }
+        state_dict.update(
+            {
+                "model.embed_tokens.weight": loaded["tok_embeddings.weight"],
+                "model.norm.weight": loaded["norm.weight"],
+                "lm_head.weight": loaded["output.weight"],
+            }
+        )
     else:
-        state_dict = {
-            "model.embed_tokens.weight": torch.cat(
-                [loaded[i]["tok_embeddings.weight"] for i in range(num_shards)], dim=1
-            ),
-            "model.norm.weight": torch.stack([loaded[i]["norm.weight"] for i in range(num_shards)]).mean(dim=0),
-            "lm_head.weight": torch.cat([loaded[i]["output.weight"] for i in range(num_shards)], dim=0),
-        }
+        state_dict.update(
+            {
+                "model.embed_tokens.weight": torch.cat(
+                    [loaded[i]["tok_embeddings.weight"] for i in range(num_shards)], dim=1
+                ),
+                "model.norm.weight": torch.stack([loaded[i]["norm.weight"] for i in range(num_shards)]).mean(dim=0),
+                "lm_head.weight": torch.cat([loaded[i]["output.weight"] for i in range(num_shards)], dim=0),
+            }
+        )
 
-    for k, v in state_dict.items():
-        index_dict["weight_map"][k] = filename
-        param_count += v.numel()
-    torch.save(state_dict, os.path.join(tmp_model_path, filename))
+    # Load VQGAN weights
+    vqgan_path = os.path.join(input_base_path, "tokenizer/vqgan.ckpt")
+    vqgan_state_dict = torch.load(vqgan_path, map_location="cpu")["state_dict"]
+    for k, v in vqgan_state_dict.items():
+        state_dict[f"model.vqmodel.{k}"] = v
 
     # Write configs
-    index_dict["metadata"] = {"total_size": param_count * 2}
-    write_json(index_dict, os.path.join(tmp_model_path, "pytorch_model.bin.index.json"))
     ffn_dim_multiplier = params["ffn_dim_multiplier"] if "ffn_dim_multiplier" in params else 1
     multiple_of = params["multiple_of"] if "multiple_of" in params else 256
 
@@ -287,21 +290,22 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
         vq_config=vq_config,
         vocabulary_map=vocabulary_map,
     )
-    config.save_pretrained(tmp_model_path)
+    with init_empty_weights():
+        model = ChameleonForCausalLM(config)
+
+    model.load_state_dict(state_dict, assign=True, strict=False)
+    model.save_pretrained(model_path, safe_serialization=True)
 
     # Make space so we can load the model properly now.
     del state_dict
     del loaded
+    del vqgan_state_dict
     gc.collect()
 
     print("Loading the checkpoint in a Chameleon model.")
-    model = ChameleonForCausalLM.from_pretrained(tmp_model_path, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True)
-    # Avoid saving this as part of the config.
-    del model.config._name_or_path
-    model.config.torch_dtype = torch.float16
-    print("Saving in the Transformers format.")
-    model.save_pretrained(model_path, safe_serialization=safe_serialization)
-    shutil.rmtree(tmp_model_path)
+    model = ChameleonForCausalLM.from_pretrained(model_path, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True)
+
+    # TODO: Short inference on a few examples to check if generation makes sense
 
 
 def main():

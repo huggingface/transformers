@@ -1133,7 +1133,7 @@ class ChameleonVQModel(nn.Module):
 
 
 class ChameleonImageVocabularyMapping:
-    def __init__(self, vocab_map: dict[str, int]):
+    def __init__(self, vocab_map):
         self.name2val = vocab_map
 
         self.bos_id = vocab_map.get("<s>")
@@ -1144,15 +1144,15 @@ class ChameleonImageVocabularyMapping:
         self.eot_id = vocab_map.get("<reserved08706>")
 
     @cached_property
-    def val2name(self) -> dict[int, str]:
+    def val2name(self):
         return {v: k for k, v in self.name2val.items()}
 
     @cached_property
-    def image_tokens(self) -> list[int]:
+    def image_tokens(self):
         return sorted([val for name, val in self.name2val.items() if name.startswith("IMGIMG")])
 
     @cached_property
-    def bpe2img(self) -> dict[int, int]:
+    def bpe2img(self):
         img_tkn_chr_mapping = {chr(ord("A") + i): str(i) for i in range(10)}
 
         def remap(old_name: str) -> str:
@@ -1161,15 +1161,15 @@ class ChameleonImageVocabularyMapping:
         return {tok: int(remap(self.val2name[tok])) for tok in self.image_tokens}
 
     @cached_property
-    def img2bpe(self) -> dict[int, int]:
+    def img2bpe(self):
         return {v: k for k, v in self.bpe2img.items()}
 
     @cached_property
-    def bpe2img_search_tensors(self) -> tuple[torch.Tensor, torch.Tensor]:
+    def bpe2img_search_tensors(self):
         return torch.tensor(sorted(self.bpe2img.keys())), torch.tensor(sorted(self.bpe2img.values()))
 
     @cached_property
-    def img2bpe_mapping_tensor(self) -> tuple[torch.Tensor, torch.Tensor]:
+    def img2bpe_mapping_tensor(self):
         mapping = torch.zeros(max(self.img2bpe.keys()) + 1, dtype=torch.int)
         for k, v in self.img2bpe.items():
             mapping[k] = v
