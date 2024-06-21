@@ -245,9 +245,9 @@ class DataTrainingArguments:
         default=False,
         metadata={
             "help": (
-                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option "
-                "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
-                "execute code present on the Hub on your local machine."
+                "Whether to trust the execution of code from datasets/models defined on the Hub."
+                " This option should only be set to `True` for repositories you trust and in which you have read the"
+                " code, as it will execute code present on the Hub on your local machine."
             )
         },
     )
@@ -434,6 +434,7 @@ def main():
             data_args.dataset_config_name,
             split=data_args.train_split_name,
             token=data_args.token,
+            trust_remote_code=data_args.trust_remote_code,
         )
 
         if data_args.audio_column_name not in raw_datasets["train"].column_names:
@@ -459,6 +460,7 @@ def main():
             data_args.dataset_config_name,
             split=data_args.eval_split_name,
             token=data_args.token,
+            trust_remote_code=data_args.trust_remote_code,
         )
 
         if data_args.max_eval_samples is not None:
