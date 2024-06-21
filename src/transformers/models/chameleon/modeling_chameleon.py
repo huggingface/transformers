@@ -325,8 +325,7 @@ class ChameleonAttention(nn.Module):
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
         if attention_mask is not None:  # no matter the length, we just slice it
-            if cache_position is not None:
-                causal_mask = attention_mask[:, :, cache_position, : key_states.shape[-2]]
+            causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
             attn_weights = attn_weights + causal_mask
 
         # upcast attention to fp32
@@ -341,9 +340,7 @@ class ChameleonAttention(nn.Module):
             )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
-
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
-
         attn_output = self.o_proj(attn_output)
 
         if not output_attentions:
@@ -614,7 +611,7 @@ class ChameleonSdpaAttention(ChameleonAttention):
 
         causal_mask = attention_mask
         if attention_mask is not None and cache_position is not None:
-            causal_mask = causal_mask[:, :, cache_position, : key_states.shape[-2]]
+            causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
 
         # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
         # Reference: https://github.com/pytorch/pytorch/issues/112577.
@@ -957,7 +954,9 @@ class ChameleonVQModelEncoder(nn.Module):
         channel_multiplier = config.channel_multiplier
 
         # downsampling
-        self.conv_in = torch.nn.Conv2d(in_channels, base_channels, kernel_size=3, stride=1, padding=1)
+        self.conv_in = torch.nn.Conv2d(
+            in_channels, base_channels, kernel_size=3, stride=1, padding=1
+        )  # mismatch -> need [512, 256, 3, 3]
 
         curr_res = resolution
         in_channel_multiplier = (1,) + tuple(channel_multiplier)
@@ -1012,8 +1011,10 @@ class ChameleonVQModelEncoder(nn.Module):
         )
 
         # end
-        self.norm_out = torch.nn.GroupNorm(num_groups=32, num_channels=block_in, eps=1e-6, affine=True)
-        self.conv_out = torch.nn.Conv2d(
+        self.norm_out = torch.nn.GroupNorm(
+            num_groups=32, num_channels=block_in, eps=1e-6, affine=True
+        )  # mismatch -> need [128] shape
+        self.conv_out = torch.nn.Conv2d(  # mismatch -> need [3, 128, 3, 3]
             block_in,
             2 * z_channels if double_z else z_channels,
             kernel_size=3,
@@ -1114,9 +1115,7 @@ class ChameleonImageVocabularyMapping:
         return mapping
 
     def convert_img2bp2(self, img_batch: torch.Tensor) -> torch.Tensor:
-        return self.img2bpe_mapping_tensor[
-            img_batch.cpu()
-        ]  # TODO: fix device and check itc works in multi-gpu setting
+        return self.img2bpe_mapping_tensor[img_batch.cpu()]  # TODO: fix device and check it works in multi-gpu setting
 
 
 CHAMELEON_START_DOCSTRING = r"""
@@ -1609,6 +1608,7 @@ class ChameleonForCausalLM(ChameleonPreTrainedModel):
         hidden_states = outputs[0]
         logits = self.lm_head(hidden_states)
         logits = logits.float()
+
         # Disallow image tokens. This does not mask any special tokens, such as begin-image or end-image.
         logits[:, :, 4:8196] = -math.inf
 

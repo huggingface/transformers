@@ -99,7 +99,7 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
     dim = params["dim"]
     dims_per_head = dim // n_heads
     base = params.get("rope_theta", 10000.0)
-    inv_freq = 1.0 / (base ** (torch.arange(0, dims_per_head, 2).float() / dims_per_head))
+    # inv_freq = 1.0 / (base ** (torch.arange(0, dims_per_head, 2).float() / dims_per_head))
     qk_layernorm = params["qk_normalization"]
     swin_norm = params["swin_norm"]
     if base > 10000.0:
@@ -243,7 +243,7 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
                 [loaded[i][f"layers.{layer_i}.feed_forward.w3.weight"] for i in range(num_shards)], dim=0
             )
 
-        state_dict[f"model.layers.{layer_i}.self_attn.rotary_emb.inv_freq"] = inv_freq
+        # state_dict[f"model.layers.{layer_i}.self_attn.rotary_emb.inv_freq"] = inv_freq do we need this?
 
     if num_shards == 1:
         # Unsharded
@@ -269,6 +269,7 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
     vqgan_path = os.path.join(input_base_path, "tokenizer/vqgan.ckpt")
     vqgan_state_dict = torch.load(vqgan_path, map_location="cpu")["state_dict"]
     for k, v in vqgan_state_dict.items():
+        k = k.replace("decoder", "encoder")
         state_dict[f"model.vqmodel.{k}"] = v
 
     # Write configs
@@ -302,7 +303,7 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
     with init_empty_weights():
         model = ChameleonForCausalLM(config)
 
-    model.load_state_dict(state_dict, assign=True, strict=False)
+    model.load_state_dict(state_dict, assign=True, strict=True)
 
     # resize embeds to account for special image token
     # See https://nlp.stanford.edu/~johnhew/vocab-expansion.html for why we get mean/stdev this way to expand embeddings
@@ -343,9 +344,7 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
     # Short inference on a few examples to check if generation makes sense
     # taken from https://github.com/facebookresearch/chameleon/blob/7a72f40aa5f462965c8374f25257f55b65b25ff4/data/prompts_for_human_evaluations.jsonl
     print("Loading the checkpoint in a Chameleon model.")
-    model = ChameleonForCausalLM.from_pretrained(
-        model_path, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True, device_map="auto"
-    )
+    model = ChameleonForCausalLM.from_pretrained(model_path, device_map="auto")
     processor = ChameleonProcessor.from_pretrained(model_path)
 
     prompt = "I'm very intrigued by this work of art:<image>Please tell me about the artist."
@@ -355,7 +354,8 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
         ).raw
     )
 
-    inputs = processor(prompt, images=image, return_tensors="pt").to(model.device, dtype=torch.bfloat16)
+    inputs = processor(prompt, images=image, return_tensors="pt").to(model.device)
+    # inputs = processor("Hello", return_tensors="pt").to(model.device)
 
     out = model.generate(**inputs, max_new_tokens=40, do_sample=False)
     generated_text = processor.batch_decode(out, skip_special_tokens=True)[0]

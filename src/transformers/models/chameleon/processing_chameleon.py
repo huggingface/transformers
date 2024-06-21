@@ -44,7 +44,6 @@ class ChameleonProcessor(ProcessorMixin):
     tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
     image_processor_class = "ChameleonImageProcessor"
 
-    # Copied from transformers.models.llava.processing_llava.LlavaProcessor.__init__
     def __init__(self, image_processor=None, tokenizer=None, image_seq_length=1024, image_token="<image>"):
         self.image_seq_length = image_seq_length
         self.image_token = image_token
@@ -52,7 +51,6 @@ class ChameleonProcessor(ProcessorMixin):
         self.image_end_token = "<eoss>"
         super().__init__(image_processor, tokenizer)
 
-    # Copied from transformers.models.llava.processing_llava.LlavaProcessor.__call__
     def __call__(
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
