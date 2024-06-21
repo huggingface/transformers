@@ -126,6 +126,9 @@ class PaliGemmaPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["PaliGemmaMultiModalProjector"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = False
+    _supports_cache_class = True
+    _supports_quantized_cache = True
+    _supports_static_cache = True
     _supports_sdpa = True
 
     def _init_weights(self, module):
@@ -479,6 +482,10 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
             cache_position=cache_position,
             **kwargs,
         )
+
+        if input_ids.shape[1] != 1:  # for BC with the current implementation, position ids in pre-fill is 1-indexed
+            model_inputs["position_ids"] += 1
+
         model_inputs["token_type_ids"] = token_type_ids
 
         # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
