@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" chameleon model configuration"""
+"""chameleon model configuration"""
 
 from typing import List
 
@@ -57,8 +57,10 @@ class ChameleonVQConfig(PretrainedConfig):
             Dropout rate.
         colorize_nlabels (`int`, *optional*):
             Colorize nlabels
-        attn_type (`str`, *optional*, defaults to `"vanilla"`): <fill_docstring>
-        resamp_type (`str`, *optional*, defaults to `"with_conv"`): <fill_docstring>
+        attn_type (`str`, *optional*, defaults to `"vanilla"`):
+            Attention type used in VQ-GAN encoder. Can be "vanilla" or None.
+        resamp_type (`str`, *optional*, defaults to `"with_conv"`):
+            Whether to do resampling with convolution layer or not. Can be "with_conv" or "without_conv"
     """
 
     model_type = "chameleon_vqgan"

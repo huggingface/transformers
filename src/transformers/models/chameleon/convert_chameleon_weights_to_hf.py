@@ -16,9 +16,11 @@ import gc
 import json
 import os
 
+import requests
 import torch
 import yaml
 from accelerate import init_empty_weights
+from PIL import Image
 
 from transformers import (
     AddedToken,
@@ -303,16 +305,33 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
     model.load_state_dict(state_dict, assign=True, strict=False)
 
     # resize embeds to account for special image token
+    # See https://nlp.stanford.edu/~johnhew/vocab-expansion.html for why we get mean/stdev this way to expand embeddings
+    pre_expansion_embeddings = model.model.embed_tokens.weight.data
+    mu = torch.mean(pre_expansion_embeddings, dim=0).float()
+    n = pre_expansion_embeddings.size()[0]
+    sigma = ((pre_expansion_embeddings - mu).T @ (pre_expansion_embeddings - mu)) / n
+    dist = torch.distributions.multivariate_normal.MultivariateNormal(mu, covariance_matrix=1e-5 * sigma)
+
     # pad to miltiple of 64 for efficient computation
     # see: https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html#requirements-tc
     model.resize_token_embeddings(config.vocab_size + 1, pad_to_multiple_of=64)
+    model.model.embed_tokens.weight.data[VOCAB_SIZE:] = torch.stack(
+        tuple((dist.sample() for _ in range(model.model.embed_tokens.weight.data[VOCAB_SIZE:].shape[0]))),
+        dim=0,
+    )
+    model.lm_head.weight.data[VOCAB_SIZE:] = torch.stack(
+        tuple((dist.sample() for _ in range(model.lm_head.weight.data[VOCAB_SIZE:].shape[0]))),
+        dim=0,
+    )
     model.save_pretrained(model_path, safe_serialization=True)
 
     # Load and save the processor
-    tokenizer = LlamaTokenizerFast(os.path.join(input_base_path, "tokenizer/text_tokenizer.json"))
+    tokenizer = LlamaTokenizerFast(
+        tokenizer_file=os.path.join(input_base_path, "tokenizer/text_tokenizer.json"), legacy=False
+    )
     tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False), special_tokens=True)
     image_processor = ChameleonImageProcessor()
-    processor = ChameleonProcessor(tokenizer=tokenizer, image_processor=image_processor)
+    processor = ChameleonProcessor(image_processor=image_processor, tokenizer=tokenizer)
     processor.save_pretrained(model_path)
 
     # Make space so we can load the model properly now.
@@ -321,10 +340,26 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
     del vqgan_state_dict
     gc.collect()
 
+    # Short inference on a few examples to check if generation makes sense
+    # taken from https://github.com/facebookresearch/chameleon/blob/7a72f40aa5f462965c8374f25257f55b65b25ff4/data/prompts_for_human_evaluations.jsonl
     print("Loading the checkpoint in a Chameleon model.")
-    model = ChameleonForCausalLM.from_pretrained(model_path, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True)
+    model = ChameleonForCausalLM.from_pretrained(
+        model_path, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True, device_map="auto"
+    )
+    processor = ChameleonProcessor.from_pretrained(model_path)
 
-    # TODO: Short inference on a few examples to check if generation makes sense
+    prompt = "I'm very intrigued by this work of art:<image>Please tell me about the artist."
+    image = Image.open(
+        requests.get(
+            "https://uploads4.wikiart.org/images/paul-klee/death-for-the-idea-1915.jpg!Large.jpg", stream=True
+        ).raw
+    )
+
+    inputs = processor(prompt, images=image, return_tensors="pt").to(model.device, dtype=torch.bfloat16)
+
+    out = model.generate(**inputs, max_new_tokens=40, do_sample=False)
+    generated_text = processor.batch_decode(out, skip_special_tokens=True)[0]
+    print(f"Generated text: {generated_text}")
 
 
 def main():

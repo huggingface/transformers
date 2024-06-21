@@ -1870,9 +1870,6 @@ class ChameleonProcessor(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-CHINESE_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST = None
-
-
 class ChineseCLIPModel(metaclass=DummyObject):
     _backends = ["torch"]
 

@@ -16,7 +16,6 @@
 Processor class for Chameleon.
 """
 
-
 from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
@@ -41,12 +40,16 @@ class ChameleonProcessor(ProcessorMixin):
             The tokenizer is a required input.
     """
 
-    attributes = ["tokenizer", "image_processor"]
+    attributes = ["image_processor", "tokenizer"]
     tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
     image_processor_class = "ChameleonImageProcessor"
 
     # Copied from transformers.models.llava.processing_llava.LlavaProcessor.__init__
-    def __init__(self, image_processor=None, tokenizer=None):
+    def __init__(self, image_processor=None, tokenizer=None, image_seq_length=1024, image_token="<image>"):
+        self.image_seq_length = image_seq_length
+        self.image_token = image_token
+        self.image_start_token = "<racm3:break>"  # fixed tokens for start and end, so can hardcode
+        self.image_end_token = "<eoss>"
         super().__init__(image_processor, tokenizer)
 
     # Copied from transformers.models.llava.processing_llava.LlavaProcessor.__call__
@@ -104,15 +107,31 @@ class ChameleonProcessor(ProcessorMixin):
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
-        if images is not None:
-            pixel_values = self.image_processor(images, return_tensors=return_tensors)["pixel_values"]
-        else:
-            pixel_values = None
-        text_inputs = self.tokenizer(
-            text, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length
+        if isinstance(text, str):
+            text = [text]
+        elif not isinstance(text, list) and not isinstance(text[0], str):
+            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+
+        # Replace the image token with the expanded image token sequence
+        prompt_strings = []
+        one_img_tokens = self.image_start_token + (self.image_token * self.image_seq_length) + self.image_end_token
+        for sample in text:
+            sample = sample.replace(self.image_token, one_img_tokens)
+            prompt_strings.append(sample)
+
+        data = self.tokenizer(
+            prompt_strings,
+            return_tensors=return_tensors,
+            padding=padding,
+            truncation=truncation,
+            max_length=max_length,
         )
 
-        return BatchFeature(data={**text_inputs, "pixel_values": pixel_values})
+        if images is not None:
+            pixel_values = self.image_processor(images, return_tensors=return_tensors)["pixel_values"]
+            data["pixel_values"] = pixel_values
+
+        return BatchFeature(data=data, tensor_type=return_tensors)
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):

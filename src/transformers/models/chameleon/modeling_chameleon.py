@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Chameleon model."""
+"""PyTorch Chameleon model."""
 
 import math
 from functools import cached_property
@@ -102,29 +102,6 @@ class ChameleonRotaryEmbedding(nn.Module):
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         # For BC we register cos and sin cached
         self.max_seq_len_cached = max_position_embeddings
-        t = torch.arange(self.max_seq_len_cached, device=device, dtype=torch.int64).type_as(self.inv_freq)
-        t = t / self.scaling_factor
-        freqs = torch.outer(t, self.inv_freq)
-        # Different from paper, but it uses a different permutation in order to obtain the same calculation
-        emb = torch.cat((freqs, freqs), dim=-1)
-        self.register_buffer("_cos_cached", emb.cos().to(torch.get_default_dtype()), persistent=False)
-        self.register_buffer("_sin_cached", emb.sin().to(torch.get_default_dtype()), persistent=False)
-
-    @property
-    def sin_cached(self):
-        logger.warning_once(
-            "The sin_cached attribute will be removed in 4.39. Bear in mind that its contents changed in v4.38. Use "
-            "the forward method of RoPE from now on instead. It is not used in the `ChameleonAttention` class"
-        )
-        return self._sin_cached
-
-    @property
-    def cos_cached(self):
-        logger.warning_once(
-            "The cos_cached attribute will be removed in 4.39. Bear in mind that its contents changed in v4.38. Use "
-            "the forward method of RoPE from now on instead. It is not used in the `ChameleonAttention` class"
-        )
-        return self._cos_cached
 
     @torch.no_grad()
     def forward(self, x, position_ids):
@@ -334,8 +311,8 @@ class ChameleonAttention(nn.Module):
             key_states = self.k_norm(key_states)
 
         past_key_value = getattr(self, "past_key_value", past_key_value)
-        cos, sin = self.rotary_emb(value_states, position_ids, seq_len=None)
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, None)
+        cos, sin = self.rotary_emb(value_states, position_ids)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; position_ids needed for the static cache
@@ -420,8 +397,8 @@ class ChameleonFlashAttention2(ChameleonAttention):
             query_states = self.q_norm(query_states)
             key_states = self.k_norm(key_states)
 
-        cos, sin = self.rotary_emb(value_states, position_ids, seq_len=None)
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, None)
+        cos, sin = self.rotary_emb(value_states, position_ids)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         past_key_value = getattr(self, "past_key_value", past_key_value)
 
@@ -430,8 +407,8 @@ class ChameleonFlashAttention2(ChameleonAttention):
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
-        # to be able to avoid many of these transpose/reshape/view.
+        # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim].
+        # We would need to refactor the KV cache to be able to avoid many of these transpose/reshape/view.
         query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
@@ -622,7 +599,7 @@ class ChameleonSdpaAttention(ChameleonAttention):
             query_states = self.q_norm(query_states)
             key_states = self.k_norm(key_states)
 
-        cos, sin = self.rotary_emb(value_states, position_ids, seq_len=None)
+        cos, sin = self.rotary_emb(value_states, position_ids)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, None)
 
         past_key_value = getattr(self, "past_key_value", past_key_value)
@@ -820,7 +797,7 @@ class ChameleonVQModelVectorQuantizer(nn.Module):
 
     def forward(self, z: torch.Tensor):
         z = z.permute(0, 2, 3, 1).contiguous()
-        z_flattened = z.view(-1, self.e_dim)
+        z_flattened = z.view(-1, self.embedding_dim)
 
         # distances from z to embeddings e_j (z - e)^2 = z^2 + e^2 - 2 e * z
         d = (
@@ -1102,14 +1079,7 @@ class ChameleonVQModel(nn.Module):
 class ChameleonImageVocabularyMapping:
     def __init__(self, vocab_map):
         self.name2val = vocab_map
-
-        self.bos_id = vocab_map.get("<s>")
-        self.eos_id = vocab_map.get("</s>")
-        self.pad_id = vocab_map.get("<pad>")
-        self.image_start_id = vocab_map.get("<racm3:break>")
         self.image_token_id = vocab_map.get("<image>")
-        self.image_end_id = vocab_map.get("<eoss>")
-        self.eot_id = vocab_map.get("<reserved08706>")
 
     @cached_property
     def val2name(self):
@@ -1144,7 +1114,9 @@ class ChameleonImageVocabularyMapping:
         return mapping
 
     def convert_img2bp2(self, img_batch: torch.Tensor) -> torch.Tensor:
-        return self.img2bpe_mapping_tensor[img_batch]
+        return self.img2bpe_mapping_tensor[
+            img_batch.cpu()
+        ]  # TODO: fix device and check itc works in multi-gpu setting
 
 
 CHAMELEON_START_DOCSTRING = r"""
@@ -1322,12 +1294,10 @@ class ChameleonModel(ChameleonPreTrainedModel):
         self.embed_tokens = value
 
     def get_image_tokens(self, pixel_values: torch.LongTensor):
+        batch_size = pixel_values.shape[0]
         _, _, image_toks = self.vqmodel.encode(pixel_values)
-        bpe_toks = (
-            [self.vocabulary_mapping.image_start_id]
-            + self.vocabulary_mapping.convert_img2bp2(image_toks).tolist()
-            + [self.vocabulary_mapping.image_end_id]
-        )
+        bpe_toks = self.vocabulary_mapping.convert_img2bp2(image_toks)
+        bpe_toks = bpe_toks.view(batch_size, -1)
         return bpe_toks
 
     @add_start_docstrings_to_model_forward(CHAMELEON_INPUTS_DOCSTRING)
@@ -1371,7 +1341,7 @@ class ChameleonModel(ChameleonPreTrainedModel):
         if pixel_values is not None:
             image_tokens = self.get_image_tokens(pixel_values)
             special_image_mask = input_ids == self.vocabulary_mapping.image_token_id
-            input_ids[special_image_mask] = image_tokens
+            input_ids[special_image_mask] = image_tokens.flatten().to(input_ids.device, input_ids.dtype)
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
@@ -1394,7 +1364,9 @@ class ChameleonModel(ChameleonPreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position)
+        causal_mask = self._update_causal_mask(
+            attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
+        )
 
         # embed positions
         hidden_states = inputs_embeds
@@ -1447,8 +1419,10 @@ class ChameleonModel(ChameleonPreTrainedModel):
         next_cache = None
         if use_cache:
             next_cache = next_decoder_cache.to_legacy_cache() if use_legacy_cache else next_decoder_cache
+
         if not return_dict:
             return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
+
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=next_cache,
@@ -1463,6 +1437,7 @@ class ChameleonModel(ChameleonPreTrainedModel):
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
+        output_attentions: bool,
     ):
         # TODO: As of torch==2.2.0, the `attention_mask` passed to the model in `generate` is 2D and of dynamic length even when the static
         # KV cache is used. This is an issue for torch.compile which then recaptures cudagraphs at each decode steps due to the dynamic shapes.
@@ -1479,7 +1454,9 @@ class ChameleonModel(ChameleonPreTrainedModel):
         # to infer the attention mask.
         past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
         using_static_cache = isinstance(past_key_values, StaticCache)
-        if self.config._attn_implementation == "sdpa" and not using_static_cache:
+
+        # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
+        if self.config._attn_implementation == "sdpa" and not using_static_cache and not output_attentions:
             if AttentionMaskConverter._ignore_causal_mask_sdpa(
                 attention_mask,
                 inputs_embeds=input_tensor,
@@ -1500,41 +1477,32 @@ class ChameleonModel(ChameleonPreTrainedModel):
                 else past_seen_tokens + sequence_length + 1
             )
 
-        causal_mask = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
-        if sequence_length != 1:
-            causal_mask = torch.triu(causal_mask, diagonal=1)
-        causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
-        causal_mask = causal_mask[None, None, :, :].expand(input_tensor.shape[0], 1, -1, -1)
-        if attention_mask is not None:
-            causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
-            if attention_mask.dim() == 2:
+        if attention_mask is not None and attention_mask.dim() == 4:
+            # in this case we assume that the mask comes already in inverted form and requires no inversion or slicing
+            if attention_mask.max() != 0:
+                raise ValueError("Custom 4D attention mask should be passed in inverted form with max==0`")
+            causal_mask = attention_mask
+        else:
+            causal_mask = torch.full(
+                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
+            )
+            if sequence_length != 1:
+                causal_mask = torch.triu(causal_mask, diagonal=1)
+            causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+            causal_mask = causal_mask[None, None, :, :].expand(input_tensor.shape[0], 1, -1, -1)
+            if attention_mask is not None:
+                causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
                 mask_length = attention_mask.shape[-1]
                 padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
                 padding_mask = padding_mask == 0
                 causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
                     padding_mask, min_dtype
                 )
-            elif attention_mask.dim() == 4:
-                # backwards compatibility: we allow passing a 4D attention mask shorter than the input length with
-                # cache. In that case, the 4D attention mask attends to the newest tokens only.
-                if attention_mask.shape[-2] < cache_position[0] + sequence_length:
-                    logger.warning_once(
-                        "Passing a 4d mask shorter than the input length is deprecated and will be removed in "
-                        "transformers v4.42.0"
-                    )
-                    offset = cache_position[0]
-                else:
-                    offset = 0
-                mask_shape = attention_mask.shape
-                mask_slice = (attention_mask.eq(0.0)).to(dtype=dtype) * min_dtype
-                causal_mask[
-                    : mask_shape[0], : mask_shape[1], offset : mask_shape[2] + offset, : mask_shape[3]
-                ] = mask_slice
-
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
             and attention_mask.device.type == "cuda"
+            and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
             # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
@@ -1669,10 +1637,10 @@ class ChameleonForCausalLM(ChameleonPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.prepare_inputs_for_generation
     def prepare_inputs_for_generation(
         self,
         input_ids,
+        pixel_values=None,
         past_key_values=None,
         attention_mask=None,
         inputs_embeds=None,
@@ -1682,18 +1650,14 @@ class ChameleonForCausalLM(ChameleonPreTrainedModel):
     ):
         past_length = 0
         if past_key_values is not None:
-            if isinstance(past_key_values, Cache):
-                past_length = cache_position[0] if cache_position is not None else past_key_values.get_seq_length()
-                max_cache_length = (
-                    torch.tensor(past_key_values.get_max_length(), device=input_ids.device)
-                    if past_key_values.get_max_length() is not None
-                    else None
-                )
-                cache_length = past_length if max_cache_length is None else torch.min(max_cache_length, past_length)
-            # TODO joao: remove this `else` after `generate` prioritizes `Cache` objects
-            else:
-                cache_length = past_length = past_key_values[0][0].shape[2]
-                max_cache_length = None
+            # Past key values are always initialized with a `Cache` object -> no need for if-else anymore
+            past_length = cache_position[0] if cache_position is not None else past_key_values.get_seq_length()
+            max_cache_length = (
+                torch.tensor(past_key_values.get_max_length(), device=input_ids.device)
+                if past_key_values.get_max_length() is not None
+                else None
+            )
+            cache_length = past_length if max_cache_length is None else torch.min(max_cache_length, past_length)
 
             # Keep only the unprocessed tokens:
             # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
@@ -1723,13 +1687,18 @@ class ChameleonForCausalLM(ChameleonPreTrainedModel):
                 position_ids = position_ids[:, -input_ids.shape[1] :]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and past_key_values is None:
+        if inputs_embeds is not None and past_length == 0:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             # The `contiguous()` here is necessary to have a static stride during decoding. torchdynamo otherwise
             # recompiles graphs as the stride of the inputs is a guard. Ref: https://github.com/huggingface/transformers/pull/29114
             # TODO: use `next_tokens` directly instead.
             model_inputs = {"input_ids": input_ids.contiguous()}
+
+        if past_length == 0:
+            # If we're in cached decoding stage, pixel values should be `None` because input ids do not contain special image token anymore
+            # Otherwise we need pixel values to be passed to model
+            model_inputs["pixel_values"] = pixel_values
 
         input_length = position_ids.shape[-1] if position_ids is not None else input_ids.shape[-1]
         if cache_position is None:
