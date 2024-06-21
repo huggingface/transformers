@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TensorFlow SwiftFormer model."""
-
+"""TensorFlow SwiftFormer model."""
 
 import collections.abc
 from typing import Optional, Tuple, Union
@@ -46,12 +45,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 220, 7, 7]
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "MBZUAI/swiftformer-xs"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
-
-
-TF_SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "MBZUAI/swiftformer-xs",
-    # See all SwiftFormer models at https://huggingface.co/models?filter=swiftformer
-]
 
 
 class TFSwiftFormerPatchEmbeddingSequential(keras.layers.Layer):

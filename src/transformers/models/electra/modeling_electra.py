@@ -54,9 +54,6 @@ _CHECKPOINT_FOR_DOC = "google/electra-small-discriminator"
 _CONFIG_FOR_DOC = "ElectraConfig"
 
 
-from ..deprecated._archive_maps import ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 def load_tf_weights_in_electra(model, config, tf_checkpoint_path, discriminator_or_generator="discriminator"):
     """Load tf checkpoints in a pytorch model."""
     try:

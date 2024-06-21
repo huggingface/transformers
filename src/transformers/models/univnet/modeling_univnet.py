@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch UnivNetModel model."""
+"""PyTorch UnivNetModel model."""
 
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
@@ -31,9 +31,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "UnivNetConfig"
 
 _CHECKPOINT_FOR_DOC = "dg845/univnet-dev"
-
-
-from ..deprecated._archive_maps import UNIVNET_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass
@@ -528,7 +525,7 @@ class UnivNetModel(PreTrainedModel):
          >>> model = UnivNetModel.from_pretrained("dg845/univnet-dev")
          >>> feature_extractor = UnivNetFeatureExtractor.from_pretrained("dg845/univnet-dev")
 
-         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True)
          >>> # Resample the audio to the feature extractor's sampling rate.
          >>> ds = ds.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
          >>> inputs = feature_extractor(

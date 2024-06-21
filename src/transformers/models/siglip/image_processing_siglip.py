@@ -18,6 +18,7 @@ from typing import Dict, List, Optional, Union
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
+    convert_to_rgb,
     resize,
     to_channel_dimension_format,
 )
@@ -73,6 +74,8 @@ class SiglipImageProcessor(BaseImageProcessor):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
             Can be overridden by the `image_std` parameter in the `preprocess` method.
+        do_convert_rgb (`bool`, *optional*, defaults to `True`):
+            Whether to convert the image to RGB.
     """
 
     model_input_names = ["pixel_values"]
@@ -87,6 +90,7 @@ class SiglipImageProcessor(BaseImageProcessor):
         do_normalize: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
+        do_convert_rgb: bool = None,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -102,6 +106,7 @@ class SiglipImageProcessor(BaseImageProcessor):
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
+        self.do_convert_rgb = do_convert_rgb
         self._valid_processor_keys = [
             "images",
             "do_resize",
@@ -115,6 +120,7 @@ class SiglipImageProcessor(BaseImageProcessor):
             "return_tensors",
             "data_format",
             "input_data_format",
+            "do_convert_rgb",
         ]
 
     def preprocess(
@@ -131,6 +137,7 @@ class SiglipImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        do_convert_rgb: bool = None,
         **kwargs,
     ) -> PIL.Image.Image:
         """
@@ -176,6 +183,8 @@ class SiglipImageProcessor(BaseImageProcessor):
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+            do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
+                Whether to convert the image to RGB.
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
@@ -186,6 +195,7 @@ class SiglipImageProcessor(BaseImageProcessor):
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
+        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
         images = make_list_of_images(images)
 
@@ -208,6 +218,9 @@ class SiglipImageProcessor(BaseImageProcessor):
         )
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
+
+        if do_convert_rgb:
+            images = [convert_to_rgb(image) for image in images]
 
         if is_scaled_image(images[0]) and do_rescale:
             logger.warning_once(

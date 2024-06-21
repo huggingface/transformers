@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Nystromformer model."""
-
+"""PyTorch Nystromformer model."""
 
 import math
 from typing import Optional, Tuple, Union
@@ -42,9 +41,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "uw-madison/nystromformer-512"
 _CONFIG_FOR_DOC = "NystromformerConfig"
-
-
-from ..deprecated._archive_maps import NYSTROMFORMER_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 class NystromformerEmbeddings(nn.Module):

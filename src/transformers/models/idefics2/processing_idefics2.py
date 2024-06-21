@@ -16,7 +16,7 @@
 Processor class for IDEFICS2.
 """
 
-from typing import TYPE_CHECKING, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image, load_image
@@ -26,7 +26,6 @@ from ...utils import TensorType, logging
 
 
 if TYPE_CHECKING:
-    from ...pipelines.conversational import Conversation
     from ...tokenization_utils_base import PreTokenizedInput
 
 
@@ -57,13 +56,15 @@ class Idefics2Processor(ProcessorMixin):
             The length of the image sequence i.e. the number of <image> tokens per image in the input.
             This parameter is used to build the string from the input prompt and image tokens and should match the
             config.perceiver_config.resampler_n_latents value for the model used.
+        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
+            in a chat into a tokenizable string.
     """
 
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "Idefics2ImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
-    def __init__(self, image_processor, tokenizer=None, image_seq_len: int = 64, **kwargs):
+    def __init__(self, image_processor, tokenizer=None, image_seq_len: int = 64, chat_template: str = None, **kwargs):
         if image_processor is None:
             raise ValueError("You need to specify an `image_processor`.")
         if tokenizer is None:
@@ -79,10 +80,7 @@ class Idefics2Processor(ProcessorMixin):
         }
         tokenizer.add_special_tokens(tokens_to_add)
 
-        # Stores a Jinja template that formats chat histories into tokenizable strings
-        self.chat_template = kwargs.pop("chat_template", None)
-
-        super().__init__(image_processor, tokenizer)
+        super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def _extract_images_from_prompts(self, prompts):
         prompt_images = []
@@ -252,49 +250,6 @@ class Idefics2Processor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
-
-    def apply_chat_template(
-        self,
-        conversation: Union[List[Dict[str, str]], "Conversation"],
-        chat_template: Optional[str] = None,
-        tokenize: bool = False,
-        **kwargs,
-    ) -> str:
-        """
-        Overrides the tokenizer's `apply_chat_template` method to apply the IDEFICS2 chat template by default
-        if no chat template is provided.
-
-        By default, the output isn't tokenized. This is because the IDEFICS2 chat template is designed to insert
-        the image token <image> into the sequence according to the message, but does not handle expanding the image
-        tokens to the sequence length or adding the surrounding tokens e.g. <fake_image_token>.
-
-        Args:
-            conversation (`Union[List[Dict, str, str], "Conversation"]`):
-                The conversation to format.
-            chat_template (`Optional[str]`, *optional*):
-                The Jinja template to use for formatting the conversation. If not provided, the default chat template
-                is used.
-            tokenize (`bool`, *optional*, defaults to `False`):
-                Whether to tokenize the output or not.
-            **kwargs:
-                Additional keyword arguments for the tokenizer's `apply_chat_template` method.
-        """
-
-        if chat_template is None:
-            if self.chat_template is not None:
-                chat_template = self.chat_template
-            else:
-                logger.warning_once(
-                    "No chat template is set for this processor, falling back to a default class-level template. This is "
-                    "very error-prone, because models are often trained with templates different from the class default! "
-                    "Default chat templates are a legacy feature and will be removed in Transformers v4.43, at which "
-                    "point any code depending on them will stop working. We recommend setting a valid chat template before "
-                    "then to ensure that this model continues working without issues."
-                )
-                chat_template = self.default_chat_template
-        return self.tokenizer.apply_chat_template(
-            conversation, chat_template=chat_template, tokenize=tokenize, **kwargs
-        )
 
     @property
     def default_chat_template(self):

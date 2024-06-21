@@ -17,7 +17,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_
 
 
 _import_structure = {
-    "configuration_canine": ["CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP", "CanineConfig"],
+    "configuration_canine": ["CanineConfig"],
     "tokenization_canine": ["CanineTokenizer"],
 }
 
@@ -28,7 +28,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_canine"] = [
-        "CANINE_PRETRAINED_MODEL_ARCHIVE_LIST",
         "CanineForMultipleChoice",
         "CanineForQuestionAnswering",
         "CanineForSequenceClassification",
@@ -41,7 +40,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_canine import CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP, CanineConfig
+    from .configuration_canine import CanineConfig
     from .tokenization_canine import CanineTokenizer
 
     try:
@@ -51,7 +50,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_canine import (
-            CANINE_PRETRAINED_MODEL_ARCHIVE_LIST,
             CanineForMultipleChoice,
             CanineForQuestionAnswering,
             CanineForSequenceClassification,

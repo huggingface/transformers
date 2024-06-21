@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License
-""" Fast tokenization classes for Camembert model."""
-
+"""Fast tokenization classes for Camembert model."""
 
 import os
 from shutil import copyfile

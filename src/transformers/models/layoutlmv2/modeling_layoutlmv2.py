@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch LayoutLMv2 model."""
+"""PyTorch LayoutLMv2 model."""
 
 import math
 from typing import Optional, Tuple, Union
@@ -52,9 +52,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "microsoft/layoutlmv2-base-uncased"
 _CONFIG_FOR_DOC = "LayoutLMv2Config"
-
-
-from ..deprecated._archive_maps import LAYOUTLMV2_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 class LayoutLMv2Embeddings(nn.Module):
@@ -386,7 +383,12 @@ class LayoutLMv2Encoder(nn.Module):
             num_buckets=self.rel_pos_bins,
             max_distance=self.max_rel_pos,
         )
-        rel_pos = self.rel_pos_bias.weight.t()[rel_pos].permute(0, 3, 1, 2)
+        # Since this is a simple indexing operation that is independent of the input,
+        # no need to track gradients for this operation
+        #
+        # Without this no_grad context, training speed slows down significantly
+        with torch.no_grad():
+            rel_pos = self.rel_pos_bias.weight.t()[rel_pos].permute(0, 3, 1, 2)
         rel_pos = rel_pos.contiguous()
         return rel_pos
 
@@ -405,8 +407,13 @@ class LayoutLMv2Encoder(nn.Module):
             num_buckets=self.rel_2d_pos_bins,
             max_distance=self.max_rel_2d_pos,
         )
-        rel_pos_x = self.rel_pos_x_bias.weight.t()[rel_pos_x].permute(0, 3, 1, 2)
-        rel_pos_y = self.rel_pos_y_bias.weight.t()[rel_pos_y].permute(0, 3, 1, 2)
+        # Since this is a simple indexing operation that is independent of the input,
+        # no need to track gradients for this operation
+        #
+        # Without this no_grad context, training speed slows down significantly
+        with torch.no_grad():
+            rel_pos_x = self.rel_pos_x_bias.weight.t()[rel_pos_x].permute(0, 3, 1, 2)
+            rel_pos_y = self.rel_pos_y_bias.weight.t()[rel_pos_y].permute(0, 3, 1, 2)
         rel_pos_x = rel_pos_x.contiguous()
         rel_pos_y = rel_pos_y.contiguous()
         rel_2d_pos = rel_pos_x + rel_pos_y
@@ -831,7 +838,7 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
         >>> model = LayoutLMv2Model.from_pretrained("microsoft/layoutlmv2-base-uncased")
 
 
-        >>> dataset = load_dataset("hf-internal-testing/fixtures_docvqa")
+        >>> dataset = load_dataset("hf-internal-testing/fixtures_docvqa", trust_remote_code=True)
         >>> image_path = dataset["test"][0]["file"]
         >>> image = Image.open(image_path).convert("RGB")
 
@@ -998,7 +1005,7 @@ class LayoutLMv2ForSequenceClassification(LayoutLMv2PreTrainedModel):
 
         >>> set_seed(0)
 
-        >>> dataset = load_dataset("rvl_cdip", split="train", streaming=True)
+        >>> dataset = load_dataset("aharley/rvl_cdip", split="train", streaming=True, trust_remote_code=True)
         >>> data = next(iter(dataset))
         >>> image = data["image"].convert("RGB")
 
@@ -1177,7 +1184,7 @@ class LayoutLMv2ForTokenClassification(LayoutLMv2PreTrainedModel):
 
         >>> set_seed(0)
 
-        >>> datasets = load_dataset("nielsr/funsd", split="test")
+        >>> datasets = load_dataset("nielsr/funsd", split="test", trust_remote_code=True)
         >>> labels = datasets.features["ner_tags"].feature.names
         >>> id2label = {v: k for v, k in enumerate(labels)}
 
@@ -1321,7 +1328,7 @@ class LayoutLMv2ForQuestionAnswering(LayoutLMv2PreTrainedModel):
         >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv2-base-uncased")
         >>> model = LayoutLMv2ForQuestionAnswering.from_pretrained("microsoft/layoutlmv2-base-uncased")
 
-        >>> dataset = load_dataset("hf-internal-testing/fixtures_docvqa")
+        >>> dataset = load_dataset("hf-internal-testing/fixtures_docvqa", trust_remote_code=True)
         >>> image_path = dataset["test"][0]["file"]
         >>> image = Image.open(image_path).convert("RGB")
         >>> question = "When is coffee break?"

@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch GroupViT model. """
-
+"""Testing suite for the PyTorch GroupViT model."""
 
 import inspect
 import os
@@ -175,7 +174,7 @@ class GroupViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
         tf.random.set_seed(seed)
         return super().test_pt_tf_model_equivalence()
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -574,7 +573,7 @@ class GroupViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         pass
 
     @unittest.skip(reason="GroupViTModel does not have input/output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     # overwritten from parent as this equivalent test needs a specific `seed` and hard to get a good one!

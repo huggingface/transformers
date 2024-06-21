@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch DeBERTa model."""
+"""PyTorch DeBERTa model."""
 
 from collections.abc import Sequence
 from typing import Optional, Tuple, Union
@@ -51,9 +51,6 @@ _QA_EXPECTED_OUTPUT = "' a nice puppet'"
 _QA_EXPECTED_LOSS = 0.14
 _QA_TARGET_START_INDEX = 12
 _QA_TARGET_END_INDEX = 14
-
-
-from ..deprecated._archive_maps import DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 class ContextPooler(nn.Module):

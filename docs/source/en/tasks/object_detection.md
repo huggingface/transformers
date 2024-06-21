@@ -204,12 +204,14 @@ Instantiate the image processor from the same checkpoint as the model you want t
 ```py
 >>> from transformers import AutoImageProcessor
 
+>>> MAX_SIZE = IMAGE_SIZE
+
 >>> image_processor = AutoImageProcessor.from_pretrained(
 ...     MODEL_NAME,
-...     # At this moment we recommend using external transform to pad and resize images.
-...     # It`s faster and yields better results for object-detection models.
-...     do_pad=False,
-...     do_resize=False,
+...     do_resize=True,
+...     size={"max_height": MAX_SIZE, "max_width": MAX_SIZE},
+...     do_pad=True,
+...     pad_size={"height": MAX_SIZE, "width": MAX_SIZE},
 ... )
 ```
 
@@ -217,24 +219,13 @@ Before passing the images to the `image_processor`, apply two preprocessing tran
 - Augmenting images
 - Reformatting annotations to meet DETR expectations
 
-First, to make sure the model does not overfit on the training data, you can apply image augmentation with any data augmentation library. Here we use [Albumentations](https://albumentations.ai/docs/) ...
+First, to make sure the model does not overfit on the training data, you can apply image augmentation with any data augmentation library. Here we use [Albumentations](https://albumentations.ai/docs/).
 This library ensures that transformations affect the image and update the bounding boxes accordingly.
 The 🤗 Datasets library documentation has a detailed [guide on how to augment images for object detection](https://huggingface.co/docs/datasets/object_detection),
-and it uses the exact same dataset as an example. Apply the same approach here, resize each image to (480, 480),
-flip it horizontally, and brighten it. For additional augmentation options, explore the [Albumentations Demo Space](https://huggingface.co/spaces/qubvel-hf/albumentations-demo).
+and it uses the exact same dataset as an example. Apply some geometric and color transformations to the image. For additional augmentation options, explore the [Albumentations Demo Space](https://huggingface.co/spaces/qubvel-hf/albumentations-demo).
 
 ```py
 >>> import albumentations as A
-
->>> max_size = IMAGE_SIZE
-
->>> # Resize image longest edge to 480 and then pad image to square 480x480.
->>> # This padding and resizing strategy give better results, see
->>> # https://github.com/huggingface/transformers/pull/30422#discussion_r1584647408
->>> basic_transforms = [
-...     A.LongestMaxSize(max_size=max_size),
-...     A.PadIfNeeded(max_size, max_size, border_mode=0, value=(128, 128, 128), position="top_left"),
-... ]
 
 >>> train_augment_and_transform = A.Compose(
 ...     [
@@ -242,13 +233,12 @@ flip it horizontally, and brighten it. For additional augmentation options, expl
 ...         A.HorizontalFlip(p=0.5),
 ...         A.RandomBrightnessContrast(p=0.5),
 ...         A.HueSaturationValue(p=0.1),
-...         *basic_transforms,
 ...     ],
 ...     bbox_params=A.BboxParams(format="coco", label_fields=["category"], clip=True, min_area=25),
 ... )
 
 >>> validation_transform = A.Compose(
-...     basic_transforms,
+...     [A.NoOp()],
 ...     bbox_params=A.BboxParams(format="coco", label_fields=["category"], clip=True),
 ... )
 ```
@@ -294,7 +284,7 @@ The `image_processor` expects the annotations to be in the following format: `{'
 Now you can combine the image and annotation transformations to use on a batch of examples:
 
 ```py
->>> def augment_and_transform_batch(examples, transform, image_processor):
+>>> def augment_and_transform_batch(examples, transform, image_processor, return_pixel_mask=False):
 ...     """Apply augmentations and format annotations in COCO format for object detection task"""
 
 ...     images = []
@@ -314,6 +304,9 @@ Now you can combine the image and annotation transformations to use on a batch o
 
 ...     # Apply the image processor transformations: resizing, rescaling, normalization
 ...     result = image_processor(images=images, annotations=annotations, return_tensors="pt")
+
+...     if not return_pixel_mask:
+...         result.pop("pixel_mask", None)
 
 ...     return result
 ```
@@ -1485,25 +1478,12 @@ Now that you have finetuned a model, evaluated it, and uploaded it to the Huggin
 ```py
 >>> import torch
 >>> import requests
->>> import numpy as np
->>> import albumentations as A
 
->>> from PIL import Image
+>>> from PIL import Image, ImageDraw
 >>> from transformers import AutoImageProcessor, AutoModelForObjectDetection
 
 >>> url = "https://images.pexels.com/photos/8413299/pexels-photo-8413299.jpeg?auto=compress&cs=tinysrgb&w=630&h=375&dpr=2"
 >>> image = Image.open(requests.get(url, stream=True).raw)
-
->>> # Define transformations for inference
->>> resize_and_pad = A.Compose([
-...     A.LongestMaxSize(max_size=max_size),
-...     A.PadIfNeeded(max_size, max_size, border_mode=0, value=(128, 128, 128), position="top_left"),
-... ])
-
->>> # This one is for visualization with no padding
->>> resize_only = A.Compose([
-...     A.LongestMaxSize(max_size=max_size),
-... ])
 ```
 
 Load model and image processor from the Hugging Face Hub (skip to use already trained in this session):
@@ -1519,12 +1499,11 @@ Load model and image processor from the Hugging Face Hub (skip to use already tr
 And detect bounding boxes:
 
 ```py
->>> np_preprocessed_image = resize_and_pad(image=np.array(image))["image"]
 
 >>> with torch.no_grad():
-...     inputs = image_processor(images=[np_preprocessed_image], return_tensors="pt")
-...     outputs = model(inputs["pixel_values"].to(device))
-...     target_sizes = torch.tensor([np_preprocessed_image.shape[:2]])
+...     inputs = image_processor(images=[image], return_tensors="pt")
+...     outputs = model(**inputs.to(device))
+...     target_sizes = torch.tensor([[image.size[1], image.size[0]]])
 ...     results = image_processor.post_process_object_detection(outputs, threshold=0.3, target_sizes=target_sizes)[0]
 
 >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
@@ -1543,9 +1522,7 @@ Detected Coverall with confidence 0.391 at location [68.61, 126.66, 309.03, 318.
 Let's plot the result:
 
 ```py
->>> resized_image = resize_only(image=np.array(image))["image"]
->>> resized_image = Image.fromarray(resized_image)
->>> draw = ImageDraw.Draw(resized_image)
+>>> draw = ImageDraw.Draw(image)
 
 >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
 ...     box = [round(i, 2) for i in box.tolist()]
@@ -1553,7 +1530,7 @@ Let's plot the result:
 ...     draw.rectangle((x, y, x2, y2), outline="red", width=1)
 ...     draw.text((x, y), model.config.id2label[label.item()], fill="white")
 
->>> resized_image
+>>> image
 ```
 
 <div class="flex justify-center">

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Idefics model. """
+"""Testing suite for the PyTorch Idefics model."""
 
 import unittest
 
@@ -21,6 +21,7 @@ from parameterized import parameterized
 from transformers import BitsAndBytesConfig, IdeficsConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import (
     TestCasePlus,
+    is_pt_tf_cross_test,
     require_bitsandbytes,
     require_torch,
     require_torch_sdpa,
@@ -558,6 +559,11 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             config.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
+
+    @is_pt_tf_cross_test
+    def test_pt_tf_model_equivalence(self, allow_missing_keys=False):
+        self.has_attentions = False
+        super().test_pt_tf_model_equivalence(allow_missing_keys=allow_missing_keys)
 
     @slow
     def test_model_from_pretrained(self):

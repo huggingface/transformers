@@ -52,9 +52,6 @@ _CHECKPOINT_FOR_DOC = "FacebookAI/xlm-roberta-base"
 _CONFIG_FOR_DOC = "XLMRobertaConfig"
 
 
-from ..deprecated._archive_maps import XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 # Copied from transformers.models.roberta.modeling_roberta.RobertaEmbeddings with Roberta->XLMRoberta
 class XLMRobertaEmbeddings(nn.Module):
     """

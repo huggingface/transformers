@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import tempfile
 import unittest
 
 from transformers import (
@@ -498,14 +497,6 @@ class SeamlessM4TDistilledIntegrationTest(unittest.TestCase):
         self.assertEqual(ids[-1], 3)
         self.assertEqual(ids[0], EN_CODE)
         self.assertEqual(len(ids), desired_max_length)
-
-    # Copied from tests.models.nllb.test_tokenization_nllb.NllbDistilledIntegrationTest.test_special_tokens_unaffacted_by_save_load with fairseq_tokens_to_ids->additional_special_tokens, Nllb->SeamlessM4T, Dict->List
-    def test_special_tokens_unaffacted_by_save_load(self):
-        tmpdirname = tempfile.mkdtemp()
-        original_special_tokens = self.tokenizer.additional_special_tokens
-        self.tokenizer.save_pretrained(tmpdirname)
-        new_tok = SeamlessM4TTokenizer.from_pretrained(tmpdirname)
-        self.assertListEqual(new_tok.additional_special_tokens, original_special_tokens)
 
     @require_torch
     def test_enro_tokenizer_prepare_batch(self):

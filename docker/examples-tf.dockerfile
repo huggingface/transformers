@@ -3,7 +3,7 @@ ENV PYTHONDONTWRITEBYTECODE=1
 USER root
 RUN apt-get update && apt-get install -y libsndfile1-dev espeak-ng time git
 RUN apt-get install -y g++ cmake
-ENV VIRTUAL_ENV=/usr/local
+ENV UV_PYTHON=/usr/local/bin/python
 RUN pip --no-cache-dir install uv && uv venv
 RUN uv pip install --no-cache-dir -U pip setuptools albumentations seqeval
 RUN pip install  --upgrade --no-cache-dir "transformers[tf-cpu,sklearn,testing,sentencepiece,tf-speech,vision]"

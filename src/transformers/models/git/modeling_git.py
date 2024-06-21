@@ -15,7 +15,6 @@
 # limitations under the License.
 """PyTorch GIT model."""
 
-
 import math
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
@@ -44,9 +43,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "microsoft/git-base"
 _CONFIG_FOR_DOC = "GitConfig"
-
-
-from ..deprecated._archive_maps import GIT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass

@@ -13,8 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 MPNet model."""
-
+"""TF 2.0 MPNet model."""
 
 from __future__ import annotations
 
@@ -62,9 +61,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "microsoft/mpnet-base"
 _CONFIG_FOR_DOC = "MPNetConfig"
-
-
-from ..deprecated._archive_maps import TF_MPNET_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 class TFMPNetPreTrainedModel(TFPreTrainedModel):

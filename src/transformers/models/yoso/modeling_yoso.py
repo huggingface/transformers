@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch YOSO model."""
-
+"""PyTorch YOSO model."""
 
 import math
 from pathlib import Path
@@ -50,9 +49,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "uw-madison/yoso-4096"
 _CONFIG_FOR_DOC = "YosoConfig"
-
-
-from ..deprecated._archive_maps import YOSO_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 lsh_cumulation = None

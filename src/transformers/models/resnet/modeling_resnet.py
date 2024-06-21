@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch ResNet model."""
+"""PyTorch ResNet model."""
 
 from typing import Optional
 
@@ -52,9 +52,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 2048, 7, 7]
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "microsoft/resnet-50"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tiger cat"
-
-
-from ..deprecated._archive_maps import RESNET_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 class ResNetConvLayer(nn.Module):

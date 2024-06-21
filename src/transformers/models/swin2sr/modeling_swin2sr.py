@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Swin2SR Transformer model."""
-
+"""PyTorch Swin2SR Transformer model."""
 
 import collections.abc
 import math
@@ -47,9 +46,6 @@ _CONFIG_FOR_DOC = "Swin2SRConfig"
 # Base docstring
 _CHECKPOINT_FOR_DOC = "caidas/swin2SR-classical-sr-x2-64"
 _EXPECTED_OUTPUT_SHAPE = [1, 180, 488, 648]
-
-
-from ..deprecated._archive_maps import SWIN2SR_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass
@@ -1132,6 +1128,10 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
          ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        loss = None
+        if labels is not None:
+            raise NotImplementedError("Training is not supported at the moment")
+
         height, width = pixel_values.shape[2:]
 
         if self.config.upsampler == "pixelshuffle_aux":
@@ -1162,10 +1162,6 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
 
         reconstruction = reconstruction / self.swin2sr.img_range + self.swin2sr.mean
         reconstruction = reconstruction[:, :, : height * self.upscale, : width * self.upscale]
-
-        loss = None
-        if labels is not None:
-            raise NotImplementedError("Training is not supported at the moment")
 
         if not return_dict:
             output = (reconstruction,) + outputs[1:]

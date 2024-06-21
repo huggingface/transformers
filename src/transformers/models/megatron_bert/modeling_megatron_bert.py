@@ -13,8 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch MegatronBERT model."""
-
+"""PyTorch MegatronBERT model."""
 
 import math
 import os
@@ -56,9 +55,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "MegatronBertConfig"
 _CHECKPOINT_FOR_DOC = "nvidia/megatron-bert-cased-345m"
-
-
-from ..deprecated._archive_maps import MEGATRON_BERT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 def load_tf_weights_in_megatron_bert(model, config, tf_checkpoint_path):

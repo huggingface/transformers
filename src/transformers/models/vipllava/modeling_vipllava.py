@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch VipLlava model."""
+"""PyTorch VipLlava model."""
+
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
@@ -37,9 +38,6 @@ from .configuration_vipllava import VipLlavaConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "VipLlavaConfig"
-
-
-from ..deprecated._archive_maps import VIPLLAVA_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass

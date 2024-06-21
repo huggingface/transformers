@@ -74,6 +74,7 @@ from .utils import (
     is_ftfy_available,
     is_g2p_en_available,
     is_galore_torch_available,
+    is_gguf_available,
     is_ipex_available,
     is_jieba_available,
     is_jinja_available,
@@ -81,6 +82,7 @@ from .utils import (
     is_keras_nlp_available,
     is_levenshtein_available,
     is_librosa_available,
+    is_lomo_available,
     is_natten_available,
     is_nltk_available,
     is_onnx_available,
@@ -114,6 +116,7 @@ from .utils import (
     is_torch_bf16_available_on_device,
     is_torch_bf16_cpu_available,
     is_torch_bf16_gpu_available,
+    is_torch_deterministic,
     is_torch_fp16_available_on_device,
     is_torch_neuroncore_available,
     is_torch_npu_available,
@@ -163,6 +166,15 @@ ENDPOINT_STAGING = "https://hub-ci.huggingface.co"
 
 # Not critical, only usable on the sandboxed CI instance.
 TOKEN = "hf_94wBhPGp6KrrTH3KDchhKpRxZwd6dmHWLL"
+
+if is_torch_available():
+    import torch
+
+    IS_ROCM_SYSTEM = torch.version.hip is not None
+    IS_CUDA_SYSTEM = torch.version.cuda is not None
+else:
+    IS_ROCM_SYSTEM = False
+    IS_CUDA_SYSTEM = False
 
 
 def parse_flag_from_env(key, default=False):
@@ -337,6 +349,14 @@ def require_galore_torch(test_case):
     return unittest.skipUnless(is_galore_torch_available(), "test requires GaLore")(test_case)
 
 
+def require_lomo(test_case):
+    """
+    Decorator marking a test that requires LOMO. These tests are skipped when LOMO-optim isn't installed.
+    https://github.com/OpenLMLab/LOMO
+    """
+    return unittest.skipUnless(is_lomo_available(), "test requires LOMO")(test_case)
+
+
 def require_cv2(test_case):
     """
     Decorator marking a test that requires OpenCV.
@@ -374,6 +394,13 @@ def require_accelerate(test_case, min_version: str = ACCELERATE_MIN_VERSION):
     return unittest.skipUnless(
         is_accelerate_available(min_version), f"test requires accelerate version >= {min_version}"
     )(test_case)
+
+
+def require_gguf(test_case):
+    """
+    Decorator marking a test that requires ggguf. These tests are skipped when gguf isn't installed.
+    """
+    return unittest.skipUnless(is_gguf_available(), "test requires gguf")(test_case)
 
 
 def require_fsdp(test_case, min_version: str = "1.12.0"):
@@ -786,23 +813,24 @@ def require_torch_multi_npu(test_case):
 
 def require_torch_xpu(test_case):
     """
-    Decorator marking a test that requires XPU and IPEX.
+    Decorator marking a test that requires XPU (in PyTorch).
 
-    These tests are skipped when Intel Extension for PyTorch isn't installed or it does not match current PyTorch
-    version.
+    These tests are skipped when XPU backend is not available. XPU backend might be available either via stock
+    PyTorch (>=2.4) or via Intel Extension for PyTorch. In the latter case, if IPEX is installed, its version
+    must match match current PyTorch version.
     """
-    return unittest.skipUnless(is_torch_xpu_available(), "test requires IPEX and an XPU device")(test_case)
+    return unittest.skipUnless(is_torch_xpu_available(), "test requires XPU device")(test_case)
 
 
 def require_torch_multi_xpu(test_case):
     """
-    Decorator marking a test that requires a multi-XPU setup with IPEX and at least one XPU device. These tests are
-    skipped on a machine without IPEX or multiple XPUs.
+    Decorator marking a test that requires a multi-XPU setup (in PyTorch). These tests are skipped on a machine without
+    multiple XPUs.
 
     To run *only* the multi_xpu tests, assuming all test names contain multi_xpu: $ pytest -sv ./tests -k "multi_xpu"
     """
     if not is_torch_xpu_available():
-        return unittest.skip("test requires IPEX and at least one XPU device")(test_case)
+        return unittest.skip("test requires PyTorch XPU")(test_case)
 
     return unittest.skipUnless(torch.xpu.device_count() > 1, "test requires multiple XPUs")(test_case)
 
@@ -915,6 +943,15 @@ def require_torch_bf16_cpu(test_case):
         is_torch_bf16_cpu_available(),
         "test requires torch>=1.10, using CPU",
     )(test_case)
+
+
+def require_deterministic_for_xpu(test_case):
+    if is_torch_xpu_available():
+        return unittest.skipUnless(is_torch_deterministic(), "test requires torch to use deterministic algorithms")(
+            test_case
+        )
+    else:
+        return test_case
 
 
 def require_torch_tf32(test_case):
@@ -2395,6 +2432,10 @@ if is_torch_available():
     BACKEND_MANUAL_SEED = {"cuda": torch.cuda.manual_seed, "cpu": torch.manual_seed, "default": torch.manual_seed}
     BACKEND_EMPTY_CACHE = {"cuda": torch.cuda.empty_cache, "cpu": None, "default": None}
     BACKEND_DEVICE_COUNT = {"cuda": torch.cuda.device_count, "cpu": lambda: 0, "default": lambda: 1}
+else:
+    BACKEND_MANUAL_SEED = {"default": None}
+    BACKEND_EMPTY_CACHE = {"default": None}
+    BACKEND_DEVICE_COUNT = {"default": lambda: 0}
 
 
 def backend_manual_seed(device: str, seed: int):
