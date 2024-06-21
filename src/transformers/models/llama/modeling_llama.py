@@ -56,7 +56,7 @@ if is_flash_attn_2_available():
 from typing import TypedDict
 
 try:
-    from tying import Unpack
+    from typing import Unpack
 except ImportError:
     from typing_extension import Unpack
 
