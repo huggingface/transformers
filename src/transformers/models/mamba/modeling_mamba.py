@@ -757,16 +757,15 @@ class MambaClassificationHead(nn.Module):
 
         self.config = config
 
-    def forward(self, features, **kwargs):
+    def forward(self, inputs, **kwargs):
         """Forward pass."""
         # Pooling is done by the forward pass in `MambaForSequenceClassification`
-        x = features
-        x = self.dropout(x)
-        x = self.dense(x)
-        x = self.activation(x)
-        x = self.dropout(x)
+        hidden_states = self.dropout(inputs)
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        hidden_states = self.dropout(hidden_states)
 
-        return self.out_proj(x)
+        return self.out_proj(hidden_states)
 
 
 @add_start_docstrings(
@@ -838,9 +837,8 @@ class MambaForSequenceClassification(MambaPreTrainedModel):
         else:
             batch_size, _ = inputs_embeds.shape[:2]
 
-        assert (
-            self.config.pad_token_id is not None or batch_size == 1
-        ), "Cannot handle batch sizes > 1 if no padding token is defined."
+        if self.config.pad_token_id is None and batch_size > 1:
+            raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
 
         if self.config.pad_token_id is None:
             sequence_lengths = -1
