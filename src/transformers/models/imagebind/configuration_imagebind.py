@@ -15,57 +15,13 @@
 
 import copy
 import os
-from typing import Any, Dict, Union
+from typing import Any, Dict, Optional, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-
-def update_config_dict(
-    config: Union[PretrainedConfig, Dict[str, Any]], config_dict_updates: Dict[str, Any], config_type: str
-) -> Dict[str, Any]:
-    if config_dict_updates is None:
-        return config
-
-    if config is None:
-        config = {}
-
-    # This is the complete result when using `config_dict_updates`.
-    if config_type == "vision":
-        _config_dict_updates = ImageBindVisionConfig(**config_dict_updates).to_dict()
-    elif config_type == "text":
-        _config_dict_updates = ImageBindTextConfig(**config_dict_updates).to_dict()
-    elif config_type == "audio":
-        _config_dict_updates = ImageBindAudioConfig(**config_dict_updates).to_dict()
-
-    # convert keys to string instead of integer
-    if "id2label" in _config_dict_updates:
-        _config_dict_updates["id2label"] = {str(key): value for key, value in _config_dict_updates["id2label"].items()}
-
-    # Give a warning if the values exist in both `_config_dict_updates` and `config_dict` but being different.
-    for key, value in _config_dict_updates.items():
-        if key in config and value != config[key] and key not in ["transformers_version"]:
-            # If specified in `config_dict_updates`
-            if key in config_dict_updates:
-                message = (
-                    f"`{key}` is found in both `{config_type}_config_dict` and `{config_type}_config` but with different "
-                    f'values. The value `{config_type}_config_dict["{key}"]` will be used instead.'
-                )
-            # If inferred from default argument values (just to be super careful)
-            else:
-                message = (
-                    f"`vision_config_dict` is provided which will be used to initialize `ImageBind{config_type.capitalize()}Config`. "
-                    f'The value `{config_type}_config["{key}"]` will be overriden.'
-                )
-            logger.warning(message)
-
-    # Update all values in `vision_config` with the ones in `_vision_config_dict`.
-    config.update(_config_dict_updates)
-
-    return config
 
 
 class ImageBindTextConfig(PretrainedConfig):
@@ -473,12 +429,12 @@ class ImageBindConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        text_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`ImageBindTextConfig`].
-        vision_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`ImageBindVisionConfig`].
-        audio_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`ImageBindAudioConfig`].
+        text_config (`dict` or `ImageBindTextConfig`, *optional*):
+            Dictionary or an instance of `ImageBindTextConfig` that defines the text model configuration.
+        vision_config (`dict` or `ImageBindVisionConfig`, *optional*):
+            Dictionary or an instance of `ImageBindVisionConfig` that defines the vision model configuration.
+        audio_config (`dict` or `ImageBindAudioConfig`, *optional*):
+            Dictionary or an instance of `ImageBindAudioConfig` that defines the audio model configuration.
         projection_dim (`int`, *optional*, defaults to 1024):
             Dimentionality of text and vision projection layers.
         kwargs (*optional*):
@@ -513,27 +469,13 @@ class ImageBindConfig(PretrainedConfig):
 
     def __init__(
         self,
-        text_config=None,
-        vision_config=None,
-        audio_config=None,
-        projection_dim=1024,
+        text_config: Optional[Union[Dict[str, Any], ImageBindTextConfig]] = None,
+        vision_config: Optional[Union[Dict[str, Any], ImageBindVisionConfig]] = None,
+        audio_config: Optional[Union[Dict[str, Any], ImageBindAudioConfig]] = None,
+        projection_dim: int = 1024,
         **kwargs,
     ):
-        # If `_config_dict` exist, we use them for the backward compatibility.
-        # We pop out these 2 attributes before calling `super().__init__` to avoid them being saved (which causes a lot
-        # of confusion!).
-        text_config_dict = kwargs.pop("text_config_dict", None)
-        vision_config_dict = kwargs.pop("vision_config_dict", None)
-        audio_config_dict = kwargs.pop("audio_config_dict", None)
-
         super().__init__(**kwargs)
-
-        # Instead of simply assigning `[text|vision]_config_dict` to `[text|vision]_config`, we use the values in
-        # `[text|vision]_config_dict` to update the values in `[text|vision]_config`. The values should be same in most
-        # cases, but we don't want to break anything regarding `_config_dict` that existed before commit `8827e1b2`.
-        text_config = update_config_dict(text_config, text_config_dict, "text")
-        vision_config = update_config_dict(vision_config, vision_config_dict, "vision")
-        audio_config = update_config_dict(audio_config, audio_config_dict, "audio")
 
         if text_config is None:
             text_config = {}
@@ -547,9 +489,11 @@ class ImageBindConfig(PretrainedConfig):
             audio_config = {}
             logger.info("`audio_config` is `None`. initializing the `ImageBindAudioConfig` with default values.")
 
-        self.text_config = ImageBindTextConfig(**text_config)
-        self.vision_config = ImageBindVisionConfig(**vision_config)
-        self.audio_config = ImageBindAudioConfig(**audio_config)
+        self.text_config = ImageBindTextConfig(**text_config) if isinstance(text_config, dict) else text_config
+        self.vision_config = (
+            ImageBindVisionConfig(**vision_config) if isinstance(vision_config, dict) else vision_config
+        )
+        self.audio_config = ImageBindAudioConfig(**audio_config) if isinstance(audio_config, dict) else audio_config
 
         self.projection_dim = projection_dim
         self.initializer_factor = 1.0
