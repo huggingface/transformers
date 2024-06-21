@@ -43,7 +43,8 @@ from ...utils import (
 
 
 if is_vision_available():
-    from ...image_utils import PILImageResampling
+    import PIL.Image
+    from PIL.Image import Image as PILImage
 
 
 logger = logging.getLogger(__name__)
@@ -200,7 +201,7 @@ class Florence2Processor(ProcessorMixin):
         image_std: Optional[Union[float, List[float]]] = None,
         data_format: Optional[ChannelDimension] = "channels_first",
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        resample: PILImageResampling = None,  # noqa: F821
+        resample: Optional[Union[PILImage, PIL.Image.Resampling]] = None,  # noqa: F821
         do_convert_rgb: bool = None,
         do_thumbnail: bool = None,
         do_align_long_axis: bool = None,
