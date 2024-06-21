@@ -1460,7 +1460,6 @@ class DABDETRDecoder(DABDETRPreTrainedModel):
     """,
     DAB_DETR_START_DOCSTRING,
 )
-# Copied from transformers.models.conditional_detr.modeling_conditional_detr.ConditionalDetrModel with ConditionalDetr->DABDETR,microsoft/conditional-detr-resnet-50->IDEA-Research/dab_detr-base
 class DABDETRModel(DABDETRPreTrainedModel):
     def __init__(self, config: DABDETRConfig):
         super().__init__(config)
@@ -1714,7 +1713,6 @@ class DABDETRModel(DABDETRPreTrainedModel):
     """,
     DAB_DETR_START_DOCSTRING,
 )
-# Copied from transformers.models.conditional_detr.modeling_conditional_detr.ConditionalDetrForObjectDetection with ConditionalDetr->DABDETR,conditional_detr->dab_detr,microsoft/conditional-detr-resnet-50->IDEA-Research/dab_detr-base
 class DABDETRForObjectDetection(DABDETRPreTrainedModel):
     def __init__(self, config: DABDETRConfig):
         super().__init__(config)
