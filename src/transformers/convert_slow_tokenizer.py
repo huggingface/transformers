@@ -622,6 +622,17 @@ class SpmConverter(Converter):
     def converted(self) -> Tokenizer:
         tokenizer = self.tokenizer(self.proto)
 
+        # Add user defined symbols (type == 4) from sentnecepiece (https://github.com/google/sentencepiece/blob/6225e08edb2577757163b3f5dbba4c0b670ef445/src/sentencepiece_model.proto#L299C29-L299C33)
+        user_defined_symbols = [
+            AddedToken(token, normalized=False, special=False)
+            for token in [p.piece for p in self.proto.pieces if p.type == 4]
+        ]
+        control_symbols = [
+            AddedToken(token, normalized=False, special=True) for token in self.proto.trainer_spec.control_symbols
+        ]
+
+        tokenizer.add_tokens(user_defined_symbols + control_symbols)
+
         # Tokenizer assemble
         normalizer = self.normalizer(self.proto)
         if normalizer is not None:
@@ -1330,10 +1341,6 @@ class GemmaConvert(SpmConverter):
             raise Exception(
                 "You're trying to run a `Unigram` model but you're file was trained with a different algorithm"
             )
-        user_defined_symbols = [
-            AddedToken(token, normalized=True, special=False) for token in proto.trainer_spec.user_defined_symbols
-        ]
-        tokenizer.add_tokens(user_defined_symbols)
         return tokenizer
 
 
