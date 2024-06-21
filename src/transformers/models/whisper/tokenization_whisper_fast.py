@@ -596,7 +596,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         return token_ids
 
     @staticmethod
-    # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer. _convert_to_list
+    # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._convert_to_list
     def _convert_to_list(token_ids):
         # convert type to ndarray if necessary
         if "torch" in str(type(token_ids)) or "tensorflow" in str(type(token_ids)) and hasattr(token_ids, "numpy"):
