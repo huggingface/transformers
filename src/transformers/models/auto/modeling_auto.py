@@ -202,6 +202,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("roberta-prelayernorm", "RobertaPreLayerNormModel"),
         ("roc_bert", "RoCBertModel"),
         ("roformer", "RoFormerModel"),
+        ("rt_detr", "RTDetrModel"),
         ("rwkv", "RwkvModel"),
         ("sam", "SamModel"),
         ("seamless_m4t", "SeamlessM4TModel"),
@@ -765,6 +766,7 @@ MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
         ("deformable_detr", "DeformableDetrForObjectDetection"),
         ("deta", "DetaForObjectDetection"),
         ("detr", "DetrForObjectDetection"),
+        ("rt_detr", "RTDetrForObjectDetection"),
         ("table-transformer", "TableTransformerForObjectDetection"),
         ("yolos", "YolosForObjectDetection"),
     ]
@@ -1252,6 +1254,7 @@ MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
         ("nat", "NatBackbone"),
         ("pvt_v2", "PvtV2Backbone"),
         ("resnet", "ResNetBackbone"),
+        ("rt_detr_resnet", "RTDetrResNetBackbone"),
         ("swin", "SwinBackbone"),
         ("swinv2", "Swinv2Backbone"),
         ("timm_backbone", "TimmBackbone"),
