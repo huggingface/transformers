@@ -1520,6 +1520,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        num_logits_to_keep: Optional[int] = None,
     ) -> Union[Tuple, Idefics2CausalLMOutputWithPast]:
         r"""
         Args:
@@ -1528,6 +1529,12 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
                 config.vocab_size]` or `model.image_token_id` (where `model` is your instance of `Idefics2ForConditionalGeneration`).
                 Tokens with indices set to `model.image_token_id` are ignored (masked), the loss is only
                 computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+            num_logits_to_keep (`int` or `None`, *optional*):
+                    Calculate logits for the last `num_logits_to_keep` tokens. If `None`, calculate logits for all
+                    `input_ids`. Only last token logits are needed for generation, and calculating them only for that token
+                    can save memory, which becomes pretty significant for long sequences.
+
         Returns:
 
         Example:
@@ -1591,11 +1598,21 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
         )
 
         hidden_states = outputs[0]
-        logits = self.lm_head(hidden_states)
-        logits = logits.float()
+        if labels is None:
+            logger.warning_once(
+                "Starting from v4.44, the `logits` model output will have the same type as the model (except at train time, where it will always be FP32)"
+            )
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        # TODO: remove those 2 float() operations in v4.44
+        if num_logits_to_keep is None:
+            logits = self.lm_head(hidden_states).float()
+        else:
+            logits = self.lm_head(hidden_states[:, -num_logits_to_keep:, :]).float()
 
         loss = None
         if labels is not None:
+            # Upcast to float if we need to compute the loss to avoid potential precision issues
+            logits = logits.float()
             labels = labels.to(logits.device)
             # Shift so that tokens < n predict n
             if attention_mask is not None:
@@ -1623,7 +1640,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
+        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, num_logits_to_keep=None, **kwargs
     ):
         past_length = 0
         # Omit tokens covered by past_key_values
@@ -1682,6 +1699,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
                 "pixel_values": pixel_values,
                 "pixel_attention_mask": pixel_attention_mask,
                 "image_hidden_states": image_hidden_states,
+                "num_logits_to_keep": num_logits_to_keep,
             }
         )
         return model_inputs

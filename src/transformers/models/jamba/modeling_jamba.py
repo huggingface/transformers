@@ -1497,10 +1497,17 @@ class JambaForCausalLM(JambaPreTrainedModel):
             logits = self.lm_head(hidden_states)
         else:
             logits = self.lm_head(hidden_states[..., -num_logits_to_keep:, :])
+        if labels is None:
+            logger.warning_once(
+                "Starting from v4.44, the `logits` model output will have the same type as the model (except at train time, where it will always be FP32)"
+            )
+        # TODO: remove this float() operations in v4.44
         logits = logits.float()
 
         loss = None
         if labels is not None:
+            # Upcast to float if we need to compute the loss to avoid potential precision issues
+            logits = logits.float()
             # Shift so that tokens < n predict n
             shift_logits = logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
