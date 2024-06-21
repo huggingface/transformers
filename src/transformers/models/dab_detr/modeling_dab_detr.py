@@ -548,7 +548,7 @@ def inverse_sigmoid(x, eps=1e-5):
     return torch.log(x1 / x2)
 
 
-# Copied from transformers.models.conditional_detr.modeling_conditional_detr.ConditionalDetrAttention with ConditionalDetr->DABDETR,Conditional DETR->DAB-DETR
+# Modified from transformers.models.conditional_detr.modeling_conditional_detr.ConditionalDetrAttention with ConditionalDetr->DABDETR,Conditional DETR->DAB-DETR
 class DABDETRAttention(nn.Module):
     """
     Cross-Attention used in DAB-DETR 'DAB-DETR for Fast Training Convergence' paper.
