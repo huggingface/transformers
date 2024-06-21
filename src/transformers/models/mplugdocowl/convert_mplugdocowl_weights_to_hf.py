@@ -80,59 +80,61 @@ def convert_state_dict_to_hf(state_dict):
     return new_state_dict
 
 
-def convert_mplugdocowl_llama_to_hf(text_model_id, vision_model_id, output_hub_path, old_state_dict_id):
-    torch.set_default_dtype(torch.float16)
-    text_config = AutoConfig.from_pretrained(text_model_id)
+def convert_mplugdocowl_llama_to_hf(text_model_id, vision_model_id, output_hub_path, old_state_dict_id, pretrained=True):
+    if not pretrained:
+        torch.set_default_dtype(torch.float16)
+        text_config = AutoConfig.from_pretrained(text_model_id)
 
-    tokenizer = AutoTokenizer.from_pretrained(text_model_id)
-    tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False), special_tokens=True)
-    tokenizer.add_special_tokens({"pad_token": "<pad>"})
+        tokenizer = AutoTokenizer.from_pretrained(text_model_id)
+        tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False), special_tokens=True)
+        tokenizer.add_special_tokens({"pad_token": "<pad>"})
 
-    #add tokens for shape-adaptive cropping module related textual crop indicators
-    #new_tokens = [f'<crop_img_row{i}_col{j}>' for i in range(10) for j in range(10)]
-    #tokenizer.add_tokens(new_tokens, special_tokens=True)
-    #image_processor = CLIPImageProcessor.from_pretrained(vision_model_id)
-    image_processor = MPLUGDocOwlImageProcessor()
-    processor = MPLUGDocOwlProcessor(tokenizer=tokenizer, image_processor=image_processor)
-    config = MPLUGDocOwlConfig(text_config=text_config)
-    config.pad_token_id = 32001
-    breakpoint()
-    with torch.device("cuda:0"):
-        model = MPLUGDocOwlForConditionalGeneration(config)
-    breakpoint()
-    # Pad to 64 for performance reasons
-    pad_shape = 64
+        image_processor = MPLUGDocOwlImageProcessor()
+        processor = MPLUGDocOwlProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        config = MPLUGDocOwlConfig(text_config=text_config)
+        config.pad_token_id = 32001
 
-    state_dict_path = hf_hub_download(old_state_dict_id, "pytorch_model.bin")
+        with torch.device("cuda:0"):
+            model = MPLUGDocOwlForConditionalGeneration(config).eval()
 
-    state_dict = torch.load(state_dict_path, map_location="cpu")
-    #state_dict = {k:v.to(torch.float16) for k, v in state_dict.items()}
-    state_dict = convert_state_dict_to_hf(state_dict)
+        # Pad to 64 for performance reasons
+        pad_shape = 64
 
-    state_dict['multi_modal_projector.reducer_before.0.weight'] = state_dict['multi_modal_projector.reducer_before.0.weight'].contiguous()
-    state_dict['multi_modal_projector.reducer.weight'] = state_dict['multi_modal_projector.reducer.weight'].contiguous()
-    #breakpoint()
-    model.load_state_dict(state_dict, strict=True, assign=True)
-   
-    pre_expansion_embeddings = model.language_model.model.embed_tokens.weight.data
-    mu = torch.mean(pre_expansion_embeddings, dim=0).float()
-    n = pre_expansion_embeddings.size()[0]
-    sigma = ((pre_expansion_embeddings - mu).T @ (pre_expansion_embeddings - mu)) / n
-    dist = torch.distributions.multivariate_normal.MultivariateNormal(mu, covariance_matrix=1e-5 * sigma)
-    #model.multi_modal_projector.reducer_before = model.multi_modal_projector.reducer_before.contiguous()
-    
-    # We add an image token so we resize the model
-    model.resize_token_embeddings(config.text_config.vocab_size + 2, pad_shape)
-    model.language_model.model.embed_tokens.weight.data[32000:] = torch.stack(
-        tuple((dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[32000:].shape[0]))),
-        dim=0,
-    )
-    model.language_model.lm_head.weight.data[32000:] = torch.stack(
-        tuple((dist.sample() for _ in range(model.language_model.lm_head.weight.data[32000:].shape[0]))),
-        dim=0,
-    )
-    breakpoint()
-    model.to(torch.float16)
+        state_dict_path = hf_hub_download(old_state_dict_id, "pytorch_model.bin")
+
+        state_dict = torch.load(state_dict_path, map_location="cpu")
+
+        state_dict = convert_state_dict_to_hf(state_dict)
+
+        state_dict['multi_modal_projector.reducer_before.0.weight'] = state_dict['multi_modal_projector.reducer_before.0.weight'].contiguous()
+        state_dict['multi_modal_projector.reducer.weight'] = state_dict['multi_modal_projector.reducer.weight'].contiguous()
+        #breakpoint()
+        model.load_state_dict(state_dict, strict=True, assign=True)
+
+        pre_expansion_embeddings = model.language_model.model.embed_tokens.weight.data
+        mu = torch.mean(pre_expansion_embeddings, dim=0).float()
+        n = pre_expansion_embeddings.size()[0]
+        sigma = ((pre_expansion_embeddings - mu).T @ (pre_expansion_embeddings - mu)) / n
+        dist = torch.distributions.multivariate_normal.MultivariateNormal(mu, covariance_matrix=1e-5 * sigma)
+        
+        # We add an image token so we resize the model
+        model.resize_token_embeddings(config.text_config.vocab_size + 2, pad_shape)
+        model.language_model.model.embed_tokens.weight.data[32000:] = torch.stack(
+            tuple((dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[32000:].shape[0]))),
+            dim=0,
+        )
+        model.language_model.lm_head.weight.data[32000:] = torch.stack(
+            tuple((dist.sample() for _ in range(model.language_model.lm_head.weight.data[32000:].shape[0]))),
+            dim=0,
+        )
+        model.to(torch.float16)
+        model.save_pretrained('/raid/dana/mplug_model_hf/')
+        processor.save_pretrained('/raid/dana/mplug_model_hf/')
+    else:
+        model = MPLUGDocOwlForConditionalGeneration.from_pretrained('/raid/dana/mplug_model_hf/')
+        model.to(torch.float16)
+        processor = MPLUGDocOwlProcessor.from_pretrained('/raid/dana/mplug_model_hf/')
+        breakpoint()
     from PIL import Image
     image = Image.open("/raid/dana/test_image.tif")
     query = "<image>Recognize text in the image."
@@ -142,15 +144,8 @@ def convert_mplugdocowl_llama_to_hf(text_model_id, vision_model_id, output_hub_p
     output.to(device)
     model.to(device)
     torch.set_default_dtype(torch.float16)
-    outputs = model.forward(input_ids=output['input_ids'], pixel_values = output['pixel_values'],attention_mask=output['attention_mask'], patch_positions=output['patch_positions'])
-    breakpoint()
-    #try:
-    #    output_s = model.generate(output['input_ids'], output['pixel_values'], temperature=1.0,max_new_tokens=512,use_cache=True,)
-    #except UnboundLocalError as e:
-    #    raise(e)
-    #breakpoint
-
-    #image_outputs = model.vision_tower(output['pixel_values'], output_hidden_states=True)
+    with torch.inference_mode():
+        outputs = model(input_ids=output['input_ids'], pixel_values = output['pixel_values'],attention_mask=output['attention_mask'], patch_positions=output['patch_positions'])
     
     breakpoint()
     model.push_to_hub(output_hub_path)

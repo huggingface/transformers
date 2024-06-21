@@ -15,7 +15,6 @@
 """Image processor class for MPLUGDocOwl."""
 
 from typing import Dict, List, Optional, Union, Tuple
-from einops import rearrange
 import numpy as np
 #FIXME change the import from transformers to import from ...
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
