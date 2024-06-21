@@ -1713,6 +1713,7 @@ class SampleTSPredictionOutput(ModelOutput):
             Sampled values from the chosen distribution.
         params (`dict[str, torch.FloatTensor]`): Parameters of the forecasted distribution.
         distribution (`str`): Name of the forecasted distribution.
+        scaling_params: (`dict[str, torch.FloatTensor]`): The distribution affine transformation parameters.
     """
 
     sequences: torch.FloatTensor = None
