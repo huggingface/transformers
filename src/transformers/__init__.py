@@ -425,7 +425,6 @@ _import_structure = {
     ],
     "models.florence": [
         "Florence2Config",
-        "Florence2LanguageConfig",
         "Florence2VisionConfig",
     ],
     "models.fnet": ["FNetConfig"],
@@ -2128,9 +2127,6 @@ else:
     _import_structure["models.florence"].extend(
         [
             "Florence2ForConditionalGeneration",
-            "Florence2LanguageForConditionalGeneration",
-            "Florence2LanguageModel",
-            "Florence2LanguagePreTrainedModel",
             "Florence2PreTrainedModel",
             "Florence2VisionModel",
             "Florence2VisionModelWithProjection",
@@ -5032,7 +5028,6 @@ if TYPE_CHECKING:
     )
     from .models.florence import (
         Florence2Config,
-        Florence2LanguageConfig,
         Florence2VisionConfig,
     )
     from .models.fnet import FNetConfig
@@ -6618,9 +6613,6 @@ if TYPE_CHECKING:
         )
         from .models.florence import (
             Florence2ForConditionalGeneration,
-            Florence2LanguageForConditionalGeneration,
-            Florence2LanguageModel,
-            Florence2LanguagePreTrainedModel,
             Florence2PreTrainedModel,
             Florence2VisionModel,
             Florence2VisionModelWithProjection,

@@ -24,7 +24,6 @@ from ...utils import (
 _import_structure = {
     "configuration_florence2": [
         "Florence2Config",
-        "Florence2LanguageConfig",
         "Florence2VisionConfig",
     ],
 }
@@ -45,20 +44,16 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_florence2"] = [
+        "Florence2ForConditionalGeneration",
         "Florence2PreTrainedModel",
         "Florence2VisionModel",
         "Florence2VisionModelWithProjection",
-        "Florence2ForConditionalGeneration",
-        "Florence2LanguageModel",
-        "Florence2LanguagePreTrainedModel",
-        "Florence2LanguageForConditionalGeneration",
     ]
 
 
 if TYPE_CHECKING:
     from .configuration_florence2 import (
         Florence2Config,
-        Florence2LanguageConfig,
         Florence2VisionConfig,
     )
 
@@ -78,9 +73,6 @@ if TYPE_CHECKING:
     else:
         from .modeling_florence2 import (
             Florence2ForConditionalGeneration,
-            Florence2LanguageForConditionalGeneration,
-            Florence2LanguageModel,
-            Florence2LanguagePreTrainedModel,
             Florence2PreTrainedModel,
             Florence2VisionModel,
             Florence2VisionModelWithProjection,

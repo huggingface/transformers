@@ -25,7 +25,6 @@ import pytest
 
 from transformers import (
     Florence2VisionConfig,
-    Florence2LanguageConfig,
     Florence2Config,
 )
 
@@ -43,13 +42,9 @@ if is_torch_available():
     from torch import nn
 
     from transformers import (
-        Florence2LanguageModel,
-        Florence2VisionModelWithProjection,
-        Florence2LanguageForConditionalGeneration,
-        Florence2VisionModel,
         Florence2ForConditionalGeneration,
-        Florence2LanguagePreTrainedModel,
-        Florence2PreTrainedModel,
+        Florence2VisionModel,
+        Florence2VisionModelWithProjection,
     )
 else:
     torch = {}
@@ -61,19 +56,20 @@ if is_vision_available():
 
 MODEL_ID = "microsoft/Florence-2-base-ft"
 
-class Florence2LanguageModelTester:
+
+class Florence2ForConditionalGenerationTester:
     def __init__(self):
         pass
 
 @require_torch
-class Florence2LanguageModelTest(ModelTesterMixin, unittest.TestCase):
+class Florence2ForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
-        self.model_tester = Florence2LanguageModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Florence2LanguageConfig)
+        self.model_tester = Florence2ForConditionalGenerationTester(self)
+        self.config_tester = ConfigTester(self, config_class=Florence2Config)
 
     @slow
     def test_model_from_pretrained(self):
-        model = Florence2LanguageModel.from_pretrained(MODEL_ID)
+        model = Florence2ForConditionalGeneration.from_pretrained(MODEL_ID)
         self.assertIsNotNone(model)
 
 
@@ -108,39 +104,6 @@ class Florence2VisionModelWithProjectionTest(ModelTesterMixin, unittest.TestCase
         model = Florence2VisionModelWithProjection.from_pretrained(MODEL_ID)
         self.assertIsNotNone(model)
 
-
-class Florence2ForConditionalGenerationTester:
-    def __init__(self):
-        pass
-
-@require_torch
-class Florence2ForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase):
-    def setUp(self):
-        self.model_tester = Florence2ForConditionalGenerationTester(self)
-        self.config_tester = ConfigTester(self, config_class=Florence2Config)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model = Florence2ForConditionalGeneration.from_pretrained(MODEL_ID)
-        self.assertIsNotNone(model)
-
-
-class Florence2LanguageForConditionalGenerationTester:
-    def __init__(self):
-        pass
-
-@require_torch
-class Florence2LanguageForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase):
-    def setUp(self):
-        self.model_tester = Florence2LanguageForConditionalGenerationTester(self)
-        self.config_tester = ConfigTester(self, config_class=Florence2LanguageConfig)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model = Florence2LanguageForConditionalGeneration.from_pretrained(MODEL_ID)
-        self.assertIsNotNone(model)
-
-
 def prepare_img():
     url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/car.jpg?download=true"
     im = Image.open(requests.get(url, stream=True).raw)
@@ -149,10 +112,10 @@ def prepare_img():
 
 @require_vision
 @require_torch
-class Florence2LanguageModelIntegrationTest(unittest.TestCase):
+class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
-        model = Florence2LanguageModel.from_pretrained(MODEL_ID).to(torch_device)
+        model = Florence2ForConditionalGeneration.from_pretrained(MODEL_ID).to(torch_device)
         processor = Florence2Processor.from_pretrained(MODEL_ID)
 
         img = prepare_img()
@@ -161,8 +124,7 @@ class Florence2LanguageModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
 
-        # TODO: write test test condition
-        #self.assertEqual(outputs.last_hidden_state.shape, (1, 1, 768))
+        # TODO: write test condition
 
 
 @require_vision
@@ -188,40 +150,6 @@ class Florence2VisionModelWithProjectionIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
         model = Florence2VisionModelWithProjection.from_pretrained(MODEL_ID).to(torch_device)
-        processor = Florence2Processor.from_pretrained(MODEL_ID)
-
-        img = prepare_img()
-        inputs = processor(img, return_tensors="pt").to(torch_device)
-
-        with torch.no_grad():
-            outputs = model(**inputs)
-
-        # TODO: write test condition
-
-
-@require_vision
-@require_torch
-class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
-    @slow
-    def test_inference(self):
-        model = Florence2ForConditionalGeneration.from_pretrained(MODEL_ID).to(torch_device)
-        processor = Florence2Processor.from_pretrained(MODEL_ID)
-
-        img = prepare_img()
-        inputs = processor(img, return_tensors="pt").to(torch_device)
-
-        with torch.no_grad():
-            outputs = model(**inputs)
-
-        # TODO: write test condition
-
-
-@require_vision
-@require_torch
-class Florence2LanguageForConditionalGenerationIntegrationTest(unittest.TestCase):
-    @slow
-    def test_inference(self):
-        model = Florence2LanguageForConditionalGeneration.from_pretrained(MODEL_ID).to(torch_device)
         processor = Florence2Processor.from_pretrained(MODEL_ID)
 
         img = prepare_img()
