@@ -52,7 +52,7 @@ import torch.distributed as dist
 from huggingface_hub import ModelCard, create_repo, upload_folder
 from packaging import version
 from torch import nn
-from torch.utils.data import DataLoader, Dataset, IterableDataset, RandomSampler, SequentialSampler
+from torch.utils.data import DataLoader, Dataset, IterableDataset, RandomSampler, SequentialSampler, DistributedSampler
 
 from . import __version__
 from .configuration_utils import PretrainedConfig
@@ -235,6 +235,8 @@ if is_accelerate_available():
 
     if is_deepspeed_available():
         from accelerate.utils import DeepSpeedSchedulerWrapper
+    
+    from accelerate.utils import parallel_state as mpu
 
 if is_accelerate_available("0.28.0"):
     from accelerate.utils import DataLoaderConfiguration
@@ -842,7 +844,15 @@ class Trainer:
             return None
 
         # Build the sampler.
-        if self.args.group_by_length:
+        if is_accelerate_available() and mpu.sequence_parallel_is_enabled():
+            assert self.args.group_by_length is False, "Group by length is not supported with sequence parallelism."
+            return DistributedSampler(
+                dataset=self.train_dataset,
+                num_replicas=mpu.get_data_parallel_world_size(),
+                rank=mpu.get_data_parallel_rank(),
+                shuffle=True,
+            )
+        elif self.args.group_by_length:
             if is_datasets_available() and isinstance(self.train_dataset, datasets.Dataset):
                 lengths = (
                     self.train_dataset[self.args.length_column_name]
@@ -861,9 +871,6 @@ class Trainer:
 
         else:
             return RandomSampler(self.train_dataset)
-    
-    def seed_worker(self, *args, **kwargs):
-        return seed_worker(*args, **kwargs)
 
     def get_train_dataloader(self) -> DataLoader:
         """
@@ -895,12 +902,20 @@ class Trainer:
         if not isinstance(train_dataset, torch.utils.data.IterableDataset):
             dataloader_params["sampler"] = self._get_train_sampler()
             dataloader_params["drop_last"] = self.args.dataloader_drop_last
-            dataloader_params["worker_init_fn"] = self.seed_worker
+            dataloader_params["worker_init_fn"] = seed_worker
             dataloader_params["prefetch_factor"] = self.args.dataloader_prefetch_factor
 
         return self.accelerator.prepare(DataLoader(train_dataset, **dataloader_params))
 
     def _get_eval_sampler(self, eval_dataset: Dataset) -> Optional[torch.utils.data.Sampler]:
+        if is_accelerate_available() and mpu.sequence_parallel_is_enabled():
+            return DistributedSampler(
+                dataset=self.eval_dataset,
+                num_replicas=mpu.get_data_parallel_world_size(),
+                rank=mpu.get_data_parallel_rank(),
+                shuffle=False,
+            )
+
         # Deprecated code
         if self.args.use_legacy_prediction_loop:
             if is_torch_xla_available():
