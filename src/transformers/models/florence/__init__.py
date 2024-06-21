@@ -27,7 +27,6 @@ _import_structure = {
         "Florence2LanguageConfig",
         "Florence2VisionConfig",
     ],
-    "processing_florence2": ["Florence2PostProcessor"],
 }
 
 try:
@@ -36,7 +35,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["processing_florence2"].append("Florence2Processor")
+    _import_structure["processing_florence2"] = ["Florence2Processor"]
 
 
 try:
@@ -61,9 +60,6 @@ if TYPE_CHECKING:
         Florence2Config,
         Florence2LanguageConfig,
         Florence2VisionConfig,
-    )
-    from .processing_florence2 import (
-        Florence2PostProcessor,
     )
 
     try:
