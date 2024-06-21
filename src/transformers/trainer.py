@@ -3307,7 +3307,6 @@ class Trainer:
             loss = self.compute_loss(model, inputs)
 
         del inputs
-        torch.cuda.empty_cache()
 
         kwargs = {}
 
