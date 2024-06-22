@@ -12,22 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
-import os
-import random
-import requests
-import shutil
-import tempfile
 import unittest
-
-import numpy as np
-import pytest
+import requests
 
 from transformers import (
-    Florence2VisionConfig,
     Florence2Config,
+    Florence2VisionConfig,
 )
-
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -39,7 +30,6 @@ from ...test_modeling_common import (
 
 if is_torch_available():
     import torch
-    from torch import nn
 
     from transformers import (
         Florence2ForConditionalGeneration,
@@ -58,11 +48,17 @@ MODEL_ID = "microsoft/Florence-2-base-ft"
 
 
 class Florence2ForConditionalGenerationTester:
-    def __init__(self):
+    def __init__(self, parent):
         pass
+
+    def prepare_config_and_inputs_for_common(self):
+        pass
+
 
 @require_torch
 class Florence2ForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (Florence2ForConditionalGeneration,) if is_torch_available() else ()
+
     def setUp(self):
         self.model_tester = Florence2ForConditionalGenerationTester(self)
         self.config_tester = ConfigTester(self, config_class=Florence2Config)
@@ -74,11 +70,17 @@ class Florence2ForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase)
 
 
 class Florence2VisionModelTester:
-    def __init__(self):
+    def __init__(self, parent):
         pass
+
+    def prepare_config_and_inputs_for_common(self):
+        pass
+
 
 @require_torch
 class Florence2VisionModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (Florence2VisionModel,) if is_torch_available() else ()
+
     def setUp(self):
         self.model_tester = Florence2VisionModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Florence2VisionConfig)
@@ -90,11 +92,17 @@ class Florence2VisionModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 class Florence2VisionModelWithProjectionTester:
-    def __init__(self):
+    def __init__(self, parent):
         pass
+
+    def prepare_config_and_inputs_for_common(self):
+        pass
+
 
 @require_torch
 class Florence2VisionModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (Florence2VisionModelWithProjection,) if is_torch_available() else ()
+
     def setUp(self):
         self.model_tester = Florence2VisionModelWithProjectionTester(self)
         self.config_tester = ConfigTester(self, config_class=Florence2VisionConfig)
@@ -103,6 +111,7 @@ class Florence2VisionModelWithProjectionTest(ModelTesterMixin, unittest.TestCase
     def test_model_from_pretrained(self):
         model = Florence2VisionModelWithProjection.from_pretrained(MODEL_ID)
         self.assertIsNotNone(model)
+
 
 def prepare_img():
     url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/car.jpg?download=true"
@@ -125,6 +134,7 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
 
         # TODO: write test condition
+        self.assertIsNotNone(outputs)
 
 
 @require_vision
@@ -142,6 +152,7 @@ class Florence2VisionModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
 
         # TODO: write test condition
+        self.assertIsNotNone(outputs)
 
 
 @require_vision
@@ -159,4 +170,5 @@ class Florence2VisionModelWithProjectionIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
 
         # TODO: write test condition
+        self.assertIsNotNone(outputs)
 

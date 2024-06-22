@@ -12,9 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
 import os
-import random
 import shutil
 import tempfile
 import unittest
@@ -27,42 +25,41 @@ from transformers.models.bart.tokenization_bart import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_vision
 from transformers.utils import IMAGE_PROCESSOR_NAME, is_vision_available
 
+
 if is_vision_available():
     from PIL import Image
 
     from transformers import CLIPImageProcessor, Florence2Processor
+
 
 @require_vision
 class Florence2ProcessorTest(unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 
-        vocab_tokens = [] # TODO: add vocab tokens
+        vocab_tokens = []  # TODO: add vocab tokens
         self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
 
         with open(self.vocab_file, "w", encoding="utf-8") as fp:
             fp.write("".join([x + "\n" for x in vocab_tokens]))
-        
+
         self.processor_file = os.path.join(self.tmpdirname, IMAGE_PROCESSOR_NAME)
 
     def get_tokenizer(self, **kwargs):
         return BartTokenizer.from_pretrained(self.tmpdirname, **kwargs)
-    
+
     def get_rust_tokenizer(self, **kwargs):
         return BartTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
-    
+
     def get_image_processor(self, **kwargs):
         return CLIPImageProcessor.from_pretrained(self.tmpdirname, **kwargs)
-    
+
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
     def prepare_image_inputs(self):
-        """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
-        or a list of PyTorch tensors if one specifies torchify=True.
-        """
+        """This function prepares a list of PIL images"""
         image_inputs = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)]
-
         image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
 
         return image_inputs
@@ -133,7 +130,6 @@ class Florence2ProcessorTest(unittest.TestCase):
         for key in encoded_tok.keys():
             self.assertListEqual(encoded_processor[key], encoded_tok[key])
 
-
     def test_processor(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
@@ -145,9 +141,10 @@ class Florence2ProcessorTest(unittest.TestCase):
 
         encoded_processor = processor(text=input_str, images=image_inputs)
 
-        self.assertListEqual(list(encoded_processor.keys()), ["input_ids", "token_type_ids", "attention_mask", "pixel_values"])
+        self.assertListEqual(
+            list(encoded_processor.keys()), ["input_ids", "token_type_ids", "attention_mask", "pixel_values"]
+        )
 
         # test if it raises when no input is passed
         with pytest.raises(ValueError):
             processor()
-
