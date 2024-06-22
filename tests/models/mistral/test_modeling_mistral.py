@@ -555,7 +555,6 @@ class MistralIntegrationTest(unittest.TestCase):
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION[self.cuda_compute_capability_major_version], text)
 
-
     @slow
     def test_model_7b_dola_generation(self):
         # ground truth text generated with dola_layers="low", repetition_penalty=1.2
