@@ -204,7 +204,8 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
     repo_id = model_name_to_repo[model_name]
     filename = name_to_checkpoint[model_name]
     filepath = hf_hub_download(
-        repo_id=repo_id, filename=f"{filename}",
+        repo_id=repo_id,
+        filename=f"{filename}",
     )
 
     state_dict = torch.load(filepath, map_location="cpu")
