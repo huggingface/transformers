@@ -471,12 +471,14 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
 
         maximum_num_keypoints = max(keypoints.shape[0] for keypoints in list_keypoints)
 
-        keypoints = torch.zeros((batch_size, maximum_num_keypoints, 2), device=pixel_values.device, dtype=pixel_values.dtype)
+        keypoints = torch.zeros(
+            (batch_size, maximum_num_keypoints, 2), device=pixel_values.device, dtype=pixel_values.dtype
+        )
         scores = torch.zeros((batch_size, maximum_num_keypoints), device=pixel_values.device, dtype=pixel_values.dtype)
         descriptors = torch.zeros(
             (batch_size, maximum_num_keypoints, self.config.descriptor_decoder_dim),
             device=pixel_values.device,
-            dtype=pixel_values.dtype
+            dtype=pixel_values.dtype,
         )
         mask = torch.zeros((batch_size, maximum_num_keypoints), device=pixel_values.device, dtype=torch.int)
 

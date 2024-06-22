@@ -94,6 +94,7 @@ else:
             ("layoutlmv2", ("LayoutLMv2ImageProcessor",)),
             ("layoutlmv3", ("LayoutLMv3ImageProcessor",)),
             ("levit", ("LevitImageProcessor",)),
+            ("lightglue", ("LightGlueImageProcessor",)),
             ("llava", ("CLIPImageProcessor",)),
             ("llava-next-video", ("LlavaNextVideoImageProcessor",)),
             ("llava_next", ("LlavaNextImageProcessor",)),

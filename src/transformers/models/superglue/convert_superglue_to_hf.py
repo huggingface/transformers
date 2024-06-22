@@ -21,9 +21,9 @@ from datasets import load_dataset
 from transformers import (
     AutoConfig,
     AutoModelForKeypointDetection,
+    LightGlueImageProcessor,
     SuperGlueConfig,
     SuperGlueForKeypointMatching,
-    LightGlueImageProcessor,
 )
 from transformers.models.superpoint.modeling_superpoint import SuperPointKeypointDescriptionOutput
 
