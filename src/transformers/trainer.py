@@ -3307,6 +3307,8 @@ class Trainer:
             loss = self.compute_loss(model, inputs)
 
         del inputs
+        if self.args.torch_empty_cache_steps is not None and self.state.global_step % self.args.torch_empty_cache_steps == 0:
+            torch.cuda.empty_cache()
 
         kwargs = {}
 

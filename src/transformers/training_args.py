@@ -267,6 +267,15 @@ class TrainingArguments:
         eval_delay (`float`, *optional*):
             Number of epochs or steps to wait for before the first evaluation can be performed, depending on the
             eval_strategy.
+        torch_empty_cache_steps (`int`, *optional*):
+            Number of steps to wait before calling `torch.cuda.empty_cache()`. If left unset or set to None, cache will not be emptied.
+
+            <tip>
+
+            This can help avoid CUDA out-of-memory errors by lowering peak VRAM usage at a cost of about [10% slower performance](https://github.com/huggingface/transformers/issues/31372).
+
+            </tip>
+
         learning_rate (`float`, *optional*, defaults to 5e-5):
             The initial learning rate for [`AdamW`] optimizer.
         weight_decay (`float`, *optional*, defaults to 0):
@@ -846,6 +855,14 @@ class TrainingArguments:
                 " eval_strategy."
             )
         },
+    )
+
+    torch_empty_cache_steps: Optional[int] = field(
+        default=None,
+        metadata={"help": "Number of steps to wait before calling `torch.cuda.empty_cache()`."
+                          "This can help avoid CUDA out-of-memory errors by lowering peak VRAM usage at a cost of about [10% slower performance](https://github.com/huggingface/transformers/issues/31372)."
+                          "If left unset or set to None, cache will not be emptied."
+                  },
     )
 
     learning_rate: float = field(default=5e-5, metadata={"help": "The initial learning rate for AdamW."})
@@ -1521,6 +1538,12 @@ class TrainingArguments:
         self.lr_scheduler_type = SchedulerType(self.lr_scheduler_type)
         if self.do_eval is False and self.eval_strategy != IntervalStrategy.NO:
             self.do_eval = True
+
+        if self.torch_empty_cache_steps is not None:
+            if not (isinstance(self.torch_empty_cache_steps, int) or self.torch_empty_cache_steps > 0):
+                raise ValueError(f'`torch_empty_cache_steps` must be an integer bigger than 0, got {self.torch_empty_cache_steps}.')
+            if 0 < self.max_steps <= self.torch_empty_cache_steps:
+                raise ValueError(f'`torch_empty_cache_steps` must be smaller than `max_steps`, got torch_empty_cache_steps: {self.torch_empty_cache_steps}, max_steps: {self.max_steps}.')
 
         # eval_steps has to be defined and non-zero, fallbacks to logging_steps if the latter is non-zero
         if self.eval_strategy == IntervalStrategy.STEPS and (self.eval_steps is None or self.eval_steps == 0):
