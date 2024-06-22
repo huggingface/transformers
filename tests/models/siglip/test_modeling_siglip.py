@@ -191,18 +191,6 @@ class SiglipVisionModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_training(self):
-        pass
-
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
     @unittest.skip(reason="SiglipVisionModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_from_base(self):
         pass
@@ -331,20 +319,6 @@ class SiglipTextModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.test_training
-    def test_training(self):
-        pass
-
-    # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.test_training_gradient_checkpointing
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
     @unittest.skip(reason="Siglip does not use inputs_embeds")
     # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.test_inputs_embeds
     def test_inputs_embeds(self):
@@ -459,18 +433,6 @@ class SiglipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @unittest.skip(reason="SiglipModel does not have input/output embeddings")
     # Copied from tests.models.clip.test_modeling_clip.CLIPModelTest.test_model_get_set_embeddings
     def test_model_get_set_embeddings(self):
-        pass
-
-    def test_training(self):
-        pass
-
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     @unittest.skip(reason="Siglip uses the same initialization scheme as the Flax original implementation")
@@ -612,15 +574,6 @@ class SiglipForImageClassificationModelTest(ModelTesterMixin, PipelineTesterMixi
 
     @unittest.skip(reason="SiglipForImageClassification does not support inputs_embeds")
     def test_model_get_set_embeddings(self):
-        pass
-
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     @unittest.skip(reason="Siglip uses the same initialization scheme as the Flax original implementation")
