@@ -423,7 +423,7 @@ _import_structure = {
         "FlavaMultimodalConfig",
         "FlavaTextConfig",
     ],
-    "models.florence": [
+    "models.florence2": [
         "Florence2Config",
         "Florence2VisionConfig",
     ],
@@ -1134,7 +1134,7 @@ else:
     _import_structure["models.dpt"].extend(["DPTFeatureExtractor", "DPTImageProcessor"])
     _import_structure["models.efficientnet"].append("EfficientNetImageProcessor")
     _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaImageProcessor", "FlavaProcessor"])
-    _import_structure["models.florence"].extend(["Florence2Processor"])
+    _import_structure["models.florence2"].extend(["Florence2Processor"])
     _import_structure["models.fuyu"].extend(["FuyuImageProcessor", "FuyuProcessor"])
     _import_structure["models.glpn"].extend(["GLPNFeatureExtractor", "GLPNImageProcessor"])
     _import_structure["models.grounding_dino"].extend(["GroundingDinoImageProcessor"])
@@ -2124,7 +2124,7 @@ else:
             "FlavaTextModel",
         ]
     )
-    _import_structure["models.florence"].extend(
+    _import_structure["models.florence2"].extend(
         [
             "Florence2ForConditionalGeneration",
             "Florence2PreTrainedModel",
