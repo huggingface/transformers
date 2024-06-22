@@ -14,7 +14,6 @@
 # limitations under the License.
 
 
-import datetime
 import gc
 import math
 import tempfile
@@ -42,7 +41,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        GPT2Tokenizer,
         MoTForQuestionAnswering,
         MoTForSequenceClassification,
         MoTForTokenClassification,
@@ -613,4 +611,3 @@ class MoTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def test_model_from_pretrained(self):
         model = MoTModel.from_pretrained("jaszczur/mixture_of_tokens")
         self.assertIsNotNone(model)
-        
