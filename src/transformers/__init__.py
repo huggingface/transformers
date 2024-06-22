@@ -5026,7 +5026,7 @@ if TYPE_CHECKING:
         FlavaMultimodalConfig,
         FlavaTextConfig,
     )
-    from .models.florence import (
+    from .models.florence2 import (
         Florence2Config,
         Florence2VisionConfig,
     )
@@ -5768,7 +5768,7 @@ if TYPE_CHECKING:
             FlavaImageProcessor,
             FlavaProcessor,
         )
-        from .models.florence import Florence2Processor
+        from .models.florence2 import Florence2Processor
         from .models.fuyu import FuyuImageProcessor, FuyuProcessor
         from .models.glpn import GLPNFeatureExtractor, GLPNImageProcessor
         from .models.grounding_dino import GroundingDinoImageProcessor
@@ -6611,7 +6611,7 @@ if TYPE_CHECKING:
             FlavaPreTrainedModel,
             FlavaTextModel,
         )
-        from .models.florence import (
+        from .models.florence2 import (
             Florence2ForConditionalGeneration,
             Florence2PreTrainedModel,
             Florence2VisionModel,
