@@ -107,6 +107,20 @@ class TextGenerationPipelineTests(unittest.TestCase):
         )
         assert output_str != output_str_with_truncation  # results must be different because one had truncation
 
+        ## -- test kwargs for preprocess_params
+        outputs = text_generator("This is a test", do_sample=False, add_special_tokens=False, padding=False)
+        self.assertEqual(
+            outputs,
+            [
+                {
+                    "generated_text": (
+                        "This is a test ☃ ☃ segmental segmental segmental 议议eski eski flutter flutter Lacy oscope."
+                        " oscope. FiliFili@@"
+                    )
+                }
+            ],
+        )
+
         # -- what is the point of this test? padding is hardcoded False in the pipeline anyway
         text_generator.tokenizer.pad_token_id = text_generator.model.config.eos_token_id
         text_generator.tokenizer.pad_token = "<pad>"
