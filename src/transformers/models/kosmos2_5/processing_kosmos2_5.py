@@ -85,8 +85,8 @@ class Kosmos2_5Processor(ProcessorMixin):
         # use updates or pop
         promt_ids = self.tokenizer(text, return_tensors="pt").input_ids[0].tolist()
         input_ids = [0, 100283] + [0] * 2048 + [100284] + promt_ids
-        image_embeds_position_mask = [0]*2 + [1]*2048 + [0]*(1+len(promt_ids))
-        attention_mask = [0, 1] + [1]*2048 + [1]*(1+len(promt_ids))
+        image_embeds_position_mask = [0, -1] + [1]*2048 + [-1]+ [0]*(len(promt_ids))
+        attention_mask = [1, 1] + [1]*2048 + [1]*(1+len(promt_ids))
         
         input_ids = torch.LongTensor(input_ids).unsqueeze(0)
         attention_mask = torch.Tensor(attention_mask).unsqueeze(0)

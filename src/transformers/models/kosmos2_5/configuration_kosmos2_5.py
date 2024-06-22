@@ -87,7 +87,7 @@ class Kosmos2_5TextConfig(PretrainedConfig):
         attention_heads=16,
         activation_function="gelu",
         dropout=0.1,
-        attention_dropout=0.1,
+        attention_dropout=0,
         activation_dropout=0.0,
         layerdrop=0.0,
         layer_norm_eps=1e-5,
@@ -97,7 +97,7 @@ class Kosmos2_5TextConfig(PretrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        _attn_implementation="eager",
+        _attn_implementation="flash_attention_2",
         **kwargs,
     ):
         super().__init__(
@@ -220,7 +220,7 @@ class Kosmos2_5VisionConfig(PretrainedConfig):
         seq_len=4096,
         relative_attention_num_buckets=32,
         relative_attention_max_distance=128,
-        _attn_implementation="eager",
+        _attn_implementation="eager", #"flash_attention_2"
         **kwargs,
     ):
         super().__init__(**kwargs)
