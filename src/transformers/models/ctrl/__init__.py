@@ -18,7 +18,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tf_availabl
 
 
 _import_structure = {
-    "configuration_ctrl": ["CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP", "CTRLConfig"],
+    "configuration_ctrl": ["CTRLConfig"],
     "tokenization_ctrl": ["CTRLTokenizer"],
 }
 
@@ -29,7 +29,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_ctrl"] = [
-        "CTRL_PRETRAINED_MODEL_ARCHIVE_LIST",
         "CTRLForSequenceClassification",
         "CTRLLMHeadModel",
         "CTRLModel",
@@ -43,7 +42,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_ctrl"] = [
-        "TF_CTRL_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFCTRLForSequenceClassification",
         "TFCTRLLMHeadModel",
         "TFCTRLModel",
@@ -52,7 +50,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig
+    from .configuration_ctrl import CTRLConfig
     from .tokenization_ctrl import CTRLTokenizer
 
     try:
@@ -62,7 +60,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_ctrl import (
-            CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
             CTRLForSequenceClassification,
             CTRLLMHeadModel,
             CTRLModel,
@@ -76,7 +73,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_ctrl import (
-            TF_CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFCTRLForSequenceClassification,
             TFCTRLLMHeadModel,
             TFCTRLModel,

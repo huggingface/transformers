@@ -52,9 +52,6 @@ _CHECKPOINT_FOR_DOC = "FacebookAI/roberta-base"
 _CONFIG_FOR_DOC = "RobertaConfig"
 
 
-from ..deprecated._archive_maps import ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 class RobertaEmbeddings(nn.Module):
     """
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing.

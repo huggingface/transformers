@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tests for the VITS tokenizer."""
+
 import json
 import os
 import shutil
@@ -87,7 +88,7 @@ class VitsTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
                 # Isolate this from the other tests because we save additional tokens/etc
                 tmpdirname = tempfile.mkdtemp()
 
-                sample_text = " He is very happy, UNwant\u00E9d,running"
+                sample_text = " He is very happy, UNwant\u00e9d,running"
                 before_tokens = tokenizer.encode(sample_text, add_special_tokens=False)
                 before_vocab = tokenizer.get_vocab()
                 tokenizer.save_pretrained(tmpdirname)

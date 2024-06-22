@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Encodec model. """
+"""Testing suite for the PyTorch Encodec model."""
 
 import copy
 import inspect
@@ -183,7 +183,7 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         pass
 
     @unittest.skip("The EncodecModel is not transformers based, thus it does not have `inputs_embeds` logics")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip("The EncodecModel is not transformers based, thus it does not have the usual `attention` logic")
@@ -325,6 +325,18 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_hidden_states_output(self):
         pass
 
+    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    def test_save_load_low_cpu_mem_usage(self):
+        pass
+
+    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    def test_save_load_low_cpu_mem_usage_checkpoints(self):
+        pass
+
+    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    def test_save_load_low_cpu_mem_usage_no_safetensors(self):
+        pass
+
     def test_determinism(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -450,7 +462,9 @@ class EncodecIntegrationTest(unittest.TestCase):
             "1.5": [371955],
             "24.0": [6659962],
         }
-        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        librispeech_dummy = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
+        )
         model_id = "facebook/encodec_24khz"
 
         model = EncodecModel.from_pretrained(model_id).to(torch_device)
@@ -504,7 +518,9 @@ class EncodecIntegrationTest(unittest.TestCase):
             "3.0": [144259, 146765, 156435, 176871, 161971],
             "24.0": [1568553, 1294948, 1306190, 1464747, 1663150],
         }
-        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        librispeech_dummy = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
+        )
         model_id = "facebook/encodec_48khz"
 
         model = EncodecModel.from_pretrained(model_id).to(torch_device)
@@ -566,7 +582,9 @@ class EncodecIntegrationTest(unittest.TestCase):
                 [85561, 81870, 76953, 48967, 79315, 85442, 81479, 107241],
             ],
         }
-        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        librispeech_dummy = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
+        )
         model_id = "facebook/encodec_48khz"
 
         model = EncodecModel.from_pretrained(model_id).to(torch_device)

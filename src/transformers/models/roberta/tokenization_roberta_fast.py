@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Fast Tokenization classes for RoBERTa."""
+
 import json
 from typing import List, Optional, Tuple
 

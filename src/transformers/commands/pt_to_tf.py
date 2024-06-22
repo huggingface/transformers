@@ -202,7 +202,9 @@ class PTtoTFCommand(BaseTransformersCLICommand):
         """
 
         def _get_audio_input():
-            ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+            ds = load_dataset(
+                "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
+            )
             speech_samples = ds.sort("id").select(range(2))[:2]["audio"]
             raw_samples = [x["array"] for x in speech_samples]
             return raw_samples
@@ -234,7 +236,7 @@ class PTtoTFCommand(BaseTransformersCLICommand):
                 }
             )
         if "pixel_values" in model_forward_signature:
-            sample_images = load_dataset("cifar10", "plain_text", split="test")[:2]["img"]
+            sample_images = load_dataset("uoft-cs/cifar10", "plain_text", split="test")[:2]["img"]  # no-script
             processor_inputs.update({"images": sample_images})
         if "input_features" in model_forward_signature:
             feature_extractor_signature = inspect.signature(processor.feature_extractor).parameters
@@ -267,6 +269,13 @@ class PTtoTFCommand(BaseTransformersCLICommand):
         return pt_input, tf_input
 
     def run(self):
+        self._logger.warning(
+            "\n\nConverting PyTorch weights to TensorFlow is deprecated and will be removed in v4.43. "
+            "Instead, we recommend that you convert PyTorch weights to Safetensors, an improved "
+            "format that can be loaded by any framework, including TensorFlow. For more information, "
+            "please see the Safetensors conversion guide: "
+            "https://huggingface.co/docs/safetensors/en/convert-weights\n\n"
+        )
         # hub version 0.9.0 introduced the possibility of programmatically opening PRs with normal write tokens.
         if version.parse(huggingface_hub.__version__) < version.parse("0.9.0"):
             raise ImportError(

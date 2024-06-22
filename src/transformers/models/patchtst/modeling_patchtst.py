@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch PatchTST model."""
+"""PyTorch PatchTST model."""
 
 import math
 from dataclasses import dataclass
@@ -32,9 +32,6 @@ from .configuration_patchtst import PatchTSTConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "PatchTSTConfig"
-
-
-from ..deprecated._archive_maps import PATCHTST_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->PatchTST
@@ -1265,7 +1262,7 @@ class PatchTSTMaskPretrainHead(nn.Module):
 
     def __init__(self, config: PatchTSTConfig):
         super().__init__()
-        self.dropout = nn.Dropout(config.dropout)
+        self.dropout = nn.Dropout(config.head_dropout) if config.head_dropout > 0 else nn.Identity()
         self.linear = nn.Linear(config.d_model, config.patch_length)
         self.use_cls_token = config.use_cls_token
 

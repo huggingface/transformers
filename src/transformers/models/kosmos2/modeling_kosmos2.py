@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch KOSMOS-2 model."""
-
+"""PyTorch KOSMOS-2 model."""
 
 import math
 from dataclasses import dataclass
@@ -45,9 +44,6 @@ from .configuration_kosmos2 import Kosmos2Config, Kosmos2TextConfig, Kosmos2Visi
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = Kosmos2Config
-
-
-from ..deprecated._archive_maps import KOSMOS2_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):

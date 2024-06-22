@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" InstructBLIP model configuration"""
+"""InstructBLIP model configuration"""
 
 import os
 from typing import Union
@@ -24,9 +24,6 @@ from ..auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
-
-
-from ..deprecated._archive_maps import INSTRUCTBLIP_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class InstructBlipVisionConfig(PretrainedConfig):
@@ -54,7 +51,7 @@ class InstructBlipVisionConfig(PretrainedConfig):
             The size (resolution) of each patch.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` ``"gelu"` are supported. to 1e-5): The epsilon used by the layer
+            `"relu"`, `"selu"` and `"gelu_new"` `"gelu"` are supported. to 1e-5): The epsilon used by the layer
             normalization layers.
         layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the layer normalization layers.

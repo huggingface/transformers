@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Speech2Text model. """
+"""Testing suite for the PyTorch Speech2Text model."""
 
 import copy
 import inspect
@@ -645,7 +645,9 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
             num_interleave, dim=0
         )
         input_ids = input_ids[:, :, 0]
-        input_ids = torch.zeros_like(input_ids[:, :1], dtype=torch.long) + model._get_decoder_start_token_id()
+        generation_config = copy.deepcopy(model.generation_config)
+        model._prepare_special_tokens(generation_config)
+        input_ids = torch.zeros_like(input_ids[:, :1]) + generation_config.decoder_start_token_id
         attention_mask = None
         return encoder_outputs, input_ids, attention_mask
 
@@ -789,7 +791,9 @@ class Speech2TextModelIntegrationTests(unittest.TestCase):
     def _load_datasamples(self, num_samples):
         from datasets import load_dataset
 
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        ds = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
+        )
         # automatic decoding with librispeech
         speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
 

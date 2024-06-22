@@ -559,8 +559,11 @@ def get_indent(code: str) -> str:
     return ""
 
 
-def run_ruff(code):
-    command = ["ruff", "format", "-", "--config", "pyproject.toml", "--silent"]
+def run_ruff(code, check=False):
+    if check:
+        command = ["ruff", "check", "-", "--fix", "--exit-zero"]
+    else:
+        command = ["ruff", "format", "-", "--config", "pyproject.toml", "--silent"]
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
     stdout, _ = process.communicate(input=code.encode())
     return stdout.decode()
@@ -753,9 +756,9 @@ def is_copy_consistent(filename: str, overwrite: bool = False, buffer: dict = No
                 else:
                     # not in the target --> add it
                     theoretical_code_blocks[f"_ignored_new_block_{ignored_new_block_index}"] = code
-                    name_mappings_1[
+                    name_mappings_1[f"_ignored_new_block_{ignored_new_block_index}"] = (
                         f"_ignored_new_block_{ignored_new_block_index}"
-                    ] = f"_ignored_new_block_{ignored_new_block_index}"
+                    )
 
                     del observed_code_blocks[name]
                     observed_code_blocks[f"_ignored_new_block_{ignored_new_block_index}"] = code

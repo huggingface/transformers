@@ -18,10 +18,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_grounding_dino": [
-        "GROUNDING_DINO_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "GroundingDinoConfig",
-    ],
+    "configuration_grounding_dino": ["GroundingDinoConfig"],
     "processing_grounding_dino": ["GroundingDinoProcessor"],
 }
 
@@ -32,7 +29,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_grounding_dino"] = [
-        "GROUNDING_DINO_PRETRAINED_MODEL_ARCHIVE_LIST",
         "GroundingDinoForObjectDetection",
         "GroundingDinoModel",
         "GroundingDinoPreTrainedModel",
@@ -49,7 +45,6 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_grounding_dino import (
-        GROUNDING_DINO_PRETRAINED_CONFIG_ARCHIVE_MAP,
         GroundingDinoConfig,
     )
     from .processing_grounding_dino import GroundingDinoProcessor
@@ -61,7 +56,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_grounding_dino import (
-            GROUNDING_DINO_PRETRAINED_MODEL_ARCHIVE_LIST,
             GroundingDinoForObjectDetection,
             GroundingDinoModel,
             GroundingDinoPreTrainedModel,

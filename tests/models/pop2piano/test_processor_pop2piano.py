@@ -111,7 +111,9 @@ class Pop2PianoProcessorTest(unittest.TestCase):
 
     def get_inputs(self):
         """get inputs for both feature extractor and tokenizer"""
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        ds = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
+        )
         speech_samples = ds.sort("id").select([0])["audio"]
         input_speech = [x["array"] for x in speech_samples][0]
         sampling_rate = [x["sampling_rate"] for x in speech_samples][0]

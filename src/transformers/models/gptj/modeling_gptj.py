@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch GPT-J model."""
+"""PyTorch GPT-J model."""
 
 import warnings
 from typing import Optional, Tuple, Union
@@ -55,9 +55,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "hf-internal-testing/tiny-random-gptj"
 _REAL_CHECKPOINT_FOR_DOC = "EleutherAI/gpt-j-6B"
 _CONFIG_FOR_DOC = "GPTJConfig"
-
-
-from ..deprecated._archive_maps import GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
@@ -1281,7 +1278,7 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
                 sequence_lengths = sequence_lengths.to(logits.device)
             else:
                 sequence_lengths = -1
-                logger.warning(
+                logger.warning_once(
                     f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
                     "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
                 )

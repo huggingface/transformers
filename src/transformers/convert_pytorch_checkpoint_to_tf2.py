@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Convert pytorch checkpoints to TensorFlow"""
-
+"""Convert pytorch checkpoints to TensorFlow"""
 
 import argparse
 import os

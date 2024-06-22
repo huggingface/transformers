@@ -12,11 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Cohere model. """
+"""Testing suite for the PyTorch Cohere model."""
 
 import unittest
-
-from parameterized import parameterized
 
 from transformers import CohereConfig, is_torch_available
 from transformers.testing_utils import (
@@ -296,11 +294,6 @@ class CohereModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip("TODO @gante fix this for Cohere")
-    @parameterized.expand([(1, False), (1, True), (4, False)])
-    def test_new_cache_format(self, num_beams, do_sample):
-        pass
-
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
@@ -380,10 +373,10 @@ class CohereIntegrationTest(unittest.TestCase):
 
         EXPECTED_TEXT = [
             'Hello today I am going to show you how to make a simple and easy card using the new stamp set called "Hello" from the Occasions catalog. This set is so versatile and can be used for many occasions. I used the new In',
-            "Hi there, here we are again with another great collection of free fonts. This time we have gathered 10 free fonts that you can download and use in your designs. These fonts are free for personal and commercial use. So",
+            "Hi there, here we are again with another great collection of free fonts for your next project. This time we have gathered 10 free fonts that you can download and use in your designs. These fonts are perfect for any kind",
         ]
 
-        model = CohereForCausalLM.from_pretrained(model_id)
+        model = CohereForCausalLM.from_pretrained(model_id, device_map="auto")
         tokenizer = AutoTokenizer.from_pretrained(model_id)
 
         tokenizer.pad_token = tokenizer.eos_token

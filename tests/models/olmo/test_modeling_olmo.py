@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch OLMo model. """
+"""Testing suite for the PyTorch OLMo model."""
 
 import unittest
 
@@ -352,11 +352,6 @@ class OlmoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
         # The output should be different for long inputs
         self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
-
-    @unittest.skip("TODO @gante fix this for OLMo")
-    @parameterized.expand([(1, False), (1, True), (4, False)])
-    def test_new_cache_format(self, num_beams, do_sample):
-        pass
 
 
 @require_torch

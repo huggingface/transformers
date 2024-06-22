@@ -22,7 +22,7 @@ from ...utils import (
 )
 
 
-_import_structure = {"configuration_unispeech": ["UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP", "UniSpeechConfig"]}
+_import_structure = {"configuration_unispeech": ["UniSpeechConfig"]}
 
 try:
     if not is_torch_available():
@@ -31,7 +31,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_unispeech"] = [
-        "UNISPEECH_PRETRAINED_MODEL_ARCHIVE_LIST",
         "UniSpeechForCTC",
         "UniSpeechForPreTraining",
         "UniSpeechForSequenceClassification",
@@ -40,7 +39,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_unispeech import UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechConfig
+    from .configuration_unispeech import UniSpeechConfig
 
     try:
         if not is_torch_available():
@@ -49,7 +48,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_unispeech import (
-            UNISPEECH_PRETRAINED_MODEL_ARCHIVE_LIST,
             UniSpeechForCTC,
             UniSpeechForPreTraining,
             UniSpeechForSequenceClassification,

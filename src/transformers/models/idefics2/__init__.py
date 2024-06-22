@@ -35,7 +35,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_idefics2"] = [
-        "IDEFICS2_PRETRAINED_MODEL_ARCHIVE_LIST",
         "Idefics2ForConditionalGeneration",
         "Idefics2PreTrainedModel",
         "Idefics2Model",
@@ -60,7 +59,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_idefics2 import (
-            IDEFICS2_PRETRAINED_MODEL_ARCHIVE_LIST,
             Idefics2ForConditionalGeneration,
             Idefics2Model,
             Idefics2PreTrainedModel,

@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TensorFlow SegFormer model."""
-
+"""TensorFlow SegFormer model."""
 
 from __future__ import annotations
 
@@ -54,9 +53,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 256, 16, 16]
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "nvidia/mit-b0"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
-
-
-from ..deprecated._archive_maps import TF_SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.convnext.modeling_tf_convnext.TFConvNextDropPath with ConvNext->Segformer
@@ -992,6 +988,9 @@ class TFSegformerForSemanticSegmentation(TFSegformerPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
+        if labels is not None and not self.config.num_labels > 1:
+            raise ValueError("The number of labels should be greater than one")
+
         outputs = self.segformer(
             pixel_values,
             output_attentions=output_attentions,
@@ -1005,10 +1004,7 @@ class TFSegformerForSemanticSegmentation(TFSegformerPreTrainedModel):
 
         loss = None
         if labels is not None:
-            if not self.config.num_labels > 1:
-                raise ValueError("The number of labels should be greater than one")
-            else:
-                loss = self.hf_compute_loss(logits=logits, labels=labels)
+            loss = self.hf_compute_loss(logits=logits, labels=labels)
 
         # make logits of shape (batch_size, num_labels, height, width) to
         # keep them consistent across APIs

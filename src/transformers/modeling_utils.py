@@ -34,6 +34,7 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 from zipfile import is_zipfile
 
 import torch
+from huggingface_hub import split_torch_state_dict_into_shards
 from packaging import version
 from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss, Identity
@@ -118,6 +119,10 @@ if is_accelerate_available():
         save_offload_index,
         set_module_tensor_to_device,
     )
+
+    accelerate_version = version.parse(importlib.metadata.version("accelerate"))
+    if accelerate_version >= version.parse("0.31"):
+        from accelerate.utils.modeling import get_state_dict_from_offload
 
 if is_safetensors_available():
     from safetensors import safe_open
@@ -358,6 +363,10 @@ def shard_checkpoint(
         weights_name (`str`, *optional*, defaults to `"pytorch_model.bin"`):
             The name of the model save file.
     """
+    logger.warning(
+        "Note that `shard_checkpoint` is deprecated and will be removed in v4.44. We recommend you using "
+        "split_torch_state_dict_into_shards from huggingface_hub library"
+    )
     max_shard_size = convert_file_size_to_int(max_shard_size)
 
     sharded_state_dicts = [{}]
@@ -374,13 +383,12 @@ def shard_checkpoint(
             storage_id = id_tensor_storage(weight)
 
         # If a `weight` shares the same underlying storage as another tensor, we put `weight` in the same `block`
-        if storage_id in storage_id_to_block:
+        if storage_id in storage_id_to_block and weight.device != torch.device("meta"):
             block_id = storage_id_to_block[storage_id]
             sharded_state_dicts[block_id][key] = weight
             continue
 
         weight_size = weight.numel() * dtype_byte_size(weight.dtype)
-
         # If this weight is going to tip up over the maximal size, we split, but only if we have put at least one
         # weight in the current shard.
         if last_block_size + weight_size > max_shard_size and len(sharded_state_dicts[-1]) > 0:
@@ -1273,6 +1281,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     is_parallelizable = False
     supports_gradient_checkpointing = False
+    _is_stateful = False
 
     # Flash Attention 2 support
     _supports_flash_attn_2 = False
@@ -1280,8 +1289,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     # SDPA support
     _supports_sdpa = False
 
-    # Has support for a `Cache` instance as `past_key_values`
+    # Has support for a `Cache` instance as `past_key_values`? Does it support a `StaticCache`?
     _supports_cache_class = False
+    _supports_static_cache = False
+
+    # Has support for a `QuantoQuantizedCache` instance as `past_key_values`
+    _supports_quantized_cache = False
 
     @property
     def dummy_inputs(self) -> Dict[str, torch.Tensor]:
@@ -1326,6 +1339,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         self.init_weights()
         self._backward_compatibility_gradient_checkpointing()
+
+    def dequantize(self):
+        """
+        Potentially dequantize the model in case it has been quantized by a quantization method that support
+        dequantization.
+        """
+        hf_quantizer = getattr(self, "hf_quantizer", None)
+
+        if hf_quantizer is None:
+            raise ValueError("You need to first quantize your model in order to dequantize it")
+
+        return hf_quantizer.dequantize(self)
 
     def _backward_compatibility_gradient_checkpointing(self):
         if self.supports_gradient_checkpointing and getattr(self.config, "gradient_checkpointing", False):
@@ -1466,6 +1491,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 config,
                 hard_check_only=False if requested_attn_implementation is None else True,
             )
+
+            if (
+                torch.version.hip is not None
+                and config._attn_implementation == "sdpa"
+                and torch.cuda.device_count() > 1
+            ):
+                logger.warning_once(
+                    "Using the `SDPA` attention implementation on multi-gpu setup with ROCM may lead to performance issues due to the FA backend. Disabling it to use alternative backends."
+                )
+                torch.backends.cuda.enable_flash_sdp(False)
         else:
             config._attn_implementation = "eager"
 
@@ -2478,8 +2513,26 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 current_peft_config = self.peft_config[active_adapter]
                 current_peft_config.save_pretrained(save_directory)
 
+        # for offloaded modules
+        module_map = {}
+
         # Save the model
         if state_dict is None:
+            # if any model parameters are offloaded to the disk, make module map
+            if hasattr(self, "hf_device_map") and (
+                "cpu" in self.hf_device_map.values() or "disk" in self.hf_device_map.values()
+            ):
+                warnings.warn(
+                    "Attempting to save a model with offloaded modules. Ensure that unallocated cpu memory exceeds the `shard_size` (5GB default)"
+                )
+                for name, module in model_to_save.named_modules():
+                    if name == "":
+                        continue
+                    module_state_dict = module.state_dict()
+
+                    for key in module_state_dict:
+                        module_map[name + f".{key}"] = module
+
             state_dict = model_to_save.state_dict()
 
         # Translate state_dict from smp to hf if saving with smp >= 1.10
@@ -2505,12 +2558,24 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     # In the non-tensor case, fall back to the pointer of the object itself
                     ptrs[id(tensor)].append(name)
 
-            # These are all the pointers of shared tensors.
-            shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
-            error_names = []
-            to_delete_names = set()
+            # These are all the pointers of shared tensors
+            if hasattr(self, "hf_device_map"):
+                # if the model has offloaded parameters, we must check using find_tied_parameters()
+                tied_params = find_tied_parameters(self)
+                if tied_params:
+                    tied_names = tied_params[0]
+                    shared_ptrs = {
+                        ptr: names for ptr, names in ptrs.items() if any(name in tied_names for name in names)
+                    }
+                else:
+                    shared_ptrs = {}
+            else:
+                shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
+
             # Recursively descend to find tied weight keys
             _tied_weights_keys = _get_tied_weight_keys(self)
+            error_names = []
+            to_delete_names = set()
             for names in shared_ptrs.values():
                 # Removing the keys which are declared as known duplicates on
                 # load. This allows to make sure the name which is kept is consistent.
@@ -2559,7 +2624,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             weights_name = ADAPTER_SAFE_WEIGHTS_NAME if safe_serialization else ADAPTER_WEIGHTS_NAME
 
-        shards, index = shard_checkpoint(state_dict, max_shard_size=max_shard_size, weights_name=weights_name)
+        filename_pattern = weights_name.replace(".bin", "{suffix}.bin").replace(".safetensors", "{suffix}.safetensors")
+        state_dict_split = split_torch_state_dict_into_shards(
+            state_dict, filename_pattern=filename_pattern, max_shard_size=max_shard_size
+        )
+        # Save index if sharded
+        index = None
+        if state_dict_split.is_sharded:
+            index = {
+                "metadata": state_dict_split.metadata,
+                "weight_map": state_dict_split.tensor_to_filename,
+            }
 
         # Clean the folder from a previous save
         for filename in os.listdir(save_directory):
@@ -2575,14 +2650,34 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if (
                 filename.startswith(weights_no_suffix)
                 and os.path.isfile(full_filename)
-                and filename not in shards.keys()
+                and filename not in state_dict_split.filename_to_tensors.keys()
                 and is_main_process
                 and reg.fullmatch(filename_no_suffix) is not None
             ):
                 os.remove(full_filename)
 
         # Save the model
-        for shard_file, shard in shards.items():
+        for shard_file, tensors in state_dict_split.filename_to_tensors.items():
+            shard = {tensor: state_dict[tensor] for tensor in tensors}
+            # remake shard with onloaded parameters if necessary
+            if module_map:
+                if accelerate_version < version.parse("0.31"):
+                    raise ImportError(
+                        f"You need accelerate version to be greater or equal than 0.31 to save models with offloaded parameters. Detected version {accelerate_version}. "
+                        f"Please upgrade accelerate with `pip install -U accelerate`"
+                    )
+                # init state_dict for this shard
+                state_dict = {name: "" for name in shard}
+                for module_name in shard:
+                    module = module_map[module_name]
+                    # update state dict with onloaded parameters
+                    state_dict = get_state_dict_from_offload(module, module_name, state_dict)
+
+                # assign shard to be the completed state dict
+                shard = state_dict
+                del state_dict
+                gc.collect()
+
             if safe_serialization:
                 # At some point we will need to deal better with save_function (used for TPU and other distributed
                 # joyfulness), but for now this enough.
@@ -2602,7 +2697,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 f.write(content)
             logger.info(
                 f"The model is bigger than the maximum size per checkpoint ({max_shard_size}) and is going to be "
-                f"split in {len(shards)} checkpoint shards. You can find where each parameters has been saved in the "
+                f"split in {len(state_dict_split.filename_to_tensors)} checkpoint shards. You can find where each parameters has been saved in the "
                 f"index located at {save_index_file}."
             )
 
@@ -2803,9 +2898,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force the (re-)download of the model weights and configuration files, overriding the
                 cached versions if they exist.
-            resume_download (`bool`, *optional*, defaults to `False`):
-                Whether or not to delete incompletely received files. Will attempt to resume the download if such a
-                file exists.
+            resume_download:
+                Deprecated and ignored. All downloads are now resumed by default when possible.
+                Will be removed in v5 of Transformers.
             proxies (`Dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
@@ -2967,7 +3062,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         state_dict = kwargs.pop("state_dict", None)
         from_tf = kwargs.pop("from_tf", False)
         from_flax = kwargs.pop("from_flax", False)
-        resume_download = kwargs.pop("resume_download", False)
+        resume_download = kwargs.pop("resume_download", None)
         proxies = kwargs.pop("proxies", None)
         output_loading_info = kwargs.pop("output_loading_info", False)
         use_auth_token = kwargs.pop("use_auth_token", None)
@@ -2993,6 +3088,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         adapter_name = kwargs.pop("adapter_name", "default")
         use_flash_attention_2 = kwargs.pop("use_flash_attention_2", False)
 
+        gguf_file = kwargs.pop("gguf_file", None)
+        # Cache path to the GGUF file
+        gguf_path = None
+
         if is_fsdp_enabled():
             low_cpu_mem_usage = True
 
@@ -3017,6 +3116,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 "The argument `trust_remote_code` is to be used with Auto classes. It has no effect here and is"
                 " ignored."
             )
+
+        if gguf_file is not None and not is_accelerate_available():
+            raise ValueError("accelerate is required when loading a GGUF file `pip install accelerate`.")
 
         if commit_hash is None:
             if not isinstance(config, PretrainedConfig):
@@ -3156,6 +3258,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             kwarg_attn_imp = kwargs.pop("attn_implementation", None)
             if kwarg_attn_imp is not None:
                 config._attn_implementation = kwarg_attn_imp
+
             model_kwargs = kwargs
 
         pre_quantized = getattr(config, "quantization_config", None) is not None
@@ -3197,7 +3300,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         keep_in_fp32_modules = None
         use_keep_in_fp32_modules = False
 
-        if pretrained_model_name_or_path is not None:
+        if gguf_file is not None and hf_quantizer is not None:
+            raise ValueError(
+                "You cannot combine Quantization and loading a model from a GGUF file, try again by making sure you did not passed a `quantization_config` or that you did not load a quantized model from the Hub."
+            )
+
+        if pretrained_model_name_or_path is not None and gguf_file is None:
             pretrained_model_name_or_path = str(pretrained_model_name_or_path)
             is_local = os.path.isdir(pretrained_model_name_or_path)
             if is_local:
@@ -3270,8 +3378,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     )
                 else:
                     raise EnvironmentError(
-                        f"Error no file named {_add_variant(WEIGHTS_NAME, variant)}, {TF2_WEIGHTS_NAME},"
-                        f" {TF_WEIGHTS_NAME + '.index'} or {FLAX_WEIGHTS_NAME} found in directory"
+                        f"Error no file named {_add_variant(WEIGHTS_NAME, variant)}, {_add_variant(SAFE_WEIGHTS_NAME, variant)},"
+                        f" {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME + '.index'} or {FLAX_WEIGHTS_NAME} found in directory"
                         f" {pretrained_model_name_or_path}."
                     )
             elif os.path.isfile(os.path.join(subfolder, pretrained_model_name_or_path)):
@@ -3356,70 +3464,75 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         )
                         if resolved_archive_file is not None:
                             is_sharded = True
-
-                    if resolved_archive_file is not None:
-                        if filename in [WEIGHTS_NAME, WEIGHTS_INDEX_NAME]:
-                            # If the PyTorch file was found, check if there is a safetensors file on the repository
-                            # If there is no safetensors file on the repositories, start an auto conversion
-                            safe_weights_name = SAFE_WEIGHTS_INDEX_NAME if is_sharded else SAFE_WEIGHTS_NAME
+                    if not local_files_only and not is_offline_mode():
+                        if resolved_archive_file is not None:
+                            if filename in [WEIGHTS_NAME, WEIGHTS_INDEX_NAME]:
+                                # If the PyTorch file was found, check if there is a safetensors file on the repository
+                                # If there is no safetensors file on the repositories, start an auto conversion
+                                safe_weights_name = SAFE_WEIGHTS_INDEX_NAME if is_sharded else SAFE_WEIGHTS_NAME
+                                has_file_kwargs = {
+                                    "revision": revision,
+                                    "proxies": proxies,
+                                    "token": token,
+                                    "cache_dir": cache_dir,
+                                    "local_files_only": local_files_only,
+                                }
+                                cached_file_kwargs = {
+                                    "cache_dir": cache_dir,
+                                    "force_download": force_download,
+                                    "resume_download": resume_download,
+                                    "local_files_only": local_files_only,
+                                    "user_agent": user_agent,
+                                    "subfolder": subfolder,
+                                    "_raise_exceptions_for_gated_repo": False,
+                                    "_raise_exceptions_for_missing_entries": False,
+                                    "_commit_hash": commit_hash,
+                                    **has_file_kwargs,
+                                }
+                                if not has_file(pretrained_model_name_or_path, safe_weights_name, **has_file_kwargs):
+                                    Thread(
+                                        target=auto_conversion,
+                                        args=(pretrained_model_name_or_path,),
+                                        kwargs={"ignore_errors_during_conversion": True, **cached_file_kwargs},
+                                        name="Thread-autoconversion",
+                                    ).start()
+                        else:
+                            # Otherwise, no PyTorch file was found, maybe there is a TF or Flax model file.
+                            # We try those to give a helpful error message.
                             has_file_kwargs = {
                                 "revision": revision,
                                 "proxies": proxies,
                                 "token": token,
-                            }
-                            cached_file_kwargs = {
                                 "cache_dir": cache_dir,
-                                "force_download": force_download,
-                                "resume_download": resume_download,
                                 "local_files_only": local_files_only,
-                                "user_agent": user_agent,
-                                "subfolder": subfolder,
-                                "_raise_exceptions_for_gated_repo": False,
-                                "_raise_exceptions_for_missing_entries": False,
-                                "_commit_hash": commit_hash,
-                                **has_file_kwargs,
                             }
-                            if not has_file(pretrained_model_name_or_path, safe_weights_name, **has_file_kwargs):
-                                Thread(
-                                    target=auto_conversion,
-                                    args=(pretrained_model_name_or_path,),
-                                    kwargs={"ignore_errors_during_conversion": True, **cached_file_kwargs},
-                                    name="Thread-autoconversion",
-                                ).start()
-                    else:
-                        # Otherwise, no PyTorch file was found, maybe there is a TF or Flax model file.
-                        # We try those to give a helpful error message.
-                        has_file_kwargs = {
-                            "revision": revision,
-                            "proxies": proxies,
-                            "token": token,
-                        }
-                        if has_file(pretrained_model_name_or_path, TF2_WEIGHTS_NAME, **has_file_kwargs):
-                            raise EnvironmentError(
-                                f"{pretrained_model_name_or_path} does not appear to have a file named"
-                                f" {_add_variant(WEIGHTS_NAME, variant)} but there is a file for TensorFlow weights."
-                                " Use `from_tf=True` to load this model from those weights."
-                            )
-                        elif has_file(pretrained_model_name_or_path, FLAX_WEIGHTS_NAME, **has_file_kwargs):
-                            raise EnvironmentError(
-                                f"{pretrained_model_name_or_path} does not appear to have a file named"
-                                f" {_add_variant(WEIGHTS_NAME, variant)} but there is a file for Flax weights. Use"
-                                " `from_flax=True` to load this model from those weights."
-                            )
-                        elif variant is not None and has_file(
-                            pretrained_model_name_or_path, WEIGHTS_NAME, **has_file_kwargs
-                        ):
-                            raise EnvironmentError(
-                                f"{pretrained_model_name_or_path} does not appear to have a file named"
-                                f" {_add_variant(WEIGHTS_NAME, variant)} but there is a file without the variant"
-                                f" {variant}. Use `variant=None` to load this model from those weights."
-                            )
-                        else:
-                            raise EnvironmentError(
-                                f"{pretrained_model_name_or_path} does not appear to have a file named"
-                                f" {_add_variant(WEIGHTS_NAME, variant)}, {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME} or"
-                                f" {FLAX_WEIGHTS_NAME}."
-                            )
+                            if has_file(pretrained_model_name_or_path, TF2_WEIGHTS_NAME, **has_file_kwargs):
+                                raise EnvironmentError(
+                                    f"{pretrained_model_name_or_path} does not appear to have a file named"
+                                    f" {_add_variant(WEIGHTS_NAME, variant)} but there is a file for TensorFlow weights."
+                                    " Use `from_tf=True` to load this model from those weights."
+                                )
+                            elif has_file(pretrained_model_name_or_path, FLAX_WEIGHTS_NAME, **has_file_kwargs):
+                                raise EnvironmentError(
+                                    f"{pretrained_model_name_or_path} does not appear to have a file named"
+                                    f" {_add_variant(WEIGHTS_NAME, variant)} but there is a file for Flax weights. Use"
+                                    " `from_flax=True` to load this model from those weights."
+                                )
+                            elif variant is not None and has_file(
+                                pretrained_model_name_or_path, WEIGHTS_NAME, **has_file_kwargs
+                            ):
+                                raise EnvironmentError(
+                                    f"{pretrained_model_name_or_path} does not appear to have a file named"
+                                    f" {_add_variant(WEIGHTS_NAME, variant)} but there is a file without the variant"
+                                    f" {variant}. Use `variant=None` to load this model from those weights."
+                                )
+                            else:
+                                raise EnvironmentError(
+                                    f"{pretrained_model_name_or_path} does not appear to have a file named"
+                                    f" {_add_variant(WEIGHTS_NAME, variant)}, {_add_variant(SAFE_WEIGHTS_NAME, variant)},"
+                                    f" {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME} or {FLAX_WEIGHTS_NAME}."
+                                )
+
                 except EnvironmentError:
                     # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted
                     # to the original exception.
@@ -3439,12 +3552,42 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 resolved_archive_file = archive_file
             else:
                 logger.info(f"loading weights file {filename} from cache at {resolved_archive_file}")
+        elif gguf_file:
+            from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
+
+            # Case 1: the GGUF file is present locally
+            if os.path.isfile(gguf_file):
+                gguf_path = gguf_file
+            # Case 2: The GGUF path is a location on the Hub
+            # Load from URL or cache if already cached
+            else:
+                cached_file_kwargs = {
+                    "cache_dir": cache_dir,
+                    "force_download": force_download,
+                    "proxies": proxies,
+                    "resume_download": resume_download,
+                    "local_files_only": local_files_only,
+                    "token": token,
+                    "user_agent": user_agent,
+                    "revision": revision,
+                    "subfolder": subfolder,
+                    "_raise_exceptions_for_gated_repo": False,
+                    "_raise_exceptions_for_missing_entries": False,
+                    "_commit_hash": commit_hash,
+                }
+
+                gguf_path = cached_file(pretrained_model_name_or_path, gguf_file, **cached_file_kwargs)
+
+            state_dict = load_gguf_checkpoint(gguf_path, return_tensors=True)["tensors"]
+
+            resolved_archive_file = None
+            is_sharded = False
         else:
             resolved_archive_file = None
 
         # We'll need to download and cache each checkpoint shard if the checkpoint is sharded.
         if is_sharded:
-            # rsolved_archive_file becomes a list of files that point to the different checkpoint shards in this case.
+            # resolved_archive_file becomes a list of files that point to the different checkpoint shards in this case.
             resolved_archive_file, sharded_metadata = get_checkpoint_shard_files(
                 pretrained_model_name_or_path,
                 resolved_archive_file,
@@ -3533,7 +3676,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 loaded_state_dict_keys = sharded_metadata["all_checkpoint_keys"]
             else:
                 loaded_state_dict_keys = list(state_dict.keys())
-            if low_cpu_mem_usage or (use_keep_in_fp32_modules and is_accelerate_available()):
+
+            if gguf_path is None and (low_cpu_mem_usage or (use_keep_in_fp32_modules and is_accelerate_available())):
                 # In case some weights need to be kept in float32 and accelerate is not installed,
                 # we later on want to take the path where state_dict is not None, that is the one
                 # that do not require accelerate.
@@ -3679,6 +3823,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # restore default dtype
             if dtype_orig is not None:
                 torch.set_default_dtype(dtype_orig)
+
             (
                 model,
                 missing_keys,
@@ -3702,6 +3847,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 dtype=torch_dtype,
                 hf_quantizer=hf_quantizer,
                 keep_in_fp32_modules=keep_in_fp32_modules,
+                gguf_path=gguf_path,
             )
 
         # make sure token embedding weights are still tied if needed
@@ -3795,9 +3941,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         dtype=None,
         hf_quantizer=None,
         keep_in_fp32_modules=None,
+        gguf_path=None,
     ):
         is_safetensors = False
         is_quantized = hf_quantizer is not None
+        state_dict_folder = None
+        state_dict_index = None
 
         if device_map is not None and "disk" in device_map.values():
             archive_file = (
@@ -4055,6 +4204,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 for p, f in weight_map.items()
                 if p.startswith(start_prefix) and param_device_map[p[len(start_prefix) :]] == "disk"
             }
+        else:
+            offload_index = None
 
         if state_dict is not None:
             # Whole checkpoint
@@ -4066,11 +4217,31 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 remove_prefix_from_model,
                 ignore_mismatched_sizes,
             )
-            error_msgs = _load_state_dict_into_model(model_to_load, state_dict, start_prefix)
-            offload_index = None
-        else:
-            # Sharded checkpoint or whole but low_cpu_mem_usage==True
 
+            # For GGUF models `state_dict` is never set to None as the state dict is always small
+            if gguf_path:
+                error_msgs, offload_index, state_dict_index = _load_state_dict_into_meta_model(
+                    model_to_load,
+                    state_dict,
+                    loaded_keys,
+                    start_prefix,
+                    expected_keys,
+                    device_map=device_map,
+                    offload_folder=offload_folder,
+                    offload_index=offload_index,
+                    state_dict_folder=state_dict_folder,
+                    state_dict_index=state_dict_index,
+                    dtype=dtype,
+                    hf_quantizer=hf_quantizer,
+                    is_safetensors=is_safetensors,
+                    keep_in_fp32_modules=keep_in_fp32_modules,
+                    unexpected_keys=unexpected_keys,
+                )
+            else:
+                # Sharded checkpoint or whole but low_cpu_mem_usage==True
+                error_msgs = _load_state_dict_into_model(model_to_load, state_dict, start_prefix)
+
+        else:
             # This should always be a list but, just to be sure.
             if not isinstance(resolved_archive_file, list):
                 resolved_archive_file = [resolved_archive_file]

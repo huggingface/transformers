@@ -21,9 +21,6 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-from ..deprecated._archive_maps import FALCON_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
-
-
 class FalconConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FalconModel`]. It is used to instantiate a Falcon
@@ -45,6 +42,9 @@ class FalconConfig(PretrainedConfig):
             Number of hidden layers in the Transformer decoder.
         num_attention_heads (`int`, *optional*, defaults to 71):
             Number of attention heads for each attention layer in the Transformer encoder.
+        num_ln_in_parallel_attn (`int`, *optional*):
+            Set to 2 if separate layer norms are to be used for the MLP and the attention output when using parallel
+            attention, otherwise, 1.
         layer_norm_epsilon (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -118,6 +118,7 @@ class FalconConfig(PretrainedConfig):
         hidden_size=4544,
         num_hidden_layers=32,
         num_attention_heads=71,
+        num_ln_in_parallel_attn=None,
         layer_norm_epsilon=1e-5,
         initializer_range=0.02,
         use_cache=True,
@@ -157,6 +158,7 @@ class FalconConfig(PretrainedConfig):
         self.multi_query = multi_query  # Ignored when new_decoder_architecture is True
         self.parallel_attn = parallel_attn
         self.bias = bias
+        self.num_ln_in_parallel_attn = num_ln_in_parallel_attn
         self.max_position_embeddings = max_position_embeddings
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling

@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Finetuning the library models for sequence classification on GLUE."""
+"""Finetuning the library models for sequence classification on GLUE."""
 # You can also adapt this script on your own text classification task. Pointers for this are left as comments.
 
 import logging
@@ -253,7 +253,7 @@ def main():
     # download the dataset.
     if data_args.task_name is not None:
         # Downloading and loading a dataset from the hub.
-        datasets = load_dataset("glue", data_args.task_name)
+        datasets = load_dataset("nyu-mll/glue", data_args.task_name)
     else:
         # Loading a dataset from your local files.
         # CSV/JSON training and evaluation files are needed.

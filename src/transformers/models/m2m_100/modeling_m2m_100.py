@@ -56,9 +56,6 @@ _CONFIG_FOR_DOC = "M2M100Config"
 _CHECKPOINT_FOR_DOC = "facebook/m2m100_418M"
 
 
-from ..deprecated._archive_maps import M2M_100_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 # Copied from transformers.models.bart.modeling_bart.shift_tokens_right
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
     """
@@ -742,7 +739,7 @@ class M2M100PreTrainedModel(PreTrainedModel):
     config_class = M2M100Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["M2M100Attention"]
+    _no_split_modules = ["M2M100EncoderLayer", "M2M100DecoderLayer"]
     _supports_flash_attn_2 = True
 
     def _init_weights(self, module):

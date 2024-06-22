@@ -32,6 +32,7 @@ python utils/check_docstrings.py --fix_and_overwrite
 which is used by `make fix-copies` (note that this fills what it cans, you might have to manually fill information
 like argument descriptions).
 """
+
 import argparse
 import ast
 import enum
@@ -127,7 +128,6 @@ OBJECTS_TO_IGNORE = [
     "ConvBertTokenizerFast",
     "ConvNextConfig",
     "ConvNextV2Config",
-    "ConversationalPipeline",
     "CpmAntTokenizer",
     "CvtConfig",
     "CvtModel",
