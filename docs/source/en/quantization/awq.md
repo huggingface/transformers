@@ -227,6 +227,6 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 <Tip warning={true}>
 
-Note this feature is supported on AMD GPUs.
+Note: this feature is supported on AMD GPUs.
 
 </Tip>
