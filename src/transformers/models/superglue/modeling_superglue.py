@@ -52,7 +52,7 @@ def concat_attentions_tuples_pair(
     for attention_prob_0, attention_prob_1 in zip(attention_probs_0, attention_probs_1):
         if attention_prob_0.size() != attention_prob_1.size():
             max_dim2 = max(attention_prob_0.shape[2], attention_prob_1.shape[2])
-            max_dim3 = max(attention_prob_0.shape[2], attention_prob_1.shape[2])
+            max_dim3 = max(attention_prob_0.shape[3], attention_prob_1.shape[3])
             new_attention_prob = torch.zeros(
                 2, attention_prob_0.shape[1], max_dim2, max_dim3, device=attention_prob_0.device
             )
@@ -139,16 +139,16 @@ def stack_hidden_states_list(hidden_states: List[torch.Tensor]) -> torch.Tensor:
     if all_same_shape:
         return torch.stack(hidden_states, dim=0)
 
-    max_num_keypoints = max(hidden_state.shape[2] for hidden_state in hidden_states)
+    max_num_keypoints = max(hidden_state.shape[1] for hidden_state in hidden_states)
     stacked_hidden_state = torch.zeros(
         len(hidden_states),
         2,
-        hidden_states[0].shape[1],
         max_num_keypoints,
+        hidden_states[0].shape[2],
         device=hidden_states[0].device,
     )
     for i, hidden_state in enumerate(hidden_states):
-        stacked_hidden_state[i, :, :, : hidden_state.shape[2]] = hidden_state
+        stacked_hidden_state[i, :, : hidden_state.shape[1], :] = hidden_state
     return stacked_hidden_state
 
 
@@ -597,8 +597,8 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
             matching_scores_1 (`torch.Tensor` of shape `(1, num_keypoints)`):
                 Scores of predicted matches from the second image.
             all_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-                Tuple of `torch.FloatTensor` (one for the output of each stage) of shape `(1, 2, num_channels,
-                num_keypoints)`.
+                Tuple of `torch.FloatTensor` (one for the output of each stage) of shape `(1, 2, num_keypoints,
+                num_channels)`.
             all_attentions (`tuple(torch.FloatTensor)`, *optional*):
                 Tuple of `torch.FloatTensor` (one for each layer) of shape `(1, 2, num_heads, num_keypoints,
                 num_keypoints)`.
@@ -679,7 +679,11 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
             all_hidden_states = all_hidden_states + concat_hidden_states_tuples_pair(
                 (projected_descriptors_0,), (projected_descriptors_1,)
             )
-
+            transposed_all_hidden_states = ()
+            for i in range(len(all_hidden_states)):
+                # From (batch_size, descriptor_dim, num_keypoints) to (batch_size, num_keypoints, descriptor_dim)
+                transposed_all_hidden_states = transposed_all_hidden_states + (all_hidden_states[i].transpose(-1, -2),)
+            all_hidden_states = transposed_all_hidden_states
         if output_attentions:
             all_attentions = all_attentions + gnn_outputs[3]
 
