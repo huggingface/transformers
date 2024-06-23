@@ -106,7 +106,7 @@ def write_model(
     model_path,
     input_base_path,
     model_size,
-    safe_serialization=True,
+    safe_serialization=False,
     llama_version=1,
     vocab_size=None,
 ):
@@ -379,7 +379,7 @@ def main():
         help="Location to write HF model and tokenizer",
     )
     parser.add_argument(
-        "--safe_serialization", default=True, type=bool, help="Whether or not to save using `safetensors`."
+        "--safe_serialization", default=False, type=bool, help="Whether or not to save using `safetensors`."
     )
     # Different Llama versions used different default values for max_position_embeddings, hence the need to be able to specify which version is being used.
     parser.add_argument(
