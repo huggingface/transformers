@@ -124,8 +124,8 @@ class DacVectorQuantize(nn.Module):
     def __init__(self, config: DacConfig):
         super().__init__()
 
-        self.in_proj = weight_norm(nn.Conv1d(config.latent_dim, config.codebook_dim, kernel_size=1))
-        self.out_proj = weight_norm(nn.Conv1d(config.codebook_dim, config.latent_dim, kernel_size=1))
+        self.in_proj = weight_norm(nn.Conv1d(config.hidden_size, config.codebook_dim, kernel_size=1))
+        self.out_proj = weight_norm(nn.Conv1d(config.codebook_dim, config.hidden_size, kernel_size=1))
         self.codebook = nn.Embedding(config.codebook_size, config.codebook_dim)
 
     def forward(self, hidden_state):
@@ -344,7 +344,7 @@ class DacResidualVectorQuantize(nn.Module):
             if self.training is False and i >= n_quantizers:
                 break
 
-            quantized_representation_i, commitment_loss_i, codebook_loss_i, indices_i, z_e_i = quantizer(residual)
+            quantized_representation_i, commitment_loss_i, codebook_loss_i, indices_i, projected_latents_i = quantizer(residual)
 
             # Create mask to apply quantizer dropout
             mask = torch.full((hidden_state.shape[0],), fill_value=i, device=hidden_state.device) < n_quantizers
@@ -356,7 +356,7 @@ class DacResidualVectorQuantize(nn.Module):
             codebook_loss += (codebook_loss_i * mask).mean()
 
             codebook_indices.append(indices_i)
-            projected_latents.append(z_e_i)
+            projected_latents.append(projected_latents_i)
 
         codebook_indices = torch.stack(codebook_indices, dim=1)
         projected_latents = torch.cat(projected_latents, dim=1)
@@ -425,9 +425,9 @@ class DacDecoder(nn.Module):
     def __init__(self, config: DacConfig):
         super().__init__()
 
-        input_channel = config.latent_dim
-        channels = config.decoder_dim
-        rates = config.decoder_rates
+        input_channel = config.hidden_size
+        channels = config.decoder_hidden_size
+        rates = config.upsampling_ratios 
 
         # Add first conv layer
         layers = [weight_norm(nn.Conv1d(input_channel, channels, kernel_size=7, padding=3))]
@@ -458,9 +458,9 @@ class DacEncoder(nn.Module):
     def __init__(self, config: DacConfig):
         super().__init__()
 
-        d_model = config.encoder_dim
-        strides = config.encoder_rates
-        d_latent = config.latent_dim
+        d_model = config.encoder_hidden_size
+        strides = config.downsampling_ratios
+        d_latent = config.hidden_size
         # Create first convolution
         self.block = [weight_norm(nn.Conv1d(1, d_model, kernel_size=7, padding=3))] 
 

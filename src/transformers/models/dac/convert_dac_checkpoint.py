@@ -141,15 +141,14 @@ def convert_checkpoint(
     config = DacConfig()
 
     metadata = model_dict["metadata"]["kwargs"]
-    config.encoder_dim = metadata["encoder_dim"]
-    config.encoder_rates = metadata["encoder_rates"]
+    config.encoder_hidden_size = metadata["encoder_dim"]
+    config.downsampling_ratios = metadata["encoder_rates"]
     config.codebook_size = metadata["codebook_size"]
     config.n_codebooks = metadata["n_codebooks"]
     config.codebook_dim = metadata["codebook_dim"]
-    config.decoder_dim = metadata["decoder_dim"]
-    config.decoder_rates = metadata["decoder_rates"]
-    config.quantizer_dropout = metadata["quantizer_dropout"]
-    config.sample_rate = metadata["sample_rate"]
+    config.decoder_hidden_size = metadata["decoder_dim"]
+    config.upsampling_ratios = metadata["decoder_rates"]
+    config.quantizer_dropout = float(metadata["quantizer_dropout"])
 
     model = DacModel(config)
 
@@ -168,14 +167,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--model",
-        default="dac_16khz",
+        default="dac_44khz",
         type=str,
         help="The model to convert. Should be one of 'dac_16khz', 'dac_24khz', 'dac_44khz'.",
     )
 
     args = parser.parse_args()
-
-    args.model = "dac_44khz"
 
     if args.model == "dac_16khz":
         checkpoint_path = "/home/kamil/.cache/descript/dac/weights_16khz_8kbps_0.0.5.pth"
