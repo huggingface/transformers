@@ -209,7 +209,7 @@ class SuperGlueModelTest(ModelTesterMixin, unittest.TestCase):
             for i, hidden_states_size in enumerate(hidden_states_sizes):
                 self.assertListEqual(
                     list(hidden_states[i].shape[-2:]),
-                    [hidden_states_size, maximum_num_matches],
+                    [maximum_num_matches, hidden_states_size],
                 )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
