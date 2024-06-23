@@ -171,6 +171,8 @@ def write_model(
         filename = f"pytorch_model-{layer_i + 1}-of-{n_layers + 1}.bin"
         if num_shards == 1:
             # Unsharded
+            llama_3_dim = dim // num_local_key_value_heads
+            permute_k_dim = llama_3_dim if llama_version == 3 else dim
             state_dict = {
                 f"model.layers.{layer_i}.self_attn.q_proj.weight": permute(
                     loaded[f"layers.{layer_i}.attention.wq.weight"], n_heads=n_heads
@@ -178,7 +180,7 @@ def write_model(
                 f"model.layers.{layer_i}.self_attn.k_proj.weight": permute(
                     loaded[f"layers.{layer_i}.attention.wk.weight"],
                     n_heads=num_key_value_heads,
-                    dim1=dim // num_local_key_value_heads,
+                    dim1=permute_k_dim,
                 ),
                 f"model.layers.{layer_i}.self_attn.v_proj.weight": loaded[f"layers.{layer_i}.attention.wv.weight"],
                 f"model.layers.{layer_i}.self_attn.o_proj.weight": loaded[f"layers.{layer_i}.attention.wo.weight"],
@@ -310,7 +312,7 @@ def write_model(
     model.config.torch_dtype = torch.float16
     print("Saving in the Transformers format.")
     model.save_pretrained(model_path, safe_serialization=safe_serialization)
-    shutil.rmtree(tmp_model_path)
+    shutil.rmtree(tmp_model_path, ignore_errors=True)
 
 
 class Llama3Converter(TikTokenConverter):
