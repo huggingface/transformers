@@ -258,8 +258,10 @@ Here are the rules you should always follow to solve your task:
 2. Always use the right arguments for the tools. Never use variable names in the 'action_input' field, use the value instead.
 3. Call a tool only when needed: do not call the search agent if you do not need information, try to solve the task yourself.
 4. Never re-do a tool call that you previously did with the exact same parameters.
+"""
 
-Now Begin! If you solve the task correctly, you will receive a reward of $1,000,000.
+DEFAULT_REACT_JSON_USER_PROMPT = """Output the 'Thought:' -> 'Action:' -> 'Observation:' sequence in the required format and nothing else.
+If you solve the task correctly, you will receive a reward of $1,000,000.
 """
 
 
@@ -357,9 +359,237 @@ Here are the rules you should always follow to solve your task:
 4. Take care to not chain too many sequential tool calls in the same code block, especially when the output format is unpredictable. For instance, a call to search has an unpredictable return format, so do not have another tool call that depends on its output in the same block: rather output results with print() to use them in the next block.
 5. Call a tool only when needed, and never re-do a tool call that you previously did with the exact same parameters.
 6. Don't name any new variable with the same name as a tool: for instance don't name a variable 'final_answer'.
-7. Never create any notional variables in our code, as having these in your logs might derail you from the true variables.
-8. You can use imports in your code, but only from the following list of modules: <<authorized_imports>>
-9. Don't give up! You're in charge of solving the task, not providing directions to solve it.
+7. You can use imports in your code, but only from the following list of modules: <<authorized_imports>>
 
 Now Begin! If you solve the task correctly, you will receive a reward of $1,000,000.
+"""
+
+DEFAULT_REACT_CODE_USER_PROMPT = """Output the 'Thought:' -> 'Code:' -> 'Observation:' sequence in the required format and nothing else.
+If you solve the task correctly, you will receive a reward of $1,000,000.
+"""
+
+SUMMARIZE_FACTS_PROMPT = """You are great at deriving facts, drawing insights and summarizing information. You will be given the task to solve and you have access to the conversation history.
+
+Task: {task}
+
+Your goal is to extract information relevant for the task and identify things that must be discovered in order to successfully complete the task.
+Don't make any assumptions. For each item provide reasoning. Your output must be formatted as a valid JSON, as follows:
+---
+{{
+  "known_facts": {{
+    "items": "list of known facts relevant to the Task",
+    "reasoning": "list of reasons for each fact"
+  }},
+  "derived_insights": {{
+    "items": "list of things that can be derived from the inputs relevant to the Task",
+    "reasoning": "list of reasons for each derived item"
+  }},
+  "facts_to_discover": {{
+    "items": "list of facts needed to successfully solve the Task",
+    "reasoning": "list of reasons for each fact"
+  }}
+}}"""
+
+UPDATE_FACTS_PROMPT = """Earlier you've built a list of facts.
+But now may have learned useful new facts or invalidated some false ones. Please update your list of facts based on the previous history. Keep the same format:
+---
+{
+  "known_facts": {
+    "items": "list of known facts relevant to the Task",
+    "reasoning": "list of reasons for each fact"
+  },
+  "derived_insights": {
+    "items": "list of things that can be derived from the inputs relevant to the Task",
+    "reasoning": "list of reasons for each derived item"
+  },
+  "facts_to_discover": {
+    "items": "list of facts needed to successfully solve the Task",
+    "reasoning": "list of reasons for each fact"
+  }
+}
+---
+
+Only output the updated facts as a valid JSON and nothing else. Now begin!
+"""
+
+PLAN_BASIC_PROMPT_SYSTEM = """You are a world expert at making efficient plans to solve any task using a set of carefully crafted tools.
+
+For the given task, I want you develop a step-by-step plan taking into account the given task and list of facts. Rely on available tools.
+This plan should involve individual tasks, that if executed correctly will yield the correct answer. 
+Do not skip steps, do not add any superfluous steps.
+{critique}
+
+---
+Example:
+
+Plan:
+### 1. Collect all relevant information
+- Collect information on the package from the web
+- Relevant tools: [web_search]
+
+### 2. Compute results
+- Multiply the obtained integer by the distance
+
+### 3. Sanity check
+- Verify that the answer makes sense
+- Relevant tools: [web_search]
+
+### 4. Return answer
+- If the result makes sense, return it
+- Relevant tools: [final_answer]
+---
+
+You will be given:
+- the task to solve
+- facts that summarize what we know about the problem so far
+- the history of previous actions and observations
+
+"""
+
+PLAN_BASIC_PROMPT_USER = """Your inputs:
+Task:
+{task}
+Here is the up to date list of facts that you know:
+{facts}
+It's the first step, no history is available yet.
+
+You have access to these tools:
+{tool_descriptions}
+
+Output your plan and nothing else."""
+
+UPDATE_PLAN_BASIC_PROMPT_USER = """
+You have access to these tools:
+{tool_descriptions}
+
+Output your new plan and nothing else."""
+
+# https://arxiv.org/pdf/2305.18323
+PLAN_REWOO_PROMPT_SYSTEM = """You are a world-class planning expert. For the following task, make a plan that can solve the problem step by step. The result of the final step should be the final answer. For each step, indicate
+an external tool to use together with tool input to retrieve evidence. You can store the evidence into a variable #E that can be called by later tools. (Step: ... #E1 = ....; Step: ..., #E2 = some_tool(..#E1..); ...)
+{critique}
+
+Tools can be one of the following:
+{tool_descriptions}
+
+Example:
+---
+Task: Thomas, Toby, and Rebecca worked a total of 157 hours in one week. Thomas worked x hours. Toby worked 10 hours less than twice what Thomas worked, and Rebecca worked 8 hours
+less than Toby. How many hours did Rebecca work?
+Facts: <some relevant pieces of information>
+Observation history: <observation history>
+
+Step: Given Thomas worked x hours, translate the problem into algebraic expressions and solve with the Solve tool. #E1 = Solve[ x + (2x - 10) + ((2x - 10) - 8) = 157]
+Step: Find out the number of hours Thomas worked. #E2 = Reason[What is x, given #E1]
+Step: Calculate the number of hours Rebecca worked. #E3 = Python[x = #E2\nprint((2 * x - 10) - 8)]
+Step: Return the answer. #E4 = final_answer[#E3]
+---
+
+The example above features made-up tools that may not be available for you.
+You only have access to these tools: {tool_names}
+
+You will be given:
+- the task to solve
+- facts that summarize what we know about the problem so far
+- the history of previous actions and observations
+"""
+
+PLAN_REWOO_PROMPT_USER = """Here is your input: 
+
+Task: {task}
+Facts: {facts}
+It's the first step, no history is available yet.
+
+Output the plan only and nothing else.
+"""
+
+UPDATE_PLAN_REWOO_PROMPT_USER = "\nOutput the plan only and nothing else.\n"
+
+TRAJECTORY_CRITIC_PROMPT = """You are an evaluation expert. 
+Your goal is to evaluate an action trajectory and give constructive criticism and helpful suggestions to improve the trajectory components. 
+The trajectory is given by the actions history. When evaluating, take into account all the given inputs.
+The available external tools are:
+{tool_descriptions}
+
+In the conversation history below, you have access to:
+Task: the task to solve
+Facts: what we know about the problem so far
+Action history: the history of actions and observations
+
+When writing suggestions, evaluate the following aspects:
+(i) whether actions give an optimal trajectory to solve a task. Recommend ways to improve if needed
+(ii) whether we are making progress based on the action history. If not, suggest to rethink planning
+
+Write a list of specific, helpful and constructive improvement suggestions. Each suggestion should be an action item.
+Output only the suggestions and nothing else.
+
+Now begin!
+"""
+
+REFINE_JSON_ACTION_SYSTEM_PROMPT = """Refine the action by incorporating the critique from an expert.
+Here are the tools you have access to:
+{tool_descriptions}
+
+You will be given:
+Task: the task to solve
+Action: the action to refine
+Critique: improvement recommendations
+
+As a reminder, an action must have the following format:
+Action:
+{{
+  "action": $TOOL_NAME,
+  "action_input": $INPUT
+}}
+Make sure to have the $INPUT as a dictionary in the right format for the tool you are using - pay attention to the arguments. Include the reasoning for the changes are making.
+Output must be in the format:
+---
+Reason:
+Action:
+---
+"""
+
+REFINE_JSON_ACTION_USER_PROMPT = """Here is your input:
+
+Task: {task}
+Action: {action}
+Critique: {critique}
+
+Now begin!
+"""
+
+REFINE_CODE_ACTION_SYSTEM_PROMPT = """Refine the action by incorporating the critique from an expert.
+You have access to a list of tools: these tools are basically Python functions which you can call with code.
+
+As a reminder, you must plan forward and output the 'Thought:', then the 'Code:' sequences:
+- in the 'Thought:' sequence, you should first explain your reasoning towards solving the task and the tools that you want to use.
+- in the 'Code:' sequence, you should write the code in simple Python. The code sequence must end with '<end_action>' sequence. During each intermediate step, you can use 'print()' to save whatever important information you will then need. In the end you have to return a final answer using the `final_answer` tool.
+
+Here are the tools you have access to:
+{tool_descriptions}
+
+You will be given:
+Task: the task to solve
+Action: the action to refine
+Critique: improvement recommendations
+
+You also can perform computations in the Python code that you generate.
+
+Here are the rules you should always follow to solve your task:
+1. Always provide a 'Thought:' sequence, and a 'Code:\n```py' sequence ending with '```<end_action>' sequence, else you will fail.
+2. Use only variables that you have defined!
+3. Always use the right arguments for the tools. DO NOT pass the arguments as a dict as in 'answer = ask_search_agent({{'query': "What is the place where James Bond lives?"}})', but use the arguments directly as in 'answer = ask_search_agent(query="What is the place where James Bond lives?")'.
+4. Take care to not chain too many sequential tool calls in the same code block, especially when the output format is unpredictable. For instance, a call to search has an unpredictable return format, so do not have another tool call that depends on its output in the same block: rather output results with print() to use them in the next block.
+5. Call a tool only when needed, and never re-do a tool call that you previously did with the exact same parameters.
+6. Don't name any new variable with the same name as a tool: for instance don't name a variable 'final_answer'.
+7. You can use imports in your code, but only from the following list of modules: {authorized_imports}
+"""
+
+REFINE_CODE_ACTION_USER_PROMPT = """Here is your input:
+
+Task: {task}
+Action: {action}
+Critique: {critique}
+
+Now begin! If you solve the task correctly, you will receive a reward of $1,000,000.
 """

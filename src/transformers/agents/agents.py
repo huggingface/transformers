@@ -25,10 +25,30 @@ from ..utils.import_utils import is_pygments_available
 from .agent_types import AgentAudio, AgentImage, AgentText
 from .default_tools import BASE_PYTHON_TOOLS, FinalAnswerTool, setup_default_tools
 from .llm_engine import HfEngine, MessageRole
-from .prompts import DEFAULT_CODE_SYSTEM_PROMPT, DEFAULT_REACT_CODE_SYSTEM_PROMPT, DEFAULT_REACT_JSON_SYSTEM_PROMPT
+from .prompts import (
+    DEFAULT_CODE_SYSTEM_PROMPT,
+    DEFAULT_REACT_CODE_SYSTEM_PROMPT,
+    DEFAULT_REACT_CODE_USER_PROMPT,
+    DEFAULT_REACT_JSON_SYSTEM_PROMPT,
+    DEFAULT_REACT_JSON_USER_PROMPT,
+    SUMMARIZE_FACTS_PROMPT,
+    UPDATE_FACTS_PROMPT,
+    PLAN_REWOO_PROMPT_USER,
+    PLAN_REWOO_PROMPT_SYSTEM,
+    PLAN_BASIC_PROMPT_USER,
+    PLAN_BASIC_PROMPT_SYSTEM,
+    UPDATE_PLAN_REWOO_PROMPT_USER,
+    UPDATE_PLAN_BASIC_PROMPT_USER,
+    TRAJECTORY_CRITIC_PROMPT,
+    REFINE_JSON_ACTION_SYSTEM_PROMPT,
+    REFINE_JSON_ACTION_USER_PROMPT,
+    REFINE_CODE_ACTION_SYSTEM_PROMPT,
+    REFINE_CODE_ACTION_USER_PROMPT,
+)
 from .python_interpreter import LIST_SAFE_MODULES, evaluate_python_code
 from .tools import (
     DEFAULT_TOOL_DESCRIPTION_TEMPLATE,
+    REWOO_TOOL_DESCRIPTION_TEMPLATE,
     Tool,
     get_tool_description_with_args,
     load_tool,
@@ -312,6 +332,13 @@ def format_prompt_with_imports(prompt_template: str, authorized_imports: List[st
     return prompt_template.replace("<<authorized_imports>>", str(authorized_imports))
 
 
+def extract_facts(facts_json):
+    facts_json = facts_json.replace("```json", "").replace("```", "")
+    facts_dict = parse_json_blob(facts_json)
+    facts = "\n".join([f"{k}: {v['items']}" for k, v in facts_dict.items() if "items" in v])
+    return facts
+
+
 class Agent:
     def __init__(
         self,
@@ -373,6 +400,7 @@ class Agent:
         if len(kwargs) > 0:
             self.task += f"\nYou have been provided with these initial arguments: {str(kwargs)}."
         self.state = kwargs.copy()
+        self.state["facts"], self.state["critique"] = "None", "None"
         self.system_prompt = format_prompt_with_tools(
             self._toolbox,
             self.system_prompt_template,
@@ -626,6 +654,8 @@ class ReactAgent(Agent):
         llm_engine: Callable = HfEngine(),
         system_prompt: str = DEFAULT_REACT_CODE_SYSTEM_PROMPT,
         tool_description_template: str = DEFAULT_TOOL_DESCRIPTION_TEMPLATE,
+        do_critique: bool = False,
+        rewoo_plan: bool = False,
         planning_interval: Optional[int] = None,
         **kwargs,
     ):
@@ -639,6 +669,8 @@ class ReactAgent(Agent):
         if "final_answer" not in self._toolbox.tools:
             self._toolbox.add_tool(FinalAnswerTool())
         self.planning_interval = planning_interval
+        self.do_critique = do_critique
+        self.rewoo_plan = rewoo_plan
 
     def provide_final_answer(self, task) -> str:
         """
@@ -735,91 +767,71 @@ class ReactAgent(Agent):
 
         return final_answer
 
+    def critique_trajectory(self):
+        history = self.write_inner_memory_from_logs(summary_mode=True)
+        critique_prompt = {
+            "role": MessageRole.USER,
+            "content": TRAJECTORY_CRITIC_PROMPT.format(
+                tool_descriptions=self._toolbox.show_tool_descriptions(self.tool_description_template),
+                task=self.task,
+                facts=self.state["facts"]
+            )
+        }
+        self.state["critique"] = self.llm_engine([critique_prompt] + history)
+
     def planning_step(self, task, is_first_step=False):
         """
         Plan the next steps to reach the objective.
         """
         if is_first_step:
-            prompt_facts = f"""Below I will present you a task. You will now build a comprehensive preparatory survey of which facts we have at our disposal and which ones we still need
-
-Here is the task:
-
-{task}
-
-Now extract information relevant for the task and identify things that must be discovered in order to successfully complete the task.
-Don't make any assumptions. For each item, provide a thorough reasoning. Here is how you will structure this survey:
-
----
-### 1. Facts that we know
-List here the specific facts that you already have access to (there might be nothing here).
-
-### 2. Facts to look up
-List here any facts that we may need to look up.
-Also list where to find each of these, for instance a website, a file... - maybe the task contains some sources that you should re-use here.
-
-### 3. Facts to derive
-List here anything that we want to derive from the above.
-
-
-Keep in mind that "facts" will typically be specific names, dates, values, etc. Your answer should use the below headings:
-### 1. Facts that we know
-### 2. Facts to look up
-### 3. Facts to derive
-Do not add anything else.
-
-Now begin!"""
+            prompt_facts = SUMMARIZE_FACTS_PROMPT.format(task=task)
             message_prompt_facts = {"role": MessageRole.SYSTEM, "content": prompt_facts}
 
-            answer_facts = self.llm_engine([message_prompt_facts])
-            self.facts = answer_facts
+            facts_json = self.llm_engine([message_prompt_facts])
+            self.state["facts"] = extract_facts(facts_json)
 
-            prompt_plan = f"""You are a world expert at making efficient plans to solve any task using a set of carefully crafted tools.
-
-For the given task, develop a step-by-step plan taking into account the given task and list of facts.
-This plan should involve individual tasks, that if executed correctly will yield the correct answer. 
-Do not skip steps, do not add any superfluous steps.
-Stop at the final step of the plan, do not try to go into execution phase yet!
-
-Plan:
-### 1. Collect all relevant information
-- Collect information on the package from the web
-- Relevant tools: [web_search]
-
-### 2. Compute results
-- Multiply the obtained integer by the distance
-
-### 3. Sanity check
-- Verify that the answer makes sense
-- Relevant tools: [web_search]
-
-### 4. Return answer
-- If the result makes sense, return it
-- Relevant tools: [final_answer]
-
-"""
-            prompt_plan_user = f"""
-Here is your task:
-
-Task:
-{task}
-
-Your plan should leverage this toolbox:
-{self._toolbox.show_tool_descriptions(self.tool_description_template)}
-
-List of facts that you know:
-{answer_facts}
-
-Now begin! Write your plan below:
-"""
-            message_prompt_plan = {"role": MessageRole.SYSTEM, "content": prompt_plan}
-            message_prompt_plan_user = {"role": MessageRole.USER, "content": prompt_plan_user}
-            answer_plan = self.llm_engine([message_prompt_plan, message_prompt_plan_user])
+            if self.rewoo_plan:
+                tool_names = [f"'{tool_name}'" for tool_name in self.toolbox.tools.keys()]
+                tool_descriptions = self._toolbox.show_tool_descriptions(REWOO_TOOL_DESCRIPTION_TEMPLATE)
+                prompt_plan = [
+                    {
+                        "role": MessageRole.SYSTEM,
+                        "content": PLAN_REWOO_PROMPT_SYSTEM.format(
+                            critique="",
+                            tool_descriptions=tool_descriptions,
+                            tool_names=", ".join(tool_names))
+                    },
+                    {
+                        "role": MessageRole.USER,
+                        "content": PLAN_REWOO_PROMPT_USER.format(
+                            task=task,
+                            facts=self.state["facts"]
+                        )
+                    }
+                ]
+            else:
+                tool_descriptions = self._toolbox.show_tool_descriptions(self.tool_description_template)
+                prompt_plan = [
+                    {
+                        "role": MessageRole.SYSTEM,
+                        "content": PLAN_BASIC_PROMPT_SYSTEM.format(critique="")
+                    },
+                    {
+                        "role": MessageRole.USER,
+                        "content": PLAN_BASIC_PROMPT_USER.format(
+                            task=task,
+                            tool_descriptions=tool_descriptions,
+                            facts=self.state["facts"]
+                        )
+                    }
+                ]
+            answer_plan = self.llm_engine(prompt_plan)
 
             final_plan_redaction = f"""[PLANNING STEP]
 Here is the plan of action that I will follow to solve the task:
 {answer_plan}"""
             final_facts_redaction = f"""Here are the facts that I know so far:
-{answer_facts}"""
+{self.state['facts']}"""
             self.logs.append({"plan": final_plan_redaction, "facts": final_facts_redaction})
             self.progressing = True
             print("PLAN:\n", final_plan_redaction)
@@ -828,73 +840,60 @@ Here is the plan of action that I will follow to solve the task:
 
             facts_update_message = {
                 "role": MessageRole.USER,
-                "content": """Earlier we've built a list of facts.
-But now you may have learned useful new facts or invalidated some false ones.
-Please update your list of facts based on the previous history, and provide these headings:
-### 1. Facts that we know from the initial task
-### 2. Facts that we have learned
-### 3. Facts still to look up
-### 4. Facts still to derive
-
-New list of facts:
-""",
+                "content": UPDATE_FACTS_PROMPT,
             }
             facts_update = self.llm_engine(agent_memory + [facts_update_message])
-            plan_update_message = {
-                "role": MessageRole.SYSTEM,
-                "content": f"""You are a world expert at making efficient plans to solve any task using a set of carefully crafted tools.
+            self.state["facts"] = extract_facts(facts_update)
+            self.logs.append(
+                {"facts": f"""Here is the list of facts that I know, that I just updated based on previous history:
+{self.state["facts"]}"""})
 
-For the given task, I want you develop a step-by-step plan taking into account the given task and list of facts. Rely on available tools.
-This plan should involve individual tasks, that if executed correctly will yield the correct answer. 
-Do not skip steps, do not add any superfluous steps.
-Stop at the final step of the plan, do not try to go into execution phase yet!
+            critique_prompt = ""
+            if self.do_critique and self.state['critique'] != "None":
+                critique_prompt += f"Also, incorporate the critique from an expert, it is important to address this." \
+                                   f"\nCritique: {self.state['critique']}"
 
----
-Example:
+            if self.rewoo_plan:
+                tool_names = [f"'{tool_name}'" for tool_name in self.toolbox.tools.keys()]
+                tool_descriptions = self._toolbox.show_tool_descriptions(REWOO_TOOL_DESCRIPTION_TEMPLATE)
+                prompt_update_plan = [
+                    {
+                        "role": MessageRole.SYSTEM,
+                        "content": PLAN_REWOO_PROMPT_SYSTEM.format(
+                            critique=critique_prompt,
+                            tool_descriptions=tool_descriptions,
+                            tool_names=", ".join(tool_names)
+                        )
+                    },
+                    *agent_memory,
+                    {
+                        "role": MessageRole.USER,
+                        "content": UPDATE_PLAN_REWOO_PROMPT_USER
+                    }
+                ]
+            else:
+                tool_descriptions = self._toolbox.show_tool_descriptions(self.tool_description_template)
+                prompt_update_plan = [
+                    {
+                        "role": MessageRole.SYSTEM,
+                        "content": PLAN_BASIC_PROMPT_SYSTEM.format(critique=critique_prompt)
+                    },
+                    *agent_memory,
+                    {
+                        "role": MessageRole.USER,
+                        "content": UPDATE_PLAN_BASIC_PROMPT_USER.format(tool_descriptions=tool_descriptions)
+                    }
+                ]
 
-Plan:
-### 1. Collect all relevant information
-- Collect information on the package from the web
-- Relevant tools: [web_search]
-
-### 2. Compute results
-- Multiply the obtained integer by the distance
-
-### 3. Sanity check
-- Verify that the answer makes sense
-- Relevant tools: [web_search]
-
-### 4. Return answer
-- If the result makes sense, return it
-- Relevant tools: [final_answer]
----
-
-Find below the record of the task to solve and what has been tried to solve it.
-""",
-            }
-            plan_update_message_user = {
-                "role": MessageRole.USER,
-                "content": f"""
-You're still working towards solving this  task:
-{task}
-
-You have access to these tools:
-{self._toolbox.show_tool_descriptions(self.tool_description_template)}
-
-Here is the up to date list of facts that you know:
-{facts_update}
-
-Now write your new plan below."""}
-            plan_update = self.llm_engine([plan_update_message] + agent_memory + [plan_update_message_user])
+            plan_update = self.llm_engine(prompt_update_plan)
             final_plan_redaction = f"""[PLANNING STEP]
 I still need to solve the task:
 {task}
 
 Here is my new/updated plan of action:
 {plan_update}
-"""
-            final_facts_redaction = f"""Here is the updated list of the facts that I know:
-{facts_update}"""
+            """
+            final_facts_redaction = f"Here is the updated list of the facts that I know:\n{self.state['facts']}"
             self.logs.append(
                 {"plan": final_plan_redaction, "facts": final_facts_redaction}
             )
@@ -926,14 +925,33 @@ class ReactJsonAgent(ReactAgent):
             **kwargs,
         )
 
+    def refine_action(self, action):
+        refine_prompt = [{
+            "role": MessageRole.SYSTEM,
+            "content": REFINE_JSON_ACTION_SYSTEM_PROMPT.format(
+                tool_descriptions=self._toolbox.show_tool_descriptions(self.tool_description_template)
+            )
+        },
+            {
+            "role": MessageRole.USER,
+            "content": REFINE_JSON_ACTION_USER_PROMPT.format(
+                task=self.task,
+                action=action,
+                critique=self.state["critique"])
+        }]
+        return self.llm_engine(refine_prompt)
+
     def step(self):
         """
         Perform one step in the ReAct framework: the agent thinks, acts, and observes the result.
         The errors are raised here, they are caught and logged in the run() method.
         """
         agent_memory = self.write_inner_memory_from_logs()
-
-        self.prompt = agent_memory
+        reinforcement_promt = {
+            "role": MessageRole.USER,
+            "content": DEFAULT_REACT_JSON_USER_PROMPT
+        }
+        self.prompt = agent_memory + [reinforcement_promt]
         self.logger.debug("===== New step =====")
 
         # Add new step in logs
@@ -950,6 +968,14 @@ class ReactJsonAgent(ReactAgent):
             raise AgentGenerationError(f"Error in generating llm output: {e}.")
         self.logger.debug("===== Output message of the LLM: =====")
         self.logger.debug(llm_output)
+        if self.do_critique:
+            try:
+                self.critique_trajectory()
+                llm_output = self.refine_action(llm_output)
+            except Exception as e:
+                raise AgentGenerationError(f"Error in generating llm output: {e}.")
+            self.logger.debug("===== Refined message of the LLM: =====")
+            self.logger.debug(llm_output)
         current_step_logs["llm_output"] = llm_output
 
         # Parse
@@ -1038,14 +1064,35 @@ class ReactCodeAgent(ReactAgent):
         self.authorized_imports = list(set(LIST_SAFE_MODULES) | set(self.additional_authorized_imports))
         self.system_prompt = self.system_prompt.replace("<<authorized_imports>>", str(self.authorized_imports))
 
+    def refine_action(self, action):
+        refine_prompt = [{
+            "role": MessageRole.SYSTEM,
+            "content": REFINE_CODE_ACTION_SYSTEM_PROMPT.format(
+                tool_descriptions=self._toolbox.show_tool_descriptions(self.tool_description_template),
+                authorized_imports=str(self.authorized_imports)
+            )
+        },
+            {
+            "role": MessageRole.USER,
+            "content": REFINE_CODE_ACTION_USER_PROMPT.format(
+                task=self.task,
+                action=action,
+                critique=self.state["critique"]
+            )
+        }]
+        return self.llm_engine(refine_prompt)
+
     def step(self):
         """
         Perform one step in the ReAct framework: the agent thinks, acts, and observes the result.
         The errors are raised here, they are caught and logged in the run() method.
         """
         agent_memory = self.write_inner_memory_from_logs()
-
-        self.prompt = agent_memory.copy()
+        reinforcement_promt = {
+            "role": MessageRole.USER,
+            "content": DEFAULT_REACT_CODE_USER_PROMPT
+        }
+        self.prompt = agent_memory.copy() + [reinforcement_promt]
 
         self.logger.debug("===== New step =====")
 
@@ -1064,6 +1111,14 @@ class ReactCodeAgent(ReactAgent):
 
         self.logger.debug("===== Output message of the LLM: =====")
         self.logger.debug(llm_output)
+        if self.do_critique:
+            try:
+                self.critique_trajectory()
+                llm_output = self.refine_action(llm_output)
+            except Exception as e:
+                raise AgentGenerationError(f"Error in generating llm output: {e}.")
+            self.logger.debug("===== Refined message of the LLM: =====")
+            self.logger.debug(llm_output)
         current_step_logs["llm_output"] = llm_output
 
         # Parse
