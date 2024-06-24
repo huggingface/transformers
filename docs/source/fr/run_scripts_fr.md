@@ -89,7 +89,7 @@ pip install -r requirements.txt
 <frameworkcontent>
 <pt>
 
-Le script exemple télécharge et prétraite un jeu de données à partir de la bibliothèque 🤗 [Datasets](https://huggingface.co/docs/datasets/). Ensuite, le script affine un ensemble de données à l'aide de [Trainer](https://huggingface.co/docs/transformers/main_classes/trainer) sur une architecture qui prend en charge la tâche de résumé. L'exemple suivant montre comment ajuster le modèle [T5-small](https://huggingface.co/google-t5/t5-small) sur les données [CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail). Le modèle T5 nécessite un argument supplémentaire source_prefix en raison de la façon dont il a été entraîné. Cette invite permet à T5 de savoir qu'il s'agit d'une tâche de résumé.
+Le script d'exemple télécharge et prétraite un jeu de données à partir de la bibliothèque 🤗 [Datasets](https://huggingface.co/docs/datasets/). Ensuite, le script affine un ensemble de données à l'aide de [Trainer](https://huggingface.co/docs/transformers/main_classes/trainer) sur une architecture qui prend en charge la tâche de résumé. L'exemple suivant montre comment ajuster le modèle [T5-small](https://huggingface.co/google-t5/t5-small) sur les données [CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail). Le modèle T5 nécessite un argument supplémentaire `source_prefix` en raison de la façon dont il a été entraîné. Cette invite permet à T5 de savoir qu'il s'agit d'une tâche de résumé.
 
 ```bash
 python examples/pytorch/summarization/run_summarization.py \
