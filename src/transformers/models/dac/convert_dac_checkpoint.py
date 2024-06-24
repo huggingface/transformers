@@ -16,6 +16,8 @@ import argparse
 import fnmatch
 
 import torch
+import re
+
 
 from transformers import (
     DacConfig,
@@ -56,6 +58,42 @@ def match_pattern(string, pattern):
 
 TOP_LEVEL_KEYS = []
 IGNORE_KEYS = []
+
+
+MAPPING_ENCODER = { 
+    'encoder.block.0': ["encoder.conv1"], 
+    'encoder.block.5': ['encoder.snake1'], 
+    'encoder.block.6': ['encoder.conv2'], 
+    'encoder.block.*.block.*.block.0'.replace('*', r'\d+'): ['encoder.block', 'res_unit', 'snake1'], 
+    'encoder.block.*.block.*.block.1'.replace('*', r'\d+'): ['encoder.block', 'res_unit', 'conv1'], 
+    'encoder.block.*.block.*.block.2'.replace('*', r'\d+'): ['encoder.block', 'res_unit', 'snake2'], 
+    'encoder.block.*.block.*.block.3'.replace('*', r'\d+'): ['encoder.block', 'res_unit', 'conv2'], 
+    'encoder.block.*.block.3'.replace('*', r'\d+'): ['encoder.block', 'snake1'], 
+    'encoder.block.*.block.4'.replace('*', r'\d+'): ['encoder.block', 'conv1'], 
+}
+
+MAPPING_QUANTIZER = {
+    'quantizer.quantizers.*': ['quantizer.quantizers.*'], 
+}
+
+MAPPING_DECODER = {
+    'decoder.model.0': ["decoder.conv1"], 
+    'decoder.model.5': ['decoder.snake1'], 
+    'decoder.model.6': ['decoder.conv2'], 
+    'decoder.model.*.block.0'.replace('*', r'\d+'): ['decoder.block', 'snake1'], 
+    'decoder.model.*.block.1'.replace('*', r'\d+'): ['decoder.block', 'conv_t1'], 
+    'decoder.model.*.block.*.block.0'.replace('*', r'\d+'): ['decoder.block', 'res_unit', 'snake1'], 
+    'decoder.model.*.block.*.block.1'.replace('*', r'\d+'): ['decoder.block', 'res_unit', 'conv1'], 
+    'decoder.model.*.block.*.block.2'.replace('*', r'\d+'): ['decoder.block', 'res_unit', 'snake2'], 
+    'decoder.model.*.block.*.block.3'.replace('*', r'\d+'): ['decoder.block', 'res_unit', 'conv2'], 
+}
+
+
+MAPPING = {
+    **MAPPING_ENCODER,
+    **MAPPING_QUANTIZER,
+    **MAPPING_DECODER,
+}
 
 
 def set_recursively(hf_pointer, key, value, full_name, weight_type):
@@ -109,22 +147,45 @@ def recursively_load_weights(orig_dict, hf_model, model_name):
         raise ValueError(f"Unsupported model: {model_name}")
 
     for name, value in orig_dict.items():
-        if should_ignore(name, IGNORE_KEYS):
-            logger.info(f"{name} was ignored")
-            continue
+        
+        is_used = False
+        for key, mapped_key in MAPPING.items():
 
-        mapped_key = ".".join(name.split(".")[:-1])
-        if "weight_g" in name:
-            weight_type = "weight_g"
-        elif "weight_v" in name:
-            weight_type = "weight_v"
-        elif "bias" in name:
-            weight_type = "bias"
-        elif "alpha" in name:
-            weight_type = "alpha"
-        elif "weight" in name:
-            weight_type = "weight"
-        set_recursively(hf_model, mapped_key, value, name, weight_type)
+            regex = re.compile(key)
+            if regex.search(name) :
+
+                if len(mapped_key) == 1: 
+                    if mapped_key[0][0] == 'q': 
+                        mapped_key = '.'.join(name.split('.')[:-1])
+                    else: 
+                        mapped_key = mapped_key[0]
+                elif len(mapped_key)==3: 
+                    integers = re.findall(r'\b\d+\b', name)
+                    if mapped_key[0][0] == 'd': 
+                        mapped_key = '{}.{}.{}{}.{}'.format(mapped_key[0],  str(int(integers[0]) - 1), mapped_key[1], str(int(integers[1]) - 1), mapped_key[2])
+                    else: 
+                        mapped_key = '{}.{}.{}{}.{}'.format(mapped_key[0],  str(int(integers[0]) - 1), mapped_key[1], str(int(integers[1]) + 1), mapped_key[2])
+                elif len(mapped_key)==2: 
+                    integers = re.findall(r'\b\d+\b', name)
+                    mapped_key = '{}.{}.{}'.format(mapped_key[0],  str(int(integers[0]) - 1), mapped_key[1])
+                    
+                is_used = True
+                if "weight_g" in name:
+                    weight_type = "weight_g"
+                elif "weight_v" in name:
+                    weight_type = "weight_v"
+                elif "bias" in name:
+                    weight_type = "bias"
+                elif "alpha" in name:
+                    weight_type = "alpha"
+                elif "weight" in name:
+                    weight_type = "weight"
+                set_recursively(hf_model, mapped_key, value, name, weight_type)
+            
+        if not is_used:
+            unused_weights.append(name)
+
+    print(list(set(unused_weights)))
 
     logger.warning(f"Unused weights: {unused_weights}")
 
