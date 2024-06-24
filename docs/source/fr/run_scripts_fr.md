@@ -78,7 +78,7 @@ Ensuite, changez votre clone actuel de  🤗 Transformers pour une version spéc
 git checkout tags/v3.5.1
 ```
 
-Après avoir configuré la bonne version de la bibliothèque, accédez au dossier d'exemple de votre choix et installez les prérequis spécifiques à l'exemple.
+Après avoir configuré la bonne version de la librairie, accédez au dossier d'exemple de votre choix et installez les prérequis spécifiques à l'exemple.
 
 ```bash
 pip install -r requirements.txt
