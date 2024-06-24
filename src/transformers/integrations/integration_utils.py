@@ -989,30 +989,40 @@ class WandbCallback(TrainerCallback):
             eval_loop_output = self.trainer.eval_loop_output
 
             inputs = eval_loop_output.inputs
-            decoded_inputs = self.tokenizer.batch_decode(inputs, skip_special_tokens=True)
+            decoded_inputs = None
+            if inputs is not None:
+                decoded_inputs = self.tokenizer.batch_decode(inputs, skip_special_tokens=True)
 
             preds = eval_loop_output.predictions
             outputs = preds.argmax(axis=-1)
-            decoded_outputs = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)
+            decoded_outputs = None
+            if outputs is not None:
+                decoded_outputs = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
             expected = eval_loop_output.label_ids
-            expected = self._replace_ignored_tokens_func(expected)
-            decoded_expected = self.tokenizer.batch_decode(expected, skip_special_tokens=True)
+            decoded_expected = None
+            if expected is not None:
+                expected = self._replace_ignored_tokens_func(expected)
+                decoded_expected = self.tokenizer.batch_decode(expected, skip_special_tokens=True)
 
-            # un-batch and log rows
-            for dec_inp, dec_out, dec_exp in zip(decoded_inputs, decoded_outputs, decoded_expected):
-                row = {
-                    "decoded_inputs": dec_inp,
-                    "decoded_outputs": dec_out,
-                    "decoded_expected": dec_exp,
-                }
+            # Determine which fields are available
+            available_fields = [
+                ("decoded_inputs", decoded_inputs),
+                ("decoded_outputs", decoded_outputs),
+                ("decoded_expected", decoded_expected)
+            ]
+            available_fields = [(name, value) for name, value in available_fields if value is not None]
+
+            # Create rows using only available fields
+            for items in zip(*(value for _, value in available_fields)):
+                row = {name: item for (name, _), item in zip(available_fields, items)}
                 self._collected_eval_rows.append(row)
 
-            table = self._wandb.Table(columns=list(row.keys()))
-            for row in self._collected_eval_rows:
-                table.add_data(*row.values())
-
-            self._wandb.log({"evaluation_table": table})
+            if self._collected_eval_rows:
+                table = self._wandb.Table(columns=list(row.keys()))
+                for row in self._collected_eval_rows:
+                    table.add_data(*row.values())
+                self._wandb.log({"evaluation_table": table})
 
 
 class CometCallback(TrainerCallback):
