@@ -1018,6 +1018,13 @@ class SiglipVisionModel(SiglipPreTrainedModel):
 @add_start_docstrings(SIGLIP_START_DOCSTRING)
 class SiglipModel(SiglipPreTrainedModel):
     config_class = SiglipConfig
+    _no_split_modules = [
+        "SiglipTextEmbeddings",
+        "SiglipEncoderLayer",
+        "SiglipVisionEmbeddings",
+        "SiglipEncoderLayer",
+        "SiglipMultiheadAttentionPoolingHead",
+    ]
 
     def __init__(self, config: SiglipConfig):
         super().__init__(config)
