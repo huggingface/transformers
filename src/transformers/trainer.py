@@ -3668,6 +3668,7 @@ class Trainer:
             )
         )
 
+        self.eval_loop_output = output
         self.log(output.metrics)
 
         if DebugOption.TPU_METRICS_DEBUG in self.args.debug:
