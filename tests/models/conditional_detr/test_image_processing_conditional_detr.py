@@ -90,7 +90,7 @@ class ConditionalDetrImageProcessingTester(unittest.TestCase):
             if isinstance(image, Image.Image):
                 w, h = image.size
             elif isinstance(image, np.ndarray):
-                h, w = image.shape[:2]
+                h, w = image.shape[0], image.shape[1]
             else:
                 h, w = image.shape[1], image.shape[2]
             if w < h:

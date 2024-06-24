@@ -189,13 +189,12 @@ class ImageProcessingTestMixin:
             return time.time() - start
 
         dummy_images = torch.randint(0, 255, (4, 3, 224, 224), dtype=torch.uint8)
-        image_processor_slow = self.image_processing_class()
+        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
         image_processor_fast = self.fast_image_processing_class()
 
         fast_time = measure_time(image_processor_fast, dummy_images)
         slow_time = measure_time(image_processor_slow, dummy_images)
 
-        # We take an average
         self.assertLessEqual(fast_time, slow_time)
 
     def test_image_processor_to_json_string(self):
