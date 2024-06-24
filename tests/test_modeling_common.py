@@ -1271,6 +1271,7 @@ class ModelTesterMixin:
                     "input_features",
                     "input_ids",
                     "input_values",
+                    "inputs_embeds",
                     "pixel_values",
                     "token_type_ids",
                     "visual_feats",
@@ -1327,16 +1328,30 @@ class ModelTesterMixin:
                             (past_mask, inputs_to_test[1]["attention_mask"]), dim=1
                         )
 
+            if "inputs_embeds" in inspect.signature(model.forward).parameters:
+                inputs_to_test.append(
+                    {
+                        "inputs_embeds": torch.rand(
+                            3, 5, model.config.hidden_size, dtype=torch.float, device=torch_device
+                        )
+                    }
+                )
+
             for inps in inputs_to_test:
                 filtered_inputs = {k: v for (k, v) in inps.items() if k in input_names}
-                input_names = list(filtered_inputs.keys())
+                input_names_to_trace = list(filtered_inputs.keys())
 
                 if model.__class__.__name__ in set(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES.values()) and (
                     not hasattr(model.config, "problem_type") or model.config.problem_type is None
                 ):
                     model.config.problem_type = "single_label_classification"
 
-                traced_model = symbolic_trace(model, input_names)
+                if "past_key_values" in input_names_to_trace:
+                    model.config.use_cache = True
+                else:
+                    model.config.use_cache = False
+
+                traced_model = symbolic_trace(model, input_names_to_trace)
 
                 with torch.no_grad():
                     traced_output = traced_model(**filtered_inputs)
