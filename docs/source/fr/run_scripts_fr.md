@@ -29,7 +29,7 @@ Ce guide vous montrera comment exécuter un script d'entraînement de résumé e
 
 ## Configuration
 
-Pour exécuter avec succès la dernière version des scripts d'exemple, vous devez **installer 🤗 Transformers à partir de la source** dans un nouvel environnement virtuel :
+Pour exécuter avec succès la dernière version des scripts d'exemple, vous devez **installer 🤗 Transformers à partir du code source** dans un nouvel environnement virtuel :
 
 ```bash
 git clone https://github.com/huggingface/transformers
