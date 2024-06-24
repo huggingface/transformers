@@ -1042,6 +1042,7 @@ class EncoderDecoderCache:
                 if len(past_key_values[layer_idx]) > 2:
                     key_states, value_states = past_key_values[layer_idx][2:]
                     cache.cross_attention_cache.update(key_states, value_states, layer_idx)
+                    cache.is_updated[layer_idx] = True
         return cache
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
