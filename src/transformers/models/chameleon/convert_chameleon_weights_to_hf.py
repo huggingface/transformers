@@ -23,7 +23,6 @@ from accelerate import init_empty_weights
 from PIL import Image
 
 from transformers import (
-    AddedToken,
     ChameleonConfig,
     ChameleonForCausalLM,
     ChameleonImageProcessor,
@@ -243,8 +242,6 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
                 [loaded[i][f"layers.{layer_i}.feed_forward.w3.weight"] for i in range(num_shards)], dim=0
             )
 
-        # state_dict[f"model.layers.{layer_i}.self_attn.rotary_emb.inv_freq"] = inv_freq do we need this?
-
     if num_shards == 1:
         # Unsharded
         state_dict.update(
@@ -269,7 +266,8 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
     vqgan_path = os.path.join(input_base_path, "tokenizer/vqgan.ckpt")
     vqgan_state_dict = torch.load(vqgan_path, map_location="cpu")["state_dict"]
     for k, v in vqgan_state_dict.items():
-        k = k.replace("decoder", "encoder")
+        if "decoder" in k:
+            continue  # we dont do image generation yet
         state_dict[f"model.vqmodel.{k}"] = v
 
     # Write configs
@@ -277,8 +275,19 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
     multiple_of = params["multiple_of"] if "multiple_of" in params else 256
 
     with open(os.path.join(input_base_path, "tokenizer/text_tokenizer.json")) as tokenizer_file:
-        vocabulary_map = json.load(tokenizer_file)["model"]["vocab"]
-        vocabulary_map["<image>"] = VOCAB_SIZE  # don't add 1 as it's 0-indexed mapping
+        tokenizer_config = json.load(tokenizer_file)
+        vocabulary_map = tokenizer_config["model"]["vocab"]
+        vocabulary_map["<image>"] = vocabulary_map[
+            "<reserved08707>"
+        ]  # use a reserved token instead of adding a new one
+        del vocabulary_map["<reserved08707>"]
+
+        for token in tokenizer_config["added_tokens"]:
+            if token["content"] == "<reserved08707>":
+                token["content"] = "<image>"
+
+    with open(os.path.join(input_base_path, "tokenizer/text_tokenizer_modified.json"), "w") as f:
+        json.dump(tokenizer_config, f)  # save the new file to init a tokenizer later
 
     with open(os.path.join(input_base_path, "tokenizer/vqgan.yaml")) as vqgan_cfg_file:
         vq_config = yaml.safe_load(vqgan_cfg_file)["model"]["params"]
@@ -303,34 +312,13 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
     with init_empty_weights():
         model = ChameleonForCausalLM(config)
 
-    model.load_state_dict(state_dict, assign=True, strict=True)
-
-    # resize embeds to account for special image token
-    # See https://nlp.stanford.edu/~johnhew/vocab-expansion.html for why we get mean/stdev this way to expand embeddings
-    pre_expansion_embeddings = model.model.embed_tokens.weight.data
-    mu = torch.mean(pre_expansion_embeddings, dim=0).float()
-    n = pre_expansion_embeddings.size()[0]
-    sigma = ((pre_expansion_embeddings - mu).T @ (pre_expansion_embeddings - mu)) / n
-    dist = torch.distributions.multivariate_normal.MultivariateNormal(mu, covariance_matrix=1e-5 * sigma)
-
-    # pad to miltiple of 64 for efficient computation
-    # see: https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html#requirements-tc
-    model.resize_token_embeddings(config.vocab_size + 1, pad_to_multiple_of=64)
-    model.model.embed_tokens.weight.data[VOCAB_SIZE:] = torch.stack(
-        tuple((dist.sample() for _ in range(model.model.embed_tokens.weight.data[VOCAB_SIZE:].shape[0]))),
-        dim=0,
-    )
-    model.lm_head.weight.data[VOCAB_SIZE:] = torch.stack(
-        tuple((dist.sample() for _ in range(model.lm_head.weight.data[VOCAB_SIZE:].shape[0]))),
-        dim=0,
-    )
+    model.load_state_dict(state_dict, assign=True, strict=False)
     model.save_pretrained(model_path, safe_serialization=True)
 
     # Load and save the processor
     tokenizer = LlamaTokenizerFast(
-        tokenizer_file=os.path.join(input_base_path, "tokenizer/text_tokenizer.json"), legacy=False
+        tokenizer_file=os.path.join(input_base_path, "tokenizer/text_tokenizer_modified.json"), legacy=False
     )
-    tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False), special_tokens=True)
     image_processor = ChameleonImageProcessor()
     processor = ChameleonProcessor(image_processor=image_processor, tokenizer=tokenizer)
     processor.save_pretrained(model_path)
@@ -355,9 +343,8 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
     )
 
     inputs = processor(prompt, images=image, return_tensors="pt").to(model.device)
-    # inputs = processor("Hello", return_tensors="pt").to(model.device)
 
-    out = model.generate(**inputs, max_new_tokens=40, do_sample=False)
+    out = model.generate(**inputs, max_new_tokens=40, do_sample=True)
     generated_text = processor.batch_decode(out, skip_special_tokens=True)[0]
     print(f"Generated text: {generated_text}")
 
@@ -371,7 +358,8 @@ def main():
     parser.add_argument(
         "--model_size",
         choices=["7B", "30B"],
-        help="'f' models correspond to the finetuned versions, and are specific to the Chameleon official release. For more details on Chameleon, checkout the original repo: https://huggingface.co/meta-chameleon",
+        help=""
+        " models correspond to the finetuned versions, and are specific to the Chameleon official release. For more details on Chameleon, checkout the original repo: https://huggingface.co/meta-chameleon",
     )
     parser.add_argument(
         "--output_dir",
