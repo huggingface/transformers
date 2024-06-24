@@ -832,6 +832,33 @@ class SiglipPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
+    @classmethod
+    def _autoset_attn_implementation(
+        cls,
+        config,
+        use_flash_attention_2: bool = False,
+        torch_dtype: Optional[torch.dtype] = None,
+        device_map: Optional[Union[str, Dict[str, int]]] = None,
+        check_device_map: bool = True,
+        **kwargs,
+    ):
+        """
+        Overrides the method in `PreTrainedModel` to update the vision config with the correct attention implementation
+        """
+        config = super()._autoset_attn_implementation(
+            config=config,
+            use_flash_attention_2=use_flash_attention_2,
+            torch_dtype=torch_dtype,
+            device_map=device_map,
+            check_device_map=check_device_map,
+            **kwargs,
+        )
+        if hasattr(config, "vision_config"):
+            config.vision_config._attn_implementation = config._attn_implementation
+        if hasattr(config, "text_config"):
+            config.text_config._attn_implementation = config._attn_implementation
+        return config
+
 
 SIGLIP_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
@@ -1332,31 +1359,6 @@ class SiglipModel(SiglipPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    @classmethod
-    def _autoset_attn_implementation(
-        cls,
-        config,
-        use_flash_attention_2: bool = False,
-        torch_dtype: Optional[torch.dtype] = None,
-        device_map: Optional[Union[str, Dict[str, int]]] = None,
-        check_device_map: bool = True,
-        **kwargs,
-    ):
-        """
-        Overrides the method in `PreTrainedModel` to update the vision config with the correct attention implementation
-        """
-        config = super()._autoset_attn_implementation(
-            config=config,
-            use_flash_attention_2=use_flash_attention_2,
-            torch_dtype=torch_dtype,
-            device_map=device_map,
-            check_device_map=check_device_map,
-            **kwargs,
-        )
-        config.vision_config._attn_implementation = config._attn_implementation
-        config.text_config._attn_implementation = config._attn_implementation
-        return config
 
     @add_start_docstrings_to_model_forward(SIGLIP_TEXT_INPUTS_DOCSTRING)
     def get_text_features(
