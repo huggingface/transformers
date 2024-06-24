@@ -87,7 +87,7 @@ class DataTrainingArguments:
         },
     )
     text_column_delimiter: Optional[str] = field(
-        default=" ", metadata={"help": "THe delimiter to use to join text columns into a single sentence."}
+        default=" ", metadata={"help": "The delimiter to use to join text columns into a single sentence."}
     )
     train_split_name: Optional[str] = field(
         default=None,
@@ -240,9 +240,9 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option "
-                "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
-                "execute code present on the Hub on your local machine."
+                "Whether to trust the execution of code from datasets/models defined on the Hub."
+                " This option should only be set to `True` for repositories you trust and in which you have read the"
+                " code, as it will execute code present on the Hub on your local machine."
             )
         },
     )
@@ -338,6 +338,7 @@ def main():
             data_args.dataset_config_name,
             cache_dir=model_args.cache_dir,
             token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
         )
         # Try print some info about the dataset
         logger.info(f"Dataset loaded: {raw_datasets}")
