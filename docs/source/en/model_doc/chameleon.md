@@ -18,22 +18,34 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The chameleon model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+The Chameleon model was proposed in [Chameleon: Mixed-Modal Early-Fusion Foundation Models
+](https://arxiv.org/abs/2405.09818v1) by META AI Chameleon Team. Chameleon is a Vision-Language Model that use vector quantization to tokenize images which enanles the model to generate multimodal output. Additionally the model can generate from an interleaved vision-text input. 
+
 
 The abstract from the paper is the following:
 
-*<INSERT PAPER ABSTRACT HERE>*
+We present Chameleon, a family of early-fusion token-based mixed-modal models capable of understanding and generating images and text in any arbitrary sequence. We outline a stable training
+approach from inception, an alignment recipe, and an architectural parameterization tailored for the
+early-fusion, token-based, mixed-modal setting. The models are evaluated on a comprehensive range
+of tasks, including visual question answering, image captioning, text generation, image generation, and
+long-form mixed modal generation. Chameleon demonstrates broad and general capabilities, including
+state-of-the-art performance in image captioning tasks, outperforms Llama-2 in text-only tasks while
+being competitive with models such as Mixtral 8x7B and Gemini-Pro, and performs non-trivial image
+generation, all in a single model. It also matches or exceeds the performance of much larger models,
+including Gemini Pro and GPT-4V, according to human judgments on a new long-form mixed-modal
+generation evaluation, where either the prompt or outputs contain mixed sequences of both images and
+text. Chameleon marks a significant step forward in a unified modeling of full multimodal documents
 
-Tips:
 
-<INSERT TIPS ABOUT MODEL HERE>
-
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+This model was contributed by [joaogante](https://huggingface.co/joaogante) and [RaushanTurganbay](https://huggingface.co/RaushanTurganbay).
+The original code can be found [here](https://github.com/facebookresearch/chameleon).
 
 
 ## ChameleonConfig
+
+[[autodoc]] ChameleonConfig
+
+## ChameleonVQConfig
 
 [[autodoc]] ChameleonConfig
 
