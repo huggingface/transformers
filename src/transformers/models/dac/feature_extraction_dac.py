@@ -154,11 +154,9 @@ class DacFeatureExtractor(SequenceFeatureExtractor):
             truncation=truncation,
             padding=padding,
             return_attention_mask=False,
+            pad_to_multiple_of=self.hop_length
         )
     
-        length = padded_inputs.input_values[0].shape[0]
-        right_pad = math.ceil(length / self.hop_length) * self.hop_length - length
-        padded_inputs.input_values = np.pad(padded_inputs.input_values, ((0, 0), (0, right_pad)))
         padded_inputs.input_values = padded_inputs.input_values[:,np.newaxis, :] 
         
         input_values = []
