@@ -1793,7 +1793,7 @@ class TrainingArguments:
             )
         elif FSDPOption.FULL_SHARD in self.fsdp and FSDPOption.SHARD_GRAD_OP in self.fsdp:
             raise ValueError("`--fsdp full_shard` is not compatible with `--fsdp shard_grad_op`.")
-        
+
         if FSDPOption.FULL_SHARD in self.fsdp and self.gradient_checkpointing:
             logger.warning(
                 "When using FSDP full shard, instead of using `gradient_checkpointing` in TrainingArguments, please"
