@@ -130,7 +130,7 @@ python examples/tensorflow/summarization/run_summarization.py  \
 [Trainer](https://huggingface.co/docs/transformers/main_classes/trainer) prend en charge l'entraînement distribué et la précision mixte, ce qui signifie que vous pouvez également les utiliser dans un script. Pour activer ces deux fonctionnalités :
 
 - Ajoutez l'argument fp16 pour activer la précision mixte.
-- Définissez le nombre de GPU à utiliser avec l'argument nproc_per_node.
+- Définissez le nombre de GPU à utiliser avec l'argument `nproc_per_node`.
 
 ```bash
 torchrun \
