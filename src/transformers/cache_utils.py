@@ -214,7 +214,7 @@ class QuantizedCacheConfig(CacheConfig):
         compute_dtype (`torch.dtype`, *optional*, defaults to `torch.float16`):
             The defualt dtype used for computations in the model. Keys and Values will be cast to this dtype after dequantization.
         device (`str`, *optional*, defaults to `"cpu"`):
-            Device on which to peform computations, should be same as the model's device.
+            Device on which to perform computations, should be same as the model's device.
     """
 
     def __init__(
