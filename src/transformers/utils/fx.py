@@ -997,7 +997,7 @@ class HFTracer(Tracer):
             )
         elif "inputs_embeds" in input_name:
             batch_size = shape[0]
-            sequence_length = shape[1]
+            sequence_length = shape[-1]
 
             inputs_dict[input_name] = torch.zeros(
                 batch_size, sequence_length, model.config.hidden_size, dtype=torch.float, device=device

@@ -1332,7 +1332,7 @@ class ModelTesterMixin:
                 inputs_to_test.append(
                     {
                         "inputs_embeds": torch.rand(
-                            3, 5, model.config.hidden_size, dtype=torch.float, device=torch_device
+                            2, 2, model.config.hidden_size, dtype=torch.float, device=torch_device
                         )
                     }
                 )
