@@ -469,7 +469,7 @@ class SiglipFlashAttention2(SiglipAttention):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         output_attentions = False
 
-        bsz, q_len, _ = hidden_states.size()
+        batch_size, q_len, _ = hidden_states.size()
 
         query_states = self.q_proj(hidden_states)
         key_states = self.k_proj(hidden_states)
@@ -478,9 +478,9 @@ class SiglipFlashAttention2(SiglipAttention):
         # Flash attention requires the input to have the shape
         # batch_size x seq_length x head_dim x hidden_dim
         # therefore we just need to keep the original shape
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
 
         # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
         # to be able to avoid many of these transpose/reshape/view.
@@ -520,7 +520,7 @@ class SiglipFlashAttention2(SiglipAttention):
             query_states, key_states, value_states, attention_mask, q_len, dropout=dropout_rate
         )
 
-        attn_output = attn_output.reshape(bsz, q_len, self.embed_dim).contiguous()
+        attn_output = attn_output.reshape(batch_size, q_len, self.embed_dim).contiguous()
         attn_output = self.out_proj(attn_output)
 
         if not output_attentions:
