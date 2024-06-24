@@ -304,8 +304,9 @@ class WhisperAttention(nn.Module):
         query_states = self._shape(self.q_proj(hidden_states) * self.scaling, tgt_len, bsz)
 
         if past_key_value is not None:
-            is_updated = past_key_value.is_updated[self.layer_idx]
+            is_updated = past_key_value.is_updated.get(self.layer_idx)
             if is_cross_attention:
+                # after the first generated id, we can subsequently re-use all key/value_states from cache
                 past_key_value.is_updated[self.layer_idx] = True
                 past_key_value = past_key_value.cross_attention_cache
             else:
@@ -406,8 +407,9 @@ class WhisperFlashAttention2(WhisperAttention):
         query_states = self._shape(self.q_proj(hidden_states), tgt_len, bsz)
 
         if past_key_value is not None:
-            is_updated = past_key_value.is_updated[self.layer_idx]
+            is_updated = past_key_value.is_updated.get(self.layer_idx)
             if is_cross_attention:
+                # after the first generated id, we can subsequently re-use all key/value_states from cache
                 past_key_value.is_updated[self.layer_idx] = True
                 past_key_value = past_key_value.cross_attention_cache
             else:
@@ -614,8 +616,9 @@ class WhisperSdpaAttention(WhisperAttention):
         query_states = self._shape(self.q_proj(hidden_states), tgt_len, bsz)
 
         if past_key_value is not None:
-            is_updated = past_key_value.is_updated[self.layer_idx]
+            is_updated = past_key_value.is_updated.get(self.layer_idx)
             if is_cross_attention:
+                # after the first generated id, we can subsequently re-use all key/value_states from cache
                 past_key_value.is_updated[self.layer_idx] = True
                 past_key_value = past_key_value.cross_attention_cache
             else:
