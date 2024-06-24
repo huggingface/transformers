@@ -818,6 +818,7 @@ class StaticCache(Cache):
 
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
+        self.is_updated: List[bool] = []
         cache_shape = (max_batch_size, self.num_key_value_heads, self.max_cache_len, self.head_dim)
         for _ in range(config.num_hidden_layers):
             # Note: `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
@@ -828,6 +829,7 @@ class StaticCache(Cache):
             torch._dynamo.mark_static_address(new_layer_value_cache)
             self.key_cache.append(new_layer_key_cache)
             self.value_cache.append(new_layer_value_cache)
+            self.is_updated.append(False)
 
     def update(
         self,
@@ -865,6 +867,8 @@ class StaticCache(Cache):
             k_out[:, :, cache_position] = key_states
             v_out[:, :, cache_position] = value_states
 
+        self.is_updated[layer_idx] = True
+
         return k_out, v_out
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
@@ -884,6 +888,7 @@ class StaticCache(Cache):
             # In-place ops prevent breaking the static address
             self.key_cache[layer_idx].zero_()
             self.value_cache[layer_idx].zero_()
+            self.is_updated[layer_idx] = False
 
 
 class SlidingWindowCache(StaticCache):
@@ -986,11 +991,8 @@ class EncoderDecoderCache:
     Base, abstract class for all encoder-decoder caches. Can be used to hold combinations of self-attention and
     cross-attention caches.
     """
-
-    def __init__(self, self_attention_cache: Cache, cross_attention_cache: Cache):
-        self.self_attention_cache = self_attention_cache
-        self.cross_attention_cache = cross_attention_cache
-        self.is_updated = {}
+    self_attention_cache: Cache
+    cross_attention_cache: Cache
 
     def __getitem__(self, layer_idx: int) -> List[Tuple[torch.Tensor]]:
         """
@@ -1059,7 +1061,6 @@ class EncoderDecoderCache:
                 f"Got {self.self_attention_cache.__str__()} for the self attention cache and "
                 f"{self.cross_attention_cache.__str__()} for the cross attention cache."
             )
-        self.is_updated = {}
 
     def reorder_cache(self, beam_idx: torch.LongTensor):
         """Reorders the cache for beam search, given the selected beam indices."""
