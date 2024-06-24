@@ -197,7 +197,7 @@ class SiglipModelTesterMixin(ModelTesterMixin):
                 else:
                     dummy_attention_mask = processed_inputs["attention_mask"]
                     dummy_attention_mask[:] = 1
-                    dummy_attention_mask[-1, -4:] = 0
+                    dummy_attention_mask[:, :1] = 0
                     processed_inputs["attention_mask"] = dummy_attention_mask
 
                 processed_inputs["output_attentions"] = output_attentions
@@ -227,11 +227,16 @@ class SiglipModelTesterMixin(ModelTesterMixin):
                 for key in logit_keys:
                     eager_logits = outputs_eager[key]
                     sdpa_logits = outputs_sdpa[key]
+
+                    if use_mask:
+                        eager_logits = eager_logits[:, 1:]
+                        sdpa_logits = sdpa_logits[:, 1:]
+
                     is_close = torch.allclose(eager_logits, sdpa_logits, atol=atol, rtol=rtol)
                     if not is_close:
                         fail_cases.append(get_mean_reldiff(key, failcase, sdpa_logits, eager_logits, atol, rtol))
 
-        self.assertTrue(len(fail_cases) == 0, "\n".join(fail_cases))
+            self.assertTrue(len(fail_cases) == 0, "\n".join(fail_cases))
 
 
 class SiglipVisionModelTester:
