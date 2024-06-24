@@ -1056,6 +1056,9 @@ class ChameleonImageVocabularyMapping:
     def __init__(self, vocab_map):
         self.name2val = vocab_map
         self.image_token_id = vocab_map.get("<image>")
+        begin_image_id = vocab_map.get("<racm3:break>")
+        end_image_id = vocab_map.get("<eoss>")
+        self.disabled_image_token_ids = self.image_tokens + [begin_image_id, end_image_id]
 
     @cached_property
     def val2name(self):
@@ -1568,9 +1571,9 @@ class ChameleonForCausalLM(ChameleonPreTrainedModel):
         logits = self.lm_head(hidden_states)
         logits = logits.float()
 
-        # Disallow image tokens. This does not mask any special tokens, such as begin-image or end-image.
-        image_token_ids = self.model.vocabulary_mapping.image_tokens
-        logits[:, :, image_token_ids] = -math.inf
+        # Disallow image tokens and special begin-image and end-image tokens
+        disabled_image_token_ids = self.model.vocabulary_mapping.disabled_image_token_ids
+        logits[:, :, disabled_image_token_ids] = -math.inf
 
         loss = None
         if labels is not None:
