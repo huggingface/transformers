@@ -3730,7 +3730,7 @@ class Trainer:
         model = self._wrap_model(self.model, training=False, dataloader=dataloader)
 
         if len(self.accelerator._models) == 0 and model is self.model:
-            start_time = time.time()          
+            start_time = time.time()
             model = (
                 self.accelerator.prepare(model)
                 if self.is_deepspeed_enabled
