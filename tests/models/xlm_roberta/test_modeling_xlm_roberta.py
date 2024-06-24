@@ -18,6 +18,7 @@ import unittest
 
 from transformers import is_torch_available
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow
+from transformers.utils.import_utils import is_torch_sdpa_available
 
 
 if is_torch_available():
@@ -32,7 +33,7 @@ if is_torch_available():
 class XLMRobertaModelIntegrationTest(unittest.TestCase):
     @slow
     def test_xlm_roberta_base(self):
-        model = XLMRobertaModel.from_pretrained("FacebookAI/xlm-roberta-base")
+        model = XLMRobertaModel.from_pretrained("FacebookAI/xlm-roberta-base", attn_implementation="eager")
         input_ids = torch.tensor([[0, 581, 10269, 83, 99942, 136, 60742, 23, 70, 80583, 18276, 2]])
         # The dog is cute and lives in the garden house
 
@@ -48,6 +49,14 @@ class XLMRobertaModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output.shape, expected_output_shape)
         # compare the actual values for a slice of last dim
         self.assertTrue(torch.allclose(output[:, :, -1], expected_output_values_last_dim, atol=1e-3))
+
+        if is_torch_sdpa_available():
+            model = XLMRobertaModel.from_pretrained("FacebookAI/xlm-roberta-base", attn_implementation="sdpa")
+            with torch.no_grad():
+                output_sdpa = model(input_ids)["last_hidden_state"].detach()
+            self.assertEqual(output.shape, expected_output_shape)
+            # compare the actual values for a slice of last dim
+            self.assertTrue(torch.allclose(output, output_sdpa, atol=1e-3))
 
     @slow
     def test_xlm_roberta_large(self):
