@@ -310,7 +310,6 @@ class ChameleonAttention(nn.Module):
             query_states = self.q_norm(query_states)
             key_states = self.k_norm(key_states)
 
-        past_key_value = getattr(self, "past_key_value", past_key_value)
         cos, sin = self.rotary_emb(value_states, position_ids)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
@@ -396,8 +395,6 @@ class ChameleonFlashAttention2(ChameleonAttention):
 
         cos, sin = self.rotary_emb(value_states, position_ids)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-
-        past_key_value = getattr(self, "past_key_value", past_key_value)
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; position_ids needed for the static cache
@@ -599,8 +596,6 @@ class ChameleonSdpaAttention(ChameleonAttention):
         cos, sin = self.rotary_emb(value_states, position_ids)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, None)
 
-        past_key_value = getattr(self, "past_key_value", past_key_value)
-
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; position_ids needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
@@ -620,12 +615,17 @@ class ChameleonSdpaAttention(ChameleonAttention):
             key_states = key_states.contiguous()
             value_states = value_states.contiguous()
 
+        # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
+        # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
+        is_causal = True if causal_mask is None and q_len > 1 else False
+
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
             key_states,
             value_states,
             attn_mask=causal_mask,
             dropout_p=self.attention_dropout if self.training else 0.0,
+            is_causal=is_causal,
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
@@ -1050,7 +1050,6 @@ class ChameleonVQModelEncoder(nn.Module):
         return last_hidden_state
 
 
-# TODO: use an existing VQGan backbone? use copied from on the resnet block?
 class ChameleonVQModel(nn.Module):
     """
     TODO
@@ -1153,7 +1152,7 @@ class ChameleonPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -1161,23 +1160,6 @@ class ChameleonPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-
-    def _setup_cache(self, cache_cls, max_batch_size, max_cache_len: Optional[int] = None):
-        if self.config._attn_implementation == "flash_attention_2" and cache_cls == StaticCache:
-            raise ValueError(
-                "`static` cache implementation is not compatible with `attn_implementation==flash_attention_2` "
-                "make sure to use `sdpa` in the mean time, and open an issue at https://github.com/huggingface/transformers"
-            )
-
-        for layer in self.model.layers:
-            weights = layer.self_attn.o_proj.weight
-            layer.self_attn.past_key_value = cache_cls(
-                self.config, max_batch_size, max_cache_len, device=weights.device, dtype=weights.dtype
-            )
-
-    def _reset_cache(self):
-        for layer in self.model.layers:
-            layer.self_attn.past_key_value = None
 
 
 CHAMELEON_INPUTS_DOCSTRING = r"""
@@ -1541,7 +1523,6 @@ class ChameleonForCausalLM(ChameleonPreTrainedModel):
     def get_decoder(self):
         return self.model
 
-    # TODO: update example
     @add_start_docstrings_to_model_forward(CHAMELEON_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1610,7 +1591,8 @@ class ChameleonForCausalLM(ChameleonPreTrainedModel):
         logits = logits.float()
 
         # Disallow image tokens. This does not mask any special tokens, such as begin-image or end-image.
-        logits[:, :, 4:8196] = -math.inf
+        image_token_ids = self.model.vocabulary_mapping.image_tokens
+        logits[:, :, image_token_ids] = -math.inf
 
         loss = None
         if labels is not None:

@@ -33,7 +33,7 @@ class ChameleonVQConfig(PretrainedConfig):
     Args:
         embed_dim (`int`, *optional*, defaults to 256):
             Dimensionality of each embedding vector.
-        n_embed (`int`, *optional*, defaults to 8192):
+        num_embeddings (`int`, *optional*, defaults to 8192):
             Number of codebook embeddings.
         double_z (`bool`, *optional*, defaults to `False`):
             Whether to use double z channels.
@@ -43,11 +43,11 @@ class ChameleonVQConfig(PretrainedConfig):
             Resolution of the input images.
         in_channels (`int`, *optional*, defaults to 3):
             Number of input channels.
-        out_ch (`int`, *optional*, defaults to 3):
+        out_channels (`int`, *optional*, defaults to 3):
             Number of output channels.
-        ch (`int`, *optional*, defaults to 128):
+        base_channels (`int`, *optional*, defaults to 128):
             Base channel count.
-        ch_mult (`List[int]`, *optional*, defaults to `[1, 1, 2, 2, 4]`):
+        channel_multiplier (`List[int]`, *optional*, defaults to `[1, 1, 2, 2, 4]`):
             Channel multipliers for each resolution.
         num_res_blocks (`int`, *optional*, defaults to 2):
             Number of residual blocks.
@@ -68,14 +68,14 @@ class ChameleonVQConfig(PretrainedConfig):
     def __init__(
         self,
         embed_dim: int = 256,
-        n_embed: int = 8192,
+        num_embeddings: int = 8192,
         double_z: bool = False,
         z_channels: int = 256,
         resolution: int = 512,
         in_channels: int = 3,
-        out_ch: int = 3,
-        ch: int = 128,
-        ch_mult: List[int] = [1, 1, 2, 2, 4],
+        out_channels: int = 3,
+        base_channels: int = 128,
+        channel_multiplier: List[int] = [1, 1, 2, 2, 4],
         num_res_blocks: int = 2,
         attn_resolutions: List[int] = None,
         dropout: float = 0.0,
@@ -86,14 +86,14 @@ class ChameleonVQConfig(PretrainedConfig):
     ):
         super().__init__(**kwargs)
         self.embed_dim = embed_dim
-        self.num_embeddings = n_embed
+        self.num_embeddings = num_embeddings
         self.double_z = double_z
         self.z_channels = z_channels
         self.resolution = resolution
         self.in_channels = in_channels
-        self.out_channels = out_ch
-        self.base_channels = ch
-        self.channel_multiplier = ch_mult
+        self.out_channels = out_channels
+        self.base_channels = base_channels
+        self.channel_multiplier = channel_multiplier
         self.num_res_blocks = num_res_blocks
         self.attn_resolutions = attn_resolutions
         self.dropout = dropout
@@ -192,7 +192,6 @@ class ChameleonConfig(PretrainedConfig):
     ```"""
 
     model_type = "chameleon"
-    is_composition = True
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
@@ -247,7 +246,13 @@ class ChameleonConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.qk_layernorm = qk_layernorm
         self.swin_norm = swin_norm
+
+        if vq_config is None:
+            vq_config = {}
+            logger.info("vq_config is None. initializing the ChameleonVQConfig with default values.")
+
         self.vq_config = ChameleonVQConfig(**vq_config)
+
         self.vocabulary_map = vocabulary_map
 
         super().__init__(

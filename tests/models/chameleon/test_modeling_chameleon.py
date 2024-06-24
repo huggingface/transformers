@@ -55,14 +55,15 @@ class ChameleonModelTester:
         parent,
         batch_size=13,
         seq_length=7,
-        is_training=True,
+        is_training=False,
         use_input_mask=True,
-        use_token_type_ids=False,
         use_labels=True,
         vocab_size=99,
+        image_token_id=98,
         hidden_size=32,
         num_hidden_layers=2,
-        num_attention_heads=4,
+        num_attention_heads=2,
+        num_key_value_heads=2,
         intermediate_size=37,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
@@ -81,12 +82,13 @@ class ChameleonModelTester:
         self.seq_length = seq_length
         self.is_training = is_training
         self.use_input_mask = use_input_mask
-        self.use_token_type_ids = use_token_type_ids
         self.use_labels = use_labels
         self.vocab_size = vocab_size
+        self.image_token_id = image_token_id
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
+        self.num_key_value_heads = num_key_value_heads
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
@@ -107,10 +109,6 @@ class ChameleonModelTester:
         if self.use_input_mask:
             input_mask = torch.tril(torch.ones(self.batch_size, self.seq_length)).to(torch_device)
 
-        token_type_ids = None
-        if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
-
         sequence_labels = None
         token_labels = None
         choice_labels = None
@@ -121,14 +119,19 @@ class ChameleonModelTester:
 
         config = self.get_config()
 
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        return config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
 
     def get_config(self):
+        vocab_map = {i: chr(i) for i in range(self.vocab_size)}
+        vocab_map[self.image_token_id] = "<image>"
+        for i in range(10, 20):
+            vocab_map[i] = "IMGIMGBS"
         return ChameleonConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
+            num_key_value_heads=self.num_key_value_heads,
             intermediate_size=self.intermediate_size,
             hidden_act=self.hidden_act,
             hidden_dropout_prob=self.hidden_dropout_prob,
@@ -138,11 +141,23 @@ class ChameleonModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
             pad_token_id=self.pad_token_id,
+            vocabulary_map={v: k for k, v in vocab_map.items()},
+            vq_config=self.get_vq_config(),
         )
 
-    def create_and_check_model(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
+    def get_vq_config(self):
+        return {
+            "embed_dim": 24,
+            "num_embeddings": 24,
+            "z_channels": 12,
+            "resolution": 12,
+            "in_channels": 3,
+            "out_channels": 3,
+            "base_channels": 32,  # we have a GroupNorm of 32 groups, so can't do less
+            "channel_multiplier": [1, 2],
+        }
+
+    def create_and_check_model(self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels):
         model = ChameleonModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -150,41 +165,10 @@ class ChameleonModelTester:
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    def create_and_check_model_as_decoder(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
-        encoder_hidden_states,
-        encoder_attention_mask,
-    ):
-        config.add_cross_attention = True
-        model = ChameleonModel(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-        )
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            encoder_hidden_states=encoder_hidden_states,
-        )
-        result = model(input_ids, attention_mask=input_mask)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-
     def create_and_check_for_causal_lm(
         self,
         config,
         input_ids,
-        token_type_ids,
         input_mask,
         sequence_labels,
         token_labels,
@@ -202,7 +186,6 @@ class ChameleonModelTester:
         self,
         config,
         input_ids,
-        token_type_ids,
         input_mask,
         sequence_labels,
         token_labels,
@@ -211,7 +194,6 @@ class ChameleonModelTester:
         encoder_attention_mask,
     ):
         config.is_decoder = True
-        config.add_cross_attention = True
         model = ChameleonForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
@@ -265,7 +247,6 @@ class ChameleonModelTester:
         (
             config,
             input_ids,
-            token_type_ids,
             input_mask,
             sequence_labels,
             token_labels,
@@ -283,6 +264,17 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         else ()
     )
     all_generative_model_classes = (ChameleonForCausalLM,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": ChameleonModel,
+            "text-classification": ChameleonForSequenceClassification,
+            "text-generation": ChameleonForCausalLM,
+            "zero-shot": ChameleonForSequenceClassification,
+            "question-answering": ChameleonForQuestionAnswering,
+        }
+        if is_torch_available()
+        else {}
+    )
     test_headmasking = False
     test_pruning = False
     fx_compatible = False
@@ -297,12 +289,6 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_chameleon_sequence_classification_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -344,12 +330,7 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    @unittest.skip("Chameleon buffers include complex numbers, which breaks this test")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
     @parameterized.expand([("linear",), ("dynamic",)])
-    @unittest.skip("TODO @gante fix this for Chameleon")
     def test_model_rope_scaling(self, scaling_type):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         short_input = ids_tensor([1, 10], config.vocab_size)
@@ -507,15 +488,13 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                     msg=f"\n{tokenizer.batch_decode(res_eager)} \nvs\n{tokenizer.batch_decode(res_sdpa)}",
                 )
 
-    @unittest.skip("TODO @gante fix this for Chameleon")
-    @parameterized.expand([(1, False), (1, True), (4, False)])
-    def test_new_cache_format(self, num_beams, do_sample):
+    @unittest.skip("Chameleon forces some token ids to be -inf!")
+    def test_batching_equivalence(self):
         pass
 
 
 @require_torch
 class ChameleonIntegrationTest(unittest.TestCase):
-    @unittest.skip("Logits are not exactly the same, once we fix the instabalities somehow, will update!")
     @slow
     def test_model_7b_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
@@ -528,7 +507,6 @@ class ChameleonIntegrationTest(unittest.TestCase):
         EXPECTED_SLICE = torch.tensor([-12.8281, -7.4453, -0.4639, -8.0625, -7.2500, -8.0000, -6.4883, -7.7695, -7.8438, -7.0312, -6.2188, -7.1328, -1.8496, 1.9961, -8.6250, -6.7227, -12.8281, -6.9492, -7.0742, -7.7852, -7.5820, -7.9062, -6.9375, -7.9805, -8.3438, -8.1562, -8.0469, -7.6250, -7.7422, -7.3398,])  # fmt: skip
         torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, atol=1e-5, rtol=1e-5)
 
-    @unittest.skip("Logits are not exactly the same, once we fix the instabalities somehow, will update!")
     @slow
     def test_model_13b_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
@@ -541,7 +519,6 @@ class ChameleonIntegrationTest(unittest.TestCase):
         EXPECTED_SLICE = torch.tensor([-8.1406, -8.0547, 2.7461, -1.2344, -0.1448, -1.8262, -1.0020, -1.8154, -1.6895, -1.8516, -2.3574, -0.9277, 3.7598, 6.5742, -1.2998, -0.1177, -8.1406, -2.9688, -2.9199, -3.1699, -3.5254, -2.3555, -2.7988, -3.4141, -2.8262, -4.5195, -3.3379, -3.3164, -2.7832, -3.0273])  # fmt: skip
         torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, atol=1e-5, rtol=1e-5)
 
-    @unittest.skip("Logits are not exactly the same, once we fix the instabalities somehow, will update!")
     @slow
     def test_model_13bf_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
@@ -554,9 +531,6 @@ class ChameleonIntegrationTest(unittest.TestCase):
         EXPECTED_SLICE = torch.tensor([-2.2227, 4.8828, 0.9023, -0.4578, -0.7871, -0.1033, -0.6221, -0.5786, -0.7803, -1.0674, -1.2920, -0.1570, 0.8008, 2.0723, -0.9497, 0.2771, -2.2227, -0.7612, -1.4346, -1.2061, -1.6426, -0.3000, -0.7139, -1.1934, -1.8691, -1.6973, -1.5947, -1.2705, -0.3523, -0.5513])  # fmt: skip
         torch.testing.assert_close(out.mean(-1), EXPECTED_SLICE, atol=1e-2, rtol=1e-2)
 
-    @unittest.skip(
-        "Logits are not exactly the same, once we fix the instabalities somehow, will update! Also it is gonna be a `too_slow` test"
-    )
     @slow
     def test_model_70b_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
@@ -570,7 +544,6 @@ class ChameleonIntegrationTest(unittest.TestCase):
         EXPECTED_SLICE = torch.tensor([-9.4922, -3.9551, 1.7998, -5.6758, -5.1055, -5.8984, -4.8320, -6.8086, -6.5391, -5.6172, -5.5820, -5.5352, 1.7881, 3.6289, -6.5117, -3.4785, -9.5000, -6.0352, -6.8125, -6.0195, -6.6836, -5.4727, -6.2812, -6.0391, -7.3398, -7.4297, -7.4844, -6.5820, -5.8789, -5.5312])  # fmt: skip
         torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, atol=1e-5, rtol=1e-5)
 
-    @unittest.skip("Model is curently gated")
     @slow
     def test_model_13b_greedy_generation(self):
         EXPECTED_TEXT_COMPLETION = """Simply put, the theory of relativity states that 1) the laws of physics are the same everywhere in the universe and 2) the passage of time and the length of objects can vary depending on the observer\'s frame of reference.\n\nThe first part of the theory, that the laws of physics are the same everywhere, is known as the "princi"""

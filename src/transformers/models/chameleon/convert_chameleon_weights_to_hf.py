@@ -289,8 +289,16 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
     with open(os.path.join(input_base_path, "tokenizer/text_tokenizer_modified.json"), "w") as f:
         json.dump(tokenizer_config, f)  # save the new file to init a tokenizer later
 
+    vq_keys_to_replace = [
+        ("ch", "base_channels"),
+        ("out_ch", "out_channels"),
+        ("n_embed", "num_embeddings"),
+        ("ch_mult", "channel_multiplier"),
+    ]
     with open(os.path.join(input_base_path, "tokenizer/vqgan.yaml")) as vqgan_cfg_file:
         vq_config = yaml.safe_load(vqgan_cfg_file)["model"]["params"]
+        for old, new in vq_keys_to_replace:
+            vq_config[new] = vq_config[old]
         vq_config.update(**vq_config["ddconfig"])
         del vq_config["ddconfig"]
 
