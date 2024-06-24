@@ -796,6 +796,10 @@ _import_structure = {
     "models.xmod": ["XmodConfig"],
     "models.yolos": ["YolosConfig"],
     "models.yoso": ["YosoConfig"],
+    "models.yuan2_m32": [
+        "Yuan2M32Config",
+        "YuanTokenizer",
+    ],
     "onnx": [],
     "pipelines": [
         "AudioClassificationPipeline",
@@ -1050,6 +1054,7 @@ else:
     _import_structure["models.xglm"].append("XGLMTokenizerFast")
     _import_structure["models.xlm_roberta"].append("XLMRobertaTokenizerFast")
     _import_structure["models.xlnet"].append("XLNetTokenizerFast")
+    _import_structure["models.yuan2_m32"].append("YuanTokenizerFast")
     _import_structure["tokenization_utils_fast"] = ["PreTrainedTokenizerFast"]
 
 
@@ -3549,6 +3554,14 @@ else:
             "YosoPreTrainedModel",
         ]
     )
+    _import_structure["models.yuan2_m32"].extend(
+        [
+            "YuanForCausalLM",
+            "YuanForSequenceClassification",
+            "YuanModel",
+            "YuanPreTrainedModel",
+        ]
+    )
     _import_structure["optimization"] = [
         "Adafactor",
         "AdamW",
@@ -5449,6 +5462,7 @@ if TYPE_CHECKING:
     from .models.xmod import XmodConfig
     from .models.yolos import YolosConfig
     from .models.yoso import YosoConfig
+    from .models.yuan2_m32 import Yuan2M32Config, YuanTokenizer
 
     # Pipelines
     from .pipelines import (
@@ -5696,6 +5710,7 @@ if TYPE_CHECKING:
         from .models.xglm import XGLMTokenizerFast
         from .models.xlm_roberta import XLMRobertaTokenizerFast
         from .models.xlnet import XLNetTokenizerFast
+        from .models.yuan2_m32 import YuanTokenizerFast
         from .tokenization_utils_fast import PreTrainedTokenizerFast
 
     try:
@@ -7730,7 +7745,12 @@ if TYPE_CHECKING:
             YosoModel,
             YosoPreTrainedModel,
         )
-
+        from .models.yuan2_m32 import (
+            YuanForCausalLM,
+            YuanForSequenceClassification,
+            YuanModel,
+            YuanPreTrainedModel,
+        )
         # Optimization
         from .optimization import (
             Adafactor,

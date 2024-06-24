@@ -526,6 +526,13 @@ else:
                     "AlbertTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            (
+                "yuan2_m32",
+                (
+                    "YuanTokenizer",
+                    "YuanTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
         ]
     )
 
