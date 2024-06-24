@@ -165,7 +165,6 @@ class GPTNeoXAttention(nn.Module):
         layer_past: Optional[Tuple[torch.Tensor]] = None,
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
-        padding_mask: Optional[torch.Tensor] = None,
     ):
         # Apply attention-specific projections and rope
         query, key, value, present = self._attn_projections_and_rope(
@@ -335,7 +334,6 @@ class GPTNeoXFlashAttention2(GPTNeoXAttention):
         layer_past: Optional[Tuple[torch.Tensor]] = None,
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
-        padding_mask: Optional[torch.Tensor] = None,
     ):
         # Apply attention-specific projections and rope
         query, key, value, present = self._attn_projections_and_rope(
@@ -526,7 +524,6 @@ class GPTNeoXSdpaAttention(GPTNeoXAttention):
         layer_past: Optional[Tuple[torch.Tensor]] = None,
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
-        padding_mask: Optional[torch.Tensor] = None,
     ):
         if output_attentions or head_mask is not None:
             logger.warning_once(
@@ -543,7 +540,6 @@ class GPTNeoXSdpaAttention(GPTNeoXAttention):
                 layer_past=layer_past,
                 use_cache=use_cache,
                 output_attentions=output_attentions,
-                padding_mask=padding_mask,
             )
 
         bsz, q_len, _ = hidden_states.size()
