@@ -507,14 +507,11 @@ class GPTNeoXSdpaAttention(GPTNeoXAttention):
     def __init__(self, config):
         super().__init__(config)
 
-        # Idea adapted from transformers.models.bert.modeling_bert.BertSdpaSelfAttention.__init__
         # SDPA with memory-efficient backend is broken in torch==2.1.2 when using non-contiguous inputs and a custom
         # attn_mask, so we need to call `.contiguous()`. This was fixed in torch==2.2.0.
         # Reference: https://github.com/pytorch/pytorch/issues/112577
         self.require_contiguous_qkv = version.parse(get_torch_version()) < version.parse("2.2.0")
 
-    # Adapted from GPTNeoXAttention.forward and following other sdpa implementations
-    # such as transformers.models.llama.modeling_llama.LlamaSdpaAttention.forward
     def forward(
         self,
         hidden_states: torch.FloatTensor,
@@ -856,8 +853,7 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
         self.layers = nn.ModuleList([GPTNeoXLayer(config) for _ in range(config.num_hidden_layers)])
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
-        self._use_sdpa = config._attn_implementation == "sdpa"
+        self._attn_implementation = config._attn_implementation
 
         self.gradient_checkpointing = False
 
@@ -937,9 +933,9 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
         if attention_mask is not None:
             assert batch_size > 0, "batch_size has to be defined and > 0"
             attention_mask = attention_mask.view(batch_size, -1)
-            if self._use_flash_attention_2:
+            if self._attn_implementation == "flash_attention_2":
                 attention_mask = attention_mask if 0 in attention_mask else None
-            elif self._use_sdpa and not output_attentions and head_mask is None:
+            elif self._attn_implementation == "sdpa" and not output_attentions and head_mask is None:
                 attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
                     attention_mask=attention_mask,
                     input_shape=(batch_size, seq_length),
