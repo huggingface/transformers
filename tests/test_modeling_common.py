@@ -1346,10 +1346,7 @@ class ModelTesterMixin:
                 ):
                     model.config.problem_type = "single_label_classification"
 
-                if "past_key_values" in input_names_to_trace:
-                    model.config.use_cache = True
-                else:
-                    model.config.use_cache = False
+                model.config.use_cache = "past_key_values" in input_names_to_trace
 
                 traced_model = symbolic_trace(model, input_names_to_trace)
 
