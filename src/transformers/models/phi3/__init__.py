@@ -19,6 +19,7 @@ from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
     is_sentencepiece_available,
+    is_tf_available,
     is_tokenizers_available,
     is_torch_available,
 )
@@ -42,6 +43,19 @@ else:
         "Phi3ForTokenClassification",
     ]
 
+try:
+    if not is_tf_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["modeling_tf_phi3"] = [
+        "TFPhi3PreTrainedModel",
+        "TFPhi3Model",
+        "TFPhi3ForCausalLM",
+        "TFPhi3ForSequenceClassification",
+        "TFPhi3ForTokenClassification",
+    ]
 
 if TYPE_CHECKING:
     from .configuration_phi3 import Phi3Config

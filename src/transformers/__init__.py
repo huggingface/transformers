@@ -4060,6 +4060,15 @@ else:
             "TFPegasusPreTrainedModel",
         ]
     )
+    _import_structure["models.phi3"].extend(
+        [
+            "TFPhi3ForCausalLM",
+            "TFPhi3ForSequenceClassification",
+            "TFPhi3ForTokenClassification",
+            "TFPhi3Model",
+            "TFPhi3PreTrainedModel",
+        ]
+    )
     _import_structure["models.rag"].extend(
         [
             "TFRagModel",
