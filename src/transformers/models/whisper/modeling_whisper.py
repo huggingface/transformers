@@ -302,7 +302,6 @@ class WhisperAttention(nn.Module):
 
         # get query proj
         query_states = self._shape(self.q_proj(hidden_states) * self.scaling, tgt_len, bsz)
-        past_key_value = getattr(self, "past_key_value", past_key_value)
 
         # use key_value_states if cross attention
         current_states = key_value_states if key_value_states is not None else hidden_states
@@ -400,7 +399,6 @@ class WhisperFlashAttention2(WhisperAttention):
 
         # get query proj
         query_states = self._shape(self.q_proj(hidden_states), tgt_len, bsz)
-        past_key_value = getattr(self, "past_key_value", past_key_value)
 
         # use key_value_states if cross attention
         current_states = key_value_states if key_value_states is not None else hidden_states
@@ -410,7 +408,8 @@ class WhisperFlashAttention2(WhisperAttention):
             and past_key_value.get_seq_length(self.layer_idx)
         ):
             # reuse k,v, cross_attentions
-            key_states, value_states = past_key_value[self.layer_idx]
+            key_states = past_key_value.key_cache[self.layer_idx]
+            value_states = past_key_value.value_cache[self.layer_idx]
         else:
             key_states = self._shape(self.k_proj(current_states), -1, bsz)
             value_states = self._shape(self.v_proj(current_states), -1, bsz)
@@ -604,7 +603,6 @@ class WhisperSdpaAttention(WhisperAttention):
 
         # get query proj
         query_states = self._shape(self.q_proj(hidden_states), tgt_len, bsz)
-        past_key_value = getattr(self, "past_key_value", past_key_value)
 
         # use key_value_states if cross attention
         current_states = key_value_states if key_value_states is not None else hidden_states
