@@ -313,7 +313,6 @@ def load_backbone(config):
     use_pretrained_backbone = getattr(config, "use_pretrained_backbone", None)
     backbone_checkpoint = getattr(config, "backbone", None)
     backbone_kwargs = getattr(config, "backbone_kwargs", None)
-
     backbone_kwargs = {} if backbone_kwargs is None else backbone_kwargs
 
     if backbone_kwargs and backbone_config is not None:
