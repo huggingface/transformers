@@ -1009,7 +1009,7 @@ class WandbCallback(TrainerCallback):
             available_fields = [
                 ("decoded_inputs", decoded_inputs),
                 ("decoded_outputs", decoded_outputs),
-                ("decoded_expected", decoded_expected)
+                ("decoded_expected", decoded_expected),
             ]
             available_fields = [(name, value) for name, value in available_fields if value is not None]
 
