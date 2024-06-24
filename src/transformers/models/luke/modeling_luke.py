@@ -44,9 +44,6 @@ _CONFIG_FOR_DOC = "LukeConfig"
 _CHECKPOINT_FOR_DOC = "studio-ousia/luke-base"
 
 
-from ..deprecated._archive_maps import LUKE_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 @dataclass
 class BaseLukeModelOutputWithPooling(BaseModelOutputWithPooling):
     """

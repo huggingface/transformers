@@ -15,6 +15,7 @@
 # limitations under the License.
 
 """Tokenization classes for Code LLaMA."""
+
 import os
 from shutil import copyfile
 from typing import Any, Dict, List, Optional, Tuple
@@ -51,7 +52,7 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
     there is no padding token in the original model.
 
     The default configuration match that of
-    [codellama/CodeLlama-7b-Instruct-hf](https://huggingface.co/codellama/CodeLlama-7b-Instruct-hf/blob/main/tokenizer_config.json)
+    [codellama/CodeLlama-7b-Instruct-hf](https://huggingface.co/meta-llama/CodeLlama-7b-Instruct-hf/blob/main/tokenizer_config.json)
     which supports prompt infilling.
 
     Args:
@@ -456,13 +457,6 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
         snippet](https://github.com/facebookresearch/llama/blob/556949fdfb72da27c2f4a40b7f0e4cf0b8153a28/llama/generation.py#L320-L362)
         in the original repository.
         """
-        logger.warning_once(
-            "No chat template is set for this tokenizer, falling back to a default class-level template. "
-            "This is very error-prone, because models are often trained with templates different from the class "
-            "default! Default chat templates are a legacy feature and will be removed in Transformers v4.43, at which "
-            "point any code depending on them will stop working. We recommend setting a valid chat template before "
-            "then to ensure that this model continues working without issues."
-        )
         template = (
             "{% if messages[0]['role'] == 'system' %}"
             "{% set loop_messages = messages[1:] %}"  # Extract system message if it's present

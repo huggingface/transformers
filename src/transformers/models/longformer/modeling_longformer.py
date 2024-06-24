@@ -43,9 +43,6 @@ _CHECKPOINT_FOR_DOC = "allenai/longformer-base-4096"
 _CONFIG_FOR_DOC = "LongformerConfig"
 
 
-from ..deprecated._archive_maps import LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 @dataclass
 class LongformerBaseModelOutput(ModelOutput):
     """

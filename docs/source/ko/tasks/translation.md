@@ -341,7 +341,7 @@ TensorFlow에서 모델을 파인튜닝하려면 우선 optimizer 함수, 학습
 ```py
 >>> from transformers import pipeline
 
-# Change `xx` to the language of the input and `yy` to the language of the desired output. 
+# Change `xx` to the language of the input and `yy` to the language of the desired output.
 # Examples: "en" for English, "fr" for French, "de" for German, "es" for Spanish, "zh" for Chinese, etc; translation_en_to_fr translates English to French
 # You can view all the lists of languages here - https://huggingface.co/languages
 >>> translator = pipeline("translation_xx_to_yy", model="my_awesome_opus_books_model")
@@ -362,7 +362,7 @@ TensorFlow에서 모델을 파인튜닝하려면 우선 optimizer 함수, 학습
 >>> inputs = tokenizer(text, return_tensors="pt").input_ids
 ```
 
-[`~transformers.generation_utils.GenerationMixin.generate`] 메서드로 번역을 생성하세요. 다양한 텍스트 생성 전략 및 생성을 제어하기 위한 매개변수에 대한 자세한 내용은 [Text Generation](../main_classes/text_generation) API를 살펴보시기 바랍니다.
+[`~generation.GenerationMixin.generate`] 메서드로 번역을 생성하세요. 다양한 텍스트 생성 전략 및 생성을 제어하기 위한 매개변수에 대한 자세한 내용은 [Text Generation](../main_classes/text_generation) API를 살펴보시기 바랍니다.
 
 ```py
 >>> from transformers import AutoModelForSeq2SeqLM

@@ -29,7 +29,7 @@ To optimize this, you can use a kv-cache to store the past keys and values inste
 The *static kv-cache* solves this issue by pre-allocating the kv-cache size to a maximum value which allows you to combine it with torch.compile for up to a 4x speed up.
 
 > [!WARNING]
-> Currently, only [Command R](./model_doc/cohere), [Gemma](./model_doc/gemma) and [Llama](./model_doc/llama2) models support static kv-cache and torch.compile.
+> Currently, only [Llama](./model_doc/llama2) and a few other models support static kv-cache and torch.compile. Check [this issue](https://github.com/huggingface/transformers/issues/28981) for a live model compatibility list.
 
 For this example, let's load the [Gemma](https://hf.co/google/gemma-2b) model.
 
@@ -65,13 +65,12 @@ tokenizer.batch_decode(outputs, skip_special_tokens=True)
 ['The theory of special relativity states 1. The speed of light is constant in all inertial reference']
 ```
 
+Under the hood, `generate` will attempt to reuse the same cache object, removing the need for re-compilation at each call. However, if the batch size or the maximum output length increase between calls, the cache will have to be reinitialized, triggering a new compilation.
+
 </hfoption>
-<hfoption id="setup_cache">
+<hfoption id="Static Cache">
 
-> [!WARNING]
-> The `_setup_cache` method is an internal and private method that is still under development. This means it may not be backward compatible and the API design may change in the future.
-
-The `_setup_cache` method doesn't support [`~GenerationMixin.generate`] yet, so this method is a bit more involved. You'll need to write your own function to decode the next token given the current token and position and cache position of previously generated tokens.
+A [`StaticCache`] object can be passed to the model's forward pass under the `past_key_values` argument, enabling the use of this object as a static kv-cache. Using this strategy, you can write your own function to decode the next token given the current token and position and cache position of previously generated tokens. You can also pass the [`StaticCache`] object to [`~GenerationMixin.generate`] and use it across calls, like you would do with a dynamic cache.
 
 ```py
 from transformers import LlamaTokenizer, LlamaForCausalLM, StaticCache, logging
@@ -90,17 +89,22 @@ tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", pad_token
 model = LlamaForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", device_map="sequential")
 inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
-def decode_one_tokens(model, cur_token, input_pos, cache_position):
+def decode_one_tokens(model, cur_token, input_pos, cache_position, past_key_values):
     logits = model(
-        cur_token, position_ids=input_pos, cache_position=cache_position, return_dict=False, use_cache=True
+        cur_token,
+        position_ids=input_pos,
+        cache_position=cache_position,
+        past_key_values=past_key_values,
+        return_dict=False,
+        use_cache=True
     )[0]
     new_token = torch.argmax(logits[:, -1], dim=-1)[:, None]
     return new_token
 ```
 
-There are a few important things you must do to enable static kv-cache and torch.compile with the `_setup_cache` method:
+There are a few important things you must do to enable static kv-cache and torch.compile with the `StaticCache` method:
 
-1. Access the model's `_setup_cache` method and pass it the [`StaticCache`] class. This is a more flexible method because it allows you to configure parameters like the maximum batch size and sequence length.
+1. Initialize the [`StaticCache`] instance before using the model for inference. There you can configure parameters like the maximum batch size and sequence length.
 
 2. Call torch.compile on the model to compile the forward pass with the static kv-cache.
 
@@ -109,30 +113,37 @@ There are a few important things you must do to enable static kv-cache and torch
 ```py
 batch_size, seq_length = inputs["input_ids"].shape
 with torch.no_grad():
-     model._setup_cache(StaticCache, 2, max_cache_len=4096)
-     cache_position = torch.arange(seq_length, device=torch_device)
-     generated_ids = torch.zeros(
-         batch_size, seq_length + NUM_TOKENS_TO_GENERATE + 1, dtype=torch.int, device=torch_device
-     )
-     generated_ids[:, cache_position] = inputs["input_ids"].to(torch_device).to(torch.int)
+    past_key_values = StaticCache(
+        config=model.config, max_batch_size=2, max_cache_len=4096, device=torch_device, dtype=model.dtype
+    )
+    cache_position = torch.arange(seq_length, device=torch_device)
+    generated_ids = torch.zeros(
+        batch_size, seq_length + NUM_TOKENS_TO_GENERATE + 1, dtype=torch.int, device=torch_device
+    )
+    generated_ids[:, cache_position] = inputs["input_ids"].to(torch_device).to(torch.int)
 
-     logits = model(**inputs, cache_position=cache_position, return_dict=False, use_cache=True)[0]
-     next_token = torch.argmax(logits[:, -1], dim=-1)[:, None]
-     generated_ids[:, seq_length] = next_token[:, 0]
+    logits = model(
+        **inputs, cache_position=cache_position, past_key_values=past_key_values,return_dict=False, use_cache=True
+    )[0]
+    next_token = torch.argmax(logits[:, -1], dim=-1)[:, None]
+    generated_ids[:, seq_length] = next_token[:, 0]
 
-     decode_one_tokens = torch.compile(decode_one_tokens, mode="reduce-overhead", fullgraph=True)
-     cache_position = torch.tensor([seq_length + 1], device=torch_device)
-     for _ in range(1, NUM_TOKENS_TO_GENERATE):
-         with torch.backends.cuda.sdp_kernel(enable_flash=False, enable_mem_efficient=False, enable_math=True):
-             next_token = decode_one_tokens(model, next_token.clone(), None, cache_position)
-             generated_ids[:, cache_position] = next_token.int()
-         cache_position += 1
+    decode_one_tokens = torch.compile(decode_one_tokens, mode="reduce-overhead", fullgraph=True)
+    cache_position = torch.tensor([seq_length + 1], device=torch_device)
+    for _ in range(1, NUM_TOKENS_TO_GENERATE):
+        with torch.backends.cuda.sdp_kernel(enable_flash=False, enable_mem_efficient=False, enable_math=True):
+            next_token = decode_one_tokens(model, next_token.clone(), None, cache_position, past_key_values)
+            generated_ids[:, cache_position] = next_token.int()
+        cache_position += 1
 
 text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
 text
 ['Simply put, the theory of relativity states that 1) the speed of light is constant, 2) the speed of light is the same for all observers, and 3) the laws of physics are the same for all observers.',
  'My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p']
 ```
+
+> [!TIP]
+> If you want to reuse the [`StaticCache`] object on a new prompt, be sure to reset its contents with the `.reset()` method
 
 </hfoption>
 </hfoptions>

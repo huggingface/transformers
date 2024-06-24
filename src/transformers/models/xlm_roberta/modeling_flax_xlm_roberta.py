@@ -52,9 +52,6 @@ _CONFIG_FOR_DOC = "XLMRobertaConfig"
 remat = nn_partitioning.remat
 
 
-from ..deprecated._archive_maps import FLAX_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 # Copied from transformers.models.roberta.modeling_flax_roberta.create_position_ids_from_input_ids
 def create_position_ids_from_input_ids(input_ids, padding_idx):
     """

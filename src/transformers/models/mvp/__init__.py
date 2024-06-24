@@ -17,7 +17,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_
 
 
 _import_structure = {
-    "configuration_mvp": ["MVP_PRETRAINED_CONFIG_ARCHIVE_MAP", "MvpConfig", "MvpOnnxConfig"],
+    "configuration_mvp": ["MvpConfig", "MvpOnnxConfig"],
     "tokenization_mvp": ["MvpTokenizer"],
 }
 
@@ -36,7 +36,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_mvp"] = [
-        "MVP_PRETRAINED_MODEL_ARCHIVE_LIST",
         "MvpForCausalLM",
         "MvpForConditionalGeneration",
         "MvpForQuestionAnswering",
@@ -46,7 +45,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_mvp import MVP_PRETRAINED_CONFIG_ARCHIVE_MAP, MvpConfig, MvpOnnxConfig
+    from .configuration_mvp import MvpConfig, MvpOnnxConfig
     from .tokenization_mvp import MvpTokenizer
 
     try:
@@ -64,7 +63,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_mvp import (
-            MVP_PRETRAINED_MODEL_ARCHIVE_LIST,
             MvpForCausalLM,
             MvpForConditionalGeneration,
             MvpForQuestionAnswering,

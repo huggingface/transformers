@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Grounding DINO model. """
+"""Testing suite for the PyTorch Grounding DINO model."""
 
 import collections
 import inspect
@@ -246,15 +246,15 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
 
     def setUp(self):
         self.model_tester = GroundingDinoModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=GroundingDinoConfig, has_text_modality=False)
+        self.config_tester = ConfigTester(
+            self,
+            config_class=GroundingDinoConfig,
+            has_text_modality=False,
+            common_properties=["d_model", "encoder_attention_heads", "decoder_attention_heads"],
+        )
 
     def test_config(self):
-        # we don't test common_properties and arguments_init as these don't apply for Grounding DINO
-        self.config_tester.create_and_test_config_to_json_string()
-        self.config_tester.create_and_test_config_to_json_file()
-        self.config_tester.create_and_test_config_from_and_save_pretrained()
-        self.config_tester.create_and_test_config_with_num_labels()
-        self.config_tester.check_config_can_be_init_without_params()
+        self.config_tester.run_common_tests()
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -269,7 +269,7 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         pass
 
     @unittest.skip(reason="Grounding DINO does not have a get_input_embeddings method")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip(reason="Grounding DINO does not use token embeddings")
@@ -483,6 +483,34 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         config.use_timm_backbone = True
         config.backbone_config = None
         config.backbone_kwargs = {"in_chans": 3, "out_indices": (2, 3, 4)}
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            if model_class.__name__ == "GroundingDinoForObjectDetection":
+                expected_shape = (
+                    self.model_tester.batch_size,
+                    self.model_tester.num_queries,
+                    config.max_text_len,
+                )
+                self.assertEqual(outputs.logits.shape, expected_shape)
+
+            self.assertTrue(outputs)
+
+    @require_timm
+    def test_hf_backbone(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        # Load a pretrained HF checkpoint as backbone
+        config.backbone = "microsoft/resnet-18"
+        config.backbone_config = None
+        config.use_timm_backbone = False
+        config.use_pretrained_backbone = True
+        config.backbone_kwargs = {"out_indices": [2, 3, 4]}
 
         for model_class in self.all_model_classes:
             model = model_class(config)

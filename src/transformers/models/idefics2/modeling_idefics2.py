@@ -53,11 +53,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "Idefics2Config"
 
-IDEFICS2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "HuggingFaceM4/idefics2-8b",
-    # See all IDEFICS2 models at https://huggingface.co/models?filter=idefics2
-]
-
 
 @dataclass
 class Idefics2BaseModelOutputWithPast(ModelOutput):
@@ -1346,6 +1341,7 @@ class Idefics2PreTrainedModel(PreTrainedModel):
     _no_split_modules = ["Idefics2VisionAttention", "Idefics2MLP", "Idefics2PerceiverLayer", "Idefics2DecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
+    _supports_cache_class = True
 
     def _init_weights(self, module):
         # important: this ported version of Idefics2 isn't meant for training from scratch - only
@@ -1596,10 +1592,12 @@ class Idefics2Model(Idefics2PreTrainedModel):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         past_seen_tokens = 0
+        return_legacy_cache = False
         if use_cache:
-            if not isinstance(past_key_values, Cache):
+            if not isinstance(past_key_values, Cache):  # kept for BC (non `Cache` `past_key_values` inputs)
+                return_legacy_cache = True
                 past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-            past_seen_tokens = past_key_values.get_usable_length(seq_length)
+            past_seen_tokens = past_key_values.get_seq_length()
 
         if inputs_embeds is not None and input_ids is None and past_seen_tokens == 0:
             raise ValueError("When first calling the model, if input_embeds are passed, input_ids should not be None.")
@@ -1671,6 +1669,9 @@ class Idefics2Model(Idefics2PreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+
+        if return_legacy_cache and use_cache:
+            outputs.past_key_values = outputs.past_key_values.to_legacy_cache()
 
         if not return_dict:
             return tuple(v for v in [*outputs, image_hidden_states] if v is not None)
@@ -1776,9 +1777,9 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
         Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
+                config.vocab_size]` or `model.image_token_id` (where `model` is your instance of `Idefics2ForConditionalGeneration`).
+                Tokens with indices set to `model.image_token_id` are ignored (masked), the loss is only
+                computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         Returns:
 
         Example:
@@ -1857,7 +1858,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
                 shift_logits = logits[..., :-1, :].contiguous()
                 shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
-            loss_fct = CrossEntropyLoss(ignore_index=self.image_token_id)
+            loss_fct = CrossEntropyLoss()
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
 
         if not return_dict:
@@ -1876,15 +1877,12 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
     ):
+        past_length = 0
         # Omit tokens covered by past_key_values
         if past_key_values is not None:
-            if isinstance(past_key_values, Cache):
-                cache_length = past_key_values.get_seq_length()
-                past_length = past_key_values.seen_tokens
-                max_cache_length = past_key_values.get_max_length()
-            else:
-                cache_length = past_length = past_key_values[0][0].shape[2]
-                max_cache_length = None
+            # Past key values are always initialized with a `Cache` object -> no need for if-else anymore
+            past_length = past_key_values.get_seq_length()
+            max_cache_length = past_key_values.get_max_length()
 
             # Keep only the unprocessed tokens:
             # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
@@ -1902,7 +1900,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
             if (
                 max_cache_length is not None
                 and attention_mask is not None
-                and cache_length + input_ids.shape[1] > max_cache_length
+                and past_length + input_ids.shape[1] > max_cache_length
             ):
                 attention_mask = attention_mask[:, -max_cache_length:]
 
@@ -1915,7 +1913,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
                 position_ids = position_ids[:, -input_ids.shape[1] :]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and past_key_values is None:
+        if inputs_embeds is not None and past_length == 0:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids}

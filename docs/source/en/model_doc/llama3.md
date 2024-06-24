@@ -82,4 +82,4 @@ pipeline("Hey how are you doing today?")
 ```
 
 ## Resources
-A ton of cool resources are already available on the documentation page of [~llama2], inviting contributors to add new recourses curated for Llama3 here! 🤗
+A ton of cool resources are already available on the documentation page of [~llama2], inviting contributors to add new resources curated for Llama3 here! 🤗

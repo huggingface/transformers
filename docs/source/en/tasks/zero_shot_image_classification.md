@@ -39,7 +39,7 @@ In this guide you'll learn how to:
 Before you begin, make sure you have all the necessary libraries installed:
 
 ```bash
-pip install -q transformers
+pip install -q "transformers[torch]" pillow
 ```
 
 ## Zero-shot image classification pipeline
@@ -119,6 +119,8 @@ image for the model by resizing and normalizing it, and a tokenizer that takes c
 
 ```py
 >>> candidate_labels = ["tree", "car", "bike", "cat"]
+# follows the pipeline prompt template to get same results
+>>> candidate_labels = [f'This is a photo of {label}.' for label in candidate_labels]
 >>> inputs = processor(images=image, text=candidate_labels, return_tensors="pt", padding=True)
 ```
 

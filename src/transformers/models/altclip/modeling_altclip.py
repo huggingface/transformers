@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch AltCLIP model."""
+"""PyTorch AltCLIP model."""
+
 import math
 from dataclasses import dataclass
 from typing import Any, List, Optional, Tuple, Union
@@ -39,9 +40,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "BAAI/AltCLIP"
 _CONFIG_FOR_DOC = "AltCLIPConfig"
-
-
-from ..deprecated._archive_maps import ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 ALTCLIP_START_DOCSTRING = r"""
@@ -1034,6 +1032,7 @@ class AltCLIPPreTrainedModel(PreTrainedModel):
     config_class = AltCLIPConfig
     base_model_prefix = "altclip"
     supports_gradient_checkpointing = True
+    _no_split_module = []
 
     def _init_weights(self, module):
         """Initialize the weights"""

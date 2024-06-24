@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Grounding DINO model."""
+"""PyTorch Grounding DINO model."""
 
 import copy
 import math
@@ -73,7 +73,7 @@ def load_cuda_kernels():
 
     global MultiScaleDeformableAttention
 
-    root = Path(__file__).resolve().parent.parent.parent / "kernels" / "grounding_dino"
+    root = Path(__file__).resolve().parent.parent.parent / "kernels" / "deformable_detr"
     src_files = [
         root / filename
         for filename in [
@@ -151,11 +151,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "GroundingDinoConfig"
 _CHECKPOINT_FOR_DOC = "IDEA-Research/grounding-dino-tiny"
-
-GROUNDING_DINO_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "IDEA-Research/grounding-dino-tiny",
-    # See all Grounding DINO models at https://huggingface.co/models?filter=grounding-dino
-]
 
 
 @dataclass
@@ -468,7 +463,14 @@ class GroundingDinoConvEncoder(nn.Module):
             self.model.feature_info.channels() if config.use_timm_backbone else self.model.channels
         )
 
-        backbone_model_type = config.backbone if config.use_timm_backbone else config.backbone_config.model_type
+        backbone_model_type = None
+        if config.backbone is not None:
+            backbone_model_type = config.backbone
+        elif config.backbone_config is not None:
+            backbone_model_type = config.backbone_config.model_type
+        else:
+            raise ValueError("Either `backbone` or `backbone_config` should be provided in the config")
+
         if "resnet" in backbone_model_type:
             for name, parameter in self.model.named_parameters():
                 if config.use_timm_backbone:

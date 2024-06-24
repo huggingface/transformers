@@ -18,7 +18,6 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 _import_structure = {
     "configuration_mobilenet_v1": [
-        "MOBILENET_V1_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "MobileNetV1Config",
         "MobileNetV1OnnxConfig",
     ],
@@ -40,7 +39,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_mobilenet_v1"] = [
-        "MOBILENET_V1_PRETRAINED_MODEL_ARCHIVE_LIST",
         "MobileNetV1ForImageClassification",
         "MobileNetV1Model",
         "MobileNetV1PreTrainedModel",
@@ -50,7 +48,6 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_mobilenet_v1 import (
-        MOBILENET_V1_PRETRAINED_CONFIG_ARCHIVE_MAP,
         MobileNetV1Config,
         MobileNetV1OnnxConfig,
     )
@@ -71,7 +68,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_mobilenet_v1 import (
-            MOBILENET_V1_PRETRAINED_MODEL_ARCHIVE_LIST,
             MobileNetV1ForImageClassification,
             MobileNetV1Model,
             MobileNetV1PreTrainedModel,

@@ -382,7 +382,7 @@ Tokenize the text and return the `input_ids` as PyTorch tensors:
 >>> inputs = tokenizer(prompt, return_tensors="pt").input_ids
 ```
 
-Use the [`~transformers.generation_utils.GenerationMixin.generate`] method to generate text.
+Use the [`~generation.GenerationMixin.generate`] method to generate text.
 For more details about the different text generation strategies and parameters for controlling generation, check out the [Text generation strategies](../generation_strategies) page.
 
 ```py

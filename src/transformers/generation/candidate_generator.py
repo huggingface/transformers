@@ -19,12 +19,12 @@ from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 import torch
 
 from ..cache_utils import DynamicCache
+from .logits_process import LogitsProcessorList, MinLengthLogitsProcessor
 
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
     from .configuration_utils import GenerationConfig
-    from .logits_process import LogitsProcessorList
 
 
 class CandidateGenerator:
@@ -94,9 +94,9 @@ class AssistedCandidateGenerator(CandidateGenerator):
         input_ids: torch.LongTensor,
         assistant_model: "PreTrainedModel",
         generation_config: "GenerationConfig",
-        logits_processor: "LogitsProcessorList",
         model_kwargs: Dict,
         inputs_tensor: Optional[torch.Tensor] = None,
+        logits_processor: "LogitsProcessorList" = None,
     ):
         # Make sure all data at the same device as assistant model
         device = assistant_model.device
@@ -116,6 +116,19 @@ class AssistedCandidateGenerator(CandidateGenerator):
                     value.detach().to(device) if isinstance(value, torch.Tensor) else copy.deepcopy(value)
                 )
 
+        # Remove potential default DynamicCache if assistant does not support it
+        if "past_key_values" in assistant_kwargs.keys():
+            if (
+                isinstance(assistant_kwargs["past_key_values"], DynamicCache)
+                and not self.assistant_model._supports_cache_class
+            ):
+                # Cache is empty -> remove it from kwargs
+                if len(assistant_kwargs["past_key_values"]) == 0:
+                    del assistant_kwargs["past_key_values"]
+                # Cache is not empty -> convert to legacy
+                else:
+                    assistant_kwargs["past_key_values"] = assistant_kwargs["past_key_values"].to_legacy_cache()
+
         if "assistant_encoder_outputs" in model_kwargs:
             assistant_kwargs["encoder_outputs"] = model_kwargs["assistant_encoder_outputs"]
         elif assistant_model.config.is_encoder_decoder:
@@ -123,7 +136,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
                 inputs_tensor, assistant_model.generation_config.bos_token_id, assistant_kwargs
             )
             assistant_kwargs = assistant_model._prepare_encoder_decoder_kwargs_for_generation(
-                inputs_tensor, assistant_kwargs, model_input_name
+                inputs_tensor, assistant_kwargs, model_input_name, assistant_model.generation_config
             )
         elif "encoder_outputs" in model_kwargs:
             assistant_kwargs["encoder_outputs"] = model_kwargs["encoder_outputs"]
@@ -145,15 +158,28 @@ class AssistedCandidateGenerator(CandidateGenerator):
             self.input_ids_key = "input_ids"
 
         # Prepare generation-related options.
-        self.logits_processor = logits_processor
+        self.logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         self.generation_config = copy.deepcopy(generation_config)
         self.generation_config.return_dict_in_generate = True
         self.generation_config.output_scores = True
 
+        # Disable sampling -- this implementation of assisted generation/speculative decoding uses the assistant
+        # greedily to maximize matches. Disables sampling-related flags to prevent warnings
+        self.generation_config.do_sample = False
+        for attr in ("temperature", "top_p", "min_p", "typical_p", "top_k", "epsilon_cutoff", "eta_cutoff"):
+            setattr(self.generation_config, attr, None)
+
         # avoid unnecessary warnings that min_length is larger than max_new_tokens
+        # remove the `MinLengthLogitsProcessor` if exists (NOTE: no need to check for `MinNewTokensLogitsProcessor`)
         self.main_model_min_length = self.generation_config.min_length
         self.generation_config.min_length = 0
         self.generation_config.min_new_tokens = None
+        for processor in self.logits_processor:
+            if type(processor) == MinLengthLogitsProcessor:
+                raise ValueError(
+                    "Passing `MinLengthLogitsProcessor` when using `assisted_generation is disabled. "
+                    "Please pass in `min_length` into `.generate()` instead"
+                )
 
     def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
         """
@@ -374,10 +400,7 @@ def _crop_past_key_values(model, past_key_values, maximum_length):
             for idx in range(len(past_key_values)):
                 past_key_values[idx] = past_key_values[idx][:, :, :maximum_length, :]
     elif isinstance(past_key_values, DynamicCache):
-        for idx in range(len(past_key_values.key_cache)):
-            if past_key_values.value_cache[idx].shape[-1] != 0:
-                past_key_values.key_cache[idx] = past_key_values.key_cache[idx][:, :, :maximum_length, :]
-                past_key_values.value_cache[idx] = past_key_values.value_cache[idx][:, :, :maximum_length, :]
+        past_key_values.crop(maximum_length)
 
     elif past_key_values is not None:
         for idx in range(len(past_key_values)):

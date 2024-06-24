@@ -18,7 +18,6 @@ import inspect
 import unittest
 
 from transformers import AutoBackbone
-from transformers.configuration_utils import PretrainedConfig
 from transformers.testing_utils import require_timm, require_torch, torch_device
 from transformers.utils.import_utils import is_torch_available
 
@@ -106,17 +105,15 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
     has_attentions = False
 
     def setUp(self):
-        self.config_class = PretrainedConfig
+        # self.config_class = PretrainedConfig
+        self.config_class = TimmBackboneConfig
         self.model_tester = TimmBackboneModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=self.config_class, has_text_modality=False)
+        self.config_tester = ConfigTester(
+            self, config_class=self.config_class, has_text_modality=False, common_properties=["num_channels"]
+        )
 
     def test_config(self):
-        self.config_tester.create_and_test_config_to_json_string()
-        self.config_tester.create_and_test_config_to_json_file()
-        self.config_tester.create_and_test_config_from_and_save_pretrained()
-        self.config_tester.create_and_test_config_with_num_labels()
-        self.config_tester.check_config_can_be_init_without_params()
-        self.config_tester.check_config_arguments_init()
+        self.config_tester.run_common_tests()
 
     def test_timm_transformer_backbone_equivalence(self):
         timm_checkpoint = "resnet18"
@@ -131,7 +128,7 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
         # Out indices are set to the last layer by default. For timm models, we don't know
         # the number of layers in advance, so we set it to (-1,), whereas for transformers
         # models, we set it to [len(stage_names) - 1] (kept for backward compatibility).
-        self.assertEqual(timm_model.out_indices, (-1,))
+        self.assertEqual(timm_model.out_indices, [-1])
         self.assertEqual(transformers_model.out_indices, [len(timm_model.stage_names) - 1])
 
         timm_model = AutoBackbone.from_pretrained(timm_checkpoint, use_timm_backbone=True, out_indices=[1, 2, 3])
@@ -158,7 +155,7 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
         pass
 
     @unittest.skip("TimmBackbone models doesn't have inputs_embeds")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip("TimmBackbone model cannot be created without specifying a backbone checkpoint")
@@ -167,6 +164,18 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
 
     @unittest.skip("Only checkpoints on timm can be loaded into TimmBackbone")
     def test_save_load(self):
+        pass
+
+    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    def test_save_load_low_cpu_mem_usage(self):
+        pass
+
+    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    def test_save_load_low_cpu_mem_usage_checkpoints(self):
+        pass
+
+    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    def test_save_load_low_cpu_mem_usage_no_safetensors(self):
         pass
 
     @unittest.skip("model weights aren't tied in TimmBackbone.")

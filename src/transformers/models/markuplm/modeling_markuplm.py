@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch MarkupLM model."""
+"""PyTorch MarkupLM model."""
 
 import math
 import os
@@ -51,9 +51,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "microsoft/markuplm-base"
 _CONFIG_FOR_DOC = "MarkupLMConfig"
-
-
-from ..deprecated._archive_maps import MARKUPLM_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 class XPathEmbeddings(nn.Module):
@@ -314,6 +311,9 @@ class MarkupLMLMPredictionHead(nn.Module):
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
 
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
+        self.decoder.bias = self.bias
+
+    def _tie_weights(self):
         self.decoder.bias = self.bias
 
     def forward(self, hidden_states):

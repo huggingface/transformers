@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Depth Anything model. """
-
+"""Testing suite for the PyTorch Depth Anything model."""
 
 import unittest
 
@@ -150,17 +149,15 @@ class DepthAnythingModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     def setUp(self):
         self.model_tester = DepthAnythingModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=DepthAnythingConfig, has_text_modality=False, hidden_size=37
+            self,
+            config_class=DepthAnythingConfig,
+            has_text_modality=False,
+            hidden_size=37,
+            common_properties=["patch_size"],
         )
 
     def test_config(self):
-        self.config_tester.create_and_test_config_to_json_string()
-        self.config_tester.create_and_test_config_to_json_file()
-        self.config_tester.create_and_test_config_from_and_save_pretrained()
-        self.config_tester.create_and_test_config_from_and_save_pretrained_subfolder()
-        self.config_tester.create_and_test_config_with_num_labels()
-        self.config_tester.check_config_can_be_init_without_params()
-        self.config_tester.check_config_arguments_init()
+        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="Depth Anything with AutoBackbone does not have a base model and hence no input_embeddings")
     def test_inputs_embeds(self):
@@ -179,7 +176,7 @@ class DepthAnythingModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         pass
 
     @unittest.skip(reason="Depth Anything with AutoBackbone does not have a base model and hence no input_embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip(reason="Depth Anything with AutoBackbone does not have a base model")
@@ -207,6 +204,35 @@ class DepthAnythingModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         model_name = "LiheYoung/depth-anything-small-hf"
         model = DepthAnythingForDepthEstimation.from_pretrained(model_name)
         self.assertIsNotNone(model)
+
+    def test_backbone_selection(self):
+        def _validate_backbone_init():
+            for model_class in self.all_model_classes:
+                model = model_class(config)
+                model.to(torch_device)
+                model.eval()
+
+                # Confirm out_indices propogated to backbone
+                self.assertEqual(len(model.backbone.out_indices), 2)
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        # Load a timm backbone
+        config.backbone = "resnet18"
+        config.use_pretrained_backbone = True
+        config.use_timm_backbone = True
+        config.backbone_config = None
+        # For transformer backbones we can't set the out_indices or just return the features
+        config.backbone_kwargs = {"out_indices": (-2, -1)}
+        _validate_backbone_init()
+
+        # Load a HF backbone
+        config.backbone = "facebook/dinov2-small"
+        config.use_pretrained_backbone = True
+        config.use_timm_backbone = False
+        config.backbone_config = None
+        config.backbone_kwargs = {"out_indices": [-2, -1]}
+        _validate_backbone_init()
 
 
 # We will verify our results on an image of cute cats

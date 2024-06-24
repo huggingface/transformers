@@ -131,9 +131,10 @@ def nested_concat(tensors, new_tensors, padding_index=-100):
     Concat the `new_tensors` to `tensors` on the first dim and pad them on the second if needed. Works for tensors or
     nested list/tuples/dict of tensors.
     """
-    assert type(tensors) == type(
-        new_tensors
-    ), f"Expected `tensors` and `new_tensors` to have the same type but found {type(tensors)} and {type(new_tensors)}."
+    if not (isinstance(tensors, torch.Tensor) and isinstance(new_tensors, torch.Tensor)):
+        assert (
+            type(tensors) == type(new_tensors)
+        ), f"Expected `tensors` and `new_tensors` to have the same type but found {type(tensors)} and {type(new_tensors)}."
     if isinstance(tensors, (list, tuple)):
         return type(tensors)(nested_concat(t, n, padding_index=padding_index) for t, n in zip(tensors, new_tensors))
     elif isinstance(tensors, torch.Tensor):
@@ -1250,6 +1251,10 @@ class AcceleratorConfig:
             Whether to use non-blocking CUDA calls to help minimize synchronization during
             distributed training with prepared `DataLoader` inputs being moved to device.
             Best if used with `pin_memory=True` in the `TrainingArguments`.
+        use_configured_state (`bool*, *optional*, defaults to `False`):
+            Whether or not to use a pre-configured `AcceleratorState` or `PartialState` defined
+            before calling `TrainingArguments`. If `True`, an `Accelerator` or `PartialState`
+            must be initialized. May lead to issues using sweeps or hyperparameter tuning.
 
     """
 
@@ -1312,6 +1317,13 @@ class AcceleratorConfig:
             "    The [`accelerate.utils.GradientAccumulationPlugin`] default is `False`."
         },
     )
+    use_configured_state: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether or not to use a pre-configured `AcceleratorState` or `PartialState` defined before calling `TrainingArguments`."
+            "If `True`, an `Accelerator` or `PartialState` must be initialized. May lead to issues using sweeps or hyperparameter tuning."
+        },
+    )
 
     @classmethod
     def from_json_file(cls, json_file):
@@ -1330,6 +1342,9 @@ class AcceleratorConfig:
 
     def to_dict(self):
         return copy.deepcopy(self.__dict__)
+
+    def pop(self, key, default=None):
+        return self.__dict__.pop(key, default)
 
 
 class LayerWiseDummyOptimizer(torch.optim.Optimizer):

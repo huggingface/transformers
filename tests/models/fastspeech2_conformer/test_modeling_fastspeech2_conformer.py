@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch FastSpeech2Conformer model."""
+"""Testing suite for the PyTorch FastSpeech2Conformer model."""
 
 import inspect
 import tempfile
@@ -344,7 +344,7 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="FastSpeech2Conformer has no input embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip(
@@ -766,7 +766,7 @@ class FastSpeech2ConformerWithHifiGanTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="FastSpeech2Conformer has no input embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip(

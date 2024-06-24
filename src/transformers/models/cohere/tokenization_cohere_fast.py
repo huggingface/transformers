@@ -20,7 +20,6 @@ from typing import Dict, List, Literal, Union
 
 from tokenizers import processors
 
-from ...pipelines.conversational import Conversation
 from ...tokenization_utils_base import BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
@@ -247,13 +246,6 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         '<BOS_TOKEN><|START_OF_TURN_TOKEN|><|USER_TOKEN|>Hello, how are you?<|END_OF_TURN_TOKEN|><|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>'
 
         """
-        logger.warning_once(
-            "No chat template is set for this tokenizer, falling back to a default class-level template. "
-            "This is very error-prone, because models are often trained with templates different from the class "
-            "default! Default chat templates are a legacy feature and will be removed in Transformers v4.43, at which "
-            "point any code depending on them will stop working. We recommend setting a valid chat template before "
-            "then to ensure that this model continues working without issues."
-        )
         default_template = (
             "{{ bos_token }}"
             "{% if messages[0]['role'] == 'system' %}"
@@ -420,7 +412,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
 
     def apply_tool_use_template(
         self,
-        conversation: Union[List[Dict[str, str]], "Conversation"],
+        conversation: Union[List[Dict[str, str]]],
         tools: List[Dict],
         **kwargs,
     ) -> Union[str, List[int]]:
@@ -431,13 +423,13 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
 
         Conceptually, this works in the same way as `apply_chat_format`, but takes an additional `tools` parameter.
 
-        Converts a Conversation object or a list of dictionaries with `"role"` and `"content"` keys and a list of available
+        Converts a chat in the form of a list of dictionaries with `"role"` and `"content"` keys and a list of available
         tools for the model to use into a prompt string, or a list of token ids.
         This method will use the tokenizer's `default_tool_use_template` template specified at the class level.
         You can override the default template using the `tool_use_template` kwarg but the quality of your results may decrease.
 
         Args:
-            conversation (Union[List[Dict[str, str]], "Conversation"]): A Conversation object or list of dicts
+            conversation (Union[List[Dict[str, str]]]): A list of dicts
                 with "role" and "content" keys, representing the chat history so far.
             tools (List[Dict]): a list of tools to render into the prompt for the model to choose from.
                 See an example at the bottom of the docstring.
@@ -575,7 +567,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
 
     def apply_grounded_generation_template(
         self,
-        conversation: Union[List[Dict[str, str]], "Conversation"],
+        conversation: Union[List[Dict[str, str]]],
         documents: List[Dict],
         citation_mode: Literal["fast", "accurate"] = "accurate",
         **kwargs,
@@ -587,13 +579,13 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         Conceptually, this works in the same way as `apply_chat_format`, but takes additional `documents`
         and parameter `citation_mode` parameters.
 
-        Converts a Conversation object or a list of dictionaries with `"role"` and `"content"` keys and a list of
+        Converts a list of dictionaries with `"role"` and `"content"` keys and a list of
         documents for the model to ground its response on into a prompt string, or a list of token ids.
         This method will use the tokenizer's `grounded_generation_template` template specified at the class level.
         You can override the default template using the `grounded_generation_template` kwarg but the quality of your results may decrease.
 
         Args:
-            conversation (Union[List[Dict[str, str]], "Conversation"]): A Conversation object or list of dicts
+            conversation (Union[List[Dict[str, str]]]): A list of dicts
                 with "role" and "content" keys, representing the chat history so far.
             documents (List[Dict[str, str]): A list of dicts, representing documents or tool outputs to ground your
                 generation on. A document is a semistructured dict, wiht a string to string mapping. Common fields are

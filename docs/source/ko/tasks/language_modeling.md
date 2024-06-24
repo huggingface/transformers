@@ -366,7 +366,7 @@ TensorFlow에서 모델을 미세 조정하려면, 먼저 옵티마이저 함수
 >>> inputs = tokenizer(prompt, return_tensors="pt").input_ids
 ```
 
-[`~transformers.generation_utils.GenerationMixin.generate`] 메소드를 사용하여 텍스트를 생성하세요. 생성을 제어하는 다양한 텍스트 생성 전략과 매개변수에 대한 자세한 내용은 [텍스트 생성 전략](../generation_strategies) 페이지를 확인하세요.
+[`~generation.GenerationMixin.generate`] 메소드를 사용하여 텍스트를 생성하세요. 생성을 제어하는 다양한 텍스트 생성 전략과 매개변수에 대한 자세한 내용은 [텍스트 생성 전략](../generation_strategies) 페이지를 확인하세요.
 
 ```py
 >>> from transformers import AutoModelForCausalLM

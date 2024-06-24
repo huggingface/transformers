@@ -239,7 +239,7 @@ When training a model from scratch, configuration values may be overridden with 
 
 
 ```bash
-python run_clm.py --model_type openai-community/gpt2 --tokenizer_name openai-community/gpt2 \ --config_overrides="n_embd=1024,n_head=16,n_layer=48,n_positions=102" \
+python run_clm.py --model_type gpt2 --tokenizer_name openai-community/gpt2 \ --config_overrides="n_embd=1024,n_head=16,n_layer=48,n_positions=102" \
 [...]
 ```
 

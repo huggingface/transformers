@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Fast tokenization class for BlenderbotSmall."""
+
 from typing import List, Optional
 
 from tokenizers import ByteLevelBPETokenizer
@@ -104,13 +105,6 @@ class BlenderbotSmallTokenizerFast(PreTrainedTokenizerFast):
         """
         A very simple chat template that just adds whitespace between messages.
         """
-        logger.warning_once(
-            "No chat template is set for this tokenizer, falling back to a default class-level template. "
-            "This is very error-prone, because models are often trained with templates different from the class "
-            "default! Default chat templates are a legacy feature and will be removed in Transformers v4.43, at which "
-            "point any code depending on them will stop working. We recommend setting a valid chat template before "
-            "then to ensure that this model continues working without issues."
-        )
         return (
             "{% for message in messages %}"
             "{% if message['role'] == 'user' %}{{ ' ' }}{% endif %}"

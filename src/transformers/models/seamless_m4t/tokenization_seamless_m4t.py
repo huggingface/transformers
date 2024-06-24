@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for SeamlessM4T."""
+
 import os
 from shutil import copyfile
 from typing import Any, Dict, List, Optional, Tuple, Union

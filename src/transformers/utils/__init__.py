@@ -21,6 +21,7 @@ from packaging import version
 
 from .. import __version__
 from .backbone_utils import BackboneConfigMixin, BackboneMixin
+from .chat_template_utils import DocstringParsingException, TypeHintParsingException, get_json_schema
 from .constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from .doc import (
     add_code_sample_docstrings,
@@ -37,9 +38,11 @@ from .generic import (
     PaddingStrategy,
     TensorType,
     add_model_info_to_auto_map,
+    add_model_info_to_custom_pipelines,
     cached_property,
     can_return_loss,
     expand_dims,
+    filter_out_non_signature_kwargs,
     find_labels,
     flatten_dict,
     infer_framework,
@@ -129,6 +132,8 @@ from .import_utils import (
     is_ftfy_available,
     is_g2p_en_available,
     is_galore_torch_available,
+    is_gguf_available,
+    is_hqq_available,
     is_in_notebook,
     is_ipex_available,
     is_jieba_available,
@@ -138,6 +143,7 @@ from .import_utils import (
     is_keras_nlp_available,
     is_levenshtein_available,
     is_librosa_available,
+    is_lomo_available,
     is_mlx_available,
     is_natten_available,
     is_ninja_available,
@@ -184,6 +190,7 @@ from .import_utils import (
     is_torch_bf16_gpu_available,
     is_torch_compile_available,
     is_torch_cuda_available,
+    is_torch_deterministic,
     is_torch_fp16_available_on_device,
     is_torch_fx_available,
     is_torch_fx_proxy,

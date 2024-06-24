@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch ViLT model. """
+"""Testing suite for the PyTorch ViLT model."""
 
 import unittest
 
@@ -357,6 +357,13 @@ class ViltModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_model_outputs_equivalence(self):
         pass
 
+    @unittest.skip(
+        reason="""VilT samples image tokens from a multinomial distribution, resulting in not deterministic
+                            hidden states. Cannot test equivalence on logit level"""
+    )
+    def test_inputs_embeds_matches_input_ids(self):
+        pass
+
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
@@ -630,7 +637,7 @@ class ViltModelIntegrationTest(unittest.TestCase):
 
         processor = self.default_processor
 
-        dataset = load_dataset("hf-internal-testing/fixtures_nlvr2", split="test")
+        dataset = load_dataset("hf-internal-testing/fixtures_nlvr2", split="test", trust_remote_code=True)
         image1 = Image.open(dataset[0]["file"]).convert("RGB")
         image2 = Image.open(dataset[1]["file"]).convert("RGB")
 

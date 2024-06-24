@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch MVP model. """
-
+"""Testing suite for the PyTorch MVP model."""
 
 import copy
 import tempfile
@@ -422,7 +421,6 @@ class MvpModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     all_generative_model_classes = (MvpForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "conversational": MvpForConditionalGeneration,
             "feature-extraction": MvpModel,
             "fill-mask": MvpForConditionalGeneration,
             "question-answering": MvpForQuestionAnswering,

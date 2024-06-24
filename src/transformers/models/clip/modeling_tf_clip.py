@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 CLIP model."""
-
+"""TF 2.0 CLIP model."""
 
 from __future__ import annotations
 
@@ -50,9 +49,6 @@ from .configuration_clip import CLIPConfig, CLIPTextConfig, CLIPVisionConfig
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "openai/clip-vit-base-patch32"
-
-
-from ..deprecated._archive_maps import TF_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 LARGE_NEGATIVE = -1e8

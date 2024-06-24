@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch PEGASUS-X model. """
-
+"""Testing suite for the PyTorch PEGASUS-X model."""
 
 import copy
 import math
@@ -207,7 +206,6 @@ class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     all_generative_model_classes = (PegasusXForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "conversational": PegasusXForConditionalGeneration,
             "feature-extraction": PegasusXModel,
             "summarization": PegasusXForConditionalGeneration,
             "text2text-generation": PegasusXForConditionalGeneration,

@@ -82,7 +82,7 @@ def copy_encoder(hf_encoder, pt_model):
 
 def copy_text_model_and_projection(hf_model, pt_model):
     # copy projection
-    hf_model.text_projection.weight.data = pt_model.text_projection.data.T
+    hf_model.text_projection.weight.data = pt_model.text_projection.data.T.contiguous()
 
     # copy text encoder
     copy_encoder(hf_model.text_model, pt_model)
@@ -90,7 +90,7 @@ def copy_text_model_and_projection(hf_model, pt_model):
 
 def copy_vison_model_and_projection(hf_model, pt_model):
     # copy projection
-    hf_model.visual_projection.weight.data = pt_model.visual.proj.data.T
+    hf_model.visual_projection.weight.data = pt_model.visual.proj.data.T.contiguous()
 
     # copy layer norms
     copy_linear(hf_model.vision_model.pre_layrnorm, pt_model.visual.ln_pre)

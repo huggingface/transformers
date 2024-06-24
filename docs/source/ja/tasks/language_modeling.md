@@ -388,7 +388,7 @@ TensorFlow でモデルを微調整するには、オプティマイザー関数
 >>> inputs = tokenizer(prompt, return_tensors="pt").input_ids
 ```
 
-[`~transformers.generation_utils.GenerationMixin.generate`] メソッドを使用してテキストを生成します。
+[`~generation.GenerationMixin.generate`] メソッドを使用してテキストを生成します。
 さまざまなテキスト生成戦略と生成を制御するためのパラメーターの詳細については、[テキスト生成戦略](../generation_strategies) ページを参照してください。
 
 ```py

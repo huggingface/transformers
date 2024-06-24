@@ -15,6 +15,7 @@
 """
 Processor class for Donut.
 """
+
 import re
 import warnings
 from contextlib import contextmanager

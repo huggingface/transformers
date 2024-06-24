@@ -60,7 +60,7 @@ image
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/segmentation_input.jpg" alt="Segmentation Input"/>
 </div>
 
-We will use [nvidia/segformer-b1-finetuned-cityscapes-1024-1024](https://huggingface.co/nvidia/segformer-b1-finetuned-cityscapes-1024-1024). 
+We will use [nvidia/segformer-b1-finetuned-cityscapes-1024-1024](https://huggingface.co/nvidia/segformer-b1-finetuned-cityscapes-1024-1024).
 
 ```python
 semantic_segmentation = pipeline("image-segmentation", "nvidia/segformer-b1-finetuned-cityscapes-1024-1024")
@@ -68,7 +68,7 @@ results = semantic_segmentation(image)
 results
 ```
 
-The segmentation pipeline output includes a mask for every predicted class. 
+The segmentation pipeline output includes a mask for every predicted class.
 ```bash
 [{'score': None,
   'label': 'road',
@@ -111,11 +111,11 @@ results[-1]["mask"]
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/semantic_segmentation_output.png" alt="Semantic Segmentation Output"/>
 </div>
 
-In instance segmentation, the goal is not to classify every pixel, but to predict a mask for **every instance of an object** in a given image. It works very similar to object detection, where there is a bounding box for every instance, there's a segmentation mask instead. We will use [facebook/mask2former-swin-large-cityscapes-instance](https://huggingface.co/facebook/mask2former-swin-large-cityscapes-instance) for this. 
+In instance segmentation, the goal is not to classify every pixel, but to predict a mask for **every instance of an object** in a given image. It works very similar to object detection, where there is a bounding box for every instance, there's a segmentation mask instead. We will use [facebook/mask2former-swin-large-cityscapes-instance](https://huggingface.co/facebook/mask2former-swin-large-cityscapes-instance) for this.
 
 ```python
 instance_segmentation = pipeline("image-segmentation", "facebook/mask2former-swin-large-cityscapes-instance")
-results = instance_segmentation(Image.open(image))
+results = instance_segmentation(image)
 results
 ```
 
@@ -148,7 +148,7 @@ Panoptic segmentation combines semantic segmentation and instance segmentation, 
 
 ```python
 panoptic_segmentation = pipeline("image-segmentation", "facebook/mask2former-swin-large-cityscapes-panoptic")
-results = panoptic_segmentation(Image.open(image))
+results = panoptic_segmentation(image)
 results
 ```
 As you can see below, we have more classes. We will later illustrate to see that every pixel is classified into one of the classes.
@@ -245,11 +245,12 @@ You'll also want to create a dictionary that maps a label id to a label class wh
 
 ```py
 >>> import json
->>> from huggingface_hub import cached_download, hf_hub_url
+>>> from pathlib import Path
+>>> from huggingface_hub import hf_hub_download
 
 >>> repo_id = "huggingface/label-files"
 >>> filename = "ade20k-id2label.json"
->>> id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename, repo_type="dataset")), "r"))
+>>> id2label = json.loads(Path(hf_hub_download(repo_id, filename, repo_type="dataset")).read_text())
 >>> id2label = {int(k): v for k, v in id2label.items()}
 >>> label2id = {v: k for k, v in id2label.items()}
 >>> num_labels = len(id2label)
@@ -309,13 +310,13 @@ As an example, take a look at this [example dataset](https://huggingface.co/data
 
 ### Preprocess
 
-The next step is to load a SegFormer image processor to prepare the images and annotations for the model. Some datasets, like this one, use the zero-index as the background class. However, the background class isn't actually included in the 150 classes, so you'll need to set `reduce_labels=True` to subtract one from all the labels. The zero-index is replaced by `255` so it's ignored by SegFormer's loss function:
+The next step is to load a SegFormer image processor to prepare the images and annotations for the model. Some datasets, like this one, use the zero-index as the background class. However, the background class isn't actually included in the 150 classes, so you'll need to set `do_reduce_labels=True` to subtract one from all the labels. The zero-index is replaced by `255` so it's ignored by SegFormer's loss function:
 
 ```py
 >>> from transformers import AutoImageProcessor
 
 >>> checkpoint = "nvidia/mit-b0"
->>> image_processor = AutoImageProcessor.from_pretrained(checkpoint, reduce_labels=True)
+>>> image_processor = AutoImageProcessor.from_pretrained(checkpoint, do_reduce_labels=True)
 ```
 
 <frameworkcontent>
