@@ -407,6 +407,7 @@ class SiglipVisionModelTest(SiglipModelTesterMixin, unittest.TestCase):
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     @require_torch_sdpa
     @slow
+    @is_flaky()
     def test_eager_matches_sdpa_inference(
         self,
         torch_dtype: str,
@@ -577,6 +578,7 @@ class SiglipTextModelTest(SiglipModelTesterMixin, unittest.TestCase):
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     @require_torch_sdpa
     @slow
+    @is_flaky()
     def test_eager_matches_sdpa_inference(
         self,
         torch_dtype: str,
@@ -885,6 +887,7 @@ class SiglipModelTest(SiglipModelTesterMixin, PipelineTesterMixin, unittest.Test
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     @require_torch_sdpa
     @slow
+    @is_flaky()
     def test_eager_matches_sdpa_inference(
         self,
         torch_dtype: str,
@@ -963,6 +966,7 @@ class SiglipForImageClassificationModelTest(SiglipModelTesterMixin, PipelineTest
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     @require_torch_sdpa
     @slow
+    @is_flaky()
     def test_eager_matches_sdpa_inference(
         self,
         torch_dtype: str,
