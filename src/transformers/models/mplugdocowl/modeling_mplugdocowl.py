@@ -278,7 +278,7 @@ class MPLUGDocOwlHReducer(MPLUGDocOwlPreTrainedModel):
 
        
         hidden_states = hidden_states.reshape(B, D, H, W_div_X * X)
-        breakpoint()
+        #breakpoint()
         sequence_output = self.reducer(hidden_states) # B,C,H,W -> B,C,H/conv_shape[0],W/(conv_shape[1])
         sequence_output = sequence_output.flatten(2).transpose(1, 2)  # B,C,H/conv_shape[0],W/(conv_shape[1]) -> B,C,L/conv_patch -> B,L/conv_patch,C
         sequence_output = sequence_output.transpose(0, 1).contiguous() # L/conv_patch, B, C
@@ -434,6 +434,7 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         patch_positions: Optional[torch.LongTensor] = None,
+        modality_indicators: Optional[torch.LongTensor] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, MPLUGDocOwlCausalLMOutputWithPast]:
         r"""
@@ -489,11 +490,7 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
             if pixel_values is not None and input_ids.shape[1] != 1:
                
                 image_outputs = self.vision_tower(pixel_values, output_hidden_states=False).last_hidden_state
-                image_outputs = torch.load('/raid/dana/transformers/src/transformers/models/mplugdocowl/docowl_if.pt').to(torch.device('cuda:0'))
-                #torch.save(image_outputs,'image_outputs_new.pt')
-                breakpoint()
-                #try:
-                #image_features = torch.load('/raid/dana/transformers/src/transformers/models/mplugdocowl/docowl_if_afterreducer.pt').to(torch.device('cuda:0'))
+     
                 image_features = self.multi_modal_projector(encoder_hidden_states=image_outputs)
                 
                 inputs_embeds = inputs_embeds.to(image_features.dtype)
@@ -502,7 +499,7 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
                 inputs_embeds, attention_mask, labels, position_ids, modality_indicators = self._merge_input_ids_with_image_features(
                     image_features, inputs_embeds, input_ids, attention_mask, labels
                 )
-                breakpoint()
+               
             # In case input_ids.shape[1] == 1 & pixel_values==None & past_key_values != None, we are in the case of
             # generation with cache
             elif past_key_values is not None and pixel_values is not None and input_ids.shape[1] == 1:
@@ -579,8 +576,9 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, inputs_embeds=None, pixel_values=None, attention_mask=None, **kwargs
+        self, input_ids, past_key_values=None, inputs_embeds=None, attention_mask=None, modality_indicators=None, **kwargs
     ):
+      
         if past_key_values is not None:
             if isinstance(past_key_values, Cache):
                 cache_length = past_key_values.get_seq_length()
@@ -607,27 +605,29 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
                 attention_mask = attention_mask[:, -(cache_length + input_ids.shape[1]) :]
 
         position_ids = kwargs.get("position_ids", None)
+        modality_indicators =kwargs.get("modality_indicators", None) 
         if attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
             if past_key_values:
                 position_ids = position_ids[:, -input_ids.shape[1] :]
-        breakpoint()
+
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids}
-
+        
         model_inputs.update(
             {
                 "position_ids": position_ids,
                 "past_key_values": past_key_values,
                 "use_cache": kwargs.get("use_cache"),
                 "attention_mask": attention_mask,
-                "pixel_values": pixel_values,
                 "patch_positions": kwargs.get("patch_positions", None),
+                "inputs_embeds":inputs_embeds,
+                "modality_indicators": modality_indicators,
             }
         )
         return model_inputs

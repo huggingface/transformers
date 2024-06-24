@@ -445,7 +445,7 @@ class MPLUGDocOwlDecoderLayer(nn.Module):
         """
 
         residual = hidden_states
-
+        breakpoint()
         hidden_states = self.input_layernorm(hidden_states, modality_indicators)
 
         # Self Attention

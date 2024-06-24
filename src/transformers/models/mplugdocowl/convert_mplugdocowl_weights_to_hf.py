@@ -144,9 +144,13 @@ def convert_mplugdocowl_llama_to_hf(text_model_id, vision_model_id, output_hub_p
     output.to(device)
     model.to(device)
     torch.set_default_dtype(torch.float16)
-    with torch.inference_mode():
-        outputs = model(input_ids=output['input_ids'], pixel_values = output['pixel_values'],attention_mask=output['attention_mask'], patch_positions=output['patch_positions'])
-    
+   # with torch.inference_mode():
+        #outputs = model(input_ids=output['input_ids'], pixel_values = output['pixel_values'],attention_mask=output['attention_mask'], patch_positions=output['patch_positions'])
+    try:
+        model.generate(output['input_ids'],max_new_tokens=512)
+    except AttributeError as e:
+        raise(e)
+
     breakpoint()
     model.push_to_hub(output_hub_path)
     processor.push_to_hub(output_hub_path)
@@ -180,4 +184,4 @@ if __name__ == "__main__":
 
 
 
-output_s = model.generate(output['input_ids'],output['pixel_values'], output['patch_positions'],do_sample=False,temperature=1.0,max_new_tokens=512,use_cache=True,)
+#output_s = model.generate(output['input_ids'],output['pixel_values'], output['patch_positions'],do_sample=False,temperature=1.0,max_new_tokens=512,use_cache=True,)

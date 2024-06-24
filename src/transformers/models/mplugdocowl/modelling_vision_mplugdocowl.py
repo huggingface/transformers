@@ -145,7 +145,7 @@ class MPLUGDocOwlVisionEmbeddings(nn.Module):
             stride=self.patch_size,
             bias=False,
         )
-        breakpoint()
+        #breakpoint()
 
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches + 1
@@ -156,17 +156,17 @@ class MPLUGDocOwlVisionEmbeddings(nn.Module):
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
         batch_size = pixel_values.shape[0]
         target_dtype = self.patch_embedding.weight.dtype
-        breakpoint()
+       # breakpoint()
         patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype)) 
-        breakpoint() # shape = [*, width, grid, grid]
+        #breakpoint() # shape = [*, width, grid, grid]
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
-        breakpoint()
+        #breakpoint()
         class_embeds = self.class_embedding.expand(batch_size, 1, -1).to(patch_embeds.dtype)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
         #embeddings = embeddings + self.position_embedding[self.position_ids]
-        breakpoint()
+        #breakpoint()
         embeddings = embeddings + self.position_embedding[:, : embeddings.size(1)].to(patch_embeds.dtype)
-        breakpoint()
+        #breakpoint()
         embeddings = self.pre_layernorm(embeddings)
         return embeddings
 
@@ -478,8 +478,7 @@ class MPLUGDocOwlEncoder(nn.Module):
                 )
 
             hidden_states = layer_outputs[0]
-            if idx == 23:
-                breakpoint()
+         
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
 
@@ -524,16 +523,16 @@ class MPLUGDocOwlVisionTransformer(PreTrainedModel):
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
-        breakpoint()
+
         hidden_states = self.embeddings(pixel_values)
-        breakpoint()
+      
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        breakpoint()
+       
         last_hidden_state = encoder_outputs[0]
         #FIXME added this
         last_hidden_state = self.post_layernorm(last_hidden_state)
