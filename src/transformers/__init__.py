@@ -654,6 +654,7 @@ _import_structure = {
         "RoFormerConfig",
         "RoFormerTokenizer",
     ],
+    "models.rt_detr": ["RTDetrConfig", "RTDetrResNetConfig"],
     "models.rwkv": ["RwkvConfig"],
     "models.sam": [
         "SamConfig",
@@ -1153,6 +1154,7 @@ else:
     _import_structure["models.pix2struct"].extend(["Pix2StructImageProcessor"])
     _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
     _import_structure["models.pvt"].extend(["PvtImageProcessor"])
+    _import_structure["models.rt_detr"].extend(["RTDetrImageProcessor"])
     _import_structure["models.sam"].extend(["SamImageProcessor"])
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
     _import_structure["models.seggpt"].extend(["SegGptImageProcessor"])
@@ -3002,6 +3004,15 @@ else:
             "RoFormerModel",
             "RoFormerPreTrainedModel",
             "load_tf_weights_in_roformer",
+        ]
+    )
+    _import_structure["models.rt_detr"].extend(
+        [
+            "RTDetrForObjectDetection",
+            "RTDetrModel",
+            "RTDetrPreTrainedModel",
+            "RTDetrResNetBackbone",
+            "RTDetrResNetPreTrainedModel",
         ]
     )
     _import_structure["models.rwkv"].extend(
@@ -5270,6 +5281,10 @@ if TYPE_CHECKING:
         RoFormerConfig,
         RoFormerTokenizer,
     )
+    from .models.rt_detr import (
+        RTDetrConfig,
+        RTDetrResNetConfig,
+    )
     from .models.rwkv import RwkvConfig
     from .models.sam import (
         SamConfig,
@@ -5792,6 +5807,7 @@ if TYPE_CHECKING:
             PoolFormerImageProcessor,
         )
         from .models.pvt import PvtImageProcessor
+        from .models.rt_detr import RTDetrImageProcessor
         from .models.sam import SamImageProcessor
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
         from .models.seggpt import SegGptImageProcessor
@@ -7294,6 +7310,13 @@ if TYPE_CHECKING:
             RoFormerModel,
             RoFormerPreTrainedModel,
             load_tf_weights_in_roformer,
+        )
+        from .models.rt_detr import (
+            RTDetrForObjectDetection,
+            RTDetrModel,
+            RTDetrPreTrainedModel,
+            RTDetrResNetBackbone,
+            RTDetrResNetPreTrainedModel,
         )
         from .models.rwkv import (
             RwkvForCausalLM,

@@ -102,7 +102,7 @@ _deps = [
     "codecarbon==1.2.0",
     "cookiecutter==1.7.3",
     "dataclasses",
-    "datasets!=2.5.0,<2.20.0",  # Temporary upper version
+    "datasets!=2.5.0",
     "decord==0.6.0",
     "deepspeed>=0.9.3",
     "diffusers",

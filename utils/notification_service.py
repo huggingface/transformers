@@ -641,7 +641,7 @@ class Message:
 
     def get_new_model_failure_blocks(self, with_header=True, to_truncate=True):
         if self.prev_ci_artifacts is None:
-            return {}
+            return []
 
         sorted_dict = sorted(self.model_results.items(), key=lambda t: t[0])
 
@@ -767,10 +767,11 @@ class Message:
 
         # To save the list of new model failures
         blocks = self.get_new_model_failure_blocks(to_truncate=False)
-        failure_text = blocks[-1]["text"]["text"]
-        file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/new_model_failures.txt")
-        with open(file_path, "w", encoding="UTF-8") as fp:
-            fp.write(failure_text)
+        if blocks:
+            failure_text = blocks[-1]["text"]["text"]
+            file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/new_model_failures.txt")
+            with open(file_path, "w", encoding="UTF-8") as fp:
+                fp.write(failure_text)
 
 
 def retrieve_artifact(artifact_path: str, gpu: Optional[str]):
@@ -891,7 +892,7 @@ if __name__ == "__main__":
     # To find the PR number in a commit title, for example, `Add AwesomeFormer model (#99999)`
     pr_number_re = re.compile(r"\(#(\d+)\)$")
 
-    title = f"🤗 Results of the {ci_event} tests."
+    title = f"🤗 Results of {ci_event} - {os.getenv('CI_TEST_JOB')}."
     # Add Commit/PR title with a link for push CI
     # (check the title in 2 env. variables - depending on the CI is triggered via `push` or `workflow_run` event)
     ci_title_push = os.environ.get("CI_TITLE_PUSH")
