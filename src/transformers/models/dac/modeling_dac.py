@@ -20,7 +20,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from einops import rearrange
 from torch.nn.utils import weight_norm
 
 from ...modeling_utils import PreTrainedModel
@@ -162,10 +161,9 @@ class DacVectorQuantize(nn.Module):
 
 
     def decode_latents(self, hidden_states):
-        # batch_size, hidden_dim, sequence_length = latents.shape
-        # encodings = latents.reshape(batch_size * sequence_length, hidden_dim)
 
-        encodings = rearrange(hidden_states, "b d t -> (b t) d")
+        batch_size, hidden_dim, sequence_length = hidden_states.shape
+        encodings = hidden_states.permute(0, 2, 1).reshape(batch_size * sequence_length, hidden_dim)
         codebook = self.codebook.weight  # codebook: (N x D)
 
         # L2 normalize encodings and codebook (ViT-VQGAN)
@@ -175,7 +173,8 @@ class DacVectorQuantize(nn.Module):
         # Compute euclidean distance with codebook
         l2_norm = encodings.pow(2).sum(1, keepdim=True)
         dist = (l2_norm - 2 * encodings @ codebook.t()) + codebook.pow(2).sum(1, keepdim=True).t()
-        indices = rearrange((-dist).max(1)[1], "(b t) -> b t", b=hidden_states.size(0))
+
+        indices = (-dist).max(1)[1].reshape(hidden_states.size(0), -1)
         quantized_representation = self.codebook(indices).transpose(1, 2)
         return quantized_representation, indices
 
@@ -188,19 +187,10 @@ class DacResidualUnit(nn.Module):
         super().__init__()
         pad = ((7 - 1) * dilation) // 2
 
-        self.block = nn.ModuleList(
-            [
-                torch.jit.script(Snake1d(dimension)), 
-                weight_norm(nn.Conv1d(dimension, dimension, kernel_size=7, dilation=dilation, padding=pad)), 
-                torch.jit.script(Snake1d(dimension)), 
-                weight_norm(nn.Conv1d(dimension, dimension, kernel_size=1))
-            ]
-
-        )
-        # self.snake1 = torch.jit.script(Snake1d(dimension))
-        # self.conv1 = weight_norm(nn.Conv1d(dimension, dimension, kernel_size=7, dilation=dilation, padding=pad))
-        # self.snake2 = torch.jit.script(Snake1d(dimension))
-        # self.conv2 = weight_norm(nn.Conv1d(dimension, dimension, kernel_size=1))
+        self.snake1 = torch.jit.script(Snake1d(dimension))
+        self.conv1 = weight_norm(nn.Conv1d(dimension, dimension, kernel_size=7, dilation=dilation, padding=pad))
+        self.snake2 = torch.jit.script(Snake1d(dimension))
+        self.conv2 = weight_norm(nn.Conv1d(dimension, dimension, kernel_size=1))
 
     def forward(self, hidden_state):
         """
@@ -215,11 +205,8 @@ class DacResidualUnit(nn.Module):
                 Input tensor after passing through the residual unit.
         """
         output_tensor = hidden_state
-        # output_tensor = self.conv1(self.snake1(output_tensor))
-        # output_tensor = self.conv2(self.snake2(output_tensor))
-
-        for block in self.block: 
-            output_tensor = block(output_tensor)
+        output_tensor = self.conv1(self.snake1(output_tensor))
+        output_tensor = self.conv2(self.snake2(output_tensor))
 
         padding = (hidden_state.shape[-1] - output_tensor.shape[-1]) // 2
         if padding > 0:
@@ -232,14 +219,12 @@ class DacEncoderBlock(nn.Module):
     """Encoder block used in DAC encoder."""
     def __init__(self, dimension: int = 16, stride: int = 1):
         super().__init__()
-        self.block = nn.ModuleList(
-            [
-                DacResidualUnit(dimension // 2, dilation=1),
-                DacResidualUnit(dimension // 2, dilation=3),
-                DacResidualUnit(dimension // 2, dilation=9),
-                torch.jit.script(Snake1d(dimension // 2)),
 
-                weight_norm(
+        self.res_unit1 = DacResidualUnit(dimension // 2, dilation=1)
+        self.res_unit2 = DacResidualUnit(dimension // 2, dilation=3)
+        self.res_unit3 = DacResidualUnit(dimension // 2, dilation=9)
+        self.snake1 = torch.jit.script(Snake1d(dimension // 2))
+        self.conv1 = weight_norm(
                     nn.Conv1d(
                         dimension // 2,
                         dimension, 
@@ -247,12 +232,14 @@ class DacEncoderBlock(nn.Module):
                         stride = stride, 
                         padding=math.ceil(stride / 2)
                     ))
-            ]
-        )
 
     def forward(self, hidden_state):
-        for block in self.block: 
-            hidden_state = block(hidden_state)
+
+        hidden_state = self.res_unit1(hidden_state)
+        hidden_state = self.res_unit2(hidden_state)
+        hidden_state = self.snake1(self.res_unit3(hidden_state))
+        hidden_state = self.conv1(hidden_state)
+
         return hidden_state
 
 
@@ -260,10 +247,9 @@ class DacDecoderBlock(nn.Module):
     """Decoder block used in DAC decoder."""
     def __init__(self, input_dim: int = 16, output_dim: int = 8, stride: int = 1):
         super().__init__()
-        self.block = nn.ModuleList(
-            [
-                torch.jit.script(Snake1d(input_dim)),
-                weight_norm(
+
+        self.snake1 = torch.jit.script(Snake1d(input_dim))
+        self.conv_t1 = weight_norm(
                     nn.ConvTranspose1d(
                         input_dim,
                         output_dim,
@@ -271,16 +257,19 @@ class DacDecoderBlock(nn.Module):
                         stride=stride,
                         padding=math.ceil(stride / 2),
                     )
-                ), 
-                DacResidualUnit(output_dim, dilation=1),
-                DacResidualUnit(output_dim, dilation=3),
-                DacResidualUnit(output_dim, dilation=9),
-            ]
-        )
+                )
+        self.res_unit1 = DacResidualUnit(output_dim, dilation=1)
+        self.res_unit2 = DacResidualUnit(output_dim, dilation=3)
+        self.res_unit3 = DacResidualUnit(output_dim, dilation=9)
 
     def forward(self, hidden_state):
-        for block in self.block: 
-            hidden_state = block(hidden_state)
+
+        hidden_state = self.snake1(hidden_state)
+        hidden_state = self.conv_t1(hidden_state)
+        hidden_state = self.res_unit1(hidden_state)
+        hidden_state = self.res_unit2(hidden_state)
+        hidden_state = self.res_unit3(hidden_state)
+
         return hidden_state
 
 
@@ -405,12 +394,13 @@ class DacResidualVectorQuantize(nn.Module):
         quantized_representation = 0
         quantized_latents = []
         codes = []
-        dims = np.cumsum([0] + [q.codebook_dim for q in self.quantizers])
+        codebook_dims_tensor = torch.tensor([0] + [q.codebook_dim for q in self.quantizers])
+        dims = torch.cumsum(codebook_dims_tensor, dim=0)
 
         n_codebooks = np.where(dims <= latents.shape[1])[0].max(axis=0, keepdims=True)[0]
         for i in range(n_codebooks):
-            j, k = dims[i], dims[i + 1]
-            quantized_latents_i, codes_i = self.quantizers[i].decode_latents(latents[:, j:k, :])
+            hidden_dim_j, hidden_dim_k = dims[i], dims[i + 1]
+            quantized_latents_i, codes_i = self.quantizers[i].decode_latents(latents[:, hidden_dim_j:hidden_dim_k, :])
             quantized_latents.append(quantized_latents_i)
             codes.append(codes_i)
 
@@ -430,26 +420,32 @@ class DacDecoder(nn.Module):
         rates = config.upsampling_ratios 
 
         # Add first conv layer
-        layers = [weight_norm(nn.Conv1d(input_channel, channels, kernel_size=7, padding=3))]
+        self.conv1 = weight_norm(nn.Conv1d(input_channel, channels, kernel_size=7, padding=3))
         
         # Add upsampling + MRF blocks
+        block = []
         for i, stride in enumerate(rates):
             input_dim = channels // 2**i
             output_dim = channels // 2 ** (i + 1)
-            layers += [DacDecoderBlock(input_dim, output_dim, stride)]
+            block += [DacDecoderBlock(input_dim, output_dim, stride)]
+        
+        self.block = nn.ModuleList(block)
 
-        # Add final conv layer
-        layers += [
-            torch.jit.script(Snake1d(output_dim)),
-            weight_norm(nn.Conv1d(output_dim, 1, kernel_size=7, padding=3)), 
-            nn.Tanh(),
-        ]
-
-        self.model = nn.ModuleList(layers)
+        self.snake1 = torch.jit.script(Snake1d(output_dim))
+        self.conv2 = weight_norm(nn.Conv1d(output_dim, 1, kernel_size=7, padding=3))
+        self.tanh = nn.Tanh()
 
     def forward(self, hidden_state):
-        for model in self.model: 
-            hidden_state = model(hidden_state)
+
+        hidden_state = self.conv1(hidden_state)
+
+        for layer in self.block: 
+            hidden_state = layer(hidden_state)
+
+        hidden_state = self.snake1(hidden_state)
+        hidden_state = self.conv2(hidden_state)
+        hidden_state = self.tanh(hidden_state)
+
         return hidden_state
 
 
@@ -462,27 +458,29 @@ class DacEncoder(nn.Module):
         strides = config.downsampling_ratios
         d_latent = config.hidden_size
         # Create first convolution
-        self.block = [weight_norm(nn.Conv1d(1, d_model, kernel_size=7, padding=3))] 
+        self.conv1 = weight_norm(nn.Conv1d(1, config.encoder_hidden_size, kernel_size=7, padding=3))
 
+        self.block = []
         # Create EncoderBlocks that double channels as they downsample by `stride`
         for stride in strides:
             d_model *= 2
             self.block += [DacEncoderBlock(d_model, stride=stride)]
-
-        # Create last convolution
-        self.block += [
-            torch.jit.script(Snake1d(d_model)),
-            weight_norm(nn.Conv1d(d_model, d_latent, kernel_size=3, padding=1))
-        ]
-
         self.block = nn.ModuleList(self.block)
-        self.enc_dim = d_model
+
+        self.snake1 = torch.jit.script(Snake1d(d_model))
+        self.conv2 = weight_norm(nn.Conv1d(d_model, config.hidden_size, kernel_size=3, padding=1))
 
     def forward(self, hidden_state):
-        output = hidden_state
+
+        hidden_state = self.conv1(hidden_state)
+        
         for module in self.block:
-            output = module(output)
-        return output
+            hidden_state = module(hidden_state)
+        
+        hidden_state = self.snake1(hidden_state)
+        hidden_state = self.conv2(hidden_state)
+
+        return hidden_state
 
 
 class DacPreTrainedModel(PreTrainedModel):
