@@ -1206,7 +1206,7 @@ def _collate_word_timestamps(tokenizer, tokens, token_timestamps, language, retu
         {
             "text": word,
             "timestamp": (token_timestamps[indices[0]][0], token_timestamps[indices[-1]][1]),
-            **optional_language_field
+            **optional_language_field,
         }
         for word, indices in zip(words, token_indices)
     ]
