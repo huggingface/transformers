@@ -47,7 +47,7 @@ The original code can be found [here](https://github.com/facebookresearch/chamel
 
 ## ChameleonVQConfig
 
-[[autodoc]] ChameleonConfig
+[[autodoc]] ChameleonVQConfig
 
 ## ChameleonProcessor
 
