@@ -1545,10 +1545,6 @@ class TrainingArguments:
                 raise ValueError(
                     f"`torch_empty_cache_steps` must be an integer bigger than 0, got {self.torch_empty_cache_steps}."
                 )
-            if 0 < self.max_steps <= self.torch_empty_cache_steps:
-                raise ValueError(
-                    f"`torch_empty_cache_steps` must be smaller than `max_steps`, got torch_empty_cache_steps: {self.torch_empty_cache_steps}, max_steps: {self.max_steps}."
-                )
 
         # eval_steps has to be defined and non-zero, fallbacks to logging_steps if the latter is non-zero
         if self.eval_strategy == IntervalStrategy.STEPS and (self.eval_steps is None or self.eval_steps == 0):
