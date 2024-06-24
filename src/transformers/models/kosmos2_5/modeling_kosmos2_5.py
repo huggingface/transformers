@@ -1305,7 +1305,7 @@ class Kosmos2_5TextBlock(nn.Module):
             is_causal=True
         )
         self.dropout = config.dropout
-        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps, elementwise_affine=False)
+        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
         if config.add_cross_attention:
             self.encoder_attn = KOSMOS2_5_TEXT_ATTENTION_CLASSES[config._attn_implementation](
@@ -1555,6 +1555,8 @@ class Kosmos2_5TextTransformer(nn.Module):
             position_ids=position_ids,
         )
 
+        # print(hidden_states.shape)
+        # print(hidden_states)
         causal_mask  = self._prepare_decoder_attention_mask(
             attention_mask, input_shape, hidden_states, past_key_values_length
         )
@@ -1627,7 +1629,6 @@ class Kosmos2_5TextTransformer(nn.Module):
                     use_cache=use_cache,
                 )
             hidden_states = layer_outputs[0]
-            
             if use_cache:
                 present_key_value_states += (layer_outputs[3 if output_attentions else 1],)
 
@@ -1682,7 +1683,7 @@ class Kosmos2_5ImageToTextProjection(nn.Module):
             add_inner_attn_layernorm=False,
             is_causal=False,
         )
-        self.dropout = nn.Dropout(config.text_config.dropout, inplace=True)
+        # self.dropout = nn.Dropout(config.text_config.dropout, inplace=True)
 
     def forward(self, features):
         hidden_states = self.dense(features)
@@ -1698,8 +1699,6 @@ class Kosmos2_5ImageToTextProjection(nn.Module):
             attention_mask=None,
             output_attentions=None,
         )
-
-        hidden_states = self.dropout(hidden_states)
 
         return hidden_states, attn_weights
 
@@ -2260,8 +2259,6 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel):
             
             image_embeds = nn.functional.normalize(vision_model_output[0], dim=-1)
             image_embeds, projection_attentions = self.image_to_text_projection(image_embeds)
-            # breakpoint() # check FA2
-
         output = self.text_model.generate(
             input_ids=input_ids,
             attention_mask=attention_mask,
