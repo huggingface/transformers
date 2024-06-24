@@ -653,7 +653,6 @@ class ChameleonDecoderLayer(nn.Module):
         self.mlp = ChameleonMLP(config)
         self.input_layernorm = ChameleonRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = ChameleonRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.swin_norm = config.swin_norm
 
     def forward(
         self,
@@ -687,46 +686,25 @@ class ChameleonDecoderLayer(nn.Module):
         """
         residual = hidden_states
 
-        if self.swin_norm:
-            # Self Attention
-            hidden_states, self_attn_weights, present_key_value = self.self_attn(
-                hidden_states=hidden_states,
-                attention_mask=attention_mask,
-                position_ids=position_ids,
-                past_key_value=past_key_value,
-                output_attentions=output_attentions,
-                use_cache=use_cache,
-                cache_position=cache_position,
-                **kwargs,
-            )
-            hidden_states = self.input_layernorm(hidden_states)
-            hidden_states = residual + hidden_states
-            # Fully Connected
-            residual = hidden_states
-            hidden_states = self.mlp(hidden_states)
-            hidden_states = self.post_attention_layernorm(hidden_states)
-            hidden_states = residual + hidden_states
-        else:  # No swin norm
-            hidden_states = self.input_layernorm(hidden_states)
+        hidden_states = self.input_layernorm(hidden_states)
 
-            # Self Attention
-            hidden_states, self_attn_weights, present_key_value = self.self_attn(
-                hidden_states=hidden_states,
-                attention_mask=attention_mask,
-                position_ids=position_ids,
-                past_key_value=past_key_value,
-                output_attentions=output_attentions,
-                use_cache=use_cache,
-                cache_position=cache_position,
-                **kwargs,
-            )
-            hidden_states = residual + hidden_states
-
-            # Fully Connected
-            residual = hidden_states
-            hidden_states = self.post_attention_layernorm(hidden_states)
-            hidden_states = self.mlp(hidden_states)
-            hidden_states = residual + hidden_states
+        # Self Attention
+        hidden_states, self_attn_weights, present_key_value = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_value=past_key_value,
+            output_attentions=output_attentions,
+            use_cache=use_cache,
+            cache_position=cache_position,
+            **kwargs,
+        )
+        hidden_states = residual + hidden_states
+        # Fully Connected
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
 
@@ -1052,9 +1030,7 @@ class ChameleonVQModelEncoder(nn.Module):
 
 class ChameleonVQModel(nn.Module):
     """
-    TODO
-
-    Inspired from https://github.com/CompVis/taming-transformers/blob/3ba01b241669f5ade541ce990f7650a3b8f65318/taming/models/vqgan.py
+    A Vector Quantizer model for encoding/decoding images into discrete tokens.
     """
 
     def __init__(self, config):
