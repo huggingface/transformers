@@ -363,7 +363,7 @@ class RobertaSdpaSelfAttention(RobertaSelfAttention):
 
         # The tgt_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal
         # mask in case tgt_len == 1.
-        is_causal = self.is_decoder and attention_mask is None and tgt_len > 1
+        is_causal = self.is_decoder and attention_mask is None and tgt_len > 1 and not is_cross_attention
 
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_layer,
