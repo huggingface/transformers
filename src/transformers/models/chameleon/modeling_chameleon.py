@@ -1090,7 +1090,9 @@ class ChameleonImageVocabularyMapping:
         return mapping
 
     def convert_img2bp2(self, img_batch: torch.Tensor) -> torch.Tensor:
-        return self.img2bpe_mapping_tensor[img_batch.cpu()]  # TODO: fix device and check it works in multi-gpu setting
+        device = img_batch.device
+        img_tokens = self.img2bpe_mapping_tensor[img_batch.to("cpu")]
+        return img_tokens.to(device)
 
 
 CHAMELEON_START_DOCSTRING = r"""
@@ -1233,12 +1235,12 @@ class ChameleonModel(ChameleonPreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        self.vocabulary_mapping = ChameleonImageVocabularyMapping(config.vocabulary_map)
         self.layers = nn.ModuleList(
             [ChameleonDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = ChameleonRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.vqmodel = ChameleonVQModel(config.vq_config)
-        self.vocabulary_mapping = ChameleonImageVocabularyMapping(config.vocabulary_map)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
