@@ -423,6 +423,10 @@ DEFAULT_TOOL_DESCRIPTION_TEMPLATE = """
     Takes inputs: {{tool.inputs}}
 """
 
+REWOO_TOOL_DESCRIPTION_TEMPLATE = """
+- {{ tool.name }}[{{ tool.inputs }}]: {{ tool.description }}
+"""
+
 
 def get_tool_description_with_args(tool: Tool, description_template: str = DEFAULT_TOOL_DESCRIPTION_TEMPLATE) -> str:
     compiled_template = compile_jinja_template(description_template)
