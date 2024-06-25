@@ -178,11 +178,25 @@ class ImageClassificationPipelineTests(unittest.TestCase):
         self.assertIs(image_classifier.tokenizer, tokenizer)
 
     @require_torch
-    def test_low_precision_pipeline(self):
+    def test_torch_float16_pipeline(self):
         import torch
 
         image_classifier = pipeline(
             "image-classification", model="hf-internal-testing/tiny-random-vit", torch_dtype=torch.float16
+        )
+        outputs = image_classifier("http://images.cocodataset.org/val2017/000000039769.jpg")
+
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [{"label": "LABEL_1", "score": 0.574}, {"label": "LABEL_0", "score": 0.426}],
+        )
+
+    @require_torch
+    def test_torch_bfloat16_pipeline(self):
+        import torch
+
+        image_classifier = pipeline(
+            "image-classification", model="hf-internal-testing/tiny-random-vit", torch_dtype=torch.bfloat16
         )
         outputs = image_classifier("http://images.cocodataset.org/val2017/000000039769.jpg")
 
