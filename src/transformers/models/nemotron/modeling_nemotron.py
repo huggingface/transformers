@@ -101,6 +101,7 @@ class NemotronLayerNorm(nn.Module):
 ALL_LAYERNORM_LAYERS.append(NemotronLayerNorm)
 
 
+# Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
 class NemotronRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0, rotary_percent=1.):
         super().__init__()
@@ -133,6 +134,7 @@ class NemotronRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
+# Copied from transformers.models.llama.modeling_llama.LlamaLinearScalingRotaryEmbedding with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
 class NemotronLinearScalingRotaryEmbedding(NemotronRotaryEmbedding):
     """NemotronRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
 
@@ -142,14 +144,14 @@ class NemotronLinearScalingRotaryEmbedding(NemotronRotaryEmbedding):
         cos, sin = super().forward(x, position_ids)
         return cos, sin
 
-
+# Copied from transformers.models.llama.modeling_llama.rotate_half
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
     x2 = x[..., x.shape[-1] // 2 :]
     return torch.cat((-x2, x1), dim=-1)
 
-
+# Copied from transformers.models.llama.modeling_llama.apply_rotary_pos_emb
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -197,7 +199,7 @@ class NemotronMLP(nn.Module):
         down_proj = self.down_proj(self.act_fn(self.up_proj(x)))
         return down_proj
 
-
+# Copied from transformers.models.llama.modeling_llama.repeat_kv
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
@@ -209,7 +211,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
-
+# Copied from transformers.models.llama.modeling_llama.LlamaAttention with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
 class NemotronAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -352,6 +354,7 @@ class NemotronAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
+# Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2 with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
 class NemotronFlashAttention2(NemotronAttention):
     """
     Nemotron flash attention module. This module inherits from `NemotronAttention` as the weights of the module stays
@@ -550,6 +553,7 @@ class NemotronFlashAttention2(NemotronAttention):
         )
 
 
+# Copied from transformers.models.llama.modeling_llama.LlamaSdpaAttention with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
 class NemotronSdpaAttention(NemotronAttention):
     """
     Nemotron attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
@@ -644,6 +648,7 @@ NEMOTRON_ATTENTION_CLASSES = {
 }
 
 
+# Copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
 class NemotronDecoderLayer(nn.Module):
     def __init__(self, config: NemotronConfig, layer_idx: int):
         super().__init__()
@@ -1058,6 +1063,7 @@ class NemotronModel(NemotronPreTrainedModel):
         return causal_mask
 
 
+# Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
 class NemotronForCausalLM(NemotronPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1271,6 +1277,7 @@ class NemotronForCausalLM(NemotronPreTrainedModel):
         return reordered_past
 
 
+# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
 @add_start_docstrings(
     """
     The Nemotron Model transformer with a sequence classification head on top (linear layer).
@@ -1394,6 +1401,7 @@ class NemotronForSequenceClassification(NemotronPreTrainedModel):
         )
 
 
+# Copied from transformers.models.llama.modeling_llama.LlamaForQuestionAnswering with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
 @add_start_docstrings(
     """
 The Nemotron Model transformer with a span classification head on top for extractive question-answering tasks like
@@ -1493,6 +1501,7 @@ class NemotronForQuestionAnswering(NemotronPreTrainedModel):
         )
 
 
+# Copied from transformers.models.llama.modeling_llama.LlamaForTokenClassification with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
 @add_start_docstrings(
     """
     The Nemotron Model transformer with a token classification head on top (a linear layer on top of the hidden-states
