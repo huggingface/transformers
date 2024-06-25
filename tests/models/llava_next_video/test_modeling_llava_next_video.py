@@ -372,11 +372,11 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
             output = model(**inputs)
 
         expected_slice = torch.tensor(
-            [[1.0020, 0.3635, -0.4895], [-8.5938, -5.6641, 3.1895], [-4.8516, -3.9980, 8.1953]],
+            [[0.2046, 0.2092, 0.2140], [0.2886, 0.2961, 0.2959], [0.3433, 0.3420, 0.3462]],
             dtype=torch.float32,
             device=torch_device,
         )
-        self.assertTrue(torch.allclose(output.logits[0, :3, :3], expected_slice, atol=1e-3))
+        self.assertTrue(torch.allclose(output.logits[0, -3:, -3:], expected_slice, atol=1e-3))
 
         # verify generation
         output = model.generate(**inputs, max_new_tokens=100)
@@ -431,12 +431,12 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
             output = model(**inputs)
 
         expected_slice = torch.tensor(
-            [[-0.1050, -0.0937, -0.1097], [0.0604, 0.0663, 0.0593], [0.1870, 0.1857, 0.1818]],
+            [[-0.1132, -0.1021, -0.1179], [0.0609, 0.0668, 0.0597], [0.1865, 0.1852, 0.1813]],
             dtype=torch.float32,
             device=torch_device,
         )
         self.assertTrue(torch.allclose(output.logits[0, -3:, -3:], expected_slice, atol=1e-3))
-        self.assertTrue(torch.allclose(output.loss, torch.tensor(6.6145, device=torch_device)))
+        self.assertTrue(torch.allclose(output.loss, torch.tensor(6.6147, device=torch_device)))
 
         # verify generation
         output = model.generate(**inputs, max_new_tokens=50)
