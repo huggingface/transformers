@@ -66,7 +66,7 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "Florence2Config"
 
 
-class LearnedAbsolutePositionEmbedding2D(nn.Module):
+class Florence2LearnedAbsolutePositionEmbedding2D(nn.Module):
     """
     This module learns positional embeddings up to a fixed maximum size.
     """
@@ -100,7 +100,7 @@ class LearnedAbsolutePositionEmbedding2D(nn.Module):
         return pos
 
 
-class PositionalEmbeddingCosine1D(nn.Module):
+class Florence2PositionalEmbeddingCosine1D(nn.Module):
     """
     This class implements a very simple positional encoding. It follows closely
     the encoder from the link below:
@@ -113,7 +113,7 @@ class PositionalEmbeddingCosine1D(nn.Module):
     """
 
     def __init__(self, embed_dim: int = 512, max_seq_len: int = 1024) -> None:
-        super(PositionalEmbeddingCosine1D, self).__init__()
+        super(Florence2PositionalEmbeddingCosine1D, self).__init__()
         self.embed_dim = embed_dim
         self.max_seq_len = max_seq_len
         # Generate the sinusoidal arrays.
@@ -152,7 +152,7 @@ class PositionalEmbeddingCosine1D(nn.Module):
         return pos_embeds
 
 
-class LearnedAbsolutePositionEmbedding1D(nn.Module):
+class Florence2LearnedAbsolutePositionEmbedding1D(nn.Module):
     """
     Learnable absolute positional embeddings for 1D sequences.
 
@@ -162,7 +162,7 @@ class LearnedAbsolutePositionEmbedding1D(nn.Module):
     """
 
     def __init__(self, embedding_dim: int = 512, num_pos: int = 1024) -> None:
-        super(LearnedAbsolutePositionEmbedding1D, self).__init__()
+        super(Florence2LearnedAbsolutePositionEmbedding1D, self).__init__()
         self.embeddings = nn.Embedding(num_pos, embedding_dim)
         self.num_pos = num_pos
 
@@ -2528,7 +2528,7 @@ class Florence2VisionModelWithProjection(Florence2PreTrainedModel):
         self.image_proj_norm = nn.LayerNorm(dim_projection)
         image_pos_embed_config = config.image_pos_embed
         if image_pos_embed_config["type"] == "learned_abs_2d":
-            self.image_pos_embed = LearnedAbsolutePositionEmbedding2D(
+            self.image_pos_embed = Florence2LearnedAbsolutePositionEmbedding2D(
                 embedding_dim=image_dim_out, num_pos=image_pos_embed_config["max_pos_embeddings"]
             )
         else:
@@ -2539,7 +2539,7 @@ class Florence2VisionModelWithProjection(Florence2PreTrainedModel):
         # temporal embedding
         visual_temporal_embedding_config = config.visual_temporal_embedding
         if visual_temporal_embedding_config["type"] == "COSINE":
-            self.visual_temporal_embed = PositionalEmbeddingCosine1D(
+            self.visual_temporal_embed = Florence2PositionalEmbeddingCosine1D(
                 embed_dim=image_dim_out, max_seq_len=visual_temporal_embedding_config["max_temporal_embeddings"]
             )
         else:
@@ -2626,7 +2626,7 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel):
         self.image_proj_norm = nn.LayerNorm(dim_projection)
         image_pos_embed_config = config.vision_config.image_pos_embed
         if image_pos_embed_config["type"] == "learned_abs_2d":
-            self.image_pos_embed = LearnedAbsolutePositionEmbedding2D(
+            self.image_pos_embed = Florence2LearnedAbsolutePositionEmbedding2D(
                 embedding_dim=image_dim_out, num_pos=image_pos_embed_config["max_pos_embeddings"]
             )
         else:
@@ -2637,7 +2637,7 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel):
         # temporal embedding
         visual_temporal_embedding_config = config.vision_config.visual_temporal_embedding
         if visual_temporal_embedding_config["type"] == "COSINE":
-            self.visual_temporal_embed = PositionalEmbeddingCosine1D(
+            self.visual_temporal_embed = Florence2PositionalEmbeddingCosine1D(
                 embed_dim=image_dim_out, max_seq_len=visual_temporal_embedding_config["max_temporal_embeddings"]
             )
         else:
