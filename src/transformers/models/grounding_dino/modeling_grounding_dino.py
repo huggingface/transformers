@@ -2851,6 +2851,34 @@ class GroundingDinoLoss(nn.Module):
         batch_idx = torch.cat([torch.full_like(target, i) for i, (_, target) in enumerate(indices)])
         target_idx = torch.cat([target for (_, target) in indices])
         return batch_idx, target_idx
+    
+    # Ignore copy
+    def _get_label_map(self, outputs):
+        """
+        Computes a mapping between the tokens associated with the prompt labels in the logit space with shape (batch_size, num_labels, hidden_size)
+        where `num_labels` is defined by the number of classes in the input prompt.
+
+        For instance if the prompt "fish. shark." we get input_ids = [  101,  3869,  1012, 11420,  1012,   102]
+        this function will then return a mapping for each of the prompt tokens (i.e. tokens associated with "fish" and "shark")
+        indicating their position in the logit space.
+
+        This is used in `loss_labels` and in the `GroundingDinoHungarianMatcher`.)
+        """
+        input_ids = outputs["input_ids"] # (batch_size, num_tokens)
+        # Add [PAD] token to the list of special tokens
+        delimiter_tokens = torch.tensor(SPECIAL_TOKENS + [0], device=input_ids.device)
+
+        # NOTE: Loop for now, but then trying to do in a bachtwise manner
+        # things to remember for batchwise later on:
+        # Easy to get the delimiter indices (only the valid ones i.e. diff between two consecutive delimiters is > 1)
+        # Have to update the class_labels in the targets with previous amount of labels as the number of labes in prompt might be different.
+        # Have to update the delimiter_indices with seq_len.
+        for ids in input_ids:
+            delimiter_token_mask = torch.isin(ids, delimiter_tokens)
+            delimiter_indices = delimiter_token_mask.nonzero()
+
+        # Placeholder for the label map
+        label_map = torch.zeros_like(...)
 
     def get_loss(self, loss, outputs, targets, indices, num_boxes):
         loss_map = {
@@ -2862,6 +2890,7 @@ class GroundingDinoLoss(nn.Module):
             raise ValueError(f"Loss {loss} not supported")
         return loss_map[loss](outputs, targets, indices, num_boxes)
 
+    # Ignore copy
     def forward(self, outputs, targets):
         """
         This performs the loss computation.
@@ -2874,6 +2903,8 @@ class GroundingDinoLoss(nn.Module):
                 losses applied, see each loss' doc.
         """
         outputs_without_aux = {k: v for k, v in outputs.items() if k != "auxiliary_outputs" and k != "enc_outputs"}
+
+        label_map = self._get_label_map(outputs)
 
         # Retrieve the matching between the outputs of the last layer and the targets
         indices = self.matcher(outputs_without_aux, targets)
