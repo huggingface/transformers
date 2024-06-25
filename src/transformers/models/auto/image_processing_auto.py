@@ -89,6 +89,7 @@ else:
             ("idefics2", ("Idefics2ImageProcessor",)),
             ("imagegpt", ("ImageGPTImageProcessor",)),
             ("instructblip", ("BlipImageProcessor",)),
+            ("instructblipvideo", ("InstructBlipVideoImageProcessor",)),
             ("kosmos-2", ("CLIPImageProcessor",)),
             ("layoutlmv2", ("LayoutLMv2ImageProcessor",)),
             ("layoutlmv3", ("LayoutLMv3ImageProcessor",)),
@@ -155,7 +156,6 @@ for model_type, image_processors in IMAGE_PROCESSOR_MAPPING_NAMES.items():
         fast_image_processor_class = fast_image_processor_class[0]
 
     IMAGE_PROCESSOR_MAPPING_NAMES[model_type] = (slow_image_processor_class, fast_image_processor_class)
-
 
 IMAGE_PROCESSOR_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, IMAGE_PROCESSOR_MAPPING_NAMES)
 

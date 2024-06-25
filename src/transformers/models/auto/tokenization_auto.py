@@ -205,6 +205,7 @@ else:
             ("idefics", (None, "LlamaTokenizerFast" if is_tokenizers_available() else None)),
             ("idefics2", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
             ("instructblip", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
+            ("instructblipvideo", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
             (
                 "jamba",
                 (
