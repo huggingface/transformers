@@ -191,6 +191,22 @@ class SiglipVisionModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @unittest.skip(reason="SiglipVisionModel does not support standalone training")
+    def test_training(self):
+        pass
+
+    @unittest.skip(reason="SiglipVisionModel does not support standalone training")
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(reason="SiglipVisionModel does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(reason="SiglipVisionModel does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
     @unittest.skip(reason="SiglipVisionModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_from_base(self):
         pass
@@ -320,16 +336,20 @@ class SiglipTextModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester.create_and_check_model(*config_and_inputs)
 
     # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.test_training
+    @unittest.skip(reason="SiglipTextModel does not support standalone training")
     def test_training(self):
         pass
 
     # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.test_training_gradient_checkpointing
+    @unittest.skip(reason="SiglipTextModel does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
+    @unittest.skip(reason="SiglipTextModel does not support standalone training")
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
+    @unittest.skip(reason="SiglipTextModel does not support standalone training")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
