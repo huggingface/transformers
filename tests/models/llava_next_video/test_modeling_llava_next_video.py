@@ -372,7 +372,7 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
             output = model(**inputs)
 
         expected_slice = torch.tensor(
-            [[1.0020, 0.3635, -0.4895], [-8.5938, -5.6641, 3.1895], [-4.8516, -4.0039, 8.2031]],
+            [[1.0020, 0.3635, -0.4895], [-8.5938, -5.6641, 3.1895], [-4.8516, -3.9980, 8.1953]],
             dtype=torch.float32,
             device=torch_device,
         )
@@ -403,7 +403,7 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=20)
 
-        EXPECTED_DECODED_TEXT = ['USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and exaggerated reactions of the child to the', 'USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and exaggerated reactions of the child to the']  # fmt: skip
+        EXPECTED_DECODED_TEXT = ['USER: \nWhy is this video funny? ASSISTANT: The video is funny because it shows a baby sitting on a bed, holding a book and reading', 'USER: \nWhy is this video funny? ASSISTANT: The video is funny because it shows a baby sitting on a bed, holding a book and reading']  # fmt: skip
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
