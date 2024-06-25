@@ -59,6 +59,7 @@ from .configuration_florence2 import (
 
 
 if is_flash_attn_2_available():
+    from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
 
 logger = logging.get_logger(__name__)
@@ -190,7 +191,7 @@ class Florence2LearnedAbsolutePositionEmbedding1D(nn.Module):
         return pos_embeds
 
 
-class Florence2Sequential(nn.Sequential):
+class Florence2DaViTSequential(nn.Sequential):
     def forward(self, *inputs):
         for module in self._modules.values():
             if type(inputs) == tuple:
@@ -200,7 +201,7 @@ class Florence2Sequential(nn.Sequential):
         return inputs
 
 
-class PreNorm(nn.Module):
+class Florence2DaViTPreNorm(nn.Module):
     def __init__(self, norm, fn, drop_path=None):
         super().__init__()
         self.norm = norm
@@ -222,7 +223,7 @@ class PreNorm(nn.Module):
         return x, size
 
 
-class Mlp(nn.Module):
+class Florence2DaViTMlp(nn.Module):
     def __init__(
         self,
         in_features,
@@ -247,7 +248,7 @@ class Mlp(nn.Module):
         return self.net(x), size
 
 
-class DepthWiseConv2d(nn.Module):
+class Florence2DaViTDepthWiseConv2d(nn.Module):
     def __init__(
         self,
         dim_in,
@@ -272,7 +273,7 @@ class DepthWiseConv2d(nn.Module):
         return x, size
 
 
-class ConvEmbed(nn.Module):
+class Florence2DaViTConvEmbed(nn.Module):
     """Image to Patch Embedding"""
 
     def __init__(self, patch_size=7, in_chans=3, embed_dim=64, stride=4, padding=2, norm_layer=None, pre_norm=True):
@@ -306,7 +307,7 @@ class ConvEmbed(nn.Module):
         return x, (H, W)
 
 
-class ChannelAttention(nn.Module):
+class Florence2DaViTChannelAttention(nn.Module):
     def __init__(self, dim, groups=8, qkv_bias=True):
         super().__init__()
 
@@ -349,8 +350,7 @@ def drop_path(x, drop_prob: float = 0., training: bool = False, scale_by_keep: b
     return x * random_tensor
 
 
-# Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->Florence2
-class Florence2DropPath(nn.Module):
+class Florence2DaViTDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
     def __init__(self, drop_prob: float = 0.) -> None:
@@ -422,7 +422,7 @@ def trunc_normal_(tensor: torch.Tensor, mean=0.0, std=1.0, a=-2.0, b=2.0) -> tor
         return tensor
 
 
-class ChannelBlock(nn.Module):
+class Florence2DaViTChannelBlock(nn.Module):
     def __init__(
         self,
         dim,
@@ -437,15 +437,15 @@ class ChannelBlock(nn.Module):
     ):
         super().__init__()
 
-        drop_path = Florence2DropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+        drop_path = Florence2DaViTDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
 
-        self.conv1 = PreNorm(None, DepthWiseConv2d(dim, 3, 1, 1)) if conv_at_attn else None
-        self.channel_attn = PreNorm(
-            norm_layer(dim), ChannelAttention(dim, groups=groups, qkv_bias=qkv_bias), drop_path
+        self.conv1 = Florence2DaViTPreNorm(None, Florence2DaViTDepthWiseConv2d(dim, 3, 1, 1)) if conv_at_attn else None
+        self.channel_attn = Florence2DaViTPreNorm(
+            norm_layer(dim), Florence2DaViTChannelAttention(dim, groups=groups, qkv_bias=qkv_bias), drop_path
         )
-        self.conv2 = PreNorm(None, DepthWiseConv2d(dim, 3, 1, 1)) if conv_at_ffn else None
-        self.ffn = PreNorm(
-            norm_layer(dim), Mlp(in_features=dim, hidden_features=int(dim * mlp_ratio), act_layer=act_layer), drop_path
+        self.conv2 = Florence2DaViTPreNorm(None, Florence2DaViTDepthWiseConv2d(dim, 3, 1, 1)) if conv_at_ffn else None
+        self.ffn = Florence2DaViTPreNorm(
+            norm_layer(dim), Florence2DaViTMlp(in_features=dim, hidden_features=int(dim * mlp_ratio), act_layer=act_layer), drop_path
         )
 
     def forward(self, x, size):
@@ -476,7 +476,7 @@ def window_reverse(windows, batch_size: int, window_size: int, H: int, W: int):
     return x
 
 
-class WindowAttention(nn.Module):
+class Florence2DaViTWindowAttention(nn.Module):
     def __init__(self, dim, num_heads, window_size, qkv_bias=True):
         super().__init__()
         self.dim = dim
@@ -532,7 +532,7 @@ class WindowAttention(nn.Module):
         return x, size
 
 
-class SpatialBlock(nn.Module):
+class Florence2DaViTSpatialBlock(nn.Module):
     def __init__(
         self,
         dim,
@@ -548,15 +548,15 @@ class SpatialBlock(nn.Module):
     ):
         super().__init__()
 
-        drop_path = Florence2DropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+        drop_path = Florence2DaViTDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
 
-        self.conv1 = PreNorm(None, DepthWiseConv2d(dim, 3, 1, 1)) if conv_at_attn else None
-        self.window_attn = PreNorm(
-            norm_layer(dim), WindowAttention(dim, num_heads, window_size, qkv_bias=qkv_bias), drop_path
+        self.conv1 = Florence2DaViTPreNorm(None, Florence2DaViTDepthWiseConv2d(dim, 3, 1, 1)) if conv_at_attn else None
+        self.window_attn = Florence2DaViTPreNorm(
+            norm_layer(dim), Florence2DaViTWindowAttention(dim, num_heads, window_size, qkv_bias=qkv_bias), drop_path
         )
-        self.conv2 = PreNorm(None, DepthWiseConv2d(dim, 3, 1, 1)) if conv_at_ffn else None
-        self.ffn = PreNorm(
-            norm_layer(dim), Mlp(in_features=dim, hidden_features=int(dim * mlp_ratio), act_layer=act_layer), drop_path
+        self.conv2 = Florence2DaViTPreNorm(None, Florence2DaViTDepthWiseConv2d(dim, 3, 1, 1)) if conv_at_ffn else None
+        self.ffn = Florence2DaViTPreNorm(
+            norm_layer(dim), Florence2DaViTMlp(in_features=dim, hidden_features=int(dim * mlp_ratio), act_layer=act_layer), drop_path
         )
 
     def forward(self, x, size):
@@ -570,7 +570,7 @@ class SpatialBlock(nn.Module):
         return x, size
 
 
-class DaViT(nn.Module):
+class Florence2DaViT(nn.Module):
     """DaViT: Dual-Attention Transformer
 
     Args:
@@ -631,7 +631,7 @@ class DaViT(nn.Module):
         convs = []
         blocks = []
         for i in range(num_stages):
-            conv_embed = ConvEmbed(
+            conv_embed = Florence2DaViTConvEmbed(
                 patch_size=patch_size[i],
                 stride=patch_stride[i],
                 padding=patch_padding[i],
@@ -642,14 +642,14 @@ class DaViT(nn.Module):
             )
             convs.append(conv_embed)
 
-            block = Florence2Sequential(
+            block = Florence2DaViTSequential(
                 *[
-                    Florence2Sequential(
+                    Florence2DaViTSequential(
                         OrderedDict(
                             [
                                 (
                                     "spatial_block",
-                                    SpatialBlock(
+                                    Florence2DaViTSpatialBlock(
                                         embed_dims[i],
                                         num_heads[i],
                                         window_size,
@@ -662,7 +662,7 @@ class DaViT(nn.Module):
                                 ),
                                 (
                                     "channel_block",
-                                    ChannelBlock(
+                                    Florence2DaViTChannelBlock(
                                         embed_dims[i],
                                         num_groups[i],
                                         drop_path_rate=dpr[depth_offset + j * 2 + 1],
@@ -756,11 +756,6 @@ class DaViT(nn.Module):
             drop_path_rate=config.drop_path_rate,
             window_size=config.window_size,
         )
-
-
-if is_flash_attn_2_available():
-    from flash_attn import flash_attn_func, flash_attn_varlen_func
-    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
 
 
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
@@ -2495,7 +2490,7 @@ class Florence2VisionModel(Florence2PreTrainedModel):
     def __init__(self, config: Florence2VisionConfig):
         super().__init__(config)
         assert config.model_type == "davit", "only DaViT is supported for now"
-        self.vision_tower = DaViT.from_config(config=config)
+        self.vision_tower = Florence2DaViT.from_config(config=config)
 
         self.post_init()
 
@@ -2515,7 +2510,7 @@ class Florence2VisionModelWithProjection(Florence2PreTrainedModel):
     def __init__(self, config: Florence2VisionConfig):
         super().__init__(config)
         assert config.model_type == "davit", "only DaViT is supported for now"
-        self.vision_tower = DaViT.from_config(config=config)
+        self.vision_tower = Florence2DaViT.from_config(config=config)
 
         self._build_image_projection_layers(config)
 
@@ -2601,7 +2596,7 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel):
         super().__init__(config)
         assert config.vision_config.model_type == "davit", "only DaViT is supported for now"
         del config.vision_config.model_type
-        self.vision_tower = DaViT.from_config(config=config.vision_config)
+        self.vision_tower = Florence2DaViT.from_config(config=config.vision_config)
         # remove unused layers
         del self.vision_tower.head
         del self.vision_tower.norms
