@@ -121,7 +121,7 @@ def select_starts_ends(
     undesired_tokens = np.abs(np.array(p_mask) - 1)
 
     if attention_mask is not None:
-        undesired_tokens = undesired_tokens & attention_mask
+        undesired_tokens = undesired_tokens.astype(attention_mask.dtype) & attention_mask
 
     # Generate mask
     undesired_tokens_mask = undesired_tokens == 0.0
