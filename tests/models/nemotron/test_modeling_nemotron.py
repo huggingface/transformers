@@ -72,7 +72,6 @@ class NemotronModelTester:
         num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=48,
-        normalization="layernorm1p",
         hidden_act="relu2",
         hidden_dropout_prob=0.0,
         attention_probs_dropout_prob=0.0,
@@ -97,7 +96,6 @@ class NemotronModelTester:
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
-        self.normalization = normalization
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
@@ -140,7 +138,6 @@ class NemotronModelTester:
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
             intermediate_size=self.intermediate_size,
-            normalization=self.normalization,
             hidden_act=self.hidden_act,
             hidden_dropout_prob=self.hidden_dropout_prob,
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
