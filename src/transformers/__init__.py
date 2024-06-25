@@ -473,6 +473,12 @@ _import_structure = {
         "InstructBlipQFormerConfig",
         "InstructBlipVisionConfig",
     ],
+    "models.instructblipvideo": [
+        "InstructBlipVideoConfig",
+        "InstructBlipVideoProcessor",
+        "InstructBlipVideoQFormerConfig",
+        "InstructBlipVideoVisionConfig",
+    ],
     "models.jamba": ["JambaConfig"],
     "models.jetmoe": ["JetMoeConfig"],
     "models.kosmos2": [
@@ -1137,6 +1143,7 @@ else:
     _import_structure["models.idefics"].extend(["IdeficsImageProcessor"])
     _import_structure["models.idefics2"].extend(["Idefics2ImageProcessor"])
     _import_structure["models.imagegpt"].extend(["ImageGPTFeatureExtractor", "ImageGPTImageProcessor"])
+    _import_structure["models.instructblipvideo"].extend(["InstructBlipVideoImageProcessor"])
     _import_structure["models.layoutlmv2"].extend(["LayoutLMv2FeatureExtractor", "LayoutLMv2ImageProcessor"])
     _import_structure["models.layoutlmv3"].extend(["LayoutLMv3FeatureExtractor", "LayoutLMv3ImageProcessor"])
     _import_structure["models.levit"].extend(["LevitFeatureExtractor", "LevitImageProcessor"])
@@ -2316,6 +2323,14 @@ else:
             "InstructBlipPreTrainedModel",
             "InstructBlipQFormerModel",
             "InstructBlipVisionModel",
+        ]
+    )
+    _import_structure["models.instructblipvideo"].extend(
+        [
+            "InstructBlipVideoForConditionalGeneration",
+            "InstructBlipVideoPreTrainedModel",
+            "InstructBlipVideoQFormerModel",
+            "InstructBlipVideoVisionModel",
         ]
     )
     _import_structure["models.jamba"].extend(
@@ -5079,6 +5094,12 @@ if TYPE_CHECKING:
         InstructBlipQFormerConfig,
         InstructBlipVisionConfig,
     )
+    from .models.instructblipvideo import (
+        InstructBlipVideoConfig,
+        InstructBlipVideoProcessor,
+        InstructBlipVideoQFormerConfig,
+        InstructBlipVideoVisionConfig,
+    )
     from .models.jamba import JambaConfig
     from .models.jetmoe import JetMoeConfig
     from .models.kosmos2 import (
@@ -5772,6 +5793,7 @@ if TYPE_CHECKING:
         from .models.idefics import IdeficsImageProcessor
         from .models.idefics2 import Idefics2ImageProcessor
         from .models.imagegpt import ImageGPTFeatureExtractor, ImageGPTImageProcessor
+        from .models.instructblipvideo import InstructBlipVideoImageProcessor
         from .models.layoutlmv2 import (
             LayoutLMv2FeatureExtractor,
             LayoutLMv2ImageProcessor,
@@ -6770,6 +6792,12 @@ if TYPE_CHECKING:
             InstructBlipPreTrainedModel,
             InstructBlipQFormerModel,
             InstructBlipVisionModel,
+        )
+        from .models.instructblipvideo import (
+            InstructBlipVideoForConditionalGeneration,
+            InstructBlipVideoPreTrainedModel,
+            InstructBlipVideoQFormerModel,
+            InstructBlipVideoVisionModel,
         )
         from .models.jamba import (
             JambaForCausalLM,
