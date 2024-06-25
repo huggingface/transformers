@@ -20,6 +20,7 @@ from transformers import (
     MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
     TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
     PreTrainedTokenizerBase,
+    is_torch_available,
     is_vision_available,
 )
 from transformers.pipelines import ImageClassificationPipeline, pipeline
@@ -35,6 +36,9 @@ from transformers.testing_utils import (
 
 from .test_pipelines_common import ANY
 
+
+if is_torch_available():
+    import torch
 
 if is_vision_available():
     from PIL import Image
