@@ -124,6 +124,7 @@ _deps = [
     "jax>=0.4.1,<=0.4.13",
     "jaxlib>=0.4.1,<=0.4.13",
     "jieba",
+    "jinja2>=3.1.0",
     "kenlm",
     # Keras pin - this is to make sure Keras 3 doesn't destroy us. Remove or change when we have proper support.
     "keras>2.9,<2.16",
@@ -131,7 +132,7 @@ _deps = [
     "librosa",
     "nltk",
     "natten>=0.14.6,<0.15.0",
-    "numpy>=1.17",
+    "numpy>=1.17,<2.0",
     "onnxconverter-common",
     "onnxruntime-tools>=1.4.2",
     "onnxruntime>=1.4.0",
