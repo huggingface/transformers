@@ -3831,12 +3831,18 @@ class Trainer:
             if is_torch_xla_available():
                 xm.mark_step()
 
-            if "use_gather_object" in inspect.signature(
-                self.gather_function
-            ).parameters.keys() and is_accelerate_available("0.30.0"):
-                self.gather_function = functools.partial(
-                    self.gather_function, use_gather_object=self.args.eval_use_gather_object
-                )
+            if self.args.eval_use_gather_object:
+                if "use_gather_object" in inspect.signature(
+                    self.gather_function
+                ).parameters.keys() and is_accelerate_available("0.30.0"):
+                    self.gather_function = functools.partial(
+                        self.gather_function, use_gather_object=self.args.eval_use_gather_object
+                    )
+                else:
+                    logger.warning(
+                        "You are using eval_use_gather_object with a version of `accelerate` < 0.30.0."
+                        "It is recommended to update your version. Since use_gather_object might not be in gather function."
+                    )
 
             # Update containers
             if losses is not None:
