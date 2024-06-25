@@ -16,12 +16,13 @@
 Image/Text processor class for AltCLIP
 """
 
+import sys
 from typing import List, Union
 
 
-try:
+if sys.version_info >= (3.11):
     from typing import Unpack
-except ImportError:
+else:
     from typing_extensions import Unpack
 
 from ...image_utils import ImageInput
@@ -30,15 +31,7 @@ from ...processing_utils import (
     ProcessorMixin,
 )
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
-from ...utils import is_torch_available, is_vision_available
 from ...utils.deprecation import deprecate_kwarg
-
-
-# TODO (@molbap) This is a bother, forward references from TypedDict are resolved and need this to work
-if is_vision_available():
-    import PIL  # noqa: F401
-if is_torch_available():
-    import torch  # noqa: F401
 
 
 class AltClipProcessorKwargs(ProcessingKwargs, total=False):

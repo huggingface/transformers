@@ -16,12 +16,13 @@
 Image/Text processor class for ALIGN
 """
 
+import sys
 from typing import List, Union
 
 
-try:
+if sys.version_info >= (3.11):
     from typing import Unpack
-except ImportError:
+else:
     from typing_extensions import Unpack
 
 from ...image_utils import ImageInput
