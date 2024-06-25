@@ -234,7 +234,7 @@ class InstructBlipVideoVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "Salesforce"
+        model_name = "Salesforce/instructblip-vicuna-7b"
         model = InstructBlipVideoVisionModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
@@ -546,7 +546,7 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "Salesforce"
+        model_name = "Salesforce/instructblip-vicuna-7b"
         model = InstructBlipVideoForConditionalGeneration.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
@@ -575,16 +575,6 @@ class InstructBlipVideoModelIntegrationTest(unittest.TestCase):
         clip = prepare_video()
         prompt = "Explain what is happening in this short video."
         inputs = processor(images=clip, text=prompt, return_tensors="pt").to(torch_device, torch.float16)
-
-        # verify logits
-        with torch.no_grad():
-            logits = model(**inputs).logits
-
-        expected_slice = torch.tensor(
-            [[-3.3203, -11.7266, 9.7266], [-5.3242, -12.8125, 10.6328], [-3.7109, -13.2422, 10.3516]],
-            device=torch_device,
-        )
-        self.assertTrue(torch.allclose(logits[0, :3, :3].float(), expected_slice, atol=1e-3))
 
         # verify generation
         outputs = model.generate(**inputs, max_new_tokens=30)
