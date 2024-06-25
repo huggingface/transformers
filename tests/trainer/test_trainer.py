@@ -27,7 +27,7 @@ import unittest
 from functools import partial
 from itertools import product
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Union
 from unittest.mock import Mock, patch
 
 import numpy as np
@@ -109,7 +109,6 @@ if is_torch_available():
 
     import transformers.optimization
     from transformers import (
-        AutoModel,
         AutoModelForCausalLM,
         AutoModelForSequenceClassification,
         EarlyStoppingCallback,
@@ -117,6 +116,7 @@ if is_torch_available():
         GlueDataTrainingArguments,
         GPT2Config,
         GPT2LMHeadModel,
+        Idefics2ForConditionalGeneration,
         LineByLineTextDataset,
         LlamaConfig,
         LlamaForCausalLM,
@@ -990,16 +990,28 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             with self.assertRaises(ValueError):
                 _ = Trainer(tiny_model, args, train_dataset=train_dataset)  # noqa
 
-
     @require_peft
     @require_bitsandbytes
     def test_peft_submodule(self):
-        from peft import LoraConfig, get_peft_model
+        from peft import LoraConfig, PeftModel, get_peft_model
 
-        # Simply tests if initializing a Trainer with a PEFT on a submodule will pass _is_peft_model check.
-        # Should be recognised as a peft model and not throw an error when quantised.
-        tiny_model = AutoModel.from_pretrained(
-            "hf-internal-testing/tiny-random-IdeficsModel", load_in_4bit=True
+        # Due to the way the Trainer is implemented we must be able to save the model with 'save_pretrained'
+        # Therefore to use peft submodules you must specify your own 'save_pretrained' method
+        # This example subclass allows for the saving of any and all submodules that are of type PeftModel
+        class PeftSubmoduleIdefics2ForConditionalGeneration(Idefics2ForConditionalGeneration):
+            def save_pretrained(
+                self,
+                save_directory: Union[str, os.PathLike],
+                **kwargs,
+            ):
+                for name, submodule in self.named_modules():
+                    if isinstance(submodule, PeftModel):
+                        submodule.save_pretrained(os.path.join(save_directory, name), **kwargs)
+
+        # Simply tests if initializing a Trainer with a PEFT on a submodule will pass _has_peft_model check.
+        # Should be recognised as being trainable from the peft submodule and not throw an error when quantised.
+        tiny_model = PeftSubmoduleIdefics2ForConditionalGeneration.from_pretrained(
+            "trl-internal-testing/tiny-random-idefics2", load_in_4bit=True
         )
 
         peft_config = LoraConfig(
@@ -1009,20 +1021,17 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             lora_dropout=0.05,
             bias="none",
         )
-        tiny_model.vision_model = get_peft_model(tiny_model.vision_model, peft_config)
+        tiny_model.vision_model = get_peft_model(tiny_model.model.vision_model, peft_config)
 
         x = torch.randint(0, 100, (128,))
         train_dataset = RepeatDataset(x)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(
-                tmp_dir,
-                learning_rate=1e-9,
-                logging_steps=5,
-            )
-            with self.assertRaises(ValueError):
-                _ = Trainer(tiny_model, args, train_dataset=train_dataset)  # noqa
+            args = TrainingArguments(tmp_dir, learning_rate=1e-9, logging_steps=5)
+            trainer = Trainer(tiny_model, args, train_dataset=train_dataset)
 
+            # Check that it trains without errors
+            trainer.train()
 
     @require_peft
     def test_multiple_peft_adapters(self):
