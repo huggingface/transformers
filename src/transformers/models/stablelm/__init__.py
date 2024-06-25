@@ -36,6 +36,7 @@ else:
         "StableLmModel",
         "StableLmPreTrainedModel",
         "StableLmForSequenceClassification",
+        "StableLmForTokenClassification",
     ]
 
 
@@ -51,6 +52,7 @@ if TYPE_CHECKING:
         from .modeling_stablelm import (
             StableLmForCausalLM,
             StableLmForSequenceClassification,
+            StableLmForTokenClassification,
             StableLmModel,
             StableLmPreTrainedModel,
         )

@@ -17,7 +17,6 @@
 URL: https://github.com/facebookresearch/dinov2/tree/main
 """
 
-
 import argparse
 import json
 from pathlib import Path

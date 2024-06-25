@@ -18,7 +18,7 @@ import tempfile
 import unittest
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_deterministic_for_xpu, require_torch, slow, torch_device
 
 from ...test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
 from ..bert.test_modeling_bert import BertModelTester
@@ -422,6 +422,7 @@ class EncoderDecoderMixin:
         loss.backward()
 
     @slow
+    @require_deterministic_for_xpu
     def test_real_model_save_load_from_pretrained(self):
         model_2, inputs = self.get_pretrained_model_and_inputs()
         model_2.to(torch_device)
@@ -578,6 +579,7 @@ class Speech2TextBertModelTest(EncoderDecoderMixin, unittest.TestCase):
     def test_save_and_load_from_pretrained(self):
         pass
 
+    @require_deterministic_for_xpu
     # all published pretrained models are Speech2TextModel != Speech2TextEncoder
     def test_real_model_save_load_from_pretrained(self):
         pass

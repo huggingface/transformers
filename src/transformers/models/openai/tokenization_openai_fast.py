@@ -14,7 +14,6 @@
 # limitations under the License.
 """Fast Tokenization classes for OpenAI GPT."""
 
-
 from typing import Optional, Tuple
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast

@@ -14,7 +14,6 @@
 # limitations under the License.
 """TF 2.0 LayoutLMv3 model."""
 
-
 from __future__ import annotations
 
 import collections

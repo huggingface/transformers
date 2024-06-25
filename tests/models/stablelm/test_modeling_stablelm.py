@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch StableLm model. """
-
+"""Testing suite for the PyTorch StableLm model."""
 
 import unittest
 
@@ -43,6 +42,7 @@ if is_torch_available():
         AutoTokenizer,
         StableLmForCausalLM,
         StableLmForSequenceClassification,
+        StableLmForTokenClassification,
         StableLmModel,
     )
     from transformers.models.stablelm.modeling_stablelm import (
@@ -287,12 +287,15 @@ class StableLmModelTester:
 # Copied from transformers.tests.persimmon.test_modeling_persimmon.PersimmonModelTest with Persimmon -> StableLm
 class StableLmModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (StableLmModel, StableLmForCausalLM, StableLmForSequenceClassification) if is_torch_available() else ()
+        (StableLmModel, StableLmForCausalLM, StableLmForSequenceClassification, StableLmForTokenClassification)
+        if is_torch_available()
+        else ()
     )
     pipeline_model_mapping = (
         {
             "feature-extraction": StableLmModel,
             "text-classification": StableLmForSequenceClassification,
+            "token-classification": StableLmForTokenClassification,
             # TODO (ydshieh): check why these two fail. Fix them or skip them in a better way.
             # "text-generation": StableLmForCausalLM,
             # "zero-shot": StableLmForSequenceClassification,
@@ -355,6 +358,22 @@ class StableLmModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_llama_token_classification_model with Llama->StableLm,llama->stablelm
+    def test_stablelm_token_classification_model(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        token_labels = ids_tensor([self.model_tester.batch_size, self.model_tester.seq_length], config.num_labels)
+        model = StableLmForTokenClassification(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=token_labels)
+        self.assertEqual(
+            result.logits.shape,
+            (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
+        )
 
     @parameterized.expand([("linear",), ("dynamic",)])
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_model_rope_scaling_from_config with Llama->StableLm

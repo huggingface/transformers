@@ -15,7 +15,6 @@
 """Convert MaskFormer checkpoints with Swin backbone from the original repository. URL:
 https://github.com/facebookresearch/MaskFormer"""
 
-
 import argparse
 import json
 import pickle

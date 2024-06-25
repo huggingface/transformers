@@ -753,9 +753,9 @@ def is_copy_consistent(filename: str, overwrite: bool = False, buffer: dict = No
                 else:
                     # not in the target --> add it
                     theoretical_code_blocks[f"_ignored_new_block_{ignored_new_block_index}"] = code
-                    name_mappings_1[
+                    name_mappings_1[f"_ignored_new_block_{ignored_new_block_index}"] = (
                         f"_ignored_new_block_{ignored_new_block_index}"
-                    ] = f"_ignored_new_block_{ignored_new_block_index}"
+                    )
 
                     del observed_code_blocks[name]
                     observed_code_blocks[f"_ignored_new_block_{ignored_new_block_index}"] = code

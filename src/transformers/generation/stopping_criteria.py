@@ -387,9 +387,9 @@ class StopStringCriteria(StoppingCriteria):
             # Since this is lots of very small assignments of lists, we build it with numpy rather
             # than torch for speed + simplicity, then convert to torch at the end
             for token_idx, valid_positions in positions.items():
-                gather_vec[
-                    token_idx, max_valid_positions * i : max_valid_positions * i + len(valid_positions)
-                ] = valid_positions
+                gather_vec[token_idx, max_valid_positions * i : max_valid_positions * i + len(valid_positions)] = (
+                    valid_positions
+                )
             for token_idx, possible_end_lens in end_lens.items():
                 gather_vec[
                     token_idx,

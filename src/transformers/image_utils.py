@@ -727,23 +727,11 @@ class ImageFeatureExtractionMixin:
         )
 
 
-def promote_annotation_format(annotation_format: Union[AnnotionFormat, AnnotationFormat]) -> AnnotationFormat:
-    # can be removed when `AnnotionFormat` is fully deprecated
-    return AnnotationFormat(annotation_format.value)
-
-
 def validate_annotations(
     annotation_format: AnnotationFormat,
     supported_annotation_formats: Tuple[AnnotationFormat, ...],
     annotations: List[Dict],
 ) -> None:
-    if isinstance(annotation_format, AnnotionFormat):
-        logger.warning_once(
-            f"`{annotation_format.__class__.__name__}` is deprecated and will be removed in v4.38. "
-            f"Please use `{AnnotationFormat.__name__}` instead."
-        )
-        annotation_format = promote_annotation_format(annotation_format)
-
     if annotation_format not in supported_annotation_formats:
         raise ValueError(f"Unsupported annotation format: {format} must be one of {supported_annotation_formats}")
 

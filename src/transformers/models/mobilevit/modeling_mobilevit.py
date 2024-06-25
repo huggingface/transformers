@@ -14,8 +14,7 @@
 # limitations under the License.
 #
 # Original license: https://github.com/apple/ml-cvnets/blob/main/LICENSE
-""" PyTorch MobileViT model."""
-
+"""PyTorch MobileViT model."""
 
 import math
 from typing import Dict, Optional, Set, Tuple, Union

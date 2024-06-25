@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Gemma model. """
+"""Testing suite for the PyTorch Gemma model."""
+
 import tempfile
 import unittest
 
@@ -41,7 +42,13 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import GemmaForCausalLM, GemmaForSequenceClassification, GemmaModel, GemmaTokenizer
+    from transformers import (
+        GemmaForCausalLM,
+        GemmaForSequenceClassification,
+        GemmaForTokenClassification,
+        GemmaModel,
+        GemmaTokenizer,
+    )
 
 
 class GemmaModelTester:
@@ -284,12 +291,17 @@ class GemmaModelTester:
 
 @require_torch
 class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (GemmaModel, GemmaForCausalLM, GemmaForSequenceClassification) if is_torch_available() else ()
+    all_model_classes = (
+        (GemmaModel, GemmaForCausalLM, GemmaForSequenceClassification, GemmaForTokenClassification)
+        if is_torch_available()
+        else ()
+    )
     all_generative_model_classes = (GemmaForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": GemmaModel,
             "text-classification": GemmaForSequenceClassification,
+            "token-classification": GemmaForTokenClassification,
             "text-generation": GemmaForCausalLM,
             "zero-shot": GemmaForSequenceClassification,
         }
@@ -369,6 +381,22 @@ class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_llama_token_classification_model with Llama->Gemma,llama->Gemma
+    def test_Gemma_token_classification_model(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        token_labels = ids_tensor([self.model_tester.batch_size, self.model_tester.seq_length], config.num_labels)
+        model = GemmaForTokenClassification(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=token_labels)
+        self.assertEqual(
+            result.logits.shape,
+            (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
+        )
 
     @unittest.skip("Gemma buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):
@@ -574,12 +602,21 @@ class GemmaIntegrationTest(unittest.TestCase):
     @require_read_token
     def test_model_2b_bf16(self):
         model_id = "google/gemma-2b"
+
+        # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
+        #
+        # Note: Key 9 is currently set for MI300, but may need potential future adjustments for H100s,
+        # considering differences in hardware processing and potential deviations in generated text.
         EXPECTED_TEXTS = {
             7: [
                 "Hello I am doing a project on the 1990s and I need to know what the most popular music",
                 "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Khichdi",
             ],
             8: [
+                "Hello I am doing a project on the 1990s and I need to know what the most popular music",
+                "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
+            ],
+            9: [
                 "Hello I am doing a project on the 1990s and I need to know what the most popular music",
                 "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
             ],
@@ -600,12 +637,21 @@ class GemmaIntegrationTest(unittest.TestCase):
     @require_read_token
     def test_model_2b_eager(self):
         model_id = "google/gemma-2b"
+
+        # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
+        #
+        # Note: Key 9 is currently set for MI300, but may need potential future adjustments for H100s,
+        # considering differences in hardware processing and potential deviations in generated text.
         EXPECTED_TEXTS = {
             7: [
                 "Hello I am doing a project on the 1990s and I am looking for some information on the ",
                 "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
             ],
             8: [
+                "Hello I am doing a project on the 1990s and I need to know what the most popular music",
+                "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
+            ],
+            9: [
                 "Hello I am doing a project on the 1990s and I need to know what the most popular music",
                 "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
             ],
@@ -628,12 +674,21 @@ class GemmaIntegrationTest(unittest.TestCase):
     @require_read_token
     def test_model_2b_sdpa(self):
         model_id = "google/gemma-2b"
+
+        # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
+        #
+        # Note: Key 9 is currently set for MI300, but may need potential future adjustments for H100s,
+        # considering differences in hardware processing and potential deviations in generated text.
         EXPECTED_TEXTS = {
             7: [
                 "Hello I am doing a project on the 1990s and I need to know what the most popular music",
                 "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Khichdi",
             ],
             8: [
+                "Hello I am doing a project on the 1990s and I need to know what the most popular music",
+                "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
+            ],
+            9: [
                 "Hello I am doing a project on the 1990s and I need to know what the most popular music",
                 "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
             ],
@@ -736,6 +791,11 @@ class GemmaIntegrationTest(unittest.TestCase):
     @require_read_token
     def test_model_7b_bf16(self):
         model_id = "google/gemma-7b"
+
+        # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
+        #
+        # Note: Key 9 is currently set for MI300, but may need potential future adjustments for H100s,
+        # considering differences in hardware processing and potential deviations in generated text.
         EXPECTED_TEXTS = {
             7: [
                 """Hello I am doing a project on a 1991 240sx and I am trying to find""",
@@ -744,6 +804,10 @@ class GemmaIntegrationTest(unittest.TestCase):
             8: [
                 "Hello I am doing a project for my school and I am trying to make a program that will read a .txt file",
                 "Hi today I am going to show you how to make a very simple and easy to make a very simple and",
+            ],
+            9: [
+                "Hello I am doing a project for my school and I am trying to get a servo to move a certain amount of degrees",
+                "Hi today I am going to show you how to make a very simple and easy to make DIY light up sign",
             ],
         }
 
@@ -818,12 +882,21 @@ class GemmaIntegrationTest(unittest.TestCase):
         NUM_TOKENS_TO_GENERATE = 40
         # Note on `EXPECTED_TEXT_COMPLETION`'s diff: the current value matches the original test if the original test
         # was changed to have a cache of 53 tokens (as opposed to 4096), on Ampere GPUs.
+        #
+        # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
+        #
+        # Note: Key 9 is currently set for MI300, but may need potential future adjustments for H100s,
+        # considering differences in hardware processing and potential deviations in generated text.
         EXPECTED_TEXT_COMPLETION = {
             8: [
                 "Hello I am doing a project on the 1990s and I need to know what the most popular music was in the 1990s. I have looked on the internet and I have found",
                 "Hi today\nI have a problem with my 2007 1.9 tdi 105bhp.\nI have a problem with the engine management light on.\nI have checked the",
             ],
             7: [
+                "Hello I am doing a project on the 1990s and I need to know what the most popular music was in the 1990s. I have looked on the internet and I have found",
+                "Hi today\nI have a problem with my 2007 1.9 tdi 105bhp.\nI have a problem with the engine management light on.\nI have checked the",
+            ],
+            9: [
                 "Hello I am doing a project on the 1990s and I need to know what the most popular music was in the 1990s. I have looked on the internet and I have found",
                 "Hi today\nI have a problem with my 2007 1.9 tdi 105bhp.\nI have a problem with the engine management light on.\nI have checked the",
             ],

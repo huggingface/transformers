@@ -14,8 +14,7 @@
 # limitations under the License.
 #
 # Original license: https://github.com/apple/ml-cvnets/blob/main/LICENSE
-""" PyTorch MobileViTV2 model."""
-
+"""PyTorch MobileViTV2 model."""
 
 from typing import Optional, Tuple, Union
 

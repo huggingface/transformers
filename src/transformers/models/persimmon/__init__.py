@@ -36,6 +36,7 @@ else:
         "PersimmonModel",
         "PersimmonPreTrainedModel",
         "PersimmonForSequenceClassification",
+        "PersimmonForTokenClassification",
     ]
 
 
@@ -51,6 +52,7 @@ if TYPE_CHECKING:
         from .modeling_persimmon import (
             PersimmonForCausalLM,
             PersimmonForSequenceClassification,
+            PersimmonForTokenClassification,
             PersimmonModel,
             PersimmonPreTrainedModel,
         )

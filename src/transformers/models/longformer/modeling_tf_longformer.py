@@ -14,7 +14,6 @@
 # limitations under the License.
 """Tensorflow Longformer model."""
 
-
 from __future__ import annotations
 
 import warnings

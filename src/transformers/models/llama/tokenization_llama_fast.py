@@ -151,9 +151,6 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         self.legacy = legacy
 
         if add_prefix_space is not None:
-            logger.warning_once(
-                "You set `add_prefix_space`. The tokenizer needs to be converted from the slow tokenizers"
-            )
             kwargs["from_slow"] = True
 
         super().__init__(
@@ -166,6 +163,8 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             add_bos_token=add_bos_token,
             add_eos_token=add_eos_token,
             use_default_system_prompt=use_default_system_prompt,
+            add_prefix_space=add_prefix_space,
+            legacy=legacy,
             **kwargs,
         )
         self._add_bos_token = add_bos_token

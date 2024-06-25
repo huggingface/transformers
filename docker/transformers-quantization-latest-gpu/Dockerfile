@@ -1,4 +1,4 @@
-FROM nvidia/cuda:12.1.0-cudnn8-devel-ubuntu20.04
+FROM nvidia/cuda:11.8.0-cudnn8-devel-ubuntu20.04
 LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -47,6 +47,9 @@ RUN python3 -m pip install --no-cache-dir aqlm[gpu]==1.0.2
 
 # Add hqq for quantization testing
 RUN python3 -m pip install --no-cache-dir hqq
+
+# For GGUF tests
+RUN python3 -m pip install --no-cache-dir gguf
 
 # Add autoawq for quantization testing
 # >=v0.2.3 needed for compatibility with torch 2.2.1

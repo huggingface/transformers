@@ -1250,6 +1250,10 @@ class AcceleratorConfig:
             Whether to use non-blocking CUDA calls to help minimize synchronization during
             distributed training with prepared `DataLoader` inputs being moved to device.
             Best if used with `pin_memory=True` in the `TrainingArguments`.
+        use_configured_state (`bool*, *optional*, defaults to `False`):
+            Whether or not to use a pre-configured `AcceleratorState` or `PartialState` defined
+            before calling `TrainingArguments`. If `True`, an `Accelerator` or `PartialState`
+            must be initialized. May lead to issues using sweeps or hyperparameter tuning.
 
     """
 
@@ -1312,6 +1316,13 @@ class AcceleratorConfig:
             "    The [`accelerate.utils.GradientAccumulationPlugin`] default is `False`."
         },
     )
+    use_configured_state: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether or not to use a pre-configured `AcceleratorState` or `PartialState` defined before calling `TrainingArguments`."
+            "If `True`, an `Accelerator` or `PartialState` must be initialized. May lead to issues using sweeps or hyperparameter tuning."
+        },
+    )
 
     @classmethod
     def from_json_file(cls, json_file):
@@ -1330,6 +1341,9 @@ class AcceleratorConfig:
 
     def to_dict(self):
         return copy.deepcopy(self.__dict__)
+
+    def pop(self, key, default=None):
+        return self.__dict__.pop(key, default)
 
 
 class LayerWiseDummyOptimizer(torch.optim.Optimizer):

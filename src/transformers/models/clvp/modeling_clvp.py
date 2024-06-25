@@ -13,8 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-""" PyTorch CLVP model."""
-
+"""PyTorch CLVP model."""
 
 import copy
 import math

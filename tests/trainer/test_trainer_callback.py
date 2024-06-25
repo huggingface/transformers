@@ -153,7 +153,7 @@ class TrainerCallbackTest(unittest.TestCase):
                     expected_events.append("on_log")
                 if trainer.args.eval_strategy == IntervalStrategy.STEPS and step % trainer.args.eval_steps == 0:
                     expected_events += evaluation_events.copy()
-                if step % trainer.args.save_steps == 0:
+                if step % trainer.args.save_steps == 0 or step == trainer.state.max_steps:
                     expected_events.append("on_save")
             expected_events.append("on_epoch_end")
             if trainer.args.eval_strategy == IntervalStrategy.EPOCH:

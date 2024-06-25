@@ -13,9 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
- Tokenization classes for fast tokenizers (provided by HuggingFace's tokenizers library). For slow (python) tokenizers
- see tokenization_utils.py
+Tokenization classes for fast tokenizers (provided by HuggingFace's tokenizers library). For slow (python) tokenizers
+see tokenization_utils.py
 """
+
 import copy
 import json
 import os
@@ -161,6 +162,9 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
         # We call this after having initialized the backend tokenizer because we update it.
         super().__init__(**kwargs)
+
+        # Set the splitting mode for special tokens for the tokenizer to be used throughout the class.
+        self._tokenizer.encode_special_tokens = self.split_special_tokens
 
         # The following logic will be replace with a single add_tokens once a fix is pushed to tokenizers
         # allows converting a slow -> fast, non-legacy: if the `tokenizer.json` does not have all the added tokens
@@ -493,6 +497,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
+        split_special_tokens: bool = False,
     ) -> BatchEncoding:
         if not isinstance(batch_text_or_text_pairs, (tuple, list)):
             raise TypeError(
@@ -507,6 +512,9 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             stride=stride,
             pad_to_multiple_of=pad_to_multiple_of,
         )
+
+        if self._tokenizer.encode_special_tokens != split_special_tokens:
+            self._tokenizer.encode_special_tokens = split_special_tokens
 
         encodings = self._tokenizer.encode_batch(
             batch_text_or_text_pairs,
@@ -577,6 +585,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
+        split_special_tokens: bool = False,
         **kwargs,
     ) -> BatchEncoding:
         batched_input = [(text, text_pair)] if text_pair else [text]
@@ -597,6 +606,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             return_offsets_mapping=return_offsets_mapping,
             return_length=return_length,
             verbose=verbose,
+            split_special_tokens=split_special_tokens,
             **kwargs,
         )
 

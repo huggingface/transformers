@@ -14,9 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
- PyTorch Transformer XL model. Adapted from https://github.com/kimiyoung/transformer-xl. In particular
- https://github.com/kimiyoung/transformer-xl/blob/master/pytorch/mem_transformer.py
+PyTorch Transformer XL model. Adapted from https://github.com/kimiyoung/transformer-xl. In particular
+https://github.com/kimiyoung/transformer-xl/blob/master/pytorch/mem_transformer.py
 """
+
 import warnings
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union

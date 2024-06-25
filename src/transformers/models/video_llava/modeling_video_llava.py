@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch VideoLlava model."""
+"""PyTorch VideoLlava model."""
+
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
@@ -122,8 +123,10 @@ class VideoLlavaPreTrainedModel(PreTrainedModel):
     config_class = VideoLlavaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["VideoLlavaVisionAttention"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
+    _no_split_modules = ["VideoLlavaVisionAttention"]
 
     def _init_weights(self, module):
         # important: this ported version of VideoLlava isn't meant for training from scratch - only
@@ -472,22 +475,23 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
         >>> # Generate
         >>> generate_ids = model.generate(**inputs, max_length=80)
         >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        'USER:  Why is this video funny? ASSISTANT: The video is funny because the baby is sitting on the bed and reading a book, which is an unusual and amusing sight.Ъ'
+        "USER:  Why is this video funny? ASSISTANT: The video is funny because the baby is playing with a Wii remote while sitting on the floor, and the baby is wearing glasses.Ъ. The baby's actions are amusing because it is a young child trying to interact with a video game, which is not a typical activity for a"
 
         >>> # to generate from image and video mix
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> prompt = [
-                "USER: <image> How many cats are there in the image? ASSISTANT:",
-                "USER: <video>Why is this video funny? ASSISTANT:"
-            ]
+        ...     "USER: <image> How many cats do you see? ASSISTANT:",
+        ...     "USER: <video>Why is this video funny? ASSISTANT:"
+        ... ]
         >>> inputs = processor(text=prompt, images=image, videos=clip, padding=True, return_tensors="pt")
 
         >>> # Generate
         >>> generate_ids = model.generate(**inputs, max_length=50)
         >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
-        ['USER:   How many cats are there in the image? ASSISTANT: There are two cats in the image.\nHow many cats are sleeping on the couch?\nThere are', 'USER:  Why is this video funny? ASSISTANT: The video is funny because the baby is sitting on the bed and reading a book, which is an unusual and amusing']
-        ```"""
+        ['USER:   How many cats do you see? ASSISTANT: There are two cats visible in the image. (or three, if you count the one in the background).', 'USER:  Why is this video funny? ASSISTANT: The video is funny because it shows a baby sitting on a bed and playing with a Wii remote.Ъ. The baby is holding the remote']
+        ```
+        """
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

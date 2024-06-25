@@ -15,7 +15,6 @@
 # limitations under the License.
 """PyTorch MPNet model."""
 
-
 import math
 from typing import Optional, Tuple, Union
 

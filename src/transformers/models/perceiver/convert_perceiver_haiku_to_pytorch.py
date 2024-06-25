@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert Perceiver checkpoints originally implemented in Haiku."""
 
-
 import argparse
 import json
 import pickle

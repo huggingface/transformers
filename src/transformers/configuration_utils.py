@@ -13,8 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Configuration base class and utilities."""
-
+"""Configuration base class and utilities."""
 
 import copy
 import json
@@ -32,6 +31,7 @@ from .utils import (
     CONFIG_NAME,
     PushToHubMixin,
     add_model_info_to_auto_map,
+    add_model_info_to_custom_pipelines,
     cached_file,
     copy_func,
     download_url,
@@ -648,7 +648,7 @@ class PretrainedConfig(PushToHubMixin):
     ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
-        resume_download = kwargs.pop("resume_download", False)
+        resume_download = kwargs.pop("resume_download", None)
         proxies = kwargs.pop("proxies", None)
         token = kwargs.pop("token", None)
         local_files_only = kwargs.pop("local_files_only", False)
@@ -735,6 +735,10 @@ class PretrainedConfig(PushToHubMixin):
         if "auto_map" in config_dict and not is_local:
             config_dict["auto_map"] = add_model_info_to_auto_map(
                 config_dict["auto_map"], pretrained_model_name_or_path
+            )
+        if "custom_pipelines" in config_dict and not is_local:
+            config_dict["custom_pipelines"] = add_model_info_to_custom_pipelines(
+                config_dict["custom_pipelines"], pretrained_model_name_or_path
             )
         return config_dict, kwargs
 

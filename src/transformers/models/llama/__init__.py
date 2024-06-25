@@ -55,6 +55,7 @@ else:
         "LlamaPreTrainedModel",
         "LlamaForSequenceClassification",
         "LlamaForQuestionAnswering",
+        "LlamaForTokenClassification",
     ]
 
 try:
@@ -95,6 +96,7 @@ if TYPE_CHECKING:
             LlamaForCausalLM,
             LlamaForQuestionAnswering,
             LlamaForSequenceClassification,
+            LlamaForTokenClassification,
             LlamaModel,
             LlamaPreTrainedModel,
         )

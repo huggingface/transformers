@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert ViT hybrid checkpoints from the timm library."""
 
-
 import argparse
 import json
 from pathlib import Path

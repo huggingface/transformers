@@ -16,7 +16,6 @@
 
 URL: https://github.com/jozhang97/DETA/tree/master"""
 
-
 import argparse
 import json
 from pathlib import Path

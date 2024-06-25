@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Generation configuration class and utilities."""
+"""Generation configuration class and utilities."""
 
 import copy
 import json
@@ -31,6 +31,7 @@ from ..utils import (
     download_url,
     extract_commit_hash,
     is_remote_url,
+    is_torch_available,
     logging,
 )
 
@@ -41,6 +42,12 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 METADATA_FIELDS = ("_from_model_config", "_commit_hash", "_original_object_hash", "transformers_version")
+NEEDS_CACHE_CONFIG = {}
+
+if is_torch_available():
+    from ..cache_utils import QuantizedCacheConfig
+
+    NEEDS_CACHE_CONFIG["quantized"] = QuantizedCacheConfig
 
 
 class GenerationMode(ExplicitEnum):
@@ -299,6 +306,10 @@ class GenerationConfig(PushToHubMixin):
 
         cache_implementation (`str`, *optional*, default to `None`):
             Cache class that should be used when generating.
+        cache_config (`Union[CacheConfig, dict]`, *optional*, default to `None`):
+            Arguments used in the key-value cache class can be passed in `cache_config`. Can be passed as a `Dict` and
+            it will be converted to its repsective `CacheConfig` internally.
+            Otherwise can be passed as a `CacheConfig` class matching the indicated `cache_implementation`.
 
         > Wild card
 
@@ -382,6 +393,13 @@ class GenerationConfig(PushToHubMixin):
 
         # Cache implementation
         self.cache_implementation = kwargs.pop("cache_implementation", None)
+        self.cache_config = kwargs.pop("cache_config", None)
+        if self.cache_implementation is not None:
+            cache_config_class = NEEDS_CACHE_CONFIG[self.cache_implementation]
+            if self.cache_config is None:
+                self.cache_config = cache_config_class()
+            elif isinstance(self.cache_config, dict):
+                self.cache_config = cache_config_class.from_dict(self.cache_config)
 
         # Prompt lookup decoding
         self.prompt_lookup_num_tokens = kwargs.pop("prompt_lookup_num_tokens", None)
@@ -638,13 +656,26 @@ class GenerationConfig(PushToHubMixin):
                     f"({self.num_beams})."
                 )
 
-        # check watermarking arguments
+        # 5. check `cache_config`
+        if self.cache_config is not None:
+            cache_class = NEEDS_CACHE_CONFIG.get(self.cache_implementation)
+            if cache_class is None:
+                raise ValueError(
+                    "You provided a `cache_config` but the cache implementation you are using "
+                    f"({self.cache_implementation}) does not require any config. Make sure to use the "
+                    "correct cache implementation matching your cache config."
+                )
+            if not isinstance(self.cache_config, cache_class):
+                self.cache_config = cache_class.from_dict(self.cache_config)
+            self.cache_config.validate()
+
+        # 6.  check watermarking arguments
         if self.watermarking_config is not None:
             if not isinstance(self.watermarking_config, WatermarkingConfig):
                 self.watermarking_config = WatermarkingConfig.from_dict(self.watermarking_config)
             self.watermarking_config.validate()
 
-        # 5. check common issue: passing `generate` arguments inside the generation config
+        # 7. check common issue: passing `generate` arguments inside the generation config
         generate_arguments = (
             "logits_processor",
             "stopping_criteria",

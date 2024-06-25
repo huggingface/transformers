@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Siglip model."""
-
+"""PyTorch Siglip model."""
 
 import math
 import warnings
@@ -960,7 +959,7 @@ class SiglipMultiheadAttentionPoolingHead(nn.Module):
 class SiglipVisionModel(SiglipPreTrainedModel):
     config_class = SiglipVisionConfig
     main_input_name = "pixel_values"
-    _no_split_modules = ["SiglipVisionTransformer"]
+    _no_split_modules = ["SiglipVisionEmbeddings", "SiglipEncoderLayer", "SiglipMultiheadAttentionPoolingHead"]
 
     def __init__(self, config: SiglipVisionConfig):
         super().__init__(config)

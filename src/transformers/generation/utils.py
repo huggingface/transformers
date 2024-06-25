@@ -24,7 +24,15 @@ import torch
 import torch.distributed as dist
 from torch import nn
 
-from ..cache_utils import Cache, DynamicCache, StaticCache
+from ..cache_utils import (
+    Cache,
+    DynamicCache,
+    HQQQuantizedCache,
+    QuantizedCacheConfig,
+    QuantoQuantizedCache,
+    SlidingWindowCache,
+    StaticCache,
+)
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..modeling_outputs import CausalLMOutputWithPast, Seq2SeqLMOutput
 from ..models.auto import (
@@ -34,7 +42,14 @@ from ..models.auto import (
     MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
     MODEL_FOR_VISION_2_SEQ_MAPPING,
 )
-from ..utils import ModelOutput, is_accelerate_available, is_torchdynamo_compiling, logging
+from ..utils import (
+    ModelOutput,
+    is_accelerate_available,
+    is_hqq_available,
+    is_quanto_available,
+    is_torchdynamo_compiling,
+    logging,
+)
 from .beam_constraints import DisjunctiveConstraint, PhrasalConstraint
 from .beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
 from .candidate_generator import (
@@ -96,9 +111,8 @@ logger = logging.get_logger(__name__)
 if is_accelerate_available():
     from accelerate.hooks import AlignDevicesHook, add_hook_to_module
 
-NEED_SETUP_CACHE_CLASSES_MAPPING = {
-    "static": StaticCache,
-}
+NEED_SETUP_CACHE_CLASSES_MAPPING = {"static": StaticCache, "sliding_window": SlidingWindowCache}
+QUANT_BACKEND_CLASSES_MAPPING = {"quanto": QuantoQuantizedCache, "HQQ": HQQQuantizedCache}
 
 
 @dataclass
@@ -1099,6 +1113,25 @@ class GenerationMixin:
                 exception_message += f" Please use one of the following classes instead: {generate_compatible_classes}"
             raise TypeError(exception_message)
 
+    def _validate_assistant(self, assistant_model):
+        if assistant_model is None:
+            return
+
+        if self.config.is_encoder_decoder and not assistant_model.config.is_encoder_decoder:
+            attributes_to_check = ["encoder_attention_heads", "encoder_ffn_dim", "encoder_layers"]
+            attributes_to_check = [attr for attr in dir(assistant_model.config) if attr in attributes_to_check]
+            are_equal = all(
+                getattr(self.config, attr) == getattr(assistant_model.config, attr) for attr in attributes_to_check
+            )
+            if not are_equal:
+                raise ValueError(
+                    "The main model and the assistant don't have compatible encoder-dependent input shapes. "
+                    "Ensure you load the assistant with the correct encoder-decoder class, e.g. `AutoModelForSpeechSeq2Seq` for Whisper."
+                )
+
+        if not self.config.vocab_size == assistant_model.config.vocab_size:
+            raise ValueError("Make sure the main and assistant model use the same tokenizer")
+
     def _validate_model_kwargs(self, model_kwargs: Dict[str, Any]):
         """Validates model kwargs for generation. Generate argument typos will also be caught here."""
         # If a `Cache` instance is passed, checks whether the model is compatible with it
@@ -1326,24 +1359,33 @@ class GenerationMixin:
         model_kwargs["cache_position"] = torch.arange(past_length, cur_len, device=input_ids.device)
         return model_kwargs
 
-    def _get_static_cache(self, max_batch_size: int, max_cache_len: int) -> StaticCache:
+    def _get_cache(self, cache_implementation: str, max_batch_size: int, max_cache_len: int) -> Cache:
         """
-        Sets a static cache for `generate`, that will persist across calls. A new cache will only be initialized a
+        Sets a cache for `generate`, that will persist across calls. A new cache will only be initialized a
         new `generate` call requires a larger cache.
 
-        Returns the resulting static cache object.
+        Returns the resulting cache object.
         """
-        needs_new_cache = (
-            not hasattr(self, "_static_cache")
-            or self._static_cache.max_batch_size < max_batch_size
-            or self._static_cache.max_cache_len < max_cache_len
+        cache_cls: Cache = NEED_SETUP_CACHE_CLASSES_MAPPING[cache_implementation]
+        need_new_cache = (
+            not hasattr(self, "_cache")
+            or (not isinstance(self._cache, cache_cls))
+            or self._cache.max_batch_size < max_batch_size
         )
-        if needs_new_cache:
+        if cache_implementation == "sliding_window":
+            need_new_cache = need_new_cache or (
+                self._cache.sliding_window_size < self._cache.model_sliding_window_size
+                and max_cache_len > self._cache.max_cache_len
+            )
+        elif cache_implementation == "static":
+            need_new_cache = need_new_cache or self._cache.max_cache_len < max_cache_len
+
+        if need_new_cache:
             if hasattr(self.config, "_pre_quantization_dtype"):
                 cache_dtype = self.config._pre_quantization_dtype
             else:
                 cache_dtype = self.dtype
-            self._static_cache = StaticCache(
+            self._cache = cache_cls(
                 config=self.config,
                 max_batch_size=max_batch_size,
                 max_cache_len=max_cache_len,
@@ -1351,8 +1393,25 @@ class GenerationMixin:
                 dtype=cache_dtype,
             )
         else:
-            self._static_cache.reset()  # reset the cache for a new generation
-        return self._static_cache
+            self._cache.reset()
+        return self._cache
+
+    def _get_decoder_start_token_id(
+        self, decoder_start_token_id: Union[int, List[int]] = None, bos_token_id: int = None
+    ) -> int:
+        decoder_start_token_id = (
+            decoder_start_token_id
+            if decoder_start_token_id is not None
+            else self.generation_config.decoder_start_token_id
+        )
+        bos_token_id = bos_token_id if bos_token_id is not None else self.generation_config.bos_token_id
+
+        if decoder_start_token_id is not None:
+            return decoder_start_token_id
+        elif bos_token_id is not None:
+            return bos_token_id
+        else:
+            return
 
     def _prepare_special_tokens(
         self,
@@ -1378,11 +1437,16 @@ class GenerationMixin:
                 return token
             return torch.tensor(token, device=device, dtype=torch.long)
 
+        # for BC we also try to get `decoder_start_token_id` from model's generation config (#30892)
+        if self.config.is_encoder_decoder:
+            generation_config.decoder_start_token_id = self._get_decoder_start_token_id(
+                generation_config.decoder_start_token_id, generation_config.bos_token_id
+            )
+
         bos_token_id = _tensor_or_none(generation_config.bos_token_id, device=device)
         eos_token_id = _tensor_or_none(generation_config.eos_token_id, device=device)
         pad_token_id = _tensor_or_none(generation_config.pad_token_id, device=device)
         decoder_start_token_id = _tensor_or_none(generation_config.decoder_start_token_id, device=device)
-        decoder_start_token_id = decoder_start_token_id if decoder_start_token_id is not None else bos_token_id
 
         # We can have more than one eos token. Always treat it as a 1D tensor (when it exists).
         if eos_token_id is not None and eos_token_id.ndim == 0:
@@ -1518,6 +1582,7 @@ class GenerationMixin:
         tokenizer = kwargs.pop("tokenizer", None)  # Pull this out first, we only use it for stopping criteria
         generation_config, model_kwargs = self._prepare_generation_config(generation_config, **kwargs)
         self._validate_model_kwargs(model_kwargs.copy())
+        self._validate_assistant(assistant_model)
 
         # 2. Set generation parameters if not already defined
         if synced_gpus is None:
@@ -1609,19 +1674,42 @@ class GenerationMixin:
                 "Passing both `cache_implementation` (used to initialize certain caches) and `past_key_values` (a "
                 "Cache object) is unsupported. Please use only one of the two."
             )
-        elif generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING:
-            if not self._supports_cache_class:
-                raise ValueError(
-                    "This model does not support the `cache_implementation` argument. Please check the following "
-                    "issue: https://github.com/huggingface/transformers/issues/28981."
-                )
-            if generation_config.cache_implementation == "static":
-                if not self._supports_static_cache:
+        elif generation_config.cache_implementation is not None:
+            if generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING:
+                if generation_config.cache_implementation == "static" and not self._supports_static_cache:
                     raise ValueError(
                         "This model does not support `cache_implementation='static'`. Please check the following "
                         "issue: https://github.com/huggingface/transformers/issues/28981"
                     )
-                model_kwargs["past_key_values"] = self._get_static_cache(batch_size, generation_config.max_length)
+                model_kwargs["past_key_values"] = self._get_cache(
+                    generation_config.cache_implementation, batch_size, generation_config.max_length
+                )
+            elif generation_config.cache_implementation == "quantized":
+                if not self._supports_quantized_cache:
+                    raise ValueError(
+                        "This model does not support the quantized cache. If you want your model to support quantized "
+                        "cache, please open an issue."
+                    )
+
+                cache_config = (
+                    generation_config.cache_config
+                    if generation_config.cache_config is not None
+                    else QuantizedCacheConfig()
+                )
+                cache_class = QUANT_BACKEND_CLASSES_MAPPING[cache_config.backend]
+
+                if cache_config.backend == "quanto" and not is_quanto_available():
+                    raise ImportError(
+                        "You need to install `quanto` in order to use KV cache quantization with quanto backend. "
+                        "Please install it via  with `pip install quanto`"
+                    )
+                elif cache_config.backend == "HQQ" and not is_hqq_available():
+                    raise ImportError(
+                        "You need to install `HQQ` in order to use KV cache quantization with HQQ backend. "
+                        "Please install it via  with `pip install hqq`"
+                    )
+
+                model_kwargs["past_key_values"] = cache_class(cache_config)
 
         self._validate_generated_length(generation_config, input_ids_length, has_default_max_length)
 

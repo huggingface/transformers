@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """PyTorch GPTBigCode model."""
+
 import math
 from typing import List, Optional, Tuple, Union
 
@@ -549,14 +550,19 @@ class GPTBigCodeSdpaAttention(GPTBigCodeAttention):
                 key = key.contiguous()
                 value = value.contiguous()
 
+        # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
+        # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
+        # The query_length > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not
+        # create a causal mask in case query_length == 1.
+        is_causal = True if self.is_causal and attention_mask is None and query_length > 1 else False
+
         sdpa_result = torch.nn.functional.scaled_dot_product_attention(
             query,
             key,
             value,
             attn_mask=attention_mask,
             dropout_p=self.attn_pdrop if self.training else 0.0,
-            # The query_length > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case query_length == 1.
-            is_causal=self.is_causal and attention_mask is None and query_length > 1,
+            is_causal=is_causal,
             scale=scale,
         )
 

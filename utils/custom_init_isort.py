@@ -34,6 +34,7 @@ For a check only (as used in `make quality`) run:
 python utils/custom_init_isort.py --check_only
 ```
 """
+
 import argparse
 import os
 import re
