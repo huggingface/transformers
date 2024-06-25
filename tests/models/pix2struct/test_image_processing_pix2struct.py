@@ -232,7 +232,7 @@ class Pix2StructImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         for max_patch in self.image_processor_tester.max_patches:
             # Test not batched input
             encoded_images = image_processor(
-                image_inputs[0], return_tensors="pt", max_patches=max_patch, input_data_format="channels_first"
+                image_inputs[0], return_tensors="pt", max_patches=max_patch, input_data_format="channels_last"
             ).flattened_patches
             self.assertEqual(
                 encoded_images.shape,
@@ -241,7 +241,7 @@ class Pix2StructImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
 
             # Test batched
             encoded_images = image_processor(
-                image_inputs, return_tensors="pt", max_patches=max_patch, input_data_format="channels_first"
+                image_inputs, return_tensors="pt", max_patches=max_patch, input_data_format="channels_last"
             ).flattened_patches
             self.assertEqual(
                 encoded_images.shape,
