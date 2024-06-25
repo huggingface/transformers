@@ -1014,18 +1014,6 @@ class DABDETRPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
-    def make_tensors_contiguous(self):
-        for name, param in self.named_parameters():
-            if not param.is_contiguous():
-                param.data = param.data.contiguous()
-
-    def save_pretrained(self, save_directory, **kwargs):
-        # Make tensors contiguous
-        self.make_tensors_contiguous()
-
-        # Call the original save_pretrained method
-        super().save_pretrained(save_directory, **kwargs)
-
 
 DAB_DETR_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
