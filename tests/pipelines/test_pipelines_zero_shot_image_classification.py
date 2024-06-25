@@ -71,7 +71,7 @@ class ZeroShotImageClassificationPipelineTests(unittest.TestCase):
     #     outputs = pipe([image] * 3, batch_size=2, candidate_labels=["A", "B"])
 
     @require_torch
-    def test_small_model_pt(self, torch_dtype='float32'):
+    def test_small_model_pt(self, torch_dtype="float32"):
         image_classifier = pipeline(
             model="hf-internal-testing/tiny-random-clip-zero-shot-image-classification", torch_dtype=torch_dtype
         )
@@ -129,7 +129,7 @@ class ZeroShotImageClassificationPipelineTests(unittest.TestCase):
 
     @require_torch
     def test_small_model_pt_fp16(self):
-        self.test_small_model_pt(torch_dtype='float16')
+        self.test_small_model_pt(torch_dtype="float16")
 
     @require_tf
     def test_small_model_tf(self):

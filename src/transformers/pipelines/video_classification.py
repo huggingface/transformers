@@ -106,7 +106,7 @@ class VideoClassificationPipeline(Pipeline):
         video = list(video)
 
         model_inputs = self.image_processor(video, return_tensors=self.framework)
-        if self.framework == 'pt':
+        if self.framework == "pt":
             model_inputs = model_inputs.to(self.torch_dtype)
         return model_inputs
 

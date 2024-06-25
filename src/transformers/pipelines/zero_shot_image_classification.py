@@ -120,7 +120,7 @@ class ZeroShotImageClassificationPipeline(Pipeline):
     def preprocess(self, image, candidate_labels=None, hypothesis_template="This is a photo of {}.", timeout=None):
         image = load_image(image, timeout=timeout)
         inputs = self.image_processor(images=[image], return_tensors=self.framework)
-        if self.framework == 'pt':
+        if self.framework == "pt":
             inputs = inputs.to(self.torch_dtype)
         inputs["candidate_labels"] = candidate_labels
         sequences = [hypothesis_template.format(x) for x in candidate_labels]

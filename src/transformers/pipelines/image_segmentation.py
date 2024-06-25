@@ -147,7 +147,7 @@ class ImageSegmentationPipeline(Pipeline):
             else:
                 kwargs = {"task_inputs": [subtask]}
             inputs = self.image_processor(images=[image], return_tensors="pt", **kwargs)
-            if self.framework == 'pt':
+            if self.framework == "pt":
                 inputs = inputs.to(self.torch_dtype)
             inputs["task_inputs"] = self.tokenizer(
                 inputs["task_inputs"],
@@ -157,7 +157,7 @@ class ImageSegmentationPipeline(Pipeline):
             )["input_ids"]
         else:
             inputs = self.image_processor(images=[image], return_tensors="pt")
-            if self.framework == 'pt':
+            if self.framework == "pt":
                 inputs = inputs.to(self.torch_dtype)
         inputs["target_size"] = target_size
         return inputs

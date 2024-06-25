@@ -119,7 +119,7 @@ class ImageToImagePipeline(Pipeline):
     def preprocess(self, image, timeout=None):
         image = load_image(image, timeout=timeout)
         inputs = self.image_processor(images=[image], return_tensors="pt")
-        if self.framework == 'pt':
+        if self.framework == "pt":
             inputs = inputs.to(self.torch_dtype)
         return inputs
 

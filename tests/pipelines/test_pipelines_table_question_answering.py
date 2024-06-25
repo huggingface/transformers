@@ -152,7 +152,7 @@ class TQAPipelineTests(unittest.TestCase):
 
     @unittest.skipIf(not is_torch_greater_or_equal_than_1_12, reason="Tapas is only available in torch v1.12+")
     @require_torch
-    def test_small_model_pt(self, torch_dtype='float32'):
+    def test_small_model_pt(self, torch_dtype="float32"):
         model_id = "lysandre/tiny-tapas-random-wtq"
         model = AutoModelForTableQuestionAnswering.from_pretrained(model_id, torch_dtype=torch_dtype)
         tokenizer = AutoTokenizer.from_pretrained(model_id)
@@ -260,7 +260,7 @@ class TQAPipelineTests(unittest.TestCase):
 
     @unittest.skipIf(not is_torch_greater_or_equal_than_1_12, reason="Tapas is only available in torch v1.12+")
     @require_torch
-    def test_slow_tokenizer_sqa_pt(self, torch_dtype='float32'):
+    def test_slow_tokenizer_sqa_pt(self, torch_dtype="float32"):
         model_id = "lysandre/tiny-tapas-random-sqa"
         model = AutoModelForTableQuestionAnswering.from_pretrained(model_id, torch_dtype=torch_dtype)
         tokenizer = AutoTokenizer.from_pretrained(model_id)
@@ -508,7 +508,7 @@ class TQAPipelineTests(unittest.TestCase):
     @unittest.skipIf(not is_torch_greater_or_equal_than_1_12, reason="Tapas is only available in torch v1.12+")
     @slow
     @require_torch
-    def test_integration_wtq_pt(self, torch_dtype='float32'):
+    def test_integration_wtq_pt(self, torch_dtype="float32"):
         table_querier = pipeline("table-question-answering", torch_dtype=torch_dtype)
 
         data = {
@@ -609,7 +609,7 @@ class TQAPipelineTests(unittest.TestCase):
     @unittest.skipIf(not is_torch_greater_or_equal_than_1_12, reason="Tapas is only available in torch v1.12+")
     @slow
     @require_torch
-    def test_integration_sqa_pt(self, torch_dtype='float32'):
+    def test_integration_sqa_pt(self, torch_dtype="float32"):
         table_querier = pipeline(
             "table-question-answering",
             model="google/tapas-base-finetuned-sqa",
@@ -668,7 +668,7 @@ class TQAPipelineTests(unittest.TestCase):
 
     @slow
     @require_torch
-    def test_large_model_pt_tapex(self, torch_dtype='float32'):
+    def test_large_model_pt_tapex(self, torch_dtype="float32"):
         model_id = "microsoft/tapex-large-finetuned-wtq"
         table_querier = pipeline(
             "table-question-answering",

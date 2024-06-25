@@ -91,7 +91,7 @@ class DepthEstimationPipeline(Pipeline):
         image = load_image(image, timeout)
         self.image_size = image.size
         model_inputs = self.image_processor(images=image, return_tensors=self.framework)
-        if self.framework == 'pt':
+        if self.framework == "pt":
             model_inputs = model_inputs.to(self.torch_dtype)
         return model_inputs
 

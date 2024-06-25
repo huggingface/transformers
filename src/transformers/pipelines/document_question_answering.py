@@ -295,7 +295,7 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
             image = load_image(input["image"], timeout=timeout)
             if self.image_processor is not None:
                 image_inputs = self.image_processor(images=image, return_tensors=self.framework)
-                if self.framework == 'pt':
+                if self.framework == "pt":
                     image_inputs = image_inputs.to(self.torch_dtype)
                 image_features.update(image_inputs)
             elif self.feature_extractor is not None:

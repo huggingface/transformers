@@ -126,7 +126,7 @@ class PipelineTesterMixin:
     pipeline_model_mapping = None
     supported_frameworks = ["pt", "tf"]
 
-    def run_task_tests(self, task, torch_dtype='float32'):
+    def run_task_tests(self, task, torch_dtype="float32"):
         """Run pipeline tests for a specific `task`
 
         Args:
@@ -176,7 +176,9 @@ class PipelineTesterMixin:
                 task, repo_name, model_architecture, tokenizer_names, processor_names, commit, torch_dtype
             )
 
-    def run_model_pipeline_tests(self, task, repo_name, model_architecture, tokenizer_names, processor_names, commit, torch_dtype='float32'):
+    def run_model_pipeline_tests(
+        self, task, repo_name, model_architecture, tokenizer_names, processor_names, commit, torch_dtype="float32"
+    ):
         """Run pipeline tests for a specific `task` with the give model class and tokenizer/processor class names
 
         Args:
@@ -207,7 +209,7 @@ class PipelineTesterMixin:
                     model_architecture,
                     tokenizer_name,
                     processor_name,
-                    torch_dtype
+                    torch_dtype,
                 ):
                     logger.warning(
                         f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')}_{torch_dtype} is skipped: test is "
@@ -215,9 +217,13 @@ class PipelineTesterMixin:
                         f"`{tokenizer_name}` | processor `{processor_name}`."
                     )
                     continue
-                self.run_pipeline_test(task, repo_name, model_architecture, tokenizer_name, processor_name, commit, torch_dtype)
+                self.run_pipeline_test(
+                    task, repo_name, model_architecture, tokenizer_name, processor_name, commit, torch_dtype
+                )
 
-    def run_pipeline_test(self, task, repo_name, model_architecture, tokenizer_name, processor_name, commit, torch_dtype='float32'):
+    def run_pipeline_test(
+        self, task, repo_name, model_architecture, tokenizer_name, processor_name, commit, torch_dtype="float32"
+    ):
         """Run pipeline tests for a specific `task` with the give model class and tokenizer/processor class name
 
         The model will be loaded from a model repository on the Hub.
@@ -280,7 +286,9 @@ class PipelineTesterMixin:
             return
 
         pipeline_test_class_name = pipeline_test_mapping[task]["test"].__name__
-        if self.is_pipeline_test_to_skip_more(pipeline_test_class_name, model.config, model, tokenizer, processor, torch_dtype):
+        if self.is_pipeline_test_to_skip_more(
+            pipeline_test_class_name, model.config, model, tokenizer, processor, torch_dtype
+        ):
             logger.warning(
                 f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')}_{torch_dtype} is skipped: test is "
                 f"currently known to fail for: model `{model_architecture.__name__}` | tokenizer "
@@ -336,7 +344,7 @@ class PipelineTesterMixin:
     @is_pipeline_test
     @require_torch
     def test_pipeline_audio_classification_fp16(self):
-        self.run_task_tests(task="audio-classification", torch_dtype='float16')
+        self.run_task_tests(task="audio-classification", torch_dtype="float16")
 
     @is_pipeline_test
     def test_pipeline_automatic_speech_recognition(self):
@@ -345,7 +353,7 @@ class PipelineTesterMixin:
     @is_pipeline_test
     @require_torch
     def test_pipeline_automatic_speech_recognition_fp16(self):
-        self.run_task_tests(task="automatic-speech-recognition", torch_dtype='float16')
+        self.run_task_tests(task="automatic-speech-recognition", torch_dtype="float16")
 
     @is_pipeline_test
     @require_vision
@@ -359,7 +367,7 @@ class PipelineTesterMixin:
     @require_timm
     @require_torch
     def test_pipeline_depth_estimation_fp16(self):
-        self.run_task_tests(task="depth-estimation", torch_dtype='float16')
+        self.run_task_tests(task="depth-estimation", torch_dtype="float16")
 
     @is_pipeline_test
     @require_pytesseract
@@ -373,7 +381,7 @@ class PipelineTesterMixin:
     @require_torch
     @require_vision
     def test_pipeline_document_question_answering_fp16(self):
-        self.run_task_tests(task="document-question-answering", torch_dtype='float16')
+        self.run_task_tests(task="document-question-answering", torch_dtype="float16")
 
     @is_pipeline_test
     def test_pipeline_feature_extraction(self):
@@ -382,7 +390,7 @@ class PipelineTesterMixin:
     @is_pipeline_test
     @require_torch
     def test_pipeline_feature_extraction_fp16(self):
-        self.run_task_tests(task="feature-extraction", torch_dtype='float16')
+        self.run_task_tests(task="feature-extraction", torch_dtype="float16")
 
     @is_pipeline_test
     def test_pipeline_fill_mask(self):
@@ -391,7 +399,7 @@ class PipelineTesterMixin:
     @is_pipeline_test
     @require_torch
     def test_pipeline_fill_mask_fp16(self):
-        self.run_task_tests(task="fill-mask", torch_dtype='float16')
+        self.run_task_tests(task="fill-mask", torch_dtype="float16")
 
     @is_pipeline_test
     @require_torch_or_tf
@@ -403,7 +411,7 @@ class PipelineTesterMixin:
     @require_vision
     @require_torch
     def test_pipeline_image_classification_fp16(self):
-        self.run_task_tests(task="image-classification", torch_dtype='float16')
+        self.run_task_tests(task="image-classification", torch_dtype="float16")
 
     @is_pipeline_test
     @require_vision
@@ -417,7 +425,7 @@ class PipelineTesterMixin:
     @require_timm
     @require_torch
     def test_pipeline_image_segmentation_fp16(self):
-        self.run_task_tests(task="image-segmentation", torch_dtype='float16')
+        self.run_task_tests(task="image-segmentation", torch_dtype="float16")
 
     @is_pipeline_test
     @require_vision
@@ -428,7 +436,7 @@ class PipelineTesterMixin:
     @require_vision
     @require_torch
     def test_pipeline_image_to_text_fp16(self):
-        self.run_task_tests(task="image-to-text", torch_dtype='float16')
+        self.run_task_tests(task="image-to-text", torch_dtype="float16")
 
     @is_pipeline_test
     @require_timm
@@ -442,7 +450,7 @@ class PipelineTesterMixin:
     @require_vision
     @require_torch
     def test_pipeline_image_feature_extraction_fp16(self):
-        self.run_task_tests(task="image-feature-extraction", torch_dtype='float16')
+        self.run_task_tests(task="image-feature-extraction", torch_dtype="float16")
 
     @unittest.skip(reason="`run_pipeline_test` is currently not implemented.")
     @is_pipeline_test
@@ -456,7 +464,7 @@ class PipelineTesterMixin:
     @require_vision
     @require_torch
     def test_pipeline_mask_generation_fp16(self):
-        self.run_task_tests(task="mask-generation", torch_dtype='float16')
+        self.run_task_tests(task="mask-generation", torch_dtype="float16")
 
     @is_pipeline_test
     @require_vision
@@ -470,7 +478,7 @@ class PipelineTesterMixin:
     @require_timm
     @require_torch
     def test_pipeline_object_detection_fp16(self):
-        self.run_task_tests(task="object-detection", torch_dtype='float16')
+        self.run_task_tests(task="object-detection", torch_dtype="float16")
 
     @is_pipeline_test
     def test_pipeline_question_answering(self):
@@ -479,7 +487,7 @@ class PipelineTesterMixin:
     @is_pipeline_test
     @require_torch
     def test_pipeline_question_answering_fp16(self):
-        self.run_task_tests(task="question-answering", torch_dtype='float16')
+        self.run_task_tests(task="question-answering", torch_dtype="float16")
 
     @is_pipeline_test
     def test_pipeline_summarization(self):
@@ -488,7 +496,7 @@ class PipelineTesterMixin:
     @is_pipeline_test
     @require_torch
     def test_pipeline_summarization_fp16(self):
-        self.run_task_tests(task="summarization", torch_dtype='float16')
+        self.run_task_tests(task="summarization", torch_dtype="float16")
 
     @is_pipeline_test
     def test_pipeline_table_question_answering(self):
@@ -497,7 +505,7 @@ class PipelineTesterMixin:
     @is_pipeline_test
     @require_torch
     def test_pipeline_table_question_answering_fp16(self):
-        self.run_task_tests(task="table-question-answering", torch_dtype='float16')
+        self.run_task_tests(task="table-question-answering", torch_dtype="float16")
 
     @is_pipeline_test
     def test_pipeline_text2text_generation(self):
@@ -506,7 +514,7 @@ class PipelineTesterMixin:
     @is_pipeline_test
     @require_torch
     def test_pipeline_text2text_generation_fp16(self):
-        self.run_task_tests(task="text2text-generation", torch_dtype='float16')
+        self.run_task_tests(task="text2text-generation", torch_dtype="float16")
 
     @is_pipeline_test
     def test_pipeline_text_classification(self):
@@ -515,7 +523,7 @@ class PipelineTesterMixin:
     @is_pipeline_test
     @require_torch
     def test_pipeline_text_classification_fp16(self):
-        self.run_task_tests(task="text-classification", torch_dtype='float16')
+        self.run_task_tests(task="text-classification", torch_dtype="float16")
 
     @is_pipeline_test
     @require_torch_or_tf
@@ -525,7 +533,7 @@ class PipelineTesterMixin:
     @is_pipeline_test
     @require_torch
     def test_pipeline_text_generation_fp16(self):
-        self.run_task_tests(task="text-generation", torch_dtype='float16')
+        self.run_task_tests(task="text-generation", torch_dtype="float16")
 
     @is_pipeline_test
     @require_torch
@@ -535,7 +543,7 @@ class PipelineTesterMixin:
     @is_pipeline_test
     @require_torch
     def test_pipeline_text_to_audio_fp16(self):
-        self.run_task_tests(task="text-to-audio", torch_dtype='float16')
+        self.run_task_tests(task="text-to-audio", torch_dtype="float16")
 
     @is_pipeline_test
     def test_pipeline_token_classification(self):
@@ -544,7 +552,7 @@ class PipelineTesterMixin:
     @is_pipeline_test
     @require_torch
     def test_pipeline_token_classification_fp16(self):
-        self.run_task_tests(task="token-classification", torch_dtype='float16')
+        self.run_task_tests(task="token-classification", torch_dtype="float16")
 
     @is_pipeline_test
     def test_pipeline_translation(self):
@@ -553,7 +561,7 @@ class PipelineTesterMixin:
     @is_pipeline_test
     @require_torch
     def test_pipeline_translation_fp16(self):
-        self.run_task_tests(task="translation", torch_dtype='float16')
+        self.run_task_tests(task="translation", torch_dtype="float16")
 
     @is_pipeline_test
     @require_torch_or_tf
@@ -567,7 +575,7 @@ class PipelineTesterMixin:
     @require_decord
     @require_torch
     def test_pipeline_video_classification_fp16(self):
-        self.run_task_tests(task="video-classification", torch_dtype='float16')
+        self.run_task_tests(task="video-classification", torch_dtype="float16")
 
     @is_pipeline_test
     @require_torch
@@ -579,7 +587,7 @@ class PipelineTesterMixin:
     @require_torch
     @require_vision
     def test_pipeline_visual_question_answering_fp16(self):
-        self.run_task_tests(task="visual-question-answering", torch_dtype='float16')
+        self.run_task_tests(task="visual-question-answering", torch_dtype="float16")
 
     @is_pipeline_test
     def test_pipeline_zero_shot(self):
@@ -588,7 +596,7 @@ class PipelineTesterMixin:
     @is_pipeline_test
     @require_torch
     def test_pipeline_zero_shot_fp16(self):
-        self.run_task_tests(task="zero-shot", torch_dtype='float16')
+        self.run_task_tests(task="zero-shot", torch_dtype="float16")
 
     @is_pipeline_test
     @require_torch
@@ -598,7 +606,7 @@ class PipelineTesterMixin:
     @is_pipeline_test
     @require_torch
     def test_pipeline_zero_shot_audio_classification_fp16(self):
-        self.run_task_tests(task="zero-shot-audio-classification", torch_dtype='float16')
+        self.run_task_tests(task="zero-shot-audio-classification", torch_dtype="float16")
 
     @is_pipeline_test
     @require_vision
@@ -609,7 +617,7 @@ class PipelineTesterMixin:
     @require_vision
     @require_torch
     def test_pipeline_zero_shot_image_classification_fp16(self):
-        self.run_task_tests(task="zero-shot-image-classification", torch_dtype='float16')
+        self.run_task_tests(task="zero-shot-image-classification", torch_dtype="float16")
 
     @is_pipeline_test
     @require_vision
@@ -621,7 +629,7 @@ class PipelineTesterMixin:
     @require_vision
     @require_torch
     def test_pipeline_zero_shot_object_detection_fp16(self):
-        self.run_task_tests(task="zero-shot-object-detection", torch_dtype='float16')
+        self.run_task_tests(task="zero-shot-object-detection", torch_dtype="float16")
 
     # This contains the test cases to be skipped without model architecture being involved.
     def is_pipeline_test_to_skip(
@@ -642,7 +650,9 @@ class PipelineTesterMixin:
 
         return False
 
-    def is_pipeline_test_to_skip_more(self, pipeline_test_casse_name, config, model, tokenizer, processor, torch_dtype):  # noqa
+    def is_pipeline_test_to_skip_more(
+        self, pipeline_test_casse_name, config, model, tokenizer, processor, torch_dtype
+    ):  # noqa
         """Skip some more tests based on the information from the instantiated objects."""
         # No fix is required for this case.
         if (
