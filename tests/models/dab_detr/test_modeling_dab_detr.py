@@ -464,8 +464,6 @@ class DABDETRModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
             )
             out_len = len(outputs)
-            print(out_len)
-            print(model_class)
             if self.is_encoder_decoder:
                 correct_outlen = 6
 
