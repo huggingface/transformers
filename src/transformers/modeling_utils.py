@@ -2958,6 +2958,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                   using the `dtype` it was saved in at the end of the training. It can't be used as an indicator of how
                   the model was trained. Since it could be trained in one of half precision dtypes, but saved in fp32.
 
+                3. A string that is a valid `torch.dtype`. E.g. "float32" loads the model in `torch.float32`, "float16" loads in `torch.float16` etc.
+
                 <Tip>
 
                 For some models the `dtype` they were trained in is unknown - you may try to check the model's paper or
