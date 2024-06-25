@@ -209,7 +209,6 @@ class PipelineTesterMixin:
                     model_architecture,
                     tokenizer_name,
                     processor_name,
-                    torch_dtype,
                 ):
                     logger.warning(
                         f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')}_{torch_dtype} is skipped: test is "
@@ -286,9 +285,7 @@ class PipelineTesterMixin:
             return
 
         pipeline_test_class_name = pipeline_test_mapping[task]["test"].__name__
-        if self.is_pipeline_test_to_skip_more(
-            pipeline_test_class_name, model.config, model, tokenizer, processor, torch_dtype
-        ):
+        if self.is_pipeline_test_to_skip_more(pipeline_test_class_name, model.config, model, tokenizer, processor):
             logger.warning(
                 f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')}_{torch_dtype} is skipped: test is "
                 f"currently known to fail for: model `{model_architecture.__name__}` | tokenizer "
@@ -633,7 +630,7 @@ class PipelineTesterMixin:
 
     # This contains the test cases to be skipped without model architecture being involved.
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name, torch_dtype
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
     ):
         """Skip some tests based on the classes or their names without the instantiated objects.
 
@@ -650,9 +647,7 @@ class PipelineTesterMixin:
 
         return False
 
-    def is_pipeline_test_to_skip_more(
-        self, pipeline_test_casse_name, config, model, tokenizer, processor, torch_dtype
-    ):  # noqa
+    def is_pipeline_test_to_skip_more(self, pipeline_test_casse_name, config, model, tokenizer, processor):  # noqa
         """Skip some more tests based on the information from the instantiated objects."""
         # No fix is required for this case.
         if (
