@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch DAB-DETR model. """
-
+"""Testing suite for the PyTorch DAB-DETR model."""
 
 import inspect
 import math
@@ -242,47 +241,6 @@ class DABDETRModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_dab_detr_object_detection_head_model(*config_and_inputs)
 
-    # # TODO: check if this works again for PyTorch 2.x.y
-    # @unittest.skip(reason="Got `CUDA error: misaligned address` with PyTorch 2.0.0.")
-    # def test_multi_gpu_data_parallel_forward(self):
-    #     pass
-
-    # @unittest.skip(reason="DAB-DETR does not use inputs_embeds")
-    # def test_inputs_embeds(self):
-    #     pass
-
-    # @unittest.skip(reason="DAB-DETR does not use inputs_embeds")
-    # def test_inputs_embeds_matches_input_ids(self):
-    #     pass
-
-    # @unittest.skip(reason="DAB-DETR does not have a get_input_embeddings method")
-    # def test_model_common_attributes(self):
-    #     pass
-
-    # @unittest.skip(reason="DAB-DETR is not a generative model")
-    # def test_generate_without_input_ids(self):
-    #     pass
-
-    # @unittest.skip(reason="DAB-DETR does not use token embeddings")
-    # def test_resize_tokens_embeddings(self):
-    #     pass
-
-    # @unittest.skip(reason="DAB-DETR is not a generative model")
-    # def test_can_use_safetensors(self):
-    #     pass
-
-    # @unittest.skip(reason="DAB-DETR is not a generative model")
-    # def test_load_save_without_tied_weights(self):
-    #     pass
-
-    # @unittest.skip(reason="DAB-DETR is not a generative model")
-    # def test_model_weights_reload_no_missing_tied_weights(self):
-    #     pass
-
-    # @unittest.skip(reason="DAB-DETR is not a generative model")
-    # def test_save_load_fast_init_from_base(self):
-    #     pass
-
     # TODO: check if this works again for PyTorch 2.x.y
     @unittest.skip(reason="Got `CUDA error: misaligned address` with PyTorch 2.0.0.")
     def test_multi_gpu_data_parallel_forward(self):
@@ -310,42 +268,6 @@ class DABDETRModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     @unittest.skip(reason="DETR does not use token embeddings")
     def test_resize_tokens_embeddings(self):
-        pass
-
-    @unittest.skip(
-        reason="DAB-DETR has shared tensors {'bbox_embed.layers.N.weight', 'decoder.bbox_embed.layers.N.weight'}"
-    )
-    def test_load_save_without_tied_weights(self):
-        pass
-
-    @unittest.skip(
-        reason="DAB-DETR has shared tensors {'bbox_embed.layers.N.weight', 'decoder.bbox_embed.layers.N.weight'}"
-    )
-    def test_model_weights_reload_no_missing_tied_weights(self):
-        pass
-
-    @unittest.skip(
-        reason="DAB-DETR has shared tensors {'bbox_embed.layers.N.weight', 'decoder.bbox_embed.layers.N.weight'}"
-    )
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(
-        reason="DAB-DETR has shared tensors {'bbox_embed.layers.N.weight', 'decoder.bbox_embed.layers.N.weight'}"
-    )
-    def test_can_use_safetensors(self):
-        pass
-
-    @unittest.skip(
-        reason="DAB-DETR has shared tensors {'bbox_embed.layers.N.weight', 'decoder.bbox_embed.layers.N.weight'}"
-    )
-    def test_save_load(self):
-        pass
-
-    @unittest.skip(
-        reason="DAB-DETR has shared tensors {'bbox_embed.layers.N.weight', 'decoder.bbox_embed.layers.N.weight'}"
-    )
-    def test_tied_weights_keys(self):
         pass
 
     @slow
@@ -542,16 +464,14 @@ class DABDETRModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
             )
             out_len = len(outputs)
-
+            print(out_len)
+            print(model_class)
             if self.is_encoder_decoder:
                 correct_outlen = 6
 
                 # loss is at first position
                 if "labels" in inputs_dict:
                     correct_outlen += 1  # loss is added to beginning
-                # Simple model returns 'last_hidden_state', 'intermediate_hidden_states', 'reference_points', 'outputs_coord'
-                if model_class.__name__ == "DABDETRModel":
-                    correct_outlen += 1
                 # Panoptic Segmentation model returns pred_logits, pred_boxes, pred_masks
                 if model_class.__name__ == "DABDETRForSegmentation":
                     correct_outlen += 2
@@ -778,7 +698,7 @@ class DABDETRModelIntegrationTests(unittest.TestCase):
         expected_shape = torch.Size((1, 300, 256))
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
         expected_slice = torch.tensor(
-            [[-0.2504, -0.2940, 0.5532], [-0.0944, -0.2442, 0.8170], [-0.6975, -0.2953, 0.7826]]
+            [[-0.4879, -0.2594, 0.4524], [-0.4997, -0.4258, 0.4329], [-0.8220, -0.4996, 0.0577]]
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=2e-4))
 

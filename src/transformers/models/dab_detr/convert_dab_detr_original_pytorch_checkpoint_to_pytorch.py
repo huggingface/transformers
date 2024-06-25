@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert DAB-DETR checkpoints."""
 
-
 import argparse
 import json
 from collections import OrderedDict
@@ -166,14 +165,20 @@ for i in range(6):
     )
 
 # convolutional projection + query embeddings + layernorm of decoder + class and bounding box heads
-# for conditional DETR, also convert reference point head and query scale MLP
+# for dab-DETR, also convert reference point head and query scale MLP
 rename_keys.extend(
     [
         ("input_proj.weight", "input_projection.weight"),
         ("input_proj.bias", "input_projection.bias"),
         ("refpoint_embed.weight", "query_refpoint_embeddings.weight"),
-        ("class_embed.weight", "class_labels_classifier.weight"),
-        ("class_embed.bias", "class_labels_classifier.bias"),
+        ("class_embed.weight", "class_embed.weight"),
+        ("class_embed.bias", "class_embed.bias"),
+        ("bbox_embed.layers.0.weight", "bbox_predictor.layers.0.weight"),
+        ("bbox_embed.layers.0.bias", "bbox_predictor.layers.0.bias"),
+        ("bbox_embed.layers.1.weight", "bbox_predictor.layers.1.weight"),
+        ("bbox_embed.layers.1.bias", "bbox_predictor.layers.1.bias"),
+        ("bbox_embed.layers.2.weight", "bbox_predictor.layers.2.weight"),
+        ("bbox_embed.layers.2.bias", "bbox_predictor.layers.2.bias"),
         ("transformer.encoder.query_scale.layers.0.weight", "encoder.query_scale.layers.0.weight"),
         ("transformer.encoder.query_scale.layers.0.bias", "encoder.query_scale.layers.0.bias"),
         ("transformer.encoder.query_scale.layers.1.weight", "encoder.query_scale.layers.1.weight"),
@@ -260,7 +265,7 @@ def convert_dab_detr_checkpoint(model_name, pytorch_dump_folder_path):
 
     # prepare image
     img = prepare_img()
-    encoding = image_processor(images=[img, img], return_tensors="pt")
+    encoding = image_processor(images=img, return_tensors="pt")
 
     logger.info(f"Converting model {model_name}...")
 
@@ -278,12 +283,12 @@ def convert_dab_detr_checkpoint(model_name, pytorch_dump_folder_path):
         if is_panoptic:
             if (
                 key.startswith("dab_detr")
-                and not key.startswith("class_labels_classifier")
+                and not key.startswith("class_embed")
                 and not key.startswith("bbox_predictor")
             ):
                 val = state_dict.pop(key)
                 state_dict["dab_detr.model" + key[4:]] = val
-            elif "class_labels_classifier" in key or "bbox_predictor" in key:
+            elif "class_embed" in key or "bbox_predictor" in key:
                 val = state_dict.pop(key)
                 state_dict["dab_detr." + key] = val
             elif key.startswith("bbox_attention") or key.startswith("mask_head"):
@@ -292,7 +297,7 @@ def convert_dab_detr_checkpoint(model_name, pytorch_dump_folder_path):
                 val = state_dict.pop(key)
                 state_dict[prefix + key] = val
         else:
-            if not key.startswith("class_labels_classifier") and not key.startswith("bbox_predictor"):
+            if not key.startswith("class_embed") and not key.startswith("bbox_predictor"):
                 val = state_dict.pop(key)
                 state_dict[prefix + key] = val
 
