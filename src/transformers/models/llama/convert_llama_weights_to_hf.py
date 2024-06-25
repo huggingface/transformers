@@ -309,7 +309,7 @@ def write_model(
     model.config.torch_dtype = torch.float16
     print("Saving in the Transformers format.")
     model.save_pretrained(model_path, safe_serialization=safe_serialization)
-    shutil.rmtree(tmp_model_path)
+    shutil.rmtree(tmp_model_path, ignore_errors=True)
 
 
 class Llama3Converter(TikTokenConverter):
