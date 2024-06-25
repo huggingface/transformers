@@ -997,7 +997,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         from peft import LoraConfig, get_peft_model
 
         # Simply tests if initializing a Trainer with a PEFT on a submodule will pass _is_peft_model check.
-        # Throws error when quantised but not recognised as a peft model.
+        # Should be recognised as a peft model and not throw an error when quantised.
         tiny_model = AutoModel.from_pretrained(
             "hf-internal-testing/tiny-random-IdeficsModel", load_in_4bit=True
         )
