@@ -17,7 +17,7 @@
 import math
 import warnings
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -832,33 +832,6 @@ class SiglipPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    @classmethod
-    def _autoset_attn_implementation(
-        cls,
-        config,
-        use_flash_attention_2: bool = False,
-        torch_dtype: Optional[torch.dtype] = None,
-        device_map: Optional[Union[str, Dict[str, int]]] = None,
-        check_device_map: bool = True,
-        **kwargs,
-    ):
-        """
-        Overrides the method in `PreTrainedModel` to update the vision config with the correct attention implementation
-        """
-        config = super()._autoset_attn_implementation(
-            config=config,
-            use_flash_attention_2=use_flash_attention_2,
-            torch_dtype=torch_dtype,
-            device_map=device_map,
-            check_device_map=check_device_map,
-            **kwargs,
-        )
-        if hasattr(config, "vision_config"):
-            config.vision_config._attn_implementation = config._attn_implementation
-        if hasattr(config, "text_config"):
-            config.text_config._attn_implementation = config._attn_implementation
-        return config
-
 
 SIGLIP_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
@@ -1053,10 +1026,11 @@ class SiglipEncoder(nn.Module):
         )
 
 
-class SiglipTextTransformer(nn.Module):
+class SiglipTextTransformer(SiglipPreTrainedModel):
+    _no_split_modules = ["SiglipTextEmbeddings", "SiglipEncoderLayer"]
+
     def __init__(self, config: SiglipTextConfig):
-        super().__init__()
-        self.config = config
+        super().__init__(config)
         embed_dim = config.hidden_size
         self.embeddings = SiglipTextEmbeddings(config)
         self.encoder = SiglipEncoder(config)
@@ -1186,10 +1160,11 @@ class SiglipTextModel(SiglipPreTrainedModel):
         )
 
 
-class SiglipVisionTransformer(nn.Module):
+class SiglipVisionTransformer(SiglipPreTrainedModel):
+    _no_split_modules = ["SiglipVisionEmbeddings", "SiglipEncoderLayer", "SiglipMultiheadAttentionPoolingHead"]
+
     def __init__(self, config: SiglipVisionConfig):
-        super().__init__()
-        self.config = config
+        super().__init__(config)
         embed_dim = config.hidden_size
 
         self.embeddings = SiglipVisionEmbeddings(config)
@@ -1351,8 +1326,12 @@ class SiglipModel(SiglipPreTrainedModel):
         text_config = config.text_config
         vision_config = config.vision_config
 
-        self.text_model = SiglipTextTransformer(text_config)
-        self.vision_model = SiglipVisionTransformer(vision_config)
+        self.text_model = SiglipTextTransformer._from_config(
+            text_config, attn_implementation=config._attn_implementation
+        )
+        self.vision_model = SiglipVisionTransformer._from_config(
+            vision_config, attn_implementation=config._attn_implementation
+        )
 
         self.logit_scale = nn.Parameter(torch.randn(1))
         self.logit_bias = nn.Parameter(torch.randn(1))
@@ -1575,7 +1554,9 @@ class SiglipForImageClassification(SiglipPreTrainedModel):
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        self.vision_model = SiglipVisionTransformer(config.vision_config)
+        self.vision_model = SiglipVisionTransformer._from_config(
+            config.vision_config, attn_implementation=config._attn_implementation
+        )
 
         # Classifier head
         self.classifier = (
