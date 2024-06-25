@@ -399,7 +399,7 @@ class AutoImageProcessor:
             kwargs["token"] = use_auth_token
 
         config = kwargs.pop("config", None)
-        use_fast = kwargs.pop("use_fast", False)
+        use_fast = kwargs.pop("use_fast", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         kwargs["_from_auto"] = True
 
@@ -430,10 +430,11 @@ class AutoImageProcessor:
 
         if image_processor_class is not None:
             # Update class name to reflect the use_fast option. If class is not found, None is returned.
-            if use_fast and not image_processor_class.endswith("Fast"):
-                image_processor_class += "Fast"
-            elif not use_fast and image_processor_class.endswith("Fast"):
-                image_processor_class = image_processor_class[:-4]
+            if use_fast is not None:
+                if use_fast and not image_processor_class.endswith("Fast"):
+                    image_processor_class += "Fast"
+                elif not use_fast and image_processor_class.endswith("Fast"):
+                    image_processor_class = image_processor_class[:-4]
             image_processor_class = image_processor_class_from_name(image_processor_class)
 
         has_remote_code = image_processor_auto_map is not None
