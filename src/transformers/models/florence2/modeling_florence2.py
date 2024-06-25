@@ -1504,7 +1504,7 @@ class Florence2DecoderLayer(nn.Module):
 
 class Florence2LanguagePreTrainedModel(PreTrainedModel):
     config_class = Florence2LanguageConfig
-    base_model_prefix = "model"
+    base_model_prefix = "florence2"
     supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_unexpected = ["encoder.version", "decoder.version"]
     _no_split_modules = [r"Florence2EncoderLayer", r"Florence2DecoderLayer"]
@@ -2132,7 +2132,6 @@ class Florence2LanguageModel(Florence2LanguagePreTrainedModel):
 
 
 class Florence2LanguageForConditionalGeneration(Florence2LanguagePreTrainedModel):
-    base_model_prefix = "model"
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
     _keys_to_ignore_on_load_missing = ["final_logits_bias"]
 
@@ -2395,7 +2394,7 @@ FLORENCE2_START_DOCSTRING = r"""
 )
 class Florence2PreTrainedModel(PreTrainedModel):
     config_class = Florence2Config
-    base_model_prefix = "model"
+    base_model_prefix = "florence2"
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
 
