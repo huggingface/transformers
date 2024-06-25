@@ -24,7 +24,7 @@ from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
 
 
-if sys.version_info >= (3.11):
+if sys.version_info >= (3, 11):
     from typing import Unpack
 else:
     from typing_extensions import Unpack
