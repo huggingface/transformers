@@ -190,7 +190,7 @@ class LearnedAbsolutePositionEmbedding1D(nn.Module):
         return pos_embeds
 
 
-class MySequential(nn.Sequential):
+class Florence2Sequential(nn.Sequential):
     def forward(self, *inputs):
         for module in self._modules.values():
             if type(inputs) == tuple:
@@ -364,7 +364,6 @@ class Florence2DropPath(nn.Module):
         return "p={}".format(self.drop_prob)
 
 
-# TODO: can this be replaced with torch.nn.init.trunc_normal_?
 # https://github.com/huggingface/pytorch-image-models/blob/b28945ff056d454b174f0fb8682e362b87150141/timm/layers/weight_init.py
 def trunc_normal_(tensor: torch.Tensor, mean=0.0, std=1.0, a=-2.0, b=2.0) -> torch.Tensor:
     r"""Fills the input Tensor with values drawn from a truncated
@@ -643,9 +642,9 @@ class DaViT(nn.Module):
             )
             convs.append(conv_embed)
 
-            block = MySequential(
+            block = Florence2Sequential(
                 *[
-                    MySequential(
+                    Florence2Sequential(
                         OrderedDict(
                             [
                                 (
