@@ -14,8 +14,6 @@
 
 import unittest
 
-import torch
-
 from transformers import (
     MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
     TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
