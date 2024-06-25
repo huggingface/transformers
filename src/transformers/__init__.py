@@ -473,6 +473,12 @@ _import_structure = {
         "InstructBlipQFormerConfig",
         "InstructBlipVisionConfig",
     ],
+    "models.instructblipvideo": [
+        "InstructBlipVideoConfig",
+        "InstructBlipVideoProcessor",
+        "InstructBlipVideoQFormerConfig",
+        "InstructBlipVideoVisionConfig",
+    ],
     "models.jamba": ["JambaConfig"],
     "models.jetmoe": ["JetMoeConfig"],
     "models.kosmos2": [
@@ -654,6 +660,7 @@ _import_structure = {
         "RoFormerConfig",
         "RoFormerTokenizer",
     ],
+    "models.rt_detr": ["RTDetrConfig", "RTDetrResNetConfig"],
     "models.rwkv": ["RwkvConfig"],
     "models.sam": [
         "SamConfig",
@@ -1136,6 +1143,7 @@ else:
     _import_structure["models.idefics"].extend(["IdeficsImageProcessor"])
     _import_structure["models.idefics2"].extend(["Idefics2ImageProcessor"])
     _import_structure["models.imagegpt"].extend(["ImageGPTFeatureExtractor", "ImageGPTImageProcessor"])
+    _import_structure["models.instructblipvideo"].extend(["InstructBlipVideoImageProcessor"])
     _import_structure["models.layoutlmv2"].extend(["LayoutLMv2FeatureExtractor", "LayoutLMv2ImageProcessor"])
     _import_structure["models.layoutlmv3"].extend(["LayoutLMv3FeatureExtractor", "LayoutLMv3ImageProcessor"])
     _import_structure["models.levit"].extend(["LevitFeatureExtractor", "LevitImageProcessor"])
@@ -1153,6 +1161,7 @@ else:
     _import_structure["models.pix2struct"].extend(["Pix2StructImageProcessor"])
     _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
     _import_structure["models.pvt"].extend(["PvtImageProcessor"])
+    _import_structure["models.rt_detr"].extend(["RTDetrImageProcessor"])
     _import_structure["models.sam"].extend(["SamImageProcessor"])
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
     _import_structure["models.seggpt"].extend(["SegGptImageProcessor"])
@@ -2316,6 +2325,14 @@ else:
             "InstructBlipVisionModel",
         ]
     )
+    _import_structure["models.instructblipvideo"].extend(
+        [
+            "InstructBlipVideoForConditionalGeneration",
+            "InstructBlipVideoPreTrainedModel",
+            "InstructBlipVideoQFormerModel",
+            "InstructBlipVideoVisionModel",
+        ]
+    )
     _import_structure["models.jamba"].extend(
         [
             "JambaForCausalLM",
@@ -3003,6 +3020,15 @@ else:
             "RoFormerModel",
             "RoFormerPreTrainedModel",
             "load_tf_weights_in_roformer",
+        ]
+    )
+    _import_structure["models.rt_detr"].extend(
+        [
+            "RTDetrForObjectDetection",
+            "RTDetrModel",
+            "RTDetrPreTrainedModel",
+            "RTDetrResNetBackbone",
+            "RTDetrResNetPreTrainedModel",
         ]
     )
     _import_structure["models.rwkv"].extend(
@@ -5069,6 +5095,12 @@ if TYPE_CHECKING:
         InstructBlipQFormerConfig,
         InstructBlipVisionConfig,
     )
+    from .models.instructblipvideo import (
+        InstructBlipVideoConfig,
+        InstructBlipVideoProcessor,
+        InstructBlipVideoQFormerConfig,
+        InstructBlipVideoVisionConfig,
+    )
     from .models.jamba import JambaConfig
     from .models.jetmoe import JetMoeConfig
     from .models.kosmos2 import (
@@ -5270,6 +5302,10 @@ if TYPE_CHECKING:
     from .models.roformer import (
         RoFormerConfig,
         RoFormerTokenizer,
+    )
+    from .models.rt_detr import (
+        RTDetrConfig,
+        RTDetrResNetConfig,
     )
     from .models.rwkv import RwkvConfig
     from .models.sam import (
@@ -5758,6 +5794,7 @@ if TYPE_CHECKING:
         from .models.idefics import IdeficsImageProcessor
         from .models.idefics2 import Idefics2ImageProcessor
         from .models.imagegpt import ImageGPTFeatureExtractor, ImageGPTImageProcessor
+        from .models.instructblipvideo import InstructBlipVideoImageProcessor
         from .models.layoutlmv2 import (
             LayoutLMv2FeatureExtractor,
             LayoutLMv2ImageProcessor,
@@ -5793,6 +5830,7 @@ if TYPE_CHECKING:
             PoolFormerImageProcessor,
         )
         from .models.pvt import PvtImageProcessor
+        from .models.rt_detr import RTDetrImageProcessor
         from .models.sam import SamImageProcessor
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
         from .models.seggpt import SegGptImageProcessor
@@ -6756,6 +6794,12 @@ if TYPE_CHECKING:
             InstructBlipQFormerModel,
             InstructBlipVisionModel,
         )
+        from .models.instructblipvideo import (
+            InstructBlipVideoForConditionalGeneration,
+            InstructBlipVideoPreTrainedModel,
+            InstructBlipVideoQFormerModel,
+            InstructBlipVideoVisionModel,
+        )
         from .models.jamba import (
             JambaForCausalLM,
             JambaForSequenceClassification,
@@ -7296,6 +7340,13 @@ if TYPE_CHECKING:
             RoFormerModel,
             RoFormerPreTrainedModel,
             load_tf_weights_in_roformer,
+        )
+        from .models.rt_detr import (
+            RTDetrForObjectDetection,
+            RTDetrModel,
+            RTDetrPreTrainedModel,
+            RTDetrResNetBackbone,
+            RTDetrResNetPreTrainedModel,
         )
         from .models.rwkv import (
             RwkvForCausalLM,
