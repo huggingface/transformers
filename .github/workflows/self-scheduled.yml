@@ -15,6 +15,19 @@ on:
       slack_report_channel:
         required: true
         type: string
+      runner:
+        required: true
+        type: string
+      docker:
+        required: true
+        type: string
+      ci_event:
+        required: true
+        type: string
+      working-directory-prefix:
+        default: ''
+        required: false
+        type: string
 
 env:
   HF_HOME: /mnt/cache
@@ -38,7 +51,7 @@ jobs:
     strategy:
       matrix:
         machine_type: [single-gpu, multi-gpu]
-    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, daily-ci]
+    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, '${{ inputs.runner }}']
     container:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -96,6 +109,8 @@ jobs:
       folder_slices: ${{ needs.setup.outputs.folder_slices }}
       machine_type: ${{ matrix.machine_type }}
       slice_id: ${{ matrix.slice_id }}
+      runner: ${{ inputs.runner }}
+      docker: ${{ inputs.docker }}
     secrets: inherit
 
   run_pipelines_torch_gpu:
@@ -105,7 +120,7 @@ jobs:
       fail-fast: false
       matrix:
         machine_type: [single-gpu, multi-gpu]
-    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, daily-ci]
+    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, '${{ inputs.runner }}']
     container:
       image: huggingface/transformers-pytorch-gpu
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -155,7 +170,7 @@ jobs:
       fail-fast: false
       matrix:
         machine_type: [single-gpu, multi-gpu]
-    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, daily-ci]
+    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, '${{ inputs.runner }}']
     container:
       image: huggingface/transformers-tensorflow-gpu
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -206,7 +221,7 @@ jobs:
       fail-fast: false
       matrix:
         machine_type: [single-gpu]
-    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, daily-ci]
+    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, '${{ inputs.runner }}']
     container:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -257,69 +272,88 @@ jobs:
       fail-fast: false
       matrix:
         machine_type: [single-gpu, multi-gpu]
-    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, daily-ci]
+    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, '${{ inputs.runner }}']
     container:
-      image: huggingface/transformers-pytorch-deepspeed-latest-gpu
+      image: ${{ inputs.docker }}
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
       - name: Update clone
-        working-directory: /workspace/transformers
+        working-directory: ${{ inputs.working-directory-prefix }}/transformers
         run: git fetch && git checkout ${{ github.sha }}
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
-        working-directory: /workspace/transformers
+        working-directory: ${{ inputs.working-directory-prefix }}/transformers
         run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
+
+      - name: Update / Install some packages (for Past CI)
+        if: ${{ contains(inputs.docker, '-past-') && contains(inputs.docker, '-pytorch-') }}
+        working-directory: ${{ inputs.working-directory-prefix }}/transformers
+        run: |
+          python3 -m pip install -U datasets
+          python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
 
       - name: Remove cached torch extensions
         run: rm -rf /github/home/.cache/torch_extensions/
 
       # To avoid unknown test failures
-      - name: Pre build DeepSpeed *again*
-        working-directory: /workspace
+      - name: Pre build DeepSpeed *again* (for daily CI)
+        if: ${{ contains(inputs.ci_event, 'Daily CI') }}
+        working-directory: ${{ inputs.working-directory-prefix }}/
         run: |
           python3 -m pip uninstall -y deepspeed
           DS_DISABLE_NINJA=1 DS_BUILD_CPU_ADAM=1 DS_BUILD_FUSED_ADAM=1 python3 -m pip install deepspeed --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check
+
+      # To avoid unknown test failures
+      - name: Pre build DeepSpeed *again* (for nightly & Past CI)
+        if: ${{ contains(inputs.ci_event, 'Nightly CI') || contains(inputs.ci_event, 'Past CI') }}
+        working-directory: ${{ inputs.working-directory-prefix }}/
+        run: |
+          python3 -m pip uninstall -y deepspeed
+          rm -rf DeepSpeed
+          git clone https://github.com/microsoft/DeepSpeed && cd DeepSpeed && rm -rf build
+          DS_BUILD_CPU_ADAM=1 DS_BUILD_FUSED_ADAM=1 python3 -m pip install . --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check
 
       - name: NVIDIA-SMI
         run: |
           nvidia-smi
 
       - name: Environment
-        working-directory: /workspace/transformers
+        working-directory: ${{ inputs.working-directory-prefix }}/transformers
         run: |
-          python utils/print_env.py
+          python3 utils/print_env.py
 
       - name: Show installed libraries and their versions
-        working-directory: /workspace/transformers
+        working-directory: ${{ inputs.working-directory-prefix }}/transformers
         run: pip freeze
 
       - name: Run all tests on GPU
-        working-directory: /workspace/transformers
+        working-directory: ${{ inputs.working-directory-prefix }}/transformers
         run: |
-          python -m pytest -v --make-reports=${{ matrix.machine_type }}_run_torch_cuda_extensions_gpu_test_reports tests/deepspeed tests/extended
+          python3 -m pytest -v --make-reports=${{ matrix.machine_type }}_run_torch_cuda_extensions_gpu_test_reports tests/deepspeed tests/extended
 
       - name: Failure short reports
         if: ${{ failure() }}
         continue-on-error: true
-        run: cat /workspace/transformers/reports/${{ matrix.machine_type }}_run_torch_cuda_extensions_gpu_test_reports/failures_short.txt
+        run: cat ${{ inputs.working-directory-prefix }}/transformers/reports/${{ matrix.machine_type }}_run_torch_cuda_extensions_gpu_test_reports/failures_short.txt
 
       - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_torch_cuda_extensions_gpu_test_reports"
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.machine_type }}_run_torch_cuda_extensions_gpu_test_reports
-          path: /workspace/transformers/reports/${{ matrix.machine_type }}_run_torch_cuda_extensions_gpu_test_reports
+          path: ${{ inputs.working-directory-prefix }}/transformers/reports/${{ matrix.machine_type }}_run_torch_cuda_extensions_gpu_test_reports
 
   run_quantization_torch_gpu:
     if: ${{ inputs.job == 'run_quantization_torch_gpu' }}
     name: " "
     needs: setup
     strategy:
+      max-parallel: 4
       fail-fast: false
       matrix:
         folders: ${{ fromJson(needs.setup.outputs.quantization_matrix) }}
         machine_type: [single-gpu, multi-gpu]
-    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, daily-ci]
+    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, '${{ inputs.runner }}']
     container:
       image: huggingface/transformers-quantization-latest-gpu
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -434,5 +468,6 @@ jobs:
       # This would be an empty string if `setup` is skipped.
       folder_slices: ${{ needs.setup.outputs.folder_slices }}
       quantization_matrix: ${{ needs.setup.outputs.quantization_matrix }}
-      
+      ci_event: ${{ inputs.ci_event }}
+
     secrets: inherit
