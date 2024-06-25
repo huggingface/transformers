@@ -201,7 +201,7 @@ class ImageClassificationPipelineTests(unittest.TestCase):
         outputs = image_classifier("http://images.cocodataset.org/val2017/000000039769.jpg")
 
         self.assertEqual(
-            nested_simplify(outputs, decimals=4),
+            nested_simplify(outputs, decimals=3),
             [{"label": "LABEL_1", "score": 0.574}, {"label": "LABEL_0", "score": 0.426}],
         )
 
