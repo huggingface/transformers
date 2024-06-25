@@ -62,8 +62,6 @@ class NemotronConfig(PretrainedConfig):
             The maximum sequence length that this model might ever be used with. <TODO>
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        normalization (`str`):
-            The type of normalization used in Nemotron
         norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
@@ -121,7 +119,6 @@ class NemotronConfig(PretrainedConfig):
         hidden_act="relu2",
         max_position_embeddings=2048,
         initializer_range=0.02,
-        normalization='layernorm1p',
         norm_eps=1e-6,
         use_cache=True,
         pad_token_id=None, #TODO
@@ -150,7 +147,6 @@ class NemotronConfig(PretrainedConfig):
         self.num_key_value_heads = num_key_value_heads
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
-        self.normalization = normalization
         self.norm_eps = norm_eps
         self.use_cache = use_cache
         self.rope_theta = rope_theta

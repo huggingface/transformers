@@ -80,25 +80,8 @@ class LayerNorm1P(nn.LayerNorm):
         return F.layer_norm(
             input, self.normalized_shape, self.weight + 1, self.bias, self.eps)
 
-class NemotronLayerNorm(nn.Module):
-    def __init__(self, hidden_size, normalization='layernorm1p', eps=1e-6):
-        super().__init__()
-        self.normalization = normalization
-        if normalization == 'layernorm1p':
-            self.ln = LayerNorm1P(hidden_size, bias=True, eps=eps)
-        elif normalization == 'layernorm':
-            self.ln = nn.LayerNorm(hidden_size, bias=True, eps=eps)
-        else:
-            raise ValueError(f'Unsupported layernorm type: {normalization}')
 
-    def forward(self, hidden_states):
-        if self.normalization == 'layernorm1p' or self.normalization == 'layernorm':
-            return self.ln(hidden_states)
-        else:
-            raise ValueError(f'Unsupported layernorm type: {normalization}')
-
-
-ALL_LAYERNORM_LAYERS.append(NemotronLayerNorm)
+ALL_LAYERNORM_LAYERS.append(LayerNorm1P)
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
@@ -636,8 +619,8 @@ class NemotronDecoderLayer(nn.Module):
         self.self_attn = NEMOTRON_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
 
         self.mlp = NemotronMLP(config)
-        self.input_layernorm = NemotronLayerNorm(config.hidden_size, normalization=config.normalization, eps=config.norm_eps)
-        self.post_attention_layernorm = NemotronLayerNorm(config.hidden_size, normalization=config.normalization, eps=config.norm_eps)
+        self.input_layernorm = LayerNorm1P(config.hidden_size, normalization=config.normalization, eps=config.norm_eps)
+        self.post_attention_layernorm = LayerNorm1P(config.hidden_size, normalization=config.normalization, eps=config.norm_eps)
 
     def forward(
         self,
@@ -836,7 +819,7 @@ class NemotronModel(NemotronPreTrainedModel):
         self.layers = nn.ModuleList(
             [NemotronDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = NemotronLayerNorm(config.hidden_size, normalization=config.normalization, eps=config.norm_eps)
+        self.norm = LayerNorm1P(config.hidden_size, normalization=config.normalization, eps=config.norm_eps)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
