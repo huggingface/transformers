@@ -16,7 +16,7 @@
 
 from typing import Dict, List, Optional, Union, Tuple
 import numpy as np
-#FIXME change the import from transformers to import from ...
+
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
     convert_to_rgb,
@@ -92,8 +92,9 @@ def box_area(boxes):
     return (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
 
 def box_iou(boxes1, area1, boxes2, eps=1e-5):
+    
     area2 = box_area(boxes2)
-    print(area2)
+    
     lt = np.maximum(boxes1[:, None, :2], boxes2[:, :2])  # [N,M,2]
     rb = np.minimum(boxes1[:, None, 2:], boxes2[:, 2:])  # [N,M,2]
 
@@ -103,10 +104,11 @@ def box_iou(boxes1, area1, boxes2, eps=1e-5):
     union = area1[:, None] + area2 - inter
 
     iou = inter / (union + eps)
-    print(iou)
+
     return iou, union
 
 def anchor_rank(anchors, anchors_areas, input_image_size, eps=1e-5):
+    
     input_image_bbox = np.array([[0, 0, input_image_size[1], input_image_size[0]]])
 
     boxes1 = anchors
@@ -118,11 +120,14 @@ def anchor_rank(anchors, anchors_areas, input_image_size, eps=1e-5):
     
     iou, _ = box_iou(boxes1, area1, boxes2)
     iou = iou.squeeze(1)
+    
     shape_iou, _ = box_iou(boxes1, area1, boxes3)
     shape_iou = np.diag(shape_iou)  # Get diagonal for self-comparison
+    
     index = np.argmax(shape_iou * 100 + iou)
-    print(index)
+    
     return index
+
 #FIXME add this into shape adaptive cropping module
 
 def anchor_resize(image:ImageInput,
@@ -146,6 +151,7 @@ def anchor_resize(image:ImageInput,
         resized_img = np.array(resized_img)
        # image_patches_list = [image_input[i] for i in range(image_input.shape[0])]
         return [resized_img], selected_anchor
+
 def shape_adaptive_cropping(image_patches: ImageInput,
                             size: Dict[str, int] = None, 
                             anchors: str = 'grid_9', 
@@ -155,11 +161,8 @@ def shape_adaptive_cropping(image_patches: ImageInput,
     
         anchors = [tuple(_) for _ in grid_dict[anchors]] 
         size = size['width']
-        #self.anchors = [tuple(_) for _ in grid_dict[anchors]]
+ 
         anchor_max = max(max(_) for _ in anchors)
-        #breakpoint()
-        #image_patches, selected_anchor = anchor_resize(image, anchors, size, interpolation) #w,h
-        #image_patches = image_patches.convert("RGB")
 
         h, w = image_patches.shape[0],image_patches.shape[1] #w,h
         
@@ -171,7 +174,7 @@ def shape_adaptive_cropping(image_patches: ImageInput,
         num_h, num_w = anchor_size
         
         image_input = image_patches.reshape(3, num_h, size, num_w, size)
-        # Step 2: Transpose to get the correct order
+        
         image_input = image_input.transpose(1, 3, 2, 4, 0)
         image_input = image_input.reshape((-1,size,size,3))
         #image_input = image_input.transpose(0,2,3,1)
@@ -282,7 +285,7 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
             "data_format",
             "input_data_format",
         ]
-        #self.adaptive_cropping_module = ShapeAdaptiveCroppingModule()
+    
     def anchor_resize(self,
                 image:ImageInput,
                 size:Dict[str, int] = None,
@@ -365,7 +368,6 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         do_shape_adaptive_cropping: bool = True,
         do_anchor_resize: bool = True,
-        #shape_adaptive_cropping: bool = True,
         **kwargs,
     ) -> PIL.Image.Image:
         """
@@ -457,10 +459,11 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
         )
         # 1. Keep global image to be able to work with it later
          
-
         if do_convert_rgb:
             images = [convert_to_rgb(image) for image in images]
+        
         patch_images = images.copy()
+
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
         
@@ -472,17 +475,17 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
             images = [
                 self.center_crop(image=image, size=crop_size, input_data_format=input_data_format) for image in images
             ]
+
         if do_resize:
             images = [
                 self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
                 for image in images
             ]
-       # breakpoint()
+
         if do_anchor_resize:
             output = [self.anchor_resize(image, size) for image in patch_images][0] 
             patch_images, selected_anchor = output[0], output[1]
             images.extend(patch_images)
-           # breakpoint()
             
         if do_rescale:
             images = [
@@ -490,7 +493,6 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
                 for image in images
             ]
             
-       # breakpoint()
         if is_scaled_image(images[0]) and do_rescale:
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
@@ -511,9 +513,8 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
         images = [
             to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
         ]
-
-            # call the module
-
+        
+        # call the module
         data = {"pixel_values": images, "patch_positions": patch_positions, "num_patches": num_patches, "anchor_max": anchor_max}
         return BatchFeature(data=data, tensor_type=return_tensors)
 

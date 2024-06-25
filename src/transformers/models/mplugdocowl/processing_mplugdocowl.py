@@ -24,34 +24,11 @@ from transformers.image_utils import ImageInput
 from transformers.processing_utils import ProcessorMixin
 from transformers.tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
 from transformers.utils import TensorType
-from .constants import IMAGE_TOKEN_INDEX, DEFAULT_IMAGE_TOKEN
 #FIXME need to add image processing class name
 #from transformers.models.mplugdocowl.image_processing_mplugdocowl import MPLUGDocOwlImageProcessor
 import numpy as np
 import torch
 
-'''
-def tokenizer_image_token(prompt, tokenizer, image_token_index=IMAGE_TOKEN_INDEX, return_tensors=None):
-    #breakpoint()
-    prompt_chunks = [tokenizer(chunk).input_ids if len(chunk) > 0 else [] for chunk in prompt.split(DEFAULT_IMAGE_TOKEN)]
-    print(prompt_chunks)
-    def insert_separator(X, sep):
-        return [ele for sublist in zip(X, [sep]*len(X)) for ele in sublist][:-1]
-    input_ids = []
-    offset = 0
-    if len(prompt_chunks) > 0 and len(prompt_chunks[0]) > 0 and prompt_chunks[0][0] == tokenizer.bos_token_id:
-        offset = 1
-        input_ids.append(prompt_chunks[0][0])
-    #breakpoint()
-    for x in insert_separator(prompt_chunks, [image_token_index] * (offset + 1)):
-        input_ids.extend(x[offset:])
-    #breakpoint()
-    if return_tensors is not None:
-        if return_tensors == 'pt':
-            return torch.tensor(input_ids, dtype=torch.long)
-        raise ValueError(f'Unsupported tensor type: {return_tensors}')
-    return input_ids
-'''
 class MPLUGDocOwlProcessor(ProcessorMixin):
     r"""
     Constructs a MPLUGDocOwl processor which wraps a MPLUGDocOwl image processor and a MPLUGDocOwl tokenizer into a single processor.
@@ -141,7 +118,7 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
         patch_positions = pixel_values['patch_positions']
         num_patches = pixel_values['num_patches']
         anchor_max = pixel_values['anchor_max']
-        #breakpoint()
+
         text_list = text.split(media_token)
        
         text = 'USER: '
@@ -164,14 +141,14 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
                 text += '<image>'*num_patches
             text += next_text
             image_token_ptr += 1
-        print(text)
+
         text = text + " ASSISTANT:"
-        #breakpoint()
         #input_ids = tokenizer_image_token(text, self.tokenizer, IMAGE_TOKEN_INDEX, return_tensors=return_tensors).unsqueeze(0)
         text_inputs = self.tokenizer(
             text, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length
         )
-        print(text_inputs)
+        print(text)
+        #print(text_inputs['input_ids'])
 
         return BatchFeature(data={**text_inputs, "pixel_values": pixel_values['pixel_values'], "patch_positions": patch_positions})
         #return BatchFeature(data={"input_ids": input_ids, "attention_mask": text_inputs.attention_mask, "pixel_values": pixel_values['pixel_values'], "patch_positions": patch_positions})

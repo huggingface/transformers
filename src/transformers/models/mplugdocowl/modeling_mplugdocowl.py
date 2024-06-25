@@ -37,7 +37,7 @@ from functools import partial
 
 from .language_modeling_mplugdocowl import MPLUGDocOwlForCausalLM
 from .modelling_vision_mplugdocowl import MPLUGDocOwlVisionModel
-from .constants import IMAGE_TOKEN_INDEX, IGNORE_INDEX
+
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "MPLUGDocOwlConfig"
@@ -83,22 +83,6 @@ class MPLUGDocOwlCausalLMOutputWithPast(ModelOutput):
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-'''
-# Copied from transformers.models.llava.modeling_llava.LlavaMultiModalProjector with Llava->MPLUGDocOwl
-class MPLUGDocOwlMultiModalProjector(nn.Module):
-    def __init__(self, config: MPLUGDocOwlConfig):
-        super().__init__()
-        self.linear_1 = nn.Linear(config.vision_config.hidden_size, config.text_config.hidden_size, bias=True)
-        self.act = ACT2FN[config.projector_hidden_act]
-        self.linear_2 = nn.Linear(config.text_config.hidden_size, config.text_config.hidden_size, bias=True)
-
-    def forward(self, image_features):
-        hidden_states = self.linear_1(image_features)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.linear_2(hidden_states)
-        return hidden_states
-
-'''
 
 MPLUGDOCOWL_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
@@ -129,29 +113,7 @@ class MPLUGDocOwlPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["MPLUGDocOwlAttention"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
-    '''
-    def _init_weights(self, module):
-        # important: this ported version of MPLUGDocOwl isn't meant for training from scratch - only
-        # inference and fine-tuning - so the proper init weights code has been removed - the original codebase
-        # https://github.com/haotian-liu/LLaVA/tree/main/mplugdocowl should serve for that purpose
-        std = (
-            self.config.initializer_range
-            if hasattr(self.config, "initializer_range")
-            else self.config.text_config.initializer_range
-        )
 
-        if hasattr(module, "class_embedding"):
-            module.class_embedding.data.normal_(mean=0.0, std=std)
-
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-    '''
     @property
     def _supports_sdpa(self):
         """
@@ -263,11 +225,11 @@ class MPLUGDocOwlHReducer(MPLUGDocOwlPreTrainedModel):
         B, L, C = encoder_hidden_states.shape # B, 1024=(448/14)^2, 1024
         H = int(torch.sqrt(torch.tensor(L)))
         encoder_hidden_states = encoder_hidden_states.transpose(2,1)
-        #breakpoint()
+
         encoder_hidden_states = encoder_hidden_states.view(B, C, H, H) #(BCHH)
-        #breakpoint()
+
         hidden_states = self.reducer_before(encoder_hidden_states)  # B 4D H W/4
-        #breakpoint()
+
         B, XD, H, W_div_X = hidden_states.shape
         X = self.conv_patch
         D = XD // X 
@@ -278,12 +240,12 @@ class MPLUGDocOwlHReducer(MPLUGDocOwlPreTrainedModel):
 
        
         hidden_states = hidden_states.reshape(B, D, H, W_div_X * X)
-        #breakpoint()
+
         sequence_output = self.reducer(hidden_states) # B,C,H,W -> B,C,H/conv_shape[0],W/(conv_shape[1])
         sequence_output = sequence_output.flatten(2).transpose(1, 2)  # B,C,H/conv_shape[0],W/(conv_shape[1]) -> B,C,L/conv_patch -> B,L/conv_patch,C
         sequence_output = sequence_output.transpose(0, 1).contiguous() # L/conv_patch, B, C
       
-        #breakpoint()
+
         sequence_output = self.visual_fc(sequence_output) # L/conv_patch, B, h
         sequence_output = sequence_output.transpose(0, 1).contiguous() # B, s/4, h
         sequence_output = torch.cat([sequence_output, self.vit_eos.repeat(B, 1, 1)], dim=1)
@@ -414,7 +376,7 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
 
         if labels is None:
             final_labels = None
-        breakpoint()
+      
         return final_embedding, final_attention_mask, final_labels, position_ids, modality_indicators
 
     @add_start_docstrings_to_model_forward(MPLUGDOCOWL_INPUTS_DOCSTRING)

@@ -145,7 +145,6 @@ class MPLUGDocOwlVisionEmbeddings(nn.Module):
             stride=self.patch_size,
             bias=False,
         )
-        #breakpoint()
 
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches + 1
@@ -156,18 +155,17 @@ class MPLUGDocOwlVisionEmbeddings(nn.Module):
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
         batch_size = pixel_values.shape[0]
         target_dtype = self.patch_embedding.weight.dtype
-       # breakpoint()
+
         patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype)) 
-        #breakpoint() # shape = [*, width, grid, grid]
+
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
-        #breakpoint()
+
         class_embeds = self.class_embedding.expand(batch_size, 1, -1).to(patch_embeds.dtype)
+        
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
-        #embeddings = embeddings + self.position_embedding[self.position_ids]
-        #breakpoint()
         embeddings = embeddings + self.position_embedding[:, : embeddings.size(1)].to(patch_embeds.dtype)
-        #breakpoint()
         embeddings = self.pre_layernorm(embeddings)
+    
         return embeddings
 
 class MPLUGDocOwlPreTrainedModel(PreTrainedModel):
@@ -207,8 +205,6 @@ class MPLUGDocOwlAttention(MPLUGDocOwlPreTrainedModel):
         self,
         hidden_states: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
-        #causal_attention_mask: Optional[torch.Tensor] = None,
-        #attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
@@ -562,8 +558,6 @@ class MPLUGDocOwlVisionModel(PreTrainedModel):
     def __init__(self, config: MPLUGDocOwlConfig):
         super().__init__(config)
         self.vision_model = MPLUGDocOwlVisionTransformer(config)
-        # Initialize weights and apply final processing
-        #self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
         return self.vision_model.embeddings#.patch_embedding
