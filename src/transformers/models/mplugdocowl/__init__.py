@@ -44,6 +44,7 @@ else:
 if TYPE_CHECKING:
     from .configuration_mplugdocowl import MPLUGDocOwlConfig
     from .processing_mplugdocowl import MPLUGDocOwlProcessor
+
     try:
         if not is_vision_available():
             raise OptionalDependencyNotAvailable()

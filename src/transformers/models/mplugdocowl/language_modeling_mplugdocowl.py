@@ -17,10 +17,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch MPLUGDocOwl language model.""" 
+"""PyTorch MPLUGDocOwl language model."""
 
 import math
-import warnings
+from functools import partial
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -30,8 +30,11 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, StaticCache
-from ...modeling_attn_mask_utils import AttentionMaskConverter, _prepare_4d_causal_attention_mask, _prepare_4d_attention_mask
+from ...cache_utils import Cache, StaticCache
+from ...modeling_attn_mask_utils import (
+    AttentionMaskConverter,
+    _prepare_4d_causal_attention_mask,
+)
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -40,14 +43,15 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
-from .configuration_mplugdocowl import MPLUGDocOwlConfig
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
     replace_return_docstrings,
 )
-from functools import partial
+from .configuration_mplugdocowl import MPLUGDocOwlConfig
+
+
 logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "MPLUGDocOwlConfig"
 
@@ -102,7 +106,6 @@ class MPLUGDocOwlRotaryEmbedding(nn.Module):
         emb = torch.cat((freqs, freqs), dim=-1)
         self.register_buffer("_cos_cached", emb.cos().to(torch.get_default_dtype()), persistent=False)
         self.register_buffer("_sin_cached", emb.sin().to(torch.get_default_dtype()), persistent=False)
-
 
     @torch.no_grad()
     def forward(self, x, position_ids):
@@ -229,20 +232,19 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
-class MultiwayNetwork(nn.Module):
 
+class MultiwayNetwork(nn.Module):
     def __init__(self, module_provider, num_multiway=2):
         super(MultiwayNetwork, self).__init__()
 
         self.multiway = torch.nn.ModuleList([module_provider() for _ in range(num_multiway)])
-    
-    def forward(self, hidden_states, multiway_indices):
 
+    def forward(self, hidden_states, multiway_indices):
         if len(self.multiway) == 1:
             return self.multiway[0](hidden_states)
 
         output_hidden_states = torch.empty_like(hidden_states)
-        
+
         for idx, subway in enumerate(self.multiway):
             local_indices = multiway_indices.eq(idx).nonzero(as_tuple=True)
             hidden = hidden_states[local_indices].unsqueeze(1).contiguous()
@@ -252,8 +254,9 @@ class MultiwayNetwork(nn.Module):
                     output = output[0]
                 output = output.squeeze(1)
                 output_hidden_states[local_indices] = output
-        
+
         return output_hidden_states.contiguous()
+
 
 class MultiwayAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
@@ -275,15 +278,25 @@ class MultiwayAttention(nn.Module):
                 f" and `num_heads`: {self.num_heads})."
             )
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)
-        self.k_proj = MultiwayNetwork(module_provider=partial(
-            nn.Linear, in_features=self.hidden_size, out_features=self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
+        self.k_proj = MultiwayNetwork(
+            module_provider=partial(
+                nn.Linear,
+                in_features=self.hidden_size,
+                out_features=self.num_key_value_heads * self.head_dim,
+                bias=config.attention_bias,
+            )
         )
-        self.v_proj = MultiwayNetwork(module_provider=partial(
-            nn.Linear, in_features=self.hidden_size, out_features=self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
+        self.v_proj = MultiwayNetwork(
+            module_provider=partial(
+                nn.Linear,
+                in_features=self.hidden_size,
+                out_features=self.num_key_value_heads * self.head_dim,
+                bias=config.attention_bias,
+            )
         )
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.attention_bias)
         self._init_rope()
-    
+
     def _init_rope(self):
         if self.config.rope_scaling is None:
             self.rotary_emb = MPLUGDocOwlRotaryEmbedding(
@@ -327,7 +340,9 @@ class MultiwayAttention(nn.Module):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
 
-        query_states = self.q_proj(hidden_states, )
+        query_states = self.q_proj(
+            hidden_states,
+        )
         key_states = self.k_proj(hidden_states, modality_indicators)
         value_states = self.v_proj(hidden_states, modality_indicators)
 
@@ -338,9 +353,9 @@ class MultiwayAttention(nn.Module):
         kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
             kv_seq_len += past_key_value[0].shape[-2]
-        #cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
+        # cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
         cos, sin = self.rotary_emb(value_states, position_ids)
-        
+
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
         if past_key_value is not None:
@@ -381,12 +396,12 @@ class MultiwayAttention(nn.Module):
         attn_output = attn_output.transpose(1, 2).contiguous()
 
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
-        #FIXME look here
+        # FIXME look here
         attn_output = self.o_proj(attn_output)
 
         if not output_attentions:
             attn_weights = None
-     
+
         return attn_output, attn_weights, past_key_value
 
 
@@ -406,6 +421,7 @@ MPLUGDocOwl_START_DOCSTRING = r"""
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
+
 class MPLUGDocOwlDecoderLayer(nn.Module):
     def __init__(self, config: MPLUGDocOwlConfig, layer_idx):
         super().__init__()
@@ -413,12 +429,12 @@ class MPLUGDocOwlDecoderLayer(nn.Module):
         self.self_attn = MultiwayAttention(config=config)
         self.layer_idx = layer_idx
         self.mlp = MPLUGDocOwlMLP(config)
-        self.input_layernorm = MultiwayNetwork(module_provider=partial(
-            MPLUGDocOwlRMSNorm, hidden_size=config.hidden_size, eps=config.rms_norm_eps
-        ))
-        self.post_attention_layernorm = MultiwayNetwork(module_provider=partial(
-            MPLUGDocOwlRMSNorm, hidden_size=config.hidden_size, eps=config.rms_norm_eps
-        ))
+        self.input_layernorm = MultiwayNetwork(
+            module_provider=partial(MPLUGDocOwlRMSNorm, hidden_size=config.hidden_size, eps=config.rms_norm_eps)
+        )
+        self.post_attention_layernorm = MultiwayNetwork(
+            module_provider=partial(MPLUGDocOwlRMSNorm, hidden_size=config.hidden_size, eps=config.rms_norm_eps)
+        )
 
     def forward(
         self,
@@ -445,7 +461,7 @@ class MPLUGDocOwlDecoderLayer(nn.Module):
         """
 
         residual = hidden_states
-     
+
         hidden_states = self.input_layernorm(hidden_states, modality_indicators)
 
         # Self Attention
@@ -475,6 +491,7 @@ class MPLUGDocOwlDecoderLayer(nn.Module):
             outputs += (present_key_value,)
 
         return outputs
+
 
 @add_start_docstrings(
     "The bare MPLUGDocOwl Model outputting raw hidden-states without any specific head on top.",
@@ -603,13 +620,13 @@ class MPLUGDocOwlModel(MPLUGDocOwlPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-   
+
     def get_input_embeddings(self):
         return self.embed_tokens
 
     def set_input_embeddings(self, value):
         self.embed_tokens = value
- 
+
     @add_start_docstrings_to_model_forward(MPLUGDocOwl_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -664,19 +681,21 @@ class MPLUGDocOwlModel(MPLUGDocOwlPreTrainedModel):
             attention_mask = torch.ones(
                 (batch_size, seq_length_with_past), dtype=torch.bool, device=inputs_embeds.device
             )
-        #breakpoint()
-       # attention_mask = self._prepare_decoder_attention_mask(
-       #     attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
-       # )
-       # breakpoint()
-        #try:
-        attention_mask = _prepare_4d_causal_attention_mask(attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length)
-        #except RuntimeError as e:
-            #raise(e)
-        #attention_mask = _prepare_4d_attention_mask(attention_mask, dtype=torch.float32)
-        #breakpoint()
+        # breakpoint()
+        # attention_mask = self._prepare_decoder_attention_mask(
+        #     attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
+        # )
+        # breakpoint()
+        # try:
+        attention_mask = _prepare_4d_causal_attention_mask(
+            attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
+        )
+        # except RuntimeError as e:
+        # raise(e)
+        # attention_mask = _prepare_4d_attention_mask(attention_mask, dtype=torch.float32)
+        # breakpoint()
         hidden_states = inputs_embeds
-      
+
         if self.gradient_checkpointing and self.training:
             if use_cache:
                 logger.warning_once(
@@ -688,9 +707,9 @@ class MPLUGDocOwlModel(MPLUGDocOwlPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
         next_decoder_cache = () if use_cache else None
-        
+
         for idx, decoder_layer in enumerate(self.layers):
-            #breakpoint()
+            # breakpoint()
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
@@ -724,7 +743,7 @@ class MPLUGDocOwlModel(MPLUGDocOwlPreTrainedModel):
                 )
 
             hidden_states = layer_outputs[0]
-            
+
             if use_cache:
                 next_decoder_cache += (layer_outputs[2 if output_attentions else 1],)
 
@@ -732,7 +751,7 @@ class MPLUGDocOwlModel(MPLUGDocOwlPreTrainedModel):
                 all_self_attns += (layer_outputs[1],)
 
         hidden_states = self.norm(hidden_states)
-                # add hidden states from the last decoder layer
+        # add hidden states from the last decoder layer
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
@@ -745,7 +764,6 @@ class MPLUGDocOwlModel(MPLUGDocOwlPreTrainedModel):
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )
-
 
     def _update_causal_mask(
         self,
@@ -945,15 +963,15 @@ class MPLUGDocOwlForCausalLM(MPLUGDocOwlPreTrainedModel):
         if not return_dict:
             output = (logits,) + outputs[1:]
             return (loss,) + output if loss is not None else output
-        
+
         return CausalLMOutputWithPast(
-        loss=loss,
-        logits=logits,
-        past_key_values=outputs.past_key_values,
-        hidden_states=outputs.hidden_states,
-        attentions=outputs.attentions,
-    )
-        
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
     def prepare_inputs_for_generation(
         self,
         input_ids,
@@ -1164,101 +1182,3 @@ class MPLUGDocOwlForSequenceClassification(MPLUGDocOwlPreTrainedModel):
             attentions=transformer_outputs.attentions,
         )
 
-
-@add_start_docstrings(
-    """
-The MPLUGDocOwl Model transformer with a span classification head on top for extractive question-answering tasks like
-SQuAD (a linear layer on top of the hidden-states output to compute `span start logits` and `span end logits`).
-    """,
-    MPLUGDocOwl_START_DOCSTRING,
-)
-class MPLUGDocOwlForQuestionAnswering(MPLUGDocOwlPreTrainedModel):
-    base_model_prefix = "transformer"
-
-    # Copied from transformers.models.bloom.modeling_bloom.BloomForQuestionAnswering.__init__ with Bloom->MPLUGDocOwl
-    def __init__(self, config):
-        super().__init__(config)
-        self.transformer = MPLUGDocOwlModel(config)
-        self.qa_outputs = nn.Linear(config.hidden_size, 2)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self):
-        return self.transformer.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.transformer.embed_tokens = value
-
-    @add_start_docstrings_to_model_forward(MPLUGDocOwl_INPUTS_DOCSTRING)
-    def forward(
-        self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        start_positions: Optional[torch.LongTensor] = None,
-        end_positions: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, QuestionAnsweringModelOutput]:
-        r"""
-        start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
-            are not taken into account for computing the loss.
-        end_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
-            are not taken into account for computing the loss.
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.transformer(
-            input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        sequence_output = outputs[0]
-
-        logits = self.qa_outputs(sequence_output)
-        start_logits, end_logits = logits.split(1, dim=-1)
-        start_logits = start_logits.squeeze(-1).contiguous()
-        end_logits = end_logits.squeeze(-1).contiguous()
-
-        total_loss = None
-        if start_positions is not None and end_positions is not None:
-            # If we are on multi-GPU, split add a dimension
-            if len(start_positions.size()) > 1:
-                start_positions = start_positions.squeeze(-1).to(start_logits.device)
-            if len(end_positions.size()) > 1:
-                end_positions = end_positions.squeeze(-1).to(end_logits.device)
-            # sometimes the start/end positions are outside our model inputs, we ignore these terms
-            ignored_index = start_logits.size(1)
-            start_positions = start_positions.clamp(0, ignored_index)
-            end_positions = end_positions.clamp(0, ignored_index)
-
-            loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
-            start_loss = loss_fct(start_logits, start_positions)
-            end_loss = loss_fct(end_logits, end_positions)
-            total_loss = (start_loss + end_loss) / 2
-
-        if not return_dict:
-            output = (start_logits, end_logits) + outputs[2:]
-            return ((total_loss,) + output) if total_loss is not None else output
-
-        return QuestionAnsweringModelOutput(
-            loss=total_loss,
-            start_logits=start_logits,
-            end_logits=end_logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )

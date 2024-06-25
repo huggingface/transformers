@@ -13,14 +13,17 @@
 # limitations under the License.
 """ MPLUGDocOwl model configuration"""
 
+import os
 import warnings
+from typing import Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING
-from typing import Union
-import os
+
+
 logger = logging.get_logger(__name__)
+
 
 class MplugDocOwlHReducerConfig(PretrainedConfig):
     model_type = "mplug_docowl_hreducer"
@@ -30,7 +33,7 @@ class MplugDocOwlHReducerConfig(PretrainedConfig):
         hidden_size=1024,
         initializer_range=0.02,
         layer_norm_eps=1e-6,
-        conv_shape='1x4',
+        conv_shape="1x4",
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -55,9 +58,9 @@ class MplugDocOwlHReducerConfig(PretrainedConfig):
 
         return cls.from_dict(config_dict, **kwargs)
 
-DEFAULT_VISUAL_CONFIG = {
-    "visual_hreducer": MplugDocOwlHReducerConfig().to_dict()
-}
+
+DEFAULT_VISUAL_CONFIG = {"visual_hreducer": MplugDocOwlHReducerConfig().to_dict()}
+
 
 class MPLUGDocOwlConfig(PretrainedConfig):
     r"""
@@ -115,10 +118,10 @@ class MPLUGDocOwlConfig(PretrainedConfig):
         self,
         vision_config=None,
         text_config=None,
-        hreducer_hidden_size = 1024,
-        hreducer_initializer_range = 0.02,
+        hreducer_hidden_size=1024,
+        hreducer_initializer_range=0.02,
         hreducer_layer_norm=1e-6,
-        hreducer_conv_shape='1x4',
+        hreducer_conv_shape="1x4",
         ignore_index=-100,
         image_token_index=32000,
         projector_hidden_act="gelu",
@@ -129,7 +132,7 @@ class MPLUGDocOwlConfig(PretrainedConfig):
         self.ignore_index = ignore_index
         self.image_token_index = image_token_index
         self.projector_hidden_act = projector_hidden_act
-        
+
         if vision_feature_select_strategy not in ["default", "full"]:
             raise ValueError(
                 "vision_feature_select_strategy should be one of 'default', 'full'."
@@ -164,7 +167,7 @@ class MPLUGDocOwlConfig(PretrainedConfig):
                 attention_dropout=0.0,
                 initializer_range=0.02,
                 initializer_factor=1.0,
-                hidden_act="quick_gelu"
+                hidden_act="quick_gelu",
             )
 
         self.vision_config = vision_config
@@ -199,4 +202,3 @@ class MPLUGDocOwlConfig(PretrainedConfig):
         output = super().to_dict()
         output.pop("_vocab_size", None)
         return output
-

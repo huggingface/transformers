@@ -21,16 +21,12 @@ from typing import Any, Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...modeling_attn_mask_utils import _create_4d_causal_attention_mask, _prepare_4d_attention_mask
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
-
 from ...utils import (
     ModelOutput,
-    add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
@@ -90,6 +86,7 @@ class CLIPVisionModelOutput(ModelOutput):
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
+
 @dataclass
 class MPLUGDocOwlOutput(ModelOutput):
     """
@@ -136,7 +133,6 @@ class MPLUGDocOwlVisionEmbeddings(nn.Module):
         self.patch_size = config.patch_size
 
         self.class_embedding = nn.Parameter(torch.randn(1, 1, self.embed_dim))
-    
 
         self.patch_embedding = nn.Conv2d(
             in_channels=config.num_channels,
@@ -150,23 +146,24 @@ class MPLUGDocOwlVisionEmbeddings(nn.Module):
         self.num_positions = self.num_patches + 1
         self.position_embedding = nn.Parameter(torch.randn(1, self.num_patches + 1, self.embed_dim))
         self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
-        self.pre_layernorm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps) #FIXME add this?
+        self.pre_layernorm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)  # FIXME add this?
 
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
         batch_size = pixel_values.shape[0]
         target_dtype = self.patch_embedding.weight.dtype
 
-        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype)) 
+        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))
 
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
 
         class_embeds = self.class_embedding.expand(batch_size, 1, -1).to(patch_embeds.dtype)
-        
+
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
         embeddings = embeddings + self.position_embedding[:, : embeddings.size(1)].to(patch_embeds.dtype)
         embeddings = self.pre_layernorm(embeddings)
-    
+
         return embeddings
+
 
 class MPLUGDocOwlPreTrainedModel(PreTrainedModel):
     """
@@ -177,6 +174,7 @@ class MPLUGDocOwlPreTrainedModel(PreTrainedModel):
     config_class = MPLUGDocOwlConfig
     base_model_prefix = "MPLUGDocOwl"
     supports_gradient_checkpointing = True
+
 
 class MPLUGDocOwlAttention(MPLUGDocOwlPreTrainedModel):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
@@ -195,7 +193,7 @@ class MPLUGDocOwlAttention(MPLUGDocOwlPreTrainedModel):
         self.scale = self.head_dim**-0.5
         self.dropout = nn.Dropout(config.attention_dropout)
 
-        self.q_v_k_proj = nn.Linear(self.embed_dim, 3*self.embed_dim)
+        self.q_v_k_proj = nn.Linear(self.embed_dim, 3 * self.embed_dim)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
@@ -210,7 +208,7 @@ class MPLUGDocOwlAttention(MPLUGDocOwlPreTrainedModel):
         """Input shape: Batch x Time x Channel"""
 
         bsz, seq_len, embed_dim = hidden_states.size()
-        
+
         mixed_qkv = self.q_v_k_proj(hidden_states)
 
         mixed_qkv = mixed_qkv.reshape(bsz, seq_len, self.num_heads, 3, embed_dim // self.num_heads).permute(
@@ -246,8 +244,9 @@ class MPLUGDocOwlAttention(MPLUGDocOwlPreTrainedModel):
         output = self.out_proj(context_layer)
 
         outputs = (output, attention_probs) if output_attentions else (output, None)
-   
+
         return outputs
+
 
 class MPLUGDocOwlMLP(nn.Module):
     def __init__(self, config):
@@ -297,12 +296,12 @@ class MPLUGDocOwlEncoderLayer(nn.Module):
             head_mask=attention_mask,
             output_attentions=output_attentions,
         )
-        hidden_states = hidden_states + residual 
+        hidden_states = hidden_states + residual
 
         residual = hidden_states
         hidden_states = self.layer_norm2(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        hidden_states = hidden_states + residual 
+        hidden_states = hidden_states + residual
 
         outputs = (hidden_states,)
 
@@ -310,6 +309,7 @@ class MPLUGDocOwlEncoderLayer(nn.Module):
             outputs += (attn_weights,)
 
         return outputs
+
 
 MPLUGDocOwl_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
@@ -378,6 +378,7 @@ MPLUGDocOwl_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
+
 class MPLUGDocOwlEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
@@ -443,7 +444,7 @@ class MPLUGDocOwlEncoder(nn.Module):
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
-            '''
+            """
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
                     encoder_layer.__call__,
@@ -452,7 +453,7 @@ class MPLUGDocOwlEncoder(nn.Module):
                     causal_attention_mask,
                     output_attentions,
                 )
-            '''
+            """
             if self.gradient_checkpointing and self.training:
 
                 def create_custom_forward(module):
@@ -474,7 +475,7 @@ class MPLUGDocOwlEncoder(nn.Module):
                 )
 
             hidden_states = layer_outputs[0]
-         
+
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
 
@@ -487,6 +488,7 @@ class MPLUGDocOwlEncoder(nn.Module):
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
 
+
 class MPLUGDocOwlVisionTransformer(PreTrainedModel):
     def __init__(self, config: MPLUGDocOwlConfig):
         super().__init__(config)
@@ -497,7 +499,7 @@ class MPLUGDocOwlVisionTransformer(PreTrainedModel):
         self.encoder = MPLUGDocOwlEncoder(config)
         self.post_layernorm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.post_init()
-    
+
     @add_start_docstrings_to_model_forward(MPLUGDocOwl_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=MPLUGDocOwlConfig)
     def forward(
@@ -521,16 +523,16 @@ class MPLUGDocOwlVisionTransformer(PreTrainedModel):
             raise ValueError("You have to specify pixel_values")
 
         hidden_states = self.embeddings(pixel_values)
-      
+
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-       
+
         last_hidden_state = encoder_outputs[0]
-        #FIXME added this
+        # FIXME added this
         last_hidden_state = self.post_layernorm(last_hidden_state)
         pooled_output = last_hidden_state[:, 0, :]
         pooled_output = self.post_layernorm(pooled_output)
@@ -543,7 +545,7 @@ class MPLUGDocOwlVisionTransformer(PreTrainedModel):
             pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
-        ) 
+        )
 
 
 @add_start_docstrings(
@@ -560,7 +562,7 @@ class MPLUGDocOwlVisionModel(PreTrainedModel):
         self.vision_model = MPLUGDocOwlVisionTransformer(config)
 
     def get_input_embeddings(self) -> nn.Module:
-        return self.vision_model.embeddings#.patch_embedding
+        return self.vision_model.embeddings  # .patch_embedding
 
     @add_start_docstrings_to_model_forward(MPLUGDocOwl_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=MPLUGDocOwlConfig)

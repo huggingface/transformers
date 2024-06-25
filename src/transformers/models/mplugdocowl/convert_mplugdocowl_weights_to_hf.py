@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import argparse
+import re
 
 import torch
-import re
 from huggingface_hub import hf_hub_download
 
 from transformers import (
@@ -25,8 +25,9 @@ from transformers import (
     MPLUGDocOwlForConditionalGeneration,
     MPLUGDocOwlProcessor,
 )
-
 from transformers.models.mplugdocowl.image_processing_mplugdocowl import MPLUGDocOwlImageProcessor
+
+
 EPILOG_TXT = """Example:
     python transformers/src/transformers/models/mplugdocowl/convert_mplugdocowl_weights_to_hf.py --text_model_id lmsys/vicuna-7b-v1.5 --vision_model_id openai/clip-vit-large-patch14-336 --output_hub_path org/mplugdocowl-v1.5-7b-conv --old_state_dict_id liuhaotian/mplugdocowl-v1.5-7b
 
@@ -80,7 +81,9 @@ def convert_state_dict_to_hf(state_dict):
     return new_state_dict
 
 
-def convert_mplugdocowl_llama_to_hf(text_model_id, vision_model_id, output_hub_path, old_state_dict_id, pretrained=True):
+def convert_mplugdocowl_llama_to_hf(
+    text_model_id, vision_model_id, output_hub_path, old_state_dict_id, pretrained=True
+):
     if not pretrained:
         torch.set_default_dtype(torch.float16)
         text_config = AutoConfig.from_pretrained(text_model_id)
@@ -106,9 +109,13 @@ def convert_mplugdocowl_llama_to_hf(text_model_id, vision_model_id, output_hub_p
 
         state_dict = convert_state_dict_to_hf(state_dict)
 
-        state_dict['multi_modal_projector.reducer_before.0.weight'] = state_dict['multi_modal_projector.reducer_before.0.weight'].contiguous()
-        state_dict['multi_modal_projector.reducer.weight'] = state_dict['multi_modal_projector.reducer.weight'].contiguous()
-        #breakpoint()
+        state_dict["multi_modal_projector.reducer_before.0.weight"] = state_dict[
+            "multi_modal_projector.reducer_before.0.weight"
+        ].contiguous()
+        state_dict["multi_modal_projector.reducer.weight"] = state_dict[
+            "multi_modal_projector.reducer.weight"
+        ].contiguous()
+        # breakpoint()
         model.load_state_dict(state_dict, strict=True, assign=True)
 
         pre_expansion_embeddings = model.language_model.model.embed_tokens.weight.data
@@ -116,11 +123,13 @@ def convert_mplugdocowl_llama_to_hf(text_model_id, vision_model_id, output_hub_p
         n = pre_expansion_embeddings.size()[0]
         sigma = ((pre_expansion_embeddings - mu).T @ (pre_expansion_embeddings - mu)) / n
         dist = torch.distributions.multivariate_normal.MultivariateNormal(mu, covariance_matrix=1e-5 * sigma)
-        
+
         # We add an image token so we resize the model
         model.resize_token_embeddings(config.text_config.vocab_size + 2, pad_shape)
         model.language_model.model.embed_tokens.weight.data[32000:] = torch.stack(
-            tuple((dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[32000:].shape[0]))),
+            tuple(
+                (dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[32000:].shape[0]))
+            ),
             dim=0,
         )
         model.language_model.lm_head.weight.data[32000:] = torch.stack(
@@ -128,19 +137,20 @@ def convert_mplugdocowl_llama_to_hf(text_model_id, vision_model_id, output_hub_p
             dim=0,
         )
         model.to(torch.float16)
-        model.save_pretrained('/raid/dana/mplug_model_hf/')
-        processor.save_pretrained('/raid/dana/mplug_model_hf/')
+        model.save_pretrained("/raid/dana/mplug_model_hf/")
+        processor.save_pretrained("/raid/dana/mplug_model_hf/")
     else:
-        model = MPLUGDocOwlForConditionalGeneration.from_pretrained('/raid/dana/mplug_model_hf/')
+        model = MPLUGDocOwlForConditionalGeneration.from_pretrained("/raid/dana/mplug_model_hf/")
         model.to(torch.float16)
-        processor = MPLUGDocOwlProcessor.from_pretrained('/raid/dana/mplug_model_hf/')
+        processor = MPLUGDocOwlProcessor.from_pretrained("/raid/dana/mplug_model_hf/")
         breakpoint()
-    
+
     from PIL import Image
-    #image = Image.open("/raid/dana/test_image.png")
-    image = Image.open('/raid/dana/examples_Rebecca_(1939_poster)_Small.jpeg')
-    #query = "<image>Recognize text in the image."
-    #query = "<image>What's the value of the Very well bar in the 65+ age group? Answer the question with detailed explanation."
+
+    # image = Image.open("/raid/dana/test_image.png")
+    image = Image.open("/raid/dana/examples_Rebecca_(1939_poster)_Small.jpeg")
+    # query = "<image>Recognize text in the image."
+    # query = "<image>What's the value of the Very well bar in the 65+ age group? Answer the question with detailed explanation."
     query = "<image>What is the name of the movie in the poster? Provide detailed explanation."
     output = processor(images=image, text=query)
     breakpoint()
@@ -148,16 +158,18 @@ def convert_mplugdocowl_llama_to_hf(text_model_id, vision_model_id, output_hub_p
     output.to(device)
     model.to(device)
     torch.set_default_dtype(torch.float16)
-   # with torch.inference_mode():
-        #outputs = model(input_ids=output['input_ids'], pixel_values = output['pixel_values'],attention_mask=output['attention_mask'], patch_positions=output['patch_positions'])
+    # with torch.inference_mode():
+    # outputs = model(input_ids=output['input_ids'], pixel_values = output['pixel_values'],attention_mask=output['attention_mask'], patch_positions=output['patch_positions'])
     try:
-        tokens = model.generate(output['input_ids'],pixel_values = output['pixel_values'], max_new_tokens=512)
+        tokens = model.generate(output["input_ids"], pixel_values=output["pixel_values"], max_new_tokens=512)
     except AttributeError as e:
-        raise(e)
+        raise (e)
 
     breakpoint()
     model.push_to_hub(output_hub_path)
     processor.push_to_hub(output_hub_path)
+
+
 def main():
     parser = argparse.ArgumentParser(
         epilog=EPILOG_TXT,
@@ -180,12 +192,13 @@ def main():
         help="Location on the hub of the raw state dict of the original model. The filename needs to be `model_state_dict.bin`",
     )
     args = parser.parse_args()
-    convert_mplugdocowl_llama_to_hf(args.text_model_id, args.vision_model_id, args.output_hub_path, args.old_state_dict_id)
+    convert_mplugdocowl_llama_to_hf(
+        args.text_model_id, args.vision_model_id, args.output_hub_path, args.old_state_dict_id
+    )
 
 
 if __name__ == "__main__":
     main()
 
 
-
-#output_s = model.generate(output['input_ids'],output['pixel_values'], output['patch_positions'],do_sample=False,temperature=1.0,max_new_tokens=512,use_cache=True,)
+# output_s = model.generate(output['input_ids'],output['pixel_values'], output['patch_positions'],do_sample=False,temperature=1.0,max_new_tokens=512,use_cache=True,)

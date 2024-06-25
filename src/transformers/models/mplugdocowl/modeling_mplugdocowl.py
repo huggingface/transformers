@@ -22,7 +22,6 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ... import PreTrainedModel
-from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...modeling_outputs import ModelOutput
 from ...utils import (
@@ -31,19 +30,18 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_mplugdocowl import MPLUGDocOwlConfig
-from functools import partial
-
 from .language_modeling_mplugdocowl import MPLUGDocOwlForCausalLM
 from .modelling_vision_mplugdocowl import MPLUGDocOwlVisionModel
+
 
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "MPLUGDocOwlConfig"
 
+
 @dataclass
-# Copied from transformers.models.idefics.modeling_idefics.IdeficsCausalLMOutputWithPast with Idefics->MPLUGDocOwl
+
 class MPLUGDocOwlCausalLMOutputWithPast(ModelOutput):
     """
     Base class for MPLUGDocOwl causal language model (or autoregressive) outputs.
@@ -84,6 +82,7 @@ class MPLUGDocOwlCausalLMOutputWithPast(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
+
 MPLUGDOCOWL_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -105,7 +104,7 @@ MPLUGDOCOWL_START_DOCSTRING = r"""
     "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
     MPLUGDOCOWL_START_DOCSTRING,
 )
-# Copied from transformers.models.llava.modeling_llava.LlavaPreTrainedModel with Llava->MPLUGDocOwl,llava->mplugdocowl
+
 class MPLUGDocOwlPreTrainedModel(PreTrainedModel):
     config_class = MPLUGDocOwlConfig
     base_model_prefix = "model"
@@ -193,70 +192,84 @@ MPLUGDOCOWL_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
+
 class MPLUGDocOwlHReducer(MPLUGDocOwlPreTrainedModel):
     def __init__(self, config, language_hidden_size):
         super().__init__(config)
         self.config = config
         self.ln_q = torch.nn.LayerNorm(self.config.hreducer_hidden_size, eps=1e-6)
-        self.conv_shape = (int(self.config.hreducer_conv_shape.split('x')[0]), int(self.config.hreducer_conv_shape.split('x')[1])) # 
-        self.conv_patch=self.conv_shape[0]*self.conv_shape[1]
+        self.conv_shape = (
+            int(self.config.hreducer_conv_shape.split("x")[0]),
+            int(self.config.hreducer_conv_shape.split("x")[1]),
+        )  #
+        self.conv_patch = self.conv_shape[0] * self.conv_shape[1]
         ## feature interaction with a conv layer
         self.reducer_before = torch.nn.Sequential(
-            nn.Conv2d(self.config.hreducer_hidden_size, self.conv_patch*self.config.hreducer_hidden_size, kernel_size=self.conv_shape, stride=self.conv_shape, bias=True),
-            nn.GELU()
+            nn.Conv2d(
+                self.config.hreducer_hidden_size,
+                self.conv_patch * self.config.hreducer_hidden_size,
+                kernel_size=self.conv_shape,
+                stride=self.conv_shape,
+                bias=True,
+            ),
+            nn.GELU(),
         )
         ## reduce visual feature length with a conv layer
-        self.reducer = nn.Conv2d(self.config.hreducer_hidden_size, self.config.hreducer_hidden_size, kernel_size=self.conv_shape, stride=self.conv_shape, bias=True)    
+        self.reducer = nn.Conv2d(
+            self.config.hreducer_hidden_size,
+            self.config.hreducer_hidden_size,
+            kernel_size=self.conv_shape,
+            stride=self.conv_shape,
+            bias=True,
+        )
         ## align visual features with language embedding with fc
         self.visual_fc = torch.nn.Linear(self.config.hreducer_hidden_size, language_hidden_size)
         self.vit_eos = torch.nn.Parameter(torch.randn(1, 1, language_hidden_size))
         self.post_init()
-    
-    def forward(
-        self,
-        encoder_hidden_states=None
-    ):
+
+    def forward(self, encoder_hidden_states=None):
         r"""
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, `optional`):
             batch_size is the number of all images (global+crop) in a batch
             Sequence of hidden-states at the output of the last layer of the encoder.
         """
-        encoder_hidden_states = encoder_hidden_states[:,1:,:] # remove the first cls token 
-        B, L, C = encoder_hidden_states.shape # B, 1024=(448/14)^2, 1024
+        encoder_hidden_states = encoder_hidden_states[:, 1:, :]  # remove the first cls token
+        B, L, C = encoder_hidden_states.shape  # B, 1024=(448/14)^2, 1024
         H = int(torch.sqrt(torch.tensor(L)))
-        encoder_hidden_states = encoder_hidden_states.transpose(2,1)
+        encoder_hidden_states = encoder_hidden_states.transpose(2, 1)
 
-        encoder_hidden_states = encoder_hidden_states.view(B, C, H, H) #(BCHH)
+        encoder_hidden_states = encoder_hidden_states.view(B, C, H, H)  # (BCHH)
 
         hidden_states = self.reducer_before(encoder_hidden_states)  # B 4D H W/4
 
         B, XD, H, W_div_X = hidden_states.shape
         X = self.conv_patch
-        D = XD // X 
-        
+        D = XD // X
+
         hidden_states = hidden_states.view(B, X, D, H, W_div_X)
 
         hidden_states = hidden_states.permute(0, 2, 3, 4, 1)
 
-       
         hidden_states = hidden_states.reshape(B, D, H, W_div_X * X)
 
-        sequence_output = self.reducer(hidden_states) # B,C,H,W -> B,C,H/conv_shape[0],W/(conv_shape[1])
-        sequence_output = sequence_output.flatten(2).transpose(1, 2)  # B,C,H/conv_shape[0],W/(conv_shape[1]) -> B,C,L/conv_patch -> B,L/conv_patch,C
-        sequence_output = sequence_output.transpose(0, 1).contiguous() # L/conv_patch, B, C
-      
+        sequence_output = self.reducer(hidden_states)  # B,C,H,W -> B,C,H/conv_shape[0],W/(conv_shape[1])
+        sequence_output = sequence_output.flatten(2).transpose(
+            1, 2
+        )  # B,C,H/conv_shape[0],W/(conv_shape[1]) -> B,C,L/conv_patch -> B,L/conv_patch,C
+        sequence_output = sequence_output.transpose(0, 1).contiguous()  # L/conv_patch, B, C
 
-        sequence_output = self.visual_fc(sequence_output) # L/conv_patch, B, h
-        sequence_output = sequence_output.transpose(0, 1).contiguous() # B, s/4, h
+        sequence_output = self.visual_fc(sequence_output)  # L/conv_patch, B, h
+        sequence_output = sequence_output.transpose(0, 1).contiguous()  # B, s/4, h
         sequence_output = torch.cat([sequence_output, self.vit_eos.repeat(B, 1, 1)], dim=1)
 
         return sequence_output
+
 
 @add_start_docstrings(
     """The MPLUGDOCOWL model which consists of a vision backbone and a language model.""",
     MPLUGDOCOWL_START_DOCSTRING,
 )
-# Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration with LLAVA->MPLUGDOCOWL,Llava->MPLUGDocOwl,llava->mplugdocowl
+
 class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
     def __init__(self, config: MPLUGDocOwlConfig):
         super().__init__(config)
@@ -265,7 +278,7 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
         language_hidden_size = config.text_config.hidden_size
         self.multi_modal_projector = MPLUGDocOwlHReducer(config, language_hidden_size)
         self.vocab_size = config.text_config.vocab_size
-   
+
         self.language_model = MPLUGDocOwlForCausalLM(config.text_config)
 
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
@@ -298,7 +311,7 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
         self.config.text_config.vocab_size = model_embeds.num_embeddings
         self.vocab_size = model_embeds.num_embeddings
         return model_embeds
-    
+
     def _merge_input_ids_with_image_features(self, image_features, inputs_embeds, input_ids, attention_mask, labels):
         num_images, num_image_patches, embed_dim = image_features.shape
         batch_size, sequence_length = input_ids.shape
@@ -320,7 +333,7 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
         if left_padding:
             new_token_positions += nb_image_pad[:, None]  # offset for left padding
         text_to_overwrite = new_token_positions[batch_indices, non_image_indices]
-        
+
         # 3. Create the full embedding, already padded to the maximum position
         final_embedding = torch.zeros(
             batch_size, max_embed_dim, embed_dim, dtype=inputs_embeds.dtype, device=inputs_embeds.device
@@ -346,7 +359,7 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
         # we need to index copy on [0, 577, 578, 579] for the text and [1:576] for the image features
         final_embedding[batch_indices, text_to_overwrite] = inputs_embeds[batch_indices, non_image_indices]
         final_attention_mask[batch_indices, text_to_overwrite] = attention_mask[batch_indices, non_image_indices]
-        #modality_indicators[batch_indices, text_to_overwrite] = 0
+        # modality_indicators[batch_indices, text_to_overwrite] = 0
         if labels is not None:
             final_labels[batch_indices, text_to_overwrite] = labels[batch_indices, non_image_indices]
 
@@ -376,7 +389,7 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
 
         if labels is None:
             final_labels = None
-      
+
         return final_embedding, final_attention_mask, final_labels, position_ids, modality_indicators
 
     @add_start_docstrings_to_model_forward(MPLUGDOCOWL_INPUTS_DOCSTRING)
@@ -396,7 +409,7 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         patch_positions: Optional[torch.LongTensor] = None,
-        #modality_indicators: Optional[torch.LongTensor] = None,
+        # modality_indicators: Optional[torch.LongTensor] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, MPLUGDocOwlCausalLMOutputWithPast]:
         r"""
@@ -450,19 +463,23 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
 
             # 2. Merge text and images
             if pixel_values is not None and input_ids.shape[1] != 1:
-               
                 image_outputs = self.vision_tower(pixel_values, output_hidden_states=False).last_hidden_state
-        
+
                 image_features = self.multi_modal_projector(encoder_hidden_states=image_outputs)
-                    
+
                 inputs_embeds = inputs_embeds.to(image_features.dtype)
 
-                    #FIXME old call is commented below
-                inputs_embeds, attention_mask, labels, position_ids, modality_indicators = self._merge_input_ids_with_image_features(
-                        image_features, inputs_embeds, input_ids, attention_mask, labels
-                    )
-                
-               
+                # FIXME old call is commented below
+                (
+                    inputs_embeds,
+                    attention_mask,
+                    labels,
+                    position_ids,
+                    modality_indicators,
+                ) = self._merge_input_ids_with_image_features(
+                    image_features, inputs_embeds, input_ids, attention_mask, labels
+                )
+
             # In case input_ids.shape[1] == 1 & pixel_values==None & past_key_values != None, we are in the case of
             # generation with cache
             if past_key_values is not None and pixel_values is not None and input_ids.shape[1] == 1:
@@ -496,7 +513,7 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
                 attention_mask = torch.cat((extended_attention_mask, attention_mask[:, -target_length:]), dim=1)
                 position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
                 modality_indicators = torch.zeros_like(input_ids).long().to(self.device)
-        #breakpoint()
+
         outputs = self.language_model(
             attention_mask=attention_mask,
             modality_indicators=modality_indicators,
@@ -540,9 +557,15 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, pixel_values=None, inputs_embeds=None, attention_mask=None, modality_indicators=None, **kwargs
+        self,
+        input_ids,
+        past_key_values=None,
+        pixel_values=None,
+        inputs_embeds=None,
+        attention_mask=None,
+        modality_indicators=None,
+        **kwargs,
     ):
-      
         if past_key_values is not None:
             if isinstance(past_key_values, Cache):
                 cache_length = past_key_values.get_seq_length()
@@ -569,9 +592,9 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
                 attention_mask = attention_mask[:, -(cache_length + input_ids.shape[1]) :]
 
         position_ids = kwargs.get("position_ids", None)
-        #modality_indicators =kwargs.get("modality_indicators", None) 
-        #if modality_indicators is None:
-            #modality_indicators = torch.zeros_like(input_ids).long().to(self.device)
+        # modality_indicators =kwargs.get("modality_indicators", None)
+        # if modality_indicators is None:
+        # modality_indicators = torch.zeros_like(input_ids).long().to(self.device)
 
         if attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation
@@ -579,14 +602,13 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
             position_ids.masked_fill_(attention_mask == 0, 1)
             if past_key_values:
                 position_ids = position_ids[:, -input_ids.shape[1] :]
- 
-            
+
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids}
-        
+
         model_inputs.update(
             {
                 "position_ids": position_ids,
@@ -595,8 +617,8 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
                 "attention_mask": attention_mask,
                 "pixel_values": pixel_values,
                 "patch_positions": kwargs.get("patch_positions", None),
-                "inputs_embeds":inputs_embeds,
-                #"modality_indicators": modality_indicators,
+                "inputs_embeds": inputs_embeds,
+                # "modality_indicators": modality_indicators,
             }
         )
         return model_inputs
@@ -604,4 +626,5 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
     def _reorder_cache(self, *args, **kwargs):
         return self.language_model._reorder_cache(*args, **kwargs)
 
-#model.forward(input_ids=output['input_ids'], pixel_values = output['pixel_values'],attention_mask=output['attention_mask'], patch_positions=output['patch_positions'])
+
+# model.forward(input_ids=output['input_ids'], pixel_values = output['pixel_values'],attention_mask=output['attention_mask'], patch_positions=output['patch_positions'])

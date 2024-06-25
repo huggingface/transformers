@@ -486,10 +486,6 @@ _import_structure = {
         "LlavaConfig",
         "LlavaProcessor",
     ],
-    "models.mplugdocowl": [
-        "MPLUGDocOwlConfig",
-        "MPLUGDocOwlProcessor",
-    ],
     "models.llava_next": [
         "LlavaNextConfig",
         "LlavaNextProcessor",
@@ -542,6 +538,10 @@ _import_structure = {
     "models.mobilenet_v2": ["MobileNetV2Config"],
     "models.mobilevit": ["MobileViTConfig"],
     "models.mobilevitv2": ["MobileViTV2Config"],
+    "models.mplugdocowl": [
+        "MPLUGDocOwlConfig",
+        "MPLUGDocOwlProcessor",
+    ],
     "models.mpnet": [
         "MPNetConfig",
         "MPNetTokenizer",
@@ -2315,12 +2315,6 @@ else:
             "LlavaPreTrainedModel",
         ]
     )
-    _import_structure["models.mplugdocowl"].extend(
-        [
-            "MPLUGDocOwlForConditionalGeneration",
-            "MPLUGDocOwlPreTrainedModel",
-        ]
-    )
     _import_structure["models.llava_next"].extend(
         [
             "LlavaNextForConditionalGeneration",
@@ -2518,6 +2512,12 @@ else:
             "MobileViTV2ForSemanticSegmentation",
             "MobileViTV2Model",
             "MobileViTV2PreTrainedModel",
+        ]
+    )
+    _import_structure["models.mplugdocowl"].extend(
+        [
+            "MPLUGDocOwlForConditionalGeneration",
+            "MPLUGDocOwlPreTrainedModel",
         ]
     )
     _import_structure["models.mpnet"].extend(
@@ -5075,10 +5075,6 @@ if TYPE_CHECKING:
         LlavaConfig,
         LlavaProcessor,
     )
-    from .models.mplugdocowl import (
-        MPLUGDocOwlConfig,
-        MPLUGDocOwlProcessor,
-    )
     from .models.llava_next import (
         LlavaNextConfig,
         LlavaNextProcessor,
@@ -5139,6 +5135,10 @@ if TYPE_CHECKING:
     )
     from .models.mobilevitv2 import (
         MobileViTV2Config,
+    )
+    from .models.mplugdocowl import (
+        MPLUGDocOwlConfig,
+        MPLUGDocOwlProcessor,
     )
     from .models.mpnet import (
         MPNetConfig,
@@ -6747,10 +6747,6 @@ if TYPE_CHECKING:
             LlavaForConditionalGeneration,
             LlavaPreTrainedModel,
         )
-        from .models.mplugdocowl import (
-            MPLUGDocOwlForConditionalGeneration,
-            MPLUGDocOwlPreTrainedModel,
-        )
         from .models.llava_next import (
             LlavaNextForConditionalGeneration,
             LlavaNextPreTrainedModel,
@@ -6907,6 +6903,10 @@ if TYPE_CHECKING:
             MobileViTV2ForSemanticSegmentation,
             MobileViTV2Model,
             MobileViTV2PreTrainedModel,
+        )
+        from .models.mplugdocowl import (
+            MPLUGDocOwlForConditionalGeneration,
+            MPLUGDocOwlPreTrainedModel,
         )
         from .models.mpnet import (
             MPNetForMaskedLM,

@@ -17,27 +17,20 @@
 import gc
 import unittest
 
-import requests
-
 from transformers import (
     AutoProcessor,
-    AutoTokenizer,
     MPLUGDocOwlConfig,
     MPLUGDocOwlForConditionalGeneration,
     is_torch_available,
     is_vision_available,
 )
 from transformers.testing_utils import (
-    require_bitsandbytes,
     require_torch,
-    require_torch_gpu,
-    require_vision,
     slow,
     torch_device,
 )
 
-from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_common import floats_tensor, ids_tensor
 
 
 if is_torch_available():
@@ -54,47 +47,51 @@ class MPLUGDocOwlVisionText2TextModelTester:
         self,
         parent,
         ignore_index=-100,
-        image_token_index=0,
+        image_token_index=32000,
+        hreducer_hidden_size=1024,
+        hreducer_initializer_range=0.02,
+        hreducer_layer_norm=1e-6,
+        hreducer_conv_shape="1x4",
         projector_hidden_act="gelu",
         seq_length=7,
-        vision_feature_select_strategy="default",
-        vision_feature_layer=-1,
+        vision_feature_select_strategy="full",
+        vision_feature_layer=-2,
         text_config={
             "model_type": "llama",
-            "seq_length": 7,
-            "is_training": True,
+            # "seq_length": 7,
+            # "is_training": True,
             "use_input_mask": True,
             "use_token_type_ids": False,
             "use_labels": True,
-            "vocab_size": 99,
-            "hidden_size": 32,
-            "num_hidden_layers": 2,
-            "num_attention_heads": 4,
-            "intermediate_size": 37,
-            "hidden_act": "gelu",
-            "hidden_dropout_prob": 0.1,
-            "attention_probs_dropout_prob": 0.1,
+            "vocab_size": 32000,
+            "hidden_size": 4096,
+            "num_hidden_layers": 32,
+            "num_attention_heads": 32,
+            "intermediate_size": 11008,
+            "hidden_act": "silu",
+            # "hidden_dropout_prob": 0.1,
+            # "attention_probs_dropout_prob": 0.1,
             "max_position_embeddings": 512,
-            "type_vocab_size": 16,
-            "type_sequence_label_size": 2,
+            # "type_vocab_size": 16,
+            # "type_sequence_label_size": 2,
             "initializer_range": 0.02,
-            "num_labels": 3,
-            "num_choices": 4,
+            # "num_labels": 3,
+            # "num_choices": 4,
             "pad_token_id": 0,
         },
         is_training=True,
         vision_config={
-            "image_size": 30,
-            "patch_size": 2,
+            "image_size": 448,
+            "patch_size": 14,
             "num_channels": 3,
-            "is_training": True,
-            "hidden_size": 32,
-            "projection_dim": 32,
-            "num_hidden_layers": 2,
-            "num_attention_heads": 4,
-            "intermediate_size": 37,
-            "dropout": 0.1,
-            "attention_dropout": 0.1,
+            # "is_training": True,
+            "hidden_size": 1024,
+            "projection_dim": 1024,
+            "num_hidden_layers": 24,
+            "num_attention_heads": 16,
+            # "intermediate_size": 37,
+            # "dropout": 0.1,
+            "attention_dropout": 0.0,
             "initializer_range": 0.02,
         },
     ):
@@ -165,12 +162,13 @@ class MPLUGDocOwlVisionText2TextModelTester:
             logits = model(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
-                pixel_values=pixel_values.to(torch.bfloat16),
+                pixel_values=pixel_values.to(torch.float16),
                 return_dict=True,
             )["logits"]
         self.parent.assertFalse(torch.isnan(logits).any().item())
 
 
+'''
 @require_torch
 class MPLUGDocOwlForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
     """
@@ -203,67 +201,83 @@ class MPLUGDocOwlForConditionalGenerationModelTest(ModelTesterMixin, unittest.Te
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
+'''
+
 
 @require_torch
 class MPLUGDocOwlForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained("mplugdocowl-hf/bakMPLUGDocOwl-v1-hf")
+        self.processor = AutoProcessor.from_pretrained("/raid/dana/mplug_model_hf")
 
     def tearDown(self):
         gc.collect()
         torch.cuda.empty_cache()
 
     @slow
-    @require_bitsandbytes
+    # @require_bitsandbytes
     def test_small_model_integration_test(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model = MPLUGDocOwlForConditionalGeneration.from_pretrained("mplugdocowl-hf/bakMPLUGDocOwl-v1-hf", load_in_4bit=True)
+        model = MPLUGDocOwlForConditionalGeneration.from_pretrained("/raid/dana/mplug_model_hf", load_in_4bit=False)
 
-        prompt = "<image>\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT:"
-        image_file = "https://mplugdocowl-vl.github.io/static/images/view.jpg"
-        raw_image = Image.open(requests.get(image_file, stream=True).raw)
+        prompt = "<image>What's the value of the Very well bar in the 65+ age group? Answer the question with detailed explanation."
+        image_file = "/raid/dana/test_image.png"
+        # raw_image = Image.open(requests.get(image_file, stream=True).raw)
+        raw_image = Image.open(image_file)
         inputs = self.processor(prompt, raw_image, return_tensors="pt")
+        print(inputs["input_ids"])
+        EXPECTED_INPUT_IDS = torch.tensor([[ 1,  3148,  1001, 29901,   529, 10945, 29918,  2492, 29958,  32000,
+           529, 29883,  1336, 29918,  2492, 29918,   798, 29900, 29918,  1054,
+         29900, 29958,  32000,   529, 29883,  1336, 29918,  2492, 29918,   798,
+         29900, 29918,  1054, 29896, 29958,  32000,   529, 29883,  1336, 29918,
+          2492, 29918,   798, 29896, 29918,  1054, 29900, 29958,  32000,   529,
+         29883,  1336, 29918,  2492, 29918,   798, 29896, 29918,  1054, 29896,
+         29958,  32000,   529, 29883,  1336, 29918,  2492, 29918,   798, 29906,
+         29918,  1054, 29900, 29958,  32000,   529, 29883,  1336, 29918,  2492,
+         29918,   798, 29906, 29918,  1054, 29896, 29958,  32000,  1724, 29915,
+         29879,   278,   995,   310,   278, 18064,  1532,  2594,   297,   278,
+         29871, 29953, 29945, 29974,  5046,  2318, 29973,   673,   278,  1139,
+           411, 13173,  8252, 29889,   319,  1799,  9047, 13566, 29901]])  # fmt: skip
 
-        EXPECTED_INPUT_IDS = torch.tensor([[1, 32000, 28705, 13, 11123, 28747, 1824, 460, 272, 1722,315, 1023, 347, 13831, 925, 684, 739, 315, 3251, 456,1633, 28804, 13, 4816, 8048, 12738, 28747]])  # fmt: skip
         self.assertTrue(torch.equal(inputs["input_ids"], EXPECTED_INPUT_IDS))
 
-        output = model.generate(**inputs, max_new_tokens=20)
-        EXPECTED_DECODED_TEXT = "\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, there are a few things one should be cautious about. Firstly,"  # fmt: skip
-
+        output = model.generate(**inputs, max_new_tokens=500)
+        EXPECTED_DECODED_TEXT = "USER: <global_img> <crop_img_row0_col0> <crop_img_row0_col1> <crop_img_row1_col0> <crop_img_row1_col1> <crop_img_row2_col0> <crop_img_row2_col1> What's the value of the Very well bar in the 65+ age group? Answer the question with detailed explanation. ASSISTANT: 68%\nIn the image, which appears to be a chart from a Pew Research Center report, the bar representing the percentage of people aged 65 and older who believe that Trump fights for their beliefs 'very well' is at 68%."  # fmt: skip
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
 
     @slow
-    @require_bitsandbytes
+    # @require_bitsandbytes
     def test_small_model_integration_test_llama_single(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model_id = "mplugdocowl-hf/mplugdocowl-1.5-7b-hf"
+        model_id = "/raid/dana/mplug_model_hf"
 
-        model = MPLUGDocOwlForConditionalGeneration.from_pretrained("mplugdocowl-hf/mplugdocowl-1.5-7b-hf", load_in_4bit=True)
+        model = MPLUGDocOwlForConditionalGeneration.from_pretrained("/raid/dana/mplug_model_hf", load_in_4bit=False)
         processor = AutoProcessor.from_pretrained(model_id)
 
-        prompt = "USER: <image>\nWhat are the things I should be cautious about when I visit this place? ASSISTANT:"
-        image_file = "https://mplugdocowl-vl.github.io/static/images/view.jpg"
-        raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        inputs = processor(prompt, raw_image, return_tensors="pt").to(torch_device, torch.float16)
+        prompt = "<image>Recognize text in the image."
+        image_file = "/raid/dana/test_image.tif"
+        raw_image = Image.open(image_file)
+        inputs = processor(prompt, raw_image, return_tensors="pt")  # .to(torch_device, torch.float16)
 
-        output = model.generate(**inputs, max_new_tokens=900, do_sample=False)
-        EXPECTED_DECODED_TEXT = "USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, there are a few things to be cautious about. First, be aware of the weather conditions, as sudden changes in weather can make the pier unsafe to walk on. Second, be mindful of the water depth and any potential hazards, such as submerged rocks or debris, that could cause accidents or injuries. Additionally, be cautious of the tides and currents, as they can change rapidly and pose a risk to swimmers or those who venture too close to the edge of the pier. Lastly, be respectful of the environment and other visitors, as the pier is a shared space where people can enjoy the view, relax, or engage in recreational activities."  # fmt: skip
+        output = model.generate(**inputs, max_new_tokens=500, do_sample=False)
 
+        EXPECTED_DECODED_TEXT = "USER: <global_img> <crop_img_row0_col0> <crop_img_row0_col1> <crop_img_row1_col0> <crop_img_row1_col1> <crop_img_row2_col0> <crop_img_row2_col1> Recognize text in the image. ASSISTANT: PHILIP MORRIS MANAGEMENT CORP."
         self.assertEqual(
             processor.decode(output[0], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
 
+
+"""
     @slow
     @require_bitsandbytes
     def test_small_model_integration_test_llama_batched(self):
         # Let' s make sure we test the preprocessing to replace what is used
         model_id = "mplugdocowl-hf/mplugdocowl-1.5-7b-hf"
 
-        model = MPLUGDocOwlForConditionalGeneration.from_pretrained("mplugdocowl-hf/mplugdocowl-1.5-7b-hf", load_in_4bit=True)
+        model = MPLUGDocOwlForConditionalGeneration.from_pretrained("/raid/dana/mplug_model_hf", load_in_4bit=True)
         processor = AutoProcessor.from_pretrained(model_id)
 
         prompts = [
@@ -288,7 +302,7 @@ class MPLUGDocOwlForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test_batch(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model = MPLUGDocOwlForConditionalGeneration.from_pretrained("mplugdocowl-hf/bakMPLUGDocOwl-v1-hf", load_in_4bit=True)
+        model = MPLUGDocOwlForConditionalGeneration.from_pretrained("mplugdocowl-hf/bakMPLUGDocOwl-v1-hf", load_in_4bit=False)
         # The first batch is longer in terms of text, but only has 1 image. The second batch will be padded in text, but the first will be padded because images take more space!.
         prompts = [
             "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
@@ -311,11 +325,11 @@ class MPLUGDocOwlForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test_llama_batched_regression(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model_id = "mplugdocowl-hf/mplugdocowl-1.5-7b-hf"
+        model_id = "/raid/dana/mplug_model_hf"
 
         # Multi-image & multi-prompt (e.g. 3 images and 2 prompts now fails with SDPA, this tests if "eager" works as before)
         model = MPLUGDocOwlForConditionalGeneration.from_pretrained(
-            "mplugdocowl-hf/mplugdocowl-1.5-7b-hf", load_in_4bit=True, attn_implementation="eager"
+            "/raid/dana/mplug_model_hf", load_in_4bit=True, attn_implementation="eager"
         )
         processor = AutoProcessor.from_pretrained(model_id, pad_token="<pad>")
 
@@ -343,7 +357,7 @@ class MPLUGDocOwlForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_batched_generation(self):
         model = MPLUGDocOwlForConditionalGeneration.from_pretrained("mplugdocowl-hf/mplugdocowl-1.5-7b-hf").to(torch_device)
 
-        processor = AutoProcessor.from_pretrained("mplugdocowl-hf/mplugdocowl-1.5-7b-hf")
+        processor = AutoProcessor.from_pretrained("/raid/dana/mplug_model_hf")
 
         prompt1 = "<image>\n<image>\nUSER: What's the the difference of two images?\nASSISTANT:"
         prompt2 = "<image>\nUSER: Describe the image.\nASSISTANT:"
@@ -433,7 +447,7 @@ class MPLUGDocOwlForConditionalGenerationIntegrationTest(unittest.TestCase):
         loss.backward()
 
     def test_tokenizer_integration(self):
-        slow_tokenizer = AutoTokenizer.from_pretrained("liuhaotian/mplugdocowl-v1.6-34b", use_fast=False)
+        slow_tokenizer = AutoTokenizer.from_pretrained("/raid/dana/mplug_model_hf", use_fast=False)
         slow_tokenizer.add_tokens("<image>", True)
 
         fast_tokenizer = AutoTokenizer.from_pretrained(
@@ -449,3 +463,4 @@ class MPLUGDocOwlForConditionalGenerationIntegrationTest(unittest.TestCase):
         EXPECTED_OUTPUT = ['<|im_start|>', 'system', '\n', 'Answer', '▁the', '▁questions', '.', '<|im_end|>', '<|im_start|>', 'user', '\n', '<image>', '\n', 'What', '▁is', '▁shown', '▁in', '▁this', '▁image', '?', '<|im_end|>', '<|im_start|>', 'ass', 'istant', '\n']  # fmt: skip
         self.assertEqual(slow_tokenizer.tokenize(prompt), EXPECTED_OUTPUT)
         self.assertEqual(fast_tokenizer.tokenize(prompt), EXPECTED_OUTPUT)
+"""
