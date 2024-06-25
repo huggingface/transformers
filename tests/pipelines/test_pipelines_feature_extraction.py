@@ -174,7 +174,7 @@ class FeatureExtractionPipelineTests(unittest.TestCase):
             raise ValueError("We expect lists of floats, nothing else")
         return shape
 
-    def get_test_pipeline(self, model, tokenizer, processor):
+    def get_test_pipeline(self, model, tokenizer, processor, torch_dtype='float32'):
         if tokenizer is None:
             self.skipTest("No tokenizer")
             return
@@ -195,7 +195,7 @@ class FeatureExtractionPipelineTests(unittest.TestCase):
             )
 
             return
-        feature_extractor = FeatureExtractionPipeline(model=model, tokenizer=tokenizer, feature_extractor=processor)
+        feature_extractor = FeatureExtractionPipeline(model=model, tokenizer=tokenizer, feature_extractor=processor, torch_dtype=torch_dtype)
         return feature_extractor, ["This is a test", "This is another test"]
 
     def run_pipeline_test(self, feature_extractor, examples):
