@@ -413,10 +413,7 @@ class SiglipVisionModelTest(SiglipModelTesterMixin, unittest.TestCase):
     @require_torch_sdpa
     @slow
     @is_flaky()
-    def test_eager_matches_sdpa_inference(
-        self,
-        torch_dtype: str,
-    ):
+    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
         super().test_eager_matches_sdpa_inference(
             torch_dtype=torch_dtype,
             logit_keys=("pooler_output", "last_hidden_state"),
@@ -584,10 +581,7 @@ class SiglipTextModelTest(SiglipModelTesterMixin, unittest.TestCase):
     @require_torch_sdpa
     @slow
     @is_flaky()
-    def test_eager_matches_sdpa_inference(
-        self,
-        torch_dtype: str,
-    ):
+    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
         super().test_eager_matches_sdpa_inference(
             torch_dtype=torch_dtype,
             logit_keys=("pooler_output", "last_hidden_state"),
@@ -893,10 +887,7 @@ class SiglipModelTest(SiglipModelTesterMixin, PipelineTesterMixin, unittest.Test
     @require_torch_sdpa
     @slow
     @is_flaky()
-    def test_eager_matches_sdpa_inference(
-        self,
-        torch_dtype: str,
-    ):
+    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
         super().test_eager_matches_sdpa_inference(
             torch_dtype=torch_dtype,
             logit_keys=("logits_per_image", "logits_per_text", "image_embeds", "text_embeds"),
@@ -972,10 +963,7 @@ class SiglipForImageClassificationModelTest(SiglipModelTesterMixin, PipelineTest
     @require_torch_sdpa
     @slow
     @is_flaky()
-    def test_eager_matches_sdpa_inference(
-        self,
-        torch_dtype: str,
-    ):
+    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
         super().test_eager_matches_sdpa_inference(
             torch_dtype=torch_dtype, logit_keys=("logits",), use_attnetion_mask_options=(False,)
         )
