@@ -7,9 +7,6 @@ from .base import GenericTensor, Pipeline, build_pipeline_init_args
 if is_vision_available():
     from ..image_utils import load_image
 
-if is_torch_available():
-    import torch
-
 @add_end_docstrings(
     build_pipeline_init_args(has_image_processor=True),
     """
