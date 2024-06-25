@@ -14,6 +14,8 @@
 
 import unittest
 
+import torch
+
 from transformers import (
     MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
     TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
@@ -179,8 +181,6 @@ class ImageClassificationPipelineTests(unittest.TestCase):
 
     @require_torch
     def test_torch_float16_pipeline(self):
-        import torch
-
         image_classifier = pipeline(
             "image-classification", model="hf-internal-testing/tiny-random-vit", torch_dtype=torch.float16
         )
@@ -193,8 +193,6 @@ class ImageClassificationPipelineTests(unittest.TestCase):
 
     @require_torch
     def test_torch_bfloat16_pipeline(self):
-        import torch
-
         image_classifier = pipeline(
             "image-classification", model="hf-internal-testing/tiny-random-vit", torch_dtype=torch.bfloat16
         )
