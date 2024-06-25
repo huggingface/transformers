@@ -41,7 +41,6 @@ _CONFIG_FOR_DOC = "MPLUGDocOwlConfig"
 
 
 @dataclass
-
 class MPLUGDocOwlCausalLMOutputWithPast(ModelOutput):
     """
     Base class for MPLUGDocOwl causal language model (or autoregressive) outputs.
@@ -104,7 +103,6 @@ MPLUGDOCOWL_START_DOCSTRING = r"""
     "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
     MPLUGDOCOWL_START_DOCSTRING,
 )
-
 class MPLUGDocOwlPreTrainedModel(PreTrainedModel):
     config_class = MPLUGDocOwlConfig
     base_model_prefix = "model"
@@ -269,7 +267,6 @@ class MPLUGDocOwlHReducer(MPLUGDocOwlPreTrainedModel):
     """The MPLUGDOCOWL model which consists of a vision backbone and a language model.""",
     MPLUGDOCOWL_START_DOCSTRING,
 )
-
 class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
     def __init__(self, config: MPLUGDocOwlConfig):
         super().__init__(config)

@@ -38,7 +38,6 @@ from ...modeling_attn_mask_utils import (
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
-    QuestionAnsweringModelOutput,
     SequenceClassifierOutputWithPast,
 )
 from ...modeling_utils import PreTrainedModel
@@ -1181,4 +1180,3 @@ class MPLUGDocOwlForSequenceClassification(MPLUGDocOwlPreTrainedModel):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
-
