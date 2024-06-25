@@ -2616,46 +2616,6 @@ def sigmoid_focal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: f
     return loss.mean(1).sum() / num_boxes
 
 
-# Copied from transformers.models.detr.modeling_detr.NestedTensor
-class NestedTensor(object):
-    def __init__(self, tensors, mask: Optional[Tensor]):
-        self.tensors = tensors
-        self.mask = mask
-
-    def to(self, device):
-        cast_tensor = self.tensors.to(device)
-        mask = self.mask
-        if mask is not None:
-            cast_mask = mask.to(device)
-        else:
-            cast_mask = None
-        return NestedTensor(cast_tensor, cast_mask)
-
-    def decompose(self):
-        return self.tensors, self.mask
-
-    def __repr__(self):
-        return str(self.tensors)
-
-
-# Copied from transformers.models.detr.modeling_detr.nested_tensor_from_tensor_list
-def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
-    if tensor_list[0].ndim == 3:
-        max_size = _max_by_axis([list(img.shape) for img in tensor_list])
-        batch_shape = [len(tensor_list)] + max_size
-        batch_size, num_channels, height, width = batch_shape
-        dtype = tensor_list[0].dtype
-        device = tensor_list[0].device
-        tensor = torch.zeros(batch_shape, dtype=dtype, device=device)
-        mask = torch.ones((batch_size, height, width), dtype=torch.bool, device=device)
-        for img, pad_img, m in zip(tensor_list, tensor, mask):
-            pad_img[: img.shape[0], : img.shape[1], : img.shape[2]].copy_(img)
-            m[: img.shape[1], : img.shape[2]] = False
-    else:
-        raise ValueError("Only 3-dimensional tensors are supported")
-    return NestedTensor(tensor, mask)
-
-
 # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrHungarianMatcher with DeformableDetr->GroundingDino
 class GroundingDinoHungarianMatcher(nn.Module):
     """
@@ -2851,6 +2811,34 @@ class GroundingDinoLoss(nn.Module):
         batch_idx = torch.cat([torch.full_like(target, i) for i, (_, target) in enumerate(indices)])
         target_idx = torch.cat([target for (_, target) in indices])
         return batch_idx, target_idx
+    
+    # Ignore copy
+    def _get_label_map(self, outputs):
+        """
+        Computes a mapping between the tokens associated with the prompt labels in the logit space with shape (batch_size, num_labels, hidden_size)
+        where `num_labels` is defined by the number of classes in the input prompt.
+
+        For instance if the prompt "fish. shark." we get input_ids = [  101,  3869,  1012, 11420,  1012,   102]
+        this function will then return a mapping for each of the prompt tokens (i.e. tokens associated with "fish" and "shark")
+        indicating their position in the logit space.
+
+        This is used in `loss_labels` and in the `GroundingDinoHungarianMatcher`.)
+        """
+        input_ids = outputs["input_ids"] # (batch_size, num_tokens)
+        # Add [PAD] token to the list of special tokens
+        delimiter_tokens = torch.tensor(SPECIAL_TOKENS + [0], device=input_ids.device)
+
+        # NOTE: Loop for now, but then trying to do in a bachtwise manner
+        # things to remember for batchwise later on:
+        # Easy to get the delimiter indices (only the valid ones i.e. diff between two consecutive delimiters is > 1)
+        # Have to update the class_labels in the targets with previous amount of labels as the number of labes in prompt might be different.
+        # Have to update the delimiter_indices with seq_len.
+        for ids in input_ids:
+            delimiter_token_mask = torch.isin(ids, delimiter_tokens)
+            delimiter_indices = delimiter_token_mask.nonzero()
+
+        # Placeholder for the label map
+        label_map = torch.zeros_like(...)
 
     def get_loss(self, loss, outputs, targets, indices, num_boxes):
         loss_map = {
@@ -2862,6 +2850,7 @@ class GroundingDinoLoss(nn.Module):
             raise ValueError(f"Loss {loss} not supported")
         return loss_map[loss](outputs, targets, indices, num_boxes)
 
+    # Ignore copy
     def forward(self, outputs, targets):
         """
         This performs the loss computation.
@@ -2874,6 +2863,8 @@ class GroundingDinoLoss(nn.Module):
                 losses applied, see each loss' doc.
         """
         outputs_without_aux = {k: v for k, v in outputs.items() if k != "auxiliary_outputs" and k != "enc_outputs"}
+
+        label_map = self._get_label_map(outputs)
 
         # Retrieve the matching between the outputs of the last layer and the targets
         indices = self.matcher(outputs_without_aux, targets)
