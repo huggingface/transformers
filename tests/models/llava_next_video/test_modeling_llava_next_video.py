@@ -372,8 +372,8 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
             output = model(**inputs)
 
         # verify generation
-        output = model.generate(**inputs, max_new_tokens=40)
-        EXPECTED_DECODED_TEXT = 'USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and exaggerated reactions of the child to the book. The child appears to be reading a book, but instead of a calm and focused reading experience, they are making a series of silly and over-the-top facial expressions. This is humorous because it is not what one would expect from a child reading a book, and it is a playful and lighthearted moment. The child\'s expressions are so extreme that they become'  # fmt: skip
+        output = model.generate(**inputs, do_sample=False, max_new_tokens=40)
+        EXPECTED_DECODED_TEXT = 'USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and exaggerated reactions of the child to the book. The child appears to be reading a book, but instead of a calm and focused reading experience'  # fmt: skip
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
@@ -394,9 +394,9 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
             padding=True,
         ).to(torch_device)
 
-        output = model.generate(**inputs, max_new_tokens=20)
+        output = model.generate(**inputs, do_sample=False, max_new_tokens=20)
 
-        EXPECTED_DECODED_TEXT = ['USER: \nWhy is this video funny? ASSISTANT: The video is funny because it shows a baby sitting on a bed, holding a book and reading', 'USER: \nWhy is this video funny? ASSISTANT: The video is funny because it shows a baby sitting on a bed, holding a book and reading']  # fmt: skip
+        EXPECTED_DECODED_TEXT = ['USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and exaggerated reactions of the child to the', 'USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and exaggerated reactions of the child to the']  # fmt: skip
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
@@ -425,7 +425,7 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.assertTrue(output.loss is not None)
 
         # verify generation
-        output = model.generate(**inputs, max_new_tokens=50)
+        output = model.generate(**inputs, do_sample=False, max_new_tokens=50)
         EXPECTED_DECODED_TEXT = 'USER: \nWhat is shown in this image? ASSISTANT: The image appears to be a graphical representation of a benchmark test for a machine learning model. It shows the performance of various models on a task, with the x-axis representing the number of parameters (measured in millions) and the y'  # fmt: skip
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
@@ -451,8 +451,8 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
         inputs_single = self.processor(self.prompt_video, videos=[self.video], return_tensors="pt").to(torch_device)
 
         # verify generation
-        output_batched = model.generate(**inputs_batched, max_new_tokens=50)
-        output_single = model.generate(**inputs_single, max_new_tokens=50)
+        output_batched = model.generate(**inputs_batched, do_sample=False, max_new_tokens=50)
+        output_single = model.generate(**inputs_single, do_sample=False, max_new_tokens=50)
         self.assertEqual(
             self.processor.decode(output_batched[0], skip_special_tokens=True),
             self.processor.decode(output_single[0], skip_special_tokens=True),
