@@ -1797,7 +1797,7 @@ class TrainingArguments:
         if FSDPOption.FULL_SHARD in self.fsdp and self.gradient_checkpointing:
             logger.warning(
                 "When using FSDP full shard, instead of using `gradient_checkpointing` in TrainingArguments, please"
-                " use `activation_checkpointing` in `fsdp_config`. The former one introduces a redundant AllGather"
+                " use `activation_checkpointing` in `fsdp_config`. The former introduces a redundant AllGather"
                 " operation in backward pass. Reference: https://github.com/huggingface/transformers/issues/30404"
             )
 
