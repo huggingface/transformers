@@ -981,7 +981,7 @@ class SlidingWindowCache(StaticCache):
 
 
 @dataclass
-class EncoderDecoderCache:
+class EncoderDecoderCache(Cache):
     """
     Base, abstract class for all encoder-decoder caches. Can be used to hold combinations of self-attention and
     cross-attention caches.
