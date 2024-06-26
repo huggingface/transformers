@@ -557,7 +557,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         key = "logits" if self.type == "ctc_with_lm" else "tokens"
         stride = None
         for outputs in model_outputs:
-            if self.framework == "pt":
+            if self.framework == "pt" and outputs[key].dtype in (torch.bfloat16, torch.float16):
                 # To enable using fp16 and bf16
                 items = outputs[key].float().numpy()
             else:
