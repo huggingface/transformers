@@ -17,7 +17,6 @@
 from typing import List, Optional, Tuple, Union
 
 import torch
-import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
@@ -36,7 +35,6 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
-    is_flash_attn_greater_or_equal_2_10,
     logging,
     replace_return_docstrings,
 )

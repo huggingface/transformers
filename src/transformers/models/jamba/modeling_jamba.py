@@ -19,7 +19,6 @@
 # limitations under the License.
 """PyTorch Jamba model."""
 
-import inspect
 import math
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -43,7 +42,6 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_flash_attn_greater_or_equal_2_10,
     logging,
     replace_return_docstrings,
 )
@@ -57,8 +55,6 @@ from .configuration_jamba import JambaConfig
 
 if is_flash_attn_2_available():
     from ...flash_attention_utils import _flash_attention_forward
-
-    _flash_supports_window_size = "window_size" in list(inspect.signature(flash_attn_func).parameters)
 
 
 if is_mamba_ssm_available():
@@ -478,7 +474,7 @@ class JambaFlashAttention2(JambaAttention):
             q_len,
             dropout=dropout_rate,
             sliding_window=getattr(self.config, "sliding_window", None) ,
-            cache_position=cache_position 
+            cache_position=cache_position
         )
 
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()

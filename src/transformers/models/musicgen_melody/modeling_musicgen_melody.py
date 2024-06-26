@@ -23,7 +23,6 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
@@ -40,7 +39,6 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
-    is_flash_attn_greater_or_equal_2_10,
     logging,
     replace_return_docstrings,
 )

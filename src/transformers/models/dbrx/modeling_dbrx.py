@@ -18,7 +18,6 @@ import math
 from typing import Any, Optional, Tuple, Union
 
 import torch
-import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 

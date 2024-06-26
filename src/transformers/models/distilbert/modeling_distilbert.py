@@ -23,7 +23,6 @@ from typing import Dict, List, Optional, Set, Tuple, Union
 
 import numpy as np
 import torch
-import torch.nn.functional as F
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
@@ -45,7 +44,6 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
-    is_flash_attn_greater_or_equal_2_10,
     logging,
     replace_return_docstrings,
 )

@@ -19,12 +19,10 @@
 # limitations under the License.
 """PyTorch Qwen2 model."""
 
-import inspect
 import math
 from typing import List, Optional, Tuple, Union
 
 import torch
-import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
@@ -43,7 +41,6 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
-    is_flash_attn_greater_or_equal_2_10,
     logging,
     replace_return_docstrings,
 )
@@ -411,7 +408,7 @@ class Qwen2FlashAttention2(Qwen2Attention):
         query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
-        
+
         sliding_window = self.sliding_window if self.layer_idx >= self.config.max_window_layers else None
 
         attn_output = _flash_attention_forward(

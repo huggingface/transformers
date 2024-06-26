@@ -19,7 +19,6 @@
 # limitations under the License.
 """PyTorch Qwen2MoE model."""
 
-import inspect
 import math
 from typing import List, Optional, Tuple, Union
 
@@ -43,7 +42,6 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
-    is_flash_attn_greater_or_equal_2_10,
     logging,
     replace_return_docstrings,
 )

@@ -22,7 +22,6 @@ from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
 import torch
-import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
@@ -52,17 +51,13 @@ from .configuration_gpt2 import GPT2Config
 
 
 if is_flash_attn_2_available():
-    from flash_attn import flash_attn_func, flash_attn_varlen_func
-    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input
+    from ...flash_attention_utils import _flash_attention_forward
 
 
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "openai-community/gpt2"
 _CONFIG_FOR_DOC = "GPT2Config"
-
-
-
 
 
 def load_tf_weights_in_gpt2(model, config, gpt2_checkpoint_path):

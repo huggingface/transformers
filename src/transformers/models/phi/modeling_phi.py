@@ -19,7 +19,6 @@ import math
 from typing import List, Optional, Tuple, Union
 
 import torch
-import torch.nn.functional as F
 import torch.utils.checkpoint
 from packaging import version
 from torch import nn
@@ -44,7 +43,6 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     get_torch_version,
     is_flash_attn_2_available,
-    is_flash_attn_greater_or_equal_2_10,
     logging,
     replace_return_docstrings,
 )

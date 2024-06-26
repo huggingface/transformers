@@ -18,7 +18,6 @@ import math
 from typing import List, Optional, Tuple, Union
 
 import torch
-import torch.nn.functional as F
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
@@ -46,8 +45,7 @@ from .configuration_m2m_100 import M2M100Config
 
 
 if is_flash_attn_2_available():
-    from flash_attn import flash_attn_func, flash_attn_varlen_func
-    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input
+    from ...flash_attention_utils import _flash_attention_forward
 
 
 logger = logging.get_logger(__name__)

@@ -15,12 +15,10 @@
 
 """PyTorch Phi-3 model."""
 
-import inspect
 import math
 from typing import List, Optional, Tuple, Union
 
 import torch
-import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
@@ -40,7 +38,6 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
-    is_flash_attn_greater_or_equal_2_10,
     logging,
     replace_return_docstrings,
 )
@@ -411,12 +408,6 @@ class Phi3FlashAttention2(Phi3Attention):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         # Phi3FlashAttention2 attention does not support output_attentions
 
-        if not _flash_supports_window_size:
-            logger.warning_once(
-                "The current flash attention version does not support sliding window attention. Please use `attn_implementation='eager'` or upgrade flash-attn library."
-            )
-            raise ValueError("The current flash attention version does not support sliding window attention.")
-
         output_attentions = False
 
         bsz, q_len, _ = hidden_states.size()
@@ -450,11 +441,6 @@ class Phi3FlashAttention2(Phi3Attention):
 
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
-        use_sliding_windows = (
-            _flash_supports_window_size
-            and getattr(self.config, "sliding_window", None) is not None
-            and kv_seq_len > self.config.sliding_window
-        )
 
         if past_key_value is not None:
             # Activate slicing cache only if the config has a value `sliding_windows` attribute
@@ -528,7 +514,8 @@ class Phi3FlashAttention2(Phi3Attention):
             attention_mask,
             q_len,
             dropout=attn_dropout,
-            use_sliding_windows=use_sliding_windows,
+            sliding_window=getattr(self.config, "sliding_window", None),
+            cache_position=kv_seq_len
         )
 
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
