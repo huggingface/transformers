@@ -1,10 +1,12 @@
-from .utils import (
-    is_flash_attn_2_available,
-    is_flash_attn_greater_or_equal_2_10,
-)
+import inspect
+
 import torch
 import torch.nn.functionnal as F
-import inspect
+
+from .utils import (
+    is_flash_attn_2_available,
+)
+
 
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func

@@ -19,12 +19,10 @@
 # limitations under the License.
 """PyTorch Mistral model."""
 
-import inspect
 import math
 from typing import List, Optional, Tuple, Union
 
 import torch
-import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
