@@ -30,7 +30,7 @@ class ChameleonVQConfig(PretrainedConfig):
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information. Instantiating a
     configuration with the defaults will yield a similar configuration to the VQModel of the
-    [chameleon-7B](https://huggingface.co/meta/chameleon-7B).
+    [meta/chameleon-7B](https://huggingface.co/meta/chameleon-7B).
 
     Args:
         embed_dim (`int`, *optional*, defaults to 256):
@@ -109,7 +109,7 @@ class ChameleonConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`ChameleonModel`]. It is used to instantiate a
     chameleon model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the
-    [chameleon-7B](https://huggingface.co/meta/chameleon-7B).
+    [meta/chameleon-7B](https://huggingface.co/meta/chameleon-7B).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
