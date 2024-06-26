@@ -47,7 +47,10 @@ class DacConfig(PretrainedConfig):
             Dimension of the codebook vectors. If not defined, uses `encoder_hidden_size`.
         quantizer_dropout (`bool`, *optional*, defaults to `False`):
             Whether to apply dropout to the quantizer.
-
+        commitment_loss_weight (float, optional, defaults to 0.25):
+            Weight of the commitment loss term in the VQVAE loss function.
+        codebook_loss_weight (float, optional, defaults to 1.0):
+            Weight of the codebook loss term in the VQVAE loss function.
     Example:
 
     ```python
@@ -73,6 +76,8 @@ class DacConfig(PretrainedConfig):
         codebook_size=1024,
         codebook_dim=8,
         quantizer_dropout=0,
+        commitment_loss_weight=0.25,
+        codebook_loss_weight=1.0,
         **kwargs,
     ):
         self.encoder_hidden_size = encoder_hidden_size
@@ -87,5 +92,7 @@ class DacConfig(PretrainedConfig):
         self.hidden_size = encoder_hidden_size * (2 ** len(downsampling_ratios))
 
         self.hop_length = int(np.prod(downsampling_ratios))
+        self.commitment_loss_weight = commitment_loss_weight
+        self.codebook_loss_weight = codebook_loss_weight
 
         super().__init__(**kwargs)

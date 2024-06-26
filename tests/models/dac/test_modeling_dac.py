@@ -22,13 +22,11 @@ import unittest
 from typing import Dict, List, Tuple
 
 import numpy as np
-from datasets import Audio, load_dataset
 
-from transformers import AutoProcessor, DacConfig
+from transformers import DacConfig
 from transformers.testing_utils import (
     is_torch_available,
     require_torch,
-    slow,
     torch_device,
 )
 
@@ -116,15 +114,15 @@ class DacModelTester:
 
     def get_config(self):
         return DacConfig(
-            encoder_dim = self.encoder_dim, 
+            encoder_dim = self.encoder_dim,
             encoder_rates= self.encoder_rates,
-            latent_dim=self.latent_dim, 
-            decoder_dim= self.decoder_dim, 
-            decoder_rates=self.decoder_rates, 
+            latent_dim=self.latent_dim,
+            decoder_dim= self.decoder_dim,
+            decoder_rates=self.decoder_rates,
             n_codebooks=self.n_codebooks,
-            codebook_size= self.codebook_size, 
-            codebook_dim= self.codebook_dim, 
-            quantizer_dropout=self.quantizer_dropout, 
+            codebook_size= self.codebook_size,
+            codebook_dim= self.codebook_dim,
+            quantizer_dropout=self.quantizer_dropout,
             sample_rate=self.sample_rate
         )
 
