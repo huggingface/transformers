@@ -526,7 +526,7 @@ class MistralIntegrationTest(unittest.TestCase):
         # Note: Key 9 is currently set for MI300, but may need potential future adjustments for H100s,
         # considering differences in hardware processing and potential deviations in output.
         EXPECTED_SLICE = {
-            7: torch.tensor([-5.8781, -5.8616, -0.1052, -4.7200, -5.8781, -5.8774, -5.8773, -5.8777, -5.8781, -5.8780, -5.8781, -5.8779, -1.0787, 1.7583, -5.8779, -5.8780, -5.8783, -5.8778, -5.8776, -5.8781, -5.8784, -5.8778, -5.8778, -5.8777, -5.8779, -5.8778, -5.8776, -5.8780, -5.8779, -5.8781]),
+            7: torch.tensor([-5.8828, -5.8633, -0.1042, -4.7266, -5.8828, -5.8789, -5.8789, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -1.0801,  1.7598, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828]),
             8: torch.tensor([-5.8711, -5.8555, -0.1050, -4.7148, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -1.0781, 1.7568, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711]),
             9: torch.tensor([-5.8750, -5.8594, -0.1047, -4.7188, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -1.0781,  1.7578, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750]),
         }  # fmt: skip
@@ -535,15 +535,11 @@ class MistralIntegrationTest(unittest.TestCase):
             out[0, 0, :30], EXPECTED_SLICE[self.cuda_compute_capability_major_version], atol=1e-4, rtol=1e-4
         )
 
-        del model
-        backend_empty_cache(torch_device)
-        gc.collect()
-
     @slow
     @require_bitsandbytes
     def test_model_7b_generation(self):
         EXPECTED_TEXT_COMPLETION = {
-            7: "My favourite condiment is 100% ketchup. I love it on everything. I'm not a big",
+            7: "My favourite condiment is 100% ketchup. I’m not a fan of mustard, mayo,",
             8: "My favourite condiment is 100% ketchup. I’m not a fan of mustard, mayo,",
         }
 
@@ -558,10 +554,6 @@ class MistralIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(input_ids, max_new_tokens=20, temperature=0)
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION[self.cuda_compute_capability_major_version], text)
-
-        del model
-        backend_empty_cache(torch_device)
-        gc.collect()
 
     @require_bitsandbytes
     @slow
@@ -586,11 +578,6 @@ class MistralIntegrationTest(unittest.TestCase):
         assistant_model.generation_config.num_assistant_tokens_schedule = "constant"
         generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
         self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
-
-        del assistant_model
-        del model
-        backend_empty_cache(torch_device)
-        gc.collect()
 
     @slow
     @require_torch_sdpa
@@ -635,7 +622,7 @@ class MistralIntegrationTest(unittest.TestCase):
         # Note: Key 9 is currently set for MI300, but may need potential future adjustments for H100s,
         # considering differences in hardware processing and potential deviations in generated text.
         EXPECTED_TEXT_COMPLETION = {
-            7: "My favourite condiment is 100% Sriracha. I love the heat, the tang and the fact costs",
+            7: "My favourite condiment is 100% ketchup. I love it on everything. I’m not a big",
             8: "My favourite condiment is 100% ketchup. I love it on everything. I’m not a big",
             9: "My favourite condiment is 100% ketchup. I love it on everything. I’m not a big",
         }
@@ -653,10 +640,6 @@ class MistralIntegrationTest(unittest.TestCase):
         )
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION[self.cuda_compute_capability_major_version], text)
-
-        del model
-        backend_empty_cache(torch_device)
-        gc.collect()
 
     @slow
     @require_read_token
@@ -725,10 +708,6 @@ class MistralIntegrationTest(unittest.TestCase):
         )
         static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION[self.cuda_compute_capability_major_version], static_compiled_text)
-
-        del model
-        backend_empty_cache(torch_device)
-        gc.collect()
 
 
 @slow
