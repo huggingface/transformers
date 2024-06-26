@@ -810,6 +810,12 @@ class Trainer:
             )
 
         columns = [k for k in signature_columns if k in dataset.column_names]
+        if len(columns) == 0:
+            raise ValueError(
+                "No columns in the dataset match the model's forward method signature. "
+                f"The following columns have been ignored: [{', '.join(ignored_columns)}]. "
+                "Please check the dataset and model. You may need to set `remove_unused_columns=False` in `TrainingArguments`."
+            )
 
         if version.parse(datasets.__version__) < version.parse("1.4.0"):
             dataset.set_format(
@@ -919,25 +925,36 @@ class Trainer:
         else:
             return None
 
-    def get_eval_dataloader(self, eval_dataset: Optional[Dataset] = None) -> DataLoader:
+    def get_eval_dataloader(self, eval_dataset: Optional[Union[str, Dataset]] = None) -> DataLoader:
         """
         Returns the evaluation [`~torch.utils.data.DataLoader`].
 
         Subclass and override this method if you want to inject some custom behavior.
 
         Args:
-            eval_dataset (`torch.utils.data.Dataset`, *optional*):
-                If provided, will override `self.eval_dataset`. If it is a [`~datasets.Dataset`], columns not accepted
-                by the `model.forward()` method are automatically removed. It must implement `__len__`.
+            eval_dataset (`str` or `torch.utils.data.Dataset`, *optional*):
+                If a `str`, will use `self.eval_dataset[eval_dataset]` as the evaluation dataset. If a `Dataset`, will override `self.eval_dataset` and must implement `__len__`. If it is a [`~datasets.Dataset`], columns not accepted by the `model.forward()` method are automatically removed.
         """
         if eval_dataset is None and self.eval_dataset is None:
             raise ValueError("Trainer: evaluation requires an eval_dataset.")
 
         # If we have persistent workers, don't do a fork bomb especially as eval datasets
         # don't change during training
-        if hasattr(self, "_eval_dataloader") and self.args.dataloader_persistent_workers:
-            return self.accelerator.prepare(self._eval_dataloader)
-        eval_dataset = eval_dataset if eval_dataset is not None else self.eval_dataset
+        dataloader_key = eval_dataset if isinstance(eval_dataset, str) else "eval"
+        if (
+            hasattr(self, "_eval_dataloaders")
+            and dataloader_key in self._eval_dataloaders
+            and self.args.dataloader_persistent_workers
+        ):
+            return self.accelerator.prepare(self._eval_dataloaders[dataloader_key])
+
+        eval_dataset = (
+            self.eval_dataset[eval_dataset]
+            if isinstance(eval_dataset, str)
+            else eval_dataset
+            if eval_dataset is not None
+            else self.eval_dataset
+        )
         data_collator = self.data_collator
 
         if is_datasets_available() and isinstance(eval_dataset, datasets.Dataset):
@@ -962,7 +979,10 @@ class Trainer:
         # we need to store the non-prepared version
         eval_dataloader = DataLoader(eval_dataset, **dataloader_params)
         if self.args.dataloader_persistent_workers:
-            self._eval_dataloader = eval_dataloader
+            if hasattr(self, "_eval_dataloaders"):
+                self._eval_dataloaders[dataloader_key] = eval_dataloader
+            else:
+                self._eval_dataloaders = {dataloader_key: eval_dataloader}
 
         return self.accelerator.prepare(eval_dataloader)
 
@@ -2175,6 +2195,9 @@ class Trainer:
         grad_norm: Optional[float] = None
         self.control = self.callback_handler.on_train_begin(args, self.state, self.control)
 
+        if args.eval_on_start:
+            self._evaluate(trial, ignore_keys_for_eval, skip_scheduler=True)
+
         total_batched_samples = 0
         for epoch in range(epochs_trained, num_train_epochs):
             epoch_iterator = train_dataloader
@@ -2305,6 +2328,8 @@ class Trainer:
                             grad_norm = _grad_norm
 
                     self.optimizer.step()
+
+                    self.control = self.callback_handler.on_optimizer_step(args, self.state, self.control)
 
                     optimizer_was_run = not self.accelerator.optimizer_step_was_skipped
                     if optimizer_was_run:
@@ -2721,6 +2746,24 @@ class Trainer:
                 f"There were unexpected keys in the checkpoint model loaded: {load_result.unexpected_keys}."
             )
 
+    def _evaluate(self, trial, ignore_keys_for_eval, skip_scheduler=False):
+        metrics = self.evaluate(ignore_keys=ignore_keys_for_eval)
+        self._report_to_hp_search(trial, self.state.global_step, metrics)
+
+        # Run delayed LR scheduler now that metrics are populated
+        if isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau) and not skip_scheduler:
+            metric_to_check = self.args.metric_for_best_model
+            if not metric_to_check.startswith("eval_"):
+                metric_to_check = f"eval_{metric_to_check}"
+            try:
+                self.lr_scheduler.step(metrics[metric_to_check])
+            except KeyError as exc:
+                raise KeyError(
+                    f"The `metric_for_best_model` training argument is set to '{metric_to_check}', which is not found in the evaluation metrics. "
+                    f"The available evaluation metrics are: {list(metrics.keys())}. Consider changing the `metric_for_best_model` via the TrainingArguments."
+                ) from exc
+        return metrics
+
     def _maybe_log_save_evaluate(self, tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval):
         if self.control.should_log and self.state.global_step > self._globalstep_last_logged:
             if is_torch_xla_available():
@@ -2747,15 +2790,7 @@ class Trainer:
 
         metrics = None
         if self.control.should_evaluate:
-            metrics = self.evaluate(ignore_keys=ignore_keys_for_eval)
-            self._report_to_hp_search(trial, self.state.global_step, metrics)
-
-            # Run delayed LR scheduler now that metrics are populated
-            if isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
-                metric_to_check = self.args.metric_for_best_model
-                if not metric_to_check.startswith("eval_"):
-                    metric_to_check = f"eval_{metric_to_check}"
-                self.lr_scheduler.step(metrics[metric_to_check])
+            metrics = self._evaluate(trial, ignore_keys_for_eval)
 
         if self.control.should_save:
             self._save_checkpoint(model, trial, metrics=metrics)
@@ -2850,7 +2885,13 @@ class Trainer:
             metric_to_check = self.args.metric_for_best_model
             if not metric_to_check.startswith("eval_"):
                 metric_to_check = f"eval_{metric_to_check}"
-            metric_value = metrics[metric_to_check]
+            try:
+                metric_value = metrics[metric_to_check]
+            except KeyError as exc:
+                raise KeyError(
+                    f"The `metric_for_best_model` training argument is set to '{metric_to_check}', which is not found in the evaluation metrics. "
+                    f"The available evaluation metrics are: {list(metrics.keys())}. Consider changing the `metric_for_best_model` via the TrainingArguments."
+                ) from exc
 
             operator = np.greater if self.args.greater_is_better else np.less
             if (
@@ -3266,7 +3307,6 @@ class Trainer:
             loss = self.compute_loss(model, inputs)
 
         del inputs
-        torch.cuda.empty_cache()
 
         kwargs = {}
 
@@ -3398,8 +3438,6 @@ class Trainer:
         logger.info(f"Saving model checkpoint to {output_dir}")
         model = self.model
         xm.mark_step()
-        if self.args.save_safetensors:
-            model.to("cpu")
 
         if xm.is_master_ordinal():
             os.makedirs(output_dir, exist_ok=True)
@@ -3414,13 +3452,13 @@ class Trainer:
                 self.accelerator.unwrap_model(model).save_pretrained(
                     output_dir,
                     is_main_process=self.args.should_save,
-                    state_dict=model.state_dict(),
+                    state_dict=xm._maybe_convert_to_cpu(model.state_dict()),
                     save_function=xm.save,
                     safe_serialization=self.args.save_safetensors,
                 )
             else:
                 logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
-                state_dict = model.state_dict()
+                state_dict = xm._maybe_convert_to_cpu(model.state_dict())
                 xm.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
         else:
             model.save_pretrained(
@@ -3428,14 +3466,10 @@ class Trainer:
                 is_main_process=self.args.should_save,
                 save_function=xm.save,
                 safe_serialization=self.args.save_safetensors,
+                state_dict=xm._maybe_convert_to_cpu(model.state_dict()),
             )
         if self.tokenizer is not None and self.args.should_save:
             self.tokenizer.save_pretrained(output_dir)
-
-        # We moved the model from TPU -> CPU for saving the weights.
-        # Now we should move it back to subsequent compute still works.
-        if self.args.save_safetensors:
-            model.to(self.args.device)
 
     def _save(self, output_dir: Optional[str] = None, state_dict=None):
         # If we are executing this function, we are the process zero, so we don't check for that.
@@ -3565,7 +3599,7 @@ class Trainer:
                 When used with `load_best_model_at_end`, make sure `metric_for_best_model` references exactly one
                 of the datasets. If you, for example, pass in `{"data1": data1, "data2": data2}` for two datasets
                 `data1` and `data2`, you could specify `metric_for_best_model="eval_data1_loss"` for using the
-                loss on `data1` and `metric_for_best_model="eval_data1_loss"` for the loss on `data2`.
+                loss on `data1` and `metric_for_best_model="eval_data2_loss"` for the loss on `data2`.
 
                 </Tip>
 
@@ -3581,12 +3615,13 @@ class Trainer:
             dictionary also contains the epoch number which comes from the training state.
         """
         # handle multipe eval datasets
-        eval_dataset = eval_dataset if eval_dataset is not None else self.eval_dataset
+        override = eval_dataset is not None
+        eval_dataset = eval_dataset if override else self.eval_dataset
         if isinstance(eval_dataset, dict):
             metrics = {}
             for eval_dataset_name, _eval_dataset in eval_dataset.items():
                 dataset_metrics = self.evaluate(
-                    eval_dataset=_eval_dataset,
+                    eval_dataset=_eval_dataset if override else eval_dataset_name,
                     ignore_keys=ignore_keys,
                     metric_key_prefix=f"{metric_key_prefix}_{eval_dataset_name}",
                 )
@@ -3750,7 +3785,7 @@ class Trainer:
 
         batch_size = self.args.eval_batch_size
 
-        logger.info(f"***** Running {description} *****")
+        logger.info(f"\n***** Running {description} *****")
         if has_length(dataloader):
             logger.info(f"  Num examples = {self.num_examples(dataloader)}")
         else:
@@ -3788,7 +3823,7 @@ class Trainer:
                     batch_size = observed_batch_size
 
             # Prediction step
-            loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only, ignore_keys=ignore_keys)
+            losses, logits, labels = self.prediction_step(model, inputs, prediction_loss_only, ignore_keys=ignore_keys)
             main_input_name = getattr(self.model, "main_input_name", "input_ids")
             inputs_decode = self._prepare_input(inputs[main_input_name]) if args.include_inputs_for_metrics else None
 
@@ -3796,8 +3831,8 @@ class Trainer:
                 xm.mark_step()
 
             # Update containers
-            if loss is not None:
-                losses = self.gather_function((loss.repeat(batch_size)))
+            if losses is not None:
+                losses = self.gather_function((losses.repeat(batch_size)))
                 all_losses.add(losses)
             if inputs_decode is not None:
                 inputs_decode = self.accelerator.pad_across_processes(inputs_decode, dim=1, pad_index=-100)
@@ -4334,7 +4369,7 @@ class Trainer:
 
         batch_size = dataloader.batch_size
         num_examples = self.num_examples(dataloader)
-        logger.info(f"***** Running {description} *****")
+        logger.info(f"\n***** Running {description} *****")
         logger.info(f"  Num examples = {num_examples}")
         logger.info(f"  Batch size = {batch_size}")
 

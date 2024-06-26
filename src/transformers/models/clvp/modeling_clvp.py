@@ -1681,7 +1681,7 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
 
         >>> # Define the Text and Load the Audio (We are taking an audio example from HuggingFace Hub using `datasets` library)
         >>> text = "This is an example text."
-        >>> ds = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True)
         >>> ds = ds.cast_column("audio", datasets.Audio(sampling_rate=22050))
         >>> _, audio, sr = ds.sort("id").select(range(1))[:1]["audio"][0].values()
 
@@ -1754,7 +1754,7 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
         >>> # Define the Text and Load the Audio (We are taking an audio example from HuggingFace Hub using `datasets` library)
         >>> text = "This is an example text."
 
-        >>> ds = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True)
         >>> ds = ds.cast_column("audio", datasets.Audio(sampling_rate=22050))
         >>> _, audio, sr = ds.sort("id").select(range(1))[:1]["audio"][0].values()
 

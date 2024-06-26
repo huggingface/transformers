@@ -169,7 +169,7 @@ Pretrained models are downloaded and locally cached at: `~/.cache/huggingface/hu
 
 ## Offline mode
 
-Run 🤗 Transformers in a firewalled or offline environment with locally cached files by setting the environment variable `TRANSFORMERS_OFFLINE=1`.
+Run 🤗 Transformers in a firewalled or offline environment with locally cached files by setting the environment variable `HF_HUB_OFFLINE=1`.
 
 <Tip>
 
@@ -178,7 +178,7 @@ Add [🤗 Datasets](https://huggingface.co/docs/datasets/) to your offline train
 </Tip>
 
 ```bash
-HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+HF_DATASETS_OFFLINE=1 HF_HUB_OFFLINE=1 \
 python examples/pytorch/translation/run_translation.py --model_name_or_path google-t5/t5-small --dataset_name wmt16 --dataset_config ro-en ...
 ```
 

@@ -1971,13 +1971,17 @@ class ModelTesterMixin:
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             model(**self._prepare_for_class(inputs_dict, model_class))
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
             model = model_class(config)
             self.assertIsInstance(model.get_input_embeddings(), (nn.Embedding, AdaptiveEmbedding))
-            model.set_input_embeddings(nn.Embedding(10, 10))
+
+            new_input_embedding_layer = nn.Embedding(10, 10)
+            model.set_input_embeddings(new_input_embedding_layer)
+            self.assertEqual(model.get_input_embeddings(), new_input_embedding_layer)
+
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
 
@@ -3403,7 +3407,7 @@ class ModelTesterMixin:
     @require_torch_gpu
     @mark.flash_attn_test
     @slow
-    @is_flaky
+    @is_flaky()
     def test_flash_attn_2_inference_equivalence(self):
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn_2:
@@ -3497,7 +3501,7 @@ class ModelTesterMixin:
     @require_torch_gpu
     @mark.flash_attn_test
     @slow
-    @is_flaky
+    @is_flaky()
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn_2:
@@ -3587,7 +3591,7 @@ class ModelTesterMixin:
     @require_torch_gpu
     @mark.flash_attn_test
     @slow
-    @is_flaky
+    @is_flaky()
     def test_flash_attn_2_generate_left_padding(self):
         for model_class in self.all_generative_model_classes:
             if not model_class._supports_flash_attn_2:
@@ -3631,7 +3635,7 @@ class ModelTesterMixin:
     @require_flash_attn
     @require_torch_gpu
     @mark.flash_attn_test
-    @is_flaky
+    @is_flaky()
     @slow
     def test_flash_attn_2_generate_padding_right(self):
         for model_class in self.all_generative_model_classes:
