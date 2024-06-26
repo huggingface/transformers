@@ -385,7 +385,14 @@ class GemmaFlashAttention2(GemmaAttention):
             value_states = value_states.to(target_dtype)
 
         attn_output = _flash_attention_forward(
-            query_states, key_states, value_states, attention_mask, q_len, dropout=dropout_rate, **kwargs
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            q_len,
+            dropout=dropout_rate,
+            sliding_window=getattr(self, "sliding_window", None),
+            **kwargs,
         )
 
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
