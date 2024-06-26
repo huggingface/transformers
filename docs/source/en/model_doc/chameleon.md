@@ -41,6 +41,111 @@ This model was contributed by [joaogante](https://huggingface.co/joaogante) and 
 The original code can be found [here](https://github.com/facebookresearch/chameleon).
 
 
+## Usage tips
+
+- We advise users to use `padding_side="left"` when computing batched generation as it leads to more accurate results. Simply make sure to call `processor.tokenizer.padding_side = "left"` before generating.
+
+- Note that Chameleon was tuned for safety alignment. If the model is refusing to answer, consider asking a more concrete question, instead of an open question.
+
+## Usage example
+
+### Single image inference
+
+Here's how to load the model and perform inference in half-precision (`torch.float16`):
+
+```python
+from transformers import ChameleonProcessor, ChameleonForCausalLM
+import torch
+from PIL import Image
+import requests
+
+processor = ChameleonProcessor.from_pretrained("meta-chameleon")
+model = ChameleonForCausalLM.from_pretrained("meta-chameleon", torch_dtype=torch.float16, device_map="auto") 
+
+# prepare image and text prompt
+url = "https://bjiujitsu.com/wp-content/uploads/2021/01/jiu_jitsu_belt_white_1.jpg"
+image = Image.open(requests.get(url, stream=True).raw)
+prompt = "What color is the belt in this image?<image>"
+
+inputs = processor(prompt, image, return_tensors="pt").to(model.device)
+
+# autoregressively complete prompt
+output = model.generate(**inputs, max_new_tokens=50)
+print(processor.decode(output[0], skip_special_tokens=True))
+```
+
+### Multi image inference
+
+LLaVa-Next can perform inference with multiple images as input, where images either belong to the same prompt or different prompts (in batched inference). Here is how you can do it:
+
+```python
+from transformers import ChameleonProcessor, ChameleonForCausalLM
+import torch
+from PIL import Image
+import requests
+
+processor = ChameleonProcessor.from_pretrained("meta-chameleon")
+model = ChameleonForCausalLM.from_pretrained("meta-chameleon", torch_dtype=torch.float16, device_map="auto") 
+
+# Get three different images
+url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+image_stop = Image.open(requests.get(url, stream=True).raw)
+
+url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+image_cats = Image.open(requests.get(url, stream=True).raw)
+
+url = "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/snowman.jpg"
+image_snowman = Image.open(requests.get(url, stream=True).raw)
+
+# Prepare a batched prompt, where the first one is a multi-image prompt and the second is not
+prompts = [
+    "What do these images have in common?<image><image>",
+    "<image>What is shown in this image?"
+]
+
+# We can simply feed images in the order they have to be used in the text prompt
+# Each "<image>" token uses one image leaving the next for the subsequent "<image>" tokens
+inputs = processor(text=prompts, images=[image_stop, image_cats, image_snowman], padding=True, return_tensors="pt").to(model.device)
+
+# Generate
+generate_ids = model.generate(**inputs, max_new_tokens=50)
+processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+```
+
+## Model optimization
+
+### Quantization using Bitsandbytes
+
+The model can be loaded in 8 or 4 bits, greatly reducing the memory requirements while maintaining the performance of the original model. First make sure to install bitsandbytes, `pip install bitsandbytes` and make sure to have access to a CUDA compatible GPU device. Simply change the snippet above with:
+
+```python
+from transformers import ChameleonForCausalLM, BitsAndBytesConfig
+
+# specify how to quantize the model
+quantization_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_quant_type="nf4",
+    bnb_4bit_compute_dtype=torch.float16,
+)
+
+model = ChameleonForCausalLM.from_pretrained("meta-chameleon", quantization_config=quantization_config, device_map="auto")
+```
+
+### Use Flash-Attention 2 to further speed-up generation
+
+First make sure to install flash-attn. Refer to the [original repository of Flash Attention](https://github.com/Dao-AILab/flash-attention) regarding that package installation. Simply change the snippet above with:
+
+```python
+from transformers import ChameleonForCausalLM
+
+model = ChameleonForCausalLM.from_pretrained(
+    model_id, 
+    torch_dtype=torch.float16, 
+    low_cpu_mem_usage=True,
+    use_flash_attention_2=True
+).to(0)
+```
+
 ## ChameleonConfig
 
 [[autodoc]] ChameleonConfig
