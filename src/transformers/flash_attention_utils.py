@@ -3,7 +3,6 @@ import inspect
 import torch
 import torch.nn.functional as F
 
-from .modeling_utils import ExtraKwargs, Unpack
 from .utils import (
     is_flash_attn_2_available,
 )
@@ -79,7 +78,6 @@ def _flash_attention_forward(
     _flash_attn_uses_top_left_mask=False,
     sliding_window=None,
     cache_position=0,
-    **kwargs: Unpack[ExtraKwargs],
 ):
     """
     Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
@@ -114,16 +112,9 @@ def _flash_attention_forward(
     # Contains at least one padding token in the sequence
     if attention_mask is not None:
         batch_size = query_states.shape[0]
-        unpad_inputs = False
-        if all(["cu_seqlens", "max_seq_lens"]) not in kwargs:
-            query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = _upad_input(
-                query_states, key_states, value_states, attention_mask, query_length
-            )
-            unpad_inputs = True
-        else:
-            cu_seq_lens = kwargs.get("cu_seq_lens")
-            max_seq_lens = kwargs.get("max_seq_lens")
-
+        query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = _upad_input(
+            query_states, key_states, value_states, attention_mask, query_length
+        )
         cu_seqlens_q, cu_seqlens_k = cu_seq_lens
         max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
 
@@ -140,8 +131,7 @@ def _flash_attention_forward(
             causal=causal,
             **flash_kwargs,
         )
-        if unpad_inputs:
-            attn_output = _pad_input(attn_output_unpad, indices_q, batch_size, query_length)
+        attn_output = _pad_input(attn_output_unpad, indices_q, batch_size, query_length)
     else:
         attn_output = flash_attn_func(
             query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=causal, **flash_kwargs

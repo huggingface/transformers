@@ -30,7 +30,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import partial, wraps
 from threading import Thread
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, TypedDict, Union
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 from zipfile import is_zipfile
 
 import torch
@@ -100,13 +100,6 @@ from .utils.import_utils import (
     is_torchdynamo_compiling,
 )
 from .utils.quantization_config import BitsAndBytesConfig, QuantizationMethod
-
-
-try:
-    from typing import Unpack  # noqa: F401
-except ImportError:
-    from typing_extensions import Unpack  # noqa: F401
-
 
 XLA_USE_BF16 = os.environ.get("XLA_USE_BF16", "0").upper()
 XLA_DOWNCAST_BF16 = os.environ.get("XLA_DOWNCAST_BF16", "0").upper()
@@ -5058,13 +5051,3 @@ def get_disk_only_shard_files(device_map, sharded_metadata, start_prefix):
         files_content[filename].append(device_map[weight_name])
 
     return [fname for fname, devices in files_content.items() if set(devices) == {"disk"}]
-
-
-class ExtraKwargs(TypedDict):
-    """Known kwargs that can be used with `transfrormers` models."""
-
-    cu_seqlens: Optional[Tuple[torch.Tensor, torch.Tensor]]
-    " a tuple reprensenting the cu_seqlens_q and cu_seqlens_k"
-
-    max_seq_lens: Optional[Tuple[torch.Tensor, torch.Tensor]]
-    " a tuple reprensenting the cu_seqlens_q and cu_seqlens_cu_seqlens_qk"
