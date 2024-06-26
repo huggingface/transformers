@@ -72,13 +72,21 @@ def _get_unpad_data(attention_mask):
         max_seqlen_in_batch,
     )
 
+def _cast_if_autocast_enabled(*args):
+    if not torch.is_autocast_enabled():
+        return args
+    else:
+        return torch.cuda.amp.autocast_mode._cast(args, torch.get_autocast_gpu_dtype())
+
+
 class LayerNorm1P(nn.LayerNorm):
     def __init__(self, normalized_shape: Union[int, List[int], Size], eps: float = 1e-5, elementwise_affine: bool = True,
                  bias: bool = True, device=None, dtype=None):
         super().__init__(normalized_shape, eps, elementwise_affine, bias, device, dtype)
     def forward(self, input: Tensor) -> Tensor:
-        return F.layer_norm(
-            input, self.normalized_shape, self.weight + 1, self.bias, self.eps)
+        args = _cast_if_autocast_enabled(input, self.normalized_shape, self.weight + 1, self.bias, self.eps)
+        with torch.cuda.amp.autocast(enabled=False):
+            return F.layer_norm(*args)
 
 
 ALL_LAYERNORM_LAYERS.append(LayerNorm1P)
@@ -619,8 +627,8 @@ class NemotronDecoderLayer(nn.Module):
         self.self_attn = NEMOTRON_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
 
         self.mlp = NemotronMLP(config)
-        self.input_layernorm = LayerNorm1P(config.hidden_size, normalization=config.normalization, eps=config.norm_eps)
-        self.post_attention_layernorm = LayerNorm1P(config.hidden_size, normalization=config.normalization, eps=config.norm_eps)
+        self.input_layernorm = LayerNorm1P(config.hidden_size, eps=config.norm_eps)
+        self.post_attention_layernorm = LayerNorm1P(config.hidden_size, eps=config.norm_eps)
 
     def forward(
         self,
@@ -819,7 +827,7 @@ class NemotronModel(NemotronPreTrainedModel):
         self.layers = nn.ModuleList(
             [NemotronDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = LayerNorm1P(config.hidden_size, normalization=config.normalization, eps=config.norm_eps)
+        self.norm = LayerNorm1P(config.hidden_size, eps=config.norm_eps)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
