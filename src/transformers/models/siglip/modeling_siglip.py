@@ -1026,11 +1026,10 @@ class SiglipEncoder(nn.Module):
         )
 
 
-class SiglipTextTransformer(SiglipPreTrainedModel):
-    _no_split_modules = ["SiglipTextEmbeddings", "SiglipEncoderLayer"]
-
+class SiglipTextTransformer(nn.Module):
     def __init__(self, config: SiglipTextConfig):
-        super().__init__(config)
+        super().__init__()
+        self.config = config
         embed_dim = config.hidden_size
         self.embeddings = SiglipTextEmbeddings(config)
         self.encoder = SiglipEncoder(config)
@@ -1160,11 +1159,10 @@ class SiglipTextModel(SiglipPreTrainedModel):
         )
 
 
-class SiglipVisionTransformer(SiglipPreTrainedModel):
-    _no_split_modules = ["SiglipVisionEmbeddings", "SiglipEncoderLayer", "SiglipMultiheadAttentionPoolingHead"]
-
+class SiglipVisionTransformer(nn.Module):
     def __init__(self, config: SiglipVisionConfig):
-        super().__init__(config)
+        super().__init__()
+        self.config = config
         embed_dim = config.hidden_size
 
         self.embeddings = SiglipVisionEmbeddings(config)
@@ -1326,12 +1324,13 @@ class SiglipModel(SiglipPreTrainedModel):
         text_config = config.text_config
         vision_config = config.vision_config
 
-        self.text_model = SiglipTextTransformer._from_config(
-            text_config, attn_implementation=config._attn_implementation
-        )
-        self.vision_model = SiglipVisionTransformer._from_config(
-            vision_config, attn_implementation=config._attn_implementation
-        )
+        # First, initialize the text and vision models with proper attention implementation
+        text_model = SiglipTextModel._from_config(text_config, attn_implementation=config._attn_implementation)
+        vision_model = SiglipVisionModel._from_config(vision_config, attn_implementation=config._attn_implementation)
+
+        # Second, get the text and vision submodules (for backward compatibility)
+        self.text_model = text_model.text_model
+        self.vision_model = vision_model.vision_model
 
         self.logit_scale = nn.Parameter(torch.randn(1))
         self.logit_bias = nn.Parameter(torch.randn(1))
@@ -1554,9 +1553,13 @@ class SiglipForImageClassification(SiglipPreTrainedModel):
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        self.vision_model = SiglipVisionTransformer._from_config(
+
+        # Create the vision model with proper attention
+        # and take only vision_model submodule (for backward compatibility)
+        vision_model = SiglipVisionModel._from_config(
             config.vision_config, attn_implementation=config._attn_implementation
         )
+        self.vision_model = vision_model.vision_model
 
         # Classifier head
         self.classifier = (
