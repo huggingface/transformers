@@ -38,9 +38,9 @@ class ChameleonProcessor(ProcessorMixin):
             The image processor is a required input.
         tokenizer ([`LlamaTokenizerFast`], *optional*):
             The tokenizer is a required input.
-        image_seq_length (`<fill_type>`, *optional*, defaults to 1024):
+        image_seq_length (`int`, *optional*, defaults to 1024):
             Sequence length of one image embedding.
-        image_token (`<fill_type>`, *optional*, defaults to `"<image>"`):
+        image_token (`str`, *optional*, defaults to `"<image>"`):
             The special token used to indicate image in the text.
     """
 
