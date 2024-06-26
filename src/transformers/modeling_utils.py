@@ -5054,11 +5054,6 @@ def get_disk_only_shard_files(device_map, sharded_metadata, start_prefix):
     return [fname for fname, devices in files_content.items() if set(devices) == {"disk"}]
 
 
-class FlashAttentionKwargs(TypedDict):
-    cu_seqlens: torch.Tensor
-    cu_seqlen_prefill: Optional[torch.Tensor]
-    prefill_cache_indixes: Optional[torch.Tensor]
-    cu_seqlens_q: Optional[torch.Tensor]
-    cu_seqlens_k: Optional[torch.Tensor]
-    max_seqlen_q: Optional[torch.Tensor]
-    max_seqlen_k: Optional[torch.Tensor]
+class ExtraKwargs(TypedDict):
+    cu_seqlens: Optional[Tuple[torch.Tensor, torch.Tensor]]
+    max_seq_lens: Optional[Tuple[torch.Tensor, torch.Tensor]]

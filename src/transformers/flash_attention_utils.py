@@ -7,7 +7,7 @@ from .utils import (
     is_flash_attn_2_available,
 )
 
-from .modeling_utils import FlashAttentionKwargs
+from .modeling_utils import ExtraKwargs
 try:
     from typing import Unpack
 except ImportError:
@@ -83,7 +83,7 @@ def _flash_attention_forward(
     _flash_attn_uses_top_left_mask=False,
     sliding_window=None,
     cache_position=0,
-    **kwargs: Unpack[FlashAttentionKwargs],
+    **kwargs: Unpack[ExtraKwargs],
 ):
     """
     Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
