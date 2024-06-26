@@ -434,7 +434,7 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
         x_branch = x_branch.transpose(1, 2)
 
         if use_cache:
-            if cache_position.shape[0] != 1:  # prefill
+            if cache_position[0] == 0:  # prefill
                 self.conv1d_state = nn.functional.pad(x_branch, (self.conv1d_width - x_branch.shape[-1] - 1, 0))
                 x_branch = self.conv_1d(x_branch)[..., :seq_len]
             else:  # decoding
@@ -539,8 +539,7 @@ class RecurrentGemmaPreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = ["cache"]
     _supports_flash_attn_2 = False
     _supports_sdpa = False  # we can't compare with eager for now
-    _supports_cache_class = True
-    _supports_quantized_cache = True
+    _is_stateful = True
 
     def _init_weights(self, module):
         std = math.sqrt(self.config.w_init_variance_scale / self.config.conv1d_width)
@@ -708,8 +707,13 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
 
         hidden_states = inputs_embeds
 
-        if use_cache and inputs_embeds.shape[1] != 1:  # TODO let's maybe only call in the `generate`?
-            self._setup_cache(self.config, hidden_states.shape[0], hidden_states.device, hidden_states.dtype)
+        if use_cache:
+            need_cache_setup = inputs_embeds.shape[1] != 1
+            # corner case: attention_mask and inputs_embeds both have length 1, i.e. prefill with 1 token
+            if attention_mask is not None:
+                need_cache_setup |= attention_mask.shape[1] == 1 and inputs_embeds.shape[1] == 1
+            if need_cache_setup:
+                self._setup_cache(self.config, hidden_states.shape[0], hidden_states.device, hidden_states.dtype)
 
         if cache_position is None:
             cache_position = torch.arange(hidden_states.shape[1], device=hidden_states.device)
@@ -901,21 +905,34 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
     def prepare_inputs_for_generation(
         self, input_ids, attention_mask=None, inputs_embeds=None, cache_position=None, use_cache=None, **kwargs
     ):
+        past_length = cache_position[0] if cache_position is not None else 0
+
+        # Keep only the unprocessed tokens:
+        # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
+        # some of the inputs are exclusively passed as part of the cache (e.g. when passing input_embeds as input)
+        if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
+            input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
+        # 2 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
+        # input_ids based on the past_length.
+        elif past_length < input_ids.shape[1]:
+            input_ids = input_ids[:, past_length:]
+        # 3 - Otherwise (past_length >= input_ids.shape[1]), let's assume input_ids only has unprocessed tokens.
+
+        # If we are about to go beyond the maximum cache length, we need to crop the input attention mask
+        attention_mask = attention_mask[:, -self.config.attention_window_size :]
+
         position_ids = kwargs.get("position_ids", None)
         if attention_mask is not None and position_ids is None:
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
-
-        attention_mask = attention_mask[:, -self.config.attention_window_size :]
-
-        past_length = cache_position[0]
         if past_length > 0:
             position_ids = position_ids[:, past_length:]
 
-        if inputs_embeds is not None:
+        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
+        if inputs_embeds is not None and past_length == 0:
             model_inputs = {"inputs_embeds": inputs_embeds[:, past_length:]}
         else:
-            model_inputs = {"input_ids": input_ids[:, past_length:].contiguous()}
+            model_inputs = {"input_ids": input_ids.contiguous()}
 
         if cache_position is not None:
             cache_position = cache_position[-position_ids.shape[1] :]

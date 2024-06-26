@@ -283,7 +283,7 @@ class RecurrentGemmaModelTester:
 @require_torch
 class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (RecurrentGemmaForCausalLM,) if is_torch_available() else ()
-    # all_generative_model_classes = (RecurrentGemmaForCausalLM,) if is_torch_available() else () #TODO @gante not fully supported
+    all_generative_model_classes = (RecurrentGemmaForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": RecurrentGemmaModel,
@@ -332,28 +332,12 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip("RecurrentGemma does not return pkv")
-    def test_past_key_values_format(self):
-        pass
-
     @unittest.skip("RecurrentGemma only supports sdpa")
     def test_eager_matches_sdpa_generate(self):
         pass
 
     @unittest.skip("RecurrentGemma only supports sdpa")
     def test_eager_matches_sdpa_inference(self):
-        pass
-
-    @unittest.skip("RecurrentGemma does not return the cache")
-    def test_contrastive_generate_low_memory(self):
-        pass
-
-    @unittest.skip("RecurrentGemma does not return the cache")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip("RecurrentGemma does not return the cache")
-    def test_contrastive_generate(self):
         pass
 
     @unittest.skip("SQRBound is known to have issues with gc")
@@ -364,31 +348,11 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
         return True  # Model does not return attention
 
     @unittest.skip("Past key values are not returned")
-    def test_prompt_lookup_decoding_matches_greedy_search(self):
-        pass
-
-    @unittest.skip("Past key values are not returned")
     def test_model_parallelism(self):
-        pass
-
-    @unittest.skip("Past key values are not returned")
-    def test_model_parallel_beam_search(self):
         pass
 
     def _check_past_key_values_for_generate(self, *args, **kwargs):
         return True
-
-    @unittest.skip("Rely on `past_key_values` to crop the assistant pkv. Not supported")
-    def test_assisted_decoding_matches_greedy_search(self):
-        pass
-
-    @unittest.skip("RecurrentGemma's output different if you pad left or right. This is expected")
-    def test_left_padding_compatibility(self):
-        pass
-
-    @unittest.skip("Relies on `past_key_values` returned by the model. Not supported with recurrent gemma")
-    def test_assisted_decoding_sample(self):
-        pass
 
     def _check_hidden_states_for_generate(
         self, batch_size, hidden_states, min_length, max_length, config, use_cache=False, num_beam_groups=1
