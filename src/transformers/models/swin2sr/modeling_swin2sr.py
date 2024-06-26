@@ -301,6 +301,8 @@ class Swin2SRSelfAttention(nn.Module):
         relative_coords_table = (
             torch.sign(relative_coords_table) * torch.log2(torch.abs(relative_coords_table) + 1.0) / math.log2(8)
         )
+        # set to same dtype as mlp weight
+        relative_coords_table = relative_coords_table.to(next(self.continuous_position_bias_mlp.parameters()).dtype)
         self.register_buffer("relative_coords_table", relative_coords_table, persistent=False)
 
         # get pair-wise relative position index for each token inside the window

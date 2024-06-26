@@ -29,22 +29,24 @@ from torch.autograd import Function
 from torch.autograd.function import once_differentiable
 
 from ...activations import ACT2FN
-from ...file_utils import (
-    ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    is_scipy_available,
-    is_timm_available,
-    is_torch_cuda_available,
-    is_vision_available,
-    replace_return_docstrings,
-    requires_backends,
-)
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import meshgrid
-from ...utils import is_accelerate_available, is_ninja_available, logging
+from ...utils import (
+    ModelOutput,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    is_accelerate_available,
+    is_ninja_available,
+    is_scipy_available,
+    is_timm_available,
+    is_torch_cuda_available,
+    is_vision_available,
+    logging,
+    replace_return_docstrings,
+    requires_backends,
+)
 from ...utils.backbone_utils import load_backbone
 from .configuration_deformable_detr import DeformableDetrConfig
 

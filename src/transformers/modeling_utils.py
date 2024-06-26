@@ -1280,6 +1280,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     is_parallelizable = False
     supports_gradient_checkpointing = False
+    _is_stateful = False
 
     # Flash Attention 2 support
     _supports_flash_attn_2 = False
