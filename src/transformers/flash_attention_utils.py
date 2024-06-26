@@ -1,7 +1,7 @@
 import inspect
 
 import torch
-import torch.nn.functionnal as F
+import torch.nn.functional as F
 
 from .utils import (
     is_flash_attn_2_available,
