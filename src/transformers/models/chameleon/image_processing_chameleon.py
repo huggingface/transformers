@@ -94,7 +94,7 @@ class ChameleonImageProcessor(BaseImageProcessor):
         do_center_crop: bool = True,
         crop_size: Dict[str, int] = None,
         do_rescale: bool = True,
-        rescale_factor: Union[int, float] = 1 / 255,
+        rescale_factor: Union[int, float] = 1 / 255.0 * 2.0,
         do_normalize: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
@@ -115,8 +115,8 @@ class ChameleonImageProcessor(BaseImageProcessor):
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else [1.0] * 3
-        self.image_std = image_std if image_std is not None else [0.5] * 3
+        self.image_mean = image_mean if image_mean is not None else [1.0, 1.0, 1.0]
+        self.image_std = image_std if image_std is not None else [1.0, 1.0, 1.0]
         self.do_convert_rgb = do_convert_rgb
         self._valid_processor_keys = [
             "images",

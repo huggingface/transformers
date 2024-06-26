@@ -119,7 +119,7 @@ class ChameleonProcessor(ProcessorMixin):
         one_img_tokens = self.image_start_token + (self.image_token * self.image_seq_length) + self.image_end_token
         for sample in text:
             sample = sample.replace(self.image_token, one_img_tokens)
-            prompt_strings.append(sample)
+            prompt_strings.append(f"{sample}{self.tokenizer.sep_token}")  # special Chameleon treatment to add sep
 
         data = self.tokenizer(
             prompt_strings,

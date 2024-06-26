@@ -81,7 +81,7 @@ def write_json(text, path):
         json.dump(text, f)
 
 
-def write_model(model_path, input_base_path, model_size, safe_serialization=True, chameleon_version=1):
+def write_model(model_path, input_base_path, model_size, chameleon_version=1):
     os.makedirs(model_path, exist_ok=True)
     input_model_path = os.path.join(input_base_path, "models", model_size.lower())
     params_path = os.path.join(input_model_path, "params.json")
@@ -98,7 +98,6 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
     dim = params["dim"]
     dims_per_head = dim // n_heads
     base = params.get("rope_theta", 10000.0)
-    # inv_freq = 1.0 / (base ** (torch.arange(0, dims_per_head, 2).float() / dims_per_head))
     qk_layernorm = params["qk_normalization"]
     swin_norm = params["swin_norm"]
     if base > 10000.0:
@@ -112,6 +111,10 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
                 f"Version {chameleon_version} of chameleon is not supported yet. "
                 "Current supported versions of chameleon are [1]."
             )
+
+    # permute for sliced rotary
+    def permute(w, n_heads=n_heads, dim1=dim, dim2=dim):
+        return w.view(n_heads, dim1 // n_heads // 2, 2, dim2).transpose(1, 2).reshape(dim1, dim2)
 
     if params.get("n_kv_heads", None) is not None:
         num_key_value_heads = params["n_kv_heads"]  # for GQA / MQA
@@ -148,8 +151,12 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
             # Unsharded
             state_dict.update(
                 {
-                    f"model.layers.{layer_i}.self_attn.q_proj.weight": loaded[f"layers.{layer_i}.attention.wq.weight"],
-                    f"model.layers.{layer_i}.self_attn.k_proj.weight": loaded[f"layers.{layer_i}.attention.wk.weight"],
+                    f"model.layers.{layer_i}.self_attn.q_proj.weight": permute(
+                        loaded[f"layers.{layer_i}.attention.wq.weight"]
+                    ),
+                    f"model.layers.{layer_i}.self_attn.k_proj.weight": permute(
+                        loaded[f"layers.{layer_i}.attention.wk.weight"]
+                    ),
                     f"model.layers.{layer_i}.self_attn.v_proj.weight": loaded[f"layers.{layer_i}.attention.wv.weight"],
                     f"model.layers.{layer_i}.self_attn.o_proj.weight": loaded[f"layers.{layer_i}.attention.wo.weight"],
                     f"model.layers.{layer_i}.mlp.gate_proj.weight": loaded[f"layers.{layer_i}.feed_forward.w1.weight"],
@@ -189,22 +196,26 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
                     ).mean(dim=0),
                 }
             )
-            state_dict[f"model.layers.{layer_i}.self_attn.q_proj.weight"] = torch.cat(
-                [
-                    loaded[i][f"layers.{layer_i}.attention.wq.weight"].view(n_heads_per_shard, dims_per_head, dim)
-                    for i in range(num_shards)
-                ],
-                dim=0,
-            ).reshape(dim, dim)
-            state_dict[f"model.layers.{layer_i}.self_attn.k_proj.weight"] = torch.cat(
-                [
-                    loaded[i][f"layers.{layer_i}.attention.wk.weight"].view(
-                        num_local_key_value_heads, dims_per_head, dim
-                    )
-                    for i in range(num_shards)
-                ],
-                dim=0,
-            ).reshape(key_value_dim, dim)
+            state_dict[f"model.layers.{layer_i}.self_attn.q_proj.weight"] = permute(
+                torch.cat(
+                    [
+                        loaded[i][f"layers.{layer_i}.attention.wq.weight"].view(n_heads_per_shard, dims_per_head, dim)
+                        for i in range(num_shards)
+                    ],
+                    dim=0,
+                ).reshape(dim, dim)
+            )
+            state_dict[f"model.layers.{layer_i}.self_attn.k_proj.weight"] = permute(
+                torch.cat(
+                    [
+                        loaded[i][f"layers.{layer_i}.attention.wk.weight"].view(
+                            num_local_key_value_heads, dims_per_head, dim
+                        )
+                        for i in range(num_shards)
+                    ],
+                    dim=0,
+                ).reshape(key_value_dim, dim)
+            )
 
             if qk_layernorm:
                 state_dict[f"model.layers.{layer_i}.self_attn.q_norm.weight"] = torch.stack(
@@ -297,9 +308,9 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
     ]
     with open(os.path.join(input_base_path, "tokenizer/vqgan.yaml")) as vqgan_cfg_file:
         vq_config = yaml.safe_load(vqgan_cfg_file)["model"]["params"]
+        vq_config.update(**vq_config["ddconfig"])
         for old, new in vq_keys_to_replace:
             vq_config[new] = vq_config[old]
-        vq_config.update(**vq_config["ddconfig"])
         del vq_config["ddconfig"]
 
     config = ChameleonConfig(
@@ -327,6 +338,7 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
     tokenizer = LlamaTokenizerFast(
         tokenizer_file=os.path.join(input_base_path, "tokenizer/text_tokenizer_modified.json"), legacy=False
     )
+    tokenizer.sep_token_id = 8710  # assign <reserved08706> to eos so that we can append it after input text
     image_processor = ChameleonImageProcessor()
     processor = ChameleonProcessor(image_processor=image_processor, tokenizer=tokenizer)
     processor.save_pretrained(model_path)
@@ -340,7 +352,7 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
     # Short inference on a few examples to check if generation makes sense
     # taken from https://github.com/facebookresearch/chameleon/blob/7a72f40aa5f462965c8374f25257f55b65b25ff4/data/prompts_for_human_evaluations.jsonl
     print("Loading the checkpoint in a Chameleon model.")
-    model = ChameleonForCausalLM.from_pretrained(model_path, device_map="auto")
+    model = ChameleonForCausalLM.from_pretrained(model_path, torch_dtype=torch.bfloat16, device_map="auto")
     processor = ChameleonProcessor.from_pretrained(model_path)
 
     prompt = "I'm very intrigued by this work of art:<image>Please tell me about the artist."
@@ -350,7 +362,7 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
         ).raw
     )
 
-    inputs = processor(prompt, images=image, return_tensors="pt").to(model.device)
+    inputs = processor(prompt, images=image, return_tensors="pt").to(model.device, torch.bfloat16)
 
     out = model.generate(**inputs, max_new_tokens=40, do_sample=True)
     generated_text = processor.batch_decode(out, skip_special_tokens=True)[0]
@@ -373,7 +385,6 @@ def main():
         "--output_dir",
         help="Location to write HF model",
     )
-    parser.add_argument("--safe_serialization", type=bool, help="Whether or not to save using `safetensors`.")
     # Different Chameleon versions used different default values for max_position_embeddings, hence the need to be able to specify which version is being used.
     parser.add_argument(
         "--chameleon_version",
@@ -387,7 +398,6 @@ def main():
         model_path=args.output_dir,
         input_base_path=args.input_dir,
         model_size=args.model_size,
-        safe_serialization=args.safe_serialization,
         chameleon_version=args.chameleon_version,
     )
 
