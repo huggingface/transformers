@@ -427,9 +427,7 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
         # verify generation
         output = model.generate(**inputs, do_sample=False, max_new_tokens=50)
         EXPECTED_DECODED_TEXT = 'USER: \nWhat is shown in this image? ASSISTANT: The image appears to be a graphical representation of a benchmark test for a machine learning model. It shows the performance of various models on a task, with the x-axis representing the number of parameters (measured in millions) and the y'  # fmt: skip
-        self.assertEqual(
-            self.processor.decode(output[0], skip_special_tokens=True), EXPECTED_DECODED_TEXT
-        )
+        self.assertEqual(self.processor.decode(output[0], skip_special_tokens=True), EXPECTED_DECODED_TEXT)
 
     @slow
     @require_bitsandbytes
