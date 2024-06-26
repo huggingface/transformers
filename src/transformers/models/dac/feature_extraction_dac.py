@@ -17,7 +17,6 @@
 from typing import List, Optional, Union
 
 import numpy as np
-import math
 
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
@@ -52,7 +51,7 @@ class DacFeatureExtractor(SequenceFeatureExtractor):
         feature_size: int = 1,
         sampling_rate: int = 16000,
         padding_value: float = 0.0,
-        hop_length: int = 512, 
+        hop_length: int = 512,
         **kwargs,
     ):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
@@ -143,7 +142,7 @@ class DacFeatureExtractor(SequenceFeatureExtractor):
             if self.feature_size == 2 and example.shape[-1] != 2:
                 raise ValueError(f"Expected stereo audio but example has {example.shape[-1]} channels")
             if self.feature_size == 2 :
-                raise ValueError(f"Stereo audio isn't supported for now")
+                raise ValueError("Stereo audio isn't supported for now")
 
         input_values = BatchFeature({"input_values": raw_audio})
 
@@ -156,9 +155,9 @@ class DacFeatureExtractor(SequenceFeatureExtractor):
             return_attention_mask=False,
             pad_to_multiple_of=self.hop_length
         )
-    
-        padded_inputs.input_values = padded_inputs.input_values[:,np.newaxis, :] 
-        
+
+        padded_inputs.input_values = padded_inputs.input_values[:,np.newaxis, :]
+
         input_values = []
         for example in padded_inputs.pop("input_values"):
             if self.feature_size == 1:

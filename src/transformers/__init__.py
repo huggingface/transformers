@@ -413,10 +413,6 @@ _import_structure = {
         "EncodecConfig",
         "EncodecFeatureExtractor",
     ],
-    "models.dac": [
-        "DacConfig",
-        "DacFeatureExtractor",
-    ],
     "models.encoder_decoder": ["EncoderDecoderConfig"],
     "models.ernie": ["ErnieConfig"],
     "models.esm": ["EsmConfig", "EsmTokenizer"],
@@ -5043,6 +5039,10 @@ if TYPE_CHECKING:
         CTRLTokenizer,
     )
     from .models.cvt import CvtConfig
+    from .models.dac import (
+        DacConfig,
+        DacFeatureExtractor,
+    )
     from .models.data2vec import (
         Data2VecAudioConfig,
         Data2VecTextConfig,
@@ -5156,10 +5156,6 @@ if TYPE_CHECKING:
     from .models.encodec import (
         EncodecConfig,
         EncodecFeatureExtractor,
-    )
-    from .models.dac import (
-        DacConfig,
-        DacFeatureExtractor,
     )
     from .models.encoder_decoder import EncoderDecoderConfig
     from .models.ernie import ErnieConfig
@@ -6754,10 +6750,6 @@ if TYPE_CHECKING:
         from .models.encodec import (
             EncodecModel,
             EncodecPreTrainedModel,
-        )
-        from .models.dac import (
-            DacModel,
-            DacPreTrainedModel,
         )
         from .models.encoder_decoder import EncoderDecoderModel
         from .models.ernie import (
