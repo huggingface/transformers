@@ -1190,7 +1190,6 @@ except OptionalDependencyNotAvailable:
 
     _import_structure["utils.dummy_pt_objects"] = [name for name in dir(dummy_pt_objects) if not name.startswith("_")]
 else:
-    _import_structure["flash_attention_utils"]: []
     _import_structure["activations"] = []
     _import_structure["benchmark.benchmark"] = ["PyTorchBenchmark"]
     _import_structure["benchmark.benchmark_args"] = ["PyTorchBenchmarkArguments"]
@@ -1216,6 +1215,7 @@ else:
         "TextDataset",
         "TextDatasetForNextSentencePrediction",
     ]
+    _import_structure["flash_attention_utils"]: []
     _import_structure["generation"].extend(
         [
             "AlternatingCodebooksLogitsProcessor",
