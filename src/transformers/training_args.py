@@ -1783,7 +1783,7 @@ class TrainingArguments:
             raise ValueError("warmup_steps must be either 0 or > 1")
 
         if isinstance(self.fsdp, bool):
-            self.fsdp = FSDPOption.FULL_SHARD if self.fsdp else ""
+            self.fsdp = [FSDPOption.FULL_SHARD] if self.fsdp else ""
         if isinstance(self.fsdp, str):
             self.fsdp = [FSDPOption(s) for s in self.fsdp.split()]
         if self.fsdp == [FSDPOption.OFFLOAD]:
