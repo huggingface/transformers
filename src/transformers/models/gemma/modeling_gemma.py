@@ -20,13 +20,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import math
-from typing import List, Optional, Tuple, TypedDict, Union, Unpack
+from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-from typing_extension import Unpack
+
+
+try:
+    from typing import Unpack
+except ImportError:
+    from typing_extension import Unpack
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
@@ -38,7 +43,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import FlashAttentionKwargs, PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     add_start_docstrings,
@@ -50,16 +55,6 @@ from .configuration_gemma import GemmaConfig
 
 
 logger = logging.get_logger(__name__)
-
-
-class ExtraKwargs(TypedDict):
-    cu_seqlens: torch.Tensor
-    cu_seqlen_prefill: Optional[torch.Tensor]
-    prefill_cache_indixes: Optional[torch.Tensor]
-    cu_seqlens_q: Optional[torch.Tensor]
-    cu_seqlens_k: Optional[torch.Tensor]
-    max_seqlen_q: Optional[torch.Tensor]
-    max_seqlen_k: Optional[torch.Tensor]
 
 
 class GemmaRMSNorm(nn.Module):
@@ -324,7 +319,7 @@ class GemmaFlashAttention2(GemmaAttention):
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[ExtraKwargs],
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         if isinstance(past_key_value, StaticCache):
             raise ValueError(

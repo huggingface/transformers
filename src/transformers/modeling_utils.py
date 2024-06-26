@@ -30,7 +30,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import partial, wraps
 from threading import Thread
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, TypedDict, Union
 from zipfile import is_zipfile
 
 import torch
@@ -5052,3 +5052,13 @@ def get_disk_only_shard_files(device_map, sharded_metadata, start_prefix):
         files_content[filename].append(device_map[weight_name])
 
     return [fname for fname, devices in files_content.items() if set(devices) == {"disk"}]
+
+
+class FlashAttentionKwargs(TypedDict):
+    cu_seqlens: torch.Tensor
+    cu_seqlen_prefill: Optional[torch.Tensor]
+    prefill_cache_indixes: Optional[torch.Tensor]
+    cu_seqlens_q: Optional[torch.Tensor]
+    cu_seqlens_k: Optional[torch.Tensor]
+    max_seqlen_q: Optional[torch.Tensor]
+    max_seqlen_k: Optional[torch.Tensor]

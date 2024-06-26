@@ -35,7 +35,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import FlashAttentionKwargs, PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     add_start_docstrings,
@@ -46,6 +46,11 @@ from ...utils import (
 )
 from .configuration_olmo import OlmoConfig
 
+
+try:
+    from typing import Unpack
+except ImportError:
+    from typing_extension import Unpack
 
 if is_flash_attn_2_available():
     from ...flash_attention_utils import _flash_attention_forward
@@ -758,7 +763,7 @@ class OlmoModel(OlmoPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[ExtraKwargs],
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
