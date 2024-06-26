@@ -299,7 +299,12 @@ class TokenClassificationPipeline(ChunkPipeline):
             ignore_labels = ["O"]
         all_entities = []
         for model_outputs in all_outputs:
-            logits = model_outputs["logits"][0].numpy()
+            if self.framework == "pt":
+                # To enable using fp16 and bf16
+                logits = model_outputs["logits"][0].float().numpy()
+            else:
+                logits = model_outputs["logits"][0].numpy()
+
             sentence = all_outputs[0]["sentence"]
             input_ids = model_outputs["input_ids"][0]
             offset_mapping = (
