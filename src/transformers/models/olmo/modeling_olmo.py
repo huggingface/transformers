@@ -50,7 +50,7 @@ from .configuration_olmo import OlmoConfig
 try:
     from typing import Unpack
 except ImportError:
-    from typing_extension import Unpack
+    from typing_extensions import Unpack
 
 if is_flash_attn_2_available():
     from ...flash_attention_utils import _flash_attention_forward

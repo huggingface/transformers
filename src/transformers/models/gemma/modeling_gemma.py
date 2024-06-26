@@ -31,7 +31,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 try:
     from typing import Unpack
 except ImportError:
-    from typing_extension import Unpack
+    from typing_extensions import Unpack
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache

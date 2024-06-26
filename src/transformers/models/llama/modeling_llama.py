@@ -51,7 +51,7 @@ from .configuration_llama import LlamaConfig
 try:
     from typing import Unpack
 except ImportError:
-    from typing_extension import Unpack
+    from typing_extensions import Unpack
 
 logger = logging.get_logger(__name__)
 
