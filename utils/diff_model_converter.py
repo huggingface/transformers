@@ -333,7 +333,10 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
     original_methods = {f.name.value if hasattr(f, "name") else f: f for f in original_node.body.body}
     updated_methods = {f.name.value if hasattr(f, "name") else f: f for f in updated_node.body.body}
     end_meth = []
-    for name, func in original_methods.items():
+
+    # Iterate directly from node.body as there can be property/setters with same names which are overwritten when we use a dict
+    for func in original_node.body.body:
+        name = func.name.value if hasattr(func, "name") else func
         if name in updated_methods and updated_methods[name] is not None:
             new_params = updated_methods[name].params
             # Replace the method in the replacement class, preserving decorators
@@ -346,6 +349,11 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
                 )
             func = func.with_changes(body=updated_methods[name].body, params=new_params)
         end_meth.append(func)
+
+    # Port new methods that are defined only in diff-file and append at the end
+    for name, func in updated_methods.items():
+        if name not in original_methods and func is not None and isinstance(func, cst.FunctionDef):
+            end_meth.append(func)
 
     result_node = original_node.with_changes(body=cst.IndentedBlock(body=end_meth))
     temp_module = cst.Module(body=[result_node])
@@ -454,7 +462,7 @@ class DiffConverterTransformer(CSTTransformer):
                 )
 
             super_file_name = self.imported_mapping[super_class]  # we need to get the parsed tree
-            model_name = re.search(r"_(\S*)", super_file_name)
+            model_name = re.search(r"models\.\w*?\.\w*?_(\S*)", super_file_name)
             if model_name:
                 model_name = model_name.groups()[0]
             else:
