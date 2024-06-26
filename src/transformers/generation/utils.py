@@ -1347,10 +1347,10 @@ class GenerationMixin:
             return model_kwargs
 
         past_length = 0
-        if "past_key_values" in model_kwargs:
+        if model_kwargs.get("past_key_values") is not None:
             if isinstance(model_kwargs["past_key_values"], Cache):
                 past_length = model_kwargs["past_key_values"].get_seq_length()
-            elif isinstance(model_kwargs["past_key_values"], (list, tuple)):
+            else:
                 past_length = model_kwargs["past_key_values"][0][0].shape[2]
         if "inputs_embeds" in model_kwargs:
             cur_len = model_kwargs["inputs_embeds"].shape[1]
