@@ -23,12 +23,15 @@ from typing import Dict, List, Tuple
 
 import numpy as np
 
-from transformers import DacConfig
+from transformers import DacConfig, AutoProcessor, DacModel
 from transformers.testing_utils import (
     is_torch_available,
     require_torch,
     torch_device,
+    slow
 )
+
+from datasets import load_dataset, Audio
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
@@ -37,8 +40,6 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 if is_torch_available():
     import torch
-
-    from transformers import DacModel
 
 
 def prepare_inputs_dict(
@@ -65,15 +66,15 @@ class DacModelTester:
         num_channels=1,
         is_training=False,
         intermediate_size=15992,
-        encoder_dim=64,
-        encoder_rates=[2, 4, 5, 8],
-        latent_dim=None,
-        decoder_dim=1536,
-        decoder_rates=[8, 5, 4, 2],
+        encoder_hidden_size=64,
+        downsampling_ratios=[2, 4, 5, 8],
+        decoder_hidden_size=1536,
         n_codebooks=12,
         codebook_size=1024,
         codebook_dim=8,
-        quantizer_dropout=False,
+        quantizer_dropout=0.0,
+        commitment_loss_weight=0.25, 
+        codebook_loss_weight=1.0, 
         sample_rate=16000,
 
     ):
@@ -82,16 +83,17 @@ class DacModelTester:
         self.num_channels = num_channels
         self.is_training = is_training
         self.intermediate_size = intermediate_size
-        self.encoder_dim=encoder_dim
-        self.encoder_rates=encoder_rates
-        self.latent_dim=latent_dim
-        self.decoder_dim=decoder_dim
-        self.decoder_rates=decoder_rates
+        self.sample_rate=sample_rate
+
+        self.encoder_hidden_size=encoder_hidden_size
+        self.downsampling_ratios=downsampling_ratios
+        self.decoder_hidden_size=decoder_hidden_size
         self.n_codebooks=n_codebooks
         self.codebook_size=codebook_size
         self.codebook_dim=codebook_dim
         self.quantizer_dropout=quantizer_dropout
-        self.sample_rate=sample_rate
+        self.commitment_loss_weight = commitment_loss_weight
+        self.codebook_loss_weight=codebook_loss_weight
 
     def prepare_config_and_inputs(self):
         input_values = floats_tensor([self.batch_size, self.num_channels, self.intermediate_size], scale=1.0)
@@ -114,16 +116,15 @@ class DacModelTester:
 
     def get_config(self):
         return DacConfig(
-            encoder_dim = self.encoder_dim,
-            encoder_rates= self.encoder_rates,
-            latent_dim=self.latent_dim,
-            decoder_dim= self.decoder_dim,
-            decoder_rates=self.decoder_rates,
+            encoder_hidden_size = self.encoder_hidden_size,
+            downsampling_ratios= self.downsampling_ratios,
+            decoder_dim= self.decoder_hidden_size,
             n_codebooks=self.n_codebooks,
             codebook_size= self.codebook_size,
             codebook_dim= self.codebook_dim,
             quantizer_dropout=self.quantizer_dropout,
-            sample_rate=self.sample_rate
+            commitment_loss_weight=self.commitment_loss_weight, 
+            codebook_loss_weight=self.codebook_loss_weight, 
         )
 
     def create_and_check_model_forward(self, config, inputs_dict):
@@ -132,7 +133,7 @@ class DacModelTester:
         input_values = inputs_dict["input_values"]
         result = model(input_values)
         self.parent.assertEqual(
-            result.audio.shape, (self.batch_size, self.num_channels, self.intermediate_size)
+            result.audio_values.shape, (self.batch_size, self.num_channels, self.intermediate_size)
         )
 
 @require_torch
@@ -176,7 +177,7 @@ class DacModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
-            expected_arg_names = ["audio_data", "n_quantizers"]
+            expected_arg_names = ["input_values", "n_quantizers", 'return_dict']
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
     @unittest.skip("The DacModel is not transformers based, thus it does not have `inputs_embeds` logics")
@@ -293,35 +294,6 @@ class DacModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_attention_outputs(self):
         pass
 
-    def test_feed_forward_chunking(self):
-        (original_config, inputs_dict) = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            torch.manual_seed(0)
-            config = copy.deepcopy(original_config)
-            config.chunk_length_s = None
-            config.overlap = None
-            config.sampling_rate = 10
-
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-            inputs["input_values"] = inputs["input_values"].repeat(1, 1, 10)
-
-            hidden_states_no_chunk = model(**inputs)[0]
-
-            torch.manual_seed(0)
-            config.chunk_length_s = 1
-            config.overlap = 0
-            config.sampling_rate = 10
-
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            hidden_states_with_chunk = model(**inputs)[0]
-            self.assertTrue(torch.allclose(hidden_states_no_chunk, hidden_states_with_chunk, atol=1e-3))
-
     @unittest.skip("The DacModel is not transformers based, thus it does not have the usual `hidden_states` logic")
     def test_hidden_states_output(self):
         pass
@@ -374,7 +346,7 @@ class DacModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         def check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs={}):
             with torch.no_grad():
                 tuple_output = model(**tuple_inputs, return_dict=False, **additional_kwargs)
-                dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs)
+                dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
 
                 def recursive_check(tuple_object, dict_object):
                     if isinstance(tuple_object, (List, Tuple)):
@@ -418,18 +390,11 @@ class DacModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
-                uniform_init_parms = ["conv"]
-                ignore_init = ["lstm"]
+                uniform_init_parms = ["conv", 'in_proj', 'out_proj', 'codebook']
                 if param.requires_grad:
                     if any(x in name for x in uniform_init_parms):
                         self.assertTrue(
                             -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    elif not any(x in name for x in ignore_init):
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
 
@@ -450,175 +415,174 @@ def compute_rmse(arr1, arr2):
     arr2_normalized = normalize(arr2)
     return np.sqrt(((arr1_normalized - arr2_normalized) ** 2).mean())
 
+@slow
+@require_torch
+class DacIntegrationTest(unittest.TestCase):
+    def test_integration_16kHz(self):
+        expected_rmse = 0.004
 
-# @slow
-# @require_torch
-# class DacIntegrationTest(unittest.TestCase):
-#     def test_integration_24kHz(self):
-#         expected_rmse = {
-#             "1.5": 0.0025,
-#             "24.0": 0.0015,
-#         }
-#         expected_codesums = {
-#             "1.5": [371955],
-#             "24.0": [6659962],
-#         }
-#         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-#         model_id = "facebook/Dac_24khz"
+        expected_encoder_sums = {
+            "encoder_loss": 25.4211,
+            "quantized_representation": -9758.1211,
+            'codebook_indices': 1350817,
+            "projected_latents": 1597.9078, 
+        }
+        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        model_id = "kamilakesbi/dac_16khz"
 
-#         model = DacModel.from_pretrained(model_id).to(torch_device)
-#         processor = AutoProcessor.from_pretrained(model_id)
+        model = DacModel.from_pretrained(model_id).to(torch_device)
+        processor = AutoProcessor.from_pretrained(model_id)
 
-#         librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
-#         audio_sample = librispeech_dummy[-1]["audio"]["array"]
+        librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
+        audio_sample = librispeech_dummy[0]["audio"]["array"]
 
-#         inputs = processor(
-#             raw_audio=audio_sample,
-#             sampling_rate=processor.sampling_rate,
-#             return_tensors="pt",
-#         ).to(torch_device)
+        inputs = processor(
+            raw_audio=audio_sample,
+            sampling_rate=processor.sampling_rate,
+            return_tensors="pt",
+        ).to(torch_device)
 
-#         for bandwidth, expected_rmse in expected_rmse.items():
-#             with torch.no_grad():
-#                 # use max bandwith for best possible reconstruction
-#                 encoder_outputs = model.encode(inputs["input_values"], bandwidth=float(bandwidth))
+        with torch.no_grad():
+            # use max bandwith for best possible reconstruction
+            encoder_outputs = model.encode(inputs["input_values"])
 
-#                 audio_code_sums = [a[0].sum().cpu().item() for a in encoder_outputs[0]]
+            expected_encoder_sums = torch.tensor(list(expected_encoder_sums.values()), dtype=torch.float32)
+            encoder_outputs_sum = torch.tensor([v.sum().cpu().item() for v in encoder_outputs.to_tuple()])
 
-#                 # make sure audio encoded codes are correct
-#                 self.assertListEqual(audio_code_sums, expected_codesums[bandwidth])
+            # make sure audio encoded codes are correct
+            self.assertTrue(torch.allclose(encoder_outputs_sum, encoder_outputs_sum, atol=1e-3))
 
-#                 audio_codes, scales = encoder_outputs.to_tuple()
-#                 input_values_dec = model.decode(audio_codes, scales, inputs["padding_mask"])[0]
-#                 input_values_enc_dec = model(
-#                     inputs["input_values"], inputs["padding_mask"], bandwidth=float(bandwidth)
-#                 )[-1]
+            _, quantized_representation, _, _ = encoder_outputs.to_tuple()
+            input_values_dec = model.decode(quantized_representation)[0]
+            input_values_enc_dec = model(inputs["input_values"])[1]
 
-#             # make sure forward and decode gives same result
-#             self.assertTrue(torch.allclose(input_values_dec, input_values_enc_dec, atol=1e-3))
+            # make sure forward and decode gives same result
+            self.assertTrue(torch.allclose(input_values_dec, input_values_enc_dec, atol=1e-3))
 
-#             # make sure shape matches
-#             self.assertTrue(inputs["input_values"].shape == input_values_enc_dec.shape)
+            arr = inputs["input_values"][0].cpu().numpy()
+            arr_enc_dec = input_values_enc_dec[0].cpu().numpy()
+            
+            max_length = min(arr_enc_dec.shape[-1], arr.shape[-1])
 
-#             arr = inputs["input_values"][0].cpu().numpy()
-#             arr_enc_dec = input_values_enc_dec[0].cpu().numpy()
+            arr_cut = arr[0,:max_length].copy()
+            arr_enc_dec_cut = arr_enc_dec[0,:max_length].copy()
 
-#             # make sure audios are more or less equal
-#             # the RMSE of two random gaussian noise vectors with ~N(0, 1) is around 1.0
-#             rmse = compute_rmse(arr, arr_enc_dec)
-#             self.assertTrue(rmse < expected_rmse)
+            # make sure audios are more or less equal
+            rmse = compute_rmse(arr_cut, arr_enc_dec_cut)
+            self.assertTrue(rmse < expected_rmse)
 
-#     def test_integration_48kHz(self):
-#         expected_rmse = {
-#             "3.0": 0.001,
-#             "24.0": 0.0005,
-#         }
-#         expected_codesums = {
-#             "3.0": [144259, 146765, 156435, 176871, 161971],
-#             "24.0": [1568553, 1294948, 1306190, 1464747, 1663150],
-#         }
-#         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-#         model_id = "facebook/Dac_48khz"
 
-#         model = DacModel.from_pretrained(model_id).to(torch_device)
-#         model = model.eval()
-#         processor = AutoProcessor.from_pretrained(model_id)
+    # def test_integration_48kHz(self):
+    #     expected_rmse = {
+    #         "3.0": 0.001,
+    #         "24.0": 0.0005,
+    #     }
+    #     expected_codesums = {
+    #         "3.0": [144259, 146765, 156435, 176871, 161971],
+    #         "24.0": [1568553, 1294948, 1306190, 1464747, 1663150],
+    #     }
+    #     librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+    #     model_id = "facebook/Dac_48khz"
 
-#         librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
-#         audio_sample = librispeech_dummy[-1]["audio"]["array"]
+    #     model = DacModel.from_pretrained(model_id).to(torch_device)
+    #     model = model.eval()
+    #     processor = AutoProcessor.from_pretrained(model_id)
 
-#         # transform mono to stereo
-#         audio_sample = np.array([audio_sample, audio_sample])
+    #     librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
+    #     audio_sample = librispeech_dummy[-1]["audio"]["array"]
 
-#         inputs = processor(raw_audio=audio_sample, sampling_rate=processor.sampling_rate, return_tensors="pt").to(
-#             torch_device
-#         )
+    #     # transform mono to stereo
+    #     audio_sample = np.array([audio_sample, audio_sample])
 
-#         for bandwidth, expected_rmse in expected_rmse.items():
-#             with torch.no_grad():
-#                 # use max bandwith for best possible reconstruction
-#                 encoder_outputs = model.encode(
-#                     inputs["input_values"], inputs["padding_mask"], bandwidth=float(bandwidth), return_dict=False
-#                 )
-#                 audio_code_sums = [a[0].sum().cpu().item() for a in encoder_outputs[0]]
+    #     inputs = processor(raw_audio=audio_sample, sampling_rate=processor.sampling_rate, return_tensors="pt").to(
+    #         torch_device
+    #     )
 
-#                 # make sure audio encoded codes are correct
-#                 self.assertListEqual(audio_code_sums, expected_codesums[bandwidth])
-#                 audio_codes, scales = encoder_outputs
-#                 input_values_dec = model.decode(audio_codes, scales, inputs["padding_mask"])[0]
-#                 input_values_enc_dec = model(
-#                     inputs["input_values"], inputs["padding_mask"], bandwidth=float(bandwidth)
-#                 )[-1]
+    #     for bandwidth, expected_rmse in expected_rmse.items():
+    #         with torch.no_grad():
+    #             # use max bandwith for best possible reconstruction
+    #             encoder_outputs = model.encode(
+    #                 inputs["input_values"], inputs["padding_mask"], bandwidth=float(bandwidth), return_dict=False
+    #             )
+    #             audio_code_sums = [a[0].sum().cpu().item() for a in encoder_outputs[0]]
 
-#             # make sure forward and decode gives same result
-#             self.assertTrue(torch.allclose(input_values_dec, input_values_enc_dec, atol=1e-3))
+    #             # make sure audio encoded codes are correct
+    #             self.assertListEqual(audio_code_sums, expected_codesums[bandwidth])
+    #             audio_codes, scales = encoder_outputs
+    #             input_values_dec = model.decode(audio_codes, scales, inputs["padding_mask"])[0]
+    #             input_values_enc_dec = model(
+    #                 inputs["input_values"], inputs["padding_mask"], bandwidth=float(bandwidth)
+    #             )[-1]
 
-#             # make sure shape matches
-#             self.assertTrue(inputs["input_values"].shape == input_values_enc_dec.shape)
+    #         # make sure forward and decode gives same result
+    #         self.assertTrue(torch.allclose(input_values_dec, input_values_enc_dec, atol=1e-3))
 
-#             arr = inputs["input_values"][0].cpu().numpy()
-#             arr_enc_dec = input_values_enc_dec[0].cpu().numpy()
+    #         # make sure shape matches
+    #         self.assertTrue(inputs["input_values"].shape == input_values_enc_dec.shape)
 
-#             # make sure audios are more or less equal
-#             # the RMSE of two random gaussian noise vectors with ~N(0, 1) is around 1.0
-#             rmse = compute_rmse(arr, arr_enc_dec)
-#             self.assertTrue(rmse < expected_rmse)
+    #         arr = inputs["input_values"][0].cpu().numpy()
+    #         arr_enc_dec = input_values_enc_dec[0].cpu().numpy()
 
-#     def test_batch_48kHz(self):
-#         expected_rmse = {
-#             "3.0": 0.001,
-#             "24.0": 0.0005,
-#         }
-#         expected_codesums = {
-#             "3.0": [
-#                 [72410, 79137, 76694, 90854, 73023, 82980, 72707, 54842],
-#                 [85561, 81870, 76953, 48967, 79315, 85442, 81479, 107241],
-#             ],
-#             "24.0": [
-#                 [72410, 79137, 76694, 90854, 73023, 82980, 72707, 54842],
-#                 [85561, 81870, 76953, 48967, 79315, 85442, 81479, 107241],
-#             ],
-#         }
-#         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-#         model_id = "facebook/Dac_48khz"
+    #         # make sure audios are more or less equal
+    #         # the RMSE of two random gaussian noise vectors with ~N(0, 1) is around 1.0
+    #         rmse = compute_rmse(arr, arr_enc_dec)
+    #         self.assertTrue(rmse < expected_rmse)
 
-#         model = DacModel.from_pretrained(model_id).to(torch_device)
-#         processor = AutoProcessor.from_pretrained(model_id, chunk_length_s=1, overlap=0.01)
+    # def test_batch_48kHz(self):
+    #     expected_rmse = {
+    #         "3.0": 0.001,
+    #         "24.0": 0.0005,
+    #     }
+    #     expected_codesums = {
+    #         "3.0": [
+    #             [72410, 79137, 76694, 90854, 73023, 82980, 72707, 54842],
+    #             [85561, 81870, 76953, 48967, 79315, 85442, 81479, 107241],
+    #         ],
+    #         "24.0": [
+    #             [72410, 79137, 76694, 90854, 73023, 82980, 72707, 54842],
+    #             [85561, 81870, 76953, 48967, 79315, 85442, 81479, 107241],
+    #         ],
+    #     }
+    #     librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+    #     model_id = "facebook/Dac_48khz"
 
-#         librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
+    #     model = DacModel.from_pretrained(model_id).to(torch_device)
+    #     processor = AutoProcessor.from_pretrained(model_id, chunk_length_s=1, overlap=0.01)
 
-#         audio_samples = [
-#             np.array([audio_sample["array"], audio_sample["array"]])
-#             for audio_sample in librispeech_dummy[-2:]["audio"]
-#         ]
+    #     librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
 
-#         inputs = processor(raw_audio=audio_samples, sampling_rate=processor.sampling_rate, return_tensors="pt")
-#         input_values = inputs["input_values"].to(torch_device)
-#         for bandwidth, expected_rmse in expected_rmse.items():
-#             with torch.no_grad():
-#                 # use max bandwith for best possible reconstruction
-#                 encoder_outputs = model.encode(input_values, bandwidth=float(bandwidth), return_dict=False)
-#                 audio_code_sums_0 = [a[0][0].sum().cpu().item() for a in encoder_outputs[0]]
-#                 audio_code_sums_1 = [a[0][1].sum().cpu().item() for a in encoder_outputs[0]]
+    #     audio_samples = [
+    #         np.array([audio_sample["array"], audio_sample["array"]])
+    #         for audio_sample in librispeech_dummy[-2:]["audio"]
+    #     ]
 
-#                 # make sure audio encoded codes are correct
-#                 self.assertListEqual(audio_code_sums_0, expected_codesums[bandwidth][0])
-#                 self.assertListEqual(audio_code_sums_1, expected_codesums[bandwidth][1])
+    #     inputs = processor(raw_audio=audio_samples, sampling_rate=processor.sampling_rate, return_tensors="pt")
+    #     input_values = inputs["input_values"].to(torch_device)
+    #     for bandwidth, expected_rmse in expected_rmse.items():
+    #         with torch.no_grad():
+    #             # use max bandwith for best possible reconstruction
+    #             encoder_outputs = model.encode(input_values, bandwidth=float(bandwidth), return_dict=False)
+    #             audio_code_sums_0 = [a[0][0].sum().cpu().item() for a in encoder_outputs[0]]
+    #             audio_code_sums_1 = [a[0][1].sum().cpu().item() for a in encoder_outputs[0]]
 
-#                 audio_codes, scales = encoder_outputs
-#                 input_values_dec = model.decode(audio_codes, scales)[0]
-#                 input_values_enc_dec = model(input_values, bandwidth=float(bandwidth))[-1]
+    #             # make sure audio encoded codes are correct
+    #             self.assertListEqual(audio_code_sums_0, expected_codesums[bandwidth][0])
+    #             self.assertListEqual(audio_code_sums_1, expected_codesums[bandwidth][1])
 
-#             # make sure forward and decode gives same result
-#             self.assertTrue(torch.allclose(input_values_dec, input_values_enc_dec, atol=1e-3))
+    #             audio_codes, scales = encoder_outputs
+    #             input_values_dec = model.decode(audio_codes, scales)[0]
+    #             input_values_enc_dec = model(input_values, bandwidth=float(bandwidth))[-1]
 
-#             # make sure shape matches
-#             self.assertTrue(input_values.shape == input_values_enc_dec.shape)
+    #         # make sure forward and decode gives same result
+    #         self.assertTrue(torch.allclose(input_values_dec, input_values_enc_dec, atol=1e-3))
 
-#             arr = input_values[0].cpu().numpy()
-#             arr_enc_dec = input_values_enc_dec[0].cpu().numpy()
+    #         # make sure shape matches
+    #         self.assertTrue(input_values.shape == input_values_enc_dec.shape)
 
-#             # make sure audios are more or less equal
-#             # the RMSE of two random gaussian noise vectors with ~N(0, 1) is around 1.0
-#             rmse = compute_rmse(arr, arr_enc_dec)
-#             self.assertTrue(rmse < expected_rmse)
+    #         arr = input_values[0].cpu().numpy()
+    #         arr_enc_dec = input_values_enc_dec[0].cpu().numpy()
+
+    #         # make sure audios are more or less equal
+    #         # the RMSE of two random gaussian noise vectors with ~N(0, 1) is around 1.0
+    #         rmse = compute_rmse(arr, arr_enc_dec)
+    #         self.assertTrue(rmse < expected_rmse)

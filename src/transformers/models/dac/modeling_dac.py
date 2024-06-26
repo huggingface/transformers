@@ -107,7 +107,7 @@ class Snake1d(nn.Module):
 class DacVectorQuantize(nn.Module):
     """
     Implementation of VQ similar to Karpathy's repo (https://github.com/karpathy/deep-vector-quantization)
-    
+        
     Additionally uses following tricks from improved VQGAN
     (https://arxiv.org/pdf/2110.04627.pdf):
         1. Factorized codes: Perform nearest neighbor lookup in low-dimensional space
@@ -183,9 +183,9 @@ class DacResidualUnit(nn.Module):
         super().__init__()
         pad = ((7 - 1) * dilation) // 2
 
-        self.snake1 = torch.jit.script(Snake1d(dimension))
+        self.snake1 = Snake1d(dimension)
         self.conv1 = weight_norm(nn.Conv1d(dimension, dimension, kernel_size=7, dilation=dilation, padding=pad))
-        self.snake2 = torch.jit.script(Snake1d(dimension))
+        self.snake2 = Snake1d(dimension)
         self.conv2 = weight_norm(nn.Conv1d(dimension, dimension, kernel_size=1))
 
     def forward(self, hidden_state):
@@ -220,7 +220,7 @@ class DacEncoderBlock(nn.Module):
         self.res_unit1 = DacResidualUnit(dimension // 2, dilation=1)
         self.res_unit2 = DacResidualUnit(dimension // 2, dilation=3)
         self.res_unit3 = DacResidualUnit(dimension // 2, dilation=9)
-        self.snake1 = torch.jit.script(Snake1d(dimension // 2))
+        self.snake1 = Snake1d(dimension // 2)
         self.conv1 = weight_norm(
                     nn.Conv1d(
                         dimension // 2,
@@ -247,7 +247,7 @@ class DacDecoderBlock(nn.Module):
 
         input_dim = config.decoder_hidden_size // 2 ** stride_index
         output_dim = config.decoder_hidden_size // 2 ** (stride_index + 1)
-        self.snake1 = torch.jit.script(Snake1d(input_dim))
+        self.snake1 = Snake1d(input_dim)
         self.conv_t1 = weight_norm(
                     nn.ConvTranspose1d(
                         input_dim,
@@ -423,13 +423,12 @@ class DacDecoder(nn.Module):
 
         # Add upsampling + MRF blocks
         block = []
-        for stride in strides:
-            stride_index = strides.index(stride)
+        for stride_index, stride in enumerate(strides):
             block += [DacDecoderBlock(config, stride, stride_index)]
 
         self.block = nn.ModuleList(block)
         output_dim = config.decoder_hidden_size // 2 ** (stride_index + 1)
-        self.snake1 = torch.jit.script(Snake1d(output_dim))
+        self.snake1 = Snake1d(output_dim)
         self.conv2 = weight_norm(nn.Conv1d(output_dim, 1, kernel_size=7, padding=3))
         self.tanh = nn.Tanh()
 
@@ -459,13 +458,13 @@ class DacEncoder(nn.Module):
 
         self.block = []
         # Create EncoderBlocks that double channels as they downsample by `stride`
-        for stride in strides:
-            stride_index = strides.index(stride) + 1
+        for stride_index, stride in enumerate(strides):
+            stride_index = stride_index + 1
             self.block += [DacEncoderBlock(config, stride=stride, stride_index=stride_index)]
 
         self.block = nn.ModuleList(self.block)
         d_model =  config.encoder_hidden_size * 2 ** stride_index
-        self.snake1 = torch.jit.script(Snake1d(d_model))
+        self.snake1 = Snake1d(d_model)
         self.conv2 = weight_norm(nn.Conv1d(d_model, config.hidden_size, kernel_size=3, padding=1))
 
     def forward(self, hidden_state):
@@ -545,7 +544,7 @@ class DacModel(DacPreTrainedModel):
     def encode(
         self,
         input_values: torch.Tensor,
-        num_quantizers: int = None,
+        n_quantizers: int = None,
         return_dict: Optional[bool] = None,
     ):
         """
@@ -554,7 +553,7 @@ class DacModel(DacPreTrainedModel):
         Args:
             input_values (`torch.Tensor of shape `(batch_size, 1, time_steps)`): 
                 Input audio data to encode,
-            num_quantizers (int, *optional*): 
+            n_quantizers (int, *optional*): 
                 Number of quantizers to use. If None, all quantizers are used. Default is None.
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
@@ -571,7 +570,7 @@ class DacModel(DacPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         quantized_representation = self.encoder(input_values)
-        quantized_representation, codebook_indices, projected_latents, commitment_loss, codebook_loss = self.quantizer(quantized_representation, num_quantizers)
+        quantized_representation, codebook_indices, projected_latents, commitment_loss, codebook_loss = self.quantizer(quantized_representation, n_quantizers)
 
         encoder_loss = self.config.commitment_loss_weight * commitment_loss + self.config.codebook_loss_weight * codebook_loss
 
@@ -620,7 +619,7 @@ class DacModel(DacPreTrainedModel):
             audio_values (`torch.Tensor` of shape `(batch_size, 1, input_length)`):
                 Decoded audio data. 
             quantized_representation (`torch.Tensor` of shape `(batch_size, dimension, time_steps)`):
-                Quantized continuous representation of input, 
+                Quantized continuous representation of input.
             codebook_indices: (`torch.Tensor` of shape `(batch_size, num_codebooks, time_steps)`):
                 Codebook indices for each codebook (quantized discrete representation of input).
             projected_latents (torch.Tensor` of shape `(batch_size, num_codebooks * dimension, time_steps)`):
@@ -630,8 +629,8 @@ class DacModel(DacPreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.return_dict
         length = input_values.shape[-1]
-        encoder_loss, quantized_representation, codebook_indices, projected_latents = self.encode(input_values, n_quantizers, return_dict=return_dict)
-        audio_values = self.decode(quantized_representation, return_dict=return_dict)
+        encoder_loss, quantized_representation, codebook_indices, projected_latents = self.encode(input_values, n_quantizers, return_dict=False)
+        audio_values = self.decode(quantized_representation, return_dict=False)
 
         if isinstance(audio_values, tuple):
             audio_values = audio_values[0][..., :length]
