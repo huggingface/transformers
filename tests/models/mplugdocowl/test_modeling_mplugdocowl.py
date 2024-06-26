@@ -113,7 +113,7 @@ class MPLUGDocOwlVisionText2TextModelTester:
 
         self.batch_size = 3
         self.num_channels = 3
-        self.image_size = 336
+        self.image_size = 448
         self.encoder_seq_length = 231
 
     def get_config(self):
@@ -123,8 +123,6 @@ class MPLUGDocOwlVisionText2TextModelTester:
             ignore_index=self.ignore_index,
             image_token_index=self.image_token_index,
             projector_hidden_act=self.projector_hidden_act,
-            vision_feature_select_strategy=self.vision_feature_select_strategy,
-            vision_feature_layer=self.vision_feature_layer,
         )
 
     def prepare_config_and_inputs(self):

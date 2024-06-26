@@ -125,28 +125,17 @@ class MPLUGDocOwlConfig(PretrainedConfig):
         ignore_index=-100,
         image_token_index=32000,
         projector_hidden_act="gelu",
-        vision_feature_select_strategy="full",
-        vision_feature_layer=-2,
         **kwargs,
     ):
         self.ignore_index = ignore_index
         self.image_token_index = image_token_index
         self.projector_hidden_act = projector_hidden_act
 
-        if vision_feature_select_strategy not in ["default", "full"]:
-            raise ValueError(
-                "vision_feature_select_strategy should be one of 'default', 'full'."
-                f"Got: {vision_feature_select_strategy}"
-            )
-
         if "vocab_size" in kwargs:
             warnings.warn(
                 "The `vocab_size` argument is deprecated and will be removed in v4.42, since it can be inferred from the `text_config`. Passing this argument has no effect",
                 FutureWarning,
             )
-
-        self.vision_feature_select_strategy = vision_feature_select_strategy
-        self.vision_feature_layer = vision_feature_layer
 
         if isinstance(vision_config, dict):
             vision_config["model_type"] = (
