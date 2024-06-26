@@ -559,9 +559,9 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         for outputs in model_outputs:
             if self.framework == "pt":
                 # To enable using fp16 and bf16
-                outputs = outputs[key].float().numpy()
+                items = outputs[key].float().numpy()
             else:
-                outputs = outputs[key].numpy()
+                items = outputs[key].numpy()
             stride = outputs.get("stride", None)
             if stride is not None and self.type in {"ctc", "ctc_with_lm"}:
                 total_n, left, right = stride
