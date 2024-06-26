@@ -392,6 +392,7 @@ class GemmaFlashAttention2(GemmaAttention):
             q_len,
             dropout=dropout_rate,
             sliding_window=getattr(self, "sliding_window", None),
+            cache_position=cache_position,
             **kwargs,
         )
 
