@@ -21,6 +21,7 @@ import torch
 from transformers import (
     DacConfig,
     DacModel,
+    DacFeatureExtractor, 
     logging,
 )
 
@@ -211,6 +212,7 @@ def convert_checkpoint(
     config.quantizer_dropout = float(metadata["quantizer_dropout"])
 
     model = DacModel(config)
+    feature_extractor = DacFeatureExtractor()
 
     original_checkpoint = model_dict["state_dict"]
 
@@ -219,7 +221,7 @@ def convert_checkpoint(
 
     if repo_id:
         print("Pushing to the hub...")
-        # feature_extractor.push_to_hub(repo_id)
+        feature_extractor.push_to_hub(repo_id)
         model.push_to_hub(repo_id)
 
 
@@ -231,15 +233,13 @@ if __name__ == "__main__":
         type=str,
         help="The model to convert. Should be one of 'dac_16khz', 'dac_24khz', 'dac_44khz'.",
     )
-
+    parser.add_argument("--checkpoint_path", required=True, default=None, type=str, help="Path to original checkpoint")
+    parser.add_argument(
+        "--pytorch_dump_folder_path", required=True, default=None, type=str, help="Path to the output PyTorch model."
+    )
+    parser.add_argument(
+        "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the 🤗 hub."
+    )
     args = parser.parse_args()
 
-    if args.model == "dac_16khz":
-        checkpoint_path = "/home/kamil/.cache/descript/dac/weights_16khz_8kbps_0.0.5.pth"
-    if args.model == "dac_24khz":
-        checkpoint_path = "/home/kamil/.cache/descript/dac/weights_24khz_8kbps_0.0.4.pth"
-    if args.model == "dac_44khz":
-        checkpoint_path = "/home/kamil/.cache/descript/dac/weights_44khz_8kbps_0.0.1.pth"
-
-    pytorch_dump_folder_path = "/home/kamil/.cache/transformers_dac"
-    convert_checkpoint(args.model, checkpoint_path, pytorch_dump_folder_path, "kamilakesbi/" + str(args.model))
+    convert_checkpoint(args.model, args.checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub)
