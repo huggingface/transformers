@@ -1613,7 +1613,7 @@ class DataCollatorForPermutationLanguageModeling(DataCollatorMixin):
         return inputs.astype(np.int64), perm_mask, target_mapping, labels.astype(np.int64)
 
 @dataclass
-class DataCollatorBatchFlattening(DefaultDataCollator):
+class DataCollatorWithFlattening(DefaultDataCollator):
     return_tensors: str = "pt"
     def __init__(self, return_position_ids=True):
         self.return_position_ids=return_position_ids
