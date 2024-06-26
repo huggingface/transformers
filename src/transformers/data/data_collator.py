@@ -1611,3 +1611,25 @@ class DataCollatorForPermutationLanguageModeling(DataCollatorMixin):
             ) & masked_indices[i]
 
         return inputs.astype(np.int64), perm_mask, target_mapping, labels.astype(np.int64)
+
+@dataclass
+class DataCollatorBatchFlattening(DefaultDataCollator):
+    return_tensors: str = "pt"
+    def __init__(self, return_position_ids=True):
+        self.return_position_ids=return_position_ids
+        warnings.warn(
+            "Using `DataCollatorForBatchFlattening` will flatten the entire mini batch into single long sequence."
+            "Make sure your attention computation is able to handles it!"
+        )
+    def __call__(self, features, return_tensors=None):
+        if return_tensors is None:
+            return_tensors = self.return_tensors
+        ret = dict(input_ids=[], labels=[])
+        if self.return_position_ids:
+            ret.update(dict(position_ids=[]))
+        for idx in range(0,len(features)):
+            ret["input_ids"] += features[idx]["input_ids"]
+            ret["labels"] += [-100] + features[idx]["labels"][1:]
+            if self.return_position_ids:
+                ret["position_ids"] += list(range(len(features[idx]["input_ids"])))
+        return default_data_collator([ret], return_tensors)
