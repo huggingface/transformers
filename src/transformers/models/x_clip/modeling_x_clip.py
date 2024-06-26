@@ -288,7 +288,7 @@ class XCLIPMLP(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->XCLIP
+# Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoderLayer with AltCLIP->XCLIP
 class XCLIPEncoderLayer(nn.Module):
     def __init__(self, config: XCLIPConfig):
         super().__init__()
@@ -609,7 +609,7 @@ X_CLIP_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPEncoder with CLIP->XCLIP
+# Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoder with AltCLIP->XCLIP
 class XCLIPEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a

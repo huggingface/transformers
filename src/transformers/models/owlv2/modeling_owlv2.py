@@ -459,7 +459,7 @@ class Owlv2MLP(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->Owlv2
+# Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoderLayer with AltCLIP->Owlv2
 class Owlv2EncoderLayer(nn.Module):
     def __init__(self, config: Owlv2Config):
         super().__init__()

@@ -838,7 +838,6 @@ class AltCLIPMLP(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->AltCLIP
 class AltCLIPEncoderLayer(nn.Module):
     def __init__(self, config: AltCLIPConfig):
         super().__init__()
@@ -889,7 +888,6 @@ class AltCLIPEncoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPEncoder with CLIP->AltCLIP
 class AltCLIPEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
@@ -1080,7 +1078,6 @@ class AltCLIPPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPVisionTransformer with CLIPVisionTransformer->AltCLIPVisionTransformer,CLIPVisionConfig->AltCLIPVisionConfig,CLIPVisionEmbeddings->AltCLIPVisionEmbeddings,CLIPEncoder->AltCLIPEncoder,CLIP_VISION_INPUTS_DOCSTRING->ALTCLIP_VISION_INPUTS_DOCSTRING
 class AltCLIPVisionTransformer(nn.Module):
     def __init__(self, config: AltCLIPVisionConfig):
         super().__init__()
