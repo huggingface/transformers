@@ -5894,10 +5894,6 @@ class MoTPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-def load_tf_weights_in_mot(*args, **kwargs):
-    requires_backends(load_tf_weights_in_mot, ["torch"])
-
-
 class MPNetForMaskedLM(metaclass=DummyObject):
     _backends = ["torch"]
 

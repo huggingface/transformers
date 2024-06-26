@@ -448,7 +448,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("mobilenet_v2", "MobileNetV2"),
         ("mobilevit", "MobileViT"),
         ("mobilevitv2", "MobileViTV2"),
-        ("mot", "MoTLMHeadModel"),
+        ("mot", "MixtureOfTokens"),
         ("mpnet", "MPNet"),
         ("mpt", "MPT"),
         ("mra", "MRA"),

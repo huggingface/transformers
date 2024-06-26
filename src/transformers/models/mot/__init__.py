@@ -24,7 +24,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_mot": ["MoTConfig", "MoTOnnxConfig"],
+    "configuration_mot": ["MoTConfig"],
 }
 
 try:
@@ -41,11 +41,10 @@ else:
         "MoTModel",
         "MoTMLP",
         "MoTPreTrainedModel",
-        "load_tf_weights_in_mot",
     ]
 
 if TYPE_CHECKING:
-    from .configuration_mot import MoTConfig, MoTOnnxConfig
+    from .configuration_mot import MoTConfig
 
     try:
         if not is_torch_available():
@@ -61,7 +60,6 @@ if TYPE_CHECKING:
             MoTMLP,
             MoTModel,
             MoTPreTrainedModel,
-            load_tf_weights_in_mot,
         )
 else:
     import sys

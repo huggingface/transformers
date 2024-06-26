@@ -1047,7 +1047,6 @@ class GenerationTesterMixin:
             # test output equality of low versus high memory
             model = model_class(config).to(torch_device).eval()
 
-            print("low_memory=True")
             low_output = model.generate(
                 input_ids,
                 top_k=4,
@@ -1057,7 +1056,6 @@ class GenerationTesterMixin:
                 attention_mask=attention_mask,
             )
 
-            print("low_memory=False")
             high_output = model.generate(
                 input_ids,
                 top_k=4,
