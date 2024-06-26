@@ -220,7 +220,7 @@ class Kosmos2_5VisionConfig(PretrainedConfig):
         seq_len=4096,
         relative_attention_num_buckets=32,
         relative_attention_max_distance=128,
-        _attn_implementation="sdpa", # eager
+        _attn_implementation="flash_attention_2", #"sdpa", # eager
         **kwargs,
     ):
         super().__init__(**kwargs)
