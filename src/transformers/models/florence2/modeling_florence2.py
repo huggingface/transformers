@@ -2312,6 +2312,10 @@ class Florence2Seq2SeqLMOutput(ModelOutput):
     decoding.
 
     Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Language modeling loss.
+        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the decoder of the model.
 
@@ -2360,7 +2364,8 @@ class Florence2Seq2SeqLMOutput(ModelOutput):
 
             image_hidden_states of the model produced by the vision encoder
     """
-
+    loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
     last_hidden_state: torch.FloatTensor = None
     past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
@@ -2369,6 +2374,7 @@ class Florence2Seq2SeqLMOutput(ModelOutput):
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    image_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 FLORENCE2_START_DOCSTRING = r"""
@@ -2594,7 +2600,6 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel):
     def __init__(self, config: Florence2Config):
         super().__init__(config)
         assert config.vision_config.model_type == "davit", "only DaViT is supported for now"
-        del config.vision_config.model_type
         self.vision_tower = Florence2DaViT.from_config(config=config.vision_config)
         # remove unused layers
         del self.vision_tower.head
@@ -2793,7 +2798,8 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel):
                     image_features, inputs_embeds
                 )
 
-        attention_mask = attention_mask.to(inputs_embeds.dtype)
+        if inputs_embeds is not None:
+            attention_mask = attention_mask.to(inputs_embeds.dtype)
         outputs = self.language_model(
             attention_mask=attention_mask,
             labels=labels,
