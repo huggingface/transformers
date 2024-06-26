@@ -1357,12 +1357,9 @@ class RTDetrHybridEncoder(nn.Module):
                 # flatten [batch, channel, height, width] to [batch, height*width, channel]
                 src_flatten = hidden_states[enc_ind].flatten(2).permute(0, 2, 1)
                 if self.training or self.eval_size is None:
-                    pos_embed = (
-                        self.build_2d_sincos_position_embedding(
-                            width, height, self.encoder_hidden_dim, self.positional_encoding_temperature
-                        )
-                        .to(src_flatten.device, src_flatten.dtype)
-                    )
+                    pos_embed = self.build_2d_sincos_position_embedding(
+                        width, height, self.encoder_hidden_dim, self.positional_encoding_temperature
+                    ).to(src_flatten.device, src_flatten.dtype)
                 else:
                     pos_embed = None
 
