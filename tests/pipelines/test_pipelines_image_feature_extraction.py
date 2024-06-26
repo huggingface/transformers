@@ -162,7 +162,9 @@ class ImageFeatureExtractionPipelineTests(unittest.TestCase):
             self.skipTest(reason="No image processor")
 
         elif type(model.config) in TOKENIZER_MAPPING:
-            self.skipTest(reason="This is a bimodal model, we need to find a more consistent way to switch on those models.")
+            self.skipTest(
+                reason="This is a bimodal model, we need to find a more consistent way to switch on those models."
+            )
 
         elif model.config.is_encoder_decoder:
             self.skipTest(

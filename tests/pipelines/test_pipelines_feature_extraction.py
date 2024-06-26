@@ -182,7 +182,9 @@ class FeatureExtractionPipelineTests(unittest.TestCase):
             or isinstance(model.config, LxmertConfig)
             or type(model.config) in IMAGE_PROCESSOR_MAPPING
         ):
-            self.skipTest(reason="This is a bimodal model, we need to find a more consistent way to switch on those models.")
+            self.skipTest(
+                reason="This is a bimodal model, we need to find a more consistent way to switch on those models."
+            )
         elif model.config.is_encoder_decoder:
             self.skipTest(
                 """encoder_decoder models are trickier for this pipeline.

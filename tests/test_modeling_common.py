@@ -3897,7 +3897,9 @@ class ModelTesterMixin:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             inputs_dict = self._prepare_for_class(inputs_dict, model_class)
             if config.model_type in ["llava", "llava_next", "vipllava", "video_llava"]:
-                self.skipTest(reason="Llava-like models currently (transformers==4.39.1) requires an attention_mask input")
+                self.skipTest(
+                    reason="Llava-like models currently (transformers==4.39.1) requires an attention_mask input"
+                )
             if config.model_type in ["paligemma"]:
                 self.skipTest(
                     "PaliGemma-like models currently (transformers==4.41.0) requires an attention_mask input"
@@ -4332,7 +4334,9 @@ class ModelTesterMixin:
             self.skipTest(reason="Model architecture does not support attentions")
 
         if len(self.all_generative_model_classes) == 0:
-            self.skipTest(reason="Model architecture has no generative classes, and thus not necessarily supporting 4D masks")
+            self.skipTest(
+                reason="Model architecture has no generative classes, and thus not necessarily supporting 4D masks"
+            )
 
         for model_class in self.all_generative_model_classes:
             if not model_class._supports_static_cache:
