@@ -1339,7 +1339,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
         return_legacy_cache = False
         return_self_attention_cache = False
         if use_cache or past_key_values is not None:
-            if isinstance(past_key_values, Cache):
+            if isinstance(past_key_values, Cache) and not isinstance(past_key_values, EncoderDecoderCache):
                 return_self_attention_cache = True
                 past_key_values = EncoderDecoderCache(past_key_values, DynamicCache())
             elif not isinstance(past_key_values, EncoderDecoderCache):
