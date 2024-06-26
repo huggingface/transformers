@@ -107,7 +107,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         output_text = "unwanted, running"
         return input_text, output_text
 
-    @unittest.skip("Chat template tests don't play well with table/layout models.")
+    @unittest.skip(reason="Chat template tests don't play well with table/layout models.")
     def test_chat_template_batched(self):
         pass
 
@@ -115,7 +115,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     # this tokenizer
     def test_save_sentencepiece_tokenizer(self) -> None:
         if not self.test_sentencepiece or not self.test_slow_tokenizer:
-            return
+            self.skipTest(reason="test_sentencepiece or test_slow_tokenizer is set to False")
         # We want to verify that we will be able to save the tokenizer even if the original files that were used to
         # build the tokenizer have been deleted in the meantime.
         words, boxes = self.get_words_and_boxes()
@@ -745,7 +745,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_padding_warning_message_fast_tokenizer(self):
         if not self.test_rust_tokenizer:
-            return
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         words, boxes = self.get_words_and_boxes_batch()
 
@@ -766,7 +766,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         )
 
         if not self.test_slow_tokenizer:
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         tokenizer_slow = self.get_tokenizer()
 
@@ -873,7 +873,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         encoded_sequences_batch_padded_2[key],
                     )
 
-    @unittest.skip("batch_encode_plus does not handle overflowing tokens.")
+    @unittest.skip(reason="batch_encode_plus does not handle overflowing tokens.")
     def test_batch_encode_plus_overflowing_tokens(self):
         pass
 
@@ -934,7 +934,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 if tokenizer.pad_token is None:
-                    self.skipTest("No padding token.")
+                    self.skipTest(reason="No padding token.")
                 else:
                     words, boxes = self.get_words_and_boxes()
 
@@ -977,7 +977,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_build_inputs_with_special_tokens(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
@@ -1066,7 +1066,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 shutil.rmtree(tmpdirname)
 
-    @unittest.skip("Not implemented")
+    @unittest.skip(reason="Not implemented")
     def test_right_and_left_truncation(self):
         pass
 
@@ -1224,13 +1224,13 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 if tokenizer.__class__ not in MODEL_TOKENIZER_MAPPING:
-                    return
+                    self.skipTest(f"{tokenizer.__class__} is not in the MODEL_TOKENIZER_MAPPING")
 
                 config_class, model_class = MODEL_TOKENIZER_MAPPING[tokenizer.__class__]
                 config = config_class()
 
                 if config.is_encoder_decoder or config.pad_token_id is None:
-                    return
+                    self.skipTest(reason="Model is an encoder-decoder or has no pad token id set.")
 
                 model = model_class(config)
 
@@ -1256,11 +1256,11 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
-            return
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         tokenizer = self.get_tokenizer()
         rust_tokenizer = self.get_rust_tokenizer()
@@ -1278,7 +1278,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_tokenization_python_rust_equals(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
@@ -1332,7 +1332,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_embeded_special_tokens(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
@@ -1522,7 +1522,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_training_new_tokenizer(self):
         # This feature only exists for fast tokenizers
         if not self.test_rust_tokenizer:
-            return
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         tokenizer = self.get_rust_tokenizer()
         new_tokenizer = tokenizer.train_new_from_iterator(SMALL_TRAINING_CORPUS, 100)
@@ -1559,7 +1559,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_training_new_tokenizer_with_special_tokens_change(self):
         # This feature only exists for fast tokenizers
         if not self.test_rust_tokenizer:
-            return
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         tokenizer = self.get_rust_tokenizer()
         # Test with a special tokens map
@@ -1672,7 +1672,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_padding_different_model_input_name(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
@@ -1770,7 +1770,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_save_pretrained(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         self.tokenizers_list[0] = (self.rust_tokenizer_class, "hf-internal-testing/tiny-random-layoutxlm", {})
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
@@ -1838,27 +1838,27 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 shutil.rmtree(tmpdirname2)
 
-    @unittest.skip("TO DO: overwrite this very extensive test.")
+    @unittest.skip(reason="TO DO: overwrite this very extensive test.")
     def test_alignement_methods(self):
         pass
 
-    @unittest.skip("layoutxlm tokenizer requires boxes besides sequences.")
+    @unittest.skip(reason="layoutxlm tokenizer requires boxes besides sequences.")
     def test_maximum_encoding_length_pair_input(self):
         pass
 
-    @unittest.skip("layoutxlm tokenizer requires boxes besides sequences.")
+    @unittest.skip(reason="layoutxlm tokenizer requires boxes besides sequences.")
     def test_maximum_encoding_length_single_input(self):
         pass
 
-    @unittest.skip("layoutxlm tokenizer requires boxes besides sequences.")
+    @unittest.skip(reason="layoutxlm tokenizer requires boxes besides sequences.")
     def test_pretokenized_inputs(self):
         pass
 
-    @unittest.skip("layoutxlm tokenizer always expects pretokenized inputs.")
+    @unittest.skip(reason="layoutxlm tokenizer always expects pretokenized inputs.")
     def test_compare_pretokenized_inputs(self):
         pass
 
-    @unittest.skip("layoutxlm fast tokenizer does not support prepare_for_model")
+    @unittest.skip(reason="layoutxlm fast tokenizer does not support prepare_for_model")
     def test_compare_prepare_for_model(self):
         pass
 
@@ -1962,18 +1962,18 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertDictEqual(dict(encoding_p), expected_results)
         self.assertDictEqual(dict(encoding_r), expected_results)
 
-    @unittest.skip("Doesn't support another framework than PyTorch")
+    @unittest.skip(reason="Doesn't support another framework than PyTorch")
     def test_np_encode_plus_sent_to_model(self):
         pass
 
-    @unittest.skip("Doesn't use SentencePiece")
+    @unittest.skip(reason="Doesn't use SentencePiece")
     def test_sentencepiece_tokenize_and_convert_tokens_to_string(self):
         pass
 
-    @unittest.skip("Doesn't use SentencePiece")
+    @unittest.skip(reason="Doesn't use SentencePiece")
     def test_sentencepiece_tokenize_and_decode(self):
         pass
 
-    @unittest.skip("Chat is not supported")
+    @unittest.skip(reason="Chat is not supported")
     def test_chat_template(self):
         pass
