@@ -51,8 +51,6 @@ class AltCLIPProcessor(ProcessorMixin):
             The image processor is a required input.
         tokenizer ([`XLMRobertaTokenizerFast`], *optional*):
             The tokenizer is a required input.
-        feature_extractor ([`CLIPFeatureExtractor`], *optional*):
-            The feature extractor is a deprecated input.
     """
 
     attributes = ["image_processor", "tokenizer"]
@@ -60,8 +58,7 @@ class AltCLIPProcessor(ProcessorMixin):
     tokenizer_class = ("XLMRobertaTokenizer", "XLMRobertaTokenizerFast")
 
     @deprecate_kwarg(old_name="feature_extractor", version="5.0.0", new_name="image_processor")
-    def __init__(self, image_processor=None, tokenizer=None, feature_extractor=None):
-        image_processor = image_processor if image_processor is not None else feature_extractor
+    def __init__(self, image_processor=None, tokenizer=None):
         if image_processor is None:
             raise ValueError("You need to specify an `image_processor`.")
         if tokenizer is None:
