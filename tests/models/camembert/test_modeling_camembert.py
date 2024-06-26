@@ -17,6 +17,7 @@ import unittest
 
 from transformers import is_torch_available
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
+from transformers.utils.import_utils import is_torch_sdpa_available
 
 
 if is_torch_available():
@@ -31,7 +32,7 @@ if is_torch_available():
 class CamembertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_output_embeds_base_model(self):
-        model = CamembertModel.from_pretrained("almanach/camembert-base")
+        model = CamembertModel.from_pretrained("almanach/camembert-base", attn_implementation="eager")
         model.to(torch_device)
 
         input_ids = torch.tensor(
@@ -54,3 +55,11 @@ class CamembertModelIntegrationTest(unittest.TestCase):
         # expected_slice = roberta.model.forward(input_ids)[0][:, :3, :3].detach()
 
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+
+        if is_torch_sdpa_available():
+            model = CamembertModel.from_pretrained("almanach/camembert-base", attn_implementation="sdpa").to(
+                torch_device
+            )
+            with torch.no_grad():
+                output_sdpa = model(input_ids)["last_hidden_state"].detach()
+            self.assertTrue(torch.allclose(output, output_sdpa, atol=1e-3))
