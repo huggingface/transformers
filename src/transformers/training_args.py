@@ -46,6 +46,7 @@ from .utils import (
     is_torch_available,
     is_torch_bf16_cpu_available,
     is_torch_bf16_gpu_available,
+    is_torch_mps_available,
     is_torch_mlu_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
@@ -2135,6 +2136,8 @@ class TrainingArguments:
                     )
             if self.use_cpu:
                 device = torch.device("cpu")
+            elif is_torch_mps_available():
+                device = torch.device("mps:0")
             elif is_torch_xpu_available():
                 device = torch.device("xpu:0")
                 torch.xpu.set_device(device)
