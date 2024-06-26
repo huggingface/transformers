@@ -469,6 +469,7 @@ class MusicgenMelodyFlashAttention2(MusicgenMelodyAttention):
         """
         Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
         first unpad the input, then computes the attention scores and pad the final attention scores.
+
         Args:
             query_states (`torch.Tensor`):
                 Input query states to be passed to Flash Attention API
