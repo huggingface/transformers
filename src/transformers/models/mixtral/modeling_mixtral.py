@@ -422,18 +422,6 @@ class MixtralFlashAttention2(MixtralAttention):
 
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
-        use_sliding_windows = (
-            _flash_supports_window_size
-            and getattr(self.config, "sliding_window", None) is not None
-            and kv_seq_len > self.config.sliding_window
-        )
-
-        if not _flash_supports_window_size:
-            logger.warning_once(
-                "The current flash attention version does not support sliding window attention, for a more memory efficient implementation"
-                " make sure to upgrade flash-attn library."
-            )
-
         if past_key_value is not None:
             # Activate slicing cache only if the config has a value `sliding_windows` attribute
             cache_has_contents = past_key_value.get_seq_length(self.layer_idx) > 0
@@ -503,7 +491,8 @@ class MixtralFlashAttention2(MixtralAttention):
             attention_mask,
             q_len,
             dropout=dropout_rate,
-            use_sliding_windows=use_sliding_windows,
+            sliding_window=getattr(self.config, "sliding_window", None),
+            cache_position=kv_seq_len,
         )
 
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
