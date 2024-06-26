@@ -1359,7 +1359,7 @@ class RTDetrHybridEncoder(nn.Module):
                 if self.training or self.eval_size is None:
                     pos_embed = self.build_2d_sincos_position_embedding(
                         width, height, self.encoder_hidden_dim, self.positional_encoding_temperature
-                    ).to(src_flatten.device)
+                    ).to(src_flatten.device, src_flatten.dtype)
                 else:
                     pos_embed = None
 
@@ -1801,12 +1801,13 @@ class RTDetrModel(RTDetrPreTrainedModel):
 
         batch_size = len(source_flatten)
         device = source_flatten.device
+        dtype = source_flatten.dtype
 
         # prepare input for decoder
         if self.training or self.config.anchor_image_size is None:
-            anchors, valid_mask = self.generate_anchors(spatial_shapes, device=device)
+            anchors, valid_mask = self.generate_anchors(spatial_shapes, device=device, dtype=dtype)
         else:
-            anchors, valid_mask = self.anchors.to(device), self.valid_mask.to(device)
+            anchors, valid_mask = self.anchors.to(device, dtype), self.valid_mask.to(device, dtype)
 
         # use the valid_mask to selectively retain values in the feature map where the mask is `True`
         memory = valid_mask.to(source_flatten.dtype) * source_flatten
