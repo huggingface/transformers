@@ -68,7 +68,6 @@ _import_structure = {
         "launch_gradio_demo",
         "load_tool",
     ],
-    "flash_attention_utils":[],
     "audio_utils": [],
     "benchmark": [],
     "commands": [],
@@ -118,6 +117,7 @@ _import_structure = {
     "feature_extraction_sequence_utils": ["SequenceFeatureExtractor"],
     "feature_extraction_utils": ["BatchFeature", "FeatureExtractionMixin"],
     "file_utils": [],
+    "flash_attention_utils": [],
     "generation": [
         "GenerationConfig",
         "TextIteratorStreamer",

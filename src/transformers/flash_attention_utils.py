@@ -3,11 +3,12 @@ import inspect
 import torch
 import torch.nn.functional as F
 
+from .modeling_utils import ExtraKwargs
 from .utils import (
     is_flash_attn_2_available,
 )
 
-from .modeling_utils import ExtraKwargs
+
 try:
     from typing import Unpack
 except ImportError:
