@@ -339,7 +339,7 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_small_model_integration_test(self):
         model = LlavaNextVideoForConditionalGeneration.from_pretrained(
             "llava-hf/LLaVA-NeXT-Video-7B-hf",
-            load_in_4bit=True,
+            load_in_4bit=True, cache_dir="./"
         )
 
         inputs = self.processor(self.prompt_video, videos=self.video, return_tensors="pt")
@@ -384,7 +384,7 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test_batch(self):
         model = LlavaNextVideoForConditionalGeneration.from_pretrained(
-            "llava-hf/LLaVA-NeXT-Video-7B-hf", load_in_4bit=True
+            "llava-hf/LLaVA-NeXT-Video-7B-hf", load_in_4bit=True, cache_dir="./"
         )
 
         inputs = self.processor(
@@ -407,7 +407,7 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_small_model_integration_test_batch_different_vision_types(self):
         model = LlavaNextVideoForConditionalGeneration.from_pretrained(
             "llava-hf/LLaVA-NeXT-Video-7B-hf",
-            load_in_4bit=True,
+            load_in_4bit=True, cache_dir="./",
         )
 
         inputs = self.processor(
@@ -429,7 +429,7 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
         EXPECTED_DECODED_TEXT = 'USER: \nWhat is shown in this image? ASSISTANT: The image appears to be a graphical representation of a benchmark test for a machine learning model. It shows the performance of various models on a task, with the x-axis representing the number of parameters (measured in millions) and the y'  # fmt: skip
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
+            EXPECTED_DECODED_TEXT, cache_dir="./"
         )
 
     @slow
@@ -437,7 +437,7 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_small_model_integration_test_batch_matches_single(self):
         model = LlavaNextVideoForConditionalGeneration.from_pretrained(
             "llava-hf/LLaVA-NeXT-Video-7B-hf",
-            load_in_4bit=True,
+            load_in_4bit=True, cache_dir="./"
         )
 
         inputs_batched = self.processor(
