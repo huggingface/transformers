@@ -68,7 +68,7 @@ class ChameleonImageProcessor(BaseImageProcessor):
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by `do_rescale` in
             the `preprocess` method.
-        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
+        rescale_factor (`int` or `float`, *optional*, defaults to 0.0078):
             Scale factor to use if rescaling the image. Can be overridden by `rescale_factor` in the `preprocess`
             method.
         do_normalize (`bool`, *optional*, defaults to `True`):
@@ -94,7 +94,7 @@ class ChameleonImageProcessor(BaseImageProcessor):
         do_center_crop: bool = True,
         crop_size: Dict[str, int] = None,
         do_rescale: bool = True,
-        rescale_factor: Union[int, float] = 1 / 255.0 * 2.0,
+        rescale_factor: Union[int, float] = 0.0078,
         do_normalize: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
