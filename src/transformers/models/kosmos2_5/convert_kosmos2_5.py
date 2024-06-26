@@ -29,7 +29,6 @@ KEYS_TO_IGNORE = [
     "gpt_model.decoder.embed_positions._float_tensor",
     # this weight is never used in the forward in the original KOSMOS-2)
     "gpt_model.decoder.self_attn_sope.scale",
-    "gpt_model.decoder.segment_emb.weight",
 ]
 
 
