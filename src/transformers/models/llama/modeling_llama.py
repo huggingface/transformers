@@ -41,17 +41,11 @@ from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_flash_attn_2_available,
-    is_flash_attn_greater_or_equal_2_10,
     logging,
     replace_return_docstrings,
 )
 from .configuration_llama import LlamaConfig
-
-
-if is_flash_attn_2_available():
-    from flash_attn import flash_attn_func, flash_attn_varlen_func
-
+from ...flash_attention_utils import _flash_attention_forward
 
 from typing import TypedDict
 
@@ -73,18 +67,6 @@ class ExtraKwargs(TypedDict):
     cu_seqlens_k: Optional[torch.Tensor]
     max_seqlen_q: Optional[torch.Tensor]
     max_seqlen_k: Optional[torch.Tensor]
-
-
-def _get_unpad_data(attention_mask):
-    seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
-    indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
-    max_seqlen_in_batch = seqlens_in_batch.max().item()
-    cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
-    return (
-        indices,
-        cu_seqlens,
-        max_seqlen_in_batch,
-    )
 
 
 class LlamaRMSNorm(nn.Module):
