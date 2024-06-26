@@ -26,10 +26,7 @@ else:
     from typing_extensions import Unpack
 
 from ...image_utils import ImageInput
-from ...processing_utils import (
-    ProcessingKwargs,
-    ProcessorMixin,
-)
+from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
 from ...utils.deprecation import deprecate_kwarg
 
