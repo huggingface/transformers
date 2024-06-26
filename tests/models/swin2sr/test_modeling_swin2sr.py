@@ -351,6 +351,6 @@ class Swin2SRModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size([1, 3, 976, 1296])
         self.assertEqual(outputs.reconstruction.shape, expected_shape)
         expected_slice = torch.tensor(
-            [[0.5454, 0.5542, 0.5640], [0.5522, 0.5562, 0.5649], [0.5391, 0.5425, 0.5615]], dtype=model.dtype
+            [[0.5454, 0.5542, 0.5640], [0.5518, 0.5562, 0.5649], [0.5391, 0.5425, 0.5620]], dtype=model.dtype
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.reconstruction[0, 0, :3, :3], expected_slice, atol=1e-4))

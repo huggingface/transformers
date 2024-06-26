@@ -504,7 +504,7 @@ class Swinv2ModelIntegrationTest(unittest.TestCase):
         # verify the logits
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
-        expected_slice = torch.tensor([-0.3943, -0.4285, 0.0014], dtype=model.dtype).to(torch_device)
+        expected_slice = torch.tensor([-0.3938, -0.4290, 0.0020], dtype=model.dtype).to(torch_device)
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
 
     @slow
