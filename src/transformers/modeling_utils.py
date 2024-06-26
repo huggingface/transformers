@@ -103,9 +103,9 @@ from .utils.quantization_config import BitsAndBytesConfig, QuantizationMethod
 
 
 try:
-    from typing import Unpack
+    from typing import Unpack  # noqa: F401
 except ImportError:
-    pass
+    from typing_extensions import Unpack  # noqa: F401
 
 
 XLA_USE_BF16 = os.environ.get("XLA_USE_BF16", "0").upper()
