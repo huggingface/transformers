@@ -61,6 +61,7 @@ _EXPECTED_OUTPUT_SHAPE = [1, 292, 1024]
 _CTC_EXPECTED_OUTPUT = "'mister quilter is the apposl of the midle classes and weare glad to welcom his gosepl'"
 _CTC_EXPECTED_LOSS = 17.17
 
+
 @dataclass
 class UniSpeechForPreTrainingOutput(ModelOutput):
     """
@@ -694,6 +695,7 @@ class UniSpeechFlashAttention2(UniSpeechAttention):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
+
 
 class UniSpeechSdpaAttention(UniSpeechAttention):
     # Copied from transformers.models.bart.modeling_bart.BartSdpaAttention.forward with Bart->UniSpeech

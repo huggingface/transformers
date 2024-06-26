@@ -78,9 +78,6 @@ _XVECTOR_CHECKPOINT = "microsoft/unispeech-sat-base-plus-sv"
 _XVECTOR_EXPECTED_OUTPUT = 0.97
 
 
-
-
-
 @dataclass
 class UniSpeechSatForPreTrainingOutput(ModelOutput):
     """
@@ -715,6 +712,7 @@ class UniSpeechSatFlashAttention2(UniSpeechSatAttention):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
+
 
 class UniSpeechSatSdpaAttention(UniSpeechSatAttention):
     # Copied from transformers.models.bart.modeling_bart.BartSdpaAttention.forward with Bart->UniSpeechSat

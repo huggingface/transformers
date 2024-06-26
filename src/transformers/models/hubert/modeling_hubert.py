@@ -42,7 +42,6 @@ if is_flash_attn_2_available():
     from ...flash_attention_utils import _flash_attention_forward
 
 
-
 logger = logging.get_logger(__name__)
 
 _HIDDEN_STATES_START_POSITION = 1
@@ -660,6 +659,7 @@ class HubertFlashAttention2(HubertAttention):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
+
 
 class HubertSdpaAttention(HubertAttention):
     # Copied from transformers.models.bart.modeling_bart.BartSdpaAttention.forward with Bart->Hubert

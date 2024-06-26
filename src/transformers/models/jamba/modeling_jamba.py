@@ -160,7 +160,6 @@ def load_balancing_loss_func(
     return overall_loss * num_experts
 
 
-
 # Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Jamba
 class JambaRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
@@ -377,7 +376,6 @@ class JambaFlashAttention2(JambaAttention):
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -403,7 +401,6 @@ class JambaFlashAttention2(JambaAttention):
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         kv_seq_len = cache_position[-1]
-
 
         if past_key_value is not None:
             # Activate slicing cache only if the config has a value `sliding_windows` attribute
@@ -473,8 +470,8 @@ class JambaFlashAttention2(JambaAttention):
             attention_mask,
             q_len,
             dropout=dropout_rate,
-            sliding_window=getattr(self.config, "sliding_window", None) ,
-            cache_position=cache_position
+            sliding_window=getattr(self.config, "sliding_window", None),
+            cache_position=cache_position,
         )
 
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
@@ -484,6 +481,7 @@ class JambaFlashAttention2(JambaAttention):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
+
 
 # Adapted from transformers.models.mistral.modeling_mistral.MistralSdpaAttention with Mistral->Jamba
 class JambaSdpaAttention(JambaAttention):

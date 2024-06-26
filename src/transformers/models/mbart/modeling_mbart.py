@@ -60,8 +60,6 @@ _CONFIG_FOR_DOC = "MBartConfig"
 _EXPECTED_OUTPUT_SHAPE = [1, 8, 1024]
 
 
-
-
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int):
     """
     Shift input ids one token to the right, and wrap the last non pad token (the <LID> token) Note that MBart does not
@@ -388,6 +386,7 @@ class MBartFlashAttention2(MBartAttention):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
+
 
 MBART_ATTENTION_CLASSES = {
     "eager": MBartAttention,

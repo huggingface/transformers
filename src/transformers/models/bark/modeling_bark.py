@@ -63,7 +63,6 @@ _CHECKPOINT_FOR_DOC = "suno/bark-small"
 _CONFIG_FOR_DOC = "BarkConfig"
 
 
-
 class BarkSelfAttention(nn.Module):
     # adapted from GPTNeoSelfAttention and Bark code
     # BarkSelfAttention can have two attention type, i.e full attention or causal attention
@@ -259,6 +258,7 @@ class BarkSelfFlashAttention2(BarkSelfAttention):
             outputs += (attn_weights,)
 
         return outputs
+
 
 BARK_ATTENTION_CLASSES = {
     "eager": BarkSelfAttention,

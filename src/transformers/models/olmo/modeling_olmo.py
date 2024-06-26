@@ -56,8 +56,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "OlmoConfig"
 
 
-
-
 class OlmoLayerNorm(nn.Module):
     """LayerNorm but with no learnable weight or bias."""
 
@@ -338,7 +336,6 @@ class OlmoFlashAttention2(OlmoAttention):
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -423,6 +420,7 @@ class OlmoFlashAttention2(OlmoAttention):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
+
 
 class OlmoSdpaAttention(OlmoAttention):
     """

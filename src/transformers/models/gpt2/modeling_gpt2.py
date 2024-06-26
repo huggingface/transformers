@@ -428,9 +428,7 @@ class GPT2FlashAttention2(GPT2Attention):
             key = key.to(target_dtype)
             value = value.to(target_dtype)
 
-        attn_output = _flash_attention_forward(
-            query, key, value, attention_mask, query_length, dropout=attn_dropout
-        )
+        attn_output = _flash_attention_forward(query, key, value, attention_mask, query_length, dropout=attn_dropout)
 
         attn_weights_reshaped = attn_output.reshape(bsz, query_length, self.num_heads * self.head_dim)
         attn_output = self.c_proj(attn_weights_reshaped)
@@ -441,6 +439,7 @@ class GPT2FlashAttention2(GPT2Attention):
             outputs += (attn_weights_reshaped,)
 
         return outputs
+
 
 class GPT2MLP(nn.Module):
     def __init__(self, intermediate_size, config):

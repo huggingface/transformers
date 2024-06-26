@@ -204,7 +204,6 @@ def load_balancing_loss_func(
     return overall_loss * num_experts
 
 
-
 class DbrxAttention(nn.Module):
     """Multi-head self attention."""
 
@@ -426,6 +425,7 @@ class DbrxFlashAttention2(DbrxAttention):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
+
 
 class DbrxSdpaAttention(DbrxAttention):
     """

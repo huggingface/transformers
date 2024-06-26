@@ -59,8 +59,6 @@ _CHECKPOINT_FOR_DOC = "microsoft/phi-1"
 _CONFIG_FOR_DOC = "PhiConfig"
 
 
-
-
 # Copied from transformers.models.mixtral.modeling_mixtral.MixtralRotaryEmbedding with Mixtral->Phi
 class PhiRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
@@ -390,8 +388,6 @@ class PhiFlashAttention2(PhiAttention):
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -492,6 +488,7 @@ class PhiFlashAttention2(PhiAttention):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
+
 
 class PhiSdpaAttention(PhiAttention):
     def __init__(self, *args, **kwargs):

@@ -270,8 +270,6 @@ class Idefics2VisionFlashAttention2(Idefics2VisionAttention):
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -645,9 +643,6 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-
-
-
 # Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Idefics2
 class Idefics2RMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
@@ -882,6 +877,7 @@ class Idefics2PerceiverFlashAttention2(Idefics2PerceiverAttention):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
+
 
 IDEFICS2_PERCEIVER_ATTENTION_CLASSES = {
     "eager": Idefics2PerceiverAttention,

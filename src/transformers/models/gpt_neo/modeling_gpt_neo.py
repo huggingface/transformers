@@ -67,7 +67,6 @@ _CONFIG_FOR_DOC = "GPTNeoConfig"
 _CHECKPOINT_FOR_DOC = "EleutherAI/gpt-neo-1.3B"
 
 
-
 def load_tf_weights_in_gpt_neo(model, config, gpt_neo_checkpoint_path):
     """Load tf checkpoints in a pytorch model"""
     try:
@@ -280,7 +279,6 @@ class GPTNeoFlashAttention2(GPTNeoSelfAttention):
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-
     def forward(
         self,
         hidden_states,
@@ -360,6 +358,7 @@ class GPTNeoFlashAttention2(GPTNeoSelfAttention):
             outputs += (attn_weights_reshaped,)
 
         return outputs
+
 
 GPT_NEO_ATTENTION_CLASSES = {
     "eager": GPTNeoSelfAttention,

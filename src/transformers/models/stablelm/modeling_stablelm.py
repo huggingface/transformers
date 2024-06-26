@@ -56,8 +56,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "StableLmConfig"
 
 
-
-
 # Copied from transformers.models.mixtral.modeling_mixtral.MixtralRotaryEmbedding with Mixtral->StableLm
 class StableLmRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
@@ -502,8 +500,6 @@ class StableLmFlashAttention2(StableLmAttention):
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -589,6 +585,7 @@ class StableLmFlashAttention2(StableLmAttention):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
+
 
 ATTENTION_CLASSES = {
     "eager": StableLmAttention,

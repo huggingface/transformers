@@ -145,6 +145,7 @@ def load_balancing_loss_func(
     overall_loss = torch.sum(tokens_per_expert * router_prob_per_expert.unsqueeze(0))
     return overall_loss * num_experts
 
+
 # Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Mixtral
 class MixtralRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
@@ -386,7 +387,6 @@ class MixtralFlashAttention2(MixtralAttention):
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -513,6 +513,7 @@ class MixtralFlashAttention2(MixtralAttention):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
+
 
 # copied from transformers.models.mistral.modeling_mistral.MistralSdpaAttention with Mistral->Mixtral
 # TODO @longjie no longer copied from Mistral after static cache

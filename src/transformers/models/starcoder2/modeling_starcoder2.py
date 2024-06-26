@@ -56,8 +56,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "Starcoder2Config"
 
 
-
-
 # Copied from transformers.models.mixtral.modeling_mixtral.MixtralRotaryEmbedding with Mixtral->Starcoder2
 class Starcoder2RotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
@@ -410,6 +408,7 @@ class Starcoder2FlashAttention2(Starcoder2Attention):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
+
 
 # Copied from transformers.models.mixtral.modeling_mixtral.MixtralSdpaAttention with Mixtral->Starcoder2
 class Starcoder2SdpaAttention(Starcoder2Attention):

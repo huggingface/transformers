@@ -93,8 +93,6 @@ _XVECTOR_CHECKPOINT = "anton-l/wav2vec2-base-superb-sv"
 _XVECTOR_EXPECTED_OUTPUT = 0.98
 
 
-
-
 @dataclass
 class Wav2Vec2ForPreTrainingOutput(ModelOutput):
     """
@@ -761,6 +759,7 @@ class Wav2Vec2FlashAttention2(Wav2Vec2Attention):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
+
 
 class Wav2Vec2SdpaAttention(Wav2Vec2Attention):
     # Copied from transformers.models.bart.modeling_bart.BartSdpaAttention.forward with Bart->Wav2Vec2

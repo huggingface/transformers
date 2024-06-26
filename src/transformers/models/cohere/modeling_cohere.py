@@ -392,6 +392,7 @@ class CohereFlashAttention2(CohereAttention):
 
         return attn_output, attn_weights, past_key_value
 
+
 # Copied from transformers.models.llama.modeling_llama.LlamaSdpaAttention Llama->Cohere
 class CohereSdpaAttention(CohereAttention):
     """

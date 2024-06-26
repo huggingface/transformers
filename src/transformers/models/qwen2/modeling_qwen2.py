@@ -51,14 +51,11 @@ if is_flash_attn_2_available():
     from ...flash_attention_utils import _flash_attention_forward
 
 
-
 logger = logging.get_logger(__name__)
 
 
 _CHECKPOINT_FOR_DOC = "Qwen/Qwen2-7B-beta"
 _CONFIG_FOR_DOC = "Qwen2Config"
-
-
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Qwen2
@@ -310,7 +307,6 @@ class Qwen2FlashAttention2(Qwen2Attention):
     config.max_window_layers layers.
     """
 
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -345,7 +341,6 @@ class Qwen2FlashAttention2(Qwen2Attention):
         cos, sin = self.rotary_emb(value_states, seq_len=rotary_seq_len)
 
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
-
 
         if past_key_value is not None:
             # Activate slicing cache only if the config has a value `sliding_windows` attribute
@@ -419,7 +414,7 @@ class Qwen2FlashAttention2(Qwen2Attention):
             q_len,
             dropout=dropout_rate,
             sliding_window=sliding_window,
-            cache_position=kv_seq_len
+            cache_position=kv_seq_len,
         )
 
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
@@ -429,6 +424,7 @@ class Qwen2FlashAttention2(Qwen2Attention):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
+
 
 # Copied from transformers.models.mixtral.modeling_mixtral.MixtralSdpaAttention with Mixtral->Qwen2
 class Qwen2SdpaAttention(Qwen2Attention):

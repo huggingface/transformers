@@ -59,8 +59,6 @@ _SEQ_CLASS_EXPECTED_LOSS = 1.71
 _SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_0'"
 
 
-
-
 class OPTLearnedPositionalEmbedding(nn.Embedding):
     """
     This module learns positional embeddings up to a fixed maximum size.
@@ -248,7 +246,6 @@ class OptFlashAttention2(OPTAttention):
     attention and deal with padding tokens in case the input contains any of them.
     """
 
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -343,6 +340,7 @@ class OptFlashAttention2(OPTAttention):
             attn_weights_reshaped = None
 
         return attn_output, attn_weights_reshaped, past_key_value
+
 
 OPT_ATTENTION_CLASSES = {
     "eager": OPTAttention,

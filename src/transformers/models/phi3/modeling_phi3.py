@@ -71,9 +71,6 @@ class Phi3RMSNorm(nn.Module):
         return self.weight * hidden_states.to(input_dtype)
 
 
-
-
-
 # Copied from transformers.models.gemma.modeling_gemma.GemmaRotaryEmbedding with gemma->phi3, Gemma->Phi3
 class Phi3RotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
@@ -396,7 +393,6 @@ class Phi3FlashAttention2(Phi3Attention):
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -440,7 +436,6 @@ class Phi3FlashAttention2(Phi3Attention):
         cos, sin = self.rotary_emb(value_states, position_ids, seq_len=rotary_seq_len)
 
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
-
 
         if past_key_value is not None:
             # Activate slicing cache only if the config has a value `sliding_windows` attribute
@@ -515,7 +510,7 @@ class Phi3FlashAttention2(Phi3Attention):
             q_len,
             dropout=attn_dropout,
             sliding_window=getattr(self.config, "sliding_window", None),
-            cache_position=kv_seq_len
+            cache_position=kv_seq_len,
         )
 
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
@@ -525,6 +520,7 @@ class Phi3FlashAttention2(Phi3Attention):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
+
 
 # copied from transformers.models.llama.modeling_llama.LlamaSdpaAttention with Llama->Phi3
 # TODO @Arthur no longer copied from LLama after static cache

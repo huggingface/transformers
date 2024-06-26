@@ -66,7 +66,6 @@ _CTC_EXPECTED_OUTPUT = "'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND
 _CTC_EXPECTED_LOSS = 66.95
 
 
-
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2._compute_mask_indices
 def _compute_mask_indices(
     shape: Tuple[int, int],
@@ -590,6 +589,7 @@ class Data2VecAudioFlashAttention2(Data2VecAudioAttention):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
+
 
 class Data2VecAudioSdpaAttention(Data2VecAudioAttention):
     # Copied from transformers.models.bart.modeling_bart.BartSdpaAttention.forward with Bart->Data2VecAudio

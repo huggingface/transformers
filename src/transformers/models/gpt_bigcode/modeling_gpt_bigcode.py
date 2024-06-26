@@ -276,8 +276,6 @@ class GPTBigCodeFlashAttention2(GPTBigCodeAttention):
     API of flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -359,9 +357,7 @@ class GPTBigCodeFlashAttention2(GPTBigCodeAttention):
             key = key.to(target_dtype)
             value = value.to(target_dtype)
 
-        attn_output = _flash_attention_forward(
-            query, key, value, attention_mask, query_length, dropout=attn_dropout
-        )
+        attn_output = _flash_attention_forward(query, key, value, attention_mask, query_length, dropout=attn_dropout)
 
         attn_weights_reshaped = attn_output.reshape(batch_size, query_length, self.num_heads * self.head_dim)
         attn_output = self.c_proj(attn_weights_reshaped)
@@ -379,6 +375,7 @@ class GPTBigCodeFlashAttention2(GPTBigCodeAttention):
         outputs += (attn_weights_reshaped,)
 
         return outputs  # a, present, (attentions)
+
 
 class GPTBigCodeSdpaAttention(GPTBigCodeAttention):
     def _attn(self, query, key, value, attention_mask=None, head_mask=None):

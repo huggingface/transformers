@@ -660,6 +660,7 @@ class SEWFlashAttention2(SEWAttention):
 
         return attn_output, attn_weights, past_key_value
 
+
 class SEWSdpaAttention(SEWAttention):
     # Copied from transformers.models.bart.modeling_bart.BartSdpaAttention.forward with Bart->SEW
     def forward(

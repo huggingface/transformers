@@ -488,6 +488,7 @@ class WhisperFlashAttention2(WhisperAttention):
 
         return attn_output, attn_weights, past_key_value
 
+
 class WhisperSdpaAttention(WhisperAttention):
     # Copied from transformers.models.bart.modeling_bart.BartSdpaAttention.forward with BART->whisper, Bart->Whisper
     def forward(

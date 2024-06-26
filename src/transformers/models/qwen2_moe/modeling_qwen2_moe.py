@@ -134,8 +134,6 @@ def load_balancing_loss_func(
     return overall_loss * num_experts
 
 
-
-
 # Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Qwen2Moe
 class Qwen2MoeRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
@@ -388,7 +386,6 @@ class Qwen2MoeFlashAttention2(Qwen2MoeAttention):
     config.max_window_layers layers.
     """
 
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -506,6 +503,7 @@ class Qwen2MoeFlashAttention2(Qwen2MoeAttention):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
+
 
 # Copied from transformers.models.mixtral.modeling_mixtral.MixtralSdpaAttention with Mixtral->Qwen2Moe
 class Qwen2MoeSdpaAttention(Qwen2MoeAttention):

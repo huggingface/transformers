@@ -514,8 +514,6 @@ class FalconFlashAttention2(FalconAttention):
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -600,6 +598,7 @@ class FalconFlashAttention2(FalconAttention):
             attn_weights = None
 
         return attn_output, past_key_value, attn_weights
+
 
 class FalconMLP(nn.Module):
     def __init__(self, config: FalconConfig):

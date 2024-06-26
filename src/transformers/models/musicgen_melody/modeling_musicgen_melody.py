@@ -59,7 +59,6 @@ _CONFIG_FOR_DOC = "MusicgenMelodyConfig"
 _CHECKPOINT_FOR_DOC = "facebook/musicgen-melody"
 
 
-
 @dataclass
 class MusicgenMelodyOutputWithPast(ModelOutput):
     """
@@ -437,6 +436,7 @@ class MusicgenMelodyFlashAttention2(MusicgenMelodyAttention):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
+
 
 # Copied from transformers.models.bart.modeling_bart.BartSdpaAttention with Bart->MusicgenMelody
 class MusicgenMelodySdpaAttention(MusicgenMelodyAttention):

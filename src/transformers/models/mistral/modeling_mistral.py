@@ -274,8 +274,6 @@ class MistralFlashAttention2(MistralAttention):
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-
-
     def forward(
         self,
         hidden_states: torch.Tensor,

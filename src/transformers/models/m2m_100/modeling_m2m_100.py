@@ -333,8 +333,6 @@ class M2M100Attention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-
-
 class M2M100FlashAttention2(M2M100Attention):
     def __init__(
         self,
@@ -423,6 +421,7 @@ class M2M100FlashAttention2(M2M100Attention):
         attn_output = self.out_proj(attn_output)
 
         return attn_output, None, past_key_value
+
 
 # Copied from transformers.models.mbart.modeling_mbart.MBartEncoderLayer with MBart->M2M100, MBART->M2M100
 class M2M100EncoderLayer(nn.Module):

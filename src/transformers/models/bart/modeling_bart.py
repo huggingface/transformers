@@ -76,7 +76,6 @@ _QA_EXPECTED_LOSS = 0.59
 _QA_EXPECTED_OUTPUT = "' nice puppet'"
 
 
-
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
     """
     Shift input ids one token to the right.
@@ -293,7 +292,6 @@ class BartFlashAttention2(BartAttention):
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-
     def _reshape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim)
 
@@ -396,6 +394,7 @@ class BartFlashAttention2(BartAttention):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
+
 
 class BartSdpaAttention(BartAttention):
     def forward(

@@ -62,9 +62,6 @@ _CONFIG_FOR_DOC = "DistilBertConfig"
 # UTILS AND BUILDING BLOCKS OF THE ARCHITECTURE #
 
 
-
-
-
 def create_sinusoidal_embeddings(n_pos: int, dim: int, out: torch.Tensor):
     if is_deepspeed_zero3_enabled():
         import deepspeed
@@ -241,7 +238,6 @@ class DistilBertFlashAttention2(MultiHeadSelfAttention):
     API of flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-
     def forward(
         self,
         query: torch.Tensor,
@@ -314,6 +310,7 @@ class DistilBertFlashAttention2(MultiHeadSelfAttention):
             return (attn_output, attn_weights)
         else:
             return (attn_output,)
+
 
 class FFN(nn.Module):
     def __init__(self, config: PretrainedConfig):

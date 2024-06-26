@@ -356,6 +356,7 @@ class JetMoeMoA(nn.Module):
     def forward(self, layer_input):
         raise NotImplementedError("This module doesn't support call and forward.")
 
+
 # Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->JetMoe
 class JetMoeRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
@@ -737,6 +738,7 @@ class JetMoeFlashAttention2(JetMoeAttention):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value, router_logits
+
 
 JETMOE_ATTENTION_CLASSES = {
     "eager": JetMoeAttention,

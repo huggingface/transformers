@@ -67,9 +67,6 @@ _CONFIG_FOR_DOC = "MusicgenConfig"
 _CHECKPOINT_FOR_DOC = "facebook/musicgen-small"
 
 
-
-
-
 @dataclass
 class MusicgenUnconditionalInput(ModelOutput):
     """
@@ -423,6 +420,7 @@ class MusicgenFlashAttention2(MusicgenAttention):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
+
 
 class MusicgenSdpaAttention(MusicgenAttention):
     def forward(
