@@ -1356,6 +1356,7 @@ class Qwen2MoeForCausalLM(Qwen2MoePreTrainedModel):
         output_router_logits: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        num_logits_to_keep: Optional[int] = None,
     ) -> Union[Tuple, MoeCausalLMOutputWithPast]:
         r"""
         Args:
@@ -1363,6 +1364,11 @@ class Qwen2MoeForCausalLM(Qwen2MoePreTrainedModel):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
                 (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+            num_logits_to_keep (`int` or `None`, *optional*):
+                    Calculate logits for the last `num_logits_to_keep` tokens. If `None`, calculate logits for all
+                    `input_ids`. Only last token logits are needed for generation, and calculating them only for that token
+                    can save memory, which becomes pretty significant for long sequences.
 
         Returns:
 
@@ -1408,11 +1414,21 @@ class Qwen2MoeForCausalLM(Qwen2MoePreTrainedModel):
         )
 
         hidden_states = outputs[0]
-        logits = self.lm_head(hidden_states)
-        logits = logits.float()
+        if labels is None:
+            logger.warning_once(
+                "Starting from v4.44, the `logits` model output will have the same type as the model (except at train time, where it will always be FP32)"
+            )
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        # TODO: remove those 2 float() operations in v4.44
+        if num_logits_to_keep is None:
+            logits = self.lm_head(hidden_states).float()
+        else:
+            logits = self.lm_head(hidden_states[:, -num_logits_to_keep:, :]).float()
 
         loss = None
         if labels is not None:
+            # Upcast to float if we need to compute the loss to avoid potential precision issues
+            logits = logits.float()
             # Shift so that tokens < n predict n
             shift_logits = logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
@@ -1459,6 +1475,7 @@ class Qwen2MoeForCausalLM(Qwen2MoePreTrainedModel):
         inputs_embeds=None,
         cache_position=None,
         use_cache=True,
+        num_logits_to_keep=None,
         **kwargs,
     ):
         past_length = 0
@@ -1520,6 +1537,7 @@ class Qwen2MoeForCausalLM(Qwen2MoePreTrainedModel):
                 "use_cache": use_cache,
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
+                "num_logits_to_keep": num_logits_to_keep,
             }
         )
         return model_inputs
