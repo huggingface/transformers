@@ -53,8 +53,6 @@ from .configuration_starcoder2 import Starcoder2Config
 if is_flash_attn_2_available():
     from ...flash_attention_utils import _flash_attention_forward
 
-    _flash_supports_window_size = "window_size" in list(inspect.signature(flash_attn_func).parameters)
-
 
 logger = logging.get_logger(__name__)
 
@@ -343,17 +341,6 @@ class Starcoder2FlashAttention2(Starcoder2Attention):
 
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
-        use_sliding_windows = (
-            _flash_supports_window_size
-            and getattr(self.config, "sliding_window", None) is not None
-            and kv_seq_len > self.config.sliding_window
-        )
-
-        if not _flash_supports_window_size:
-            logger.warning_once(
-                "The current flash attention version does not support sliding window attention, for a more memory efficient implementation"
-                " make sure to upgrade flash-attn library."
-            )
 
         if past_key_value is not None:
             # Activate slicing cache only if the config has a value `sliding_windows` attribute
@@ -424,7 +411,8 @@ class Starcoder2FlashAttention2(Starcoder2Attention):
             attention_mask,
             q_len,
             dropout=dropout_rate,
-            use_sliding_windows=use_sliding_windows,
+            sliding_windows=getattr(self.config, "sliding_window", None) ,
+            cache_position=kv_seq_len
         )
 
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()

@@ -50,8 +50,6 @@ from .configuration_phi3 import Phi3Config
 if is_flash_attn_2_available():
     from ...flash_attention_utils import _flash_attention_forward
 
-    _flash_supports_window_size = "window_size" in list(inspect.signature(flash_attn_func).parameters)
-
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "microsoft/Phi-3-mini-4k-instruct"

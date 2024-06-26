@@ -53,7 +53,6 @@ from .configuration_qwen2 import Qwen2Config
 if is_flash_attn_2_available():
     from ...flash_attention_utils import _flash_attention_forward
 
-    _flash_supports_window_size = "window_size" in list(inspect.signature(flash_attn_func).parameters)
 
 
 logger = logging.get_logger(__name__)
@@ -358,18 +357,6 @@ class Qwen2FlashAttention2(Qwen2Attention):
 
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
-        use_sliding_windows = (
-            _flash_supports_window_size
-            and getattr(self.config, "sliding_window", None) is not None
-            and kv_seq_len > self.config.sliding_window
-            and self.config.use_sliding_window
-        )
-
-        if not _flash_supports_window_size:
-            logger.warning_once(
-                "The current flash attention version does not support sliding window attention, for a more memory efficient implementation"
-                " make sure to upgrade flash-attn library."
-            )
 
         if past_key_value is not None:
             # Activate slicing cache only if the config has a value `sliding_windows` attribute
@@ -432,6 +419,8 @@ class Qwen2FlashAttention2(Qwen2Attention):
         query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
+        
+        sliding_window = self.sliding_window if self.layer_idx >= self.config.max_window_layers else None
 
         attn_output = _flash_attention_forward(
             query_states,
@@ -440,7 +429,8 @@ class Qwen2FlashAttention2(Qwen2Attention):
             attention_mask,
             q_len,
             dropout=dropout_rate,
-            use_sliding_windows=use_sliding_windows,
+            sliding_window=sliding_window,
+            cache_position=kv_seq_len
         )
 
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()

@@ -60,7 +60,6 @@ _CONFIG_FOR_DOC = "StableLmConfig"
 
 
 
-
 # Copied from transformers.models.mixtral.modeling_mixtral.MixtralRotaryEmbedding with Mixtral->StableLm
 class StableLmRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
