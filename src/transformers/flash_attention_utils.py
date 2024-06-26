@@ -4,13 +4,13 @@ from .utils import (
 )
 import torch
 import torch.nn.functionnal as F
-
-if is_flash_attn_2_available():
-    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
-
+import inspect
 
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
+    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
+
+    _flash_supports_window_size = "window_size" in list(inspect.signature(flash_attn_func).parameters)
 
 
 def _get_unpad_data(attention_mask):
@@ -74,6 +74,8 @@ def _flash_attention_forward(
     softmax_scale=None,
     is_causal=False,
     _flash_attn_uses_top_left_mask=False,
+    sliding_window=None,
+    cache_position=0,
     **kwargs,
 ):
     """
@@ -101,6 +103,10 @@ def _flash_attention_forward(
         # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in LlamaFlashAttention2 __init__.
         causal = is_causal and query_length != 1
 
+    use_sliding_windows = (
+        _flash_supports_window_size and sliding_window is not None and cache_position > sliding_window
+    )
+    flash_kwargs = {"window_size": (sliding_window, sliding_window)} if use_sliding_windows else {}
     # Contains at least one padding token in the sequence
     if attention_mask is not None:
         batch_size = query_states.shape[0]
@@ -128,12 +134,13 @@ def _flash_attention_forward(
             dropout_p=dropout,
             softmax_scale=softmax_scale,
             causal=causal,
+            **flash_kwargs,
         )
         if unpad_inputs:
             attn_output = _pad_input(attn_output_unpad, indices_q, batch_size, query_length)
     else:
         attn_output = flash_attn_func(
-            query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=causal
+            query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=causal, **flash_kwargs
         )
 
     return attn_output
