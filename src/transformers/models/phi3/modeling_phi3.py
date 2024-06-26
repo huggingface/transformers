@@ -126,22 +126,52 @@ class Phi3SuScaledRotaryEmbedding(Phi3RotaryEmbedding):
     def __init__(self, dim, config, device=None):
         super().__init__(dim, config.max_position_embeddings, config.rope_theta, device)
 
+        self._short_factor = None
+        self._long_factor = None
+
         self.short_factor = config.rope_scaling["short_factor"]
         self.long_factor = config.rope_scaling["long_factor"]
+
         self.original_max_position_embeddings = config.original_max_position_embeddings
+
+    @property
+    def short_factor(self):
+        return self._short_factor
+
+    @short_factor.setter
+    def short_factor(self, value):
+        self._short_factor = value
+
+        inv_freq_shape = torch.arange(0, self.dim, 2, dtype=torch.int64).float() / self.dim
+
+        short_factor = torch.tensor(value, dtype=torch.float32)
+        short_inv_freq = 1.0 / (short_factor * self.base**inv_freq_shape)
+        self.register_buffer("short_inv_freq", short_inv_freq, persistent=False)
+
+    @property
+    def long_factor(self):
+        return self._long_factor
+
+    @long_factor.setter
+    def long_factor(self, value):
+        self._long_factor = value
+
+        inv_freq_shape = torch.arange(0, self.dim, 2, dtype=torch.int64).float() / self.dim
+
+        long_factor = torch.tensor(value, dtype=torch.float32)
+        long_inv_freq = 1.0 / (long_factor * self.base**inv_freq_shape)
+        self.register_buffer("long_inv_freq", long_inv_freq, persistent=False)
 
     @torch.no_grad()
     def forward(self, x, position_ids, seq_len=None):
         seq_len = torch.max(position_ids) + 1
+
         if seq_len > self.original_max_position_embeddings:
-            ext_factors = torch.tensor(self.long_factor, dtype=torch.float32, device=x.device)
+            inv_freq = self.long_inv_freq
         else:
-            ext_factors = torch.tensor(self.short_factor, dtype=torch.float32, device=x.device)
+            inv_freq = self.short_inv_freq
 
-        inv_freq_shape = torch.arange(0, self.dim, 2, dtype=torch.int64, device=x.device).float() / self.dim
-        self.inv_freq = 1.0 / (ext_factors * self.base**inv_freq_shape)
-
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
 
         # Force float32 since bfloat16 loses precision on long contexts
@@ -167,22 +197,52 @@ class Phi3YarnScaledRotaryEmbedding(Phi3RotaryEmbedding):
     def __init__(self, dim, config, device=None):
         super().__init__(dim, config.max_position_embeddings, config.rope_theta, device)
 
+        self._short_factor = None
+        self._long_factor = None
+
         self.short_factor = config.rope_scaling["short_factor"]
         self.long_factor = config.rope_scaling["long_factor"]
+
         self.original_max_position_embeddings = config.original_max_position_embeddings
+
+    @property
+    def short_factor(self):
+        return self._short_factor
+
+    @short_factor.setter
+    def short_factor(self, value):
+        self._short_factor = value
+
+        inv_freq_shape = torch.arange(0, self.dim, 2, dtype=torch.int64).float() / self.dim
+
+        short_factor = torch.tensor(value, dtype=torch.float32)
+        short_inv_freq = 1.0 / (short_factor * self.base**inv_freq_shape)
+        self.register_buffer("short_inv_freq", short_inv_freq, persistent=False)
+
+    @property
+    def long_factor(self):
+        return self._long_factor
+
+    @long_factor.setter
+    def long_factor(self, value):
+        self._long_factor = value
+
+        inv_freq_shape = torch.arange(0, self.dim, 2, dtype=torch.int64).float() / self.dim
+
+        long_factor = torch.tensor(value, dtype=torch.float32)
+        long_inv_freq = 1.0 / (long_factor * self.base**inv_freq_shape)
+        self.register_buffer("long_inv_freq", long_inv_freq, persistent=False)
 
     @torch.no_grad()
     def forward(self, x, position_ids, seq_len=None):
         seq_len = torch.max(position_ids) + 1
+
         if seq_len > self.original_max_position_embeddings:
-            ext_factors = torch.tensor(self.long_factor, dtype=torch.float32, device=x.device)
+            inv_freq = self.long_inv_freq
         else:
-            ext_factors = torch.tensor(self.short_factor, dtype=torch.float32, device=x.device)
+            inv_freq = self.short_inv_freq
 
-        inv_freq_shape = torch.arange(0, self.dim, 2, dtype=torch.int64, device=x.device).float() / self.dim
-        self.inv_freq = 1.0 / (ext_factors * self.base**inv_freq_shape)
-
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
 
         # Force float32 since bfloat16 loses precision on long contexts
