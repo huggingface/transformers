@@ -643,7 +643,7 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
             # print(trainer.model.b.item())
             # need to investigate at some point
             if (stage == ZERO3 and dtype == FP16) or (dtype == BF16):
-                self.skipTest("When using zero3/fp16 or any/bf16 the optimizer seems run oddly")
+                self.skipTest(reason="When using zero3/fp16 or any/bf16 the optimizer seems run oddly")
 
             # it's enough that train didn't fail for this test, but we must check that
             # optimizer/scheduler didn't run (since if it did this test isn't testing the right thing)
@@ -795,7 +795,7 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
         # ToDo: Currently, hf_optim + hf_scheduler resumes with the correct states and
         # also has same losses for few steps but then slowly diverges. Need to figure it out.
         if optim == HF_OPTIM and scheduler == HF_SCHEDULER:
-            self.skipTest("hf_optim + hf_scheduler resumes with the correct states but slowly diverges")
+            self.skipTest(reason="hf_optim + hf_scheduler resumes with the correct states but slowly diverges")
 
         output_dir = self.get_auto_remove_tmp_dir("./xxx", after=False)
         ds_config_dict = self.get_config_dict(stage)
@@ -1113,7 +1113,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
     @require_torch_multi_accelerator
     def test_inference(self, dtype):
         if dtype == "bf16" and not is_torch_bf16_available_on_device(torch_device):
-            self.skipTest("test requires bfloat16 hardware support")
+            self.skipTest(reason="test requires bfloat16 hardware support")
 
         # this is just inference, so no optimizer should be loaded
         # it only works for z3 (makes no sense with z1-z2)

@@ -470,7 +470,7 @@ class JetMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest("JetMoe flash attention does not support right padding")
+        self.skipTest(reason="JetMoe flash attention does not support right padding")
 
 
 @require_torch

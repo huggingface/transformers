@@ -164,7 +164,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 config = config_class()
 
                 if config.is_encoder_decoder or config.pad_token_id is None:
-                    self.skipTest("Model is an encoder-decoder or does not have a pad token id set")
+                    self.skipTest(reason="Model is an encoder-decoder or does not have a pad token id set")
 
                 model = model_class(config)
 
@@ -184,7 +184,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
-            self.skipTest("test_rust_tokenizer is set to False")
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         tokenizer = self.get_tokenizer()
         rust_tokenizer = self.get_rust_tokenizer()
@@ -846,7 +846,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 table = self.get_table(tokenizer, length=0)
                 if tokenizer.pad_token is None:
-                    self.skipTest("No padding token.")
+                    self.skipTest(reason="No padding token.")
                 else:
                     empty_tokens = tokenizer(table, padding=True, pad_to_multiple_of=8)
                     normal_tokens = tokenizer(table, "This is a sample input", padding=True, pad_to_multiple_of=8)
@@ -1059,7 +1059,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 config = config_class()
 
                 if config.is_encoder_decoder or config.pad_token_id is None:
-                    self.skipTest("Model is an encoder-decoder or has no padding token set.")
+                    self.skipTest(reason="Model is an encoder-decoder or has no padding token set.")
 
                 model = model_class(config)
 

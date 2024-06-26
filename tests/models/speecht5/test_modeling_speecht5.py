@@ -605,13 +605,13 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
     def test_resize_embeddings_untied(self):
         original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.test_resize_embeddings:
-            self.skipTest("test_resize_embeddings is set to False")
+            self.skipTest(reason="test_resize_embeddings is set to False")
 
         original_config.tie_word_embeddings = False
 
         # if model cannot untied embeddings -> leave test
         if original_config.tie_word_embeddings:
-            self.skipTest("Model cannot untie embeddings")
+            self.skipTest(reason="Model cannot untie embeddings")
 
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
@@ -651,7 +651,7 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
     def test_resize_tokens_embeddings(self):
         original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.test_resize_embeddings:
-            self.skipTest("test_resize_embeddings is set to False")
+            self.skipTest(reason="test_resize_embeddings is set to False")
 
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)

@@ -593,7 +593,7 @@ class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
     def _create_and_check_torch_fx_tracing(self, config, inputs_dict, output_loss=False):
         if not is_torch_fx_available() or not self.fx_compatible:
-            self.skipTest("torch.fx is not available or not compatible with this model")
+            self.skipTest(reason="torch.fx is not available or not compatible with this model")
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.return_dict = False

@@ -176,13 +176,13 @@ class FeatureExtractionPipelineTests(unittest.TestCase):
 
     def get_test_pipeline(self, model, tokenizer, processor):
         if tokenizer is None:
-            self.skipTest("No tokenizer")
+            self.skipTest(reason="No tokenizer")
         elif (
             type(model.config) in FEATURE_EXTRACTOR_MAPPING
             or isinstance(model.config, LxmertConfig)
             or type(model.config) in IMAGE_PROCESSOR_MAPPING
         ):
-            self.skipTest("This is a bimodal model, we need to find a more consistent way to switch on those models.")
+            self.skipTest(reason="This is a bimodal model, we need to find a more consistent way to switch on those models.")
         elif model.config.is_encoder_decoder:
             self.skipTest(
                 """encoder_decoder models are trickier for this pipeline.

@@ -614,7 +614,7 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         for model_class in self.all_model_classes:
             # BertForMultipleChoice behaves incorrectly in JIT environments.
             if model_class == BertForMultipleChoice:
-                self.skipTest("BertForMultipleChoice behaves incorrectly in JIT environments.")
+                self.skipTest(reason="BertForMultipleChoice behaves incorrectly in JIT environments.")
 
             config.torchscript = True
             model = model_class(config=config)

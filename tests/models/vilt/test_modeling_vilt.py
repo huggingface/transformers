@@ -272,7 +272,7 @@ class ViltModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def test_training(self):
         if not self.model_tester.is_training:
-            self.skipTest("model_tester.is_training is set to False.")
+            self.skipTest(reason="model_tester.is_training is set to False.")
 
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -296,7 +296,7 @@ class ViltModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def test_training_gradient_checkpointing(self):
         if not self.model_tester.is_training:
-            self.skipTest("model_tester.is_training is set to False.")
+            self.skipTest(reason="model_tester.is_training is set to False.")
 
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

@@ -343,7 +343,7 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     def test_retain_grad_hidden_states_attentions(self):
         if self.model_tester.attention_type == "block_sparse":
             # this test can't pass since attention matrix (which is getting returned) can't have gradients (& just 0 at many locations)
-            self.skipTest("Cannot pass since returned attention matrix can't have gradients")
+            self.skipTest(reason="Cannot pass since returned attention matrix can't have gradients")
         super().test_retain_grad_hidden_states_attentions()
 
     # BigBirdPegasusForSequenceClassification does not support inputs_embeds

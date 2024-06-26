@@ -525,7 +525,7 @@ class Qwen2MoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest("Qwen2Moe flash attention does not support right padding")
+        self.skipTest(reason="Qwen2Moe flash attention does not support right padding")
 
     # Ignore copy
     def test_load_balancing_loss(self):

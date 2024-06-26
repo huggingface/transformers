@@ -1354,7 +1354,7 @@ class ModelUtilsTest(TestCasePlus):
             self.assertIn("You may ignore this warning if your `pad_token_id`", cl.out)
 
         if not is_torchdynamo_available():
-            self.skipTest("torchdynamo is not available")
+            self.skipTest(reason="torchdynamo is not available")
         with self.subTest("Ensure that the warning code is skipped when compiling with torchdynamo."):
             logger.warning_once.cache_clear()
             from torch._dynamo import config, testing
@@ -2197,7 +2197,7 @@ class TestAttentionImplementation(unittest.TestCase):
 
     def test_not_available_flash(self):
         if is_flash_attn_2_available():
-            self.skipTest("Please uninstall flash-attn package to run test_not_available_flash")
+            self.skipTest(reason="Please uninstall flash-attn package to run test_not_available_flash")
 
         with self.assertRaises(ImportError) as cm:
             _ = AutoModel.from_pretrained(
@@ -2208,7 +2208,7 @@ class TestAttentionImplementation(unittest.TestCase):
 
     def test_not_available_flash_with_config(self):
         if is_flash_attn_2_available():
-            self.skipTest("Please uninstall flash-attn package to run test_not_available_flash")
+            self.skipTest(reason="Please uninstall flash-attn package to run test_not_available_flash")
 
         config = AutoConfig.from_pretrained("hf-internal-testing/tiny-random-GPTBigCodeModel")
 
@@ -2223,7 +2223,7 @@ class TestAttentionImplementation(unittest.TestCase):
 
     def test_not_available_sdpa(self):
         if is_torch_sdpa_available():
-            self.skipTest("This test requires torch<=2.0")
+            self.skipTest(reason="This test requires torch<=2.0")
 
         with self.assertRaises(ImportError) as cm:
             _ = AutoModel.from_pretrained(

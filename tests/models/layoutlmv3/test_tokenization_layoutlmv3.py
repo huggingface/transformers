@@ -694,7 +694,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_padding_warning_message_fast_tokenizer(self):
         if not self.test_rust_tokenizer:
-            self.skipTest("test_rust_tokenizer is set to False")
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         words, boxes = self.get_words_and_boxes_batch()
 
@@ -715,7 +715,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         )
 
         if not self.test_slow_tokenizer:
-            self.skipTest("test_rust_tokenizer is set to False")
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         tokenizer_slow = self.get_tokenizer()
 
@@ -883,7 +883,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 if tokenizer.pad_token is None:
-                    self.skipTest("No padding token.")
+                    self.skipTest(reason="No padding token.")
                 else:
                     words, boxes = self.get_words_and_boxes()
 
@@ -926,7 +926,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_build_inputs_with_special_tokens(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            self.skipTest("test_rust_tokenizer is set to False")
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
@@ -1174,7 +1174,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 config = config_class()
 
                 if config.is_encoder_decoder or config.pad_token_id is None:
-                    self.skipTest("Model is an encoder-decoder or has no pad token id set.")
+                    self.skipTest(reason="Model is an encoder-decoder or has no pad token id set.")
 
                 model = model_class(config)
 
@@ -1205,11 +1205,11 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
-            self.skipTest("test_rust_tokenizer is set to False")
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            self.skipTest("test_slow_tokenizer is set to False")
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         tokenizer = self.get_tokenizer()
         rust_tokenizer = self.get_rust_tokenizer()
@@ -1227,7 +1227,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_tokenization_python_rust_equals(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            self.skipTest("test_slow_tokenizer is set to False")
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
@@ -1281,7 +1281,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_embeded_special_tokens(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            self.skipTest("test_slow_tokenizer is set to False")
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
@@ -1471,7 +1471,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_training_new_tokenizer(self):
         # This feature only exists for fast tokenizers
         if not self.test_rust_tokenizer:
-            self.skipTest("test_rust_tokenizer is set to False")
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         tokenizer = self.get_rust_tokenizer()
         new_tokenizer = tokenizer.train_new_from_iterator(SMALL_TRAINING_CORPUS, 100)
@@ -1508,7 +1508,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_training_new_tokenizer_with_special_tokens_change(self):
         # This feature only exists for fast tokenizers
         if not self.test_rust_tokenizer:
-            self.skipTest("test_rust_tokenizer is set to False")
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         tokenizer = self.get_rust_tokenizer()
         # Test with a special tokens map
@@ -1621,7 +1621,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_padding_different_model_input_name(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            self.skipTest("test_slow_tokenizer is set to False")
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
@@ -2414,7 +2414,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 config = config_class()
 
                 if config.is_encoder_decoder or config.pad_token_id is None:
-                    self.skipTest("Model is an encoder-decoder or has no pad token id set.")
+                    self.skipTest(reason="Model is an encoder-decoder or has no pad token id set.")
 
                 model = model_class(config)
 

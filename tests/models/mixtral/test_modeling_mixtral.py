@@ -490,7 +490,7 @@ class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest("Mixtral flash attention does not support right padding")
+        self.skipTest(reason="Mixtral flash attention does not support right padding")
 
     # Ignore copy
     def test_load_balancing_loss(self):

@@ -390,7 +390,7 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         Overriding the test_mismatched_shapes_have_properly_initialized_weights test because A_log and D params of the
         Mamba block are initialized differently and we tested that in test_initialization
         """
-        self.skipTest("Cumbersome and redundant for Jamba")
+        self.skipTest(reason="Cumbersome and redundant for Jamba")
 
     def test_attention_outputs(self):
         r"""
@@ -638,7 +638,7 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         Overriding the test_flash_attn_2_inference_padding_right test as the Jamba model, like Mixtral, doesn't support
         right padding + use cache with FA2
         """
-        self.skipTest("Jamba flash attention does not support right padding")
+        self.skipTest(reason="Jamba flash attention does not support right padding")
 
     @unittest.skip(reason="Jamba has its own special cache type")
     @parameterized.expand([(1, False), (1, True), (4, False)])

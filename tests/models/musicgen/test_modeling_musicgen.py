@@ -205,7 +205,7 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
     def check_training_gradient_checkpointing(self, gradient_checkpointing_kwargs=None):
         if not self.model_tester.is_training:
-            self.skipTest("model_tester.is_training is set to False")
+            self.skipTest(reason="model_tester.is_training is set to False")
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.use_cache = False
@@ -625,7 +625,7 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     # Copied from tests.test_modeling_common.ModelTesterMixin.test_eager_matches_sdpa_inference
     def test_eager_matches_sdpa_inference(self, torch_dtype: str):
         if not self.has_attentions:
-            self.skipTest("Model architecture does not support attentions")
+            self.skipTest(reason="Model architecture does not support attentions")
 
         if not self.all_model_classes[0]._supports_sdpa:
             self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
@@ -1088,7 +1088,7 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
     def check_training_gradient_checkpointing(self, gradient_checkpointing_kwargs=None):
         if not self.model_tester.is_training:
-            self.skipTest("model_tester.is_training is set to False")
+            self.skipTest(reason="model_tester.is_training is set to False")
 
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1572,7 +1572,7 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
         # if no bos token id => cannot generate from None
         if config.bos_token_id is None:
-            self.skipTest("bos_token_id is None")
+            self.skipTest(reason="bos_token_id is None")
 
         for model_class in self.greedy_sample_model_classes:
             model = model_class(config).to(torch_device)
@@ -1940,7 +1940,7 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     # Copied from tests.test_modeling_common.ModelTesterMixin.test_eager_matches_sdpa_inference
     def test_eager_matches_sdpa_inference(self, torch_dtype: str):
         if not self.has_attentions:
-            self.skipTest("Model architecture does not support attentions")
+            self.skipTest(reason="Model architecture does not support attentions")
 
         if not self.all_model_classes[0]._supports_sdpa:
             self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")

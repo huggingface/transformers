@@ -253,7 +253,7 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 if tokenizer.pad_token is None:
-                    self.skipTest("No padding token.")
+                    self.skipTest(reason="No padding token.")
                 else:
                     empty_tokens = tokenizer("", padding=True, pad_to_multiple_of=8)
                     normal_tokens = tokenizer("This is a sample input", padding=True, pad_to_multiple_of=8)
@@ -286,7 +286,7 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @require_torch
     def test_prepare_seq2seq_batch(self):
         if not self.test_seq2seq:
-            self.skipTest("test_seq2seq is set to False")
+            self.skipTest(reason="test_seq2seq is set to False")
 
         tokenizers = self.get_tokenizers()
         for tokenizer in tokenizers:
@@ -316,7 +316,7 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         pad_to_multiple_of=None,
                     )
                 except NotImplementedError:
-                    self.skipTest("Encountered NotImplementedError when calling prepare_seq2seq_batch")
+                    self.skipTest(reason="Encountered NotImplementedError when calling prepare_seq2seq_batch")
                 self.assertEqual(batch.input_ids.shape[1], 3)
                 self.assertEqual(batch.labels.shape[1], 10)
 
@@ -390,7 +390,7 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_training_new_tokenizer(self):
         # This feature only exists for fast tokenizers
         if not self.test_rust_tokenizer:
-            self.skipTest("test_rust_tokenizer is set to False")
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         tokenizer = self.get_rust_tokenizer()
         new_tokenizer = tokenizer.train_new_from_iterator(SMALL_TRAINING_CORPUS, 100)

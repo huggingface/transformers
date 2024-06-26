@@ -163,7 +163,7 @@ class ModelOutputTester(unittest.TestCase):
     @require_torch
     def test_export_serialization(self):
         if not is_torch_greater_or_equal_than_2_2:
-            self.skipTest("Export serialization requires torch >= 2.2.0")
+            self.skipTest(reason="Export serialization requires torch >= 2.2.0")
 
         model_cls = AlbertForMaskedLM
         model_config = model_cls.config_class()

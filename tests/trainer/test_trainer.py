@@ -3668,7 +3668,7 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
     def test_push_to_hub_with_saves_each_n_steps(self):
         num_gpus = max(1, backend_device_count(torch_device))
         if num_gpus > 2:
-            self.skipTest("More than 2 GPUs available")
+            self.skipTest(reason="More than 2 GPUs available")
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             trainer = get_regression_trainer(

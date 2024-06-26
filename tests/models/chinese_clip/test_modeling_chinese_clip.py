@@ -625,7 +625,7 @@ class ChineseCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
-            self.skipTest("test_torchscript is set to False")
+            self.skipTest(reason="test_torchscript is set to False")
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.torchscript = True

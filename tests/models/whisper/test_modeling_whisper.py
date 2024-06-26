@@ -739,7 +739,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             inputs_dict,
         ) = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.test_resize_embeddings:
-            self.skipTest("test_resize_embeddings is False")
+            self.skipTest(reason="test_resize_embeddings is False")
 
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
@@ -787,13 +787,13 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             inputs_dict,
         ) = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.test_resize_embeddings:
-            self.skipTest("test_resize_embeddings is False")
+            self.skipTest(reason="test_resize_embeddings is False")
 
         original_config.tie_word_embeddings = False
 
         # if model cannot untied embeddings -> leave test
         if original_config.tie_word_embeddings:
-            self.skipTest("Model cannot untie embeddings")
+            self.skipTest(reason="Model cannot untie embeddings")
 
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
@@ -905,7 +905,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn_2:
-                self.skipTest("Model does not support Flash Attention 2")
+                self.skipTest(reason="Model does not support Flash Attention 2")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
@@ -951,7 +951,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn_2:
-                self.skipTest("Model does not support flash_attention_2")
+                self.skipTest(reason="Model does not support flash_attention_2")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
@@ -1000,7 +1000,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
-            self.skipTest("test_torchscript is set to False")
+            self.skipTest(reason="test_torchscript is set to False")
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.torchscript = True
@@ -1100,7 +1100,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 fx_model_class_name = "Flax" + model_class.__name__
 
                 if not hasattr(transformers, fx_model_class_name):
-                    self.skipTest("No Flax model exists for this class")
+                    self.skipTest(reason="No Flax model exists for this class")
 
                 # Output all for aggressive testing
                 config.output_hidden_states = True
@@ -1172,7 +1172,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 fx_model_class_name = "Flax" + model_class.__name__
 
                 if not hasattr(transformers, fx_model_class_name):
-                    self.skipTest("No Flax model exists for this class")
+                    self.skipTest(reason="No Flax model exists for this class")
 
                 # Output all for aggressive testing
                 config.output_hidden_states = True
@@ -3198,7 +3198,7 @@ class WhisperEncoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
                 fx_model_class_name = "Flax" + model_class.__name__
 
                 if not hasattr(transformers, fx_model_class_name):
-                    self.skipTest("Flax model does not exist")
+                    self.skipTest(reason="Flax model does not exist")
 
                 # Output all for aggressive testing
                 config.output_hidden_states = True

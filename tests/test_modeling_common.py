@@ -298,7 +298,7 @@ class ModelTesterMixin:
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             if model_class._keep_in_fp32_modules is None:
-                self.skipTest("Model class has no _keep_in_fp32_modules attribute defined")
+                self.skipTest(reason="Model class has no _keep_in_fp32_modules attribute defined")
 
             model = model_class(config)
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -392,7 +392,7 @@ class ModelTesterMixin:
     def test_save_load_fast_init_from_base(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if config.__class__ not in MODEL_MAPPING:
-            self.skipTest("Model class not in MODEL_MAPPING")
+            self.skipTest(reason="Model class not in MODEL_MAPPING")
 
         base_class = MODEL_MAPPING[config.__class__]
 
@@ -526,7 +526,7 @@ class ModelTesterMixin:
     def test_save_load_fast_init_to_base(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if config.__class__ not in MODEL_MAPPING:
-            self.skipTest("Model class not in MODEL_MAPPING")
+            self.skipTest(reason="Model class not in MODEL_MAPPING")
 
         base_class = MODEL_MAPPING[config.__class__]
 
@@ -582,7 +582,7 @@ class ModelTesterMixin:
     def test_torch_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if config.__class__ not in MODEL_MAPPING:
-            self.skipTest("Model class not in MODEL_MAPPING")
+            self.skipTest(reason="Model class not in MODEL_MAPPING")
 
         base_class = MODEL_MAPPING[config.__class__]
 
@@ -982,7 +982,7 @@ class ModelTesterMixin:
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
-            self.skipTest("test_torchscript is set to `False`")
+            self.skipTest(reason="test_torchscript is set to `False`")
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.torchscript = True
@@ -1044,7 +1044,7 @@ class ModelTesterMixin:
                             if "attention_mask" in inputs:
                                 trace_input["attention_mask"] = inputs["attention_mask"]
                             else:
-                                self.skipTest("testing SDPA without attention_mask is not supported")
+                                self.skipTest(reason="testing SDPA without attention_mask is not supported")
 
                             model(main_input, attention_mask=inputs["attention_mask"])
                             # example_kwarg_inputs was introduced in torch==2.0, but it is fine here since SDPA has a requirement on torch>=2.1.
@@ -1703,7 +1703,7 @@ class ModelTesterMixin:
             inputs_dict,
         ) = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.test_resize_embeddings:
-            self.skipTest("test_resize_embeddings is set to `False`")
+            self.skipTest(reason="test_resize_embeddings is set to `False`")
 
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
@@ -1803,13 +1803,13 @@ class ModelTesterMixin:
             inputs_dict,
         ) = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.test_resize_embeddings:
-            self.skipTest("test_resize_embeddings is set to `False`")
+            self.skipTest(reason="test_resize_embeddings is set to `False`")
 
         original_config.tie_word_embeddings = False
 
         # if model cannot untied embeddings -> leave test
         if original_config.tie_word_embeddings:
-            self.skipTest("Model cannot untied embeddings")
+            self.skipTest(reason="Model cannot untied embeddings")
 
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
@@ -1881,7 +1881,7 @@ class ModelTesterMixin:
 
     def test_correct_missing_keys(self):
         if not self.test_missing_keys:
-            self.skipTest("test_missing_keys is set to `False`")
+            self.skipTest(reason="test_missing_keys is set to `False`")
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -1909,7 +1909,7 @@ class ModelTesterMixin:
 
     def test_tie_model_weights(self):
         if not self.test_torchscript:
-            self.skipTest("test_torchscript is set to `False`")
+            self.skipTest(reason="test_torchscript is set to `False`")
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -2368,7 +2368,7 @@ class ModelTesterMixin:
 
             tf_model_class_name = "TF" + model_class.__name__  # Add the "TF" at the beginning
             if not hasattr(transformers, tf_model_class_name):
-                self.skipTest("transformers does not have TF version of this model yet")
+                self.skipTest(reason="transformers does not have TF version of this model yet")
 
             # Output all for aggressive testing
             config.output_hidden_states = True
@@ -2550,7 +2550,7 @@ class ModelTesterMixin:
                 fx_model_class_name = "Flax" + model_class.__name__
 
                 if not hasattr(transformers, fx_model_class_name):
-                    self.skipTest("No Flax model exists for this class")
+                    self.skipTest(reason="No Flax model exists for this class")
 
                 # Output all for aggressive testing
                 config.output_hidden_states = True
@@ -2621,7 +2621,7 @@ class ModelTesterMixin:
                 fx_model_class_name = "Flax" + model_class.__name__
 
                 if not hasattr(transformers, fx_model_class_name):
-                    self.skipTest("No Flax model exists for this class")
+                    self.skipTest(reason="No Flax model exists for this class")
 
                 # Output all for aggressive testing
                 config.output_hidden_states = True
@@ -2733,7 +2733,7 @@ class ModelTesterMixin:
 
             model_forward_args = inspect.signature(model.forward).parameters
             if "inputs_embeds" not in model_forward_args:
-                self.skipTest("This model doesn't use `inputs_embeds`")
+                self.skipTest(reason="This model doesn't use `inputs_embeds`")
 
             inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
             pad_token_id = config.pad_token_id if config.pad_token_id is not None else 1
@@ -2794,7 +2794,7 @@ class ModelTesterMixin:
     @require_torch_multi_gpu
     def test_model_parallelization(self):
         if not self.test_model_parallel:
-            self.skipTest("test_model_parallel is set to False")
+            self.skipTest(reason="test_model_parallel is set to False")
 
         # a candidate for testing_utils
         def get_current_gpu_memory_use():
@@ -2856,7 +2856,7 @@ class ModelTesterMixin:
     @require_torch_multi_gpu
     def test_model_parallel_equal_results(self):
         if not self.test_model_parallel:
-            self.skipTest("test_model_parallel is set to False")
+            self.skipTest(reason="test_model_parallel is set to False")
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -3105,7 +3105,7 @@ class ModelTesterMixin:
 
     def test_load_with_mismatched_shapes(self):
         if not self.test_mismatched_shapes:
-            self.skipTest("test_missmatched_shapes is set to False")
+            self.skipTest(reason="test_missmatched_shapes is set to False")
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -3149,7 +3149,7 @@ class ModelTesterMixin:
 
     def test_mismatched_shapes_have_properly_initialized_weights(self):
         if not self.test_mismatched_shapes:
-            self.skipTest("test_missmatched_shapes is set to False")
+            self.skipTest(reason="test_missmatched_shapes is set to False")
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         configs_no_init = _config_zero_init(config)
@@ -3268,7 +3268,7 @@ class ModelTesterMixin:
     @slow
     def test_flash_attn_2_conversion(self):
         if not self.has_attentions:
-            self.skipTest("Model architecture does not support attentions")
+            self.skipTest(reason="Model architecture does not support attentions")
 
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -3297,7 +3297,7 @@ class ModelTesterMixin:
     @is_flaky()
     def test_flash_attn_2_inference_equivalence(self):
         if not self.has_attentions:
-            self.skipTest("Model architecture does not support attentions")
+            self.skipTest(reason="Model architecture does not support attentions")
 
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn_2:
@@ -3394,7 +3394,7 @@ class ModelTesterMixin:
     @is_flaky()
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         if not self.has_attentions:
-            self.skipTest("Model architecture does not support attentions")
+            self.skipTest(reason="Model architecture does not support attentions")
 
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn_2:
@@ -3487,7 +3487,7 @@ class ModelTesterMixin:
     @is_flaky()
     def test_flash_attn_2_generate_left_padding(self):
         if not self.has_attentions:
-            self.skipTest("Model architecture does not support attentions")
+            self.skipTest(reason="Model architecture does not support attentions")
 
         for model_class in self.all_generative_model_classes:
             if not model_class._supports_flash_attn_2:
@@ -3535,7 +3535,7 @@ class ModelTesterMixin:
     @slow
     def test_flash_attn_2_generate_padding_right(self):
         if not self.has_attentions:
-            self.skipTest("Model architecture does not support attentions")
+            self.skipTest(reason="Model architecture does not support attentions")
 
         for model_class in self.all_generative_model_classes:
             if not model_class._supports_flash_attn_2:
@@ -3581,7 +3581,7 @@ class ModelTesterMixin:
     @slow
     def test_eager_matches_sdpa_inference(self, torch_dtype: str):
         if not self.has_attentions:
-            self.skipTest("Model architecture does not support attentions")
+            self.skipTest(reason="Model architecture does not support attentions")
 
         if not self.all_model_classes[0]._supports_sdpa:
             self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
@@ -3882,13 +3882,13 @@ class ModelTesterMixin:
     @slow
     def test_sdpa_can_dispatch_on_flash(self):
         if not self.has_attentions:
-            self.skipTest("Model architecture does not support attentions")
+            self.skipTest(reason="Model architecture does not support attentions")
 
         compute_capability = torch.cuda.get_device_capability()
         major, _ = compute_capability
 
         if not torch.version.cuda or major < 8:
-            self.skipTest("This test requires an NVIDIA GPU with compute capability >= 8.0")
+            self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
 
         for model_class in self.all_model_classes:
             if not model_class._supports_sdpa:
@@ -3897,13 +3897,13 @@ class ModelTesterMixin:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             inputs_dict = self._prepare_for_class(inputs_dict, model_class)
             if config.model_type in ["llava", "llava_next", "vipllava", "video_llava"]:
-                self.skipTest("Llava-like models currently (transformers==4.39.1) requires an attention_mask input")
+                self.skipTest(reason="Llava-like models currently (transformers==4.39.1) requires an attention_mask input")
             if config.model_type in ["paligemma"]:
                 self.skipTest(
                     "PaliGemma-like models currently (transformers==4.41.0) requires an attention_mask input"
                 )
             if config.model_type in ["idefics"]:
-                self.skipTest("Idefics currently (transformers==4.39.1) requires an image_attention_mask input")
+                self.skipTest(reason="Idefics currently (transformers==4.39.1) requires an image_attention_mask input")
             model = model_class(config)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -3926,13 +3926,13 @@ class ModelTesterMixin:
     @slow
     def test_sdpa_can_compile_dynamic(self):
         if not self.has_attentions:
-            self.skipTest("Model architecture does not support attentions")
+            self.skipTest(reason="Model architecture does not support attentions")
 
         compute_capability = torch.cuda.get_device_capability()
         major, _ = compute_capability
 
         if not torch.version.cuda or major < 8:
-            self.skipTest("This test requires an NVIDIA GPU with compute capability >= 8.0")
+            self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
 
         for model_class in self.all_model_classes:
             if not model_class._supports_sdpa:
@@ -3969,7 +3969,7 @@ class ModelTesterMixin:
     @slow
     def test_eager_matches_sdpa_generate(self):
         if not self.has_attentions:
-            self.skipTest("Model architecture does not support attentions")
+            self.skipTest(reason="Model architecture does not support attentions")
 
         max_new_tokens = 30
 
@@ -4042,7 +4042,7 @@ class ModelTesterMixin:
     @require_torch_sdpa
     def test_sdpa_matches_eager_sliding_window(self):
         if not self.has_attentions:
-            self.skipTest("Model architecture does not support attentions")
+            self.skipTest(reason="Model architecture does not support attentions")
 
         WINDOW_ATTENTION_MODELS = ["mistral", "mixtral", "qwen2", "qwen_moe", "starcoder2"]
 
@@ -4099,7 +4099,7 @@ class ModelTesterMixin:
     @slow
     def test_flash_attn_2_generate_use_cache(self):
         if not self.has_attentions:
-            self.skipTest("Model architecture does not support attentions")
+            self.skipTest(reason="Model architecture does not support attentions")
 
         max_new_tokens = 30
 
@@ -4147,7 +4147,7 @@ class ModelTesterMixin:
     @slow
     def test_flash_attn_2_fp32_ln(self):
         if not self.has_attentions:
-            self.skipTest("Model architecture does not support attentions")
+            self.skipTest(reason="Model architecture does not support attentions")
 
         for model_class in self.all_generative_model_classes:
             if not model_class._supports_flash_attn_2:
@@ -4204,7 +4204,7 @@ class ModelTesterMixin:
 
             tf_model_class_name = "TF" + model_class.__name__  # Add the "TF" at the beginning
             if not hasattr(transformers, tf_model_class_name):
-                self.skipTest("transformers does not have this model in TF version yet")
+                self.skipTest(reason="transformers does not have this model in TF version yet")
 
             tf_model_class = getattr(transformers, tf_model_class_name)
 
@@ -4228,7 +4228,7 @@ class ModelTesterMixin:
 
             flax_model_class_name = "Flax" + model_class.__name__  # Add the "Flax at the beginning
             if not hasattr(transformers, flax_model_class_name):
-                self.skipTest("transformers does not have this model in Flax version yet")
+                self.skipTest(reason="transformers does not have this model in Flax version yet")
 
             flax_model_class = getattr(transformers, flax_model_class_name)
 
@@ -4250,7 +4250,7 @@ class ModelTesterMixin:
     @slow
     def test_flash_attn_2_from_config(self):
         if not self.has_attentions:
-            self.skipTest("Model architecture does not support attentions")
+            self.skipTest(reason="Model architecture does not support attentions")
 
         for model_class in self.all_generative_model_classes:
             if not model_class._supports_flash_attn_2:
@@ -4329,10 +4329,10 @@ class ModelTesterMixin:
 
     def test_custom_4d_attention_mask(self):
         if not self.has_attentions:
-            self.skipTest("Model architecture does not support attentions")
+            self.skipTest(reason="Model architecture does not support attentions")
 
         if len(self.all_generative_model_classes) == 0:
-            self.skipTest("Model architecture has no generative classes, and thus not necessarily supporting 4D masks")
+            self.skipTest(reason="Model architecture has no generative classes, and thus not necessarily supporting 4D masks")
 
         for model_class in self.all_generative_model_classes:
             if not model_class._supports_static_cache:
@@ -4377,7 +4377,7 @@ class ModelTesterMixin:
     @require_read_token
     def test_torch_compile(self):
         if version.parse(torch.__version__) < version.parse("2.3"):
-            self.skipTest("This test requires torch >= 2.3 to run.")
+            self.skipTest(reason="This test requires torch >= 2.3 to run.")
 
         if not hasattr(self, "_torch_compile_test_ckpt"):
             self.skipTest(f"{self.__class__.__name__} doesn't have the attribute `_torch_compile_test_ckpt`.")

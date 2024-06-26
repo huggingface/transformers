@@ -512,7 +512,7 @@ class ReformerTesterMixin:
 
     def test_reformer_lm_model_backward(self):
         if not self.model_tester.is_training:
-            self.skipTest("model_tester.is_training is set to False")
+            self.skipTest(reason="model_tester.is_training is set to False")
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_reformer_model_with_lm_backward(*config_and_inputs)
 
@@ -536,7 +536,7 @@ class ReformerTesterMixin:
 
     def test_reformer_chunking_backward_equality(self):
         if not self.model_tester.is_training:
-            self.skipTest("model_tester.is_training is set to False")
+            self.skipTest(reason="model_tester.is_training is set to False")
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_reformer_feed_backward_chunking(*config_and_inputs)
 

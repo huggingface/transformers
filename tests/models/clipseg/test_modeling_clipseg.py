@@ -544,7 +544,7 @@ class CLIPSegModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
-            self.skipTest("test_torchscript is set to False")
+            self.skipTest(reason="test_torchscript is set to False")
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.torchscript = True
@@ -645,7 +645,7 @@ class CLIPSegModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                 fx_model_class_name = "Flax" + model_class.__name__
 
                 if not hasattr(transformers, fx_model_class_name):
-                    self.skipTest("No Flax model exists for this class")
+                    self.skipTest(reason="No Flax model exists for this class")
 
                 fx_model_class = getattr(transformers, fx_model_class_name)
 
@@ -701,7 +701,7 @@ class CLIPSegModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                 fx_model_class_name = "Flax" + model_class.__name__
 
                 if not hasattr(transformers, fx_model_class_name):
-                    self.skipTest("No Flax model exists for this class")
+                    self.skipTest(reason="No Flax model exists for this class")
 
                 fx_model_class = getattr(transformers, fx_model_class_name)
 
@@ -747,7 +747,7 @@ class CLIPSegModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def test_training(self):
         if not self.model_tester.is_training:
-            self.skipTest("Training test is skipped as the model was not trained")
+            self.skipTest(reason="Training test is skipped as the model was not trained")
 
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

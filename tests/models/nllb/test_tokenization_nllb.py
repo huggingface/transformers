@@ -207,7 +207,7 @@ class NllbTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @require_torch
     def test_prepare_seq2seq_batch(self):
         if not self.test_seq2seq:
-            self.skipTest("test_seq2seq is set to False")
+            self.skipTest(reason="test_seq2seq is set to False")
 
         tokenizers = self.get_tokenizers()
         for tokenizer in tokenizers:
@@ -236,7 +236,7 @@ class NllbTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         tgt_lang="ron_Latn",
                     )
                 except NotImplementedError:
-                    self.skipTest("Encountered NotImplementedError when calling prepare_seq2seq_batch")
+                    self.skipTest(reason="Encountered NotImplementedError when calling prepare_seq2seq_batch")
                 self.assertEqual(batch.input_ids.shape[1], 3)
                 self.assertEqual(batch.labels.shape[1], 10)
                 # max_target_length will default to max_length if not specified

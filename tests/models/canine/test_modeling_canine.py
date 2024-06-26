@@ -441,7 +441,7 @@ class CanineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def test_headmasking(self):
         if not self.test_head_masking:
-            self.skipTest("test_head_masking is set to False")
+            self.skipTest(reason="test_head_masking is set to False")
 
         global_rng.seed(42)
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

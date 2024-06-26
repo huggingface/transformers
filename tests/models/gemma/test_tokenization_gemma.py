@@ -63,7 +63,7 @@ class GemmaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @require_torch
     def test_batch_tokenization(self):
         if not self.test_seq2seq:
-            self.skipTest("test_seq2seq is set to False")
+            self.skipTest(reason="test_seq2seq is set to False")
 
         tokenizers = self.get_tokenizers()
         for tokenizer in tokenizers:
@@ -83,7 +83,7 @@ class GemmaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         return_tensors="pt",
                     )
                 except NotImplementedError:
-                    self.skipTest("Encountered NotImplementedError when calling tokenizer")
+                    self.skipTest(reason="Encountered NotImplementedError when calling tokenizer")
                 self.assertEqual(batch.input_ids.shape[1], 3)
                 # max_target_length will default to max_length if not specified
                 batch = tokenizer(text, max_length=3, return_tensors="pt")

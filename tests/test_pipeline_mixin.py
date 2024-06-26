@@ -297,7 +297,7 @@ class PipelineTesterMixin:
                 f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')} is skipped: Could not get the "
                 "pipeline for testing."
             )
-            self.skipTest("Could not get the pipeline for testing.")
+            self.skipTest(reason="Could not get the pipeline for testing.")
 
         task_test.run_pipeline_test(pipeline, examples)
 

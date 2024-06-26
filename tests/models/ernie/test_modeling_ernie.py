@@ -578,7 +578,7 @@ class ErnieModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             if model_class == ErnieForMultipleChoice:
-                self.skipTest("ErnieForMultipleChoice behaves incorrectly in JIT environments.")
+                self.skipTest(reason="ErnieForMultipleChoice behaves incorrectly in JIT environments.")
 
             config.torchscript = True
             model = model_class(config=config)

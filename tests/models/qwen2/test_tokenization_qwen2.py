@@ -169,7 +169,7 @@ class Qwen2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_slow_tokenizer_token_with_number_sign(self):
         if not self.test_slow_tokenizer:
-            self.skipTest("test_slow_tokenizer is set to False")
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         sequence = " ###"
         token_ids = [268, 269]
@@ -180,7 +180,7 @@ class Qwen2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_slow_tokenizer_decode_spaces_between_special_tokens_default(self):
         # Qwen2Tokenizer changes the default `spaces_between_special_tokens` in `decode` to False
         if not self.test_slow_tokenizer:
-            self.skipTest("test_slow_tokenizer is set to False")
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         # tokenizer has a special token: `"<|endfotext|>"` as eos, but it is not `legacy_added_tokens`
         # special tokens in `spaces_between_special_tokens` means spaces between `legacy_added_tokens`
