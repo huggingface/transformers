@@ -2682,6 +2682,14 @@ class GenerationMixin:
                         else (outputs.hidden_states,)
                     )
 
+            if (
+                hasattr(generation_config, "assistant_confidence_threshold")
+                and generation_config.assistant_confidence_threshold > 0
+            ):    
+                p = next_token_scores.softmax(-1).max(-1).values
+                if p < generation_config.assistant_confidence_threshold:
+                    this_peer_finished = True
+            
             # token selection
             if do_sample:
                 probs = nn.functional.softmax(next_token_scores, dim=-1)
@@ -3866,12 +3874,20 @@ class GenerationMixin:
             streamer.end()
 
         if (
+            hasattr(candidate_generator, "assistant_threshold")
+        ):
+            candidate_generator.assistant_model.generation_config.assistant_threshold = (
+                candidate_generator.assistant_threshold
+            )
+
+        if (
             hasattr(candidate_generator, "assistant_model")
             and candidate_generator.assistant_model.generation_config.num_assistant_tokens_schedule == "heuristic"
         ):
             candidate_generator.assistant_model.generation_config.num_assistant_tokens = (
                 candidate_generator.num_assistant_tokens
             )
+        
         if return_dict_in_generate:
             if self.config.is_encoder_decoder:
                 return GenerateEncoderDecoderOutput(
