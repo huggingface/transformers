@@ -35,7 +35,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
 )
-from ...modeling_utils import ExtraKwargs, PreTrainedModel
+from ...modeling_utils import ExtraKwargs, PreTrainedModel, Unpack
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     add_start_docstrings,
@@ -46,11 +46,6 @@ from ...utils import (
 )
 from .configuration_olmo import OlmoConfig
 
-
-try:
-    from typing import Unpack
-except ImportError:
-    from typing_extensions import Unpack
 
 if is_flash_attn_2_available():
     from ...flash_attention_utils import _flash_attention_forward

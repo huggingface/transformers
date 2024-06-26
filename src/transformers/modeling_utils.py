@@ -102,6 +102,12 @@ from .utils.import_utils import (
 from .utils.quantization_config import BitsAndBytesConfig, QuantizationMethod
 
 
+try:
+    from typing import Unpack
+except ImportError:
+    pass
+
+
 XLA_USE_BF16 = os.environ.get("XLA_USE_BF16", "0").upper()
 XLA_DOWNCAST_BF16 = os.environ.get("XLA_DOWNCAST_BF16", "0").upper()
 
@@ -5055,8 +5061,7 @@ def get_disk_only_shard_files(device_map, sharded_metadata, start_prefix):
 
 
 class ExtraKwargs(TypedDict):
-    """Known kwargs that can be used with `transfrormers` models.
-    """
+    """Known kwargs that can be used with `transfrormers` models."""
 
     cu_seqlens: Optional[Tuple[torch.Tensor, torch.Tensor]]
     " a tuple reprensenting the cu_seqlens_q and cu_seqlens_k"

@@ -3,16 +3,11 @@ import inspect
 import torch
 import torch.nn.functional as F
 
-from .modeling_utils import ExtraKwargs
+from .modeling_utils import ExtraKwargs, Unpack
 from .utils import (
     is_flash_attn_2_available,
 )
 
-
-try:
-    from typing import Unpack
-except ImportError:
-    from typing_extensions import Unpack
 
 if is_flash_attn_2_available():
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
