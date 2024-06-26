@@ -302,13 +302,26 @@ class ChameleonAttention(nn.Module):
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
+        if self.qk_layernorm:
+            # reshape for layernorm
+            query_states = query_states.view(-1, self.num_heads, self.head_dim)
+            key_states = key_states.view(-1, self.num_key_value_heads, self.head_dim)
+
+            query_states = self.q_norm(query_states)
+            key_states = self.k_norm(key_states)
+
+        # permute key/value to use transformers RoPE implementation (see for more: https://github.com/huggingface/transformers/issues/25199)
+        # NOTE: permutation is done same way as in llama conversion script
+        key_states = (
+            key_states.view(-1, self.num_heads, self.head_dim // 2, 2).transpose(3, 2).reshape(-1, self.hidden_size)
+        )
+        query_states = (
+            query_states.view(-1, self.num_heads, self.head_dim // 2, 2).transpose(3, 2).reshape(-1, self.hidden_size)
+        )
+
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-
-        if self.qk_layernorm:
-            query_states = self.q_norm(query_states)
-            key_states = self.k_norm(key_states)
 
         cos, sin = self.rotary_emb(value_states, position_ids)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
@@ -328,7 +341,7 @@ class ChameleonAttention(nn.Module):
             attn_weights = attn_weights + causal_mask
 
         # upcast attention to fp32
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1).to(query_states.dtype)
         attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
         attn_output = torch.matmul(attn_weights, value_states)
 
@@ -382,16 +395,29 @@ class ChameleonFlashAttention2(ChameleonAttention):
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
+        if self.qk_layernorm:
+            # reshape for layernorm
+            query_states = query_states.view(-1, self.num_heads, self.head_dim)
+            key_states = key_states.view(-1, self.num_key_value_heads, self.head_dim)
+
+            query_states = self.q_norm(query_states)
+            key_states = self.k_norm(key_states)
+
+        # permute key/value to use transformers RoPE implementation (see for more: https://github.com/huggingface/transformers/issues/25199)
+        # NOTE: permutation is done same way as in llama conversion script
+        key_states = (
+            key_states.view(-1, self.num_heads, self.head_dim // 2, 2).transpose(3, 2).reshape(-1, self.hidden_size)
+        )
+        query_states = (
+            query_states.view(-1, self.num_heads, self.head_dim // 2, 2).transpose(3, 2).reshape(-1, self.hidden_size)
+        )
+
         # Flash attention requires the input to have the shape
         # batch_size x seq_length x head_dim x hidden_dim
         # therefore we just need to keep the original shape
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-
-        if self.qk_layernorm:
-            query_states = self.q_norm(query_states)
-            key_states = self.k_norm(key_states)
 
         cos, sin = self.rotary_emb(value_states, position_ids)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
@@ -585,13 +611,26 @@ class ChameleonSdpaAttention(ChameleonAttention):
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
+        if self.qk_layernorm:
+            # reshape for layernorm
+            query_states = query_states.view(-1, self.num_heads, self.head_dim)
+            key_states = key_states.view(-1, self.num_key_value_heads, self.head_dim)
+
+            query_states = self.q_norm(query_states)
+            key_states = self.k_norm(key_states)
+
+        # permute key/value to use transformers RoPE implementation (see for more: https://github.com/huggingface/transformers/issues/25199)
+        # NOTE: permutation is done same way as in llama conversion script
+        key_states = (
+            key_states.view(-1, self.num_heads, self.head_dim // 2, 2).transpose(3, 2).reshape(-1, self.hidden_size)
+        )
+        query_states = (
+            query_states.view(-1, self.num_heads, self.head_dim // 2, 2).transpose(3, 2).reshape(-1, self.hidden_size)
+        )
+
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-
-        if self.qk_layernorm:
-            query_states = self.q_norm(query_states)
-            key_states = self.k_norm(key_states)
 
         cos, sin = self.rotary_emb(value_states, position_ids)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, None)
@@ -931,10 +970,7 @@ class ChameleonVQModelEncoder(nn.Module):
         z_channels = config.z_channels
         channel_multiplier = config.channel_multiplier
 
-        # downsampling
-        self.conv_in = torch.nn.Conv2d(
-            in_channels, base_channels, kernel_size=3, stride=1, padding=1
-        )  # mismatch -> need [512, 256, 3, 3]
+        self.conv_in = torch.nn.Conv2d(in_channels, base_channels, kernel_size=3, stride=1, padding=1)
 
         curr_res = resolution
         in_channel_multiplier = (1,) + tuple(channel_multiplier)
@@ -970,7 +1006,6 @@ class ChameleonVQModelEncoder(nn.Module):
                 curr_res = curr_res // 2
             self.down.append(down)
 
-        # middle
         self.mid = nn.Module()
         self.mid.block_1 = ChameleonVQModelEncoderResnetBlock(
             in_channels=block_in,
@@ -988,11 +1023,8 @@ class ChameleonVQModelEncoder(nn.Module):
             dropout=config.dropout,
         )
 
-        # end
-        self.norm_out = torch.nn.GroupNorm(
-            num_groups=32, num_channels=block_in, eps=1e-6, affine=True
-        )  # mismatch -> need [128] shape
-        self.conv_out = torch.nn.Conv2d(  # mismatch -> need [3, 128, 3, 3]
+        self.norm_out = torch.nn.GroupNorm(num_groups=32, num_channels=block_in, eps=1e-6, affine=True)
+        self.conv_out = torch.nn.Conv2d(
             block_in,
             2 * z_channels if double_z else z_channels,
             kernel_size=3,
@@ -1056,9 +1088,6 @@ class ChameleonImageVocabularyMapping:
     def __init__(self, vocab_map):
         self.name2val = vocab_map
         self.image_token_id = vocab_map.get("<image>")
-        begin_image_id = vocab_map.get("<racm3:break>")
-        end_image_id = vocab_map.get("<eoss>")
-        self.disabled_image_token_ids = self.image_tokens + [begin_image_id, end_image_id]
 
     @cached_property
     def val2name(self):
@@ -1533,18 +1562,21 @@ class ChameleonForCausalLM(ChameleonPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, ChameleonForCausalLM
+        >>> from transformers import ChameleonProcessor, ChameleonForCausalLM
+        >>> import torch
+        >>> import requests
+        >>> from PIL import Image
 
         >>> model = ChameleonForCausalLM.from_pretrained("meta-chameleon/meta-chameleon/chameleon-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("meta-chameleon/meta-chameleon/chameleon-hf")
+        >>> processor = ChameleonProcessor.from_pretrained("meta-chameleon/meta-chameleon/chameleon-hf")
 
-        >>> prompt = "Hey, are you conscious? Can you talk to me?"
-        >>> inputs = tokenizer(prompt, return_tensors="pt")
+        >>> image = Image.open(requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw)
+        >>> image_2 = Image.open(requests.get("https://www.kxan.com/wp-content/uploads/sites/40/2020/10/ORION.jpg", stream=True).raw)
+        >>> prompt = "What do these two images have in common?<image><image>"
+        >>> inputs = processor(prompt, images=[image, image_2], return_tensors="pt").to(model.device, torch.float16)
 
-        >>> # Generate
-        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
-        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
+        >>> generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
+        >>> processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1571,9 +1603,9 @@ class ChameleonForCausalLM(ChameleonPreTrainedModel):
         logits = self.lm_head(hidden_states)
         logits = logits.float()
 
-        # Disallow image tokens and special begin-image and end-image tokens
-        disabled_image_token_ids = self.model.vocabulary_mapping.disabled_image_token_ids
-        logits[:, :, disabled_image_token_ids] = -math.inf
+        # Disallow image tokens which does not include special begin-image and end-image tokens
+        image_tokens = self.model.vocabulary_mapping.image_tokens
+        logits[:, :, image_tokens] = torch.finfo(logits.dtype).min
 
         loss = None
         if labels is not None:

@@ -112,10 +112,6 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
                 "Current supported versions of chameleon are [1]."
             )
 
-    # permute for sliced rotary
-    def permute(w, n_heads=n_heads, dim1=dim, dim2=dim):
-        return w.view(n_heads, dim1 // n_heads // 2, 2, dim2).transpose(1, 2).reshape(dim1, dim2)
-
     if params.get("n_kv_heads", None) is not None:
         num_key_value_heads = params["n_kv_heads"]  # for GQA / MQA
         num_local_key_value_heads = n_heads_per_shard // num_key_value_heads
@@ -151,12 +147,8 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
             # Unsharded
             state_dict.update(
                 {
-                    f"model.layers.{layer_i}.self_attn.q_proj.weight": permute(
-                        loaded[f"layers.{layer_i}.attention.wq.weight"]
-                    ),
-                    f"model.layers.{layer_i}.self_attn.k_proj.weight": permute(
-                        loaded[f"layers.{layer_i}.attention.wk.weight"]
-                    ),
+                    f"model.layers.{layer_i}.self_attn.q_proj.weight": loaded[f"layers.{layer_i}.attention.wq.weight"],
+                    f"model.layers.{layer_i}.self_attn.k_proj.weight": loaded[f"layers.{layer_i}.attention.wk.weight"],
                     f"model.layers.{layer_i}.self_attn.v_proj.weight": loaded[f"layers.{layer_i}.attention.wv.weight"],
                     f"model.layers.{layer_i}.self_attn.o_proj.weight": loaded[f"layers.{layer_i}.attention.wo.weight"],
                     f"model.layers.{layer_i}.mlp.gate_proj.weight": loaded[f"layers.{layer_i}.feed_forward.w1.weight"],
@@ -196,26 +188,23 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
                     ).mean(dim=0),
                 }
             )
-            state_dict[f"model.layers.{layer_i}.self_attn.q_proj.weight"] = permute(
-                torch.cat(
-                    [
-                        loaded[i][f"layers.{layer_i}.attention.wq.weight"].view(n_heads_per_shard, dims_per_head, dim)
-                        for i in range(num_shards)
-                    ],
-                    dim=0,
-                ).reshape(dim, dim)
-            )
-            state_dict[f"model.layers.{layer_i}.self_attn.k_proj.weight"] = permute(
-                torch.cat(
-                    [
-                        loaded[i][f"layers.{layer_i}.attention.wk.weight"].view(
-                            num_local_key_value_heads, dims_per_head, dim
-                        )
-                        for i in range(num_shards)
-                    ],
-                    dim=0,
-                ).reshape(key_value_dim, dim)
-            )
+            state_dict[f"model.layers.{layer_i}.self_attn.q_proj.weight"] = torch.cat(
+                [
+                    loaded[i][f"layers.{layer_i}.attention.wq.weight"].view(n_heads_per_shard, dims_per_head, dim)
+                    for i in range(num_shards)
+                ],
+                dim=0,
+            ).reshape(dim, dim)
+
+            state_dict[f"model.layers.{layer_i}.self_attn.k_proj.weight"] = torch.cat(
+                [
+                    loaded[i][f"layers.{layer_i}.attention.wk.weight"].view(
+                        num_local_key_value_heads, dims_per_head, dim
+                    )
+                    for i in range(num_shards)
+                ],
+                dim=0,
+            ).reshape(key_value_dim, dim)
 
             if qk_layernorm:
                 state_dict[f"model.layers.{layer_i}.self_attn.q_norm.weight"] = torch.stack(
@@ -298,7 +287,7 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
                 token["content"] = "<image>"
 
     with open(os.path.join(input_base_path, "tokenizer/text_tokenizer_modified.json"), "w") as f:
-        json.dump(tokenizer_config, f)  # save the new file to init a tokenizer later
+        json.dump(tokenizer_config, f)  # save the new file to init tokenizer later
 
     vq_keys_to_replace = [
         ("ch", "base_channels"),
@@ -338,7 +327,8 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
     tokenizer = LlamaTokenizerFast(
         tokenizer_file=os.path.join(input_base_path, "tokenizer/text_tokenizer_modified.json"), legacy=False
     )
-    tokenizer.sep_token_id = 8710  # assign <reserved08706> to eos so that we can append it after input text
+    tokenizer.sep_token_id = 8710  # assign <reserved08706> to sep so that we can append it after input text
+    tokenizer.pad_token_id = 1  # assing <pad> to special pad_token
     image_processor = ChameleonImageProcessor()
     processor = ChameleonProcessor(image_processor=image_processor, tokenizer=tokenizer)
     processor.save_pretrained(model_path)
@@ -351,7 +341,7 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
 
     # Short inference on a few examples to check if generation makes sense
     # taken from https://github.com/facebookresearch/chameleon/blob/7a72f40aa5f462965c8374f25257f55b65b25ff4/data/prompts_for_human_evaluations.jsonl
-    print("Loading the checkpoint in a Chameleon model.")
+    print("Loading the checkpoint in a Chameleon model...")
     model = ChameleonForCausalLM.from_pretrained(model_path, torch_dtype=torch.bfloat16, device_map="auto")
     processor = ChameleonProcessor.from_pretrained(model_path)
 
@@ -361,12 +351,31 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
             "https://uploads4.wikiart.org/images/paul-klee/death-for-the-idea-1915.jpg!Large.jpg", stream=True
         ).raw
     )
-
     inputs = processor(prompt, images=image, return_tensors="pt").to(model.device, torch.bfloat16)
+    length = inputs.input_ids.shape[1]
 
-    out = model.generate(**inputs, max_new_tokens=40, do_sample=True)
-    generated_text = processor.batch_decode(out, skip_special_tokens=True)[0]
-    print(f"Generated text: {generated_text}")
+    out = model.generate(**inputs, max_new_tokens=40, do_sample=False)
+    generated_text = processor.batch_decode(out[:, length:], skip_special_tokens=True)[0]
+
+    expected_output = "The image you provided is a drawing by the artist, M.C. Escher. Born in the Netherlands in 1898, Escher was a master of optical illusions and impossible drawings"
+    assert generated_text == expected_output, f"Generations don't match: {generated_text} != {expected_output}"
+
+    # Multi-image example
+    prompt = "I used to know a lot about constellations when I was younger, but as I grew older, I forgot most of what I knew. These are the only two constellations that I really remember now.<image><image>I would like for you to tell me about 3 more constellations and give me a little bit of history about the constellation."
+    image = Image.open(
+        requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
+    )
+    image_2 = Image.open(
+        requests.get("https://www.kxan.com/wp-content/uploads/sites/40/2020/10/ORION.jpg", stream=True).raw
+    )
+
+    inputs = processor(prompt, images=[image, image_2], return_tensors="pt").to(model.device, dtype=torch.bfloat16)
+    length = inputs.input_ids.shape[1]
+    out = model.generate(**inputs, max_new_tokens=50, do_sample=False)
+    generated_text = processor.batch_decode(out[:, length:], skip_special_tokens=True)[0]
+
+    expected_output = "Sure, I'd be happy to help! Here are three more constellations and their histories:\n\n1. **Leo**: Leo is one of the most recognizable constellations in the night sky, with its distinctive"
+    assert generated_text == expected_output, f"Generations don't match: {generated_text} != {expected_output}"
 
 
 def main():
