@@ -7,6 +7,11 @@ from .utils import (
     is_flash_attn_2_available,
 )
 
+from .modeling_utils import FlashAttentionKwargs
+try:
+    from typing import Unpack
+except ImportError:
+    from typing_extensions import Unpack
 
 if is_flash_attn_2_available():
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
@@ -78,7 +83,7 @@ def _flash_attention_forward(
     _flash_attn_uses_top_left_mask=False,
     sliding_window=None,
     cache_position=0,
-    **kwargs,
+    **kwargs: Unpack[FlashAttentionKwargs],
 ):
     """
     Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
@@ -109,6 +114,7 @@ def _flash_attention_forward(
         _flash_supports_window_size and sliding_window is not None and cache_position > sliding_window
     )
     flash_kwargs = {"window_size": (sliding_window, sliding_window)} if use_sliding_windows else {}
+
     # Contains at least one padding token in the sequence
     if attention_mask is not None:
         batch_size = query_states.shape[0]
