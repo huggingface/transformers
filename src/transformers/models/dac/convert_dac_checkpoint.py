@@ -20,8 +20,8 @@ import torch
 
 from transformers import (
     DacConfig,
+    DacFeatureExtractor,
     DacModel,
-    DacFeatureExtractor, 
     logging,
 )
 
@@ -195,7 +195,7 @@ def convert_checkpoint(
     model_name,
     checkpoint_path,
     pytorch_dump_folder_path,
-    sample_rate = 16000, 
+    sample_rate = 16000,
     repo_id=None,
 ):
     model_dict = torch.load(checkpoint_path, "cpu")
@@ -246,5 +246,5 @@ if __name__ == "__main__":
         "--sample_rate", default=None, type=str, help="Sample rate used by DacFeatureExtractor"
     )
     args = parser.parse_args()
-    
+
     convert_checkpoint(args.model, args.checkpoint_path, args.pytorch_dump_folder_path, args.sample_rate, args.push_to_hub)

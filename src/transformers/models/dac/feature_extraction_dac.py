@@ -156,7 +156,8 @@ class DacFeatureExtractor(SequenceFeatureExtractor):
             pad_to_multiple_of=self.hop_length
         )
 
-        padded_inputs.input_values = padded_inputs.input_values[:,np.newaxis, :]
+        if padding is not False:
+            padded_inputs.input_values = padded_inputs.input_values[:,np.newaxis, :]
 
         input_values = []
         for example in padded_inputs.pop("input_values"):
