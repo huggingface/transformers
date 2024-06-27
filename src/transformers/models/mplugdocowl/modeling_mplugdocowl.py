@@ -202,9 +202,19 @@ class MPLUGDocOwlHReducer(MPLUGDocOwlPreTrainedModel):
         )  #
         self.conv_patch = self.conv_shape[0] * self.conv_shape[1]
         ## feature interaction with a conv layer
-        self.reducer_conv = nn.Conv2d(self.config.hreducer_hidden_size, self.conv_patch*self.config.hreducer_hidden_size, kernel_size=self.conv_shape, stride=self.conv_shape, bias=True)
-        self.reducer_activation = ACT2FN[self.config.hreducer_activation]
-        
+        #FIXME removing it for now
+        #self.reducer_conv = nn.Conv2d(self.config.hreducer_hidden_size, self.conv_patch*self.config.hreducer_hidden_size, kernel_size=self.conv_shape, stride=self.conv_shape, bias=True)
+        #self.reducer_activation = ACT2FN[self.config.hreducer_activation]
+        self.reducer_before = torch.nn.Sequential(
+    nn.Conv2d(
+        self.config.hreducer_hidden_size,
+        self.conv_patch * self.config.hreducer_hidden_size,
+        kernel_size=self.conv_shape,
+        stride=self.conv_shape,
+        bias=True,
+    ),
+    nn.GELU(),
+)
         ## reduce visual feature length with a conv layer
         self.reducer = nn.Conv2d(
             self.config.hreducer_hidden_size,
@@ -231,8 +241,8 @@ class MPLUGDocOwlHReducer(MPLUGDocOwlPreTrainedModel):
 
         encoder_hidden_states = encoder_hidden_states.view(B, C, H, H)  # (BCHH)
 
-        hidden_states = self.reducer_conv(encoder_hidden_states)  # B 4D H W/4
-        hidden_states = self.reducer_activation(hidden_states)
+        hidden_states = self.reducer_before(encoder_hidden_states)  # B 4D H W/4
+        #hidden_states = self.reducer_activation(hidden_states)
         B, XD, H, W_div_X = hidden_states.shape
         X = self.conv_patch
         D = XD // X
@@ -397,7 +407,7 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         patch_positions: Optional[torch.LongTensor] = None,
-        # modality_indicators: Optional[torch.LongTensor] = None,
+        modality_indicators: Optional[torch.LongTensor] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, MPLUGDocOwlCausalLMOutputWithPast]:
         r"""
@@ -440,7 +450,6 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
         if inputs_embeds is None:
             # 1. Extra the input embeddings
             inputs_embeds = self.get_input_embeddings()(input_ids)
-
             # 2. Merge text and images
             if pixel_values is not None and input_ids.shape[1] != 1:
                 image_outputs = self.vision_tower(pixel_values, output_hidden_states=False).last_hidden_state
@@ -449,7 +458,6 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
 
                 inputs_embeds = inputs_embeds.to(image_features.dtype)
 
-                # FIXME old call is commented below
                 (
                     inputs_embeds,
                     attention_mask,
@@ -540,10 +548,10 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
         self,
         input_ids,
         past_key_values=None,
-       # pixel_values=None,
+        pixel_values=None,
         inputs_embeds=None,
         attention_mask=None,
-       # modality_indicators=None,
+        modality_indicators=None,
         **kwargs,
     ):
         if past_key_values is not None:
@@ -595,10 +603,10 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
                 "past_key_values": past_key_values,
                 "use_cache": kwargs.get("use_cache"),
                 "attention_mask": attention_mask,
-                #"pixel_values": pixel_values,
+                "pixel_values": pixel_values,
                 "patch_positions": kwargs.get("patch_positions", None),
                 "inputs_embeds": inputs_embeds,
-                # "modality_indicators": modality_indicators,
+                "modality_indicators": modality_indicators,
             }
         )
         return model_inputs

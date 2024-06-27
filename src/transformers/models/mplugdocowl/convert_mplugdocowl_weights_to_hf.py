@@ -82,7 +82,7 @@ def convert_state_dict_to_hf(state_dict):
 
 
 def convert_mplugdocowl_llama_to_hf(
-    text_model_id, output_hub_path, old_state_dict_id, pretrained=False
+    text_model_id, output_hub_path, old_state_dict_id, pretrained=True
 ):
     if not pretrained:
         torch.set_default_dtype(torch.float16)
@@ -162,7 +162,7 @@ def convert_mplugdocowl_llama_to_hf(
     # with torch.inference_mode():
     # outputs = model(input_ids=output['input_ids'], pixel_values = output['pixel_values'],attention_mask=output['attention_mask'], patch_positions=output['patch_positions'])
     try:
-        tokens = model.generate(output["input_ids"], pixel_values=output["pixel_values"], max_new_tokens=512)
+        tokens = model.generate(output["input_ids"],pixel_values = output['pixel_values'], max_new_tokens=512)
     except AttributeError as e:
         raise (e)
 
