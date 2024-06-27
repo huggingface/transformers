@@ -2422,7 +2422,7 @@ class Trainer:
             for checkpoint in checkpoints_sorted:
                 if not os.path.samefile(checkpoint, self.state.best_model_checkpoint):
                     logger.info(f"Deleting older checkpoint [{checkpoint}] due to args.save_total_limit")
-                    shutil.rmtree(checkpoint)
+                    shutil.rmtree(checkpoint, ignore_errors=True)
 
         self.control = self.callback_handler.on_train_end(args, self.state, self.control)
 
