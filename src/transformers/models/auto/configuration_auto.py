@@ -323,7 +323,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("byt5", "ByT5"),
         ("camembert", "CamemBERT"),
         ("canine", "CANINE"),
-        ("chameleon", "chameleon"),
+        ("chameleon", "Chameleon"),
         ("chinese_clip", "Chinese-CLIP"),
         ("chinese_clip_vision_model", "ChineseCLIPVisionModel"),
         ("clap", "CLAP"),
