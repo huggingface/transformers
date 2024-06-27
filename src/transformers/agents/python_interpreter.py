@@ -628,7 +628,7 @@ def evaluate_ast(
 
     Args:
         expression (`ast.AST`):
-            The code to evaluate, as an abastract syntax tree.
+            The code to evaluate, as an abstract syntax tree.
         state (`Dict[str, Any]`):
             A dictionary mapping variable names to values. The `state` is updated if need be when the evaluation
             encounters assignements.
@@ -640,7 +640,7 @@ def evaluate_ast(
             Add more at your own risk!
     """
     if isinstance(expression, ast.Assign):
-        # Assignement -> we evaluate the assignement which should update the state
+        # Assignement -> we evaluate the assignment which should update the state
         # We return the variable assigned as it may be used to determine the final result.
         return evaluate_assign(expression, state, tools)
     elif isinstance(expression, ast.AugAssign):

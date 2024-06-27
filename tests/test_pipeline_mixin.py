@@ -248,7 +248,7 @@ class PipelineTesterMixin:
                     f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')} is skipped: Could not load the "
                     f"processor from `{repo_id}` with `{processor_name}`."
                 )
-                return
+                self.skipTest(f"Could not load the processor from {repo_id} with {processor_name}.")
 
         # TODO: Maybe not upload such problematic tiny models to Hub.
         if tokenizer is None and processor is None:
@@ -256,7 +256,7 @@ class PipelineTesterMixin:
                 f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')} is skipped: Could not find or load "
                 f"any tokenizer / processor from `{repo_id}`."
             )
-            return
+            self.skipTest(f"Could not find or load any tokenizer / processor from {repo_id}.")
 
         # TODO: We should check if a model file is on the Hub repo. instead.
         try:
@@ -266,7 +266,7 @@ class PipelineTesterMixin:
                 f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')} is skipped: Could not find or load "
                 f"the model from `{repo_id}` with `{model_architecture}`."
             )
-            return
+            self.skipTest(f"Could not find or load the model from {repo_id} with {model_architecture}.")
 
         pipeline_test_class_name = pipeline_test_mapping[task]["test"].__name__
         if self.is_pipeline_test_to_skip_more(pipeline_test_class_name, model.config, model, tokenizer, processor):
@@ -275,7 +275,9 @@ class PipelineTesterMixin:
                 f"currently known to fail for: model `{model_architecture.__name__}` | tokenizer "
                 f"`{tokenizer_name}` | processor `{processor_name}`."
             )
-            return
+            self.skipTest(
+                f"Test is known to fail for: model `{model_architecture.__name__}` | tokenizer `{tokenizer_name}` | processor `{processor_name}`."
+            )
 
         # validate
         validate_test_components(self, task, model, tokenizer, processor)
@@ -295,7 +297,7 @@ class PipelineTesterMixin:
                 f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')} is skipped: Could not get the "
                 "pipeline for testing."
             )
-            return
+            self.skipTest(reason="Could not get the pipeline for testing.")
 
         task_test.run_pipeline_test(pipeline, examples)
 

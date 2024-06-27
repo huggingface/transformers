@@ -496,6 +496,13 @@ class SiglipPreTrainedModel(PreTrainedModel):
     config_class = SiglipConfig
     base_model_prefix = "siglip"
     supports_gradient_checkpointing = True
+    _no_split_modules = [
+        "SiglipTextEmbeddings",
+        "SiglipEncoderLayer",
+        "SiglipVisionEmbeddings",
+        "SiglipEncoderLayer",
+        "SiglipMultiheadAttentionPoolingHead",
+    ]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -816,8 +823,6 @@ class SiglipTextTransformer(nn.Module):
 class SiglipTextModel(SiglipPreTrainedModel):
     config_class = SiglipTextConfig
 
-    _no_split_modules = ["SiglipTextEmbeddings", "SiglipEncoderLayer"]
-
     def __init__(self, config: SiglipTextConfig):
         super().__init__(config)
         self.text_model = SiglipTextTransformer(config)
@@ -959,7 +964,6 @@ class SiglipMultiheadAttentionPoolingHead(nn.Module):
 class SiglipVisionModel(SiglipPreTrainedModel):
     config_class = SiglipVisionConfig
     main_input_name = "pixel_values"
-    _no_split_modules = ["SiglipVisionEmbeddings", "SiglipEncoderLayer", "SiglipMultiheadAttentionPoolingHead"]
 
     def __init__(self, config: SiglipVisionConfig):
         super().__init__(config)
@@ -1222,7 +1226,10 @@ class SiglipModel(SiglipPreTrainedModel):
         text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
 
         # cosine similarity as logits
-        logits_per_text = torch.matmul(text_embeds, image_embeds.t()) * self.logit_scale.exp() + self.logit_bias
+        logits_per_text = (
+            torch.matmul(text_embeds, image_embeds.t().to(text_embeds.device)) * self.logit_scale.exp()
+            + self.logit_bias
+        )
         logits_per_image = logits_per_text.t()
 
         loss = None

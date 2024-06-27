@@ -285,7 +285,7 @@ class VideoLlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         encoded_images = image_processor(
             image_inputs[0],
             return_tensors="pt",
-            input_data_format="channels_first",
+            input_data_format="channels_last",
             image_mean=0,
             image_std=1,
         ).pixel_values_images
@@ -296,7 +296,7 @@ class VideoLlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         encoded_images = image_processor(
             image_inputs,
             return_tensors="pt",
-            input_data_format="channels_first",
+            input_data_format="channels_last",
             image_mean=0,
             image_std=1,
         ).pixel_values_images
