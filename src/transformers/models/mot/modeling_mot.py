@@ -369,7 +369,6 @@ class MoTMLP(nn.Module):
             condition=x == max_values,
             input=torch.Tensor([1.0]).to(dtype=x.dtype, device=x.device),
             other=torch.Tensor([0.0]).to(dtype=x.dtype, device=x.device),
-            out=x,
         )  # potentially make it the value itself? torch.where(x == max_values, x, 0.0)
 
     def get_init_weight(self, shape, fan_in, init_type, scale, dtype=torch.float32):

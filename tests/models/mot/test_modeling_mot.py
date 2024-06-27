@@ -116,7 +116,12 @@ class MoTModelTester:
             self.parent.skipTest("Not available for sparsity_dim == 1")
 
     def prepare_config_and_inputs(
-        self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
+        self,
+        gradient_checkpointing=False,
+        scale_attn_by_inverse_layer_idx=False,
+        reorder_and_upcast_attn=False,
+        emit_softmax_over_experts=False,
+        use_discrete_routing=False,
     ):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
@@ -144,6 +149,8 @@ class MoTModelTester:
             gradient_checkpointing=gradient_checkpointing,
             scale_attn_by_inverse_layer_idx=scale_attn_by_inverse_layer_idx,
             reorder_and_upcast_attn=reorder_and_upcast_attn,
+            emit_softmax_over_experts=emit_softmax_over_experts,
+            use_discrete_routing=use_discrete_routing,
         )
 
         head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
@@ -161,7 +168,12 @@ class MoTModelTester:
         )
 
     def get_config(
-        self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
+        self,
+        gradient_checkpointing=False,
+        scale_attn_by_inverse_layer_idx=False,
+        reorder_and_upcast_attn=False,
+        emit_softmax_over_experts=False,
+        use_discrete_routing=False,
     ):
         return MoTConfig(
             vocab_size=self.vocab_size,
@@ -185,6 +197,8 @@ class MoTModelTester:
             gradient_checkpointing=gradient_checkpointing,
             scale_attn_by_inverse_layer_idx=scale_attn_by_inverse_layer_idx,
             reorder_and_upcast_attn=reorder_and_upcast_attn,
+            emit_softmax_over_experts=emit_softmax_over_experts,
+            use_discrete_routing=use_discrete_routing,
         )
 
     def get_pipeline_config(self):
@@ -611,3 +625,11 @@ class MoTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def test_model_from_pretrained(self):
         model = MoTModel.from_pretrained("jaszczur/mixture_of_tokens")
         self.assertIsNotNone(model)
+
+    def test_mot_emit_softmax_over_experts(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(emit_softmax_over_experts=True)
+        self.model_tester.create_and_check_forward_and_backwards(*config_and_inputs)
+
+    def test_mot_use_discrete_routing(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(use_discrete_routing=True)
+        self.model_tester.create_and_check_forward_and_backwards(*config_and_inputs)

@@ -55,7 +55,7 @@ class MoTConfig(PretrainedConfig):
         expert_size (`int`, *optional*):
             The dimensionality of an expert. `None` will set it to n_inner / n_head.
         init_scale (`float`, *optional*, defaults to 1.0):
-            # TODO: Add description
+            The scaling factor for the initialization of MoTMLP weights. Inactive when creating through `from_pretrained`.
         activation_function (`str`, *optional*, defaults to `"gelu_new"`):
             Activation function, to be selected in the list `["relu", "silu", "gelu", "tanh", "gelu_new"]`.
         resid_pdrop (`float`, *optional*, defaults to 0.1):
@@ -82,9 +82,10 @@ class MoTConfig(PretrainedConfig):
             Whether to scale keys (K) prior to computing attention (dot-product) and upcast attention
             dot-product/softmax to float() when training with mixed precision.
         emit_softmax_over_experts (`bool`, *optional*, defaults to `False`):
-            # TODO: Add description
+            Determines the method of redistributing aggregated tokens in the MoT MLP. By default the model uses the merge weights.
+            This flag switches it to taking a softmax over the experts.
         use_discrete_routing (`bool`, *optional*, defaults to `False`):
-            # TODO: Add description
+            Discretize the mixing, sending only to the expert with the highest weight. Inference-only.
 
     Example:
 
