@@ -209,6 +209,7 @@ class OneFormerProcessingTest(unittest.TestCase):
         self.assertTrue(hasattr(processor, "max_seq_length"))
         self.assertTrue(hasattr(processor, "task_seq_length"))
 
+    @unittest.skip
     def test_batch_feature(self):
         pass
 
@@ -397,6 +398,7 @@ class OneFormerProcessingTest(unittest.TestCase):
 
         return inputs
 
+    @unittest.skip
     def test_init_without_params(self):
         pass
 

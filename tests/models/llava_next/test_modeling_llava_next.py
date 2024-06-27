@@ -265,6 +265,14 @@ class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
     def test_cpu_offload(self):
         pass
 
+    @unittest.skip(reason="Compile not yet supported because in LLava models")
+    def test_sdpa_can_compile_dynamic(self):
+        pass
+
+    @unittest.skip(reason="Compile not yet supported because in LLava models")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
 
 @require_torch
 class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):

@@ -335,14 +335,16 @@ class Pix2StructImageProcessingTestFourChannels(ImageProcessingTestMixin, unitte
                 (self.image_processor_tester.batch_size, max_patch, expected_hidden_dim),
             )
 
-    @unittest.skip("Pix2StructImageProcessor does not support 4 channels yet")  # FIXME Amy
+    @unittest.skip(reason="Pix2StructImageProcessor does not support 4 channels yet")  # FIXME Amy
     def test_call_numpy(self):
         return super().test_call_numpy()
 
-    @unittest.skip("Pix2StructImageProcessor does not support 4 channels yet")  # FIXME Amy
+    @unittest.skip(reason="Pix2StructImageProcessor does not support 4 channels yet")  # FIXME Amy
     def test_call_pytorch(self):
         return super().test_call_torch()
 
-    @unittest.skip("Pix2StructImageProcessor does treat numpy and PIL 4 channel images consistently")  # FIXME Amy
+    @unittest.skip(
+        reason="Pix2StructImageProcessor does treat numpy and PIL 4 channel images consistently"
+    )  # FIXME Amy
     def test_call_numpy_4_channels(self):
         return super().test_call_torch()

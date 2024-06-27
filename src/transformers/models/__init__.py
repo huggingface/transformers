@@ -125,6 +125,7 @@ from . import (
     llama,
     llava,
     llava_next,
+    llava_next_video,
     longformer,
     longt5,
     luke,

@@ -398,11 +398,11 @@ class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
         )
 
-    @unittest.skip("Gemma buffers include complex numbers, which breaks this test")
+    @unittest.skip(reason="Gemma buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip("Gemma uses GQA on all models so the KV cache is a non standard format")
+    @unittest.skip(reason="Gemma uses GQA on all models so the KV cache is a non standard format")
     def test_past_key_values_format(self):
         pass
 
@@ -456,7 +456,7 @@ class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest("Gemma flash attention does not support right padding")
+        self.skipTest(reason="Gemma flash attention does not support right padding")
 
     @require_torch_sdpa
     @require_torch_gpu
@@ -464,7 +464,7 @@ class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_sdpa_equivalence(self):
         for model_class in self.all_model_classes:
             if not model_class._supports_sdpa:
-                return
+                self.skipTest(reason="Model does not support SDPA")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
@@ -498,7 +498,7 @@ class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_flash_attn_2_equivalence(self):
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn_2:
-                return
+                self.skipTest(reason="Model does not support Flash Attention 2")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
@@ -749,7 +749,7 @@ class GemmaIntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
-    @unittest.skip("The test will not fit our CI runners")
+    @unittest.skip(reason="The test will not fit our CI runners")
     @require_read_token
     def test_model_7b_fp32(self):
         model_id = "google/gemma-7b"
@@ -877,7 +877,7 @@ class GemmaIntegrationTest(unittest.TestCase):
         # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
         # work as intended. See https://github.com/pytorch/pytorch/issues/121943
         if version.parse(torch.__version__) < version.parse("2.3.0"):
-            self.skipTest("This test requires torch >= 2.3 to run.")
+            self.skipTest(reason="This test requires torch >= 2.3 to run.")
 
         NUM_TOKENS_TO_GENERATE = 40
         # Note on `EXPECTED_TEXT_COMPLETION`'s diff: the current value matches the original test if the original test

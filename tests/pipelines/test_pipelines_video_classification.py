@@ -94,5 +94,6 @@ class VideoClassificationPipelineTests(unittest.TestCase):
         )
 
     @require_tf
+    @unittest.skip
     def test_small_model_tf(self):
         pass
