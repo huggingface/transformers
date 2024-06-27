@@ -212,7 +212,6 @@ class MPLUGDocOwlForConditionalGenerationIntegrationTest(unittest.TestCase):
         torch.cuda.empty_cache()
 
     @slow
-    # @require_bitsandbytes
     def test_small_model_integration_test(self):
         # Let' s make sure we test the preprocessing to replace what is used
         model = MPLUGDocOwlForConditionalGeneration.from_pretrained("/raid/dana/mplug_model_hf", load_in_4bit=False)
