@@ -16,17 +16,11 @@
 
 import unittest
 
-import pytest
-from packaging import version
-
 from transformers import AutoModelForCausalLM, AutoTokenizer, Gemma2Config, is_torch_available
 from transformers.testing_utils import (
-    require_bitsandbytes,
-    require_flash_attn,
     require_read_token,
     require_torch,
     require_torch_gpu,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -43,7 +37,6 @@ if is_torch_available():
         Gemma2ForSequenceClassification,
         Gemma2ForTokenClassification,
         Gemma2Model,
-        GemmaTokenizer,
     )
 
 
