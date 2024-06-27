@@ -166,6 +166,8 @@ class ChameleonConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         qk_layernorm (`bool`, *optional*, defaults to `False`):
             Whether to use query-key normalization.
+        swin_norm (`bool`, *optional*, defaults to `False`):
+            Use Swin Transformer normalization.
         vq_config (`dict`, *optional*):
             ChameleonVQConfig instance containing the configuration for the VQ-VAE model.
         vocabulary_map (`dict`, *optional*):
@@ -211,7 +213,8 @@ class ChameleonConfig(PretrainedConfig):
         rope_scaling=None,
         attention_bias=False,
         attention_dropout=0.0,
-        qk_layernorm=False,
+        qk_layernorm=True,
+        swin_norm=False,
         vq_config=None,
         vocabulary_map=None,
         mlp_bias=False,
@@ -240,6 +243,7 @@ class ChameleonConfig(PretrainedConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.qk_layernorm = qk_layernorm
+        self.swin_norm = swin_norm
 
         if vq_config is None:
             vq_config = {}
