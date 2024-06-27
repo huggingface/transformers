@@ -156,28 +156,16 @@ class SiglipModelTesterMixin(ModelTesterMixin):
                 for use_mask in use_attention_mask_options
                 for output_attentions in [True, False]
                 for sdpa_backend in [
-                    SDPBackend.FLASH_ATTENTION,
-                    SDPBackend.EFFICIENT_ATTENTION,
+                    SDPBackend.MATH,
                     [SDPBackend.FLASH_ATTENTION, SDPBackend.MATH],
                     [SDPBackend.EFFICIENT_ATTENTION, SDPBackend.MATH],
+                    [SDPBackend.FLASH_ATTENTION, SDPBackend.EFFICIENT_ATTENTION, SDPBackend.MATH],
                 ]
                 for batch_size in [1, 5]
             ]
             fail_cases = []
 
             for use_mask, output_attentions, sdpa_backend, batch_size in cases:
-                # SDPA flash attention backend is not implemented for float32
-                if torch_dtype == torch.float32 and sdpa_backend == SDPBackend.FLASH_ATTENTION:
-                    continue
-
-                # SDPA flash attention backend does not support mask
-                if use_mask and sdpa_backend == SDPBackend.FLASH_ATTENTION:
-                    continue
-
-                # Efficient attention does not support CPU
-                if torch_device == "cpu" and sdpa_backend == SDPBackend.EFFICIENT_ATTENTION:
-                    continue
-
                 processed_inputs = inputs_dict.copy()
 
                 # convert to torch_dtype
