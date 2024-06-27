@@ -649,7 +649,7 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             if tensor.dtype == torch.float32:
                 inputs_dict[key] = tensor.to(torch_dtype)
 
-        for model_class in self.all_model_classes[1:]:
+        for model_class in self.all_model_classes:
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model_class(config).save_pretrained(tmpdirname)
                 model_static = model_class.from_pretrained(
