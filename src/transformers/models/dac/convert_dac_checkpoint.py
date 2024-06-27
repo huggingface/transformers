@@ -195,6 +195,7 @@ def convert_checkpoint(
     model_name,
     checkpoint_path,
     pytorch_dump_folder_path,
+    sample_rate = 16000, 
     repo_id=None,
 ):
     model_dict = torch.load(checkpoint_path, "cpu")
@@ -213,6 +214,7 @@ def convert_checkpoint(
 
     model = DacModel(config)
     feature_extractor = DacFeatureExtractor()
+    feature_extractor.sampling_rate = sample_rate
 
     original_checkpoint = model_dict["state_dict"]
 
@@ -240,6 +242,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the 🤗 hub."
     )
+    parser.add_argument(
+        "--sample_rate", default=None, type=str, help="Sample rate used by DacFeatureExtractor"
+    )
     args = parser.parse_args()
-
-    convert_checkpoint(args.model, args.checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub)
+    
+    convert_checkpoint(args.model, args.checkpoint_path, args.pytorch_dump_folder_path, args.sample_rate, args.push_to_hub)

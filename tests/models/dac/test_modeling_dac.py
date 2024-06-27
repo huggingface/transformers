@@ -418,171 +418,157 @@ def compute_rmse(arr1, arr2):
 @slow
 @require_torch
 class DacIntegrationTest(unittest.TestCase):
-    def test_integration_16kHz(self):
-        expected_rmse = 0.004
+    def test_integration(self):
+        expected_rmse = {
+            "dac_16khz":0.004, 
+            "dac_24khz": 0.0026, 
+            "dac_44khz": 0.0008, 
+        }
 
-        expected_encoder_sums = {
-            "encoder_loss": 25.4211,
-            "quantized_representation": -9758.1211,
-            'codebook_indices': 1350817,
-            "projected_latents": 1597.9078, 
+        expected_encoder_sums_dict = {
+            "dac_16khz": {
+                "encoder_loss": 24.873,
+                "quantized_representation": -22443.92,
+                'codebook_indices': 1763635,
+                "projected_latents": 1891.828,
+            }, 
+            "dac_24khz": {
+                "encoder_loss": 28.091,
+                "quantized_representation": 7952.426,
+                'codebook_indices': 7133234,
+                "projected_latents": -2933.110,
+            }, 
+            "dac_44khz": {
+                "encoder_loss": 24.1003,
+                "quantized_representation": 10457.930,
+                'codebook_indices': 2282129,
+                "projected_latents": 2074.932,
+            }, 
         }
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        model_id = "kamilakesbi/dac_16khz"
+        
+        models = ['dac_16khz', 'dac_24khz', 'dac_44khz']
 
-        model = DacModel.from_pretrained(model_id).to(torch_device)
-        processor = AutoProcessor.from_pretrained(model_id)
+        for model_name in models: 
 
-        librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
-        audio_sample = librispeech_dummy[0]["audio"]["array"]
+            model_id = 'kamilakesbi/{}'.format(model_name)
+            model = DacModel.from_pretrained(model_id).to(torch_device)
+            processor = AutoProcessor.from_pretrained(model_id)
 
-        inputs = processor(
-            raw_audio=audio_sample,
-            sampling_rate=processor.sampling_rate,
-            return_tensors="pt",
-        ).to(torch_device)
+            librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
+            audio_sample = librispeech_dummy[0]["audio"]["array"]
 
-        with torch.no_grad():
-            # use max bandwith for best possible reconstruction
-            encoder_outputs = model.encode(inputs["input_values"])
+            inputs = processor(
+                raw_audio=audio_sample,
+                sampling_rate=processor.sampling_rate,
+                return_tensors="pt",
+            ).to(torch_device)
 
-            expected_encoder_sums = torch.tensor(list(expected_encoder_sums.values()), dtype=torch.float32)
-            encoder_outputs_sum = torch.tensor([v.sum().cpu().item() for v in encoder_outputs.to_tuple()])
+            with torch.no_grad():
+                encoder_outputs = model.encode(inputs["input_values"])
 
-            # make sure audio encoded codes are correct
-            self.assertTrue(torch.allclose(encoder_outputs_sum, encoder_outputs_sum, atol=1e-3))
+                expected_encoder_sums = torch.tensor(list(expected_encoder_sums_dict[str(model_name)].values()), dtype=torch.float32)
+                encoder_outputs_sum = torch.tensor([v.sum().cpu().item() for v in encoder_outputs.to_tuple()])
 
-            _, quantized_representation, _, _ = encoder_outputs.to_tuple()
-            input_values_dec = model.decode(quantized_representation)[0]
-            input_values_enc_dec = model(inputs["input_values"])[1]
+                # make sure audio encoded codes are correct
+                self.assertTrue(torch.allclose(encoder_outputs_sum, expected_encoder_sums, atol=1e-3))
 
-            # make sure forward and decode gives same result
-            self.assertTrue(torch.allclose(input_values_dec, input_values_enc_dec, atol=1e-3))
+                _, quantized_representation, _, _ = encoder_outputs.to_tuple()
+                input_values_dec = model.decode(quantized_representation)[0]
+                input_values_enc_dec = model(inputs["input_values"])[1]
 
-            arr = inputs["input_values"][0].cpu().numpy()
-            arr_enc_dec = input_values_enc_dec[0].cpu().numpy()
-            
-            max_length = min(arr_enc_dec.shape[-1], arr.shape[-1])
+                # make sure forward and decode gives same result
+                self.assertTrue(torch.allclose(input_values_dec, input_values_enc_dec, atol=1e-3))
 
-            arr_cut = arr[0,:max_length].copy()
-            arr_enc_dec_cut = arr_enc_dec[0,:max_length].copy()
+                arr = inputs["input_values"][0].cpu().numpy()
+                arr_enc_dec = input_values_enc_dec[0].cpu().numpy()
+                
+                max_length = min(arr_enc_dec.shape[-1], arr.shape[-1])
 
-            # make sure audios are more or less equal
-            rmse = compute_rmse(arr_cut, arr_enc_dec_cut)
-            self.assertTrue(rmse < expected_rmse)
+                arr_cut = arr[0,:max_length].copy()
+                arr_enc_dec_cut = arr_enc_dec[0,:max_length].copy()
 
+                # make sure audios are more or less equal
+                rmse = compute_rmse(arr_cut, arr_enc_dec_cut)
+                self.assertTrue(rmse < expected_rmse[str(model_name)])
 
-    # def test_integration_48kHz(self):
-    #     expected_rmse = {
-    #         "3.0": 0.001,
-    #         "24.0": 0.0005,
-    #     }
-    #     expected_codesums = {
-    #         "3.0": [144259, 146765, 156435, 176871, 161971],
-    #         "24.0": [1568553, 1294948, 1306190, 1464747, 1663150],
-    #     }
-    #     librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-    #     model_id = "facebook/Dac_48khz"
+    def test_integration_batch(self):
+        expected_rmse = {
+            "dac_16khz":0.002, 
+            "dac_24khz": 0.0013, 
+            "dac_44khz": 0.0004, 
+        }
 
-    #     model = DacModel.from_pretrained(model_id).to(torch_device)
-    #     model = model.eval()
-    #     processor = AutoProcessor.from_pretrained(model_id)
+        expected_encoder_sums_dict = {
+            "dac_16khz": {
+                "encoder_loss": 20.3622,
+                "quantized_representation": -39568.0898,
+                'codebook_indices': 4166923,
+                "projected_latents": 1526.3572,
+            }, 
+            "dac_24khz": {
+                "encoder_loss": 24.5159,
+                "quantized_representation": 40920.2500,
+                'codebook_indices': 17405028,
+                "projected_latents": -5158.3975,
+            }, 
+            "dac_44khz": {
+                "encoder_loss": 19.4507,
+                "quantized_representation": -5212.0156,
+                'codebook_indices': 5736248, 
+                "projected_latents": 1636.0724
+            }, 
+        }
+        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        
+        models = ['dac_16khz', 'dac_24khz', 'dac_44khz']
 
-    #     librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
-    #     audio_sample = librispeech_dummy[-1]["audio"]["array"]
+        for model_name in models: 
 
-    #     # transform mono to stereo
-    #     audio_sample = np.array([audio_sample, audio_sample])
+            model_id = 'kamilakesbi/{}'.format(model_name)
+            model = DacModel.from_pretrained(model_id).to(torch_device)
+            processor = AutoProcessor.from_pretrained(model_id)
 
-    #     inputs = processor(raw_audio=audio_sample, sampling_rate=processor.sampling_rate, return_tensors="pt").to(
-    #         torch_device
-    #     )
+            librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
 
-    #     for bandwidth, expected_rmse in expected_rmse.items():
-    #         with torch.no_grad():
-    #             # use max bandwith for best possible reconstruction
-    #             encoder_outputs = model.encode(
-    #                 inputs["input_values"], inputs["padding_mask"], bandwidth=float(bandwidth), return_dict=False
-    #             )
-    #             audio_code_sums = [a[0].sum().cpu().item() for a in encoder_outputs[0]]
+            audio_samples = [
+                np.array([audio_sample["array"]])[0]
+                for audio_sample in librispeech_dummy[-2:]["audio"]
+            ]
 
-    #             # make sure audio encoded codes are correct
-    #             self.assertListEqual(audio_code_sums, expected_codesums[bandwidth])
-    #             audio_codes, scales = encoder_outputs
-    #             input_values_dec = model.decode(audio_codes, scales, inputs["padding_mask"])[0]
-    #             input_values_enc_dec = model(
-    #                 inputs["input_values"], inputs["padding_mask"], bandwidth=float(bandwidth)
-    #             )[-1]
+            inputs = processor(
+                raw_audio=audio_samples,
+                sampling_rate=processor.sampling_rate,
+                truncation=False, 
+                return_tensors="pt",
+            ).to(torch_device)
 
-    #         # make sure forward and decode gives same result
-    #         self.assertTrue(torch.allclose(input_values_dec, input_values_enc_dec, atol=1e-3))
+            with torch.no_grad():
+                encoder_outputs = model.encode(inputs["input_values"])
 
-    #         # make sure shape matches
-    #         self.assertTrue(inputs["input_values"].shape == input_values_enc_dec.shape)
+                expected_encoder_sums = torch.tensor(list(expected_encoder_sums_dict[str(model_name)].values()), dtype=torch.float32)
+                encoder_outputs_sum = torch.tensor([v.sum().cpu().item() for v in encoder_outputs.to_tuple()])
 
-    #         arr = inputs["input_values"][0].cpu().numpy()
-    #         arr_enc_dec = input_values_enc_dec[0].cpu().numpy()
+                # make sure audio encoded codes are correct
+                self.assertTrue(torch.allclose(encoder_outputs_sum, expected_encoder_sums, atol=1e-3))
 
-    #         # make sure audios are more or less equal
-    #         # the RMSE of two random gaussian noise vectors with ~N(0, 1) is around 1.0
-    #         rmse = compute_rmse(arr, arr_enc_dec)
-    #         self.assertTrue(rmse < expected_rmse)
+                _, quantized_representation, _, _ = encoder_outputs.to_tuple()
+                input_values_dec = model.decode(quantized_representation)[0]
+                input_values_enc_dec = model(inputs["input_values"])[1]
 
-    # def test_batch_48kHz(self):
-    #     expected_rmse = {
-    #         "3.0": 0.001,
-    #         "24.0": 0.0005,
-    #     }
-    #     expected_codesums = {
-    #         "3.0": [
-    #             [72410, 79137, 76694, 90854, 73023, 82980, 72707, 54842],
-    #             [85561, 81870, 76953, 48967, 79315, 85442, 81479, 107241],
-    #         ],
-    #         "24.0": [
-    #             [72410, 79137, 76694, 90854, 73023, 82980, 72707, 54842],
-    #             [85561, 81870, 76953, 48967, 79315, 85442, 81479, 107241],
-    #         ],
-    #     }
-    #     librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-    #     model_id = "facebook/Dac_48khz"
+                # make sure forward and decode gives same result
+                self.assertTrue(torch.allclose(input_values_dec, input_values_enc_dec, atol=1e-3))
 
-    #     model = DacModel.from_pretrained(model_id).to(torch_device)
-    #     processor = AutoProcessor.from_pretrained(model_id, chunk_length_s=1, overlap=0.01)
+                arr = inputs["input_values"].cpu().numpy()
+                arr_enc_dec = input_values_enc_dec.cpu().numpy()
+                
+                max_length = min(arr_enc_dec.shape[-1], arr.shape[-1])
 
-    #     librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
+                arr_cut = arr[:,:,:max_length].copy()
+                arr_enc_dec_cut = arr_enc_dec[:,:,:max_length].copy()
 
-    #     audio_samples = [
-    #         np.array([audio_sample["array"], audio_sample["array"]])
-    #         for audio_sample in librispeech_dummy[-2:]["audio"]
-    #     ]
+                # make sure audios are more or less equal
+                rmse = compute_rmse(arr_cut, arr_enc_dec_cut)
+                self.assertTrue(rmse < expected_rmse[str(model_name)])
 
-    #     inputs = processor(raw_audio=audio_samples, sampling_rate=processor.sampling_rate, return_tensors="pt")
-    #     input_values = inputs["input_values"].to(torch_device)
-    #     for bandwidth, expected_rmse in expected_rmse.items():
-    #         with torch.no_grad():
-    #             # use max bandwith for best possible reconstruction
-    #             encoder_outputs = model.encode(input_values, bandwidth=float(bandwidth), return_dict=False)
-    #             audio_code_sums_0 = [a[0][0].sum().cpu().item() for a in encoder_outputs[0]]
-    #             audio_code_sums_1 = [a[0][1].sum().cpu().item() for a in encoder_outputs[0]]
-
-    #             # make sure audio encoded codes are correct
-    #             self.assertListEqual(audio_code_sums_0, expected_codesums[bandwidth][0])
-    #             self.assertListEqual(audio_code_sums_1, expected_codesums[bandwidth][1])
-
-    #             audio_codes, scales = encoder_outputs
-    #             input_values_dec = model.decode(audio_codes, scales)[0]
-    #             input_values_enc_dec = model(input_values, bandwidth=float(bandwidth))[-1]
-
-    #         # make sure forward and decode gives same result
-    #         self.assertTrue(torch.allclose(input_values_dec, input_values_enc_dec, atol=1e-3))
-
-    #         # make sure shape matches
-    #         self.assertTrue(input_values.shape == input_values_enc_dec.shape)
-
-    #         arr = input_values[0].cpu().numpy()
-    #         arr_enc_dec = input_values_enc_dec[0].cpu().numpy()
-
-    #         # make sure audios are more or less equal
-    #         # the RMSE of two random gaussian noise vectors with ~N(0, 1) is around 1.0
-    #         rmse = compute_rmse(arr, arr_enc_dec)
-    #         self.assertTrue(rmse < expected_rmse)
+   
