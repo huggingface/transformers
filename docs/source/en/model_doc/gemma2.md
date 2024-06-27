@@ -56,13 +56,3 @@ This model was contributed by [Arthur Zucker](https://huggingface.co/ArthurZ), [
 
 [[autodoc]] Gemma2ForTokenClassification
     - forward
-
-## FlaxGemma2Model
-
-[[autodoc]] FlaxGemma2Model
-    - __call__
-
-## FlaxGemma2ForCausalLM
-
-[[autodoc]] FlaxGemma2ForCausalLM
-    - __call__
