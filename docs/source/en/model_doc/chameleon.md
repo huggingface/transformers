@@ -24,7 +24,7 @@ The Chameleon model was proposed in [Chameleon: Mixed-Modal Early-Fusion Foundat
 
 The abstract from the paper is the following:
 
-We present Chameleon, a family of early-fusion token-based mixed-modal models capable of understanding and generating images and text in any arbitrary sequence. We outline a stable training
+*We present Chameleon, a family of early-fusion token-based mixed-modal models capable of understanding and generating images and text in any arbitrary sequence. We outline a stable training
 approach from inception, an alignment recipe, and an architectural parameterization tailored for the
 early-fusion, token-based, mixed-modal setting. The models are evaluated on a comprehensive range
 of tasks, including visual question answering, image captioning, text generation, image generation, and
@@ -34,7 +34,7 @@ being competitive with models such as Mixtral 8x7B and Gemini-Pro, and performs 
 generation, all in a single model. It also matches or exceeds the performance of much larger models,
 including Gemini Pro and GPT-4V, according to human judgments on a new long-form mixed-modal
 generation evaluation, where either the prompt or outputs contain mixed sequences of both images and
-text. Chameleon marks a significant step forward in a unified modeling of full multimodal documents
+text. Chameleon marks a significant step forward in a unified modeling of full multimodal documents*
 
 
 This model was contributed by [joaogante](https://huggingface.co/joaogante) and [RaushanTurganbay](https://huggingface.co/RaushanTurganbay).
