@@ -1273,6 +1273,9 @@ class GenerationTesterMixin:
             if any(model_name in model_class.__name__.lower() for model_name in ["marian", "mbart", "pegasus"]):
                 self.skipTest("DoLa is not supported for models that don't return layerwise hidden states")
 
+            if any(model_name in model_class.__name__.lower() for model_name in ["rwkv"]):
+                self.skipTest("Won't fix: model with non-standard dictionary output shapes")
+
             # enable cache if the model is not openai-gpt, xlnet, cpm, or xlm
             config, input_ids, attention_mask = self._get_input_ids_and_config()
 
