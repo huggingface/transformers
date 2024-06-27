@@ -50,6 +50,7 @@ if is_torch_available():
     )
 
 
+@require_torch
 class GemmaModelTester:
     config_class = GemmaConfig
     model_class = GemmaModel
