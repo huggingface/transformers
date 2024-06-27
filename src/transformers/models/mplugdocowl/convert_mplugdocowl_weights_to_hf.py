@@ -82,7 +82,7 @@ def convert_state_dict_to_hf(state_dict):
 
 
 def convert_mplugdocowl_llama_to_hf(
-    text_model_id, vision_model_id, output_hub_path, old_state_dict_id, pretrained=True
+    text_model_id, vision_model_id, output_hub_path, old_state_dict_id, pretrained=False
 ):
     if not pretrained:
         torch.set_default_dtype(torch.float16)
@@ -115,7 +115,7 @@ def convert_mplugdocowl_llama_to_hf(
         state_dict["multi_modal_projector.reducer.weight"] = state_dict[
             "multi_modal_projector.reducer.weight"
         ].contiguous()
-        # breakpoint()
+
         model.load_state_dict(state_dict, strict=True, assign=True)
 
         pre_expansion_embeddings = model.language_model.model.embed_tokens.weight.data
@@ -137,35 +137,13 @@ def convert_mplugdocowl_llama_to_hf(
             dim=0,
         )
         model.to(torch.float16)
-        model.save_pretrained("/raid/dana/mplug_model_hf/")
-        processor.save_pretrained("/raid/dana/mplug_model_hf/")
+        model.save_pretrained("/raid/dana/mplug_model_hf_chat/")
+        processor.save_pretrained("/raid/dana/mplug_model_hf_chat/")
     else:
         model = MPLUGDocOwlForConditionalGeneration.from_pretrained("/raid/dana/mplug_model_hf/")
         model.to(torch.float16)
         processor = MPLUGDocOwlProcessor.from_pretrained("/raid/dana/mplug_model_hf/")
-        breakpoint()
 
-    from PIL import Image
-
-    # image = Image.open("/raid/dana/test_image.png")
-    image = Image.open("/raid/dana/examples_Rebecca_(1939_poster)_Small.jpeg")
-    # query = "<image>Recognize text in the image."
-    # query = "<image>What's the value of the Very well bar in the 65+ age group? Answer the question with detailed explanation."
-    query = "<image>What is the name of the movie in the poster? Provide detailed explanation."
-    output = processor(images=image, text=query)
-    breakpoint()
-    device = torch.device("cuda:0")
-    output.to(device)
-    model.to(device)
-    torch.set_default_dtype(torch.float16)
-    # with torch.inference_mode():
-    # outputs = model(input_ids=output['input_ids'], pixel_values = output['pixel_values'],attention_mask=output['attention_mask'], patch_positions=output['patch_positions'])
-    try:
-        tokens = model.generate(output["input_ids"], pixel_values=output["pixel_values"], max_new_tokens=512)
-    except AttributeError as e:
-        raise (e)
-
-    breakpoint()
     model.push_to_hub(output_hub_path)
     processor.push_to_hub(output_hub_path)
 
@@ -199,6 +177,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-# output_s = model.generate(output['input_ids'],output['pixel_values'], output['patch_positions'],do_sample=False,temperature=1.0,max_new_tokens=512,use_cache=True,)

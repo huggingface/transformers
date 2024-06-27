@@ -172,10 +172,6 @@ def anchor_rank(anchors, anchors_areas, input_image_size, eps=1e-5):
 
     return index
 
-
-# FIXME add this into shape adaptive cropping module
-
-
 def anchor_resize(
     image: ImageInput,
     anchors: str = "grid_9",
@@ -194,7 +190,7 @@ def anchor_resize(
     target_size = anchors[selected_anchor][2:].astype(int)  # target width, height
     resized_img = image.resize((target_size[0], target_size[1]), resample=resample)
     resized_img = np.array(resized_img)
-    # image_patches_list = [image_input[i] for i in range(image_input.shape[0])]
+    
     return [resized_img], selected_anchor
 
 
@@ -211,20 +207,16 @@ def shape_adaptive_cropping(
 
     anchor_max = max(max(_) for _ in anchors)
 
-    h, w = image_patches.shape[0], image_patches.shape[1]  # w,h
-
     image_patches = image_patches.transpose(2, 0, 1)
 
     anchor_size = anchors[selected_anchor]
 
-    # Reshape the image
     num_h, num_w = anchor_size
 
     image_input = image_patches.reshape(3, num_h, size, num_w, size)
 
     image_input = image_input.transpose(1, 3, 2, 4, 0)
     image_input = image_input.reshape((-1, size, size, 3))
-    # image_input = image_input.transpose(0,2,3,1)
     image_patches_list = [image_input[i] for i in range(image_input.shape[0])]
     anchor = anchors[selected_anchor]  # w,h
     patch_position = np.concatenate(
@@ -238,7 +230,7 @@ def shape_adaptive_cropping(
     patch_position = patch_position.reshape(-1, 2)
     if add_global_img:
         patch_position = np.vstack((np.ones((1, 2), dtype=np.int64) * anchor_max, patch_position))
-    # num_patch, (ph, pw)
+    
     return image_patches_list, patch_position, patch_position.shape[0], anchor_max
 
 
@@ -256,10 +248,10 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
             method.
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
             Resampling filter to use if resizing the image. Can be overridden by `resample` in the `preprocess` method.
-        do_center_crop (`bool`, *optional*, defaults to `True`):
+        do_center_crop (`bool`, *optional*, defaults to `False`):
             Whether to center crop the image to the specified `crop_size`. Can be overridden by `do_center_crop` in the
             `preprocess` method.
-        crop_size (`Dict[str, int]` *optional*, defaults to 224):
+        crop_size (`Dict[str, int]` *optional*, defaults to `False`):
             Size of the output image after applying `center_crop`. Can be overridden by `crop_size` in the `preprocess`
             method.
         do_rescale (`bool`, *optional*, defaults to `True`):
@@ -279,6 +271,8 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
             Can be overridden by the `image_std` parameter in the `preprocess` method.
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Whether to convert the image to RGB.
+        do_shape_adaptive_cropping (`bool`, *optional*, defaults to `True`): <fill_docstring>
+        do_anchor_resize (`bool`, *optional*, defaults to `True`): <fill_docstring>
     """
 
     model_input_names = ["pixel_values"]

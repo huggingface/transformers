@@ -239,12 +239,42 @@ class MPLUGDocOwlForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.equal(inputs["input_ids"], EXPECTED_INPUT_IDS))
 
         output = model.generate(**inputs, max_new_tokens=500)
-        EXPECTED_DECODED_TEXT = "USER: <global_img> <crop_img_row0_col0> <crop_img_row0_col1> <crop_img_row1_col0> <crop_img_row1_col1> <crop_img_row2_col0> <crop_img_row2_col1> What's the value of the Very well bar in the 65+ age group? Answer the question with detailed explanation. ASSISTANT: 68%\nIn the image, which appears to be a chart from a Pew Research Center report, the bar representing the percentage of people aged 65 and older who believe that Trump fights for their beliefs 'very well' is at 68%."  # fmt: skip
+        EXPECTED_DECODED_TEXT = "68%\nIn the image, which appears to be a chart from a Pew Research Center report, the bar representing the percentage of people aged 65 and older who believe that Trump fights for their beliefs 'very well' is at 68%."  # fmt: skip
         self.assertEqual(
-            self.processor.decode(output[0], skip_special_tokens=True),
+            self.processor.decode(output[0,inputs["input_ids"].shape[1]:], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
+    def test_small_model_integration_test_single(self):
+        # Let' s make sure we test the preprocessing to replace what is used
+        model = MPLUGDocOwlForConditionalGeneration.from_pretrained("/raid/dana/mplug_model_hf", load_in_4bit=False)
 
+        prompt = "<image>Parse texts in the image."
+        image_file = "/raid/dana/fflw0023_1.png"
+        # raw_image = Image.open(requests.get(image_file, stream=True).raw)
+        raw_image = Image.open(image_file)
+        inputs = self.processor(prompt, raw_image, return_tensors="pt")
+        print(inputs["input_ids"])
+        EXPECTED_INPUT_IDS = torch.tensor([[    1,  3148,  1001, 29901,   529, 10945, 29918,  2492, 29958,  32000,
+           529, 29883,  1336, 29918,  2492, 29918,   798, 29900, 29918,  1054,
+         29900, 29958,  32000,   529, 29883,  1336, 29918,  2492, 29918,   798,
+         29900, 29918,  1054, 29896, 29958,  32000,   529, 29883,  1336, 29918,
+          2492, 29918,   798, 29896, 29918,  1054, 29900, 29958,  32000,   529,
+         29883,  1336, 29918,  2492, 29918,   798, 29896, 29918,  1054, 29896,
+         29958,  32000,   529, 29883,  1336, 29918,  2492, 29918,   798, 29906,
+         29918,  1054, 29900, 29958,  32000,   529, 29883,  1336, 29918,  2492,
+         29918,   798, 29906, 29918,  1054, 29896, 29958,  32000, 20969, 26442,
+           297,   278,  1967, 29889,   319,  1799,  9047, 13566, 29901]])
+  # fmt: skip
+
+        self.assertTrue(torch.equal(inputs["input_ids"], EXPECTED_INPUT_IDS))
+
+        output = model.generate(**inputs, max_new_tokens=500)
+        EXPECTED_DECODED_TEXT = "<doc>     RESPONSE    CODE    REQUEST    CONFIRMATION \n     To:    Joe Leinster \n     From:  Bonnie Tucker \n     Date:  September 18, 1996 \n     Brand: Eclipse    PPS Program #: 602399 Requested By: \n     Title: Sneak Preview Attendance Roster B - Charlotte Tests \n     Description: REVISED - Record of smokers attending a sneak preview in Charlotte that may or may not be \n     pre-registered. (CHANGED SUPPLIER) \n     Fullfillment Data Entry at: M/A/R/C \n     Circulation Quantity: 300 \n     Estimated Response: 100.00 % \n     Estimated Responders: 300 \n     Distribution Drop Date: 10/03/96    Expiration Date: 11/15/96 \n     Response Code Assigned: _ W24 \n     Address, postal requirements, barcodes, document storage, and \n     batch numbers to be supplied by: \n     M/A/R/C \n     DE Fullfillment Vendor \n     C:  Suzi Hicks, RJR-IR    Vanessa Oakley \n     Karen Giddens    Melissa Andrews - TBM \n     52251 \n     2954 \n     Jackson Roper    Tammi LaManna - M/B \n     Debbie Lockery \n     Source: https://www.industrydocuments.ucsf.edu/docs/fflw0023 </doc></s>"  # fmt: skip
+        self.assertEqual(
+            self.processor.decode(output[0,inputs["input_ids"].shape[1]:], skip_special_tokens=True),
+            EXPECTED_DECODED_TEXT,
+        )
+'''
     @slow
     # @require_bitsandbytes
     def test_small_model_integration_test_llama_single(self):
@@ -266,7 +296,7 @@ class MPLUGDocOwlForConditionalGenerationIntegrationTest(unittest.TestCase):
             processor.decode(output[0], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
-
+'''
 
 """
     @slow

@@ -78,17 +78,16 @@ class MPLUGDocOwlConfig(PretrainedConfig):
             The config object or dictionary of the vision backbone.
         text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `LlamaConfig`):
             The config object or dictionary of the text backbone.
+        hreducer_hidden_size (`<fill_type>`, *optional*, defaults to 1024): <fill_docstring>
+        hreducer_initializer_range (`<fill_type>`, *optional*, defaults to 0.02): <fill_docstring>
+        hreducer_layer_norm (`<fill_type>`, *optional*, defaults to 1e-06): <fill_docstring>
+        hreducer_conv_shape (`<fill_type>`, *optional*, defaults to `"1x4"`): <fill_docstring>
         ignore_index (`int`, *optional*, defaults to -100):
             The ignore index for the loss function.
         image_token_index (`int`, *optional*, defaults to 32000):
             The image token index to encode the image prompt.
         projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The activation function used by the multimodal projector.
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
-            The feature selection strategy used to select the vision feature from the vision backbone.
-            Can be one of `"default"` or `"full"`.
-        vision_feature_layer (`int`, *optional*, defaults to -2):
-            The index of the layer to select the vision feature.
 
     Example:
 

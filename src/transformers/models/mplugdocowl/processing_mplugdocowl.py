@@ -33,13 +33,13 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
     r"""
     Constructs a MPLUGDocOwl processor which wraps a MPLUGDocOwl image processor and a MPLUGDocOwl tokenizer into a single processor.
 
-    [`MPLUGDocOwlProcessor`] offers all the functionalities of [`MPLUGDocOwlImageProcessor`] and [`MPLUGDocOwlTokenizerFast`]. See the
+    [`MPLUGDocOwlProcessor`] offers all the functionalities of [`MPLUGDocOwlImageProcessor`] and [`AutoTokenizerFast`]. See the
     [`~MPLUGDocOwlProcessor.__call__`] and [`~MPLUGDocOwlProcessor.decode`] for more information.
 
     Args:
         image_processor ([`MPLUGDocOwlImageProcessor`], *optional*):
             The image processor is a required input.
-        tokenizer ([`MPLUGDocOwlTokenizerFast`], *optional*):
+        tokenizer ([`AutoTokenizerFast`], *optional*):
             The tokenizer is a required input.
     """
 
@@ -63,7 +63,7 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to MPLUGDocOwlTokenizerFast's [`~MPLUGDocOwlTokenizerFast.__call__`] if `text` is not `None` to encode
+        and `kwargs` arguments to AutoTokenizerFast's [`~AutoTokenizerFast.__call__`] if `text` is not `None` to encode
         the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
         MPLUGDocOwlImageProcessor's [`~MPLUGDocOwlImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
         of the above two methods for more information.
@@ -169,14 +169,14 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
 
     def batch_decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to MPLUGDocOwlTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
+        This method forwards all its arguments to AutoTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
         refer to the docstring of this method for more information.
         """
         return self.tokenizer.batch_decode(*args, **kwargs)
 
     def decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to MPLUGDocOwlTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
+        This method forwards all its arguments to AutoTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
         the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
