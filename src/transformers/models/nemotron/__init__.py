@@ -26,13 +26,6 @@ _import_structure = {
 }
 
 
-try:
-    if not is_sentencepiece_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tokenization_nemotron"] = ["NemotronTokenizer"]
 
 try:
     if not is_torch_available():
@@ -52,14 +45,6 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_nemotron import NemotronConfig
-
-    try:
-        if is_sentencepiece_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .tokenization_nemotron import NemotronTokenizer
     
     try:
         if not is_torch_available():

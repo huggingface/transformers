@@ -49,7 +49,7 @@ if is_torch_available():
         NemotronForSequenceClassification,
         NemotronForTokenClassification,
         NemotronModel,
-        NemotronTokenizer,
+        AutoTokenizer,
     )
     from transformers.models.nemotron.modeling_nemotron import (
         NemotronLinearScalingRotaryEmbedding,
@@ -531,7 +531,7 @@ class NemotronModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         max_new_tokens = 30
 
         test_model = "thhaus/nemotron3-8b"
-        tokenizer = NemotronTokenizer.from_pretrained(test_model)
+        tokenizer = AutoTokenizer.from_pretrained(test_model)
 
         model_sdpa = NemotronForCausalLM.from_pretrained(
             test_model,
@@ -608,7 +608,7 @@ class NemotronIntegrationTest(unittest.TestCase):
         model = NemotronForCausalLM.from_pretrained(
             model_id, torch_dtype=torch.float16, device_map="auto", attn_implementation="sdpa"
         )
-        tokenizer = NemotronTokenizer.from_pretrained(model_id)
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(text, return_tensors="pt").to(torch_device)
         
         output = model.generate(**inputs, do_sample=False)
@@ -626,7 +626,7 @@ class NemotronIntegrationTest(unittest.TestCase):
         model = NemotronForCausalLM.from_pretrained(
             model_id, torch_dtype=torch.float16, device_map="auto", attn_implementation="eager"
         )
-        tokenizer = NemotronTokenizer.from_pretrained(model_id)
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(text, return_tensors="pt").to(torch_device)
         
         output = model.generate(**inputs, do_sample=False)
@@ -644,7 +644,7 @@ class NemotronIntegrationTest(unittest.TestCase):
         model = NemotronForCausalLM.from_pretrained(
             model_id, torch_dtype=torch.float16, device_map="auto", attn_implementation="flash_attention_2"
         )
-        tokenizer = NemotronTokenizer.from_pretrained(model_id)
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(text, return_tensors="pt").to(torch_device)
         
         output = model.generate(**inputs, do_sample=False)
