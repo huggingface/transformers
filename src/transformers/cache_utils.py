@@ -55,6 +55,22 @@ class Cache:
         """
         raise NotImplementedError("Make sure to implement `update` in a subclass.")
 
+    def post_process(self, layer_idx: int, cache_kwargs: Optional[Dict[str, Any]] = None):
+        """
+        Updates the cache with any post-processing logic required for the layer `layer_idx`.
+
+        Parameters:
+            layer_idx (`int`):
+                The index of the layer to cache the states for.
+            cache_kwargs (`Dict[str, Any]`, `optional`):
+                Additional arguments for the cache subclass. These are specific to each subclass and allow new types of
+                cache to be created.
+
+        Return:
+            A tuple containing the updated key and value states.
+        """
+        pass
+
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         # TODO: deprecate this function in favor of `cache_position`
@@ -970,3 +986,218 @@ class SlidingWindowCache(StaticCache):
         # in theory there is no limit because the sliding window size is fixed
         # no matter how long the sentence is
         return None
+
+
+class HHCache(Cache):
+    def __init__(self, recent_size=512, hh_size=4) -> None:
+        self.key_cache: List[torch.Tensor] = []
+        self.value_cache: List[torch.Tensor] = []
+        self.hh_score: List[torch.Tensor] = []
+        self.hh_size = hh_size
+        self.recent_size = recent_size
+        self.window_size = hh_size + recent_size
+        self.cos_sin_rerotation_cache = {}
+        self._cos_cache = None
+        self._sin_cache = None
+        self._seen_tokens = 0
+
+    def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
+        """Returns the sequence length of the cached states. A layer index can be optionally passed."""
+        if len(self.key_cache) <= layer_idx:
+            return 0
+        return self.key_cache[layer_idx].shape[-2]
+
+    def get_max_length(self) -> Optional[int]:
+        """Returns the maximum sequence length of the cached states."""
+        return self.window_size + 1
+
+    @staticmethod
+    def _rotate_half(x):
+        x1 = x[..., : x.shape[-1] // 2]
+        x2 = x[..., x.shape[-1] // 2 :]
+        return torch.cat((-x2, x1), dim=-1)
+
+    def _apply_key_rotary_pos_emb(
+        self, key_states: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
+    ) -> torch.Tensor:
+        rotated_key_states = (key_states * cos) + (self._rotate_half(key_states) * sin)
+        return rotated_key_states
+
+    def _get_rerotation_cos_sin(
+        self,
+        key_states: torch.Tensor,
+        cos: torch.Tensor,
+        sin: torch.Tensor,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        if key_states.shape[-2] not in self.cos_sin_rerotation_cache:
+            # Upcast to float32 temporarily for better accuracy
+            cos = cos.to(torch.float32)
+            sin = sin.to(torch.float32)
+
+            # Compute the cos and sin required for back- and forward-rotating to one position earlier in the sequence
+            original_cos = cos[self.hh_size + key_states.shape[-2] :]
+            shifted_cos = cos[self.hh_size : -key_states.shape[-2]]
+            original_sin = sin[self.hh_size + key_states.shape[-2] :]
+            shifted_sin = sin[self.hh_size : -key_states.shape[-2]]
+            rerotation_cos = original_cos * shifted_cos + original_sin * shifted_sin
+            rerotation_sin = -original_sin * shifted_cos + original_cos * shifted_sin
+
+            self.cos_sin_rerotation_cache[key_states.shape[-2]] = (
+                rerotation_cos.to(key_states.dtype).unsqueeze(0),
+                rerotation_sin.to(key_states.dtype).unsqueeze(0),
+            )
+        return self.cos_sin_rerotation_cache[key_states.shape[-2]]
+
+    def _rope_rerotate(self, layer_idx: int) -> None:
+        # Rotation of recent window
+        keys_to_keep = self.key_cache[layer_idx][:, :, -self.recent_size :]
+        rerotation_cos, rerotation_sin = self._get_rerotation_cos_sin(
+            self.key_states,
+            self._cos_cache[: self.window_size + 1],
+            self._sin_cache[: self.window_size + 1],
+        )
+        if self.partial_rotation_size is not None:
+            keys_to_keep, keys_pass = (
+                keys_to_keep[..., : self.partial_rotation_size],
+                keys_to_keep[..., self.partial_rotation_size :],
+            )
+        keys_to_keep = self._apply_key_rotary_pos_emb(keys_to_keep, rerotation_cos, rerotation_sin)
+        if self.partial_rotation_size is not None:
+            keys_to_keep = torch.cat((keys_to_keep, keys_pass), dim=-1)
+        self.key_cache[layer_idx][:, :, -self.recent_size :] = keys_to_keep
+
+    def _evict(self, keep_topk: torch.Tensor, keep_recent: torch.Tensor, layer_idx: int) -> None:
+        # [bsz, num_heads, seq_len, head_dim]
+        bsz, num_heads, _, head_dim = self.key_cache[layer_idx].shape
+        hh_score = self.hh_score[layer_idx]
+        keep_idx = torch.cat([keep_topk, keep_recent], dim=-1)
+
+        mask = torch.zeros(hh_score.shape, dtype=torch.bool).to(self.key_cache[layer_idx].device)
+        mask = mask.scatter(-1, keep_idx, 1)
+
+        self.key_cache[layer_idx] = self.key_cache[layer_idx][mask].view(bsz, num_heads, -1, head_dim)
+        self.value_cache[layer_idx] = self.value_cache[layer_idx][mask].view(bsz, num_heads, -1, head_dim)
+        self.hh_score[layer_idx] = hh_score[mask].view(bsz, num_heads, -1)
+
+        if self.using_rope:
+            self._rope_rerotate(layer_idx)
+
+    def update(
+        self,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        layer_idx: int,
+        cache_kwargs: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Updates the cache with the new `key_states` and `value_states` for the layer `layer_idx`.
+
+        Parameters:
+            key_states (`torch.Tensor`):
+                The new key states to cache.
+            value_states (`torch.Tensor`):
+                The new value states to cache.
+            layer_idx (`int`):
+                The index of the layer to cache the states for.
+            cache_kwargs (`Dict[str, Any]`, `optional`):
+                Additional arguments for the cache subclass. The following arguments can be used in `SinkCache`: `sin`,
+                `cos` and `partial_rotation_size`. These arguments are used with models using RoPE, to recompute the
+                rotation as the tokens are shifted.
+
+        Return:
+            A tuple containing the updated key and value states.
+        """
+        sin = cache_kwargs.get("sin")
+        cos = cache_kwargs.get("cos")
+        self.partial_rotation_size = cache_kwargs.get("partial_rotation_size")
+        self.using_rope = cos is not None and sin is not None
+
+        # # Update the number of seen tokens
+        if layer_idx == 0:
+            self._seen_tokens += key_states.shape[-2]
+            self.key_states = key_states
+
+        # Update the sin/cos cache, which holds sin/cos values for all possible positions
+        if self.using_rope and layer_idx == 0:
+            # BC: some models still pass `sin`/`cos` with 2 dims. In those models, they are the full sin/cos. Remove
+            # after all RoPE models have a llama-like cache utilization.
+            if cos.dim() == 2:
+                self._cos_cache = cos
+                self._sin_cache = sin
+            else:
+                if self._cos_cache is None:
+                    self._cos_cache = cos[0, ...]
+                    self._sin_cache = sin[0, ...]
+                elif self._cos_cache.shape[0] < self.window_size + 1:
+                    self._cos_cache = torch.cat([self._cos_cache, cos[0, ...]], dim=0)
+                    self._sin_cache = torch.cat([self._sin_cache, sin[0, ...]], dim=0)
+
+        if len(self.key_cache) <= layer_idx:
+            # Empty cache
+            self.key_cache.append(key_states)
+            self.value_cache.append(value_states)
+
+        else:
+            # Growing cache
+            self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
+            self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
+
+        return self.key_cache[layer_idx], self.value_cache[layer_idx]
+
+    def post_process(self, layer_idx, cache_kwargs):
+        # update hh score
+        attn_score_cache = cache_kwargs["attn_weights"]
+        kv_groups = attn_score_cache.shape[1] // self.key_states.shape[1]
+        if len(self.hh_score) <= layer_idx:
+            self.hh_score.append(attn_score_cache.sum(2)[:, ::kv_groups, :])
+        else:
+            num_new_tokens = attn_score_cache.shape[2]
+            attn_score_cache = attn_score_cache.sum(2)[:, ::kv_groups, :]
+            attn_score_cache[:, :, :-num_new_tokens] += self.hh_score[layer_idx]
+            self.hh_score[layer_idx] = attn_score_cache
+
+        # hh-selection
+        seq_len = self.get_seq_length(layer_idx)
+        if seq_len > self.window_size:
+            hh_score = self.hh_score[layer_idx]
+            select_hh_scores = hh_score[:, :, : seq_len - self.recent_size]
+            _, keep_topk = torch.topk(select_hh_scores, self.hh_size, dim=-1)
+            keep_topk = keep_topk.sort().values
+
+            keep_recent = torch.arange(seq_len - self.recent_size, seq_len, device=keep_topk.device).repeat(
+                keep_topk.shape[0], keep_topk.shape[1], 1
+            )
+            self._evict(keep_topk, keep_recent, layer_idx)
+
+        return self.key_cache[layer_idx], self.value_cache[layer_idx]
+
+    def evict_for_space(self, num_coming):
+        if num_coming > self.window_size:
+            self._reset()
+            return
+
+        seq_len = self.get_seq_length()
+        if seq_len + num_coming <= self.window_size:
+            return
+
+        for layer_idx in range(len(self.key_cache)):
+            # hh-selection
+            hh_score = self.hh_score[layer_idx]
+            select_hh_scores = hh_score[:, :, : seq_len - self.recent_size + num_coming]
+            _, keep_topk = torch.topk(select_hh_scores, self.hh_size, dim=-1)
+            keep_topk = keep_topk.sort().values
+
+            keep_recent = torch.arange(
+                seq_len - self.recent_size + num_coming,
+                seq_len,
+                device=keep_topk.device,
+            ).repeat(keep_topk.shape[0], keep_topk.shape[1], 1)
+            self._evict(keep_topk, keep_recent, layer_idx)
+
+    def _reset(self):
+        self.hh_score = []
+        self.key_cache = []
+        self.value_cache = []
+        self.cos_sin_rerotation_cache = {}
+        self._cos_cache = None
+        self._sin_cache = None
