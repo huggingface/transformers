@@ -541,7 +541,7 @@ class ChameleonIntegrationTest(unittest.TestCase):
 
         # greedy generation outputs
         EXPECTED_TEXT_COMPLETION = [
-            'Describe what do you see here and tell me about the history behind?The image depicts a star map with a specific constellation highlighted. The constellation is known as the "Southern Cross" and is located in the southern hemisphere. It is a prominent feature of the',
+            'Describe what do you see here and tell me about the history behind it?The image depicts a star map with a specific constellation highlighted. The constellation is known as the "Southern Cross" and is located in the southern hemisphere. It is a prominent feature of the',
             'What constellation is this image showing?The image is showing the constellation of Orion.'
             ]  # fmt: skip
         generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
