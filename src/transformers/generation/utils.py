@@ -28,6 +28,7 @@ from ..cache_utils import (
     Cache,
     DynamicCache,
     HQQQuantizedCache,
+    HybridCache,
     QuantizedCacheConfig,
     QuantoQuantizedCache,
     SlidingWindowCache,
@@ -115,6 +116,7 @@ if is_accelerate_available():
 NEED_SETUP_CACHE_CLASSES_MAPPING = {
     "static": StaticCache,
     "sliding_window": SlidingWindowCache,
+    "hybrid": HybridCache,
     "mamba": None,
 }  # None is just a placeholder for caches that needs customization
 QUANT_BACKEND_CLASSES_MAPPING = {"quanto": QuantoQuantizedCache, "HQQ": HQQQuantizedCache}
