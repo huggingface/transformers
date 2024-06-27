@@ -1083,7 +1083,7 @@ class HybridCache(Cache):
         # no matter how long the sentence is
         return self.max_cache_len
 
-    def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
+    def get_seq_length(self, layer_idx: Optional[int] = 0):
         return None
 
     def reset(self):
