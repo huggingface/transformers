@@ -910,10 +910,9 @@ class ChameleonVQModelEncoderConvDownsample(nn.Module):
         super().__init__()
         self.conv = nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=2, padding=0)
         # no asymmetric padding in torch conv, must do it ourselves
-        self.pad = (0, 1, 0, 1)
 
     def forward(self, hidden_states):
-        hidden_states = F.pad(hidden_states, self.pad, mode="constant", value=0)
+        hidden_states = F.pad(hidden_states, pad=(0, 1, 0, 1), mode="constant", value=0)
         hidden_states = self.conv(hidden_states)
         return hidden_states
 
