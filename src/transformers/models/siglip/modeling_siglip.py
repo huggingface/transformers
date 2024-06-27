@@ -636,7 +636,7 @@ class SiglipSdpaAttention(SiglipAttention):
     SDPA API.
     """
 
-    is_casual = False
+    is_causal = False
 
     # Adapted from SiglipAttention.forward and transformers.models.llama.modeling_llama.LlamaSdpaAttention.forward
     def forward(
@@ -676,7 +676,7 @@ class SiglipSdpaAttention(SiglipAttention):
 
         # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
         # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
-        is_causal = True if self.is_casual and q_len > 1 else False
+        is_causal = True if self.is_causal and q_len > 1 else False
 
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,

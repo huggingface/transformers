@@ -71,7 +71,7 @@ class SiglipModelTesterMixin(ModelTesterMixin):
     def test_eager_matches_sdpa_inference(
         self,
         torch_dtype: str,
-        use_attnetion_mask_options: Tuple[bool, ...] = (True, False),
+        use_attention_mask_options: Tuple[bool, ...] = (True, False),
         logit_keys: Tuple[str, ...] = ("logits_per_image", "logits_per_text", "image_embeds", "text_embeds"),
     ):
         if not self.all_model_classes[0]._supports_sdpa:
@@ -160,7 +160,7 @@ class SiglipModelTesterMixin(ModelTesterMixin):
             # We use these for loops instead of parameterized.expand just for the interest of avoiding loading/saving the model each time,
             # but it would be nicer to have an efficient way to use parameterized.expand
             cases = []
-            for use_mask in use_attnetion_mask_options:
+            for use_mask in use_attention_mask_options:
                 for output_attentions in [True, False]:
                     for enable_kernels in [False, True]:
                         for batch_size in [1, 5]:
@@ -417,7 +417,7 @@ class SiglipVisionModelTest(SiglipModelTesterMixin, unittest.TestCase):
         super().test_eager_matches_sdpa_inference(
             torch_dtype=torch_dtype,
             logit_keys=("pooler_output", "last_hidden_state"),
-            use_attnetion_mask_options=(False,),
+            use_attention_mask_options=(False,),
         )
 
 
@@ -585,7 +585,7 @@ class SiglipTextModelTest(SiglipModelTesterMixin, unittest.TestCase):
         super().test_eager_matches_sdpa_inference(
             torch_dtype=torch_dtype,
             logit_keys=("pooler_output", "last_hidden_state"),
-            use_attnetion_mask_options=(False, True),
+            use_attention_mask_options=(False, True),
         )
 
 
@@ -890,7 +890,7 @@ class SiglipModelTest(SiglipModelTesterMixin, PipelineTesterMixin, unittest.Test
         super().test_eager_matches_sdpa_inference(
             torch_dtype=torch_dtype,
             logit_keys=("logits_per_image", "logits_per_text", "image_embeds", "text_embeds"),
-            use_attnetion_mask_options=(False, True),
+            use_attention_mask_options=(False, True),
         )
 
 
@@ -964,7 +964,7 @@ class SiglipForImageClassificationModelTest(SiglipModelTesterMixin, PipelineTest
     @is_flaky()
     def test_eager_matches_sdpa_inference(self, torch_dtype: str):
         super().test_eager_matches_sdpa_inference(
-            torch_dtype=torch_dtype, logit_keys=("logits",), use_attnetion_mask_options=(False,)
+            torch_dtype=torch_dtype, logit_keys=("logits",), use_attention_mask_options=(False,)
         )
 
 
