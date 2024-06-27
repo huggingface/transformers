@@ -44,6 +44,8 @@ class NemotronConfig(PretrainedConfig):
             Number of hidden layers in the Transformer decoder.
         num_attention_heads (`int`, *optional*, defaults to 32):
             Number of attention heads for each attention layer in the Transformer decoder.
+        kv_channels (`int`, *optional*, defaults to None):
+            Projection weights dimension in multi-head attention. Set to hidden_size // num_attention_heads if None
         num_key_value_heads (`int`, *optional*):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
@@ -111,6 +113,7 @@ class NemotronConfig(PretrainedConfig):
         intermediate_size=16384,
         num_hidden_layers=32,
         num_attention_heads=32,
+        kv_channels=None,
         num_key_value_heads=None,
         hidden_act="relu2",
         max_position_embeddings=2048,
@@ -135,6 +138,7 @@ class NemotronConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
+        self.kv_channels = kv_channels
 
         # for backward compatibility
         if num_key_value_heads is None:
