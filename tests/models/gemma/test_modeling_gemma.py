@@ -53,10 +53,11 @@ if is_torch_available():
 @require_torch
 class GemmaModelTester:
     config_class = GemmaConfig
-    model_class = GemmaModel
-    for_causal_lm_class = GemmaForCausalLM
-    for_sequence_class = GemmaForSequenceClassification
-    for_token_class = GemmaForTokenClassification
+    if is_torch_available():
+        model_class = GemmaModel
+        for_causal_lm_class = GemmaForCausalLM
+        for_sequence_class = GemmaForSequenceClassification
+        for_token_class = GemmaForTokenClassification
 
     def __init__(
         self,
