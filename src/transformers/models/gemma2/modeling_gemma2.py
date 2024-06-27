@@ -935,6 +935,11 @@ class Gemma2Model(Gemma2PreTrainedModel):
         past_key_values: Cache,
         output_attentions: bool,
     ):
+        if self.config._attn_implementation == "flash_attention_2":
+            if attention_mask is not None and 0.0 in attention_mask:
+                return attention_mask
+            return None
+
         dtype, device = input_tensor.dtype, input_tensor.device
         min_dtype = torch.finfo(dtype).min
         sequence_length = input_tensor.shape[1]
