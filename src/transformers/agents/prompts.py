@@ -123,7 +123,7 @@ caption = image_captioner(image)
 ```<end_action>
 
 ---
-Above example were using tools that might not exist for you. You only have acces to those Tools:
+Above example were using tools that might not exist for you. You only have access to those Tools:
 <<tool_names>>
 
 Remember to make sure that variables you use are all defined.
@@ -145,7 +145,7 @@ The $ACTION_JSON_BLOB should only contain a SINGLE action, do NOT return a list 
   "action_input": $INPUT
 }<end_action>
 
-Make sure to have the $INPUT as a dictionnary in the right format for the tool you are using, and do not put variable names as input if you can find the right values.
+Make sure to have the $INPUT as a dictionary in the right format for the tool you are using, and do not put variable names as input if you can find the right values.
 
 You should ALWAYS use the following format:
 
@@ -250,7 +250,7 @@ Action:
 }<end_action>
 
 
-Above example were using notional tools that might not exist for you. You only have acces to those tools:
+Above example were using notional tools that might not exist for you. You only have access to those tools:
 <<tool_descriptions>>
 
 Here are the rules you should always follow to solve your task:

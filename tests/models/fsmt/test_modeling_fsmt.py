@@ -263,7 +263,7 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
             self.assertEqual(info["missing_keys"], [])
 
-    @unittest.skip("Test has a segmentation fault on torch 1.8.0")
+    @unittest.skip(reason="Test has a segmentation fault on torch 1.8.0")
     def test_export_to_onnx(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
         model = FSMTModel(config).to(torch_device)
@@ -312,23 +312,23 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             2,
         )
 
-    @unittest.skip("can't be implemented for FSMT due to dual vocab.")
+    @unittest.skip(reason="can't be implemented for FSMT due to dual vocab.")
     def test_resize_tokens_embeddings(self):
         pass
 
-    @unittest.skip("Passing inputs_embeds not implemented for FSMT.")
+    @unittest.skip(reason="Passing inputs_embeds not implemented for FSMT.")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip("Input ids is required for FSMT.")
+    @unittest.skip(reason="Input ids is required for FSMT.")
     def test_inputs_embeds_matches_input_ids(self):
         pass
 
-    @unittest.skip("model weights aren't tied in FSMT.")
+    @unittest.skip(reason="model weights aren't tied in FSMT.")
     def test_tie_model_weights(self):
         pass
 
-    @unittest.skip("TODO: Decoder embeddings cannot be resized at the moment")
+    @unittest.skip(reason="TODO: Decoder embeddings cannot be resized at the moment")
     def test_resize_embeddings_untied(self):
         pass
 
@@ -582,7 +582,7 @@ class TestSinusoidalPositionalEmbeddings(unittest.TestCase):
         # odd num_embeddings is allowed
         SinusoidalPositionalEmbedding(num_positions=5, embedding_dim=4, padding_idx=self.padding_idx).to(torch_device)
 
-    @unittest.skip("different from marian (needs more research)")
+    @unittest.skip(reason="different from marian (needs more research)")
     def test_positional_emb_weights_against_marian(self):
         desired_weights = torch.tensor(
             [

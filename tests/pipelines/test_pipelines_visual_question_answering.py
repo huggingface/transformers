@@ -236,6 +236,6 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase):
         )
 
     @require_tf
-    @unittest.skip("Visual question answering not implemented in TF")
+    @unittest.skip(reason="Visual question answering not implemented in TF")
     def test_small_model_tf(self):
         pass
