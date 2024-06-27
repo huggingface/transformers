@@ -30,7 +30,7 @@ from ...image_utils import (
     PILImageResampling,
     infer_channel_dimension_format,
     is_scaled_image,
-    make_list_of_images,
+    is_valid_image,
     to_numpy_array,
     valid_images,
     validate_kwargs,
@@ -43,6 +43,29 @@ logger = logging.get_logger(__name__)
 
 if is_vision_available():
     import PIL
+
+
+def make_batched_images(images) -> List[List[ImageInput]]:
+    """
+    Accepts images in list or nested list format, and makes a list of images for preprocessing.
+
+    Args:
+        images (`Union[List[List[ImageInput]], List[ImageInput], ImageInput]`):
+            The input image.
+
+    Returns:
+        list: A list of images.
+    """
+    if isinstance(images, (list, tuple)) and isinstance(images[0], (list, tuple)) and is_valid_image(images[0][0]):
+        return [img for img_list in images for img in img_list]
+
+    elif isinstance(images, (list, tuple)) and is_valid_image(images[0]):
+        return images
+
+    elif is_valid_image(images):
+        return [images]
+
+    raise ValueError(f"Could not make batched video from {images}")
 
 
 class ChameleonImageProcessor(BaseImageProcessor):
@@ -272,7 +295,7 @@ class ChameleonImageProcessor(BaseImageProcessor):
 
         validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
-        images = make_list_of_images(images)
+        images = make_batched_images(images)
 
         if not valid_images(images):
             raise ValueError(
