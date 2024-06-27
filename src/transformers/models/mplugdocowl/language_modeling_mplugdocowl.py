@@ -597,7 +597,7 @@ MPLUGDocOwl_INPUTS_DOCSTRING = r"""
     "The bare MPLUGDocOwl Model outputting raw hidden-states without any specific head on top.",
     MPLUGDocOwl_START_DOCSTRING,
 )
-class MPLUGDocOwlModel(MPLUGDocOwlPreTrainedModel):
+class MPLUGDocOwlLanguageModel(MPLUGDocOwlPreTrainedLanguageModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`MPLUGDocOwlDecoderLayer`]
 
