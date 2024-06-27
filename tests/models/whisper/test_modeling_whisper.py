@@ -3632,7 +3632,6 @@ class WhisperStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin,
             config=config, input_ids=inputs_dict["input_ids"]
         )
 
-
     @unittest.skip(reason="Tested implicitly through the encoder-decoder tests")
     def test_custom_4d_attention_mask(self):
         pass
