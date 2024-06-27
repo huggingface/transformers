@@ -76,7 +76,7 @@ class ChameleonImageProcessor(BaseImageProcessor):
         image_mean (`float` or `List[float]`, *optional*, defaults to `[1.0, 1.0, 1.0]`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `[0.5, 0.5, 0.5]`):
+        image_std (`float` or `List[float]`, *optional*, defaults to `[1.0, 1.0, 1.0]`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
             Can be overridden by the `image_std` parameter in the `preprocess` method.
