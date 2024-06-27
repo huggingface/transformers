@@ -609,7 +609,7 @@ class MoTBlock(nn.Module):
         return outputs  # hidden_states, present, (attentions, cross_attentions)
 
 
-# Copied from transformers.models.gpt2.modeling_gpt2.GPT2PreTrainedModel with GPT2->MoT,gpt2->mot,OpenAI GPT-2->MixtureOfTokens
+# Mostly copied from transformers.models.gpt2.modeling_gpt2.GPT2PreTrainedModel with GPT2->MoT,gpt2->mot,OpenAI GPT-2->MixtureOfTokens, but removed references to TF and FlashAttention2
 class MoTPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -626,6 +626,7 @@ class MoTPreTrainedModel(PreTrainedModel):
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
 
+    # Copied from transformers.models.gpt2.modeling_gpt2.GPT2PreTrainedModel._init_weights with GPT2->MoT,gpt2->mot,OpenAI GPT-2->MixtureOfTokens
     def _init_weights(self, module):
         """Initialize the weights."""
         if isinstance(module, (nn.Linear, Conv1D)):
