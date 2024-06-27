@@ -213,7 +213,6 @@ class MPLUGDocOwlForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test(self):
-        # Let' s make sure we test the preprocessing to replace what is used
         model = MPLUGDocOwlForConditionalGeneration.from_pretrained("/raid/dana/mplug_model_hf", load_in_4bit=False)
 
         prompt = "<image>What's the value of the Very well bar in the 65+ age group? Answer the question with detailed explanation."
