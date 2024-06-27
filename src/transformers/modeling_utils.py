@@ -1339,6 +1339,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         self.init_weights()
         self._backward_compatibility_gradient_checkpointing()
+        if hasattr(self, "gamma") or hasattr(self, "beta"):
+            logger.warning(
+                f"Parameter names `gamma` or `beta` for {self.__class__.__name__} will be renamed within the model. "
+                f"Please use different names to suppress this warning."
+            )
 
     def dequantize(self):
         """
@@ -3980,6 +3985,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if "gamma" in key:
                 return key.replace("gamma", "weight")
             return key
+
+        if "beta" in loaded_keys or "gamma" in loaded_keys:
+            logger.warning(
+                f"Parameter names `gamma` or `beta` for {cls.__name__} will be renamed within the model. "
+                f"Please use different names to suppress this warning."
+            )
 
         original_loaded_keys = loaded_keys
         loaded_keys = [_fix_key(key) for key in loaded_keys]

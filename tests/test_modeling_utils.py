@@ -1487,6 +1487,34 @@ class ModelUtilsTest(TestCasePlus):
             outputs_from_saved = new_model(input_ids)
             self.assertTrue(torch.allclose(outputs_from_saved["logits"], outputs["logits"]))
 
+    def test_warning_for_beta_gamma_parameters(self):
+        class TestModel(PreTrainedModel):
+            def __init__(self, config):
+                super().__init__(config)
+                self.gamma = nn.Parameter(torch.ones(10))
+                self.post_init()
+
+            def forward(self):
+                return self.gamma.sum()
+
+        logger = logging.get_logger("transformers.modeling_utils")
+        config = PretrainedConfig()
+        warning_msg = "Parameter names `gamma` or `beta` for TestModel will be renamed within the model."
+
+        with LoggingLevel(logging.WARNING):
+            with CaptureLogger(logger) as cl1:
+                model = TestModel(config)
+
+        self.assertIn(warning_msg, cl1.out)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            with LoggingLevel(logging.WARNING):
+                with CaptureLogger(logger) as cl2:
+                    TestModel.from_pretrained(tmp_dir, config=config)
+
+        self.assertIn(warning_msg, cl2.out)
+
 
 @slow
 @require_torch
