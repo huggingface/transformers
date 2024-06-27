@@ -37,9 +37,9 @@ class DacFeatureExtractor(SequenceFeatureExtractor):
         feature_size (`int`, *optional*, defaults to 1):
             The feature dimension of the extracted features. Use 1 for mono, 2 for stereo.
         sampling_rate (`int`, *optional*, defaults to 16000):
-            The sampling rate at which the audio waveform should be digitalized expressed in hertz (Hz).
+            The sampling rate at which the audio waveform should be digitalized, expressed in hertz (Hz).
         padding_value (`float`, *optional*, defaults to 0.0):
-            The value that is used to fill the padding values.
+            The value that is used for padding.
         hop_length (`int`, *optional*, defaults to 512):
             Overlap length between successive windows.
     """
