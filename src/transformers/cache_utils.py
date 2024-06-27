@@ -752,6 +752,15 @@ class SinkCache(Cache):
             self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
             self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
 
+        elif key_states.shape[-2] >= self.window_length - self.num_sink_tokens:
+            # Renew cache but keep sink tokens
+            sink_keys = self.key_cache[layer_idx][:, :, : self.num_sink_tokens]
+            remain_length = self.window_length - self.num_sink_tokens
+            self.key_cache[layer_idx] = torch.cat([sink_keys, key_states[:, :, -remain_length:]], dim=-2)
+
+            sink_values = self.value_cache[layer_idx][:, :, : self.num_sink_tokens]
+            self.value_cache[layer_idx] = torch.cat([sink_values, value_states[:, :, -remain_length:]], dim=-2)
+
         else:
             # Shifting cache
             keys_to_keep = self.key_cache[layer_idx][
