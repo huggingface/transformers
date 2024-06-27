@@ -128,10 +128,11 @@ class GPTNeoXJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         assert encoded_sentence == ids_1
         assert encoded_pair == ids_1 + ids_2
 
+    @unittest.skip
     def test_conversion_reversible(self):
         # Intentionally convert some words to accommodate character fluctuations unique to Japanese
         pass
 
+    @unittest.skip(reason="tokenizer has no padding token")
     def test_padding_different_model_input_name(self):
-        # tokenizer has no padding token
         pass

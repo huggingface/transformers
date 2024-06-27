@@ -1395,7 +1395,7 @@ class GenerationMixin:
             return model_kwargs
 
         past_length = 0
-        if "past_key_values" in model_kwargs:
+        if model_kwargs.get("past_key_values") is not None:
             past_key_values = model_kwargs["past_key_values"]
             if isinstance(past_key_values, (Cache, EncoderDecoderCache)):
                 past_length = past_key_values.get_seq_length()
@@ -3739,15 +3739,14 @@ class GenerationMixin:
         model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
 
         # This is needed if return_dict_in_generate is True
+        start_from_empty_dynamic_cache = False
         past_key_values = model_kwargs.get("past_key_values", None)
         if isinstance(past_key_values, DynamicCache) or (
             isinstance(past_key_values, EncoderDecoderCache)
             and isinstance(past_key_values.self_attention_cache, DynamicCache)
         ):
-            if len(model_kwargs["past_key_values"]) == 0:
+            if len(past_key_values) == 0:
                 start_from_empty_dynamic_cache = True
-        else:
-            start_from_empty_dynamic_cache = False
 
         this_peer_finished = False
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):

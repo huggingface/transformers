@@ -138,75 +138,75 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
         self.assertEqual(len(timm_model.out_features), len(transformers_model.out_features))
         self.assertEqual(timm_model.channels, transformers_model.channels)
 
-    @unittest.skip("TimmBackbone doesn't support feed forward chunking")
+    @unittest.skip(reason="TimmBackbone doesn't support feed forward chunking")
     def test_feed_forward_chunking(self):
         pass
 
-    @unittest.skip("TimmBackbone doesn't have num_hidden_layers attribute")
+    @unittest.skip(reason="TimmBackbone doesn't have num_hidden_layers attribute")
     def test_hidden_states_output(self):
         pass
 
-    @unittest.skip("TimmBackbone initialization is managed on the timm side")
+    @unittest.skip(reason="TimmBackbone initialization is managed on the timm side")
     def test_initialization(self):
         pass
 
-    @unittest.skip("TimmBackbone models doesn't have inputs_embeds")
+    @unittest.skip(reason="TimmBackbone models doesn't have inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip("TimmBackbone models doesn't have inputs_embeds")
+    @unittest.skip(reason="TimmBackbone models doesn't have inputs_embeds")
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip("TimmBackbone model cannot be created without specifying a backbone checkpoint")
+    @unittest.skip(reason="TimmBackbone model cannot be created without specifying a backbone checkpoint")
     def test_from_pretrained_no_checkpoint(self):
         pass
 
-    @unittest.skip("Only checkpoints on timm can be loaded into TimmBackbone")
+    @unittest.skip(reason="Only checkpoints on timm can be loaded into TimmBackbone")
     def test_save_load(self):
         pass
 
-    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
     def test_save_load_low_cpu_mem_usage(self):
         pass
 
-    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
     def test_save_load_low_cpu_mem_usage_checkpoints(self):
         pass
 
-    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
     def test_save_load_low_cpu_mem_usage_no_safetensors(self):
         pass
 
-    @unittest.skip("model weights aren't tied in TimmBackbone.")
+    @unittest.skip(reason="model weights aren't tied in TimmBackbone.")
     def test_tie_model_weights(self):
         pass
 
-    @unittest.skip("model weights aren't tied in TimmBackbone.")
+    @unittest.skip(reason="model weights aren't tied in TimmBackbone.")
     def test_tied_model_weights_key_ignore(self):
         pass
 
-    @unittest.skip("Only checkpoints on timm can be loaded into TimmBackbone")
+    @unittest.skip(reason="Only checkpoints on timm can be loaded into TimmBackbone")
     def test_load_save_without_tied_weights(self):
         pass
 
-    @unittest.skip("Only checkpoints on timm can be loaded into TimmBackbone")
+    @unittest.skip(reason="Only checkpoints on timm can be loaded into TimmBackbone")
     def test_model_weights_reload_no_missing_tied_weights(self):
         pass
 
-    @unittest.skip("TimmBackbone doesn't have hidden size info in its configuration.")
+    @unittest.skip(reason="TimmBackbone doesn't have hidden size info in its configuration.")
     def test_channels(self):
         pass
 
-    @unittest.skip("TimmBackbone doesn't support output_attentions.")
+    @unittest.skip(reason="TimmBackbone doesn't support output_attentions.")
     def test_torchscript_output_attentions(self):
         pass
 
-    @unittest.skip("Safetensors is not supported by timm.")
+    @unittest.skip(reason="Safetensors is not supported by timm.")
     def test_can_use_safetensors(self):
         pass
 
-    @unittest.skip("Need to use a timm backbone and there is no tiny model available.")
+    @unittest.skip(reason="Need to use a timm backbone and there is no tiny model available.")
     def test_model_is_small(self):
         pass
 

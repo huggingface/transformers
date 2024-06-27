@@ -354,21 +354,22 @@ class UniSpeechRobustModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
 
     # UniSpeech has no inputs_embeds
+    @unittest.skip(reason="UniSpeech has no inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
     # `input_ids` is renamed to `input_values`
+    @unittest.skip(reason="UniSpeech has no inputs_embeds")
     def test_forward_signature(self):
         pass
 
     # UniSpeech cannot resize token embeddings
     # since it has no tokens embeddings
+    @unittest.skip(reason="UniSpeech has no tokens embeds")
     def test_resize_tokens_embeddings(self):
         pass
 
-    # UniSpeech has no inputs_embeds
-    # and thus the `get_input_embeddings` fn
-    # is not implemented
+    @unittest.skip(reason="UniSpeech has no inputs_embeds")
     def test_model_get_set_embeddings(self):
         pass
 

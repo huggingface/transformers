@@ -477,7 +477,7 @@ class FlaubertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         for model_class in self.all_model_classes:
             # FlauBertForMultipleChoice behaves incorrectly in JIT environments.
             if model_class == FlaubertForMultipleChoice:
-                return
+                self.skipTest(reason="FlauBertForMultipleChoice behaves incorrectly in JIT environments.")
 
             config.torchscript = True
             model = model_class(config=config)
