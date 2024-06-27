@@ -46,11 +46,11 @@ class DacConfig(PretrainedConfig):
             Number of discrete codes in each codebook.
         codebook_dim (`int`, *optional*, defaults to 8):
             Dimension of the codebook vectors. If not defined, uses `encoder_hidden_size`.
-        quantizer_dropout (`bool`, *optional*, defaults to `False`):
+        quantizer_dropout (`bool`, *optional*, defaults to 0):
             Whether to apply dropout to the quantizer.
-        commitment_loss_weight (float, optional, defaults to 0.25):
+        commitment_loss_weight (float, optional, defaults to 0.25, *optional*, defaults to 0.25):
             Weight of the commitment loss term in the VQVAE loss function.
-        codebook_loss_weight (float, optional, defaults to 1.0):
+        codebook_loss_weight (float, optional, defaults to 1.0, *optional*, defaults to 1.0):
             Weight of the codebook loss term in the VQVAE loss function.
     Example:
 
@@ -65,7 +65,7 @@ class DacConfig(PretrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    """
+    ```"""
 
     model_type = "dac"
 

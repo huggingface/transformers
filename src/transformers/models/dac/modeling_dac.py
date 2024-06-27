@@ -518,7 +518,7 @@ DAC_START_DOCSTRING = r"""
 DAC_INPUTS_DOCSTRING = r"""
     Args:
         input_values (`torch.Tensor` of shape `(batch_size, 1, time_steps)`).
-            Audio data to encode, 
+            Audio data to encode,
         n_quantizers (`int`, *optional*):
             Number of quantizers to use. If `None`, all quantizers are used. Default is `None`.
         return_dict (`bool`, *optional*):
