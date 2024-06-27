@@ -561,7 +561,6 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
             to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
         ]
 
-        # call the module
         data = {
             "pixel_values": images,
             "patch_positions": patch_positions,
