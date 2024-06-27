@@ -274,7 +274,7 @@ class MPLUGDocOwlForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 '''
     @slow
-    def test_small_model_integration_test_llama_single(self):
+    def test_small_model_integration_test_mplugdocowl_single(self):
         # Let' s make sure we test the preprocessing to replace what is used
         model_id = "/raid/dana/mplug_model_hf"
 
