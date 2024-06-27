@@ -505,7 +505,7 @@ class ModelTesterMixin:
 
         # Check that the parameters are equal.
         for p1, p2 in zip(model_low_usage.parameters(), model_non_low_usage.parameters()):
-            self.assertEquals(p1.data.ne(p2.data).sum(), 0)
+            self.assertEqual(p1.data.ne(p2.data).sum(), 0)
 
         # Check that the state dict keys are equal.
         self.assertEqual(set(model_low_usage.state_dict().keys()), set(model_non_low_usage.state_dict().keys()))
