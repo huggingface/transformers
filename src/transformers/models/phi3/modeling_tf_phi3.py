@@ -86,6 +86,12 @@ class TFPhi3RotaryEmbedding(tf.keras.layers.Layer):
                                         initializer=tf.constant_initializer(inv_freq.numpy()),
                                         trainable=False)
 
+    def build(self, input_shape):
+        self.inv_freq = 1.0 / (
+            self.base ** (tf.range(0, self.dim, 2, dtype=tf.float32) / self.dim)
+        )
+        super().build(input_shape)
+
     def call(self, x, position_ids):
         inv_freq_expanded = tf.expand_dims(self.inv_freq, axis=0)
         inv_freq_expanded = tf.expand_dims(inv_freq_expanded, axis=-1)
@@ -244,6 +250,12 @@ class TFPhi3MLP(tf.keras.layers.Layer):
 
         return self.down_proj(up_states)
 
+    def build(self, input_shape=None):
+        self.gate_up_proj.build(input_shape)
+        self.down_proj.build([input_shape[0], self.config.intermediate_size])
+        super(TFPhi3MLP, self).build(input_shape)
+
+
 def repeat_kv(hidden_states: tf.Tensor, n_rep: int) -> tf.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
@@ -317,6 +329,9 @@ class TFPhi3Attention(tf.keras.layers.Layer):
         past_key_value=None,
         output_attentions=False,
         use_cache=False,
+        cache_position=None,
+        training=False,
+        **kwargs,
     ):
         tf.get_logger().warning("You are not running the flash-attention implementation, expect numerical differences.")
 
@@ -334,14 +349,13 @@ class TFPhi3Attention(tf.keras.layers.Layer):
 
         kv_seq_len = shape_list(key_states)[-2]
         if past_key_value is not None:
-            if self.layer_idx is None:
-                raise ValueError(
-                    f"The cache structure has changed since version v4.36. If you are using {self.__class__.__name__} "
-                    "for auto-regressive decoding with k/v caching, please make sure to initialize the attention class "
-                    "with a layer index."
-                )
-            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
-        cos, sin = self.rotary_emb(value_states, position_ids, seq_len=kv_seq_len)
+            # cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+            # key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            # Claude: The above code is commented out since the Cache class is not defined in this translation.
+            # It would need to be implemented separately in TensorFlow. For now, just using the key and value states directly.
+            pass
+        # kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
+        cos, sin = self.rotary_emb(value_states, position_ids)
 
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
@@ -371,7 +385,7 @@ class TFPhi3Attention(tf.keras.layers.Layer):
         # upcast attention to fp32
         attn_weights = tf.nn.softmax(attn_weights, axis=-1)
         attn_weights = tf.cast(attn_weights, dtype=value_states.dtype)
-        attn_weights = Dropout(self.attention_dropout)(attn_weights, training=self.training)
+        attn_weights = Dropout(self.attention_dropout)(attn_weights)
 
         attn_output = tf.matmul(attn_weights, value_states)
 
@@ -390,16 +404,24 @@ class TFPhi3Attention(tf.keras.layers.Layer):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
+
+    def build(self, input_shape=None):
+        self.qkv_proj.build(input_shape)
+        self.o_proj.build([input_shape[0], input_shape[1], self.hidden_size])
+        super(TFPhi3Attention, self).build(input_shape)
+
+
 class TFPhi3DecoderLayer(tf.keras.layers.Layer):
     def __init__(self, config, layer_idx: int, **kwargs):
         super().__init__(**kwargs)
         self.config = config
-        # self.self_attn = PHI3_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx=layer_idx)
-        self.mlp = TFPhi3MLP(config)
+        self.hidden_size = config.hidden_size
+        self.self_attn = TFPhi3Attention(config, layer_idx=layer_idx, name="self_attn")
+        self.mlp = TFPhi3MLP(config, name="mlp")
         self.input_layernorm = TFPhi3RMSNorm(config.hidden_size, eps=config.rms_norm_eps, name="input_layernorm")
-        self.resid_attn_dropout = tf.keras.layers.Dropout(config.resid_pdrop, name="resid_attn_dropout")
-        self.resid_mlp_dropout = tf.keras.layers.Dropout(config.resid_pdrop, name="resid_mlp_dropout")
         self.post_attention_layernorm = TFPhi3RMSNorm(config.hidden_size, eps=config.rms_norm_eps, name="post_attention_layernorm")
+        self.resid_attn_dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.resid_mlp_dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
 
     def call(
         self,
@@ -409,7 +431,9 @@ class TFPhi3DecoderLayer(tf.keras.layers.Layer):
         past_key_value=None,
         output_attentions=False,
         use_cache=False,
+        cache_position=None,
         training=False,
+        **kwargs,
     ):
         """
         Args:
@@ -439,7 +463,9 @@ class TFPhi3DecoderLayer(tf.keras.layers.Layer):
             past_key_value=past_key_value,
             output_attentions=output_attentions,
             use_cache=use_cache,
+            cache_position=cache_position,
             training=training,
+            **kwargs,
         )
 
         hidden_states = residual + self.resid_attn_dropout(attn_outputs, training=training)
@@ -458,6 +484,14 @@ class TFPhi3DecoderLayer(tf.keras.layers.Layer):
             outputs += (present_key_value,)
 
         return outputs
+
+    def build(self, input_shape=None):
+        self.self_attn.build(input_shape)
+        self.mlp.build(input_shape)
+        self.input_layernorm.build(input_shape)
+        self.post_attention_layernorm.build(input_shape)
+        super(TFPhi3DecoderLayer, self).build(input_shape)
+
 
 PHI3_START_DOCSTRING = r"""
     This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the generic methods the
@@ -626,7 +660,7 @@ class TFPhi3Model(TFPhi3PreTrainedModel):
 )
 
 # Claude: Translated from PyTorch to TensorFlow
-@keras_serializable
+@tf.keras.utils.register_keras_serializable()
 class TFPhi3MainLayer(tf.keras.layers.Layer):
     config_class = Phi3Config
 
@@ -688,9 +722,9 @@ class TFPhi3MainLayer(tf.keras.layers.Layer):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
-            input_shape = shape_list(input_ids)
+            input_shape = tf.shape(input_ids)
         elif inputs_embeds is not None:
-            input_shape = shape_list(inputs_embeds)[:-1]
+            input_shape = tf.shape(inputs_embeds)[:-1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
@@ -762,7 +796,8 @@ class TFPhi3MainLayer(tf.keras.layers.Layer):
         )
     @tf.function
     def _update_causal_mask(self, attention_mask, input_tensor):
-        batch_size, seq_length = shape_list(input_tensor)[:2]
+        batch_size = tf.shape(input_tensor)[0]
+        seq_length = tf.shape(input_tensor)[1]
         dtype = input_tensor.dtype
 
         # support going beyond cached `max_position_embedding`
@@ -779,38 +814,43 @@ class TFPhi3MainLayer(tf.keras.layers.Layer):
         causal_mask = tf.repeat(causal_mask, batch_size, axis=0)
 
         if attention_mask is not None and tf.rank(attention_mask) == 2:
-            mask_length = shape_list(attention_mask)[-1]
+            mask_length = tf.shape(attention_mask)[-1]
             padding_mask = tf.equal(causal_mask[..., :mask_length], 0) & tf.equal(
                 tf.expand_dims(tf.expand_dims(attention_mask, 1), 1), 0
             )
 
-            causal_mask = tf.where(padding_mask, tf.cast(tf.float32.min, dtype), causal_mask[..., :mask_length])
+            causal_mask = tf.where( padding_mask, tf.cast(tf.float32.min, dtype), causal_mask[..., :mask_length],)
 
         return causal_mask
 
     def build(self, input_shape=None):
         if self.built:
             return
-        self.built = True
+
+        if input_shape is None:
+            input_shape = [None, self.config.max_position_embeddings]
+        # Check if input_shape is a dictionary and extract shapes
+        if isinstance(input_shape, dict):
+            input_shape = input_shape["input_ids"]
         if getattr(self, "embed_tokens", None) is not None:
             with tf.name_scope(self.embed_tokens.name):
-                self.embed_tokens.build(None)
+                self.embed_tokens.build(input_shape)
         if getattr(self, "norm", None) is not None:
             with tf.name_scope(self.norm.name):
-                self.norm.build(None)
+                self.norm.build(input_shape)
         if getattr(self, "decoder_layers", None) is not None:
             for layer in self.decoder_layers:
                 with tf.name_scope(layer.name):
-                    layer.build(None)
+                    layer.build([None, input_shape[1], self.config.hidden_size])
+        self.built = True
 
 class TFPhi3ForCausalLM(TFPhi3PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        self.model = TFPhi3Model(config)
+        self.model = TFPhi3MainLayer(config, name="model")
         self.vocab_size = config.vocab_size
-        self.lm_head = tf.keras.layers.Dense(config.vocab_size, use_bias=False)
+        self.lm_head = tf.keras.layers.Dense(config.vocab_size, use_bias=False, name="lm_head", kernel_initializer=get_initializer(config.initializer_range))
 
-        self.post_init()
 
     def get_input_embeddings(self):
         return self.model.embed_tokens
@@ -819,7 +859,9 @@ class TFPhi3ForCausalLM(TFPhi3PreTrainedModel):
         self.model.embed_tokens = value
 
     def get_output_embeddings(self):
-        return self.lm_head
+        if getattr(self.config, "use_output_embedding", False):
+            return self.lm_head
+        return None
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
@@ -832,7 +874,7 @@ class TFPhi3ForCausalLM(TFPhi3PreTrainedModel):
 
     def call(self, input_ids=None, attention_mask=None, position_ids=None, past_key_values=None,
              inputs_embeds=None, labels=None, use_cache=None, output_attentions=None, output_hidden_states=None,
-             return_dict=None, training=False):
+        cache_position=None, return_dict=None):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -840,7 +882,8 @@ class TFPhi3ForCausalLM(TFPhi3PreTrainedModel):
         outputs = self.model(input_ids=input_ids, attention_mask=attention_mask, position_ids=position_ids,
                              past_key_values=past_key_values, inputs_embeds=inputs_embeds, use_cache=use_cache,
                              output_attentions=output_attentions, output_hidden_states=output_hidden_states,
-                             return_dict=return_dict, training=training)
+                             return_dict=return_dict, cache_position=cache_position,
+        )
 
         hidden_states = outputs[0]
         logits = self.lm_head(hidden_states)
@@ -880,6 +923,18 @@ class TFPhi3ForCausalLM(TFPhi3PreTrainedModel):
     def _reorder_cache(past_key_values, beam_idx):
         return tuple(tf.gather(layer_past, beam_idx, axis=0) for layer_past in past_key_values)
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+
+        self.built = True
+        if getattr(self, "model", None) is not None:
+            with tf.name_scope(self.model.name):
+                self.model.build(input_shape)
+        if getattr(self, "lm_head", None) is not None:
+            with tf.name_scope(self.lm_head.name):
+                self.lm_head.build([None, self.config.hidden_size])
+
 
 @add_start_docstrings(
     """
@@ -894,10 +949,8 @@ class TFPhi3ForSequenceClassification(TFPhi3PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.model = TFPhi3Model(config)
+        self.model = TFPhi3MainLayer(config, name="model")
         self.score = tf.keras.layers.Dense(config.num_labels, use_bias=False)
-
-        self.post_init()
 
     def get_input_embeddings(self):
         return self.model.embed_tokens
@@ -905,9 +958,24 @@ class TFPhi3ForSequenceClassification(TFPhi3PreTrainedModel):
     def set_input_embeddings(self, value):
         self.model.embed_tokens = value
 
+    def build(self, input_shape):
+        # Build the underlying model layers
+        if isinstance(input_shape, dict):
+            input_shape = input_shape["input_ids"]
+
+        self.model.build(input_shape)
+        self.score.build((input_shape[0], self.config.hidden_size))
+        super().build(input_shape)
+
+    @unpack_inputs
+    @add_start_docstrings_to_model_forward(PHI3_INPUTS_DOCSTRING)
     def call(self, input_ids=None, attention_mask=None, position_ids=None, past_key_values=None,
              inputs_embeds=None, labels=None, use_cache=None, output_attentions=None, output_hidden_states=None,
              return_dict=None, training=False):
+        if isinstance(input_ids, dict):
+            input_ids = input_ids.get("input_ids")
+            attention_mask = input_ids.get("attention_mask")
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         model_outputs = self.model(input_ids, attention_mask=attention_mask, position_ids=position_ids,
@@ -959,7 +1027,7 @@ class TFPhi3ForTokenClassification(TFPhi3PreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
-        self.model = TFPhi3Model(config)
+        self.model = TFPhi3MainLayer(config)
         if hasattr(config, "classifier_dropout") and config.classifier_dropout is not None:
             classifier_dropout = config.classifier_dropout
         elif hasattr(config, "hidden_dropout") and config.hidden_dropout is not None:
@@ -968,9 +1036,6 @@ class TFPhi3ForTokenClassification(TFPhi3PreTrainedModel):
             classifier_dropout = 0.1
         self.dropout = Dropout(classifier_dropout)
         self.classifier = Dense(config.num_labels, activation='softmax')
-
-        # Initialize weights and apply final processing
-        self.post_init()
 
     @add_start_docstrings_to_model_forward(PHI3_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
@@ -1028,3 +1093,8 @@ class TFPhi3ForTokenClassification(TFPhi3PreTrainedModel):
             hidden_states=model_outputs.hidden_states,
             attentions=model_outputs.attentions,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
