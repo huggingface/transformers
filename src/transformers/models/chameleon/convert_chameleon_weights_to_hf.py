@@ -301,6 +301,8 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
         for old, new in vq_keys_to_replace:
             vq_config[new] = vq_config[old]
         del vq_config["ddconfig"]
+        del vq_config["ckpt_path"]
+        del vq_config["lossconfig"]
 
     config = ChameleonConfig(
         hidden_size=dim,

@@ -34,9 +34,9 @@ class ChameleonProcessor(ProcessorMixin):
     See the [`~ChameleonProcessor.__call__`] and [`~ChameleonProcessor.decode`] for more information.
 
     Args:
-        image_processor ([`ChameleonImageProcessor`], *optional*):
+        image_processor ([`ChameleonImageProcessor`]):
             The image processor is a required input.
-        tokenizer ([`LlamaTokenizerFast`], *optional*):
+        tokenizer ([`LlamaTokenizerFast`]):
             The tokenizer is a required input.
         image_seq_length (`int`, *optional*, defaults to 1024):
             Sequence length of one image embedding.
@@ -63,6 +63,7 @@ class ChameleonProcessor(ProcessorMixin):
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: int = None,
         return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
+        return_for_text_completion: bool = False,
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
@@ -119,7 +120,9 @@ class ChameleonProcessor(ProcessorMixin):
         one_img_tokens = self.image_start_token + (self.image_token * self.image_seq_length) + self.image_end_token
         for sample in text:
             sample = sample.replace(self.image_token, one_img_tokens)
-            prompt_strings.append(f"{sample}{self.tokenizer.sep_token}")  # special Chameleon treatment to add sep
+            if not return_for_text_completion:
+                sample += self.tokenizer.sep_token  # special Chameleon treatment to add sep for chat mode
+            prompt_strings.append(sample)
 
         data = self.tokenizer(
             prompt_strings,

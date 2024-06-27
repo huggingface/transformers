@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 ## Overview
 
 The Chameleon model was proposed in [Chameleon: Mixed-Modal Early-Fusion Foundation Models
-](https://arxiv.org/abs/2405.09818v1) by META AI Chameleon Team. Chameleon is a Vision-Language Model that use vector quantization to tokenize images which enables the model to generate multimodal output. Additionally the model can generate from an interleaved vision-text input. 
+](https://arxiv.org/abs/2405.09818v1) by META AI Chameleon Team. Chameleon is a Vision-Language Model that use vector quantization to tokenize images which enables the model to generate multimodal output. The model takes images and texts as input, including an interleaved format, and generates textual response. Image generation module is not released yet. 
 
 
 The abstract from the paper is the following:
@@ -36,6 +36,11 @@ including Gemini Pro and GPT-4V, according to human judgments on a new long-form
 generation evaluation, where either the prompt or outputs contain mixed sequences of both images and
 text. Chameleon marks a significant step forward in a unified modeling of full multimodal documents*
 
+
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/chameleon_arch.png"
+alt="drawing" width="600"/>
+
+<small> Chameleon incorporates a vector quantizer module to transform images into discrete tokens. That also enables image geenration using an auto-regressive transformer. Taken from the <a href="https://arxiv.org/abs/2405.09818v1">original paper.</a> </small>
 
 This model was contributed by [joaogante](https://huggingface.co/joaogante) and [RaushanTurganbay](https://huggingface.co/RaushanTurganbay).
 The original code can be found [here](https://github.com/facebookresearch/chameleon).
@@ -76,7 +81,7 @@ print(processor.decode(output[0], skip_special_tokens=True))
 
 ### Multi image inference
 
-LLaVa-Next can perform inference with multiple images as input, where images either belong to the same prompt or different prompts (in batched inference). Here is how you can do it:
+Chameleon can perform inference with multiple images as input, where images either belong to the same prompt or different prompts (in batched inference). Here is how you can do it:
 
 ```python
 from transformers import ChameleonProcessor, ChameleonForCausalLM
@@ -131,9 +136,9 @@ quantization_config = BitsAndBytesConfig(
 model = ChameleonForCausalLM.from_pretrained("meta-chameleon", quantization_config=quantization_config, device_map="auto")
 ```
 
-### Use Flash-Attention 2 to further speed-up generation
+### Use Flash-Attention 2 and SDPA to further speed-up generation
 
-First make sure to install flash-attn. Refer to the [original repository of Flash Attention](https://github.com/Dao-AILab/flash-attention) regarding that package installation. Simply change the snippet above with:
+The models supports both, Flash-Attention 2 and PyTorch's [`torch.nn.functional.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html) which can be enables for optimization. SDPA is the default options when you load the model, If you want to switch for Flash Attention 2, first make sure to install flash-attn. Refer to the [original repository](https://github.com/Dao-AILab/flash-attention) regarding that package installation. Simply change the snippet above with:
 
 ```python
 from transformers import ChameleonForCausalLM

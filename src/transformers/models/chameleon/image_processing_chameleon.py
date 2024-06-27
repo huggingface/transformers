@@ -136,6 +136,7 @@ class ChameleonImageProcessor(BaseImageProcessor):
             "input_data_format",
         ]
 
+    # Copied from transformers.models.clip.image_processing_clip.CLIPImageProcessor.resize
     def resize(
         self,
         image: np.ndarray,
@@ -341,6 +342,7 @@ class ChameleonImageProcessor(BaseImageProcessor):
     def blend_rgba(self, image: ImageInput) -> ImageInput:
         """
         Convert image to RGB by blending the transparency layer if it's in RGBA format.
+        If image is not `PIL.Image`, it si simply returned without modifications.
 
         Args:
             image (`ImageInput`):

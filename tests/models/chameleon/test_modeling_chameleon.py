@@ -14,7 +14,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch chameleon model."""
 
-import tempfile
 import unittest
 
 import pytest
@@ -79,6 +78,10 @@ class ChameleonModelTester:
         num_labels=3,
         num_choices=4,
         pad_token_id=0,
+        vq_num_embeds=12,
+        vq_embed_dim=12,
+        vq_channel_multiplier=[1, 2],
+        vq_img_token_start_id=10,  # has to be less than vocab size when added with vq_num_embeds
         scope=None,
     ):
         self.parent = parent
@@ -105,6 +108,10 @@ class ChameleonModelTester:
         self.num_choices = num_choices
         self.pad_token_id = pad_token_id
         self.scope = scope
+        self.vq_num_embeds = vq_num_embeds
+        self.vq_embed_dim = vq_embed_dim
+        self.vq_channel_multiplier = vq_channel_multiplier
+        self.vq_img_token_start_id = vq_img_token_start_id
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -126,10 +133,18 @@ class ChameleonModelTester:
         return config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
 
     def get_config(self):
+        # create dummy vocab map for image2bpe mapping if it needs remapping
+        # we assume that vocab size is big enough to accoun for image tokens somewhere in the beginning
+        # same way as in real ckpt, when img tokens are in first half of embeds
+        # we will need "vq_num_embeds" amount of tokens
+
         vocab_map = {i: chr(i) for i in range(self.vocab_size)}
         vocab_map[self.image_token_id] = "<image>"
-        for i in range(10, 20):
-            vocab_map[i] = "IMGIMGBS"
+        start = self.vq_img_token_start_id
+        end = self.vq_img_token_start_id + self.vq_num_embeds
+        for i in range(start, end):
+            vocab_map[i] = f"IMGIMGBS{i}"  # dummy str for each token, anything starting with IMGIMG
+
         return ChameleonConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
@@ -151,14 +166,12 @@ class ChameleonModelTester:
 
     def get_vq_config(self):
         return {
-            "embed_dim": 24,
-            "num_embeddings": 24,
-            "z_channels": 12,
-            "resolution": 12,
+            "embed_dim": self.vq_embed_dim,
+            "num_embeddings": self.vq_num_embeds,
+            "z_channels": self.vq_embed_dim,
             "in_channels": 3,
-            "out_channels": 3,
             "base_channels": 32,  # we have a GroupNorm of 32 groups, so can't do less
-            "channel_multiplier": [1, 2],
+            "channel_multiplier": self.vq_channel_multiplier,
         }
 
     def create_and_check_model(self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels):
@@ -400,33 +413,6 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         output_fa_2 = processor.tokenizer.batch_decode(output_fa_2)
 
         self.assertListEqual(output_native, output_fa_2)
-
-    @require_flash_attn
-    @require_torch_gpu
-    @slow
-    def test_use_flash_attention_2_true(self):
-        """
-        NOTE: this is the only test testing that the legacy `use_flash_attention=2` argument still works as intended.
-        """
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                model = model_class(config)
-                model.save_pretrained(tmp_dir)
-
-                new_model = ChameleonForCausalLM.from_pretrained(
-                    tmp_dir, use_flash_attention_2=True, torch_dtype=torch.float16
-                ).to("cuda")
-
-                self.assertTrue(new_model.config._attn_implementation == "flash_attention_2")
-
-                has_flash = False
-                for name, submodule in new_model.named_modules():
-                    if "FlashAttention" in submodule.__class__.__name__:
-                        has_flash = True
-                        break
-                if not has_flash:
-                    raise ValueError("The flash model should have flash attention layers")
 
     @require_torch_sdpa
     @slow

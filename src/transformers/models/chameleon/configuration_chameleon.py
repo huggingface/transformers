@@ -55,12 +55,8 @@ class ChameleonVQConfig(PretrainedConfig):
             Resolutions to apply attention.
         dropout (`float`, *optional*, defaults to 0.0):
             Dropout rate.
-        colorize_nlabels (`int`, *optional*):
-            Colorize nlabels
         attn_type (`str`, *optional*, defaults to `"vanilla"`):
             Attention type used in VQ-GAN encoder. Can be "vanilla" or None.
-        resamp_type (`str`, *optional*, defaults to `"with_conv"`):
-            Whether to do resampling with convolution layer or not. Can be "with_conv" or "without_conv"
     """
 
     model_type = "chameleon_vqgan"
@@ -78,9 +74,7 @@ class ChameleonVQConfig(PretrainedConfig):
         num_res_blocks: int = 2,
         attn_resolutions: List[int] = None,
         dropout: float = 0.0,
-        colorize_nlabels: int = None,
         attn_type: str = "vanilla",
-        resamp_type: str = "with_conv",
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -95,9 +89,7 @@ class ChameleonVQConfig(PretrainedConfig):
         self.num_res_blocks = num_res_blocks
         self.attn_resolutions = attn_resolutions
         self.dropout = dropout
-        self.colorize_nlabels = colorize_nlabels
         self.attn_type = attn_type
-        self.resamp_type = resamp_type
 
 
 class ChameleonConfig(PretrainedConfig):
@@ -164,7 +156,7 @@ class ChameleonConfig(PretrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        qk_layernorm (`bool`, *optional*, defaults to `False`):
+        qk_layernorm (`bool`, *optional*, defaults to `True`):
             Whether to use query-key normalization.
         swin_norm (`bool`, *optional*, defaults to `False`):
             Use Swin Transformer normalization.
