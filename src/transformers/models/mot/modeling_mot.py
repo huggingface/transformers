@@ -16,7 +16,6 @@
 """PyTorch MixtureOfTokens model."""
 
 import math
-import os
 import warnings
 from typing import Optional, Tuple, Union
 
