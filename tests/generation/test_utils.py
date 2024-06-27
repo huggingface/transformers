@@ -1302,11 +1302,12 @@ class GenerationTesterMixin:
                 "output_scores": True,
                 "output_logits": True,
                 "output_hidden_states": True,
-                "output_attentions": True,
+                "output_attentions": self.has_attentions,
                 "return_dict_in_generate": True,
             }
             generation_kwargs.update({"dola_layers": "low"})
-            output_dola = model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
+            model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
+            output_dola = model.generate(input_ids, **model_kwargs, **generation_kwargs)
             self._check_outputs(output_dola, input_ids, model.config, use_cache=config.use_cache)
 
     def test_assisted_decoding_sample(self):
