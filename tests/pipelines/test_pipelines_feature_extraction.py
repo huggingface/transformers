@@ -193,7 +193,9 @@ class FeatureExtractionPipelineTests(unittest.TestCase):
                 For now ignore those.
                 """
             )
-        feature_extractor = FeatureExtractionPipeline(model=model, tokenizer=tokenizer, feature_extractor=processor, torch_dtype=torch_dtype)
+        feature_extractor = FeatureExtractionPipeline(
+            model=model, tokenizer=tokenizer, feature_extractor=processor, torch_dtype=torch_dtype
+        )
         return feature_extractor, ["This is a test", "This is another test"]
 
     def run_pipeline_test(self, feature_extractor, examples):
