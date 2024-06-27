@@ -224,8 +224,6 @@ class NemotronAttention(nn.Module):
         self.rotary_percent = config.rope_percentage
         self.is_causal = True
 
-        assert (self.head_dim * self.num_heads) == self.hidden_size
-
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
