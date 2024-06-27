@@ -359,7 +359,6 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
         # we need to index copy on [0, 577, 578, 579] for the text and [1:576] for the image features
         final_embedding[batch_indices, text_to_overwrite] = inputs_embeds[batch_indices, non_image_indices]
         final_attention_mask[batch_indices, text_to_overwrite] = attention_mask[batch_indices, non_image_indices]
-        # modality_indicators[batch_indices, text_to_overwrite] = 0
         if labels is not None:
             final_labels[batch_indices, text_to_overwrite] = labels[batch_indices, non_image_indices]
 
