@@ -37,15 +37,6 @@ This model was contributed by [Arthur Zucker](https://huggingface.co/ArthurZ), [
 
 [[autodoc]] Gemma2Config
 
-## Gemma2Tokenizer
-
-[[autodoc]] Gemma2Tokenizer
-
-
-## Gemma2TokenizerFast
-
-[[autodoc]] Gemma2TokenizerFast
-
 ## Gemma2Model
 
 [[autodoc]] Gemma2Model
