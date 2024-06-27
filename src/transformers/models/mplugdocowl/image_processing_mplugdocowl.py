@@ -190,7 +190,6 @@ def anchor_resize(
     target_size = anchors[selected_anchor][2:].astype(int)  # target width, height
     resized_img = image.resize((target_size[0], target_size[1]), resample=resample)
     resized_img = np.array(resized_img)
-    
     return [resized_img], selected_anchor
 
 
@@ -230,7 +229,6 @@ def shape_adaptive_cropping(
     patch_position = patch_position.reshape(-1, 2)
     if add_global_img:
         patch_position = np.vstack((np.ones((1, 2), dtype=np.int64) * anchor_max, patch_position))
-    
     return image_patches_list, patch_position, patch_position.shape[0], anchor_max
 
 
@@ -571,10 +569,3 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
             "anchor_max": anchor_max,
         }
         return BatchFeature(data=data, tensor_type=return_tensors)
-
-
-# image_processor = MPLUGDocOwlImageProcessor()
-# image = Image.open("/home/dana_aubakirova/test_image.tif")
-# pixel_values = image_processor(image, do_rescale=False, do_convert_rgb=True, do_shape_adaptive_cropping=True, do_resize=True, do_normalize=True, return_tensors=TensorType.PYTORCH,image_mean=(0.48145466, 0.4578275, 0.40821073), image_std=(0.26862954, 0.26130258, 0.27577711),resample=None,size=224)
-# breakpoint()
-# print(pixel_values)

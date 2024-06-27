@@ -444,7 +444,9 @@ class MPLUGDocOwlEncoder(nn.Module):
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
-            """
+
+            #FIXME: Is it better than custom forward below?
+            '''
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
                     encoder_layer.__call__,
@@ -453,7 +455,7 @@ class MPLUGDocOwlEncoder(nn.Module):
                     causal_attention_mask,
                     output_attentions,
                 )
-            """
+            '''
             if self.gradient_checkpointing and self.training:
 
                 def create_custom_forward(module):
@@ -467,6 +469,7 @@ class MPLUGDocOwlEncoder(nn.Module):
                     hidden_states,
                     attention_mask,
                 )
+   
             else:
                 layer_outputs = encoder_layer(
                     hidden_states,

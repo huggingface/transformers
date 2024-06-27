@@ -23,6 +23,7 @@ from torch import nn
 
 from ... import PreTrainedModel
 from ...cache_utils import Cache
+from ...activations import ACT2FN
 from ...modeling_outputs import ModelOutput
 from ...utils import (
     add_start_docstrings,
@@ -195,23 +196,15 @@ class MPLUGDocOwlHReducer(MPLUGDocOwlPreTrainedModel):
     def __init__(self, config, language_hidden_size):
         super().__init__(config)
         self.config = config
-        self.ln_q = torch.nn.LayerNorm(self.config.hreducer_hidden_size, eps=1e-6)
         self.conv_shape = (
             int(self.config.hreducer_conv_shape.split("x")[0]),
             int(self.config.hreducer_conv_shape.split("x")[1]),
         )  #
         self.conv_patch = self.conv_shape[0] * self.conv_shape[1]
         ## feature interaction with a conv layer
-        self.reducer_before = torch.nn.Sequential(
-            nn.Conv2d(
-                self.config.hreducer_hidden_size,
-                self.conv_patch * self.config.hreducer_hidden_size,
-                kernel_size=self.conv_shape,
-                stride=self.conv_shape,
-                bias=True,
-            ),
-            nn.GELU(),
-        )
+        self.reducer_conv = nn.Conv2d(self.config.hreducer_hidden_size, self.conv_patch*self.config.hreducer_hidden_size, kernel_size=self.conv_shape, stride=self.conv_shape, bias=True)
+        self.reducer_activation = ACT2FN[self.config.hreducer_activation]
+        
         ## reduce visual feature length with a conv layer
         self.reducer = nn.Conv2d(
             self.config.hreducer_hidden_size,
@@ -238,8 +231,8 @@ class MPLUGDocOwlHReducer(MPLUGDocOwlPreTrainedModel):
 
         encoder_hidden_states = encoder_hidden_states.view(B, C, H, H)  # (BCHH)
 
-        hidden_states = self.reducer_before(encoder_hidden_states)  # B 4D H W/4
-
+        hidden_states = self.reducer_conv(encoder_hidden_states)  # B 4D H W/4
+        hidden_states = self.reducer_activation(hidden_states)
         B, XD, H, W_div_X = hidden_states.shape
         X = self.conv_patch
         D = XD // X
@@ -547,10 +540,10 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
         self,
         input_ids,
         past_key_values=None,
-        pixel_values=None,
+       # pixel_values=None,
         inputs_embeds=None,
         attention_mask=None,
-        modality_indicators=None,
+       # modality_indicators=None,
         **kwargs,
     ):
         if past_key_values is not None:
@@ -602,7 +595,7 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
                 "past_key_values": past_key_values,
                 "use_cache": kwargs.get("use_cache"),
                 "attention_mask": attention_mask,
-                "pixel_values": pixel_values,
+                #"pixel_values": pixel_values,
                 "patch_positions": kwargs.get("patch_positions", None),
                 "inputs_embeds": inputs_embeds,
                 # "modality_indicators": modality_indicators,

@@ -120,6 +120,7 @@ class MPLUGDocOwlConfig(PretrainedConfig):
         hreducer_hidden_size=1024,
         hreducer_initializer_range=0.02,
         hreducer_layer_norm=1e-6,
+        hreducer_activation='gelu',
         hreducer_conv_shape="1x4",
         ignore_index=-100,
         image_token_index=32000,
@@ -172,6 +173,7 @@ class MPLUGDocOwlConfig(PretrainedConfig):
         self.hreducer_initializer_range = hreducer_initializer_range
         self.hreducer_layer_norm = hreducer_layer_norm
         self.hreducer_conv_shape = hreducer_conv_shape
+        self.hreducer_activation = hreducer_activation
         super().__init__(**kwargs)
 
     @property
