@@ -338,10 +338,7 @@ class ChameleonImageProcessor(BaseImageProcessor):
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
 
-    def blend_rgba(
-        self,
-        image: ImageInput,
-    ) -> ImageInput:
+    def blend_rgba(self, image: ImageInput) -> ImageInput:
         """
         Convert image to RGB by blending the transparency layer if it's in RGBA format.
 
