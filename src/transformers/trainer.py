@@ -3831,16 +3831,6 @@ class Trainer:
             if is_torch_xla_available():
                 xm.mark_step()
 
-            if self.args.eval_use_gather_object and not is_accelerate_available("0.30.0"):
-                logger.warning(
-                    "You are using eval_use_gather_object = True with a version of `accelerate` < 0.30.0. This is not supported"
-                    " and we recommend you to update your version."
-                )
-            if "use_gather_object" in inspect.signature(self.gather_function).parameters.keys():
-                self.gather_function = functools.partial(
-                    self.gather_function, use_gather_object=self.args.eval_use_gather_object
-                )
-
             # Update containers
             if losses is not None:
                 losses = self.gather_function((losses.repeat(batch_size)))
@@ -4615,6 +4605,16 @@ class Trainer:
         self.accelerator = Accelerator(**args)
         # some Trainer classes need to use `gather` instead of `gather_for_metrics`, thus we store a flag
         self.gather_function = self.accelerator.gather_for_metrics
+
+        if self.args.eval_use_gather_object and not is_accelerate_available("0.30.0"):
+            logger.warning(
+                "You are using eval_use_gather_object = True with a version of `accelerate` < 0.30.0. This is not supported"
+                " and we recommend you to update your version."
+            )
+        if "use_gather_object" in inspect.signature(self.gather_function).parameters.keys():
+            self.gather_function = functools.partial(
+                self.gather_function, use_gather_object=self.args.eval_use_gather_object
+            )
 
         # deepspeed and accelerate flags covering both trainer args and accelerate launcher
         self.is_deepspeed_enabled = getattr(self.accelerator.state, "deepspeed_plugin", None) is not None
