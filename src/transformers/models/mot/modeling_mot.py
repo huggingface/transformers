@@ -1306,7 +1306,7 @@ class MoTForSequenceClassification(MoTPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(MOT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        checkpoint="microsoft/DialogRPT-updown",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1441,7 +1441,7 @@ class MoTForTokenClassification(MoTPreTrainedModel):
     @add_start_docstrings_to_model_forward(MOT_INPUTS_DOCSTRING)
     # fmt: off
     @add_code_sample_docstrings(
-        checkpoint="brad1141/mot-finetuned-comp2",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         expected_loss=0.25,
@@ -1546,7 +1546,6 @@ class MoTForQuestionAnswering(MoTPreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
-        real_checkpoint=_CHECKPOINT_FOR_DOC,
     )
     def forward(
         self,
