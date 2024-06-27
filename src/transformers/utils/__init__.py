@@ -60,6 +60,8 @@ from .generic import (
     tensor_size,
     to_numpy,
     to_py_obj,
+    torch_float,
+    torch_int,
     transpose,
     working_or_temp_dir,
 )

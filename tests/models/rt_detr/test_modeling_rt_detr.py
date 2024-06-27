@@ -18,6 +18,8 @@ import inspect
 import math
 import unittest
 
+from parameterized import parameterized
+
 from transformers import (
     RTDetrConfig,
     RTDetrImageProcessor,
@@ -25,7 +27,7 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.testing_utils import require_torch, require_vision, torch_device
+from transformers.testing_utils import require_torch, require_torch_gpu, require_vision, slow, torch_device
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
@@ -89,7 +91,7 @@ class RTDetrModelTester:
         label_noise_ratio=0.5,
         box_noise_scale=1.0,
         learn_initial_query=False,
-        anchor_image_size=[64, 64],
+        anchor_image_size=None,
         image_size=64,
         disable_custom_kernels=True,
         with_box_refine=True,
@@ -605,6 +607,28 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                         [0.0, 1.0],
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
+
+    @parameterized.expand(["float32", "float16", "bfloat16"])
+    @require_torch_gpu
+    @slow
+    def test_inference_with_different_dtypes(self, torch_dtype_str):
+        torch_dtype = {
+            "float32": torch.float32,
+            "float16": torch.float16,
+            "bfloat16": torch.bfloat16,
+        }[torch_dtype_str]
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device).to(torch_dtype)
+            model.eval()
+            for key, tensor in inputs_dict.items():
+                if tensor.dtype == torch.float32:
+                    inputs_dict[key] = tensor.to(torch_dtype)
+            with torch.no_grad():
+                _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
 
 TOLERANCE = 1e-4

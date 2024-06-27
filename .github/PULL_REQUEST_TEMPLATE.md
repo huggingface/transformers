@@ -39,7 +39,7 @@ members/contributors who may be interested in your PR.
 
 Models:
 
-- text models: @ArthurZucker and @younesbelkada
+- text models: @ArthurZucker
 - vision models: @amyeroberts
 - speech models: @sanchit-gandhi
 - graph models: @clefourrier
@@ -58,7 +58,7 @@ Integrations:
 - deepspeed: HF Trainer/Accelerate: @muellerzr
 - ray/raytune: @richardliaw, @amogkam
 - Big Model Inference: @SunMarc
-- quantization (bitsandbytes, autogpt): @SunMarc and @younesbelkada
+- quantization (bitsandbytes, autogpt): @SunMarc 
 
 Documentation: @stevhliu and @MKhalusova
 

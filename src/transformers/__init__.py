@@ -473,6 +473,12 @@ _import_structure = {
         "InstructBlipQFormerConfig",
         "InstructBlipVisionConfig",
     ],
+    "models.instructblipvideo": [
+        "InstructBlipVideoConfig",
+        "InstructBlipVideoProcessor",
+        "InstructBlipVideoQFormerConfig",
+        "InstructBlipVideoVisionConfig",
+    ],
     "models.jamba": ["JambaConfig"],
     "models.jetmoe": ["JetMoeConfig"],
     "models.kosmos2": [
@@ -509,6 +515,10 @@ _import_structure = {
     "models.llava_next": [
         "LlavaNextConfig",
         "LlavaNextProcessor",
+    ],
+    "models.llava_next_video": [
+        "LlavaNextVideoConfig",
+        "LlavaNextVideoProcessor",
     ],
     "models.longformer": [
         "LongformerConfig",
@@ -1137,10 +1147,12 @@ else:
     _import_structure["models.idefics"].extend(["IdeficsImageProcessor"])
     _import_structure["models.idefics2"].extend(["Idefics2ImageProcessor"])
     _import_structure["models.imagegpt"].extend(["ImageGPTFeatureExtractor", "ImageGPTImageProcessor"])
+    _import_structure["models.instructblipvideo"].extend(["InstructBlipVideoImageProcessor"])
     _import_structure["models.layoutlmv2"].extend(["LayoutLMv2FeatureExtractor", "LayoutLMv2ImageProcessor"])
     _import_structure["models.layoutlmv3"].extend(["LayoutLMv3FeatureExtractor", "LayoutLMv3ImageProcessor"])
     _import_structure["models.levit"].extend(["LevitFeatureExtractor", "LevitImageProcessor"])
     _import_structure["models.llava_next"].append("LlavaNextImageProcessor")
+    _import_structure["models.llava_next_video"].append("LlavaNextVideoImageProcessor")
     _import_structure["models.mask2former"].append("Mask2FormerImageProcessor")
     _import_structure["models.maskformer"].extend(["MaskFormerFeatureExtractor", "MaskFormerImageProcessor"])
     _import_structure["models.mobilenet_v1"].extend(["MobileNetV1FeatureExtractor", "MobileNetV1ImageProcessor"])
@@ -2318,6 +2330,14 @@ else:
             "InstructBlipVisionModel",
         ]
     )
+    _import_structure["models.instructblipvideo"].extend(
+        [
+            "InstructBlipVideoForConditionalGeneration",
+            "InstructBlipVideoPreTrainedModel",
+            "InstructBlipVideoQFormerModel",
+            "InstructBlipVideoVisionModel",
+        ]
+    )
     _import_structure["models.jamba"].extend(
         [
             "JambaForCausalLM",
@@ -2415,6 +2435,12 @@ else:
         [
             "LlavaNextForConditionalGeneration",
             "LlavaNextPreTrainedModel",
+        ]
+    )
+    _import_structure["models.llava_next_video"].extend(
+        [
+            "LlavaNextVideoForConditionalGeneration",
+            "LlavaNextVideoPreTrainedModel",
         ]
     )
     _import_structure["models.longformer"].extend(
@@ -5079,6 +5105,12 @@ if TYPE_CHECKING:
         InstructBlipQFormerConfig,
         InstructBlipVisionConfig,
     )
+    from .models.instructblipvideo import (
+        InstructBlipVideoConfig,
+        InstructBlipVideoProcessor,
+        InstructBlipVideoQFormerConfig,
+        InstructBlipVideoVisionConfig,
+    )
     from .models.jamba import JambaConfig
     from .models.jetmoe import JetMoeConfig
     from .models.kosmos2 import (
@@ -5115,6 +5147,10 @@ if TYPE_CHECKING:
     from .models.llava_next import (
         LlavaNextConfig,
         LlavaNextProcessor,
+    )
+    from .models.llava_next_video import (
+        LlavaNextVideoConfig,
+        LlavaNextVideoProcessor,
     )
     from .models.longformer import (
         LongformerConfig,
@@ -5772,6 +5808,7 @@ if TYPE_CHECKING:
         from .models.idefics import IdeficsImageProcessor
         from .models.idefics2 import Idefics2ImageProcessor
         from .models.imagegpt import ImageGPTFeatureExtractor, ImageGPTImageProcessor
+        from .models.instructblipvideo import InstructBlipVideoImageProcessor
         from .models.layoutlmv2 import (
             LayoutLMv2FeatureExtractor,
             LayoutLMv2ImageProcessor,
@@ -5782,6 +5819,7 @@ if TYPE_CHECKING:
         )
         from .models.levit import LevitFeatureExtractor, LevitImageProcessor
         from .models.llava_next import LlavaNextImageProcessor
+        from .models.llava_next_video import LlavaNextVideoImageProcessor
         from .models.mask2former import Mask2FormerImageProcessor
         from .models.maskformer import (
             MaskFormerFeatureExtractor,
@@ -6771,6 +6809,12 @@ if TYPE_CHECKING:
             InstructBlipQFormerModel,
             InstructBlipVisionModel,
         )
+        from .models.instructblipvideo import (
+            InstructBlipVideoForConditionalGeneration,
+            InstructBlipVideoPreTrainedModel,
+            InstructBlipVideoQFormerModel,
+            InstructBlipVideoVisionModel,
+        )
         from .models.jamba import (
             JambaForCausalLM,
             JambaForSequenceClassification,
@@ -6845,6 +6889,10 @@ if TYPE_CHECKING:
         from .models.llava_next import (
             LlavaNextForConditionalGeneration,
             LlavaNextPreTrainedModel,
+        )
+        from .models.llava_next_video import (
+            LlavaNextVideoForConditionalGeneration,
+            LlavaNextVideoPreTrainedModel,
         )
         from .models.longformer import (
             LongformerForMaskedLM,

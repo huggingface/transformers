@@ -403,7 +403,7 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
         EXPECTED_LOGTIS = torch.Tensor([-0.3059, 0.0000, 9.3029, 0.6456, -0.9148, 1.7836, 0.6478, 0.9438, -0.5272, -0.6617, -1.2717, 0.4564, 0.1345, -0.2301, -1.0140, 1.1427, -1.5535, 0.1337, 0.2082, -0.8112, -0.3842, -0.3377, 0.1256, 0.6450, -0.0452, 0.0219, 1.4274, -0.4991, -0.2063, -0.4409,])  # fmt: skip
         torch.testing.assert_close(output.logits[1, 0, :30], EXPECTED_LOGTIS, rtol=6e-3, atol=9e-3)
 
-    @unittest.skip("This requires 300GB of RAM")
+    @unittest.skip(reason="This requires 300GB of RAM")
     def test_large_logits(self):
         model = self.big_model
         with torch.no_grad():
@@ -421,7 +421,7 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
         torch.testing.assert_close(output.last_hidden_state[1, 0, :30], EXPECTED_DECODER_STATE, rtol=6e-3, atol=9e-3)
         torch.testing.assert_close(output.logits[1, 0, :30], EXPECTED_LOGTIS, rtol=6e-3, atol=9e-3)
 
-    @unittest.skip("This requires 300GB of RAM")
+    @unittest.skip(reason="This requires 300GB of RAM")
     def test_seq_to_seq_generation(self):
         model = self.big_model
         tokenizer = NllbTokenizer.from_pretrained("facebook/nllb-moe-54b")

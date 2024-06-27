@@ -151,6 +151,11 @@ class BaseImageProcessor(ImageProcessingMixin):
             **kwargs,
         )
 
+    def to_dict(self):
+        encoder_dict = super().to_dict()
+        encoder_dict.pop("_valid_processor_keys", None)
+        return encoder_dict
+
 
 VALID_SIZE_DICT_KEYS = (
     {"height", "width"},
