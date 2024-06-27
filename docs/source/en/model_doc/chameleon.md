@@ -142,7 +142,7 @@ model = ChameleonForCausalLM.from_pretrained(
     model_id, 
     torch_dtype=torch.float16, 
     low_cpu_mem_usage=True,
-    use_flash_attention_2=True
+    attn_implementation="flash_attention_2"
 ).to(0)
 ```
 
