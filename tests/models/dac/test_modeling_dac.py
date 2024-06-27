@@ -98,10 +98,10 @@ class DacModelTester:
         return config, inputs_dict
 
     def prepare_config_and_inputs_for_model_class(self, model_class):
-        config, inputs_dict = self.prepare_config_and_inputs()
-        inputs_dict["input_values"] = ids_tensor([self.batch_size, 1, self.num_channels], self.codebook_size).type(
-            torch.float32
-        )
+
+        input_values = floats_tensor([self.batch_size, self.num_channels, self.intermediate_size], scale=1.0)
+        config = self.get_config()
+        inputs_dict = {"input_values": input_values}
 
         return config, inputs_dict
 
@@ -420,19 +420,19 @@ class DacIntegrationTest(unittest.TestCase):
 
         expected_encoder_sums_dict = {
             "dac_16khz": {
-                "encoder_loss": 24.873,
+                "loss": 24.873,
                 "quantized_representation": -22443.92,
                 "codebook_indices": 1763635,
                 "projected_latents": 1891.828,
             },
             "dac_24khz": {
-                "encoder_loss": 28.091,
+                "loss": 28.091,
                 "quantized_representation": 7952.426,
                 "codebook_indices": 7133234,
                 "projected_latents": -2933.110,
             },
             "dac_44khz": {
-                "encoder_loss": 24.1003,
+                "loss": 24.1003,
                 "quantized_representation": 10457.930,
                 "codebook_indices": 2282129,
                 "projected_latents": 2074.932,
@@ -495,19 +495,19 @@ class DacIntegrationTest(unittest.TestCase):
 
         expected_encoder_sums_dict = {
             "dac_16khz": {
-                "encoder_loss": 20.3622,
+                "loss": 40.7245,
                 "quantized_representation": -39568.0898,
                 "codebook_indices": 4166923,
                 "projected_latents": 1526.3572,
             },
             "dac_24khz": {
-                "encoder_loss": 24.5159,
+                "loss": 49.0317,
                 "quantized_representation": 40920.2500,
                 "codebook_indices": 17405028,
                 "projected_latents": -5158.3975,
             },
             "dac_44khz": {
-                "encoder_loss": 19.4507,
+                "loss": 38.9014,
                 "quantized_representation": -5212.0156,
                 "codebook_indices": 5736248,
                 "projected_latents": 1636.0724,
