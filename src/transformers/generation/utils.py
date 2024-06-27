@@ -112,7 +112,11 @@ logger = logging.get_logger(__name__)
 if is_accelerate_available():
     from accelerate.hooks import AlignDevicesHook, add_hook_to_module
 
-NEED_SETUP_CACHE_CLASSES_MAPPING = {"static": StaticCache, "sliding_window": SlidingWindowCache}
+NEED_SETUP_CACHE_CLASSES_MAPPING = {
+    "static": StaticCache,
+    "sliding_window": SlidingWindowCache,
+    "mamba": None,
+}  # None is just a placeholder for caches that needs customization
 QUANT_BACKEND_CLASSES_MAPPING = {"quanto": QuantoQuantizedCache, "HQQ": HQQQuantizedCache}
 
 
@@ -1406,12 +1410,20 @@ class GenerationMixin:
         model_kwargs["cache_position"] = torch.arange(past_length, cur_len, device=input_ids.device)
         return model_kwargs
 
-    def _get_cache(self, cache_implementation: str, max_batch_size: int, max_cache_len: int) -> Cache:
+    def setup_cache_for_generation(
+        self,
+        model_kwargs: Dict[str, Any],
+        cache_implementation: str,
+        max_batch_size: int,
+        max_cache_len: int,
+        **kwargs,
+    ):
         """
         Sets a cache for `generate`, that will persist across calls. A new cache will only be initialized a
-        new `generate` call requires a larger cache.
+        new `generate` call requires a larger cache. This function might be overwritten by different model classes
+        to suit different needs of setting up caches.
 
-        Returns the resulting cache object.
+        Returns the resulting `model_kwargs` with cache being set.
         """
         cache_cls: Cache = NEED_SETUP_CACHE_CLASSES_MAPPING[cache_implementation]
         if cache_implementation == "sliding_window":
@@ -1438,7 +1450,9 @@ class GenerationMixin:
             )
         else:
             self._cache.reset()
-        return self._cache
+
+        model_kwargs["past_key_values"] = self._cache
+        return model_kwargs
 
     def _supports_default_dynamic_cache(self) -> bool:
         """
@@ -1731,7 +1745,7 @@ class GenerationMixin:
         ):
             raise ValueError(
                 "Passing both `cache_implementation` (used to initialize certain caches) and `past_key_values`/`cache_params` (a "
-                "Cache object) is unsupported. Please use only one of the two."
+                "concrete Cache instance) is unsupported. Please use only one of the two."
             )
         elif generation_config.cache_implementation is not None:
             if generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING:
@@ -1740,30 +1754,12 @@ class GenerationMixin:
                         "This model does not support `cache_implementation='static'`. Please check the following "
                         "issue: https://github.com/huggingface/transformers/issues/28981"
                     )
-                model_kwargs["past_key_values"] = self._get_cache(
-                    generation_config.cache_implementation, batch_size, generation_config.max_length
+                model_kwargs = self.setup_cache_for_generation(
+                    model_kwargs=model_kwargs,
+                    cache_implementation=generation_config.cache_implementation,
+                    batch_size=batch_size,
+                    max_cache_len=generation_config.max_length,
                 )
-            elif generation_config.cache_implementation == "mamba":
-                from ..models.mamba.modeling_mamba import MambaCache, MambaConfig
-
-                if not isinstance(self.config, MambaConfig):
-                    raise ValueError(
-                        "You can only specify `cache_implementation` to `mamba` if you are using mamba model"
-                    )
-
-                if hasattr(self, "_cache"):
-                    assert isinstance(self._cache, MambaCache), "Only `MambaCache` can be used on mamba model"
-                    need_new_cache = self._cache.conv_states.shape[1] != batch_size
-                else:
-                    need_new_cache = True
-
-                if need_new_cache:
-                    self._cache = MambaCache(
-                        config=self.config, batch_size=batch_size, dtype=self.dtype, device=self.device
-                    )
-                else:
-                    self._cache.reset()
-                model_kwargs["cache_params"] = self._cache
             elif generation_config.cache_implementation == "quantized":
                 if not self._supports_quantized_cache:
                     raise ValueError(

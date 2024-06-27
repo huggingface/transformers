@@ -282,7 +282,9 @@ class MambaMixer(nn.Module):
         if cache_params is not None:
             ssm_state = cache_params.ssm_states[self.layer_idx].clone()
             ssm_state = ssm_state.to(hidden_states.device)
-
+            # use `cache_position.shape[0]` to check whether we are in prefill
+            # stage, it's equivalent to check `cache_position[0] == 0`, which
+            # breaks dynamo fullgraph constraints
             if cache_position.shape[0] == self.conv_kernel_size:
                 conv_state = nn.functional.pad(
                     hidden_states,
@@ -714,10 +716,19 @@ class MambaForCausalLM(MambaPreTrainedModel):
     ):
         if use_cache:
             # `cache_position` should have been initialized in `generate`
-            assert cache_position is not None
+            if cache_position is None:
+                raise ValueError(
+                    "`cache_position` should not be None as it should have been initialized in "
+                    "`model.generate`, you are responsible for passing in a valid `cache_position` if "
+                    "you are calling `prepare_inputs_for_generation` directly with `use_cache=True`"
+                )
             if cache_position[0] > 0:
                 input_ids = input_ids[:, -1].unsqueeze(-1)
             else:
+                # we initialize the `cache_position` to full size of `conv_states` at prefill stage
+                # considering padding will be applied when input length is shorter, and truncation
+                # will be applied when it is longer, so it will be equivalent to always have it match
+                # the length of `cache_params.conv_states`, which is `config.conv_kernel`
                 cache_position = torch.arange(0, self.config.conv_kernel, device=input_ids.device)
 
         if inputs_embeds is not None and cache_params is None:
@@ -733,6 +744,32 @@ class MambaForCausalLM(MambaPreTrainedModel):
             }
         )
         return model_inputs
+
+    def setup_cache_for_generation(
+        self,
+        model_kwargs: Dict[str, Any],
+        cache_implementation: str,
+        max_batch_size: int,
+        **kwargs,
+    ):
+        if cache_implementation != "mamba":
+            raise ValueError(
+                "Only `MambaCache` can be used on mamba model, please specify `cache_implementation` to `mamba` in `model.generate`"
+            )
+        if hasattr(self, "_cache"):
+            assert isinstance(self._cache, MambaCache), "Only `MambaCache` can be used on mamba model"
+            need_new_cache = self._cache.conv_states.shape[1] != max_batch_size
+        else:
+            need_new_cache = True
+
+        if need_new_cache:
+            self._cache = MambaCache(
+                config=self.config, batch_size=max_batch_size, dtype=self.dtype, device=self.device
+            )
+        else:
+            self._cache.reset()
+        model_kwargs["cache_params"] = self._cache
+        return model_kwargs
 
     @add_start_docstrings_to_model_forward(MAMBA_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
