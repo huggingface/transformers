@@ -394,6 +394,12 @@ def is_causal_conv1d_available():
     return False
 
 
+def is_mambapy_available():
+    if is_torch_available():
+        return _is_package_available("mambapy")
+    return False
+
+
 def is_torch_mps_available():
     if is_torch_available():
         import torch
