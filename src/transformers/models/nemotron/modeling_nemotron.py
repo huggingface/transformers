@@ -303,7 +303,7 @@ class NemotronAttention(nn.Module):
 
         attn_output = attn_output.transpose(1, 2).contiguous()
 
-        attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
+        attn_output = attn_output.reshape(bsz, q_len, self.head_dim * self.num_heads)
 
 
         attn_output = self.o_proj(attn_output)
@@ -407,7 +407,7 @@ class NemotronFlashAttention2(NemotronAttention):
             query_states, key_states, value_states, attention_mask, q_len, dropout=dropout_rate
         )
 
-        attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
+        attn_output = attn_output.reshape(bsz, q_len, self.head_dim * self.num_heads).contiguous()
         attn_output = self.o_proj(attn_output)
 
         if not output_attentions:
@@ -594,7 +594,7 @@ class NemotronSdpaAttention(NemotronAttention):
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.view(bsz, q_len, self.hidden_size)
+        attn_output = attn_output.view(bsz, q_len, self.head_dim * self.num_heads)
 
         attn_output = self.o_proj(attn_output)
 
