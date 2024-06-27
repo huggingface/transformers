@@ -74,12 +74,12 @@ class MaskGenerationPipelineTests(unittest.TestCase):
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
         ]
 
-    # TODO: Implement me @Arthur
+    @unittest.skip(reason="TODO @Arthur: Implement me")
     def run_pipeline_test(self, mask_generator, examples):
         pass
 
     @require_tf
-    @unittest.skip("Image segmentation not implemented in TF")
+    @unittest.skip(reason="Image segmentation not implemented in TF")
     def test_small_model_tf(self):
         pass
 

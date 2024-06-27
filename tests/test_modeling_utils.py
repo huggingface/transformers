@@ -445,6 +445,18 @@ class ModelUtilsTest(TestCasePlus):
         with self.assertRaises(ValueError):
             model = AutoModel.from_config(config, torch_dtype=torch.int64)
 
+    def test_model_from_config_torch_dtype_str(self):
+        # test that from_pretrained works with torch_dtype being strings like "float32" for PyTorch backend
+        model = AutoModel.from_pretrained(TINY_T5, torch_dtype="float32")
+        self.assertEqual(model.dtype, torch.float32)
+
+        model = AutoModel.from_pretrained(TINY_T5, torch_dtype="float16")
+        self.assertEqual(model.dtype, torch.float16)
+
+        # torch.set_default_dtype() supports only float dtypes, so will fail with non-float type
+        with self.assertRaises(ValueError):
+            model = AutoModel.from_pretrained(TINY_T5, torch_dtype="int64")
+
     def test_model_from_pretrained_torch_dtype(self):
         # test that the model can be instantiated with dtype of either
         # 1. explicit from_pretrained's torch_dtype argument
@@ -1354,7 +1366,7 @@ class ModelUtilsTest(TestCasePlus):
             self.assertIn("You may ignore this warning if your `pad_token_id`", cl.out)
 
         if not is_torchdynamo_available():
-            return
+            self.skipTest(reason="torchdynamo is not available")
         with self.subTest("Ensure that the warning code is skipped when compiling with torchdynamo."):
             logger.warning_once.cache_clear()
             from torch._dynamo import config, testing
@@ -1631,7 +1643,7 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
             self.assertEqual(discussion.author, "SFconvertbot")
             self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
 
-    @unittest.skip("Edge case, should work once the Space is updated`")
+    @unittest.skip(reason="Edge case, should work once the Space is updated`")
     def test_safetensors_on_the_fly_wrong_user_opened_pr(self):
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
@@ -1760,7 +1772,7 @@ class ModelPushToHubTester(unittest.TestCase):
         except HTTPError:
             pass
 
-    @unittest.skip("This test is flaky")
+    @unittest.skip(reason="This test is flaky")
     def test_push_to_hub(self):
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
@@ -1800,7 +1812,7 @@ The commit description supports markdown synthax see:
         )
         self.assertEqual(commit_details.commit_description, COMMIT_DESCRIPTION)
 
-    @unittest.skip("This test is flaky")
+    @unittest.skip(reason="This test is flaky")
     def test_push_to_hub_in_organization(self):
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
@@ -2197,7 +2209,7 @@ class TestAttentionImplementation(unittest.TestCase):
 
     def test_not_available_flash(self):
         if is_flash_attn_2_available():
-            self.skipTest("Please uninstall flash-attn package to run test_not_available_flash")
+            self.skipTest(reason="Please uninstall flash-attn package to run test_not_available_flash")
 
         with self.assertRaises(ImportError) as cm:
             _ = AutoModel.from_pretrained(
@@ -2208,7 +2220,7 @@ class TestAttentionImplementation(unittest.TestCase):
 
     def test_not_available_flash_with_config(self):
         if is_flash_attn_2_available():
-            self.skipTest("Please uninstall flash-attn package to run test_not_available_flash")
+            self.skipTest(reason="Please uninstall flash-attn package to run test_not_available_flash")
 
         config = AutoConfig.from_pretrained("hf-internal-testing/tiny-random-GPTBigCodeModel")
 
@@ -2223,7 +2235,7 @@ class TestAttentionImplementation(unittest.TestCase):
 
     def test_not_available_sdpa(self):
         if is_torch_sdpa_available():
-            self.skipTest("This test requires torch<=2.0")
+            self.skipTest(reason="This test requires torch<=2.0")
 
         with self.assertRaises(ImportError) as cm:
             _ = AutoModel.from_pretrained(

@@ -404,7 +404,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
             # TF generation does not support max_new_tokens, and it's impossible
             # to control long generation with only max_length without
             # fancy calculation, dismissing tests for now.
-            return
+            self.skipTest(reason="TF generation does not support max_new_tokens")
         # We don't care about infinite range models.
         # They already work.
         # Skip this test for XGLM, since it uses sinusoidal positional embeddings which are resized on-the-fly.

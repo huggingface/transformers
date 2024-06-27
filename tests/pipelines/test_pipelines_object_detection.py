@@ -103,7 +103,7 @@ class ObjectDetectionPipelineTests(unittest.TestCase):
                 )
 
     @require_tf
-    @unittest.skip("Object detection not implemented in TF")
+    @unittest.skip(reason="Object detection not implemented in TF")
     def test_small_model_tf(self):
         pass
 

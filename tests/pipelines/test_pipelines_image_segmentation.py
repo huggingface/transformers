@@ -169,7 +169,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
         )
 
     @require_tf
-    @unittest.skip("Image segmentation not implemented in TF")
+    @unittest.skip(reason="Image segmentation not implemented in TF")
     def test_small_model_tf(self):
         pass
 

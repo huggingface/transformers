@@ -612,8 +612,8 @@ class XLNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_xlnet_qa(*config_and_inputs)
 
+    @unittest.skip(reason="xlnet cannot keep gradients in attentions or hidden states")
     def test_retain_grad_hidden_states_attentions(self):
-        # xlnet cannot keep gradients in attentions or hidden states
         return
 
     # overwrite from test_modeling_common

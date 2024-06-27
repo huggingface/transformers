@@ -76,7 +76,7 @@ class ZeroShotObjectDetectionPipelineTests(unittest.TestCase):
         )
 
     @require_tf
-    @unittest.skip("Zero Shot Object Detection not implemented in TF")
+    @unittest.skip(reason="Zero Shot Object Detection not implemented in TF")
     def test_small_model_tf(self):
         pass
 
@@ -187,7 +187,7 @@ class ZeroShotObjectDetectionPipelineTests(unittest.TestCase):
         )
 
     @require_tf
-    @unittest.skip("Zero Shot Object Detection not implemented in TF")
+    @unittest.skip(reason="Zero Shot Object Detection not implemented in TF")
     def test_large_model_tf(self):
         pass
 
