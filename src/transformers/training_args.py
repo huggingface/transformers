@@ -2002,6 +2002,12 @@ class TrainingArguments:
                 FutureWarning,
             )
 
+        if self.eval_use_gather_object and not is_accelerate_available("0.30.0"):
+            raise ValueError(
+                "--eval_use_gather_object requires Accelerate to be version of `accelerate` < 0.30.0."
+                "This is not supported and we recommend you to update your version."
+            )
+
     def __str__(self):
         self_as_dict = asdict(self)
 
