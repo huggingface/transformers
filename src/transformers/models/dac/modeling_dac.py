@@ -42,7 +42,7 @@ _CONFIG_FOR_DOC = "DacConfig"
 class DacOutput(ModelOutput):
     """
     Args:
-        encoder_loss (`torch.Tensor`):
+        loss (`torch.Tensor`):
             Loss from the encoder model, comprising the weighted combination of the commitment and codebook losses.
         audio_values (`torch.Tensor` of shape `(batch_size, 1, input_length)`):
             Decoded audio data.
@@ -54,7 +54,7 @@ class DacOutput(ModelOutput):
             Projected latents (continuous representation of input before quantization).
     """
 
-    encoder_loss: torch.FloatTensor = None
+    loss: torch.FloatTensor = None
     audio_values: torch.FloatTensor = None
     quantized_representation: torch.FloatTensor = None
     codebook_indices: torch.FloatTensor = None
@@ -65,7 +65,7 @@ class DacOutput(ModelOutput):
 class DacEncoderOutput(ModelOutput):
     """
     Args:
-        encoder_loss (`torch.Tensor`):
+        loss (`torch.Tensor`):
             Loss from the encoder model, comprising the weighted combination of the commitment and codebook losses.
         quantized_representation (`torch.Tensor` of shape `(batch_size, dimension, time_steps)`, *optional*):
             Quantized continuous representation of input.
@@ -75,7 +75,7 @@ class DacEncoderOutput(ModelOutput):
             Projected latents (continuous representation of input before quantization).
     """
 
-    encoder_loss: torch.FloatTensor = None
+    loss: torch.FloatTensor = None
     quantized_representation: torch.FloatTensor = None
     codebook_indices: torch.FloatTensor = None
     projected_latents: torch.FloatTensor = None
@@ -344,8 +344,8 @@ class DacResidualVectorQuantize(nn.Module):
             residual = residual - quantized_representation_i
 
             # Sum losses
-            commitment_loss += (commitment_loss_i * mask).mean()
-            codebook_loss += (codebook_loss_i * mask).mean()
+            commitment_loss += (commitment_loss_i * mask)
+            codebook_loss += (codebook_loss_i * mask)
 
             codebook_indices.append(indices_i)
             projected_latents.append(projected_latents_i)
@@ -564,7 +564,7 @@ class DacModel(DacPreTrainedModel):
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         Returns:
-            encoder_loss (`torch.Tensor`):
+            loss (`torch.Tensor` of shape ((batch_size, 1, time_steps)):
                 Loss from the encoder model, comprising the weighted combination of the commitment and codebook losses.
             quantized_representation (`torch.Tensor` of shape `(batch_size, dimension, time_steps)`):
                 Quantized continuous representation of input.
@@ -580,14 +580,14 @@ class DacModel(DacPreTrainedModel):
             quantized_representation, n_quantizers
         )
 
-        encoder_loss = (
+        loss = (
             self.config.commitment_loss_weight * commitment_loss + self.config.codebook_loss_weight * codebook_loss
         )
 
         if not return_dict:
-            return (encoder_loss, quantized_representation, codebook_indices, projected_latents)
+            return (loss, quantized_representation, codebook_indices, projected_latents)
 
-        return DacEncoderOutput(encoder_loss, quantized_representation, codebook_indices, projected_latents)
+        return DacEncoderOutput(loss, quantized_representation, codebook_indices, projected_latents)
 
     def decode(
         self,
@@ -624,7 +624,7 @@ class DacModel(DacPreTrainedModel):
     ):
         """
         Returns:
-            encoder_loss (`torch.Tensor`):
+            loss (`torch.Tensor` of shape `(batch_size, 1)`):
                 Loss from the encoder model, comprising the weighted combination of the commitment and codebook losses.
             audio_values (`torch.Tensor` of shape `(batch_size, 1, input_length)`):
                 Decoded audio data.
@@ -639,7 +639,7 @@ class DacModel(DacPreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.return_dict
         length = input_values.shape[-1]
-        encoder_loss, quantized_representation, codebook_indices, projected_latents = self.encode(
+        loss, quantized_representation, codebook_indices, projected_latents = self.encode(
             input_values, n_quantizers, return_dict=False
         )
         audio_values = self.decode(quantized_representation, return_dict=False)
@@ -650,6 +650,6 @@ class DacModel(DacPreTrainedModel):
             audio_values = audio_values[..., :length]
 
         if not return_dict:
-            return (encoder_loss, audio_values, quantized_representation, codebook_indices, projected_latents)
+            return (loss, audio_values, quantized_representation, codebook_indices, projected_latents)
 
-        return DacOutput(encoder_loss, audio_values, quantized_representation, codebook_indices, projected_latents)
+        return DacOutput(loss, audio_values, quantized_representation, codebook_indices, projected_latents)
