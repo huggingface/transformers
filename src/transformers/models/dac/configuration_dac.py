@@ -22,6 +22,7 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
+
 class DacConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`DacModel`]. It is used to instantiate a
@@ -65,6 +66,7 @@ class DacConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     """
+
     model_type = "dac"
 
     def __init__(
