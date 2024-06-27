@@ -344,8 +344,8 @@ class DacResidualVectorQuantize(nn.Module):
             residual = residual - quantized_representation_i
 
             # Sum losses
-            commitment_loss += (commitment_loss_i * mask)
-            codebook_loss += (codebook_loss_i * mask)
+            commitment_loss += commitment_loss_i * mask
+            codebook_loss += codebook_loss_i * mask
 
             codebook_indices.append(indices_i)
             projected_latents.append(projected_latents_i)
@@ -580,9 +580,7 @@ class DacModel(DacPreTrainedModel):
             quantized_representation, n_quantizers
         )
 
-        loss = (
-            self.config.commitment_loss_weight * commitment_loss + self.config.codebook_loss_weight * codebook_loss
-        )
+        loss = self.config.commitment_loss_weight * commitment_loss + self.config.codebook_loss_weight * codebook_loss
 
         if not return_dict:
             return (loss, quantized_representation, codebook_indices, projected_latents)

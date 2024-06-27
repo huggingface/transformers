@@ -27,7 +27,7 @@ from transformers import AutoProcessor, DacConfig, DacModel
 from transformers.testing_utils import is_torch_available, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -98,7 +98,6 @@ class DacModelTester:
         return config, inputs_dict
 
     def prepare_config_and_inputs_for_model_class(self, model_class):
-
         input_values = floats_tensor([self.batch_size, self.num_channels, self.intermediate_size], scale=1.0)
         config = self.get_config()
         inputs_dict = {"input_values": input_values}
