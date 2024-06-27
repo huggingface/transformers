@@ -159,8 +159,6 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
         text_inputs = self.tokenizer(
             text, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length
         )
-        print(text)
-        # print(text_inputs['input_ids'])
 
         return BatchFeature(
             data={**text_inputs, "pixel_values": pixel_values["pixel_values"], "patch_positions": patch_positions}
