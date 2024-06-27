@@ -472,8 +472,8 @@ class OffloadedCache(DynamicCache):
 
     def evict_previous_layer(self, layer_idx: int):
         "Moves the previous layer cache to the CPU"
-        prev_layer_idx = layer_idx - 1 if layer_idx >= 1 else len(self) - 1
-        if layer_idx >= 1 or len(self) > 2:
+        if len(self) > 2:
+            prev_layer_idx = (layer_idx - 1) % len(self)
             self.key_cache[prev_layer_idx] = self.key_cache[prev_layer_idx].to("cpu", non_blocking=True)
             self.value_cache[prev_layer_idx] = self.value_cache[prev_layer_idx].to("cpu", non_blocking=True)
 
@@ -481,18 +481,20 @@ class OffloadedCache(DynamicCache):
         "Gets the cache for this layer to the device. Prefetches the next and evicts the previous layer."
         if layer_idx < len(self):
             # Evict the previous layer if necessary
+            torch.cuda.current_stream().synchronize()
             self.evict_previous_layer(layer_idx)
             # Load current layer cache to its original device if not already there
             original_device = self.original_device[layer_idx]
-            key_tensor = self.key_cache[layer_idx].to(original_device, non_blocking=True)
-            value_tensor = self.value_cache[layer_idx].to(original_device, non_blocking=True)
+            self.prefetch_stream.synchronize()
+            key_tensor = self.key_cache[layer_idx]
+            value_tensor = self.value_cache[layer_idx]
             # Now deal with beam search ops which were delayed
             if self.beam_idx is not None:
                 self.beam_idx = self.beam_idx.to(original_device)
                 key_tensor = key_tensor.index_select(0, self.beam_idx)
                 value_tensor = value_tensor.index_select(0, self.beam_idx)
             # Prefetch the next layer
-            self.prefetch_layer(layer_idx + 1)
+            self.prefetch_layer((layer_idx + 1) % len(self))
             return (key_tensor, value_tensor)
         else:
             raise KeyError(f"Cache only has {len(self)} layers, attempted to access layer with index {layer_idx}")

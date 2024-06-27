@@ -462,9 +462,7 @@ class CacheIntegrationTest(unittest.TestCase):
         """Tests that OffloadedCache produces the same result as the default DynamicCache"""
         model_name = "microsoft/Phi-3-mini-4k-instruct"
         tokenizer = AutoTokenizer.from_pretrained(model_name)
-        model = AutoModelForCausalLM.from_pretrained(
-            model_name, device_map="auto", torch_dtype=torch.float16, attn_implementation="flash_attention_2"
-        )
+        model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", torch_dtype=torch.float16)
         device = model.device
         input_text = "Fun fact:"
         inputs = tokenizer(input_text, return_tensors="pt").to(device)
@@ -488,9 +486,7 @@ class CacheIntegrationTest(unittest.TestCase):
         """Tests that OffloadedCache uses less memory than the default DynamicCache"""
         model_name = "microsoft/Phi-3-mini-4k-instruct"
         tokenizer = AutoTokenizer.from_pretrained(model_name)
-        model = AutoModelForCausalLM.from_pretrained(
-            model_name, device_map="auto", torch_dtype=torch.float16, attn_implementation="flash_attention_2"
-        )
+        model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", torch_dtype=torch.float16)
         device = model.device
         input_text = "Fun fact:"
         inputs = tokenizer(input_text, return_tensors="pt").to(device)
