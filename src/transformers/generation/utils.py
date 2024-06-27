@@ -28,6 +28,7 @@ from ..cache_utils import (
     Cache,
     DynamicCache,
     HQQQuantizedCache,
+    HybridCache,
     QuantizedCacheConfig,
     QuantoQuantizedCache,
     SlidingWindowCache,
@@ -1398,11 +1399,13 @@ class GenerationMixin:
             return model_kwargs
 
         past_length = 0
-        if "past_key_values" in model_kwargs:
-            if isinstance(model_kwargs["past_key_values"], Cache):
-                past_length = model_kwargs["past_key_values"].get_seq_length()
-            else:
-                past_length = model_kwargs["past_key_values"][0][0].shape[2]
+        if model_kwargs.get("past_key_values") is not None:
+            cache = model_kwargs["past_key_values"]
+            if not isinstance(cache, Cache):
+                past_length = cache[0][0].shape[2]
+            elif hasattr(cache, "get_seq_length") and cache.get_seq_length() is not None:
+                past_length = cache.get_seq_length()
+
         if "inputs_embeds" in model_kwargs:
             cur_len = model_kwargs["inputs_embeds"].shape[1]
         else:
@@ -3716,11 +3719,10 @@ class GenerationMixin:
         model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
 
         # This is needed if return_dict_in_generate is True
+        start_from_empty_dynamic_cache = False
         if isinstance(model_kwargs.get("past_key_values", None), DynamicCache):
             if len(model_kwargs["past_key_values"]) == 0:
                 start_from_empty_dynamic_cache = True
-        else:
-            start_from_empty_dynamic_cache = False
 
         this_peer_finished = False
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
