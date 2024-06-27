@@ -1399,7 +1399,7 @@ class GenerationMixin:
             cache = model_kwargs["past_key_values"]
             if not isinstance(cache, Cache):
                 past_length = cache[0][0].shape[2]
-            elif hasattr(cache, "get_seq_length"):
+            elif hasattr(cache, "get_seq_length") and cache.get_seq_length() is not None:
                 past_length = cache.get_seq_length()
 
         if "inputs_embeds" in model_kwargs:
