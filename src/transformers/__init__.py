@@ -2613,7 +2613,6 @@ else:
             "MoTLMHeadModel",
             "MoTModel",
             "MoTPreTrainedModel",
-            "load_tf_weights_in_mot",
         ]
     )
     _import_structure["models.mpnet"].extend(
@@ -7009,7 +7008,6 @@ if TYPE_CHECKING:
             MoTLMHeadModel,
             MoTModel,
             MoTPreTrainedModel,
-            load_tf_weights_in_mot,
         )
         from .models.mpnet import (
             MPNetForMaskedLM,
