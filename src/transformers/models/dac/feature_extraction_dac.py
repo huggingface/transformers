@@ -41,7 +41,7 @@ class DacFeatureExtractor(SequenceFeatureExtractor):
         padding_value (`float`, *optional*, defaults to 0.0):
             The value that is used to fill the padding values.
         hop_length (`int`, *optional*, defaults to 512):
-            Overlap length between successive windows. 
+            Overlap length between successive windows.
     """
 
     model_input_names = ["input_values", "n_quantizers"]
@@ -63,7 +63,7 @@ class DacFeatureExtractor(SequenceFeatureExtractor):
         padding: Optional[Union[bool, str, PaddingStrategy]] = None,
         truncation: Optional[bool] = False,
         max_length: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = 'pt',
+        return_tensors: Optional[Union[str, TensorType]] = "pt",
         sampling_rate: Optional[int] = None,
     ) -> BatchFeature:
         """
@@ -141,7 +141,7 @@ class DacFeatureExtractor(SequenceFeatureExtractor):
                 raise ValueError(f"Expected mono audio but example has {example.shape[-1]} channels")
             if self.feature_size == 2 and example.shape[-1] != 2:
                 raise ValueError(f"Expected stereo audio but example has {example.shape[-1]} channels")
-            if self.feature_size == 2 :
+            if self.feature_size == 2:
                 raise ValueError("Stereo audio isn't supported for now")
 
         input_values = BatchFeature({"input_values": raw_audio})
@@ -153,11 +153,11 @@ class DacFeatureExtractor(SequenceFeatureExtractor):
             truncation=truncation,
             padding=padding,
             return_attention_mask=False,
-            pad_to_multiple_of=self.hop_length
+            pad_to_multiple_of=self.hop_length,
         )
 
         if padding is not False:
-            padded_inputs.input_values = padded_inputs.input_values[:,np.newaxis, :]
+            padded_inputs.input_values = padded_inputs.input_values[:, np.newaxis, :]
 
         input_values = []
         for example in padded_inputs.pop("input_values"):

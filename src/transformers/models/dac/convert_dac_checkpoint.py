@@ -61,31 +61,31 @@ IGNORE_KEYS = []
 
 
 MAPPING_ENCODER = {
-    'encoder.block.0': ["encoder.conv1"],
-    'encoder.block.5': ['encoder.snake1'],
-    'encoder.block.6': ['encoder.conv2'],
-    'encoder.block.*.block.*.block.0'.replace('*', r'\d+'): ['encoder.block', 'res_unit', 'snake1'],
-    'encoder.block.*.block.*.block.1'.replace('*', r'\d+'): ['encoder.block', 'res_unit', 'conv1'],
-    'encoder.block.*.block.*.block.2'.replace('*', r'\d+'): ['encoder.block', 'res_unit', 'snake2'],
-    'encoder.block.*.block.*.block.3'.replace('*', r'\d+'): ['encoder.block', 'res_unit', 'conv2'],
-    'encoder.block.*.block.3'.replace('*', r'\d+'): ['encoder.block', 'snake1'],
-    'encoder.block.*.block.4'.replace('*', r'\d+'): ['encoder.block', 'conv1'],
+    "encoder.block.0": ["encoder.conv1"],
+    "encoder.block.5": ["encoder.snake1"],
+    "encoder.block.6": ["encoder.conv2"],
+    "encoder.block.*.block.*.block.0".replace("*", r"\d+"): ["encoder.block", "res_unit", "snake1"],
+    "encoder.block.*.block.*.block.1".replace("*", r"\d+"): ["encoder.block", "res_unit", "conv1"],
+    "encoder.block.*.block.*.block.2".replace("*", r"\d+"): ["encoder.block", "res_unit", "snake2"],
+    "encoder.block.*.block.*.block.3".replace("*", r"\d+"): ["encoder.block", "res_unit", "conv2"],
+    "encoder.block.*.block.3".replace("*", r"\d+"): ["encoder.block", "snake1"],
+    "encoder.block.*.block.4".replace("*", r"\d+"): ["encoder.block", "conv1"],
 }
 
 MAPPING_QUANTIZER = {
-    'quantizer.quantizers.*': ['quantizer.quantizers.*'],
+    "quantizer.quantizers.*": ["quantizer.quantizers.*"],
 }
 
 MAPPING_DECODER = {
-    'decoder.model.0': ["decoder.conv1"],
-    'decoder.model.5': ['decoder.snake1'],
-    'decoder.model.6': ['decoder.conv2'],
-    'decoder.model.*.block.0'.replace('*', r'\d+'): ['decoder.block', 'snake1'],
-    'decoder.model.*.block.1'.replace('*', r'\d+'): ['decoder.block', 'conv_t1'],
-    'decoder.model.*.block.*.block.0'.replace('*', r'\d+'): ['decoder.block', 'res_unit', 'snake1'],
-    'decoder.model.*.block.*.block.1'.replace('*', r'\d+'): ['decoder.block', 'res_unit', 'conv1'],
-    'decoder.model.*.block.*.block.2'.replace('*', r'\d+'): ['decoder.block', 'res_unit', 'snake2'],
-    'decoder.model.*.block.*.block.3'.replace('*', r'\d+'): ['decoder.block', 'res_unit', 'conv2'],
+    "decoder.model.0": ["decoder.conv1"],
+    "decoder.model.5": ["decoder.snake1"],
+    "decoder.model.6": ["decoder.conv2"],
+    "decoder.model.*.block.0".replace("*", r"\d+"): ["decoder.block", "snake1"],
+    "decoder.model.*.block.1".replace("*", r"\d+"): ["decoder.block", "conv_t1"],
+    "decoder.model.*.block.*.block.0".replace("*", r"\d+"): ["decoder.block", "res_unit", "snake1"],
+    "decoder.model.*.block.*.block.1".replace("*", r"\d+"): ["decoder.block", "res_unit", "conv1"],
+    "decoder.model.*.block.*.block.2".replace("*", r"\d+"): ["decoder.block", "res_unit", "snake2"],
+    "decoder.model.*.block.*.block.3".replace("*", r"\d+"): ["decoder.block", "res_unit", "conv2"],
 }
 
 
@@ -147,27 +147,36 @@ def recursively_load_weights(orig_dict, hf_model, model_name):
         raise ValueError(f"Unsupported model: {model_name}")
 
     for name, value in orig_dict.items():
-
         is_used = False
         for key, mapped_key in MAPPING.items():
-
             regex = re.compile(key)
-            if regex.search(name) :
-
+            if regex.search(name):
                 if len(mapped_key) == 1:
-                    if mapped_key[0][0] == 'q':
-                        mapped_key = '.'.join(name.split('.')[:-1])
+                    if mapped_key[0][0] == "q":
+                        mapped_key = ".".join(name.split(".")[:-1])
                     else:
                         mapped_key = mapped_key[0]
-                elif len(mapped_key)==3:
-                    integers = re.findall(r'\b\d+\b', name)
-                    if mapped_key[0][0] == 'd':
-                        mapped_key = '{}.{}.{}{}.{}'.format(mapped_key[0],  str(int(integers[0]) - 1), mapped_key[1], str(int(integers[1]) - 1), mapped_key[2])
+                elif len(mapped_key) == 3:
+                    integers = re.findall(r"\b\d+\b", name)
+                    if mapped_key[0][0] == "d":
+                        mapped_key = "{}.{}.{}{}.{}".format(
+                            mapped_key[0],
+                            str(int(integers[0]) - 1),
+                            mapped_key[1],
+                            str(int(integers[1]) - 1),
+                            mapped_key[2],
+                        )
                     else:
-                        mapped_key = '{}.{}.{}{}.{}'.format(mapped_key[0],  str(int(integers[0]) - 1), mapped_key[1], str(int(integers[1]) + 1), mapped_key[2])
-                elif len(mapped_key)==2:
-                    integers = re.findall(r'\b\d+\b', name)
-                    mapped_key = '{}.{}.{}'.format(mapped_key[0],  str(int(integers[0]) - 1), mapped_key[1])
+                        mapped_key = "{}.{}.{}{}.{}".format(
+                            mapped_key[0],
+                            str(int(integers[0]) - 1),
+                            mapped_key[1],
+                            str(int(integers[1]) + 1),
+                            mapped_key[2],
+                        )
+                elif len(mapped_key) == 2:
+                    integers = re.findall(r"\b\d+\b", name)
+                    mapped_key = "{}.{}.{}".format(mapped_key[0], str(int(integers[0]) - 1), mapped_key[1])
 
                 is_used = True
                 if "weight_g" in name:
@@ -195,7 +204,7 @@ def convert_checkpoint(
     model_name,
     checkpoint_path,
     pytorch_dump_folder_path,
-    sample_rate = 16000,
+    sample_rate=16000,
     repo_id=None,
 ):
     model_dict = torch.load(checkpoint_path, "cpu")
@@ -242,9 +251,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the 🤗 hub."
     )
-    parser.add_argument(
-        "--sample_rate", default=None, type=str, help="Sample rate used by DacFeatureExtractor"
-    )
+    parser.add_argument("--sample_rate", default=None, type=str, help="Sample rate used by DacFeatureExtractor")
     args = parser.parse_args()
 
-    convert_checkpoint(args.model, args.checkpoint_path, args.pytorch_dump_folder_path, args.sample_rate, args.push_to_hub)
+    convert_checkpoint(
+        args.model, args.checkpoint_path, args.pytorch_dump_folder_path, args.sample_rate, args.push_to_hub
+    )

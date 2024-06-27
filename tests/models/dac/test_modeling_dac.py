@@ -69,24 +69,23 @@ class DacModelTester:
         commitment_loss_weight=0.25,
         codebook_loss_weight=1.0,
         sample_rate=16000,
-
     ):
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels
         self.is_training = is_training
         self.intermediate_size = intermediate_size
-        self.sample_rate=sample_rate
+        self.sample_rate = sample_rate
 
-        self.encoder_hidden_size=encoder_hidden_size
-        self.downsampling_ratios=downsampling_ratios
-        self.decoder_hidden_size=decoder_hidden_size
-        self.n_codebooks=n_codebooks
-        self.codebook_size=codebook_size
-        self.codebook_dim=codebook_dim
-        self.quantizer_dropout=quantizer_dropout
+        self.encoder_hidden_size = encoder_hidden_size
+        self.downsampling_ratios = downsampling_ratios
+        self.decoder_hidden_size = decoder_hidden_size
+        self.n_codebooks = n_codebooks
+        self.codebook_size = codebook_size
+        self.codebook_dim = codebook_dim
+        self.quantizer_dropout = quantizer_dropout
         self.commitment_loss_weight = commitment_loss_weight
-        self.codebook_loss_weight=codebook_loss_weight
+        self.codebook_loss_weight = codebook_loss_weight
 
     def prepare_config_and_inputs(self):
         input_values = floats_tensor([self.batch_size, self.num_channels, self.intermediate_size], scale=1.0)
@@ -108,12 +107,12 @@ class DacModelTester:
 
     def get_config(self):
         return DacConfig(
-            encoder_hidden_size = self.encoder_hidden_size,
-            downsampling_ratios= self.downsampling_ratios,
-            decoder_dim= self.decoder_hidden_size,
+            encoder_hidden_size=self.encoder_hidden_size,
+            downsampling_ratios=self.downsampling_ratios,
+            decoder_dim=self.decoder_hidden_size,
             n_codebooks=self.n_codebooks,
-            codebook_size= self.codebook_size,
-            codebook_dim= self.codebook_dim,
+            codebook_size=self.codebook_size,
+            codebook_dim=self.codebook_dim,
             quantizer_dropout=self.quantizer_dropout,
             commitment_loss_weight=self.commitment_loss_weight,
             codebook_loss_weight=self.codebook_loss_weight,
@@ -127,6 +126,7 @@ class DacModelTester:
         self.parent.assertEqual(
             result.audio_values.shape, (self.batch_size, self.num_channels, self.intermediate_size)
         )
+
 
 @require_torch
 class DacModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
@@ -169,7 +169,7 @@ class DacModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
-            expected_arg_names = ["input_values", "n_quantizers", 'return_dict']
+            expected_arg_names = ["input_values", "n_quantizers", "return_dict"]
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
     @unittest.skip("The DacModel is not transformers based, thus it does not have `inputs_embeds` logics")
@@ -382,7 +382,7 @@ class DacModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
-                uniform_init_parms = ["conv", 'in_proj', 'out_proj', 'codebook']
+                uniform_init_parms = ["conv", "in_proj", "out_proj", "codebook"]
                 if param.requires_grad:
                     if any(x in name for x in uniform_init_parms):
                         self.assertTrue(
@@ -407,12 +407,13 @@ def compute_rmse(arr1, arr2):
     arr2_normalized = normalize(arr2)
     return np.sqrt(((arr1_normalized - arr2_normalized) ** 2).mean())
 
+
 @slow
 @require_torch
 class DacIntegrationTest(unittest.TestCase):
     def test_integration(self):
         expected_rmse = {
-            "dac_16khz":0.004,
+            "dac_16khz": 0.004,
             "dac_24khz": 0.0026,
             "dac_44khz": 0.0008,
         }
@@ -421,29 +422,28 @@ class DacIntegrationTest(unittest.TestCase):
             "dac_16khz": {
                 "encoder_loss": 24.873,
                 "quantized_representation": -22443.92,
-                'codebook_indices': 1763635,
+                "codebook_indices": 1763635,
                 "projected_latents": 1891.828,
             },
             "dac_24khz": {
                 "encoder_loss": 28.091,
                 "quantized_representation": 7952.426,
-                'codebook_indices': 7133234,
+                "codebook_indices": 7133234,
                 "projected_latents": -2933.110,
             },
             "dac_44khz": {
                 "encoder_loss": 24.1003,
                 "quantized_representation": 10457.930,
-                'codebook_indices': 2282129,
+                "codebook_indices": 2282129,
                 "projected_latents": 2074.932,
             },
         }
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
-        models = ['dac_16khz', 'dac_24khz', 'dac_44khz']
+        models = ["dac_16khz", "dac_24khz", "dac_44khz"]
 
         for model_name in models:
-
-            model_id = 'kamilakesbi/{}'.format(model_name)
+            model_id = "kamilakesbi/{}".format(model_name)
             model = DacModel.from_pretrained(model_id).to(torch_device)
             processor = AutoProcessor.from_pretrained(model_id)
 
@@ -459,7 +459,9 @@ class DacIntegrationTest(unittest.TestCase):
             with torch.no_grad():
                 encoder_outputs = model.encode(inputs["input_values"])
 
-                expected_encoder_sums = torch.tensor(list(expected_encoder_sums_dict[str(model_name)].values()), dtype=torch.float32)
+                expected_encoder_sums = torch.tensor(
+                    list(expected_encoder_sums_dict[str(model_name)].values()), dtype=torch.float32
+                )
                 encoder_outputs_sum = torch.tensor([v.sum().cpu().item() for v in encoder_outputs.to_tuple()])
 
                 # make sure audio encoded codes are correct
@@ -477,8 +479,8 @@ class DacIntegrationTest(unittest.TestCase):
 
                 max_length = min(arr_enc_dec.shape[-1], arr.shape[-1])
 
-                arr_cut = arr[0,:max_length].copy()
-                arr_enc_dec_cut = arr_enc_dec[0,:max_length].copy()
+                arr_cut = arr[0, :max_length].copy()
+                arr_enc_dec_cut = arr_enc_dec[0, :max_length].copy()
 
                 # make sure audios are more or less equal
                 rmse = compute_rmse(arr_cut, arr_enc_dec_cut)
@@ -486,7 +488,7 @@ class DacIntegrationTest(unittest.TestCase):
 
     def test_integration_batch(self):
         expected_rmse = {
-            "dac_16khz":0.002,
+            "dac_16khz": 0.002,
             "dac_24khz": 0.0013,
             "dac_44khz": 0.0004,
         }
@@ -495,38 +497,34 @@ class DacIntegrationTest(unittest.TestCase):
             "dac_16khz": {
                 "encoder_loss": 20.3622,
                 "quantized_representation": -39568.0898,
-                'codebook_indices': 4166923,
+                "codebook_indices": 4166923,
                 "projected_latents": 1526.3572,
             },
             "dac_24khz": {
                 "encoder_loss": 24.5159,
                 "quantized_representation": 40920.2500,
-                'codebook_indices': 17405028,
+                "codebook_indices": 17405028,
                 "projected_latents": -5158.3975,
             },
             "dac_44khz": {
                 "encoder_loss": 19.4507,
                 "quantized_representation": -5212.0156,
-                'codebook_indices': 5736248,
-                "projected_latents": 1636.0724
+                "codebook_indices": 5736248,
+                "projected_latents": 1636.0724,
             },
         }
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
-        models = ['dac_16khz', 'dac_24khz', 'dac_44khz']
+        models = ["dac_16khz", "dac_24khz", "dac_44khz"]
 
         for model_name in models:
-
-            model_id = 'kamilakesbi/{}'.format(model_name)
+            model_id = "kamilakesbi/{}".format(model_name)
             model = DacModel.from_pretrained(model_id).to(torch_device)
             processor = AutoProcessor.from_pretrained(model_id)
 
             librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
 
-            audio_samples = [
-                np.array([audio_sample["array"]])[0]
-                for audio_sample in librispeech_dummy[-2:]["audio"]
-            ]
+            audio_samples = [np.array([audio_sample["array"]])[0] for audio_sample in librispeech_dummy[-2:]["audio"]]
 
             inputs = processor(
                 raw_audio=audio_samples,
@@ -538,7 +536,9 @@ class DacIntegrationTest(unittest.TestCase):
             with torch.no_grad():
                 encoder_outputs = model.encode(inputs["input_values"])
 
-                expected_encoder_sums = torch.tensor(list(expected_encoder_sums_dict[str(model_name)].values()), dtype=torch.float32)
+                expected_encoder_sums = torch.tensor(
+                    list(expected_encoder_sums_dict[str(model_name)].values()), dtype=torch.float32
+                )
                 encoder_outputs_sum = torch.tensor([v.sum().cpu().item() for v in encoder_outputs.to_tuple()])
 
                 # make sure audio encoded codes are correct
@@ -556,10 +556,9 @@ class DacIntegrationTest(unittest.TestCase):
 
                 max_length = min(arr_enc_dec.shape[-1], arr.shape[-1])
 
-                arr_cut = arr[:,:,:max_length].copy()
-                arr_enc_dec_cut = arr_enc_dec[:,:,:max_length].copy()
+                arr_cut = arr[:, :, :max_length].copy()
+                arr_enc_dec_cut = arr_enc_dec[:, :, :max_length].copy()
 
                 # make sure audios are more or less equal
                 rmse = compute_rmse(arr_cut, arr_enc_dec_cut)
                 self.assertTrue(rmse < expected_rmse[str(model_name)])
-

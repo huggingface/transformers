@@ -1764,6 +1764,12 @@ else:
             "DacPreTrainedModel",
         ]
     )
+    _import_structure["models.dac"].extend(
+        [
+            "DacModel",
+            "DacPreTrainedModel",
+        ]
+    )
     _import_structure["models.data2vec"].extend(
         [
             "Data2VecAudioForAudioFrameClassification",
@@ -2110,12 +2116,6 @@ else:
         [
             "EncodecModel",
             "EncodecPreTrainedModel",
-        ]
-    )
-    _import_structure["models.dac"].extend(
-        [
-            "DacModel",
-            "DacPreTrainedModel",
         ]
     )
     _import_structure["models.encoder_decoder"].append("EncoderDecoderModel")

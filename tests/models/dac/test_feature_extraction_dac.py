@@ -159,10 +159,9 @@ class DacFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Test
         # fmt: on
         input_audio = self._load_datasamples(1)
         feature_extractor = DacFeatureExtractor()
-        input_values = feature_extractor(input_audio, return_tensors="pt")['input_values']
+        input_values = feature_extractor(input_audio, return_tensors="pt")["input_values"]
         self.assertEqual(input_values.shape, (1, 1, 93696))
         self.assertTrue(torch.allclose(input_values[0, 0, :30], EXPECTED_INPUT_VALUES, atol=1e-4))
-
 
     def test_truncation_and_padding(self):
         input_audio = self._load_datasamples(2)
