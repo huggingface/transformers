@@ -39,6 +39,7 @@ from transformers.utils import (
     is_torch_available,
     is_torch_bf16_available_on_device,
     is_torch_fp16_available_on_device,
+    is_torch_sdpa_available,
     is_vision_available,
 )
 
@@ -60,6 +61,8 @@ if is_torch_available():
 
     from transformers import SiglipForImageClassification, SiglipModel, SiglipTextModel, SiglipVisionModel
 
+if is_torch_sdpa_available():
+    from torch.nn.attention import SDPBackend, sdpa_kernel
 
 if is_vision_available():
     from PIL import Image
@@ -85,41 +88,30 @@ class SiglipModelTesterMixin(ModelTesterMixin):
                 f"bfloat16 not supported on {torch_device} (on the specific device currently used, e.g. Nvidia T4 GPU)"
             )
 
-        # Not sure whether it's fine to put torch.XXX in a decorator if torch is not available so hacking it here instead.
-        if torch_dtype == "float16":
-            torch_dtype = torch.float16
-        elif torch_dtype == "bfloat16":
-            torch_dtype = torch.bfloat16
-        elif torch_dtype == "float32":
-            torch_dtype = torch.float32
+        # Convert to torch dtype
+        dtypes = {
+            "float16": torch.float16,
+            "bfloat16": torch.bfloat16,
+            "float32": torch.float32,
+        }
+        torch_dtype = dtypes[torch_dtype]
 
         atols = {
-            ("cpu", False, torch.float32): 1e-5,
-            ("cpu", False, torch.bfloat16): 3e-2,
-            ("cpu", True, torch.float32): 1e-5,
-            ("cpu", True, torch.bfloat16): 3e-2,
-            ("cuda", False, torch.float32): 1e-5,
-            ("cuda", False, torch.bfloat16): 3e-2,
-            ("cuda", False, torch.float16): 5e-3,
-            ("cuda", True, torch.float32): 1e-5,
-            ("cuda", True, torch.bfloat16): 3e-2,
-            ("cuda", True, torch.float16): 5e-3,
+            torch.float32: 1e-5,
+            torch.bfloat16: 3e-2,
+            torch.float16: 5e-3,
         }
         rtols = {
-            ("cpu", False, torch.float32): 1e-4,
-            ("cpu", False, torch.bfloat16): 3e-2,
-            ("cpu", True, torch.float32): 1e-4,
-            ("cpu", True, torch.bfloat16): 3e-2,
-            ("cuda", False, torch.float32): 1e-4,
-            ("cuda", False, torch.bfloat16): 3e-2,
-            ("cuda", False, torch.float16): 5e-3,
-            ("cuda", True, torch.float32): 1e-4,
-            ("cuda", True, torch.bfloat16): 3e-2,
-            ("cuda", True, torch.float16): 5e-3,
+            torch.float32: 1e-4,
+            torch.bfloat16: 3e-2,
+            torch.float16: 5e-3,
         }
 
-        def get_mean_reldiff(msg, failcase, x, ref, atol, rtol):
-            return f"{msg} {failcase}: mean relative difference: {((x - ref).abs() / (ref.abs() + 1e-12)).mean():.3e}, torch atol = {atol}, torch rtol = {rtol}"
+        atol = atols[torch_dtype]
+        rtol = rtols[torch_dtype]
+
+        def get_mean_reldiff(msg, current_case, x, ref, atol, rtol):
+            return f"{msg} {current_case}: mean relative difference: {((x - ref).abs() / (ref.abs() + 1e-12)).mean():.3e}, torch atol = {atol}, torch rtol = {rtol}"
 
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -159,26 +151,32 @@ class SiglipModelTesterMixin(ModelTesterMixin):
 
             # We use these for loops instead of parameterized.expand just for the interest of avoiding loading/saving the model each time,
             # but it would be nicer to have an efficient way to use parameterized.expand
-            cases = []
-            for use_mask in use_attention_mask_options:
-                for output_attentions in [True, False]:
-                    for enable_kernels in [False, True]:
-                        for batch_size in [1, 5]:
-                            cases.append(
-                                {
-                                    "use_mask": use_mask,
-                                    "output_attentions": output_attentions,
-                                    "enable_kernels": enable_kernels,
-                                    "batch_size": batch_size,
-                                }
-                            )
-
+            cases = [
+                (use_mask, output_attentions, sdpa_backend, batch_size)
+                for use_mask in use_attention_mask_options
+                for output_attentions in [True, False]
+                for sdpa_backend in [
+                    SDPBackend.FLASH_ATTENTION,
+                    SDPBackend.EFFICIENT_ATTENTION,
+                    [SDPBackend.FLASH_ATTENTION, SDPBackend.MATH],
+                    [SDPBackend.EFFICIENT_ATTENTION, SDPBackend.MATH],
+                ]
+                for batch_size in [1, 5]
+            ]
             fail_cases = []
-            for case in cases:
-                use_mask = case["use_mask"]
-                output_attentions = case["output_attentions"]
-                enable_kernels = case["enable_kernels"]
-                batch_size = case["batch_size"]
+
+            for use_mask, output_attentions, sdpa_backend, batch_size in cases:
+                # SDPA flash attention backend is not implemented for float32
+                if torch_dtype == torch.float32 and sdpa_backend == SDPBackend.FLASH_ATTENTION:
+                    continue
+
+                # SDPA flash attention backend does not support mask
+                if use_mask and sdpa_backend == SDPBackend.FLASH_ATTENTION:
+                    continue
+
+                # Efficient attention does not support CPU
+                if torch_device == "cpu" and sdpa_backend == SDPBackend.EFFICIENT_ATTENTION:
+                    continue
 
                 processed_inputs = inputs_dict.copy()
 
@@ -203,26 +201,20 @@ class SiglipModelTesterMixin(ModelTesterMixin):
                 processed_inputs["output_attentions"] = output_attentions
                 processed_inputs["output_hidden_states"] = True
 
-                failcase = (
-                    f"padding_side=left, use_mask={use_mask}, batch_size={batch_size}, enable_kernels={enable_kernels}"
+                current_case = (
+                    f"padding_side=left, use_mask={use_mask}, batch_size={batch_size}, sdpa_backend={sdpa_backend}"
                 )
 
-                with torch.no_grad():
-                    with torch.backends.cuda.sdp_kernel(
-                        enable_flash=enable_kernels,
-                        enable_math=True,
-                        enable_mem_efficient=enable_kernels,
-                    ):
-                        prepared_inputs = self._prepare_for_class(processed_inputs, model_class)
-                        outputs_eager = model_eager(**prepared_inputs)
-                        outputs_sdpa = model_sdpa(**prepared_inputs)
+                prepared_inputs = self._prepare_for_class(processed_inputs, model_class)
 
-                if torch_device in ["cpu", "cuda"]:
-                    atol = atols[torch_device, enable_kernels, torch_dtype]
-                    rtol = rtols[torch_device, enable_kernels, torch_dtype]
-                else:
-                    atol = 1e-7
-                    rtol = 1e-4
+                with torch.no_grad():
+                    try:
+                        with sdpa_kernel(sdpa_backend):
+                            outputs_eager = model_eager(**prepared_inputs)
+                            outputs_sdpa = model_sdpa(**prepared_inputs)
+                    except Exception as e:
+                        fail_cases.append(f"{current_case}: {e}")
+                        continue
 
                 for key in logit_keys:
                     eager_logits = outputs_eager[key]
@@ -234,7 +226,7 @@ class SiglipModelTesterMixin(ModelTesterMixin):
 
                     is_close = torch.allclose(eager_logits, sdpa_logits, atol=atol, rtol=rtol)
                     if not is_close:
-                        fail_cases.append(get_mean_reldiff(key, failcase, sdpa_logits, eager_logits, atol, rtol))
+                        fail_cases.append(get_mean_reldiff(key, current_case, sdpa_logits, eager_logits, atol, rtol))
 
             self.assertTrue(len(fail_cases) == 0, "\n".join(fail_cases))
 
