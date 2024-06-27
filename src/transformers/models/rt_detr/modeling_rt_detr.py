@@ -1656,7 +1656,11 @@ class RTDetrModel(RTDetrPreTrainedModel):
             param.requires_grad_(True)
 
     @lru_cache(maxsize=32)
-    def generate_anchors(self, spatial_shapes=None, grid_size=0.05, dtype=torch.float32, device="cpu"):
+    def generate_anchors(self, spatial_shapes=None, grid_size=0.05):
+
+        # We always generate anchors in float32 to preserve original model code
+        dtype = torch.float32
+
         if spatial_shapes is None:
             spatial_shapes = [
                 [int(self.config.anchor_image_size[0] / s), int(self.config.anchor_image_size[1] / s)]
@@ -1674,7 +1678,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
             anchors.append(torch.concat([grid_xy, wh], -1).reshape(-1, height * width, 4))
         # define the valid range for anchor coordinates
         eps = 1e-2
-        anchors = torch.concat(anchors, 1).to(device)
+        anchors = torch.concat(anchors, 1)
         valid_mask = ((anchors > eps) * (anchors < 1 - eps)).all(-1, keepdim=True)
         anchors = torch.log(anchors / (1 - anchors))
         anchors = torch.where(valid_mask, anchors, torch.inf)
@@ -1769,15 +1773,15 @@ class RTDetrModel(RTDetrPreTrainedModel):
 
         # Prepare encoder inputs (by flattening)
         source_flatten = []
-        spatial_shapes = []
+        spatial_shapes_list = []
         for level, source in enumerate(sources):
             batch_size, num_channels, height, width = source.shape
             spatial_shape = (height, width)
-            spatial_shapes.append(spatial_shape)
+            spatial_shapes_list.append(spatial_shape)
             source = source.flatten(2).transpose(1, 2)
             source_flatten.append(source)
         source_flatten = torch.cat(source_flatten, 1)
-        spatial_shapes = torch.as_tensor(spatial_shapes, dtype=torch.long, device=source_flatten.device)
+        spatial_shapes = torch.as_tensor(spatial_shapes_list, dtype=torch.long, device=source_flatten.device)
         level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
 
         # prepare denoising training
@@ -1805,9 +1809,14 @@ class RTDetrModel(RTDetrPreTrainedModel):
 
         # prepare input for decoder
         if self.training or self.config.anchor_image_size is None:
-            anchors, valid_mask = self.generate_anchors(spatial_shapes, device=device, dtype=dtype)
+            # Pass spatial_shapes as tuple to make it hashable and make sure
+            # lru_cache is working for generate_anchors()
+            spatial_shapes_tuple = tuple(spatial_shapes_list)
+            anchors, valid_mask = self.generate_anchors(spatial_shapes_tuple)
         else:
-            anchors, valid_mask = self.anchors.to(device, dtype), self.valid_mask.to(device, dtype)
+            anchors, valid_mask = self.anchors, self.valid_mask
+
+        anchors, valid_mask = anchors.to(device, dtype), valid_mask.to(device, dtype)
 
         # use the valid_mask to selectively retain values in the feature map where the mask is `True`
         memory = valid_mask.to(source_flatten.dtype) * source_flatten
