@@ -185,4 +185,3 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
 
 
-# test the code
