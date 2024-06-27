@@ -1188,7 +1188,7 @@ class ChameleonImageVocabularyMapping:
             mapping[k] = v
         return mapping
 
-    def convert_img2bp2(self, img_batch: torch.Tensor) -> torch.Tensor:
+    def convert_img2bpe(self, img_batch: torch.Tensor) -> torch.Tensor:
         device = img_batch.device
         img_tokens = self.img2bpe_mapping_tensor[img_batch.to("cpu")]
         return img_tokens.to(device)
