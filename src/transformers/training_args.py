@@ -773,10 +773,10 @@ class TrainingArguments:
             that takes a boolean argument `compute_result`, which when passed `True`, will trigger the final global
             summary statistics from the batch-level summary statistics you've accumulated over the evaluation set.
 
-        eval_on_start(`bool`, *optional*, defaults to `False`):
+        eval_on_start (`bool`, *optional*, defaults to `False`):
             Whether to perform a evaluation step (sanity check) before the training to ensure the validation steps works correctly.
 
-        eval_use_gather_object(`bool`, *optional*, defaults to `False`):
+        eval_use_gather_object (`bool`, *optional*, defaults to `False`):
             Whether to run recursively gather object in a nested list/tuple/dictionary of objects from all devices.
     """
 
