@@ -165,7 +165,6 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
         return BatchFeature(
             data={**text_inputs, "pixel_values": pixel_values["pixel_values"], "patch_positions": patch_positions}
         )
-        # return BatchFeature(data={"input_ids": input_ids, "attention_mask": text_inputs.attention_mask, "pixel_values": pixel_values['pixel_values'], "patch_positions": patch_positions})
 
     def batch_decode(self, *args, **kwargs):
         """
