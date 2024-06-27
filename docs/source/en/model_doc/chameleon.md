@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 ## Overview
 
 The Chameleon model was proposed in [Chameleon: Mixed-Modal Early-Fusion Foundation Models
-](https://arxiv.org/abs/2405.09818v1) by META AI Chameleon Team. Chameleon is a Vision-Language Model that use vector quantization to tokenize images which enanles the model to generate multimodal output. Additionally the model can generate from an interleaved vision-text input. 
+](https://arxiv.org/abs/2405.09818v1) by META AI Chameleon Team. Chameleon is a Vision-Language Model that use vector quantization to tokenize images which enables the model to generate multimodal output. Additionally the model can generate from an interleaved vision-text input. 
 
 
 The abstract from the paper is the following:
