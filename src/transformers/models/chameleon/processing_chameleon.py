@@ -48,7 +48,7 @@ class ChameleonProcessor(ProcessorMixin):
     tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
     image_processor_class = "ChameleonImageProcessor"
 
-    def __init__(self, image_processor=None, tokenizer=None, image_seq_length=1024, image_token="<image>"):
+    def __init__(self, image_processor, tokenizer, image_seq_length: int = 1024, image_token: str = "<image>"):
         self.image_seq_length = image_seq_length
         self.image_token = image_token
         self.image_start_token = "<racm3:break>"  # fixed tokens for start and end, so can hardcode
