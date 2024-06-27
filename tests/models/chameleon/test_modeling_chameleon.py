@@ -531,7 +531,7 @@ class ChameleonIntegrationTest(unittest.TestCase):
             requests.get("https://www.kxan.com/wp-content/uploads/sites/40/2020/10/ORION.jpg", stream=True).raw
         )
         prompts = [
-            "<image>Describe what do you see here and tell me about the history behind?",
+            "<image>Describe what do you see here and tell me about the history behind it?",
             "What constellation is this image showing?<image>",
         ]
 
