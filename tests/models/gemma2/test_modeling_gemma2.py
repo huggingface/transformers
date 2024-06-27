@@ -41,11 +41,12 @@ if is_torch_available():
 
 
 class Gemma2ModelTester(GemmaModelTester):
-    config_class = Gemma2Config
-    model_class = Gemma2Model
-    for_causal_lm_class = Gemma2ForCausalLM
-    for_sequence_class = Gemma2ForSequenceClassification
-    for_token_class = Gemma2ForTokenClassification
+    if is_torch_available():
+        config_class = Gemma2Config
+        model_class = Gemma2Model
+        for_causal_lm_class = Gemma2ForCausalLM
+        for_sequence_class = Gemma2ForSequenceClassification
+        for_token_class = Gemma2ForTokenClassification
 
 
 @require_torch
