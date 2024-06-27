@@ -28,7 +28,6 @@ from ..cache_utils import (
     Cache,
     DynamicCache,
     HQQQuantizedCache,
-    HybridCache,
     QuantizedCacheConfig,
     QuantoQuantizedCache,
     SlidingWindowCache,
@@ -1760,7 +1759,7 @@ class GenerationMixin:
                 model_kwargs = self.setup_cache_for_generation(
                     model_kwargs=model_kwargs,
                     cache_implementation=generation_config.cache_implementation,
-                    batch_size=batch_size,
+                    max_batch_size=batch_size,
                     max_cache_len=generation_config.max_length,
                 )
             elif generation_config.cache_implementation == "quantized":
