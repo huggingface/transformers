@@ -58,7 +58,7 @@ class MPLUGDocOwlVisionText2TextModelTester:
         vision_feature_layer=-2,
         text_config={
             "model_type": "llama",
-            # "seq_length": 7,
+            "seq_length": 7,
             # "is_training": True,
             "use_input_mask": True,
             "use_token_type_ids": False,
