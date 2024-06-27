@@ -506,7 +506,7 @@ class ChameleonIntegrationTest(unittest.TestCase):
         image = Image.open(
             requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
         )
-        prompt = "<image>Describe what do you see here and tell me about the history behind?"
+        prompt = "<image>Describe what do you see here and tell me about the history behind it?"
 
         inputs = processor(prompt, images=image, return_tensors="pt").to(model.device, torch.float16)
 
