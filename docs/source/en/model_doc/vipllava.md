@@ -34,7 +34,7 @@ Tips:
 
 - Note the model has not been explicitly trained to process multiple images in the same prompt, although this is technically possible, you may experience inaccurate results.
 
-- For better results, we recommend users to use processor's `apply_chat_template()` method to format your prompt correctly. Each message in the conversation history for chat templates is a dicts with keys "role" and "content". The "content" should be a list of dicts, for "text" and "image" modalaties, as follows:
+- For better results, we recommend users to use the processor's `apply_chat_template()` method to format your prompt correctly. Each message in the conversation history for chat templates is a dictionary with keys "role" and "content". The "content" should be a list of dictionaries, for "text" and "image" modalities, as follows:
 
 ```python
 from transformers import AutoProcessor
