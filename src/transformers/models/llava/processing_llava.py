@@ -134,3 +134,57 @@ class LlavaProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+
+    @property
+    def default_chat_template(self):
+        """
+        This default vicuna template formats inputs in the form of a chat history. For each message in the chat history:
+        * the template will output the role of the speaker followed by the content of the message.
+        * content is a list of strings and images.
+        * If the content element is an image, the template will output a sequence of <image> tokens
+
+        Example:
+
+        ```python
+        messages = [{
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "What’s the content of this image?"},
+                {"type": "image"},
+                ],
+        },
+        {
+            "role": "assistant",
+            "content": [{"type": "text", "text": "This picture shows a red stop sign."},]
+        }]
+        ```
+
+        Will create outputs like:
+        ```
+        USER: <image>\nWhat is the content of this image? ASSITANT: This picture shows a red stop sign
+        ```
+        """
+        # fmt: off
+        return (
+            "{% for message in messages %}"
+                "{% if message['role'] == 'system' %}"
+                    "{{ message['content'][0]['text'] }}"
+                "{% else %}"
+                    "{{ message['role'].upper() + ': '}}"
+                "{% endif %}"
+
+                "{# Render all images first #}"
+                "{% for content in message['content'] | selectattr('type', 'equalto', 'image') %}"
+                    "{{ '<image>\n' }}"
+                "{% endfor %}"
+
+                "{# Render all text finally #}"
+                "{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}"
+                    "{{ content['text'] + ' '}}"
+                "{% endfor %}"
+            "{% endfor %}"
+            "{% if add_generation_prompt %}"
+                "{{ 'ASSISTANT:' }}"
+            "{% endif %}"
+        )
+        # fmt: on
