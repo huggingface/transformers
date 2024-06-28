@@ -1730,6 +1730,7 @@ class GenerationMixin:
 
         use_dynamic_cache_by_default = False
         if generation_config.cache_implementation is not None and model_kwargs.get("past_key_values") is not None:
+            breakpoint()
             raise ValueError(
                 "Passing both `cache_implementation` (used to initialize certain caches) and `past_key_values` (a "
                 "Cache object) is unsupported. Please use only one of the two."
