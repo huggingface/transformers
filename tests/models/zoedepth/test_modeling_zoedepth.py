@@ -148,18 +148,19 @@ class ZoeDepthModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     def setUp(self):
         self.model_tester = ZoeDepthModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ZoeDepthConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=ZoeDepthConfig, has_text_modality=False, hidden_size=37, common_properties=[]
+        )
 
     def test_config(self):
-        self.config_tester.create_and_test_config_to_json_string()
-        self.config_tester.create_and_test_config_to_json_file()
-        self.config_tester.create_and_test_config_from_and_save_pretrained()
-        self.config_tester.create_and_test_config_with_num_labels()
-        self.config_tester.check_config_can_be_init_without_params()
-        self.config_tester.check_config_arguments_init()
+        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="ZoeDepth with AutoBackbone does not have a base model and hence no input_embeddings")
     def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(reason="ZoeDepth with AutoBackbone does not have a base model and hence no input_embeddings")
+    def test_model_get_set_embeddings(self):
         pass
 
     def test_for_depth_estimation(self):
