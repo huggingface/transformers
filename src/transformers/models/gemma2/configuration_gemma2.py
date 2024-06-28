@@ -124,7 +124,7 @@ class Gemma2Config(PretrainedConfig):
         attention_bias=False,
         attention_dropout=0.0,
         final_logit_softcapping=30.0,
-        attn_logit_softcapping=50.00,
+        attn_logit_softcapping=50.0,
         query_pre_attn_scalar=224,
         sliding_window=4096,
         final_logit_softcapping=30.0,
