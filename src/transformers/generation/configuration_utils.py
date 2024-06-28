@@ -400,7 +400,7 @@ class GenerationConfig(PushToHubMixin):
         # Cache implementation
         self.cache_implementation = kwargs.pop("cache_implementation", None)
         self.cache_config = kwargs.pop("cache_config", None)
-        if self.cache_implementation is not None:
+        if self.cache_implementation is not None and self.cache_implementation in NEEDS_CACHE_CONFIG:
             cache_config_class = NEEDS_CACHE_CONFIG[self.cache_implementation]
             if self.cache_config is None:
                 self.cache_config = cache_config_class()
@@ -518,7 +518,7 @@ class GenerationConfig(PushToHubMixin):
         if self.pad_token_id is not None and self.pad_token_id < 0:
             warnings.warn(
                 f"`pad_token_id` should be positive but got {self.pad_token_id}. This will cause errors when batch generating, if there is padding. "
-                "Please set `pas_token_id` explicitly by `model.generation_config.pad_token_id=PAD_TOKEN_ID` to avoid errors in generation, and ensure your `input_ids` input does not have negative values."
+                "Please set `pad_token_id` explicitly by `model.generation_config.pad_token_id=PAD_TOKEN_ID` to avoid errors in generation, and ensure your `input_ids` input does not have negative values."
             )
 
         # Validation of attribute relations:

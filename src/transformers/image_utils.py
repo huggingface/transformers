@@ -25,9 +25,11 @@ from packaging import version
 from .utils import (
     ExplicitEnum,
     is_jax_tensor,
+    is_numpy_array,
     is_tf_tensor,
     is_torch_available,
     is_torch_tensor,
+    is_torchvision_available,
     is_vision_available,
     logging,
     requires_backends,
@@ -52,6 +54,20 @@ if is_vision_available():
     else:
         PILImageResampling = PIL.Image
 
+    if is_torchvision_available():
+        from torchvision.transforms import InterpolationMode
+
+        pil_torch_interpolation_mapping = {
+            PILImageResampling.NEAREST: InterpolationMode.NEAREST,
+            PILImageResampling.BOX: InterpolationMode.BOX,
+            PILImageResampling.BILINEAR: InterpolationMode.BILINEAR,
+            PILImageResampling.HAMMING: InterpolationMode.HAMMING,
+            PILImageResampling.BICUBIC: InterpolationMode.BICUBIC,
+            PILImageResampling.LANCZOS: InterpolationMode.LANCZOS,
+            PILImageResampling.NEAREST: InterpolationMode.NEAREST,
+        }
+
+
 if TYPE_CHECKING:
     if is_torch_available():
         import torch
@@ -65,7 +81,16 @@ ImageInput = Union[
 ]  # noqa
 
 
-VideoInput = Union[np.ndarray, "torch.Tensor", List[np.ndarray], List["torch.Tensor"]]  # noqa
+VideoInput = Union[
+    List["PIL.Image.Image"],
+    "np.ndarray",
+    "torch.Tensor",
+    List["np.ndarray"],
+    List["torch.Tensor"],
+    List[List["PIL.Image.Image"]],
+    List[List["np.ndarrray"]],
+    List[List["torch.Tensor"]],
+]  # noqa
 
 
 class ChannelDimension(ExplicitEnum):
@@ -90,14 +115,30 @@ def is_pil_image(img):
     return is_vision_available() and isinstance(img, PIL.Image.Image)
 
 
+class ImageType(ExplicitEnum):
+    PIL = "pillow"
+    TORCH = "torch"
+    NUMPY = "numpy"
+    TENSORFLOW = "tensorflow"
+    JAX = "jax"
+
+
+def get_image_type(image):
+    if is_pil_image(image):
+        return ImageType.PIL
+    if is_torch_tensor(image):
+        return ImageType.TORCH
+    if is_numpy_array(image):
+        return ImageType.NUMPY
+    if is_tf_tensor(image):
+        return ImageType.TENSORFLOW
+    if is_jax_tensor(image):
+        return ImageType.JAX
+    raise ValueError(f"Unrecognised image type {type(image)}")
+
+
 def is_valid_image(img):
-    return (
-        (is_vision_available() and isinstance(img, PIL.Image.Image))
-        or isinstance(img, np.ndarray)
-        or is_torch_tensor(img)
-        or is_tf_tensor(img)
-        or is_jax_tensor(img)
-    )
+    return is_pil_image(img) or is_numpy_array(img) or is_torch_tensor(img) or is_tf_tensor(img) or is_jax_tensor(img)
 
 
 def valid_images(imgs):
@@ -202,7 +243,12 @@ def infer_channel_dimension_format(
     else:
         raise ValueError(f"Unsupported number of image dimensions: {image.ndim}")
 
-    if image.shape[first_dim] in num_channels:
+    if image.shape[first_dim] in num_channels and image.shape[last_dim] in num_channels:
+        logger.warning(
+            f"The channel dimension is ambiguous. Got image shape {image.shape}. Assuming channels are the first dimension."
+        )
+        return ChannelDimension.FIRST
+    elif image.shape[first_dim] in num_channels:
         return ChannelDimension.FIRST
     elif image.shape[last_dim] in num_channels:
         return ChannelDimension.LAST

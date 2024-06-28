@@ -40,7 +40,7 @@ class ZeroShotAudioClassificationPipelineTests(unittest.TestCase):
             [{"score": 0.501, "label": "Sound of a dog"}, {"score": 0.499, "label": "Sound of vaccum cleaner"}],
         )
 
-    @unittest.skip("No models are available in TF")
+    @unittest.skip(reason="No models are available in TF")
     def test_small_model_tf(self):
         pass
 
@@ -89,6 +89,6 @@ class ZeroShotAudioClassificationPipelineTests(unittest.TestCase):
             * 5,
         )
 
-    @unittest.skip("No models are available in TF")
+    @unittest.skip(reason="No models are available in TF")
     def test_large_model_tf(self):
         pass

@@ -334,7 +334,7 @@ class IBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.assertTrue(torch.all(torch.eq(position_ids, expected_positions)))
 
     # Override
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -379,7 +379,7 @@ class IBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 model(**inputs)[0]
 
-    @unittest.skip("ibert overrides scaling to None if inputs_embeds")
+    @unittest.skip(reason="ibert overrides scaling to None if inputs_embeds")
     def test_inputs_embeds_matches_input_ids(self):
         pass
 

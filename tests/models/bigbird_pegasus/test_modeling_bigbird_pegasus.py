@@ -253,7 +253,6 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     all_generative_model_classes = (BigBirdPegasusForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "conversational": BigBirdPegasusForConditionalGeneration,
             "feature-extraction": BigBirdPegasusModel,
             "question-answering": BigBirdPegasusForQuestionAnswering,
             "summarization": BigBirdPegasusForConditionalGeneration,
@@ -336,14 +335,15 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
 
     def test_generate_without_input_ids(self):
         if self.model_tester.attention_type == "block_sparse":
-            # this test can never pass for BigBird-block-sparse attention since input_ids must be multiple of block_size
-            return
+            self.skipTest(
+                "Cannot pass for BigBird-block-sparse attention since input_ids must be multiple of block_size"
+            )
         super().test_generate_without_input_ids()
 
     def test_retain_grad_hidden_states_attentions(self):
         if self.model_tester.attention_type == "block_sparse":
             # this test can't pass since attention matrix (which is getting returned) can't have gradients (& just 0 at many locations)
-            return
+            self.skipTest(reason="Cannot pass since returned attention matrix can't have gradients")
         super().test_retain_grad_hidden_states_attentions()
 
     # BigBirdPegasusForSequenceClassification does not support inputs_embeds
@@ -812,6 +812,6 @@ class BigBirdPegasusStandaloneDecoderModelTest(ModelTesterMixin, GenerationTeste
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_attention_mask_past(*config_and_inputs)
 
+    @unittest.skip("Decoder cannot retain gradients")
     def test_retain_grad_hidden_states_attentions(self):
-        # decoder cannot keep gradients
         return

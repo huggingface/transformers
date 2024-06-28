@@ -178,7 +178,6 @@ class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_tokenization_python_rust_equals(self):
         super().test_tokenization_python_rust_equals()
 
-    # overwrite common test
+    @unittest.skip(reason="CLIP always lower cases letters")
     def test_added_tokens_do_lower_case(self):
-        # CLIP always lower cases letters
         pass
