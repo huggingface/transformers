@@ -20,6 +20,7 @@ from .data_collator import (
     DataCollatorForTokenClassification,
     DataCollatorForWholeWordMask,
     DataCollatorWithPadding,
+    DataCollatorWithFlattening,
     DefaultDataCollator,
     default_data_collator,
 )

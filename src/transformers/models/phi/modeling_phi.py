@@ -49,6 +49,7 @@ from ...utils import (
 )
 from .configuration_phi import PhiConfig
 
+from ..llama.modeling_llama import prepare_fa2_from_position_ids
 
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
@@ -511,7 +512,7 @@ class PhiFlashAttention2(PhiAttention):
             value_states = value_states.to(target_dtype)
 
         attn_output = self._flash_attention_forward(
-            query_states, key_states, value_states, attention_mask, q_len, dropout=attn_dropout, softmax_scale=None
+            query_states, key_states, value_states, attention_mask, q_len, dropout=attn_dropout, softmax_scale=None, position_ids=position_ids
         )
 
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
@@ -524,7 +525,7 @@ class PhiFlashAttention2(PhiAttention):
 
     # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._flash_attention_forward
     def _flash_attention_forward(
-        self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
+        self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None, position_ids=None
     ):
         """
         Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
@@ -544,6 +545,8 @@ class PhiFlashAttention2(PhiAttention):
                 Attention dropout
             softmax_scale (`float`, *optional*):
                 The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
+            position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Used to compute cu_seqlen
         """
         if not self._flash_attn_uses_top_left_mask:
             causal = self.is_causal
@@ -576,9 +579,33 @@ class PhiFlashAttention2(PhiAttention):
 
             attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
         else:
-            attn_output = flash_attn_func(
-                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=causal
-            )
+            if (position_ids[:,-1]==position_ids.size(1)-1).all():
+                attn_output = flash_attn_func(
+                    query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=causal
+                )
+            else:
+                batch_size = query_states.size(0)
+                query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = prepare_fa2_from_position_ids(
+                    query_states, key_states, value_states, position_ids, query_length
+                )
+
+                cu_seqlens_q, cu_seqlens_k = cu_seq_lens
+                max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
+
+                attn_output = flash_attn_varlen_func(
+                    query_states,
+                    key_states,
+                    value_states,
+                    cu_seqlens_q=cu_seqlens_q,
+                    cu_seqlens_k=cu_seqlens_k,
+                    max_seqlen_q=max_seqlen_in_batch_q,
+                    max_seqlen_k=max_seqlen_in_batch_k,
+                    dropout_p=dropout,
+                    softmax_scale=softmax_scale,
+                    causal=causal,
+                )
+
+                attn_output = attn_output.view(batch_size, -1, attn_output.size(-2), attn_output.size(-1))
 
         return attn_output
 

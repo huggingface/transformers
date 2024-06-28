@@ -54,6 +54,7 @@ from ...utils import (
 from ...utils.import_utils import is_torch_fx_available
 from .configuration_mixtral import MixtralConfig
 
+from ..llama.modeling_llama import prepare_fa2_from_position_ids
 
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
@@ -529,6 +530,7 @@ class MixtralFlashAttention2(MixtralAttention):
             q_len,
             dropout=dropout_rate,
             use_sliding_windows=use_sliding_windows,
+            position_ids=position_ids
         )
 
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
@@ -549,6 +551,7 @@ class MixtralFlashAttention2(MixtralAttention):
         dropout=0.0,
         softmax_scale=None,
         use_sliding_windows=False,
+        position_ids=None
     ):
         """
         Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
@@ -570,6 +573,8 @@ class MixtralFlashAttention2(MixtralAttention):
                 The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
             use_sliding_windows (`bool`, *optional*):
                 Whether to activate sliding window attention.
+            position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Used to compute cu_seqlen
         """
         if not self._flash_attn_uses_top_left_mask:
             causal = self.is_causal
@@ -617,25 +622,64 @@ class MixtralFlashAttention2(MixtralAttention):
 
             attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
         else:
-            if not use_sliding_windows:
-                attn_output = flash_attn_func(
-                    query_states,
-                    key_states,
-                    value_states,
-                    dropout,
-                    softmax_scale=softmax_scale,
-                    causal=causal,
-                )
+            if (position_ids[:,-1]==position_ids.size(1)-1).all():
+                if not use_sliding_windows:
+                    attn_output = flash_attn_func(
+                        query_states,
+                        key_states,
+                        value_states,
+                        dropout,
+                        softmax_scale=softmax_scale,
+                        causal=causal,
+                    )
+                else:
+                    attn_output = flash_attn_func(
+                        query_states,
+                        key_states,
+                        value_states,
+                        dropout,
+                        softmax_scale=softmax_scale,
+                        causal=causal,
+                        window_size=(self.config.sliding_window, self.config.sliding_window),
+                    )
             else:
-                attn_output = flash_attn_func(
-                    query_states,
-                    key_states,
-                    value_states,
-                    dropout,
-                    softmax_scale=softmax_scale,
-                    causal=causal,
-                    window_size=(self.config.sliding_window, self.config.sliding_window),
+                batch_size = query_states.size(0)
+                query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = prepare_fa2_from_position_ids(
+                    query_states, key_states, value_states, position_ids, query_length
                 )
+
+                cu_seqlens_q, cu_seqlens_k = cu_seq_lens
+                max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
+
+                if not use_sliding_windows:
+                    attn_output = flash_attn_varlen_func(
+                        query_states,
+                        key_states,
+                        value_states,
+                        cu_seqlens_q=cu_seqlens_q,
+                        cu_seqlens_k=cu_seqlens_k,
+                        max_seqlen_q=max_seqlen_in_batch_q,
+                        max_seqlen_k=max_seqlen_in_batch_k,
+                        dropout_p=dropout,
+                        softmax_scale=softmax_scale,
+                        causal=causal,
+                    )
+                else:
+                    attn_output = flash_attn_varlen_func(
+                        query_states,
+                        key_states,
+                        value_states,
+                        cu_seqlens_q=cu_seqlens_q,
+                        cu_seqlens_k=cu_seqlens_k,
+                        max_seqlen_q=max_seqlen_in_batch_q,
+                        max_seqlen_k=max_seqlen_in_batch_k,
+                        dropout_p=dropout,
+                        softmax_scale=softmax_scale,
+                        causal=causal,
+                        window_size=(self.config.sliding_window, self.config.sliding_window),
+                    )
+
+                attn_output = attn_output.view(batch_size, -1, attn_output.size(-2), attn_output.size(-1))
 
         return attn_output
 
