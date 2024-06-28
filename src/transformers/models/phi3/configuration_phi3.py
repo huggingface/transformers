@@ -56,6 +56,8 @@ class Phi3Config(PretrainedConfig):
             Dropout probability for mlp outputs.
         embd_pdrop (`int`, *optional*, defaults to 0.0):
             The dropout ratio for the embeddings.
+        attention_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio after computing the attention scores.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
@@ -118,6 +120,7 @@ class Phi3Config(PretrainedConfig):
         num_key_value_heads=None,
         resid_pdrop=0.0,
         embd_pdrop=0.0,
+        attention_bias=False,
         attention_dropout=0.0,
         hidden_act="silu",
         max_position_embeddings=4096,
@@ -146,6 +149,7 @@ class Phi3Config(PretrainedConfig):
         self.num_key_value_heads = num_key_value_heads
         self.resid_pdrop = resid_pdrop
         self.embd_pdrop = embd_pdrop
+        self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.hidden_act = hidden_act
         self.max_position_embeddings = max_position_embeddings
