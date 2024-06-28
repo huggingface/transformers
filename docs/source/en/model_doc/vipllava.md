@@ -34,16 +34,38 @@ Tips:
 
 - Note the model has not been explicitly trained to process multiple images in the same prompt, although this is technically possible, you may experience inaccurate results.
 
-- For better results, we recommend users to prompt the model with the correct prompt format: 
+- For better results, we recommend users to use processor's `apply_chat_template()` method to format your prompt correctly. Each message in the conversation history for chat templates is a dicts with keys "role" and "content". The "content" should be a list of dicts, for "text" and "image" modalaties, as follows:
 
-```bash
-A chat between a curious human and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the human's questions.###Human: <image>\n<prompt>###Assistant:
-```
+```python
+from transformers import AutoProcessor
 
-For multiple turns conversation:
+processor = AutoProcessor.from_pretrained("llava-hf/vip-llava-7b-hf")
 
-```bash
-A chat between a curious human and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the human's questions.###Human: <image>\n<prompt1>###Assistant: <answer1>###Human: <prompt2>###Assistant:
+conversation = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "image"},
+            {"type": "text", "text": "What’s shown in this image?"},
+            ],
+    },
+    {
+        "role": "assistant",
+        "content": [{"type": "text", "text": "This image shows a red stop sign."},]
+    },
+    {
+
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "Decsribe the image in more details."},
+            ],
+    },
+]
+
+text_prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)
+
+# Note that the template simply formats your prompt, you still have to tokenize it and obtain pixel values for your images
+print(text_prompt)
 ```
 
 The original code can be found [here](https://github.com/mu-cai/ViP-LLaVA).

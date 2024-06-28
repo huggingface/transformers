@@ -139,9 +139,9 @@ class LlavaProcessor(ProcessorMixin):
     def default_chat_template(self):
         """
         This default vicuna template formats inputs in the form of a chat history. For each message in the chat history:
-        * the template will output the role of the speaker followed by the content of the message.
-        * content is a list of strings and images.
-        * If the content element is an image, the template will output a sequence of <image> tokens
+        * The template will output the role of the speaker followed by the content of the message.
+        * Content in the input should be a a list of dicts for each modality (image/text).If the modality is image, the template will output an <image> token
+        * In the output you will get a formatted prompt as a string
 
         Example:
 
