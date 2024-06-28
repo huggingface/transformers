@@ -1149,13 +1149,22 @@ class RTDetrPreTrainedModel(PreTrainedModel):
         """Initalize the weights"""
 
         """initialize conv/fc bias value according to a given probability value."""
-        if isinstance(module, nn.Linear) and hasattr(module, "class_embed"):
+        if isinstance(module, (RTDetrForObjectDetection, RTDetrDecoder)) and module.class_embed is not None:
+            for layer in module.class_embed:
+                prior_prob = self.config.initializer_range
+                bias = float(-math.log((1 - prior_prob) / prior_prob))
+                nn.init.xavier_uniform_(layer.weight)
+                if hasattr(layer, "bias") and layer.bias is not None:
+                    nn.init.constant_(layer.bias, bias)
+        
+        if isinstance(module, RTDetrModel):
             prior_prob = self.config.initializer_range
             bias = float(-math.log((1 - prior_prob) / prior_prob))
-            nn.init.xavier_uniform_(module.weight)
-            if module.bias is not None:
-                nn.init.constant_(module.bias, bias)
-        elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
+            nn.init.xavier_uniform_(module.enc_score_head.weight)
+            if hasattr(module.enc_score_head, "bias") and module.enc_score_head.bias is not None:
+                nn.init.constant_(module.enc_score_head.bias, bias)
+
+        if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
