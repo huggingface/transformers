@@ -112,7 +112,10 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's (height, width) dimensions. Can be overidden by `do_resize` in `preprocess`.
         size (`Dict[str, int]` *optional*, defaults to `{"height": 384, "width": 512}`):
-            Size of the image after resizing. Can be overidden by `size` in `preprocess`.
+            Size of the image after resizing. Size of the image after resizing. If `keep_aspect_ratio` is `True`,
+            the image is resized by choosing the smaller of the height and width scaling factors and using it for both dimensions.
+            If `ensure_multiple_of` is also set, the image is further resized to a size that is a multiple of this value.
+            Can be overidden by `size` in `preprocess`.
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
             Defines the resampling filter to use if resizing the image. Can be overidden by `resample` in `preprocess`.
         keep_aspect_ratio (`bool`, *optional*, defaults to `True`):
@@ -338,9 +341,9 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
-                Size of the image after resizing. If `keep_aspect_ratio` is `True`, the image is resized to the largest
-                possible size such that the aspect ratio is preserved. If `ensure_multiple_of` is also set, the image is
-                resized to a size that is a multiple of this value.
+                Size of the image after resizing. If `keep_aspect_ratio` is `True`, he image is resized by choosing the smaller of
+                the height and width scaling factors and using it for both dimensions. If `ensure_multiple_of` is also set,
+                the image is further resized to a size that is a multiple of this value.
             keep_aspect_ratio (`bool`, *optional*, defaults to `self.keep_aspect_ratio`):
                 If `True` and `do_resize=True`, the image is resized by choosing the smaller of the height and width scaling factors and using it for
                 both dimensions. This ensures that the image is scaled down as little as possible while still fitting within the
