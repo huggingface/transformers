@@ -96,7 +96,7 @@ class TokenizerUtilTester(unittest.TestCase):
         # the current folder and have the right name.
         if os.path.isfile("tokenizer.json"):
             # We skip the test if the user has a `tokenizer.json` in this folder to avoid deleting it.
-            return
+            self.skipTest(reason="Skipping test as there is a `tokenizer.json` file in the current folder.")
         try:
             with open("tokenizer.json", "wb") as f:
                 http_get("https://huggingface.co/hf-internal-testing/tiny-random-bert/blob/main/tokenizer.json", f)

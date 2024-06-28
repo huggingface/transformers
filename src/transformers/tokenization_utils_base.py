@@ -3645,7 +3645,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 and `convert_tokens_to_ids` methods.
             num_tokens_to_remove (`int`, *optional*, defaults to 0):
                 Number of tokens to remove using the truncation strategy.
-            truncation_strategy (`str` or [`~tokenization_utils_base.TruncationStrategy`], *optional*, defaults to `False`):
+            truncation_strategy (`str` or [`~tokenization_utils_base.TruncationStrategy`], *optional*, defaults to `'longest_first'`):
                 The strategy to follow for truncation. Can be:
 
                 - `'longest_first'`: Truncate to a maximum length specified with the argument `max_length` or to the

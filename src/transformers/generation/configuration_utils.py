@@ -400,7 +400,7 @@ class GenerationConfig(PushToHubMixin):
         # Cache implementation
         self.cache_implementation = kwargs.pop("cache_implementation", None)
         self.cache_config = kwargs.pop("cache_config", None)
-        if self.cache_implementation is not None:
+        if self.cache_implementation is not None and self.cache_implementation in NEEDS_CACHE_CONFIG:
             cache_config_class = NEEDS_CACHE_CONFIG[self.cache_implementation]
             if self.cache_config is None:
                 self.cache_config = cache_config_class()

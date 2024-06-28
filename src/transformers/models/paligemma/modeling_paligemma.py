@@ -448,13 +448,11 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
 
                     # Get the target length
                     target_seqlen = cache_position[-1] + 1
-
                     extended_attention_mask = torch.ones(
-                        (attention_mask.shape[0], target_seqlen - attention_mask.shape[1]),
+                        (attention_mask.shape[0], target_seqlen - attention_mask.shape[1] + 1),
                         dtype=attention_mask.dtype,
                         device=attention_mask.device,
                     )
-
                     # Filter out only the tokens that can be un-attended, this can happen
                     # if one uses PaliGemma+ Fused modules where the cache on the
                     # first iteration is already big enough, or if one passes custom cache
@@ -467,6 +465,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
 
                     attention_mask = torch.cat((attention_mask, extended_attention_mask), dim=1)
                     position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
+
         attention_mask = attention_mask.to(inputs_embeds.dtype)
         outputs = self.language_model(
             attention_mask=attention_mask,
