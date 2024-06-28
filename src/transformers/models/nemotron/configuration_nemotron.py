@@ -93,13 +93,13 @@ class NemotronConfig(PretrainedConfig):
             Whether to include a gated projection layer in the MLP layers.
 
     ```python
-    >>> from transformers import LlamaModel, LlamaConfig
+    >>> from transformers import NemotronModel, NemotronConfig
 
-    >>> # Initializing a LLaMA llama-7b style configuration
-    >>> configuration = LlamaConfig()
+    >>> # Initializing a Nemotron nemotron-15b style configuration
+    >>> configuration = NemotronConfig()
 
-    >>> # Initializing a model from the llama-7b style configuration
-    >>> model = LlamaModel(configuration)
+    >>> # Initializing a model from the nemotron-15b style configuration
+    >>> model = NemotronModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -110,21 +110,21 @@ class NemotronConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=32000,
-        hidden_size=4096,
-        intermediate_size=16384,
+        vocab_size=256000,
+        hidden_size=6144,
+        intermediate_size=24576,
         num_hidden_layers=32,
-        num_attention_heads=32,
+        num_attention_heads=48,
         kv_channels=None,
         num_key_value_heads=None,
         hidden_act="relu2",
-        max_position_embeddings=2048,
-        initializer_range=0.02,
-        norm_eps=1e-6,
+        max_position_embeddings=4096,
+        initializer_range=0.0134,
+        norm_eps=1e-5,
         use_cache=True,
         pad_token_id=None,
-        bos_token_id=1,
-        eos_token_id=2,
+        bos_token_id=2,
+        eos_token_id=3,
         tie_word_embeddings=False,
         rope_theta=10000.0,
         rope_scaling=None,
