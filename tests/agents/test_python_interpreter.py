@@ -20,7 +20,7 @@ import pytest
 
 from transformers import load_tool
 from transformers.agents.agent_types import AGENT_TYPE_MAPPING
-from transformers.agents.default_tools import BASE_PYTHON_TOOLS, LIST_SAFE_MODULES
+from transformers.agents.default_tools import BASE_PYTHON_TOOLS
 from transformers.agents.python_interpreter import InterpreterError, evaluate_python_code
 
 from .test_tools_common import ToolTesterMixin
@@ -274,8 +274,9 @@ check_digits = [calculate_isbn_10_check_digit(number) for number in numbers]
 print(check_digits)
 """
         state = {}
-        evaluate_python_code(code, {"range": range, "print": print, "sum": sum, "enumerate": enumerate, "int": int, "str": str}, state)
-
+        evaluate_python_code(
+            code, {"range": range, "print": print, "sum": sum, "enumerate": enumerate, "int": int, "str": str}, state
+        )
 
     def test_listcomp(self):
         code = "x = [i for i in range(3)]"
@@ -306,16 +307,16 @@ print(check_digits)
         result = evaluate_python_code(code, {"range": range}, state={})
         assert result == {0: 0, 1: 1, 2: 4}
 
-        code= "{num: name for num, name in {101: 'a', 102: 'b'}.items() if name not in ['a']}"
+        code = "{num: name for num, name in {101: 'a', 102: 'b'}.items() if name not in ['a']}"
         result = evaluate_python_code(code, {"print": print}, state={}, authorized_imports=["pandas"])
-        assert result == {102: 'b'}
+        assert result == {102: "b"}
 
         code = """
 shifts = {'A': ('6:45', '8:00'), 'B': ('10:00', '11:45')}
 shift_minutes = {worker: ('a', 'b') for worker, (start, end) in shifts.items()}
 """
         result = evaluate_python_code(code, {}, state={})
-        assert result == {'A': ('a', 'b'), 'B': ('a', 'b')}
+        assert result == {"A": ("a", "b"), "B": ("a", "b")}
 
     def test_tuple_assignment(self):
         code = "a, b = 0, 1\nb"
@@ -420,9 +421,8 @@ if char.isalpha():
         code = "import matplotlib.pyplot as plt"
         evaluate_python_code(code, authorized_imports=["matplotlib.pyplot"], state={})
         evaluate_python_code(code, authorized_imports=["matplotlib"], state={})
-        with pytest.raises(InterpreterError) as e:
+        with pytest.raises(InterpreterError):
             evaluate_python_code(code, authorized_imports=["pyplot"], state={})
-
 
     def test_multiple_comparators(self):
         code = "0 <= -1 < 4 and 0 <= -5 < 4"
@@ -729,7 +729,7 @@ returns_none(1)
         assert result is None
 
     def test_nested_for_loop(self):
-        code="""
+        code = """
 all_res = []
 for i in range(10):
     subres = []
@@ -742,7 +742,7 @@ out[:10]
 """
         state = {}
         result = evaluate_python_code(code, {"print": print, "range": range}, state=state)
-        assert result  == [0, 0, 1, 0, 1, 2, 0, 1, 2, 3]
+        assert result == [0, 0, 1, 0, 1, 2, 0, 1, 2, 3]
 
     def test_pandas(self):
         code = """
@@ -794,7 +794,7 @@ distance_geneva_barcelona = haversine(*coords_geneva, *coords_barcelona)
         assert round(result, 1) == 622395.4
 
     def test_for(self):
-        code="""
+        code = """
 shifts = {
     "Worker A": ("6:45 pm", "8:00 pm"),
     "Worker B": ("10:00 am", "11:45 am")
@@ -806,4 +806,4 @@ for worker, (start, end) in shifts.items():
 shift_intervals
 """
         result = evaluate_python_code(code, {"print": print, "map": map}, state={})
-        assert result == {'Worker A': '8:00 pm', 'Worker B': '11:45 am'}
+        assert result == {"Worker A": "8:00 pm", "Worker B": "11:45 am"}

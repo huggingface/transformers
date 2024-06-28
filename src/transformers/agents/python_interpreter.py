@@ -17,10 +17,17 @@
 import ast
 import builtins
 import difflib
-import numpy as np
-import pandas as pd
 from collections.abc import Mapping
 from typing import Any, Callable, Dict, List, Optional
+
+import numpy as np
+
+from ..utils import is_pandas_available
+
+
+if is_pandas_available():
+    import pandas as pd
+
 
 class InterpreterError(ValueError):
     """
@@ -53,6 +60,7 @@ LIST_SAFE_MODULES = [
 
 PRINT_OUTPUTS, MAX_LEN_OUTPUT = "", 50000
 OPERATIONS_COUNT, MAX_OPERATIONS = 0, 10000000
+
 
 class BreakException(Exception):
     pass
@@ -335,7 +343,7 @@ def set_value(target, value, state, tools):
         state[target.id] = value
     elif isinstance(target, ast.Tuple):
         if not isinstance(value, tuple):
-            if hasattr(value, '__iter__') and not isinstance(value, (str, bytes)):
+            if hasattr(value, "__iter__") and not isinstance(value, (str, bytes)):
                 value = tuple(value)
             else:
                 raise InterpreterError("Cannot unpack non-tuple value")
@@ -354,16 +362,14 @@ def set_value(target, value, state, tools):
 
 def evaluate_call(call, state, tools):
     if not (isinstance(call.func, ast.Attribute) or isinstance(call.func, ast.Name)):
-        raise InterpreterError(
-            f"This is not a correct function: {call.func})."
-        )
+        raise InterpreterError(f"This is not a correct function: {call.func}).")
     if isinstance(call.func, ast.Attribute):
         obj = evaluate_ast(call.func.value, state, tools)
         func_name = call.func.attr
         if not hasattr(obj, func_name):
             raise InterpreterError(f"Object {obj} has no attribute {func_name}")
         func = getattr(obj, func_name)
-    
+
     elif isinstance(call.func, ast.Name):
         func_name = call.func.id
         if func_name in state:
@@ -388,12 +394,11 @@ def evaluate_call(call, state, tools):
     for arg in call.args:
         if isinstance(arg, ast.Starred):
             unpacked = evaluate_ast(arg.value, state, tools)
-            if not hasattr(unpacked, '__iter__') or isinstance(unpacked, (str, bytes)):
+            if not hasattr(unpacked, "__iter__") or isinstance(unpacked, (str, bytes)):
                 raise InterpreterError(f"Cannot unpack non-iterable value {unpacked}")
             args.extend(unpacked)
         else:
             args.append(evaluate_ast(arg, state, tools))
-
 
     kwargs = {keyword.arg: evaluate_ast(keyword.value, state, tools) for keyword in call.keywords}
 
@@ -471,6 +476,7 @@ def evaluate_name(name, state, tools):
     if len(close_matches) > 0:
         return state[close_matches[0]]
     raise InterpreterError(f"The variable `{name.id}` is not defined.")
+
 
 def evaluate_condition(condition, state, tools):
     left = evaluate_ast(condition.left, state, tools)
@@ -651,8 +657,8 @@ def evaluate_with(with_node, state, tools):
 
 def import_modules(expression, state, authorized_imports):
     def check_module_authorized(module_name):
-        module_path = module_name.split('.')
-        module_subpaths = ['.'.join(module_path[:i]) for i in range(1, len(module_path) + 1)]
+        module_path = module_name.split(".")
+        module_subpaths = [".".join(module_path[:i]) for i in range(1, len(module_path) + 1)]
         return any(subpath in authorized_imports for subpath in module_subpaths)
 
     if isinstance(expression, ast.Import):
@@ -661,7 +667,9 @@ def import_modules(expression, state, authorized_imports):
                 module = __import__(alias.name)
                 state[alias.asname or alias.name] = module
             else:
-                raise InterpreterError(f"Import of {alias.name} is not allowed. Authorized imports are: {str(authorized_imports)}")
+                raise InterpreterError(
+                    f"Import of {alias.name} is not allowed. Authorized imports are: {str(authorized_imports)}"
+                )
         return None
     elif isinstance(expression, ast.ImportFrom):
         if check_module_authorized(expression.module):
@@ -671,6 +679,7 @@ def import_modules(expression, state, authorized_imports):
         else:
             raise InterpreterError(f"Import from {expression.module} is not allowed.")
         return None
+
 
 def evaluate_dictcomp(dictcomp, state, tools):
     result = {}
@@ -713,7 +722,9 @@ def evaluate_ast(
     """
     global OPERATIONS_COUNT
     if OPERATIONS_COUNT >= MAX_OPERATIONS:
-        raise InterpreterError(f"Reached the max number of operations of {MAX_OPERATIONS}. Maybe there is an infinite loop somewhere in the code, or you're just asking too many calculations.")
+        raise InterpreterError(
+            f"Reached the max number of operations of {MAX_OPERATIONS}. Maybe there is an infinite loop somewhere in the code, or you're just asking too many calculations."
+        )
     OPERATIONS_COUNT += 1
     if isinstance(expression, ast.Assign):
         # Assignement -> we evaluate the assignement which should update the state
@@ -857,7 +868,7 @@ def evaluate_python_code(
         try:
             result = evaluate_ast(node, state, tools, authorized_imports)
         except InterpreterError as e:
-            msg=""
+            msg = ""
             if len(PRINT_OUTPUTS) > 0:
                 if len(PRINT_OUTPUTS) < MAX_LEN_OUTPUT:
                     msg += f"Print outputs:\n{PRINT_OUTPUTS}\n====\n"
@@ -869,6 +880,9 @@ def evaluate_python_code(
             if len(PRINT_OUTPUTS) < MAX_LEN_OUTPUT:
                 state["print_outputs"] = PRINT_OUTPUTS
             else:
-                state["print_outputs"] = PRINT_OUTPUTS[:MAX_LEN_OUTPUT] + f"\n_Print outputs were over {MAX_LEN_OUTPUT} characters, so they have been truncated._"
+                state["print_outputs"] = (
+                    PRINT_OUTPUTS[:MAX_LEN_OUTPUT]
+                    + f"\n_Print outputs were over {MAX_LEN_OUTPUT} characters, so they have been truncated._"
+                )
 
     return result

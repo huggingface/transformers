@@ -29,14 +29,14 @@ from .prompts import (
     DEFAULT_CODE_SYSTEM_PROMPT,
     DEFAULT_REACT_CODE_SYSTEM_PROMPT,
     DEFAULT_REACT_JSON_SYSTEM_PROMPT,
+    PLAN_UPDATE_FINAL_PLAN_REDACTION,
     SYSTEM_PROMPT_FACTS,
-    SYSTEM_PROMPT_PLAN,
-    USER_PROMPT_PLAN,
     SYSTEM_PROMPT_FACTS_UPDATE,
+    SYSTEM_PROMPT_PLAN,
     SYSTEM_PROMPT_PLAN_UPDATE,
     USER_PROMPT_FACTS_UPDATE,
+    USER_PROMPT_PLAN,
     USER_PROMPT_PLAN_UPDATE,
-    PLAN_UPDATE_FINAL_PLAN_REDACTION
 )
 from .python_interpreter import LIST_SAFE_MODULES, evaluate_python_code
 from .tools import (
@@ -419,15 +419,21 @@ class Agent:
                 thought_message = {"role": MessageRole.ASSISTANT, "content": step_log["llm_output"].strip()}
                 memory.append(thought_message)
             if "facts" in step_log:
-                thought_message = {"role": MessageRole.ASSISTANT, "content": f"[FACTS LIST]:\n" + step_log["facts"].strip()}
+                thought_message = {
+                    "role": MessageRole.ASSISTANT,
+                    "content": "[FACTS LIST]:\n" + step_log["facts"].strip(),
+                }
                 memory.append(thought_message)
 
             if "plan" in step_log and not summary_mode:
-                thought_message = {"role": MessageRole.ASSISTANT, "content": f"[PLAN]:\n" + step_log["plan"].strip()}
+                thought_message = {"role": MessageRole.ASSISTANT, "content": "[PLAN]:\n" + step_log["plan"].strip()}
                 memory.append(thought_message)
 
             if "tool_call" in step_log and summary_mode:
-                tool_call_message = {"role": MessageRole.ASSISTANT, "content": f"[STEP {i} TOOL CALL]: " + str(step_log["tool_call"]).strip()}
+                tool_call_message = {
+                    "role": MessageRole.ASSISTANT,
+                    "content": f"[STEP {i} TOOL CALL]: " + str(step_log["tool_call"]).strip(),
+                }
                 memory.append(tool_call_message)
 
             if "error" in step_log or "observation" in step_log:
@@ -747,28 +753,35 @@ class ReactAgent(Agent):
 
         return final_answer
 
-
     def planning_step(self, task, is_first_step=False, iteration: int = None):
         """
         Plan the next steps to reach the objective.
         """
         if is_first_step:
             message_prompt_facts = {"role": MessageRole.SYSTEM, "content": SYSTEM_PROMPT_FACTS}
-            message_prompt_task = {"role": MessageRole.USER, "content": f"""Here is the task:
+            message_prompt_task = {
+                "role": MessageRole.USER,
+                "content": f"""Here is the task:
 ```
 {task}
 ```
-Now begin!"""}
+Now begin!""",
+            }
 
             answer_facts = self.llm_engine([message_prompt_facts, message_prompt_task])
 
             message_system_prompt_plan = {"role": MessageRole.SYSTEM, "content": SYSTEM_PROMPT_PLAN}
-            message_user_prompt_plan = {"role": MessageRole.USER, "content": USER_PROMPT_PLAN.format(
-                task=task,
-                tool_descriptions=self._toolbox.show_tool_descriptions(self.tool_description_template),
-                answer_facts=answer_facts
-            )}
-            answer_plan = self.llm_engine([message_system_prompt_plan, message_user_prompt_plan], stop_sequences=['<end_plan>'])
+            message_user_prompt_plan = {
+                "role": MessageRole.USER,
+                "content": USER_PROMPT_PLAN.format(
+                    task=task,
+                    tool_descriptions=self._toolbox.show_tool_descriptions(self.tool_description_template),
+                    answer_facts=answer_facts,
+                ),
+            }
+            answer_plan = self.llm_engine(
+                [message_system_prompt_plan, message_user_prompt_plan], stop_sequences=["<end_plan>"]
+            )
 
             final_plan_redaction = f"""Here is the plan of action that I will follow to solve the task:
 ```
@@ -782,8 +795,10 @@ Now begin!"""}
             self.logger.debug("===== Initial plan: =====")
             self.logger.debug(final_plan_redaction)
         else:  # update plan
-            agent_memory = self.write_inner_memory_from_logs(summary_mode=False) # This will not log the plan but will log facts
-            
+            agent_memory = self.write_inner_memory_from_logs(
+                summary_mode=False
+            )  # This will not log the plan but will log facts
+
             # Redact updated facts
             facts_update_system_prompt = {
                 "role": MessageRole.SYSTEM,
@@ -806,19 +821,20 @@ Now begin!"""}
                     task=task,
                     tool_descriptions=self._toolbox.show_tool_descriptions(self.tool_description_template),
                     facts_update=facts_update,
-                    remaining_steps = (self.max_iterations - iteration)
-                )}
-            plan_update = self.llm_engine([plan_update_message] + agent_memory + [plan_update_message_user], stop_sequences=['<end_plan>'])
-            
+                    remaining_steps=(self.max_iterations - iteration),
+                ),
+            }
+            plan_update = self.llm_engine(
+                [plan_update_message] + agent_memory + [plan_update_message_user], stop_sequences=["<end_plan>"]
+            )
+
             # Log final facts and plan
             final_plan_redaction = PLAN_UPDATE_FINAL_PLAN_REDACTION.format(task=task, plan_update=plan_update)
             final_facts_redaction = f"""Here is the updated list of the facts that I know:
 ```
 {facts_update}
 ```"""
-            self.logs.append(
-                {"plan": final_plan_redaction, "facts": final_facts_redaction}
-            )
+            self.logs.append({"plan": final_plan_redaction, "facts": final_facts_redaction})
             self.logger.debug("===== Updated plan: =====")
             self.logger.debug(final_plan_redaction)
             print("UPDATED PLAN:", final_plan_redaction)
@@ -893,7 +909,9 @@ class ReactJsonAgent(ReactAgent):
             if isinstance(arguments, dict):
                 if "answer" in arguments:
                     answer = arguments["answer"]
-                    if isinstance(answer, str) and answer in self.state.keys():  # if the answer is a state variable, return the value
+                    if (
+                        isinstance(answer, str) and answer in self.state.keys()
+                    ):  # if the answer is a state variable, return the value
                         answer = self.state[answer]
                 else:
                     answer = arguments
