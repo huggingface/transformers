@@ -18,19 +18,13 @@ from transformers.utils import is_vision_available
 
 
 if is_vision_available():
-    from transformers import AutoTokenizer, LlavaProcessor
+    from transformers import AutoProcessor
 
 
 @require_vision
 class LlavaProcessorTest(unittest.TestCase):
-    def test_can_load_various_tokenizers(self):
-        for checkpoint in ["Intel/llava-gemma-2b", "llava-hf/llava-1.5-7b-hf"]:
-            processor = LlavaProcessor.from_pretrained(checkpoint)
-            tokenizer = AutoTokenizer.from_pretrained(checkpoint)
-            self.assertEqual(processor.tokenizer.__class__, tokenizer.__class__)
-
     def test_chat_template(self):
-        processor = LlavaProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf")
+        processor = AutoProcessor.from_pretrained("llava-hf/llava-v1.6-vicuna-7b-hf")
         expected_prompt = "USER: <image>\nWhat is shown in this image? ASSISTANT:"
 
         messages = [
