@@ -135,7 +135,7 @@ class PaliGemmaConfig(PretrainedConfig):
     @property
     def vocab_size(self):
         warnings.warn(
-            "The `vocab_size` attribute is deprecated and will be removed in v4.43, Please use `text_config.vocab_size` instead.",
+            "The `vocab_size` attribute is deprecated and will be removed in v4.44, Please use `text_config.vocab_size` instead.",
             FutureWarning,
         )
         return self._vocab_size
