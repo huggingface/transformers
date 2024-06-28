@@ -20,10 +20,10 @@ import argparse
 import logging
 
 import datasets
-
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
 from tokenizers.trainers import UnigramTrainer
+
 from transformers import AlbertTokenizerFast
 
 

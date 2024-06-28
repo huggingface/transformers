@@ -27,18 +27,18 @@ jobs:
     strategy:
       matrix:
         file: ["quality", "consistency", "custom-tokenizers", "torch-light", "tf-light", "exotic-models", "torch-tf-light", "torch-jax-light", "jax-light", "examples-torch",  "examples-tf"]
-    continue-on-error: true 
+    continue-on-error: true
 
     steps:
-      - 
+      -
         name: Set tag
         run: |
               if ${{contains(github.event.head_commit.message, '[build-ci-image]')}}; then
-                  echo "TAG=huggingface/transformers-${{ matrix.file }}:dev" >> "$GITHUB_ENV" 
+                  echo "TAG=huggingface/transformers-${{ matrix.file }}:dev" >> "$GITHUB_ENV"
                   echo "setting it to DEV!"
               else
                   echo "TAG=huggingface/transformers-${{ matrix.file }}" >> "$GITHUB_ENV"
-                  
+
               fi
       -
         name: Set up Docker Buildx
@@ -60,6 +60,5 @@ jobs:
           build-args: |
             REF=${{ github.sha }}
           file: "./docker/${{ matrix.file }}.dockerfile"
-
           push: ${{ contains(github.event.head_commit.message, 'ci-image]') ||  github.event_name == 'schedule' }}
           tags: ${{ env.TAG }}

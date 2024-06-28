@@ -8,13 +8,6 @@ parameters:
         type: boolean
         default: false
 
-on:
-    workflow_run:
-        workflows: [" Build pr ci-docker"]
-        types:
-        - completed
-        - skipped
-
 jobs:
     # Ensure running with CircleCI/huggingface
     check_circleci_user:
@@ -33,11 +26,7 @@ jobs:
     fetch_tests:
         working_directory: ~/transformers
         docker:
-            - image: |
-                if [contains(github.event.head_commit.message, '[build-ci-image]')]; then
-                    huggingface/transformers-quality:dev
-                else
-                    huggingface/transformers-quality
+            - image: huggingface/transformers-quality
         parallelism: 1
         steps:
             - checkout
@@ -133,11 +122,7 @@ jobs:
     check_code_quality:
         working_directory: ~/transformers
         docker:
-            - image: |
-                if [contains(github.event.head_commit.message, '[build-ci-image]')]; then
-                    huggingface/transformers-quality:dev
-                else
-                    huggingface/transformers-quality
+            - image: huggingface/transformers-quality
         resource_class: large
         environment:
             TRANSFORMERS_IS_CI: yes
