@@ -602,6 +602,7 @@ GEMMA2_ATTENTION_CLASSES = {
 class Gemma2DecoderLayer(nn.Module):
     def __init__(self, config: Gemma2Config, layer_idx: int):
         super().__init__()
+        self.config = config
         self.hidden_size = config.hidden_size
 
         self.self_attn = GEMMA2_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
@@ -625,7 +626,9 @@ class Gemma2DecoderLayer(nn.Module):
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        if self.is_sliding and attention_mask is not None:  # efficient SDPA and no padding
+        if (
+            self.config._attn_implementation != "flash_attention_2" and self.is_sliding and attention_mask is not None
+        ):  # efficient SDPA and no padding
             attention_mask = attention_mask * torch.tril(
                 torch.ones_like(attention_mask), diagonal=-self.sliding_window
             )
