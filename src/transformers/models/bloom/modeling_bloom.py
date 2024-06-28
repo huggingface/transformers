@@ -483,16 +483,14 @@ class BloomBlock(nn.Module):
                 residual=residual,
                 alibi=alibi,
                 attention_mask=encoder_attention_mask,
-                layer_past=None,
                 head_mask=head_mask,
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
-                use_cache=False,
                 output_attentions=output_attentions,
             )
 
             cross_attention_output = cross_attn_outputs[0]
-            outputs = cross_attn_outputs[1:]
+            outputs = outputs + cross_attn_outputs[2:]
 
             # Post attention layernorm
             layernorm_output = self.post_cross_attention_layernorm(cross_attention_output)
