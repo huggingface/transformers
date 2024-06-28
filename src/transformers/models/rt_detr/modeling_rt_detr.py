@@ -1156,7 +1156,7 @@ class RTDetrPreTrainedModel(PreTrainedModel):
                 nn.init.xavier_uniform_(layer.weight)
                 if hasattr(layer, "bias") and layer.bias is not None:
                     nn.init.constant_(layer.bias, bias)
-        
+
         if isinstance(module, RTDetrModel):
             prior_prob = self.config.initializer_range
             bias = float(-math.log((1 - prior_prob) / prior_prob))
