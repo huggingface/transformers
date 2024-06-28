@@ -22,8 +22,6 @@ from dataclasses import asdict, dataclass, is_dataclass
 from enum import Enum
 from typing import Any, Dict, List, Optional, Union
 
-from compressed_tensors.quantization.quant_config import QuantizationStatus
-from compressed_tensors.quantization.quant_scheme import QuantizationScheme
 from packaging import version
 from pydantic import BaseModel
 
