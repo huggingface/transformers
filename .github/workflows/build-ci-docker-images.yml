@@ -61,7 +61,7 @@ jobs:
         if: ${{ !contains(github.event.head_commit.message, '[build-ci-image]') && github.event_name != 'schedule' }}
         uses: huggingface/hf-workflows/.github/actions/post-slack@main
         with:
-          slack_channel: "#transformers-internal"
+          slack_channel: "#transformers-ci-feedback-tests"
           title: 🤗 New docker images for CircleCI are pushed.
           status: ${{ job.status }}
           slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
