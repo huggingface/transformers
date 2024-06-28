@@ -832,7 +832,8 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
         start = datetime.datetime.now()
         model.generate(input_ids, do_sample=False, max_time=None, max_length=256)
         duration = datetime.datetime.now() - start
-        self.assertGreater(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
+        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
+        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
 
     @slow
     def test_contrastive_search_gpt2(self):

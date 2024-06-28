@@ -843,6 +843,17 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
                 device = next(iter(hf_device_map.values()))
             else:
                 device = -1
+                if (
+                    is_torch_mlu_available()
+                    or is_torch_cuda_available()
+                    or is_torch_npu_available()
+                    or is_torch_xpu_available(check_device=True)
+                    or is_torch_mps_available()
+                ):
+                    logger.warning(
+                        "Hardware accelerator e.g. GPU is available in the environment, but no `device` argument"
+                        " is passed to the `Pipeline` object. Model will be on CPU."
+                    )
 
         if is_torch_available() and self.framework == "pt":
             if device == -1 and self.model.device is not None:

@@ -37,14 +37,16 @@ class LlavaNextProcessor(ProcessorMixin):
             The image processor is a required input.
         tokenizer ([`LlamaTokenizerFast`], *optional*):
             The tokenizer is a required input.
+        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
+            in a chat into a tokenizable string.
     """
 
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
-    def __init__(self, image_processor=None, tokenizer=None):
-        super().__init__(image_processor, tokenizer)
+    def __init__(self, image_processor=None, tokenizer=None, chat_template=None):
+        super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
         self,
