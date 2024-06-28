@@ -247,6 +247,11 @@ class Gemma2Attention(nn.Module):
             causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
             attn_weights = attn_weights + causal_mask
 
+        if self.config.attn_logit_softcapping is not None:
+            attn_weights = attn_weights / self.config.attn_logit_softcapping
+            attn_weights = torch.tanh(attn_weights)
+            attn_weights = attn_weights * self.config.attn_logit_softcapping
+        
         # upcast attention to fp32
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
         attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)

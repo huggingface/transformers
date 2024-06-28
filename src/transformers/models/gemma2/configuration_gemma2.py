@@ -121,6 +121,8 @@ class Gemma2Config(PretrainedConfig):
         rope_theta=10000.0,
         attention_bias=False,
         attention_dropout=0.0,
+        final_logit_softcapping=30.0,
+        attn_logit_softcapping=50.00,
         query_pre_attn_scalar=224,
         sliding_window=4096,
         final_logit_softcapping=30.0,
@@ -149,7 +151,16 @@ class Gemma2Config(PretrainedConfig):
         self.rope_theta = rope_theta
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        self.hidden_activation = hidden_activation
+        self.attn_logit_softcapping = attn_logit_softcapping
+
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
+        )
+        self.final_logit_softcapping = final_logit_softcapping
         self.query_pre_attn_scalar = query_pre_attn_scalar
         self.sliding_window = sliding_window
         self.final_logit_softcapping = final_logit_softcapping
