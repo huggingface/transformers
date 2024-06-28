@@ -128,7 +128,9 @@ class ZoeDepthImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         size = {"height": 380, "width": 513}
         multiple = 32
-        image_processor = ZoeDepthImageProcessor(do_pad=False, ensure_multiple_of=multiple, size=size, keep_aspect_ratio=False)
+        image_processor = ZoeDepthImageProcessor(
+            do_pad=False, ensure_multiple_of=multiple, size=size, keep_aspect_ratio=False
+        )
         pixel_values = image_processor(image, return_tensors="pt").pixel_values
 
         self.assertEqual(list(pixel_values.shape), [1, 3, 384, 512])
@@ -141,7 +143,9 @@ class ZoeDepthImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         height, width = 512, 512
         size = {"height": height, "width": width}
         multiple = 32
-        image_processor = ZoeDepthImageProcessor(do_pad=False, ensure_multiple_of=multiple, size=size, keep_aspect_ratio=False)
+        image_processor = ZoeDepthImageProcessor(
+            do_pad=False, ensure_multiple_of=multiple, size=size, keep_aspect_ratio=False
+        )
         pixel_values = image_processor(image, return_tensors="pt").pixel_values
 
         self.assertEqual(list(pixel_values.shape), [1, 3, height, width])
