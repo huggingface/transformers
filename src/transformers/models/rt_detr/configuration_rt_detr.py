@@ -118,8 +118,8 @@ class RTDetrConfig(PretrainedConfig):
             Scale or magnitude of noise to be added to the bounding boxes.
         learn_initial_query (`bool`, *optional*, defaults to `False`):
             Indicates whether the initial query embeddings for the decoder should be learned during training
-        anchor_image_size (`Tuple[int, int]`, *optional*, defaults to `[640, 640]`):
-            Height and width of the input image used during evaluation to generate the bounding box anchors.
+        anchor_image_size (`Tuple[int, int]`, *optional*):
+            Height and width of the input image used during evaluation to generate the bounding box anchors. If None, automatic generate anchor is applied.
         disable_custom_kernels (`bool`, *optional*, defaults to `True`):
             Whether to disable custom kernels.
         with_box_refine (`bool`, *optional*, defaults to `True`):
@@ -218,7 +218,7 @@ class RTDetrConfig(PretrainedConfig):
         label_noise_ratio=0.5,
         box_noise_scale=1.0,
         learn_initial_query=False,
-        anchor_image_size=[640, 640],
+        anchor_image_size=None,
         disable_custom_kernels=True,
         with_box_refine=True,
         is_encoder_decoder=True,
