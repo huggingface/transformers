@@ -169,6 +169,7 @@ class Toolbox:
         self._tools = {tool.name: tool for tool in tools}
         if add_base_tools:
             self.add_base_tools()
+        self.add_tool(FinalAnswerTool())
         self._load_tools_if_needed()
 
     def add_base_tools(self, add_python_interpreter: bool = False):
@@ -631,8 +632,6 @@ class ReactAgent(Agent):
             tool_description_template=tool_description_template,
             **kwargs,
         )
-        if "final_answer" not in self._toolbox.tools:
-            self._toolbox.add_tool(FinalAnswerTool())
 
     def provide_final_answer(self, task) -> str:
         """
