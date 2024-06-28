@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class Config(PretrainedConfig):
+class baizeConfig(PretrainedConfig):
     r"""
 
 
