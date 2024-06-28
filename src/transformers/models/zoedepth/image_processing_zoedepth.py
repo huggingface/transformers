@@ -69,18 +69,9 @@ def get_resize_output_image_size(
     input_height, input_width = get_image_size(input_image, input_data_format)
     output_height, output_width = output_size
 
-    print("Input height:", input_height)
-    print("Input width:", input_width)
-
-    print("Output height:", output_height)
-    print("Output width:", output_width)
-
     # determine new height and width
     scale_height = output_height / input_height
     scale_width = output_width / input_width
-
-    print("Scale height:", scale_height)
-    print("Scale width:", scale_width)
 
     if keep_aspect_ratio:
         # scale as little as possible
