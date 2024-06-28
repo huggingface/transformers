@@ -307,6 +307,7 @@ class GraniteAttention(nn.Module):
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
 
@@ -598,6 +599,7 @@ class GraniteSdpaAttention(GraniteAttention):
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         if output_attentions:
             # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
@@ -696,6 +698,7 @@ class GraniteDecoderLayer(nn.Module):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
@@ -710,6 +713,11 @@ class GraniteDecoderLayer(nn.Module):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
                 (see `past_key_values`).
             past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
+            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+                Indices depicting the position of the input sequence tokens in the sequence
+            kwargs (`dict`, *optional*):
+                Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
+                into the model
         """
         residual = hidden_states
 
@@ -937,6 +945,10 @@ class GraniteModel(GranitePreTrainedModel):
         if use_cache and not isinstance(past_key_values, Cache):  # kept for BC (non `Cache` `past_key_values` inputs)
             return_legacy_cache = True
             past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+            logger.warning_once(
+                "We detected that you are passing `past_key_values` as a tuple and this is deprecated and will be removed in v4.43. "
+                "Please use an appropriate `Cache` class (https://huggingface.co/docs/transformers/v4.41.3/en/internal/generation_utils#transformers.Cache)"
+            )
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -1437,6 +1449,7 @@ SQuAD (a linear layer on top of the hidden-states output to compute `span start 
 class GraniteForQuestionAnswering(GranitePreTrainedModel):
     base_model_prefix = "transformer"
 
+    # Copied from transformers.models.bloom.modeling_bloom.BloomForQuestionAnswering.__init__ with Bloom->Granite
     def __init__(self, config):
         super().__init__(config)
         self.transformer = GraniteModel(config)
