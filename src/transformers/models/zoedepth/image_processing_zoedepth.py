@@ -118,7 +118,8 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
         keep_aspect_ratio (`bool`, *optional*, defaults to `True`):
             If `True`, the image is resized by choosing the smaller of the height and width scaling factors and using it for
             both dimensions. This ensures that the image is scaled down as little as possible while still fitting within the
-            desired output size. Do note that `ensure_multiple_of` can be used after this.
+            desired output size. In case `ensure_multiple_of` is also set, the image is further resized to a size that is a
+            multiple of this value by flooring the height and width to the nearest multiple of this value.
             Can be overidden by `keep_aspect_ratio` in `preprocess`.
         ensure_multiple_of (`int`, *optional*, defaults to 32):
             If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Works by flooring
@@ -343,7 +344,8 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
             keep_aspect_ratio (`bool`, *optional*, defaults to `self.keep_aspect_ratio`):
                 If `True` and `do_resize=True`, the image is resized by choosing the smaller of the height and width scaling factors and using it for
                 both dimensions. This ensures that the image is scaled down as little as possible while still fitting within the
-                desired output size. Do note that `ensure_multiple_of` can be used after this.
+                desired output size. In case `ensure_multiple_of` is also set, the image is further resized to a size that is a
+                multiple of this value by flooring the height and width to the nearest multiple of this value.
             ensure_multiple_of (`int`, *optional*, defaults to `self.ensure_multiple_of`):
                 If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Works by flooring
                 the height and width to the nearest multiple of this value.
