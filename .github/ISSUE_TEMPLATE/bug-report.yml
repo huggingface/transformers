@@ -25,7 +25,7 @@ body:
 
         Models:
 
-          - text models: @ArthurZucker and @younesbelkada
+          - text models: @ArthurZucker 
           - vision models: @amyeroberts
           - speech models: @sanchit-gandhi
           - graph models: @clefourrier
@@ -44,7 +44,7 @@ body:
           - deepspeed: HF Trainer/Accelerate: @muellerzr
           - ray/raytune: @richardliaw, @amogkam
           - Big Model Inference: @SunMarc
-          - quantization (bitsandbytes, autogpt): @SunMarc and @younesbelkada
+          - quantization (bitsandbytes, autogpt): @SunMarc
 
         Documentation: @stevhliu
 
