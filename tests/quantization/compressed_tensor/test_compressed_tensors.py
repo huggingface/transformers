@@ -1,6 +1,3 @@
-# from transformers.quantizers.quantizer_compressed_tensors import CompressedTensorsHfQuantizer
-# from transformers.quantizers.quantizer_compressed_tensors import CompressedTensorsHfQuantizer
-
 import gc
 import unittest
 
