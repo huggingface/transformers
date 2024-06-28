@@ -178,18 +178,13 @@ class NemotronMLP(nn.Module):
         self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
-        self.gated_mlp = config.gated_mlp
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
-        if self.gated_mlp:
-            self.gated_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x):
-        if self.gated_mlp:
-            return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        else:
-            return self.down_proj(self.act_fn(self.up_proj(x)))
+
+        return self.down_proj(self.act_fn(self.up_proj(x)))
 
 # Copied from transformers.models.llama.modeling_llama.repeat_kv
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:

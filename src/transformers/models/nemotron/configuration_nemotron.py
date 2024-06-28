@@ -88,9 +88,7 @@ class NemotronConfig(PretrainedConfig):
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         mlp_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
-        gated_mlp (`bool`, *optional*, defaults to `False`):
-            Whether to include a gated projection layer in the MLP layers.
+            Whether to use a bias in up_proj and down_proj layers in the MLP layers.
 
     ```python
     >>> from transformers import NemotronModel, NemotronConfig
@@ -132,7 +130,6 @@ class NemotronConfig(PretrainedConfig):
         attention_bias=False,
         attention_dropout=0.0,
         mlp_bias=False,
-        gated_mlp=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -159,7 +156,6 @@ class NemotronConfig(PretrainedConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.mlp_bias = mlp_bias
-        self.gated_mlp = gated_mlp
 
         super().__init__(
             pad_token_id=pad_token_id,
