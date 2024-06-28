@@ -14,10 +14,9 @@
 # limitations under the License.
 
 """
- PyTorch DistilBERT model adapted in part from Facebook, Inc XLM model (https://github.com/facebookresearch/XLM) and in
- part from HuggingFace PyTorch version of Google AI Bert model (https://github.com/google-research/bert)
+PyTorch DistilBERT model adapted in part from Facebook, Inc XLM model (https://github.com/facebookresearch/XLM) and in
+part from HuggingFace PyTorch version of Google AI Bert model (https://github.com/google-research/bert)
 """
-
 
 import math
 from typing import Dict, List, Optional, Set, Tuple, Union

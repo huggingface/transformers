@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch VITS model."""
+"""PyTorch VITS model."""
 
 import math
 from dataclasses import dataclass
@@ -1394,6 +1394,9 @@ class VitsModel(VitsPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        if labels is not None:
+            raise NotImplementedError("Training of VITS is not supported yet.")
+
         if attention_mask is not None:
             input_padding_mask = attention_mask.unsqueeze(-1).float()
         else:
@@ -1407,9 +1410,6 @@ class VitsModel(VitsPreTrainedModel):
             speaker_embeddings = self.embed_speaker(speaker_id).unsqueeze(-1)
         else:
             speaker_embeddings = None
-
-        if labels is not None:
-            raise NotImplementedError("Training of VITS is not supported yet.")
 
         text_encoder_output = self.text_encoder(
             input_ids=input_ids,

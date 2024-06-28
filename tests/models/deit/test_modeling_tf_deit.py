@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the TensorFlow DeiT model. """
-
+"""Testing suite for the TensorFlow DeiT model."""
 
 from __future__ import annotations
 
@@ -294,3 +293,20 @@ class DeiTModelIntegrationTest(unittest.TestCase):
         expected_slice = tf.constant([-1.0266, 0.1912, -1.2861])
 
         self.assertTrue(np.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+
+    @slow
+    def test_inference_interpolate_pos_encoding(self):
+        model = TFDeiTForImageClassificationWithTeacher.from_pretrained("facebook/deit-base-distilled-patch16-224")
+
+        image_processor = self.default_image_processor
+        # image size is {"height": 480, "width": 640}
+        image = prepare_img()
+        image_processor.size = {"height": 480, "width": 640}
+        # center crop set to False so image is not center cropped to 224x224
+        inputs = image_processor(images=image, return_tensors="tf", do_center_crop=False)
+        # forward pass
+        outputs = model(**inputs, interpolate_pos_encoding=True)
+
+        # verify the logits
+        expected_shape = tf.TensorShape((1, 1000))
+        self.assertEqual(outputs.logits.shape, expected_shape)

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Donut Swin Transformer model.
+"""PyTorch Donut Swin Transformer model.
 
 This implementation is identical to a regular Swin Transformer, without final layer norm on top of the final hidden
 states."""
@@ -35,6 +35,7 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
+    torch_int,
 )
 from .configuration_donut_swin import DonutSwinConfig
 
@@ -205,9 +206,7 @@ class DonutSwinEmbeddings(nn.Module):
         interpolate_pos_encoding: bool = False,
     ) -> Tuple[torch.Tensor]:
         _, num_channels, height, width = pixel_values.shape
-        embeddings, output_dimensions = self.patch_embeddings(
-            pixel_values, interpolate_pos_encoding=interpolate_pos_encoding
-        )
+        embeddings, output_dimensions = self.patch_embeddings(pixel_values)
         embeddings = self.norm(embeddings)
         batch_size, seq_len, _ = embeddings.size()
 
@@ -228,7 +227,7 @@ class DonutSwinEmbeddings(nn.Module):
         return embeddings, output_dimensions
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinPatchEmbeddings
+# Copied from transformers.models.swin.modeling_swin.SwinPatchEmbeddings with Swin->DonutSwin
 class DonutSwinPatchEmbeddings(nn.Module):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
@@ -260,21 +259,10 @@ class DonutSwinPatchEmbeddings(nn.Module):
             pixel_values = nn.functional.pad(pixel_values, pad_values)
         return pixel_values
 
-    def forward(
-        self, pixel_values: Optional[torch.FloatTensor], interpolate_pos_encoding: bool = False
-    ) -> Tuple[torch.Tensor, Tuple[int]]:
+    def forward(self, pixel_values: Optional[torch.FloatTensor]) -> Tuple[torch.Tensor, Tuple[int]]:
         _, num_channels, height, width = pixel_values.shape
-        if num_channels != self.num_channels:
-            raise ValueError(
-                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
-            )
         # pad the input to be divisible by self.patch_size, if needed
         pixel_values = self.maybe_pad(pixel_values, height, width)
-        if not interpolate_pos_encoding and (height != self.image_size[0] or width != self.image_size[1]):
-            raise ValueError(
-                f"Input image size ({height}*{width}) doesn't match model"
-                f" ({self.image_size[0]}*{self.image_size[1]})."
-            )
         embeddings = self.projection(pixel_values)
         _, _, height, width = embeddings.shape
         output_dimensions = (height, width)
@@ -575,13 +563,15 @@ class DonutSwinLayer(nn.Module):
     def set_shift_and_window_size(self, input_resolution):
         if min(input_resolution) <= self.window_size:
             # if window size is larger than input resolution, we don't partition windows
-            self.shift_size = 0
-            self.window_size = min(input_resolution)
+            self.shift_size = torch_int(0)
+            self.window_size = (
+                torch.min(torch.tensor(input_resolution)) if torch.jit.is_tracing() else min(input_resolution)
+            )
 
-    def get_attn_mask(self, height, width, dtype):
+    def get_attn_mask(self, height, width, dtype, device):
         if self.shift_size > 0:
             # calculate attention mask for SW-MSA
-            img_mask = torch.zeros((1, height, width, 1), dtype=dtype)
+            img_mask = torch.zeros((1, height, width, 1), dtype=dtype, device=device)
             height_slices = (
                 slice(0, -self.window_size),
                 slice(-self.window_size, -self.shift_size),
@@ -646,9 +636,9 @@ class DonutSwinLayer(nn.Module):
         # partition windows
         hidden_states_windows = window_partition(shifted_hidden_states, self.window_size)
         hidden_states_windows = hidden_states_windows.view(-1, self.window_size * self.window_size, channels)
-        attn_mask = self.get_attn_mask(height_pad, width_pad, dtype=hidden_states.dtype)
-        if attn_mask is not None:
-            attn_mask = attn_mask.to(hidden_states_windows.device)
+        attn_mask = self.get_attn_mask(
+            height_pad, width_pad, dtype=hidden_states.dtype, device=hidden_states_windows.device
+        )
 
         attention_outputs = self.attention(
             hidden_states_windows, attn_mask, head_mask, output_attentions=output_attentions

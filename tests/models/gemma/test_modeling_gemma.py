@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Gemma model. """
+"""Testing suite for the PyTorch Gemma model."""
+
 import tempfile
 import unittest
 
@@ -41,10 +42,23 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import GemmaForCausalLM, GemmaForSequenceClassification, GemmaModel, GemmaTokenizer
+    from transformers import (
+        GemmaForCausalLM,
+        GemmaForSequenceClassification,
+        GemmaForTokenClassification,
+        GemmaModel,
+    )
 
 
+@require_torch
 class GemmaModelTester:
+    config_class = GemmaConfig
+    if is_torch_available():
+        model_class = GemmaModel
+        for_causal_lm_class = GemmaForCausalLM
+        for_sequence_class = GemmaForSequenceClassification
+        for_token_class = GemmaForTokenClassification
+
     def __init__(
         self,
         parent,
@@ -122,9 +136,8 @@ class GemmaModelTester:
 
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
-    # Ignore copy
     def get_config(self):
-        return GemmaConfig(
+        return self.config_class(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -142,18 +155,16 @@ class GemmaModelTester:
             head_dim=self.head_dim,
         )
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model with Llama->Gemma
     def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = GemmaModel(config=config)
+        model = self.model_class(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model_as_decoder with Llama->Gemma
     def create_and_check_model_as_decoder(
         self,
         config,
@@ -167,7 +178,7 @@ class GemmaModelTester:
         encoder_attention_mask,
     ):
         config.add_cross_attention = True
-        model = GemmaModel(config)
+        model = self.model_class(config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -184,7 +195,6 @@ class GemmaModelTester:
         result = model(input_ids, attention_mask=input_mask)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_for_causal_lm with Llama->Gemma
     def create_and_check_for_causal_lm(
         self,
         config,
@@ -197,13 +207,12 @@ class GemmaModelTester:
         encoder_hidden_states,
         encoder_attention_mask,
     ):
-        model = GemmaForCausalLM(config=config)
+        model = self.for_causal_lm_class(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_decoder_model_past_large_inputs with Llama->Gemma
     def create_and_check_decoder_model_past_large_inputs(
         self,
         config,
@@ -218,7 +227,7 @@ class GemmaModelTester:
     ):
         config.is_decoder = True
         config.add_cross_attention = True
-        model = GemmaForCausalLM(config=config)
+        model = self.for_causal_lm_class(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -284,12 +293,17 @@ class GemmaModelTester:
 
 @require_torch
 class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (GemmaModel, GemmaForCausalLM, GemmaForSequenceClassification) if is_torch_available() else ()
+    all_model_classes = (
+        (GemmaModel, GemmaForCausalLM, GemmaForSequenceClassification, GemmaForTokenClassification)
+        if is_torch_available()
+        else ()
+    )
     all_generative_model_classes = (GemmaForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": GemmaModel,
             "text-classification": GemmaForSequenceClassification,
+            "token-classification": GemmaForTokenClassification,
             "text-generation": GemmaForCausalLM,
             "zero-shot": GemmaForSequenceClassification,
         }
@@ -336,7 +350,7 @@ class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-        model = GemmaForSequenceClassification(config)
+        model = self.model_tester.for_sequence_class(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
@@ -349,7 +363,7 @@ class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-        model = GemmaForSequenceClassification(config)
+        model = self.model_tester.for_sequence_class(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
@@ -364,17 +378,32 @@ class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         sequence_labels = ids_tensor(
             [self.model_tester.batch_size, config.num_labels], self.model_tester.type_sequence_label_size
         ).to(torch.float)
-        model = GemmaForSequenceClassification(config)
+        model = self.model_tester.for_sequence_class(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    @unittest.skip("Gemma buffers include complex numbers, which breaks this test")
+    def test_Gemma_token_classification_model(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        token_labels = ids_tensor([self.model_tester.batch_size, self.model_tester.seq_length], config.num_labels)
+        model = self.model_tester.for_token_class(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=token_labels)
+        self.assertEqual(
+            result.logits.shape,
+            (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
+        )
+
+    @unittest.skip(reason="Gemma buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip("Gemma uses GQA on all models so the KV cache is a non standard format")
+    @unittest.skip(reason="Gemma uses GQA on all models so the KV cache is a non standard format")
     def test_past_key_values_format(self):
         pass
 
@@ -428,7 +457,7 @@ class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest("Gemma flash attention does not support right padding")
+        self.skipTest(reason="Gemma flash attention does not support right padding")
 
     @require_torch_sdpa
     @require_torch_gpu
@@ -436,7 +465,7 @@ class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_sdpa_equivalence(self):
         for model_class in self.all_model_classes:
             if not model_class._supports_sdpa:
-                return
+                self.skipTest(reason="Model does not support SDPA")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
@@ -465,12 +494,12 @@ class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     @require_flash_attn
     @require_torch_gpu
     @pytest.mark.flash_attn_test
-    @is_flaky
+    @is_flaky()
     @slow
     def test_flash_attn_2_equivalence(self):
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn_2:
-                return
+                self.skipTest(reason="Model does not support Flash Attention 2")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
@@ -512,46 +541,8 @@ class GemmaIntegrationTest(unittest.TestCase):
             cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
 
     @require_read_token
-    def test_model_2b_fp32(self):
-        model_id = "google/gemma-2b"
-        EXPECTED_TEXTS = [
-            "Hello I am doing a project on the 1990s and I need to know what the most popular music",
-            "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
-        ]
-
-        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True).to(torch_device)
-
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
-
-        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
-
-        self.assertEqual(output_text, EXPECTED_TEXTS)
-
-    @require_read_token
     def test_model_2b_fp16(self):
-        model_id = "google/gemma-2b"
-        EXPECTED_TEXTS = [
-            "Hello I am doing a project on the 1990s and I need to know what the most popular music",
-            "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
-        ]
-
-        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16).to(
-            torch_device
-        )
-
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
-
-        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
-
-        self.assertEqual(output_text, EXPECTED_TEXTS)
-
-    @require_read_token
-    def test_model_2b_fp16_static_cache(self):
-        model_id = "google/gemma-2b"
+        model_id = "google/gemma-2-9b"
         EXPECTED_TEXTS = [
             "Hello I am doing a project on the 1990s and I need to know what the most popular music",
             "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
@@ -574,12 +565,21 @@ class GemmaIntegrationTest(unittest.TestCase):
     @require_read_token
     def test_model_2b_bf16(self):
         model_id = "google/gemma-2b"
+
+        # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
+        #
+        # Note: Key 9 is currently set for MI300, but may need potential future adjustments for H100s,
+        # considering differences in hardware processing and potential deviations in generated text.
         EXPECTED_TEXTS = {
             7: [
                 "Hello I am doing a project on the 1990s and I need to know what the most popular music",
                 "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Khichdi",
             ],
             8: [
+                "Hello I am doing a project on the 1990s and I need to know what the most popular music",
+                "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
+            ],
+            9: [
                 "Hello I am doing a project on the 1990s and I need to know what the most popular music",
                 "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
             ],
@@ -600,12 +600,21 @@ class GemmaIntegrationTest(unittest.TestCase):
     @require_read_token
     def test_model_2b_eager(self):
         model_id = "google/gemma-2b"
+
+        # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
+        #
+        # Note: Key 9 is currently set for MI300, but may need potential future adjustments for H100s,
+        # considering differences in hardware processing and potential deviations in generated text.
         EXPECTED_TEXTS = {
             7: [
                 "Hello I am doing a project on the 1990s and I am looking for some information on the ",
                 "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
             ],
             8: [
+                "Hello I am doing a project on the 1990s and I need to know what the most popular music",
+                "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
+            ],
+            9: [
                 "Hello I am doing a project on the 1990s and I need to know what the most popular music",
                 "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
             ],
@@ -628,12 +637,21 @@ class GemmaIntegrationTest(unittest.TestCase):
     @require_read_token
     def test_model_2b_sdpa(self):
         model_id = "google/gemma-2b"
+
+        # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
+        #
+        # Note: Key 9 is currently set for MI300, but may need potential future adjustments for H100s,
+        # considering differences in hardware processing and potential deviations in generated text.
         EXPECTED_TEXTS = {
             7: [
                 "Hello I am doing a project on the 1990s and I need to know what the most popular music",
                 "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Khichdi",
             ],
             8: [
+                "Hello I am doing a project on the 1990s and I need to know what the most popular music",
+                "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
+            ],
+            9: [
                 "Hello I am doing a project on the 1990s and I need to know what the most popular music",
                 "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
             ],
@@ -694,7 +712,7 @@ class GemmaIntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
-    @unittest.skip("The test will not fit our CI runners")
+    @unittest.skip(reason="The test will not fit our CI runners")
     @require_read_token
     def test_model_7b_fp32(self):
         model_id = "google/gemma-7b"
@@ -736,6 +754,11 @@ class GemmaIntegrationTest(unittest.TestCase):
     @require_read_token
     def test_model_7b_bf16(self):
         model_id = "google/gemma-7b"
+
+        # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
+        #
+        # Note: Key 9 is currently set for MI300, but may need potential future adjustments for H100s,
+        # considering differences in hardware processing and potential deviations in generated text.
         EXPECTED_TEXTS = {
             7: [
                 """Hello I am doing a project on a 1991 240sx and I am trying to find""",
@@ -744,6 +767,10 @@ class GemmaIntegrationTest(unittest.TestCase):
             8: [
                 "Hello I am doing a project for my school and I am trying to make a program that will read a .txt file",
                 "Hi today I am going to show you how to make a very simple and easy to make a very simple and",
+            ],
+            9: [
+                "Hello I am doing a project for my school and I am trying to get a servo to move a certain amount of degrees",
+                "Hi today I am going to show you how to make a very simple and easy to make DIY light up sign",
             ],
         }
 
@@ -813,11 +840,16 @@ class GemmaIntegrationTest(unittest.TestCase):
         # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
         # work as intended. See https://github.com/pytorch/pytorch/issues/121943
         if version.parse(torch.__version__) < version.parse("2.3.0"):
-            self.skipTest("This test requires torch >= 2.3 to run.")
+            self.skipTest(reason="This test requires torch >= 2.3 to run.")
 
         NUM_TOKENS_TO_GENERATE = 40
         # Note on `EXPECTED_TEXT_COMPLETION`'s diff: the current value matches the original test if the original test
         # was changed to have a cache of 53 tokens (as opposed to 4096), on Ampere GPUs.
+        #
+        # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
+        #
+        # Note: Key 9 is currently set for MI300, but may need potential future adjustments for H100s,
+        # considering differences in hardware processing and potential deviations in generated text.
         EXPECTED_TEXT_COMPLETION = {
             8: [
                 "Hello I am doing a project on the 1990s and I need to know what the most popular music was in the 1990s. I have looked on the internet and I have found",
@@ -827,10 +859,14 @@ class GemmaIntegrationTest(unittest.TestCase):
                 "Hello I am doing a project on the 1990s and I need to know what the most popular music was in the 1990s. I have looked on the internet and I have found",
                 "Hi today\nI have a problem with my 2007 1.9 tdi 105bhp.\nI have a problem with the engine management light on.\nI have checked the",
             ],
+            9: [
+                "Hello I am doing a project on the 1990s and I need to know what the most popular music was in the 1990s. I have looked on the internet and I have found",
+                "Hi today\nI have a problem with my 2007 1.9 tdi 105bhp.\nI have a problem with the engine management light on.\nI have checked the",
+            ],
         }
 
         prompts = ["Hello I am doing", "Hi today"]
-        tokenizer = GemmaTokenizer.from_pretrained("google/gemma-2b", pad_token="</s>", padding_side="right")
+        tokenizer = AutoTokenizer.from_pretrained("google/gemma-2b", pad_token="</s>", padding_side="right")
         model = GemmaForCausalLM.from_pretrained("google/gemma-2b", device_map="sequential", torch_dtype=torch.float16)
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 

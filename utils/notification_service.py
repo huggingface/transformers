@@ -14,6 +14,7 @@
 
 import ast
 import collections
+import datetime
 import functools
 import json
 import operator
@@ -26,9 +27,11 @@ from typing import Dict, List, Optional, Union
 import requests
 from get_ci_error_statistics import get_jobs
 from get_previous_daily_ci import get_last_daily_ci_reports
+from huggingface_hub import HfApi
 from slack_sdk import WebClient
 
 
+api = HfApi()
 client = WebClient(token=os.environ["CI_SLACK_BOT_TOKEN"])
 
 NON_MODEL_TEST_MODULES = [
@@ -636,9 +639,9 @@ class Message:
             {"type": "section", "text": {"type": "mrkdwn", "text": failure_text}},
         ]
 
-    def get_new_model_failure_blocks(self, with_header=True):
+    def get_new_model_failure_blocks(self, with_header=True, to_truncate=True):
         if self.prev_ci_artifacts is None:
-            return {}
+            return []
 
         sorted_dict = sorted(self.model_results.items(), key=lambda t: t[0])
 
@@ -675,6 +678,8 @@ class Message:
                         all_failure_lines[new_text].append(f"<{url}|{device}>" if url is not None else device)
 
         MAX_ERROR_TEXT = 3000 - len("[Truncated]") - len("```New model failures```\n\n")
+        if not to_truncate:
+            MAX_ERROR_TEXT = float("inf")
         failure_text = ""
         for line, devices in all_failure_lines.items():
             new_text = failure_text + f"{'|'.join(devices)} gpu\n{line}"
@@ -759,6 +764,14 @@ class Message:
             )
 
             time.sleep(1)
+
+        # To save the list of new model failures
+        blocks = self.get_new_model_failure_blocks(to_truncate=False)
+        if blocks:
+            failure_text = blocks[-1]["text"]["text"]
+            file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/new_model_failures.txt")
+            with open(file_path, "w", encoding="UTF-8") as fp:
+                fp.write(failure_text)
 
 
 def retrieve_artifact(artifact_path: str, gpu: Optional[str]):
@@ -879,7 +892,7 @@ if __name__ == "__main__":
     # To find the PR number in a commit title, for example, `Add AwesomeFormer model (#99999)`
     pr_number_re = re.compile(r"\(#(\d+)\)$")
 
-    title = f"🤗 Results of the {ci_event} tests."
+    title = f"🤗 Results of {ci_event} - {os.getenv('CI_TEST_JOB')}."
     # Add Commit/PR title with a link for push CI
     # (check the title in 2 env. variables - depending on the CI is triggered via `push` or `workflow_run` event)
     ci_title_push = os.environ.get("CI_TITLE_PUSH")
@@ -1145,11 +1158,24 @@ if __name__ == "__main__":
     if not os.path.isdir(os.path.join(os.getcwd(), f"ci_results_{job_name}")):
         os.makedirs(os.path.join(os.getcwd(), f"ci_results_{job_name}"))
 
+    target_workflow = "huggingface/transformers/.github/workflows/self-scheduled-caller.yml@refs/heads/main"
+    is_scheduled_ci_run = os.environ.get("CI_WORKFLOW_REF") == target_workflow
+
     # Only the model testing job is concerned: this condition is to avoid other jobs to upload the empty list as
     # results.
     if job_name == "run_models_gpu":
         with open(f"ci_results_{job_name}/model_results.json", "w", encoding="UTF-8") as fp:
             json.dump(model_results, fp, indent=4, ensure_ascii=False)
+
+        # upload results to Hub dataset (only for the scheduled daily CI run on `main`)
+        if is_scheduled_ci_run:
+            api.upload_file(
+                path_or_fileobj=f"ci_results_{job_name}/model_results.json",
+                path_in_repo=f"{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/model_results.json",
+                repo_id="hf-internal-testing/transformers_daily_ci",
+                repo_type="dataset",
+                token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
+            )
 
     # Must have the same keys as in `additional_results`.
     # The values are used as the file names where to save the corresponding CI job results.
@@ -1163,16 +1189,26 @@ if __name__ == "__main__":
         with open(f"ci_results_{job_name}/{test_to_result_name[job]}_results.json", "w", encoding="UTF-8") as fp:
             json.dump(job_result, fp, indent=4, ensure_ascii=False)
 
+        # upload results to Hub dataset (only for the scheduled daily CI run on `main`)
+        if is_scheduled_ci_run:
+            api.upload_file(
+                path_or_fileobj=f"ci_results_{job_name}/{test_to_result_name[job]}_results.json",
+                path_in_repo=f"{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/{test_to_result_name[job]}_results.json",
+                repo_id="hf-internal-testing/transformers_daily_ci",
+                repo_type="dataset",
+                token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
+            )
+
     prev_ci_artifacts = None
-    target_workflow = "huggingface/transformers/.github/workflows/self-scheduled.yml@refs/heads/main"
-    if os.environ.get("CI_WORKFLOW_REF") == target_workflow:
-        # Get the last previously completed CI's failure tables
-        artifact_names = [f"ci_results_{job_name}"]
-        output_dir = os.path.join(os.getcwd(), "previous_reports")
-        os.makedirs(output_dir, exist_ok=True)
-        prev_ci_artifacts = get_last_daily_ci_reports(
-            artifact_names=artifact_names, output_dir=output_dir, token=os.environ["ACCESS_REPO_INFO_TOKEN"]
-        )
+    if is_scheduled_ci_run:
+        if job_name == "run_models_gpu":
+            # Get the last previously completed CI's failure tables
+            artifact_names = [f"ci_results_{job_name}"]
+            output_dir = os.path.join(os.getcwd(), "previous_reports")
+            os.makedirs(output_dir, exist_ok=True)
+            prev_ci_artifacts = get_last_daily_ci_reports(
+                artifact_names=artifact_names, output_dir=output_dir, token=os.environ["ACCESS_REPO_INFO_TOKEN"]
+            )
 
     message = Message(
         title,

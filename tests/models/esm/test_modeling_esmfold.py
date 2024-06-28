@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch ESM model. """
-
+"""Testing suite for the PyTorch ESM model."""
 
 import unittest
 
@@ -185,7 +184,7 @@ class EsmFoldModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip("Does not support attention outputs")
+    @unittest.skip(reason="Does not support attention outputs")
     def test_attention_outputs(self):
         pass
 
@@ -193,75 +192,77 @@ class EsmFoldModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_correct_missing_keys(self):
         pass
 
-    @unittest.skip("Esm does not support embedding resizing")
+    @unittest.skip(reason="Esm does not support embedding resizing")
     def test_resize_embeddings_untied(self):
         pass
 
-    @unittest.skip("Esm does not support embedding resizing")
+    @unittest.skip(reason="Esm does not support embedding resizing")
     def test_resize_tokens_embeddings(self):
         pass
 
-    @unittest.skip("ESMFold does not support passing input embeds!")
+    @unittest.skip(reason="ESMFold does not support passing input embeds!")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip("ESMFold does not support head pruning.")
+    @unittest.skip(reason="ESMFold does not support head pruning.")
     def test_head_pruning(self):
         pass
 
-    @unittest.skip("ESMFold does not support head pruning.")
+    @unittest.skip(reason="ESMFold does not support head pruning.")
     def test_head_pruning_integration(self):
         pass
 
-    @unittest.skip("ESMFold does not support head pruning.")
+    @unittest.skip(reason="ESMFold does not support head pruning.")
     def test_head_pruning_save_load_from_config_init(self):
         pass
 
-    @unittest.skip("ESMFold does not support head pruning.")
+    @unittest.skip(reason="ESMFold does not support head pruning.")
     def test_head_pruning_save_load_from_pretrained(self):
         pass
 
-    @unittest.skip("ESMFold does not support head pruning.")
+    @unittest.skip(reason="ESMFold does not support head pruning.")
     def test_headmasking(self):
         pass
 
-    @unittest.skip("ESMFold does not output hidden states in the normal way.")
+    @unittest.skip(reason="ESMFold does not output hidden states in the normal way.")
     def test_hidden_states_output(self):
         pass
 
-    @unittest.skip("ESMfold does not output hidden states in the normal way.")
+    @unittest.skip(reason="ESMfold does not output hidden states in the normal way.")
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    @unittest.skip("ESMFold only has one output format.")
+    @unittest.skip(reason="ESMFold only has one output format.")
     def test_model_outputs_equivalence(self):
         pass
 
-    @unittest.skip("This test doesn't work for ESMFold and doesn't test core functionality")
+    @unittest.skip(reason="This test doesn't work for ESMFold and doesn't test core functionality")
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip("ESMFold does not support input chunking.")
+    @unittest.skip(reason="ESMFold does not support input chunking.")
     def test_feed_forward_chunking(self):
         pass
 
-    @unittest.skip("ESMFold doesn't respect you and it certainly doesn't respect your initialization arguments.")
+    @unittest.skip(
+        reason="ESMFold doesn't respect you and it certainly doesn't respect your initialization arguments."
+    )
     def test_initialization(self):
         pass
 
-    @unittest.skip("ESMFold doesn't support torchscript compilation.")
+    @unittest.skip(reason="ESMFold doesn't support torchscript compilation.")
     def test_torchscript_output_attentions(self):
         pass
 
-    @unittest.skip("ESMFold doesn't support torchscript compilation.")
+    @unittest.skip(reason="ESMFold doesn't support torchscript compilation.")
     def test_torchscript_output_hidden_state(self):
         pass
 
-    @unittest.skip("ESMFold doesn't support torchscript compilation.")
+    @unittest.skip(reason="ESMFold doesn't support torchscript compilation.")
     def test_torchscript_simple(self):
         pass
 
-    @unittest.skip("ESMFold doesn't support data parallel.")
+    @unittest.skip(reason="ESMFold doesn't support data parallel.")
     def test_multi_gpu_data_parallel_forward(self):
         pass
 

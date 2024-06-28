@@ -72,6 +72,13 @@ class ErnieMTokenizer(metaclass=DummyObject):
         requires_backends(self, ["sentencepiece"])
 
 
+class XLMProphetNetTokenizer(metaclass=DummyObject):
+    _backends = ["sentencepiece"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["sentencepiece"])
+
+
 class FNetTokenizer(metaclass=DummyObject):
     _backends = ["sentencepiece"]
 
@@ -227,13 +234,6 @@ class UdopTokenizer(metaclass=DummyObject):
 
 
 class XGLMTokenizer(metaclass=DummyObject):
-    _backends = ["sentencepiece"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["sentencepiece"])
-
-
-class XLMProphetNetTokenizer(metaclass=DummyObject):
     _backends = ["sentencepiece"]
 
     def __init__(self, *args, **kwargs):

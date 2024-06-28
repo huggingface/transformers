@@ -55,20 +55,20 @@ class LxmertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
 
     def get_input_output_texts(self, tokenizer):
-        input_text = "UNwant\u00E9d,running"
+        input_text = "UNwant\u00e9d,running"
         output_text = "unwanted, running"
         return input_text, output_text
 
     def test_full_tokenizer(self):
         tokenizer = self.tokenizer_class(self.vocab_file)
 
-        tokens = tokenizer.tokenize("UNwant\u00E9d,running")
+        tokens = tokenizer.tokenize("UNwant\u00e9d,running")
         self.assertListEqual(tokens, ["un", "##want", "##ed", ",", "runn", "##ing"])
         self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [7, 4, 5, 10, 8, 9])
 
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
-            return
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         tokenizer = self.get_tokenizer()
         rust_tokenizer = self.get_rust_tokenizer()

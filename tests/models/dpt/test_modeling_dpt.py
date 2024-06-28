@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch DPT model. """
-
+"""Testing suite for the PyTorch DPT model."""
 
 import unittest
 
@@ -184,7 +183,7 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -276,6 +275,34 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                         [0.0, 1.0],
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
+
+    def test_backbone_selection(self):
+        def _validate_backbone_init():
+            for model_class in self.all_model_classes:
+                model = model_class(config)
+                model.to(torch_device)
+                model.eval()
+
+                if model.__class__.__name__ == "DPTForDepthEstimation":
+                    # Confirm out_indices propogated to backbone
+                    self.assertEqual(len(model.backbone.out_indices), 2)
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.use_pretrained_backbone = True
+        config.backbone_config = None
+        config.backbone_kwargs = {"out_indices": [-2, -1]}
+        # Force load_backbone path
+        config.is_hybrid = False
+
+        # Load a timm backbone
+        config.backbone = "resnet18"
+        config.use_timm_backbone = True
+        _validate_backbone_init()
+
+        # Load a HF backbone
+        config.backbone = "facebook/dinov2-small"
+        config.use_timm_backbone = False
+        _validate_backbone_init()
 
     @slow
     def test_model_from_pretrained(self):

@@ -43,8 +43,8 @@ class Seq2seqTrainerTester(TestCasePlus):
         bert2bert.config.decoder_start_token_id = tokenizer.cls_token_id
         bert2bert.config.max_length = 128
 
-        train_dataset = datasets.load_dataset("cnn_dailymail", "3.0.0", split="train[:1%]")
-        val_dataset = datasets.load_dataset("cnn_dailymail", "3.0.0", split="validation[:1%]")
+        train_dataset = datasets.load_dataset("abisee/cnn_dailymail", "3.0.0", split="train[:1%]")
+        val_dataset = datasets.load_dataset("abisee/cnn_dailymail", "3.0.0", split="validation[:1%]")
 
         train_dataset = train_dataset.select(range(32))
         val_dataset = val_dataset.select(range(16))
@@ -145,7 +145,7 @@ class Seq2seqTrainerTester(TestCasePlus):
         MAX_INPUT_LENGTH = 256
         MAX_TARGET_LENGTH = 256
 
-        dataset = datasets.load_dataset("gsm8k", "main", split="train[:38]")
+        dataset = datasets.load_dataset("openai/gsm8k", "main", split="train[:38]")
         model = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-small")
         tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-small")
         data_collator = DataCollatorForSeq2Seq(tokenizer, model=model, return_tensors="pt", padding="longest")
@@ -161,7 +161,6 @@ class Seq2seqTrainerTester(TestCasePlus):
             tokenizer=tokenizer,
             data_collator=data_collator,
             compute_metrics=lambda x: {"samples": x[0].shape[0]},
-            report_to="none",
         )
 
         def prepare_data(examples):

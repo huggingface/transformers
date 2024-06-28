@@ -14,8 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
- PyTorch XLNet model.
+PyTorch XLNet model.
 """
+
 import warnings
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union

@@ -147,6 +147,7 @@ class TestTokenizationBart(TokenizerTesterMixin, unittest.TestCase):
             self.assertTrue((input_ids[:, -1] == tokenizer.eos_token_id).all().item())
             self.assertTrue((labels[:, -1] == tokenizer.eos_token_id).all().item())
 
+    @unittest.skip
     def test_pretokenized_inputs(self):
         pass
 

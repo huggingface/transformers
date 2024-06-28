@@ -31,6 +31,7 @@ jobs:
         steps:
             - checkout
             - run: uv pip install -U -e .
+            - run: echo 'export "GIT_COMMIT_MESSAGE=$(git show -s --format=%s)"' >> "$BASH_ENV" && source "$BASH_ENV"
             - run: mkdir -p test_preparation
             - run: python utils/tests_fetcher.py | tee tests_fetched_summary.txt
             - store_artifacts:
@@ -80,7 +81,7 @@ jobs:
                   path: ~/transformers/test_preparation/filtered_test_list.txt
             - store_artifacts:
                   path: test_preparation/examples_test_list.txt
-            - run: python .circleci/create_circleci_config.py --fetcher_folder test_preparation
+            - run: export "GIT_COMMIT_MESSAGE=$(git show -s --format=%s)" && echo $GIT_COMMIT_MESSAGE && python .circleci/create_circleci_config.py --fetcher_folder test_preparation
             - run: |
                   if [ ! -s test_preparation/generated_config.yml ]; then
                       echo "No tests to run, exiting early!"
@@ -97,7 +98,7 @@ jobs:
     fetch_all_tests:
         working_directory: ~/transformers
         docker:
-            - image: huggingface/transformers-consistency
+            - image: huggingface/transformers-quality
         parallelism: 1
         steps:
             - checkout

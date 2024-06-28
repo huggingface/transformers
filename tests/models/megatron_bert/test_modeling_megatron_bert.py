@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch MegatronBERT model. """
-
+"""Testing suite for the PyTorch MegatronBERT model."""
 
 import math
 import os
@@ -370,7 +369,7 @@ TOLERANCE = 1e-4
 @require_tokenizers
 class MegatronBertModelIntegrationTests(unittest.TestCase):
     @slow
-    @unittest.skip("Model is not available.")
+    @unittest.skip(reason="Model is not available.")
     def test_inference_no_head(self):
         directory = "nvidia/megatron-bert-uncased-345m"
         if "MYDIR" in os.environ:

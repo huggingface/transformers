@@ -99,6 +99,7 @@ _av_available = importlib.util.find_spec("av") is not None
 _bitsandbytes_available = _is_package_available("bitsandbytes")
 _eetq_available = _is_package_available("eetq")
 _galore_torch_available = _is_package_available("galore_torch")
+_lomo_available = _is_package_available("lomo_optim")
 # `importlib.metadata.version` doesn't work with `bs4` but `beautifulsoup4`. For `importlib.util.find_spec`, reversed.
 _bs4_available = importlib.util.find_spec("bs4") is not None
 _coloredlogs_available = _is_package_available("coloredlogs")
@@ -295,6 +296,18 @@ def is_torch_available():
     return _torch_available
 
 
+def is_torch_deterministic():
+    """
+    Check whether pytorch uses deterministic algorithms by looking if torch.set_deterministic_debug_mode() is set to 1 or 2"
+    """
+    import torch
+
+    if torch.get_deterministic_debug_mode() == 0:
+        return False
+    else:
+        return True
+
+
 def is_hqq_available():
     return _hqq_available
 
@@ -326,6 +339,10 @@ def is_torchvision_available():
 
 def is_galore_torch_available():
     return _galore_torch_available
+
+
+def is_lomo_available():
+    return _lomo_available
 
 
 def is_pyctcdecode_available():
@@ -730,11 +747,19 @@ def is_ipex_available():
 
 @lru_cache
 def is_torch_xpu_available(check_device=False):
-    "Checks if `intel_extension_for_pytorch` is installed and potentially if a XPU is in the environment"
-    if not is_ipex_available():
+    """
+    Checks if XPU acceleration is available either via `intel_extension_for_pytorch` or
+    via stock PyTorch (>=2.4) and potentially if a XPU is in the environment
+    """
+    if not is_torch_available():
         return False
 
-    import intel_extension_for_pytorch  # noqa: F401
+    torch_version = version.parse(_torch_version)
+    if is_ipex_available():
+        import intel_extension_for_pytorch  # noqa: F401
+    elif torch_version.major < 2 or (torch_version.major == 2 and torch_version.minor < 4):
+        return False
+
     import torch
 
     if check_device:

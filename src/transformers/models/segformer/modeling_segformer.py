@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch SegFormer model."""
-
+"""PyTorch SegFormer model."""
 
 import math
 from typing import Optional, Tuple, Union
@@ -785,6 +784,9 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
+        if labels is not None and self.config.num_labels < 1:
+            raise ValueError(f"Number of labels should be >=0: {self.config.num_labels}")
+
         outputs = self.segformer(
             pixel_values,
             output_attentions=output_attentions,
@@ -810,8 +812,6 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
                 loss_fct = BCEWithLogitsLoss(reduction="none")
                 loss = loss_fct(upsampled_logits.squeeze(1), labels.float())
                 loss = (loss * valid_mask).mean()
-            else:
-                raise ValueError(f"Number of labels should be >=0: {self.config.num_labels}")
 
         if not return_dict:
             if output_hidden_states:

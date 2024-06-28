@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch PLBART model. """
-
+"""Testing suite for the PyTorch PLBART model."""
 
 import copy
 import tempfile
@@ -228,7 +227,6 @@ class PLBartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     all_generative_model_classes = (PLBartForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "conversational": PLBartForConditionalGeneration,
             "feature-extraction": PLBartModel,
             "summarization": PLBartForConditionalGeneration,
             "text-classification": PLBartForSequenceClassification,
@@ -321,7 +319,7 @@ class PLBartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
-    @unittest.skip("Failing since #26752")
+    @unittest.skip(reason="Failing since #26752")
     def test_sample_generate(self):
         pass
 
@@ -666,6 +664,6 @@ class PLBartStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, 
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_attention_mask_past(*config_and_inputs)
 
+    @unittest.skip(reason="Decoder cannot keep gradients")
     def test_retain_grad_hidden_states_attentions(self):
-        # decoder cannot keep gradients
         return

@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch ALIGN model. """
-
+"""Testing suite for the PyTorch ALIGN model."""
 
 import inspect
 import os
@@ -24,7 +23,6 @@ import requests
 
 from transformers import AlignConfig, AlignProcessor, AlignTextConfig, AlignVisionConfig
 from transformers.testing_utils import (
-    is_flax_available,
     require_torch,
     require_vision,
     slow,
@@ -55,10 +53,6 @@ if is_torch_available():
 
 if is_vision_available():
     from PIL import Image
-
-
-if is_flax_available():
-    pass
 
 
 class AlignVisionModelTester:
@@ -148,20 +142,15 @@ class AlignVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = AlignVisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=AlignVisionConfig, has_text_modality=False, hidden_size=37
+            self,
+            config_class=AlignVisionConfig,
+            has_text_modality=False,
+            hidden_size=37,
+            common_properties=["num_channels", "image_size"],
         )
 
     def test_config(self):
-        self.create_and_test_config_common_properties()
-        self.config_tester.create_and_test_config_to_json_string()
-        self.config_tester.create_and_test_config_to_json_file()
-        self.config_tester.create_and_test_config_from_and_save_pretrained()
-        self.config_tester.create_and_test_config_with_num_labels()
-        self.config_tester.check_config_can_be_init_without_params()
-        self.config_tester.check_config_arguments_init()
-
-    def create_and_test_config_common_properties(self):
-        return
+        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="AlignVisionModel does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -172,7 +161,7 @@ class AlignVisionModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="AlignVisionModel does not support input and output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     def test_forward_signature(self):
@@ -221,9 +210,11 @@ class AlignVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
+    @unittest.skip
     def test_training(self):
         pass
 
+    @unittest.skip
     def test_training_gradient_checkpointing(self):
         pass
 
@@ -361,9 +352,11 @@ class AlignTextModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @unittest.skip
     def test_training(self):
         pass
 
+    @unittest.skip
     def test_training_gradient_checkpointing(self):
         pass
 
@@ -490,7 +483,7 @@ class AlignModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="AlignModel does not have input/output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     # override as the `temperature` parameter initilization is different for ALIGN
@@ -524,7 +517,7 @@ class AlignModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
-            return
+            self.skipTest(reason="test_torchscript is set to False")
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.torchscript = True

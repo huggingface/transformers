@@ -87,6 +87,58 @@ generated_text = processor.batch_decode(generated_text, skip_special_tokens=True
 print("Generated text:", generated_text)
 ```
 
+- During training, it's important to determine which tokens the model should not learn. For Idefics2, this typically comes down to the image and padding tokens. This means that one can create the labels as follows:
+
+```python
+import requests
+from PIL import Image
+from transformers import Idefics2Processor, Idefics2ForConditionalGeneration
+import torch
+
+url_1 = "http://images.cocodataset.org/val2017/000000039769.jpg"
+url_2 = "http://images.cocodataset.org/val2017/000000219578.jpg"
+
+image_1 = Image.open(requests.get(url_1, stream=True).raw)
+image_2 = Image.open(requests.get(url_2, stream=True).raw)
+images = [image_1, image_2]
+
+messages = [{
+    "role": "user",
+    "content": [
+        {"type": "text", "text": "What’s the difference between these two images?"},
+        {"type": "image"},
+        {"type": "image"},
+    ],
+},
+{
+    "role": "assistant",
+    "content": [
+        {"type": "text", "text": "The difference is that one image is about dogs and the other one about cats."},
+    ],
+}]
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
+processor = Idefics2Processor.from_pretrained("HuggingFaceM4/idefics2-8b")
+model = Idefics2ForConditionalGeneration.from_pretrained("HuggingFaceM4/idefics2-8b")
+model.to(device)
+
+text = processor.apply_chat_template(messages, add_generation_prompt=False)
+inputs = processor(images=images, text=text, return_tensors="pt").to(device)
+
+labels = inputs.input_ids.clone()
+labels[labels == processor.tokenizer.pad_token_id] = -100
+labels[labels == model.config.image_token_id] = -100
+
+inputs["labels"] = labels
+
+outputs = model(**inputs)
+loss = outputs.loss
+loss.backward()
+```
+
+Do note that when training Idefics2 on multi-turn conversations between a user and an assistant, one typically also sets all the tokens corresponding to the user messages to -100.
+
 ## Model optimizations: Flash Attention
 
 The code snippets above showcase inference without any optimization tricks. However, one can drastically speed up the model by leveraging [Flash Attention](../perf_train_gpu_one.md#flash-attention-2), which is a faster implementation of the attention mechanism used inside the model.

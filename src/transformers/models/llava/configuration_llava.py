@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Llava model configuration"""
+"""Llava model configuration"""
 
 import warnings
 
@@ -131,23 +131,5 @@ class LlavaConfig(PretrainedConfig):
             text_config = CONFIG_MAPPING["llama"]()
 
         self.text_config = text_config
-        self._vocab_size = self.text_config.vocab_size
 
         super().__init__(**kwargs)
-
-    @property
-    def vocab_size(self):
-        warnings.warn(
-            "The `vocab_size` attribute is deprecated and will be removed in v4.42, Please use `text_config.vocab_size` instead.",
-            FutureWarning,
-        )
-        return self._vocab_size
-
-    @vocab_size.setter
-    def vocab_size(self, value):
-        self._vocab_size = value
-
-    def to_dict(self):
-        output = super().to_dict()
-        output.pop("_vocab_size", None)
-        return output

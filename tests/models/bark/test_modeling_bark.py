@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Bark model. """
-
+"""Testing suite for the PyTorch Bark model."""
 
 import copy
 import inspect
@@ -755,7 +754,7 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 model(**inputs)[0]
 
-    @unittest.skip("FineModel relies on codebook idx and does not return same logits")
+    @unittest.skip(reason="FineModel relies on codebook idx and does not return same logits")
     def test_inputs_embeds_matches_input_ids(self):
         pass
 
@@ -810,7 +809,7 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
             expected_arg_names = ["codebook_idx", "input_ids"]
             self.assertListEqual(arg_names[:2], expected_arg_names)
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         # one embedding layer per codebook
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -827,7 +826,7 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
         # resizing tokens_embeddings of a ModuleList
         original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.test_resize_embeddings:
-            return
+            self.skipTest(reason="test_resize_embeddings is False")
 
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
@@ -878,7 +877,7 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
         # resizing tokens_embeddings of a ModuleList
         original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.test_resize_embeddings:
-            return
+            self.skipTest(reason="test_resize_embeddings is False")
 
         original_config.tie_word_embeddings = False
 
@@ -932,7 +931,7 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
     def test_flash_attn_2_inference_equivalence(self):
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn_2:
-                return
+                self.skipTest(reason="Model does not support flash_attention_2")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
@@ -989,7 +988,7 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn_2:
-                return
+                self.skipTest(reason="Model does not support flash_attention_2")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
@@ -1327,4 +1326,9 @@ class BarkModelIntegrationTests(unittest.TestCase):
             output_with_offload = self.model.generate(**input_ids, do_sample=False, temperature=1.0)
 
         # checks if same output
-        self.assertListEqual(output_with_no_offload.tolist(), output_with_offload.tolist())
+        self.assertListAlmostEqual(output_with_no_offload.squeeze().tolist(), output_with_offload.squeeze().tolist())
+
+    def assertListAlmostEqual(self, list1, list2, tol=1e-6):
+        self.assertEqual(len(list1), len(list2))
+        for a, b in zip(list1, list2):
+            self.assertAlmostEqual(a, b, delta=tol)

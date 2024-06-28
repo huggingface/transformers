@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch FNet model. """
-
+"""Testing suite for the PyTorch FNet model."""
 
 import unittest
 from typing import Dict, List, Tuple
@@ -322,6 +321,7 @@ class FNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         return inputs_dict
 
     # Overriden Tests
+    @unittest.skip
     def test_attention_outputs(self):
         pass
 

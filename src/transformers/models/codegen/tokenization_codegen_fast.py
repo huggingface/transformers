@@ -14,7 +14,6 @@
 # limitations under the License.
 """Tokenization classes for OpenAI GPT."""
 
-
 import json
 import re
 from typing import TYPE_CHECKING, List, Optional, Tuple, Union

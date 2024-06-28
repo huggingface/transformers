@@ -97,11 +97,11 @@ class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # Test that the tokenization is identical on unicode of space type
                 spaces_unicodes = [
                     "\u0009",  # (horizontal tab, '\t')
-                    "\u000B",  # (vertical tab)
-                    "\u000C",  # (form feed)
+                    "\u000b",  # (vertical tab)
+                    "\u000c",  # (form feed)
                     "\u0020",  # (space, ' ')
-                    "\u200E",  # (left-to-right mark):w
-                    "\u200F",  # (right-to-left mark)
+                    "\u200e",  # (left-to-right mark):w
+                    "\u200f",  # (right-to-left mark)
                 ]
                 for unicode_seq in spaces_unicodes:
                     text_tokenized_s = tokenizer_s.tokenize(unicode_seq)
@@ -111,11 +111,11 @@ class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # Test that the tokenization is identical on unicode of line break type
                 line_break_unicodes = [
-                    "\u000A",  # (line feed, '\n')
+                    "\u000a",  # (line feed, '\n')
                     "\r\n",  # (carriage return and line feed, '\r\n')
-                    "\u000D",  # (carriage return, '\r')
+                    "\u000d",  # (carriage return, '\r')
                     "\r",  # (carriage return, '\r')
-                    "\u000D",  # (carriage return, '\r')
+                    "\u000d",  # (carriage return, '\r')
                     "\u2028",  # (line separator)
                     "\u2029",  # (paragraph separator)
                     # "\u0085", # (next line)
@@ -178,7 +178,6 @@ class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_tokenization_python_rust_equals(self):
         super().test_tokenization_python_rust_equals()
 
-    # overwrite common test
+    @unittest.skip(reason="CLIP always lower cases letters")
     def test_added_tokens_do_lower_case(self):
-        # CLIP always lower cases letters
         pass

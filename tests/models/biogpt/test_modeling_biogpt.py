@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch BioGPT model. """
+"""Testing suite for the PyTorch BioGPT model."""
 
 import math
 import unittest
@@ -414,7 +414,7 @@ class BioGptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    @unittest.skip("The `input_embeds` when fed don't produce the same results.")
+    @unittest.skip(reason="The `input_embeds` when fed don't produce the same results.")
     def test_beam_sample_generate(self):
         pass
 

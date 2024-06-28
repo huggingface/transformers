@@ -15,6 +15,7 @@
 """
 Feature extractor class for Whisper
 """
+
 from typing import List, Optional, Union
 
 import numpy as np
@@ -188,6 +189,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         sampling_rate: Optional[int] = None,
         do_normalize: Optional[bool] = None,
         device: Optional[str] = "cpu",
+        return_token_timestamps: Optional[bool] = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -237,6 +239,9 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
             device (`str`, *optional*, defaults to `'cpu'`):
                 Specifies the device for computation of the log-mel spectrogram of audio signals in the
                 `_torch_extract_fbank_features` method. (e.g., "cpu", "cuda")
+            return_token_timestamps (`bool`, *optional*, defaults to `None`):
+                Whether or not to return the number of frames of the input raw_speech.
+                These num_frames can be used by the model to compute word level timestamps.
         """
 
         if sampling_rate is not None:
@@ -302,12 +307,16 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
 
         if isinstance(input_features[0], List):
             padded_inputs["input_features"] = [np.asarray(feature, dtype=np.float32) for feature in input_features]
+
         else:
             padded_inputs["input_features"] = input_features
 
         if return_attention_mask:
             # rescale from sample (48000) to feature (3000)
             padded_inputs["attention_mask"] = padded_inputs["attention_mask"][:, :: self.hop_length]
+
+        if return_token_timestamps is not None:
+            padded_inputs["num_frames"] = [len(raw_speech_i) // self.hop_length for raw_speech_i in raw_speech]
 
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)

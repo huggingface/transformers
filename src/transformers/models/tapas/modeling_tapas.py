@@ -14,7 +14,6 @@
 # limitations under the License.
 """PyTorch TAPAS model."""
 
-
 import enum
 import math
 import os

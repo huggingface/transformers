@@ -15,6 +15,7 @@
 """
 Processor class for Bark
 """
+
 import json
 import os
 from typing import Optional

@@ -634,9 +634,9 @@ _MANUAL_META_OVERRIDES: Dict[Callable, Callable] = {
 }
 
 if is_torch_greater_or_equal_than_2_0:
-    _MANUAL_META_OVERRIDES[
-        torch.nn.functional.scaled_dot_product_attention
-    ] = torch_nn_functional_scaled_dot_product_attention
+    _MANUAL_META_OVERRIDES[torch.nn.functional.scaled_dot_product_attention] = (
+        torch_nn_functional_scaled_dot_product_attention
+    )
 
 
 class HFProxy(Proxy):

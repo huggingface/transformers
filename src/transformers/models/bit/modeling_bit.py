@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch BiT model. Also supports backbone for ViT hybrid."""
+"""PyTorch BiT model. Also supports backbone for ViT hybrid."""
 
 import collections
 import math
