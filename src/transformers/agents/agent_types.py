@@ -16,8 +16,6 @@ import os
 import pathlib
 import tempfile
 import uuid
-import torch
-from torch import Tensor
 import numpy as np
 
 from ..utils import is_soundfile_availble, is_torch_available, is_vision_available, logging
