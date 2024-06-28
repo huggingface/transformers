@@ -18,19 +18,22 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The mPLUGDocOwl model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+The mPLUGDocOwl model was proposed in [mPLUG-DocOwl 1.5: Unified Structure Learning for OCR-free Document Understanding](https://arxiv.org/pdf/2403.12895) by <Anwen Hu, Haiyang Xu, Jiabo Ye, Ming Yan
+Liang Zhang, Bo Zhang, Chen Li, Ji Zhang, Qin Jin, Fei Huang, Jingren Zhou>.
+<MPLUGDocOwl1.5 is a multimodal model designed for text-rich images. It features the H-Reducer vision-to-text module, which preserves spatial relationships and efficiently processes high-resolution document images by merging visual features horizontally.
+The model employs Unified Structure Learning with structure-aware parsing tasks and multi-grained text localization tasks, teaching it to parse text using line feeds, spaces, and extended Markdown syntax, which enhances the model's ability to correlate text with specific positions in the image.
+DocOwl 1.5 undergoes a two-stage training process: Unified Structure Learning followed by Multi-task Tuning among Downstream Tasks. The high-quality DocReason25K dataset boosts reasoning abilities, allowing DocOwl 1.5-Chat to balance concise answers and detailed explanations.>
 
 The abstract from the paper is the following:
 
-*<INSERT PAPER ABSTRACT HERE>*
+*Structure information is critical for understanding the semantics of text-rich images, such as documents, tables, and charts. Existing Multimodal Large Language Mod- els (MLLMs) for Visual Document Understanding are equipped with text recogni- tion ability but lack general structure understanding abilities for text-rich document images. In this work, we emphasize the importance of structure information in Vi- sual Document Understanding and propose the Unified Structure Learning to boost the performance of MLLMs. Our Unified Structure Learning comprises structure- aware parsing tasks and multi-grained text localization tasks across 5 domains: document, webpage, table, chart, and natural image. To better encode structure information, we design a simple and effective vision-to-text module H-Reducer, which can not only maintain the layout information but also reduce the length of vi- sual features by merging horizontal adjacent patches through convolution, enabling the LLM to understand high-resolution images more efficiently. Furthermore, by constructing structure-aware text sequences and multi-grained pairs of texts and bounding boxes for publicly available text-rich images, we build a comprehensive training set DocStruct4M to support structure learning. Finally, we construct a small but high-quality reasoning tuning dataset DocReason25K to trigger the de- tailed explanation ability in the document domain. Our model DocOwl 1.5 achieves state-of-the-art performance on 10 visual document understanding benchmarks, improving the SOTA performance of MLLMs with a 7B LLM by more than 10 points in 5/10 benchmarks.*
 
 Tips:
 
 <INSERT TIPS ABOUT MODEL HERE>
 
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+This model was contributed by [danaaubakirova](https://huggingface.co/danaaubakirova).
+The original code can be found [here](https://github.com/X-PLUG/mPLUG-DocOwl/tree/main/DocOwl1.5).
 
 
 ## MPLUGDocOwlConfig
