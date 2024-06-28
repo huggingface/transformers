@@ -165,7 +165,7 @@ class LlavaNextProcessor(ProcessorMixin):
 
         Will create outputs like:
         ```
-        USER: <image>\nWhat is the content of this image? ASSITANT: This picture shows a red stop sign
+        USER: <image>\nWhat is the content of this image? ASSISTANT: This picture shows a red stop sign
         ```
         """
         # fmt: off
