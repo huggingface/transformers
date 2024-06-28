@@ -57,7 +57,7 @@ class NemotronConfig(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 2048):
-            The maximum sequence length that this model might ever be used with. <TODO>
+            The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         norm_eps (`float`, *optional*, defaults to 1e-06):
@@ -110,7 +110,7 @@ class NemotronConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=32000, # TODO
+        vocab_size=32000,
         hidden_size=4096,
         intermediate_size=16384,
         num_hidden_layers=32,
@@ -122,9 +122,9 @@ class NemotronConfig(PretrainedConfig):
         initializer_range=0.02,
         norm_eps=1e-6,
         use_cache=True,
-        pad_token_id=None, #TODO
-        bos_token_id=1, # TODO
-        eos_token_id=2, # TODO
+        pad_token_id=None,
+        bos_token_id=1,
+        eos_token_id=2,
         tie_word_embeddings=False,
         rope_theta=10000.0,
         rope_scaling=None,
