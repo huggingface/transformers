@@ -6,8 +6,7 @@ import unittest
 
 import torch
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, CompressedTensorsConfig
-from transformers.testing_utils import slow
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
 class CompressedTensorsTest(unittest.TestCase):
