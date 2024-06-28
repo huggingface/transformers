@@ -1152,7 +1152,7 @@ class RTDetrPreTrainedModel(PreTrainedModel):
         if isinstance(module, (RTDetrForObjectDetection, RTDetrDecoder)):
             if module.class_embed is not None:
                 for layer in module.class_embed:
-                    prior_prob = self.config.initializer_bias_prior_prob
+                    prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
                     bias = float(-math.log((1 - prior_prob) / prior_prob))
                     nn.init.xavier_uniform_(layer.weight)
                     nn.init.constant_(layer.bias, bias)
@@ -1163,7 +1163,7 @@ class RTDetrPreTrainedModel(PreTrainedModel):
                     nn.init.constant_(layer.layers[-1].bias, 0)
 
         if isinstance(module, RTDetrModel):
-            prior_prob = self.config.initializer_bias_prior_prob
+            prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
             bias = float(-math.log((1 - prior_prob) / prior_prob))
             nn.init.xavier_uniform_(module.enc_score_head.weight)
             nn.init.constant_(module.enc_score_head.bias, bias)
