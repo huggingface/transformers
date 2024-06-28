@@ -186,7 +186,7 @@ class NemotronMLP(nn.Module):
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x):
-        if self.gated_proj:
+        if self.gated_mlp:
             return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
         else:
             return self.down_proj(self.act_fn(self.up_proj(x)))
