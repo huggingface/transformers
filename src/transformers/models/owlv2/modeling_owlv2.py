@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch OWLv2 model."""
+"""PyTorch OWLv2 model."""
 
 from dataclasses import dataclass
 from functools import lru_cache
@@ -1276,8 +1276,7 @@ class Owlv2ClassPredictionHead(nn.Module):
             if query_mask.ndim > 1:
                 query_mask = torch.unsqueeze(query_mask, dim=-2)
 
-            pred_logits = pred_logits.to(torch.float64)
-            pred_logits = torch.where(query_mask == 0, -1e6, pred_logits)
+            pred_logits = torch.where(query_mask == 0, torch.finfo(pred_logits.dtype).min, pred_logits)
             pred_logits = pred_logits.to(torch.float32)
 
         return (pred_logits, image_class_embeds)

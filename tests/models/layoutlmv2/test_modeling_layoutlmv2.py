@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch LayoutLMv2 model. """
-
+"""Testing suite for the PyTorch LayoutLMv2 model."""
 
 import unittest
 
@@ -415,7 +414,7 @@ class LayoutLMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    @unittest.skip("We cannot configure detectron2 to output a smaller backbone")
+    @unittest.skip(reason="We cannot configure detectron2 to output a smaller backbone")
     def test_model_is_small(self):
         pass
 

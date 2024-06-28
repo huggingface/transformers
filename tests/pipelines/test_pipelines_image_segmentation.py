@@ -169,7 +169,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
         )
 
     @require_tf
-    @unittest.skip("Image segmentation not implemented in TF")
+    @unittest.skip(reason="Image segmentation not implemented in TF")
     def test_small_model_tf(self):
         pass
 
@@ -567,7 +567,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
 
         image_segmenter = pipeline("image-segmentation", model=model, image_processor=image_processor)
 
-        image = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+        image = load_dataset("hf-internal-testing/fixtures_ade20k", split="test", trust_remote_code=True)
         file = image[0]["file"]
         outputs = image_segmenter(file, threshold=threshold)
 
@@ -621,7 +621,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
     def test_oneformer(self):
         image_segmenter = pipeline(model="shi-labs/oneformer_ade20k_swin_tiny")
 
-        image = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+        image = load_dataset("hf-internal-testing/fixtures_ade20k", split="test", trust_remote_code=True)
         file = image[0]["file"]
         outputs = image_segmenter(file, threshold=0.99)
         # Shortening by hashing

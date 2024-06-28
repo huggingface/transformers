@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" X-CLIP model configuration"""
+"""X-CLIP model configuration"""
 
 import os
 from typing import Union
@@ -52,7 +52,7 @@ class XCLIPTextConfig(PretrainedConfig):
             just in case (e.g., 512 or 1024 or 2048).
         hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported.
+            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
         layer_norm_eps (`float`, *optional*, defaults to 1e-5):
             The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -166,7 +166,7 @@ class XCLIPVisionConfig(PretrainedConfig):
             The size (resolution) of each patch.
         hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"`, `"gelu_new"` and ``"quick_gelu"` are supported.
+            `"relu"`, `"selu"`, `"gelu_new"` and `"quick_gelu"` are supported.
         layer_norm_eps (`float`, *optional*, defaults to 1e-5):
             The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -274,14 +274,14 @@ class XCLIPConfig(PretrainedConfig):
         vision_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`XCLIPVisionConfig`].
         projection_dim (`int`, *optional*, defaults to 512):
-            Dimentionality of text and vision projection layers.
+            Dimensionality of text and vision projection layers.
         prompt_layers (`int`, *optional*, defaults to 2):
             Number of layers in the video specific prompt generator.
         prompt_alpha (`float`, *optional*, defaults to 0.1):
             Alpha value to use in the video specific prompt generator.
         prompt_hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
             The non-linear activation function (function or string) in the video specific prompt generator. If string,
-            `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported.
+            `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
         prompt_num_attention_heads (`int`, *optional*, defaults to 8):
             Number of attention heads in the cross-attention of the video specific prompt generator.
         prompt_attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -341,7 +341,7 @@ class XCLIPConfig(PretrainedConfig):
                     else:
                         message = (
                             f"`text_config_dict` is provided which will be used to initialize `XCLIPTextConfig`. The "
-                            f'value `text_config["{key}"]` will be overriden.'
+                            f'value `text_config["{key}"]` will be overridden.'
                         )
                     logger.info(message)
 
@@ -373,7 +373,7 @@ class XCLIPConfig(PretrainedConfig):
                     else:
                         message = (
                             f"`vision_config_dict` is provided which will be used to initialize `XCLIPVisionConfig`. "
-                            f'The value `vision_config["{key}"]` will be overriden.'
+                            f'The value `vision_config["{key}"]` will be overridden.'
                         )
                     logger.info(message)
 

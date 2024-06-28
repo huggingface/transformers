@@ -14,6 +14,7 @@
 """
 Integrations with other Python libraries.
 """
+
 import functools
 import importlib.metadata
 import importlib.util
@@ -752,7 +753,7 @@ class WandbCallback(TrainerCallback):
             combined_dict = {**args.to_dict()}
 
             if hasattr(model, "config") and model.config is not None:
-                model_config = model.config.to_dict()
+                model_config = model.config if isinstance(model.config, dict) else model.config.to_dict()
                 combined_dict = {**model_config, **combined_dict}
             if hasattr(model, "peft_config") and model.peft_config is not None:
                 peft_config = model.peft_config
@@ -796,7 +797,7 @@ class WandbCallback(TrainerCallback):
             except AttributeError:
                 logger.info("Could not log the number of model parameters in Weights & Biases.")
 
-            # log the initial model and architecture to an artifact
+            # log the initial model architecture to an artifact
             with tempfile.TemporaryDirectory() as temp_dir:
                 model_name = (
                     f"model-{self._wandb.run.id}"
@@ -812,7 +813,6 @@ class WandbCallback(TrainerCallback):
                         "initial_model": True,
                     },
                 )
-                model.save_pretrained(temp_dir)
                 # add the architecture to a separate text file
                 save_model_architecture_to_file(model, temp_dir)
 

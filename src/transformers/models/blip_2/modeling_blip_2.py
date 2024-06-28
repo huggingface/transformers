@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch BLIP-2 model."""
+"""PyTorch BLIP-2 model."""
 
 import math
 from dataclasses import dataclass
@@ -317,7 +317,7 @@ class Blip2PreTrainedModel(PreTrainedModel):
                 module.bias.data.zero_()
 
         if isinstance(module, Blip2VisionEmbeddings):
-            if hasattr(self.config, "vision_config"):
+            if hasattr(self.config, "vision_config") and not isinstance(self.config, Blip2VisionConfig):
                 factor = self.config.vision_config.initializer_range
             nn.init.trunc_normal_(module.position_embedding, mean=0.0, std=factor)
             nn.init.trunc_normal_(module.class_embedding, mean=0.0, std=factor)

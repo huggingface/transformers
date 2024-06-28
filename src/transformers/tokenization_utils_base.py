@@ -28,6 +28,7 @@ from collections.abc import Mapping, Sized
 from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import lru_cache
+from inspect import isfunction
 from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
 
 import numpy as np
@@ -47,6 +48,7 @@ from .utils import (
     copy_func,
     download_url,
     extract_commit_hash,
+    get_json_schema,
     is_flax_available,
     is_jax_tensor,
     is_mlx_available,
@@ -72,8 +74,6 @@ if TYPE_CHECKING:
         import tensorflow as tf
     if is_flax_available():
         import jax.numpy as jnp  # noqa: F401
-    from .pipelines.conversational import Conversation
-
 
 if is_tokenizers_available():
     from tokenizers import AddedToken
@@ -126,6 +126,8 @@ TextInputPair = Tuple[str, str]
 PreTokenizedInputPair = Tuple[List[str], List[str]]
 EncodedInputPair = Tuple[List[int], List[int]]
 
+# Define type aliases for text-related non-text modalities
+AudioInput = Union["np.ndarray", "torch.Tensor", List["np.ndarray"], List["torch.Tensor"]]
 
 # Slow tokenizers used to be saved in three separated files
 SPECIAL_TOKENS_MAP_FILE = "special_tokens_map.json"
@@ -1538,10 +1540,10 @@ INIT_TOKENIZER_DOCSTRING = r"""
             Whether or not the model should cleanup the spaces that were added when splitting the input text during the
             tokenization process.
         split_special_tokens (`bool`, *optional*, defaults to `False`):
-            Whether or not the special tokens should be split during the tokenization process. The default behavior is
-            to not split special tokens. This means that if `<s>` is the `bos_token`, then `tokenizer.tokenize("<s>") =
-            ['<s>`]. Otherwise, if `split_special_tokens=True`, then `tokenizer.tokenize("<s>")` will be give `['<',
-            's', '>']`. This argument is only supported for `slow` tokenizers for the moment.
+            Whether or not the special tokens should be split during the tokenization process. Passing will affect the
+            internal state of the tokenizer. The default behavior is to not split special tokens. This means that if
+            `<s>` is the `bos_token`, then `tokenizer.tokenize("<s>") = ['<s>`]. Otherwise, if
+            `split_special_tokens=True`, then `tokenizer.tokenize("<s>")` will be give `['<','s', '>']`.
 """
 
 
@@ -1684,7 +1686,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
     def apply_chat_template(
         self,
-        conversation: Union[List[Dict[str, str]], List[List[Dict[str, str]]], "Conversation"],
+        conversation: Union[List[Dict[str, str]], List[List[Dict[str, str]]]],
+        tools: Optional[List[Dict]] = None,
+        documents: Optional[List[Dict[str, str]]] = None,
         chat_template: Optional[str] = None,
         add_generation_prompt: bool = False,
         tokenize: bool = True,
@@ -1703,10 +1707,23 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         to the default_chat_template specified at the class level.
 
         Args:
-            conversation (Union[List[Dict[str, str]], List[List[Dict[str, str]]], "Conversation"]): A list of dicts
+            conversation (Union[List[Dict[str, str]], List[List[Dict[str, str]]]]): A list of dicts
                 with "role" and "content" keys, representing the chat history so far.
-            chat_template (str, *optional*): A Jinja template to use for this conversion. If
-                this is not passed, the model's default chat template will be used instead.
+            tools (`List[Dict]`, *optional*):
+                A list of tools (callable functions) that will be accessible to the model. If the template does not
+                support function calling, this argument will have no effect. Each tool should be passed as a JSON Schema,
+                giving the name, description and argument types for the tool. See our
+                [chat templating guide](https://huggingface.co/docs/transformers/main/en/chat_templating#automated-function-conversion-for-tool-use)
+                for more information.
+            documents (`List[Dict[str, str]]`, *optional*):
+                A list of dicts representing documents that will be accessible to the model if it is performing RAG
+                (retrieval-augmented generation). If the template does not support RAG, this argument will have no
+                effect. We recommend that each document should be a dict containing "title" and "text" keys. Please
+                see the RAG section of the [chat templating guide](https://huggingface.co/docs/transformers/main/en/chat_templating#arguments-for-RAG)
+                for examples of passing documents with chat templates.
+            chat_template (`str`, *optional*):
+                A Jinja template to use for this conversion. It is usually not necessary to pass anything to this
+                argument, as the model's template will be used by default.
             add_generation_prompt (bool, *optional*): Whether to end the prompt with the token(s) that indicate
                 the start of an assistant message. This is useful when you want to generate a response from the model.
                 Note that this argument will be passed to the chat template, and so it must be supported in the
@@ -1764,16 +1781,20 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 chat_template = template_dict[chat_template]
                 if using_default_dict:
                     using_default_template = True
-            elif chat_template is None and "default" in template_dict:
-                chat_template = template_dict["default"]
+            elif chat_template is None:
+                if tools is not None and "tool_use" in template_dict:
+                    chat_template = template_dict["tool_use"]
+                elif "default" in template_dict:
+                    chat_template = template_dict["default"]
+                else:
+                    raise ValueError(
+                        "This model has multiple chat templates with no default specified! Please either pass a chat "
+                        "template or the name of the template you wish to use to the `chat_template` argument. Available "
+                        f"template names are {sorted(template_dict.keys())}."
+                    )
                 if using_default_dict:
                     using_default_template = True
-            elif chat_template is None:
-                raise ValueError(
-                    "This model has multiple chat templates with no default specified! Please either pass a chat "
-                    "template or the name of the template you wish to use to the `chat_template` argument. Available "
-                    f"template names are {sorted(template_dict.keys())}."
-                )
+
         elif chat_template is None:
             # These are the cases when the model has a single template
             # priority: `chat_template` argument > `tokenizer.chat_template` > `tokenizer.default_chat_template
@@ -1804,6 +1825,27 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             conversations = [conversation]
             is_batched = False
 
+        # We accept either JSON schemas or functions for tools. If we get functions, we convert them to schemas
+        if tools is not None:
+            tool_schemas = []
+            for tool in tools:
+                if isinstance(tool, dict):
+                    tool_schemas.append(tool)
+                elif isfunction(tool):
+                    tool_schemas.append(get_json_schema(tool))
+                else:
+                    raise ValueError(
+                        "Tools should either be a JSON schema, or a callable function with type hints "
+                        "and a docstring suitable for auto-conversion to a schema."
+                    )
+        else:
+            tool_schemas = None
+
+        if documents is not None:
+            for document in documents:
+                if not isinstance(document, dict):
+                    raise TypeError("Documents should be a list of dicts with 'title' and 'text' keys!")
+
         rendered = []
         template_kwargs = {**self.special_tokens_map, **kwargs}  # kwargs overwrite special tokens if both are present
         for chat in conversations:
@@ -1811,7 +1853,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 # Indicates it's a Conversation object
                 chat = chat.messages
             rendered_chat = compiled_template.render(
-                messages=chat, add_generation_prompt=add_generation_prompt, **template_kwargs
+                messages=chat,
+                tools=tool_schemas,
+                documents=documents,
+                add_generation_prompt=add_generation_prompt,
+                **template_kwargs,
             )
             rendered.append(rendered_chat)
 
@@ -1844,15 +1890,21 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         except ImportError:
             raise ImportError("apply_chat_template requires jinja2 to be installed.")
 
-        if version.parse(jinja2.__version__) < version.parse("3.0.0"):
+        if version.parse(jinja2.__version__) < version.parse("3.1.0"):
             raise ImportError(
-                "apply_chat_template requires jinja2>=3.0.0 to be installed. Your version is " f"{jinja2.__version__}."
+                "apply_chat_template requires jinja2>=3.1.0 to be installed. Your version is " f"{jinja2.__version__}."
             )
 
         def raise_exception(message):
             raise TemplateError(message)
 
+        def tojson(x, ensure_ascii=False, indent=None, separators=None, sort_keys=False):
+            # We override the built-in tojson filter because Jinja's default filter escapes HTML characters
+            # We also expose some options like custom indents and separators
+            return json.dumps(x, ensure_ascii=ensure_ascii, indent=indent, separators=separators, sort_keys=sort_keys)
+
         jinja_env = ImmutableSandboxedEnvironment(trim_blocks=True, lstrip_blocks=True)
+        jinja_env.filters["tojson"] = tojson
         jinja_env.globals["raise_exception"] = raise_exception
         return jinja_env.from_string(chat_template)
 
@@ -2284,11 +2336,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                             # We keep this new value and ignore the one stored in the special_tokens_map_file
                             continue
                         if isinstance(value, dict):
-                            value = AddedToken(**value, special=True)
+                            value["special"] = True
+                            value = AddedToken(**value)
                         elif key == "additional_special_tokens" and isinstance(value, list):
                             additional_special_tokens = init_kwargs.pop("additional_special_tokens", []) or []
                             for token in value:
-                                token = AddedToken(**token, special=True) if isinstance(token, dict) else token
+                                if isinstance(token, dict):
+                                    token["special"] = True
+                                    token = AddedToken(**token)
                                 if token not in additional_special_tokens:
                                     additional_special_tokens.append(token)
                             value = additional_special_tokens
@@ -2876,6 +2931,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             "return_special_tokens_mask": return_special_tokens_mask,
             "return_offsets_mapping": return_offsets_mapping,
             "return_length": return_length,
+            "split_special_tokens": kwargs.pop("split_special_tokens", self.split_special_tokens),
             "verbose": verbose,
         }
         all_kwargs.update(kwargs)
@@ -2920,6 +2976,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
+        split_special_tokens: bool = False,
         **kwargs,
     ) -> BatchEncoding:
         # Input type checking for clearer error
@@ -2989,6 +3046,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 return_offsets_mapping=return_offsets_mapping,
                 return_length=return_length,
                 verbose=verbose,
+                split_special_tokens=split_special_tokens,
                 **kwargs,
             )
         else:
@@ -3010,6 +3068,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 return_offsets_mapping=return_offsets_mapping,
                 return_length=return_length,
                 verbose=verbose,
+                split_special_tokens=split_special_tokens,
                 **kwargs,
             )
 
@@ -3083,6 +3142,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             return_offsets_mapping=return_offsets_mapping,
             return_length=return_length,
             verbose=verbose,
+            split_special_tokens=kwargs.pop("split_special_tokens", self.split_special_tokens),
             **kwargs,
         )
 
@@ -3105,6 +3165,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
+        split_special_tokens: bool = False,
         **kwargs,
     ) -> BatchEncoding:
         raise NotImplementedError
@@ -3135,6 +3196,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
+        split_special_tokens: bool = False,
         **kwargs,
     ) -> BatchEncoding:
         """
@@ -3180,6 +3242,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             return_offsets_mapping=return_offsets_mapping,
             return_length=return_length,
             verbose=verbose,
+            split_special_tokens=split_special_tokens,
             **kwargs,
         )
 
@@ -3208,6 +3271,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
+        split_special_tokens: bool = False,
         **kwargs,
     ) -> BatchEncoding:
         raise NotImplementedError
@@ -3581,7 +3645,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 and `convert_tokens_to_ids` methods.
             num_tokens_to_remove (`int`, *optional*, defaults to 0):
                 Number of tokens to remove using the truncation strategy.
-            truncation_strategy (`str` or [`~tokenization_utils_base.TruncationStrategy`], *optional*, defaults to `False`):
+            truncation_strategy (`str` or [`~tokenization_utils_base.TruncationStrategy`], *optional*, defaults to `'longest_first'`):
                 The strategy to follow for truncation. Can be:
 
                 - `'longest_first'`: Truncate to a maximum length specified with the argument `max_length` or to the

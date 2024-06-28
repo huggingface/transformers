@@ -7,7 +7,7 @@
       title: Installation
   title: Démarrer
 - sections:
-    - local: in_translation
+    - local: tutoriel_pipeline
       title: Pipelines pour l'inférence
     - local: autoclass_tutorial
       title: Chargement d'instances pré-entraînées avec une AutoClass

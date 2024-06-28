@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
- Feature extraction saving/loading class for common feature extractors.
+Feature extraction saving/loading class for common feature extractors.
 """
 
 import copy

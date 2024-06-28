@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch VideoLlava model."""
+"""PyTorch VideoLlava model."""
+
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
@@ -122,6 +123,7 @@ class VideoLlavaPreTrainedModel(PreTrainedModel):
     config_class = VideoLlavaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["VideoLlavaVisionAttention"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
     _no_split_modules = ["VideoLlavaVisionAttention"]
@@ -285,7 +287,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
         num_images, num_image_patches, embed_dim = visual_features.shape
         batch_size, sequence_length = input_ids.shape
         left_padding = not torch.sum(input_ids[:, -1] == torch.tensor(self.pad_token_id))
-        special_vision_token = self.config.video_token_index if num_frames == 8 else self.config.image_token_index
+        special_vision_token = self.config.video_token_index if num_frames > 1 else self.config.image_token_index
 
         # 1. Create a mask to know where special image tokens are
         special_image_token_mask = input_ids == special_vision_token
@@ -373,14 +375,13 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
         # videos do not need to select features and it's always "full" (as it is done in the orig implementation)
         if pixel_values_videos is not None:
             batch_size_vid, num_frames, channels, height, width = pixel_values_videos.shape
-            if num_frames != 8:
-                raise ValueError(f"Video pixel values should have exactly `8` frames but foung `{num_frames}`")
 
             pixel_values = pixel_values_videos.reshape(batch_size_vid * num_frames, channels, height, width)
             video_outputs = self.video_tower(pixel_values, output_hidden_states=True)
             video_outputs = video_outputs.hidden_states[vision_feature_layer].squeeze(1)
         else:
             video_outputs = None
+            num_frames = 0
 
         if pixel_values_images is not None:
             image_outputs = self.image_tower(pixel_values_images, output_hidden_states=True)
@@ -395,7 +396,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
         else:
             image_outputs = None
 
-        return image_outputs, video_outputs
+        return image_outputs, video_outputs, num_frames
 
     @add_start_docstrings_to_model_forward(VIDEO_LLAVA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=VideoLlavaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
@@ -473,22 +474,23 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
         >>> # Generate
         >>> generate_ids = model.generate(**inputs, max_length=80)
         >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        'USER:  Why is this video funny? ASSISTANT: The video is funny because the baby is sitting on the bed and reading a book, which is an unusual and amusing sight.Ъ'
+        "USER:  Why is this video funny? ASSISTANT: The video is funny because the baby is playing with a Wii remote while sitting on the floor, and the baby is wearing glasses.Ъ. The baby's actions are amusing because it is a young child trying to interact with a video game, which is not a typical activity for a"
 
         >>> # to generate from image and video mix
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> prompt = [
-                "USER: <image> How many cats are there in the image? ASSISTANT:",
-                "USER: <video>Why is this video funny? ASSISTANT:"
-            ]
+        ...     "USER: <image> How many cats do you see? ASSISTANT:",
+        ...     "USER: <video>Why is this video funny? ASSISTANT:"
+        ... ]
         >>> inputs = processor(text=prompt, images=image, videos=clip, padding=True, return_tensors="pt")
 
         >>> # Generate
         >>> generate_ids = model.generate(**inputs, max_length=50)
         >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
-        ['USER:   How many cats are there in the image? ASSISTANT: There are two cats in the image.\nHow many cats are sleeping on the couch?\nThere are', 'USER:  Why is this video funny? ASSISTANT: The video is funny because the baby is sitting on the bed and reading a book, which is an unusual and amusing']
-        ```"""
+        ['USER:   How many cats do you see? ASSISTANT: There are two cats visible in the image. (or three, if you count the one in the background).', 'USER:  Why is this video funny? ASSISTANT: The video is funny because it shows a baby sitting on a bed and playing with a Wii remote.Ъ. The baby is holding the remote']
+        ```
+        """
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -510,7 +512,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
 
             # 2. Merge text and images
             if (pixel_values_images is not None or pixel_values_videos is not None) and input_ids.shape[1] != 1:
-                image_outputs, video_outputs = self._get_vision_features(
+                image_outputs, video_outputs, num_frames = self._get_vision_features(
                     pixel_values_images=pixel_values_images,
                     pixel_values_videos=pixel_values_videos,
                     vision_feature_layer=vision_feature_layer,
@@ -543,7 +545,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
                         input_ids,
                         attention_mask,
                         labels,
-                        num_frames=8,
+                        num_frames=num_frames,
                     )
             else:
                 # In case input_ids.shape[1] == 1 & past_key_values != None, we are in the case of

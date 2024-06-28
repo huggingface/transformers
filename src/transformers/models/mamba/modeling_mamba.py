@@ -244,6 +244,7 @@ class MambaMixer(nn.Module):
         # 2. Convolution sequence transformation
         if cache_params is not None:
             ssm_state = cache_params.ssm_states[self.layer_idx].clone()
+            ssm_state = ssm_state.to(hidden_states.device)
             if cache_params.seqlen_offset > 0:
                 conv_state = cache_params.conv_states[self.layer_idx]                   # [batch, intermediate_size, conv_kernel_size]
                 conv_state = torch.roll(conv_state, shifts=-1, dims=-1)
@@ -353,6 +354,7 @@ class MambaPreTrainedModel(PreTrainedModel):
     base_model_prefix = "backbone"
     _no_split_modules = ["MambaBlock"]
     supports_gradient_checkpointing = True
+    _is_stateful = True
 
     def _init_weights(self, module):
         """Initialize the weights."""
@@ -632,7 +634,12 @@ class MambaForCausalLM(MambaPreTrainedModel):
         return model_kwargs
 
     def prepare_inputs_for_generation(
-        self, input_ids, cache_params: Optional[MambaCache] = None, inputs_embeds=None, attention_mask=None, **kwargs
+        self,
+        input_ids,
+        inputs_embeds=None,
+        use_cache=None,
+        cache_params: Optional[MambaCache] = None,
+        **kwargs,
     ):
         # only last token for inputs_ids if the state is passed along.
         if cache_params is not None:
@@ -643,7 +650,12 @@ class MambaForCausalLM(MambaPreTrainedModel):
         else:
             model_inputs = {"input_ids": input_ids}
 
-        model_inputs["cache_params"] = cache_params
+        model_inputs.update(
+            {
+                "cache_params": cache_params,
+                "use_cache": use_cache,
+            }
+        )
         return model_inputs
 
     @add_start_docstrings_to_model_forward(MAMBA_INPUTS_DOCSTRING)

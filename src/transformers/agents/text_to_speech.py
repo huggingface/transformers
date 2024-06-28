@@ -51,7 +51,9 @@ class TextToSpeechTool(PipelineTool):
             if not is_datasets_available():
                 raise ImportError("Datasets needs to be installed if not passing speaker embeddings.")
 
-            embeddings_dataset = load_dataset("Matthijs/cmu-arctic-xvectors", split="validation")
+            embeddings_dataset = load_dataset(
+                "Matthijs/cmu-arctic-xvectors", split="validation", trust_remote_code=True
+            )
             speaker_embeddings = torch.tensor(embeddings_dataset[7305]["xvector"]).unsqueeze(0)
 
         return {"input_ids": inputs["input_ids"], "speaker_embeddings": speaker_embeddings}

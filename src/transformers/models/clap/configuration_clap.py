@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" CLAP model configuration"""
+"""CLAP model configuration"""
 
 import os
 from typing import Union
@@ -342,9 +342,9 @@ class ClapConfig(PretrainedConfig):
         audio_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`ClapAudioConfig`].
         logit_scale_init_value (`float`, *optional*, defaults to 14.29):
-            The inital value of the *logit_scale* paramter. Default is used as per the original CLAP implementation.
+            The initial value of the *logit_scale* parameter. Default is used as per the original CLAP implementation.
         projection_dim (`int`, *optional*, defaults to 512):
-            Dimentionality of text and audio projection layers.
+            Dimensionality of text and audio projection layers.
         projection_hidden_act (`str`, *optional*, defaults to `"relu"`):
             Activation function for the projection layers.
         initializer_factor (`float`, *optional*, defaults to 1.0):

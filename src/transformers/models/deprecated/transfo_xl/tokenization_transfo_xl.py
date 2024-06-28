@@ -14,9 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
- Tokenization classes for Transformer XL model. Adapted from https://github.com/kimiyoung/transformer-xl.
+Tokenization classes for Transformer XL model. Adapted from https://github.com/kimiyoung/transformer-xl.
 """
-
 
 import glob
 import os

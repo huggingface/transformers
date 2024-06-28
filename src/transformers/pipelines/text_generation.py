@@ -137,11 +137,10 @@ class TextGenerationPipeline(Pipeline):
 
         add_special_tokens = False
         if "add_special_tokens" in generate_kwargs:
-            preprocess_params["add_special_tokens"] = generate_kwargs["add_special_tokens"]
-            add_special_tokens = generate_kwargs["add_special_tokens"]
+            add_special_tokens = preprocess_params["add_special_tokens"] = generate_kwargs.pop("add_special_tokens")
 
         if "padding" in generate_kwargs:
-            preprocess_params["padding"] = generate_kwargs["padding"]
+            preprocess_params["padding"] = generate_kwargs.pop("padding")
 
         if truncation is not None:
             preprocess_params["truncation"] = truncation
@@ -240,7 +239,7 @@ class TextGenerationPipeline(Pipeline):
                   truncate a lot of the prompt and not suitable when generation exceed the model capacity)
             generate_kwargs (`dict`, *optional*):
                 Additional keyword arguments to pass along to the generate method of the model (see the generate method
-                corresponding to your framework [here](./model#generative-models)).
+                corresponding to your framework [here](./main_classes/text_generation)).
 
         Return:
             A list or a list of lists of `dict`: Returns one of the following dictionaries (cannot return a combination

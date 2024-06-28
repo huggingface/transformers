@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch InstructBLIP model."""
+"""PyTorch InstructBLIP model."""
 
 import math
 from dataclasses import dataclass
@@ -324,7 +324,7 @@ class InstructBlipPreTrainedModel(PreTrainedModel):
                 module.bias.data.zero_()
 
         if isinstance(module, InstructBlipVisionEmbeddings):
-            if hasattr(self.config, "vision_config"):
+            if hasattr(self.config, "vision_config") and not isinstance(self.config, InstructBlipVisionConfig):
                 factor = self.config.vision_config.initializer_range
             nn.init.trunc_normal_(module.position_embedding, mean=0.0, std=factor)
             nn.init.trunc_normal_(module.class_embedding, mean=0.0, std=factor)

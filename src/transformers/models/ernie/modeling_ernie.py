@@ -14,7 +14,6 @@
 # limitations under the License.
 """PyTorch ERNIE model."""
 
-
 import math
 import warnings
 from dataclasses import dataclass

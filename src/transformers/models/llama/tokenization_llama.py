@@ -19,6 +19,7 @@
 # limitations under the License.
 
 """Tokenization classes for LLaMA."""
+
 import os
 from shutil import copyfile
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
@@ -157,7 +158,8 @@ class LlamaTokenizer(PreTrainedTokenizer):
                 " expected, and simply means that the `legacy` (previous) behavior will be used so nothing changes for you."
                 " If you want to use the new behaviour, set `legacy=False`. This should only be set if you understand what it"
                 " means, and thoroughly read the reason why this was added as explained in"
-                " https://github.com/huggingface/transformers/pull/24565"
+                " https://github.com/huggingface/transformers/pull/24565 - if you loaded a llama tokenizer from a GGUF file"
+                " you can ignore this message"
             )
             legacy = True
 

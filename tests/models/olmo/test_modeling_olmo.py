@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch OLMo model. """
+"""Testing suite for the PyTorch OLMo model."""
 
 import unittest
 
@@ -301,7 +301,7 @@ class OlmoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip("OLMo does not support head pruning.")
+    @unittest.skip(reason="OLMo does not support head pruning.")
     def test_headmasking(self):
         pass
 
@@ -311,7 +311,7 @@ class OlmoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip("OLMo buffers include complex numbers, which breaks this test")
+    @unittest.skip(reason="OLMo buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):
         pass
 

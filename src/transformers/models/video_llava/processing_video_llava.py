@@ -16,7 +16,6 @@
 Processor class for VideoLlava.
 """
 
-
 from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature

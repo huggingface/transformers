@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch TrOCR model. """
+"""Testing suite for the PyTorch TrOCR model."""
 
 import unittest
 
@@ -170,15 +170,15 @@ class TrOCRStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, P
         self.model_tester = TrOCRStandaloneDecoderModelTester(self, is_training=False)
         self.config_tester = ConfigTester(self, config_class=TrOCRConfig)
 
-    # not implemented currently
+    @unittest.skip(reason="Not yet implemented")
     def test_inputs_embeds(self):
         pass
 
-    # trocr has no base model
+    @unittest.skip(reason="trocr has no base model")
     def test_save_load_fast_init_from_base(self):
         pass
 
-    # trocr has no base model
+    @unittest.skip(reason="trocr has no base model")
     def test_save_load_fast_init_to_base(self):
         pass
 
@@ -189,10 +189,10 @@ class TrOCRStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, P
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past(*config_and_inputs)
 
-    # decoder cannot keep gradients
+    @unittest.skip(reason="Decoder cannot keep gradients")
     def test_retain_grad_hidden_states_attentions(self):
         return
 
-    @unittest.skip("The model doesn't support left padding")  # and it's not used enough to be worth fixing :)
+    @unittest.skip(reason="The model doesn't support left padding")  # and it's not used enough to be worth fixing :)
     def test_left_padding_compatibility(self):
         pass

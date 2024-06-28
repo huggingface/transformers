@@ -72,6 +72,12 @@ class CircleCIJob:
         if self.docker_image is None:
             # Let's avoid changing the default list and make a copy.
             self.docker_image = copy.deepcopy(DEFAULT_DOCKER_IMAGE)
+        else:
+            # BIG HACK WILL REMOVE ONCE FETCHER IS UPDATED
+            print(os.environ.get("GIT_COMMIT_MESSAGE"))
+            if "[build-ci-image]" in os.environ.get("GIT_COMMIT_MESSAGE", "") or os.environ.get("GIT_COMMIT_MESSAGE", "") == "dev-ci":
+                self.docker_image[0]["image"] = f"{self.docker_image[0]['image']}:dev"
+            print(f"Using {self.docker_image} docker image")
         if self.install_steps is None:
             self.install_steps = []
         if self.pytest_options is None:
@@ -149,7 +155,7 @@ class CircleCIJob:
                     elif self.name in ["flax","torch","tf"]:
                         name = self.name if self.name != "torch" else ""
                         if self.name == "torch":
-                            all_tests = glob.glob(f"tests/models/**/test_modeling_{name}*.py", recursive=True) 
+                            all_tests = glob.glob(f"tests/models/**/test_modeling_{name}*.py", recursive=True)
                             filtered = [k for k in all_tests if ("_tf_") not in k and "_flax_" not in k]
                             expanded_tests.extend(filtered)
                         else:
@@ -157,7 +163,7 @@ class CircleCIJob:
                     else:
                         expanded_tests.extend(glob.glob("tests/models/**/test_modeling*.py", recursive=True))
                 elif test == "tests/pipelines":
-                    expanded_tests.extend(glob.glob("tests/models/**/test_modeling*.py", recursive=True)) 
+                    expanded_tests.extend(glob.glob("tests/models/**/test_modeling*.py", recursive=True))
                 else:
                     expanded_tests.append(test)
             tests = " ".join(expanded_tests)
@@ -320,7 +326,7 @@ examples_tensorflow_job = CircleCIJob(
     "examples_tensorflow",
     cache_name="tensorflow_examples",
     docker_image=[{"image":"huggingface/transformers-examples-tf"}],
-    install_steps=["uv venv && uv pip install ."],
+    install_steps=["uv venv && uv pip install . && uv pip install -r examples/tensorflow/_tests_requirements.txt"],
     parallelism=8
 )
 

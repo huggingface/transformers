@@ -21,6 +21,7 @@ from packaging import version
 
 from .. import __version__
 from .backbone_utils import BackboneConfigMixin, BackboneMixin
+from .chat_template_utils import DocstringParsingException, TypeHintParsingException, get_json_schema
 from .constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from .doc import (
     add_code_sample_docstrings,
@@ -41,6 +42,7 @@ from .generic import (
     cached_property,
     can_return_loss,
     expand_dims,
+    filter_out_non_signature_kwargs,
     find_labels,
     flatten_dict,
     infer_framework,
@@ -58,6 +60,8 @@ from .generic import (
     tensor_size,
     to_numpy,
     to_py_obj,
+    torch_float,
+    torch_int,
     transpose,
     working_or_temp_dir,
 )
@@ -188,6 +192,7 @@ from .import_utils import (
     is_torch_bf16_gpu_available,
     is_torch_compile_available,
     is_torch_cuda_available,
+    is_torch_deterministic,
     is_torch_fp16_available_on_device,
     is_torch_fx_available,
     is_torch_fx_proxy,

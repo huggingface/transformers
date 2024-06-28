@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch LayoutLM model."""
-
+"""PyTorch LayoutLM model."""
 
 import math
 from typing import Optional, Tuple, Union
@@ -1295,7 +1294,7 @@ class LayoutLMForQuestionAnswering(LayoutLMPreTrainedModel):
         >>> tokenizer = AutoTokenizer.from_pretrained("impira/layoutlm-document-qa", add_prefix_space=True)
         >>> model = LayoutLMForQuestionAnswering.from_pretrained("impira/layoutlm-document-qa", revision="1e3ebac")
 
-        >>> dataset = load_dataset("nielsr/funsd", split="train")
+        >>> dataset = load_dataset("nielsr/funsd", split="train", trust_remote_code=True)
         >>> example = dataset[0]
         >>> question = "what's his name?"
         >>> words = example["words"]

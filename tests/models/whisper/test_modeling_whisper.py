@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Whisper model. """
+"""Testing suite for the PyTorch Whisper model."""
 
 import copy
 import inspect
@@ -35,6 +35,7 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_fp16,
     require_torch_gpu,
+    require_torch_multi_gpu,
     require_torchaudio,
     slow,
     torch_device,
@@ -503,9 +504,11 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 model(**inputs)[0]
 
     # training is not supported yet
+    @unittest.skip(reason="Training is not supported yet")
     def test_training(self):
         pass
 
+    @unittest.skip(reason="Training is not supported yet")
     def test_training_gradient_checkpointing(self):
         pass
 
@@ -521,6 +524,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
+    @unittest.skip
     def test_generate_with_head_masking(self):
         pass
 
@@ -735,7 +739,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             inputs_dict,
         ) = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.test_resize_embeddings:
-            return
+            self.skipTest(reason="test_resize_embeddings is False")
 
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
@@ -783,13 +787,13 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             inputs_dict,
         ) = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.test_resize_embeddings:
-            return
+            self.skipTest(reason="test_resize_embeddings is False")
 
         original_config.tie_word_embeddings = False
 
         # if model cannot untied embeddings -> leave test
         if original_config.tie_word_embeddings:
-            return
+            self.skipTest(reason="Model cannot untie embeddings")
 
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
@@ -826,6 +830,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             model(**self._prepare_for_class(inputs_dict, model_class))
 
+    @unittest.skip
     def test_generate_without_input_ids(self):
         pass
 
@@ -900,7 +905,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn_2:
-                return
+                self.skipTest(reason="Model does not support Flash Attention 2")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
@@ -946,7 +951,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn_2:
-                return
+                self.skipTest(reason="Model does not support flash_attention_2")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
@@ -995,7 +1000,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
-            return
+            self.skipTest(reason="test_torchscript is set to False")
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.torchscript = True
@@ -1095,8 +1100,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 fx_model_class_name = "Flax" + model_class.__name__
 
                 if not hasattr(transformers, fx_model_class_name):
-                    # no flax model exists for this class
-                    return
+                    self.skipTest(reason="No Flax model exists for this class")
 
                 # Output all for aggressive testing
                 config.output_hidden_states = True
@@ -1168,8 +1172,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 fx_model_class_name = "Flax" + model_class.__name__
 
                 if not hasattr(transformers, fx_model_class_name):
-                    # no flax model exists for this class
-                    return
+                    self.skipTest(reason="No Flax model exists for this class")
 
                 # Output all for aggressive testing
                 config.output_hidden_states = True
@@ -1551,7 +1554,9 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         return WhisperProcessor.from_pretrained("openai/whisper-base")
 
     def _load_datasamples(self, num_samples):
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        ds = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
+        )
         # automatic decoding with librispeech
         speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
 
@@ -1762,7 +1767,9 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
         model.to(torch_device)
 
-        ds = load_dataset("facebook/multilingual_librispeech", "german", split="test", streaming=True)
+        ds = load_dataset(
+            "facebook/multilingual_librispeech", "german", split="test", streaming=True, trust_remote_code=True
+        )
         ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
 
         input_speech = next(iter(ds))["audio"]["array"]
@@ -1829,7 +1836,14 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model.to(torch_device)
 
         token = os.getenv("HF_HUB_READ_TOKEN", True)
-        ds = load_dataset("mozilla-foundation/common_voice_6_1", "ja", split="test", streaming=True, token=token)
+        ds = load_dataset(
+            "mozilla-foundation/common_voice_6_1",
+            "ja",
+            split="test",
+            streaming=True,
+            token=token,
+            trust_remote_code=True,
+        )
         ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
 
         input_speech = next(iter(ds))["audio"]["array"]
@@ -2357,7 +2371,9 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         )
         assistant_model.to(torch_device)
 
-        dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        dataset = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
+        )
         sample = dataset[0]["audio"]
 
         input_features = processor(sample["array"], return_tensors="pt", sampling_rate=16_000).input_features
@@ -2406,7 +2422,9 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         )
         assistant_model.to(torch_device)
 
-        dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        dataset = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
+        )
         sample = dataset[0]["audio"]
 
         input_features = processor(sample["array"], return_tensors="pt", sampling_rate=16_000).input_features
@@ -2447,7 +2465,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
         model = model.to(torch_device)
 
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean")
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", trust_remote_code=True)
         one_audio = np.concatenate([x["array"] for x in ds["validation"]["audio"]], dtype=np.float32)
 
         input_features = processor(
@@ -2483,7 +2501,9 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         prompt = "Mr. Kilter, Brionno."  # let's force Quilter -> Kilter, Brion -> Brionno
         prompt_ids = processor.get_prompt_ids(prompt, return_tensors="pt").to(torch_device)
 
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:-1]")
+        ds = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:-1]", trust_remote_code=True
+        )
         one_audio = np.concatenate([x["array"] for x in ds["audio"]], dtype=np.float32)
 
         first_text = ds[0]["text"].lower()
@@ -2534,7 +2554,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
         model = model.to(torch_device)
 
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean")
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", trust_remote_code=True)
         one_audio = np.concatenate([x["array"] for x in ds["validation"]["audio"]], dtype=np.float32)
 
         input_features = processor(
@@ -2567,7 +2587,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
         model = model.to(torch_device)
 
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean")
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", trust_remote_code=True)
         one_audio = np.concatenate([x["array"] for x in ds["validation"]["audio"]], dtype=np.float32)
 
         input_features = processor(
@@ -2609,7 +2629,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
         model = model.to(torch_device)
 
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean")
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", trust_remote_code=True)
         one_audio = np.concatenate([x["array"] for x in ds["validation"]["audio"]], dtype=np.float32)
         audios = []
         audios.append(one_audio[110000:])
@@ -2663,7 +2683,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
         model = model.to(torch_device)
 
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean")
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", trust_remote_code=True)
         one_audio = np.concatenate([x["array"] for x in ds["validation"]["audio"]], dtype=np.float32)
         audios = []
         audios.append(one_audio[110000:])
@@ -2866,6 +2886,81 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         for i in range(num_samples):
             assert decoded_all[i] == EXPECTED_TEXT[i]
 
+    @require_torch_gpu
+    @slow
+    def test_whisper_empty_longform(self):
+        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
+        model = model.to(torch_device)
+
+        ds = load_dataset("distil-whisper/meanwhile", "default")["test"]
+        ds = ds.cast_column("audio", Audio(sampling_rate=16000))
+
+        num_samples = 8
+
+        audio = ds[:num_samples]["audio"]
+        audios = [x["array"] for x in audio]
+        audios[0][:] = np.zeros(audios[0].shape)
+
+        inputs = processor(
+            audios,
+            return_tensors="pt",
+            truncation=False,
+            padding="longest",
+            return_attention_mask=True,
+            sampling_rate=16_000,
+        )
+        inputs = inputs.to(device=torch_device)
+
+        gen_kwargs = {
+            "no_speech_threshold": 0.2,
+            "temperature": (0.0,),
+            "logprob_threshold": 0.0,  # Ignore logprob, use only no-speech prob
+            "num_beams": 5,
+            "language": "fr",
+            "task": "transcribe",
+        }
+
+        torch.manual_seed(0)
+        model.generate(**inputs, **gen_kwargs)
+
+    @require_torch_multi_gpu
+    @slow
+    def test_whisper_empty_longform_multi_gpu(self):
+        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny", device_map="auto")
+
+        ds = load_dataset("distil-whisper/meanwhile", "default")["test"]
+        ds = ds.cast_column("audio", Audio(sampling_rate=16000))
+
+        num_samples = 8
+
+        audio = ds[:num_samples]["audio"]
+        audios = [x["array"] for x in audio]
+        audios[0][:] = np.zeros(audios[0].shape)
+
+        inputs = processor(
+            audios,
+            return_tensors="pt",
+            truncation=False,
+            padding="longest",
+            return_attention_mask=True,
+            sampling_rate=16_000,
+        )
+        inputs = inputs.to(device=model.device)
+
+        gen_kwargs = {
+            "no_speech_threshold": 0.2,
+            "temperature": (0.0,),
+            "logprob_threshold": 0.0,  # Ignore logprob, use only no-speech prob
+            "num_beams": 5,
+            "language": "fr",
+            "task": "transcribe",
+        }
+
+        torch.manual_seed(0)
+        model.generate(**inputs, **gen_kwargs)
+
 
 def prepare_whisper_encoder_inputs_dict(config, input_features, head_mask=None):
     if head_mask is None:
@@ -3040,8 +3135,9 @@ class WhisperEncoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
     def test_model_parallelism(self):
         pass
 
-    # input embeds is meaningless for an encoder-only acoustic model
+    @unittest.skip(reason="Not applicable for an encoder-only acoustic model")
     def test_inputs_embeds(self):
+        # input embeds is meaningless for an encoder-only acoustic model
         pass
 
     # the equivalent test is passing the encoder outputs directly to the model
@@ -3077,7 +3173,7 @@ class WhisperEncoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
             self.assertTrue((outputs_embeds == outputs).all())
 
     # Needs to override as the encoder input embedding is a Conv1d
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -3088,6 +3184,7 @@ class WhisperEncoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
             self.assertTrue(x is None or isinstance(x, torch.nn.Conv1d))
 
     # WhisperEncoder cannot resize token embeddings since it has no tokens embeddings
+    @unittest.skip(reason="Model has no tokens embeds")
     def test_resize_tokens_embeddings(self):
         pass
 
@@ -3101,8 +3198,7 @@ class WhisperEncoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
                 fx_model_class_name = "Flax" + model_class.__name__
 
                 if not hasattr(transformers, fx_model_class_name):
-                    # no flax model exists for this class
-                    return
+                    self.skipTest(reason="Flax model does not exist")
 
                 # Output all for aggressive testing
                 config.output_hidden_states = True
@@ -3174,8 +3270,7 @@ class WhisperEncoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
                 fx_model_class_name = "Flax" + model_class.__name__
 
                 if not hasattr(transformers, fx_model_class_name):
-                    # no flax model exists for this class
-                    return
+                    self.skip("Flax model does not exist")
 
                 # Output all for aggressive testing
                 config.output_hidden_states = True
@@ -3469,17 +3564,16 @@ class WhisperStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin,
             config=config, input_ids=inputs_dict["input_ids"]
         )
 
-    @unittest.skip("Generate needs input ids")
+    @unittest.skip(reason="Generate needs input ids")
     def test_generate_without_input_ids(self):
         # generate only works with input ids for whisper
         pass
 
-    @unittest.skip("Decoder can't keep attention grads")
+    @unittest.skip(reason="Decoder can't keep attention grads")
     def test_retain_grad_hidden_states_attentions(self):
-        # decoder cannot keep gradients
         return
 
-    @unittest.skip("The model doesn't support fast init from base")
+    @unittest.skip(reason="The model doesn't support fast init from base")
     def test_save_load_fast_init_from_base(self):
         pass
 
