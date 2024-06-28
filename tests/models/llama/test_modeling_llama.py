@@ -706,21 +706,22 @@ class LlamaIntegrationTest(unittest.TestCase):
     @slow
     def test_model_7b_dola_generation(self):
         # ground truth text generated with dola_layers="low", repetition_penalty=1.2
-        EXPECTED_TEXT_COMPLETION = """Simply put, the theory of relativity states that 1) time and space are relative, and 2) the laws of physics are the same for all observers in uniform motion relative to one another.\n\nThe theory of relativity was developed by Albert Einstein in the early 20th century, and it revolutionized our understanding of space and time."""
+        EXPECTED_TEXT_COMPLETION = (
+            "Simply put, the theory of relativity states that 1) time and space are relative, and 2) the laws of "
+            "physics are the same for all observers in uniform motion relative to one another.\n\nThe theory of "
+            "relativity was developed by Albert Einstein in the early 20th century, and it revolutionized our "
+            "understanding of space and time."
+        )
         prompt = "Simply put, the theory of relativity states that "
         tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
-        input_ids = tokenizer.encode(prompt, return_tensors="pt")
         model = LlamaForCausalLM.from_pretrained(
-            "meta-llama/Llama-2-7b-chat-hf", device_map="sequential", use_safetensors=False
+            "meta-llama/Llama-2-7b-chat-hf", device_map="sequential", torch_dtype=torch.float16
         )
-        # if cuda is available, we can use it
-        if torch.cuda.is_available():
-            input_ids = input_ids.to("cuda")
-            model = model.to("cuda")
+        model_inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
 
         # greedy generation outputs
         generated_ids = model.generate(
-            input_ids, max_new_tokens=64, top_p=None, temperature=1, do_sample=False, dola_layers="low"
+            **model_inputs, max_new_tokens=64, top_p=None, temperature=1, do_sample=False, dola_layers="low"
         )
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
