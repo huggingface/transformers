@@ -584,6 +584,41 @@ class NemotronModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
                     res_sdpa,
                     msg=f"\n{tokenizer.batch_decode(res_eager)} \nvs\n{tokenizer.batch_decode(res_sdpa)}",
                 )
+    
+    @require_flash_attn
+    @require_torch_gpu
+    @require_bitsandbytes
+    @pytest.mark.flash_attn_test
+    @require_read_token
+    @slow
+    def test_flash_attn_2_generate_padding_right(self):
+        """
+        Overwritting the common test as the test is flaky on tiny models
+        """
+        model = NemotronForCausalLM.from_pretrained(
+            "thhaus/nemotron3-8b",
+            torch_dtype=torch.float16, device_map="auto",
+        )
+
+        tokenizer = AutoTokenizer.from_pretrained("thhaus/nemotron3-8b")
+
+        texts = ["hi", "Hello this is a very long sentence"]
+
+        tokenizer.pad_token = tokenizer.eos_token
+
+        inputs = tokenizer(texts, return_tensors="pt", padding=True).to(0)
+
+        output_native = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_native = tokenizer.batch_decode(output_native)
+
+        model = NemotronForCausalLM.from_pretrained(
+            "thhaus/nemotron3-8b", torch_dtype=torch.float16, device_map="auto", attn_implementation="flash_attention_2"
+        )
+
+        output_fa_2 = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_fa_2 = tokenizer.batch_decode(output_fa_2)
+
+        self.assertListEqual(output_native, output_fa_2)
 
 
 @require_torch_gpu
