@@ -56,13 +56,14 @@ KEYS_TO_MODIFY_MAPPING = {
     r"model\.vision_model\.embeddings\.pre_layernorm": r"vision_tower.vision_model.embeddings.pre_layernorm",
     r"model\.vision_model\.embeddings\.patch_embed": r"vision_tower.vision_model.embeddings.patch_embedding",
     r"model\.vision_model\.embeddings\.cls_token": r"vision_tower.vision_model.embeddings.class_embedding",
-    r"model\.vision_model\.": r"vision_tower.vision_model.",
+    r"model\.vision_model\.": r"vision_tower.vision_model.", 
     r"model\.layers\.": r"language_model.model.layers.",
     r"model\.mm_projector": r"multi_modal_projector",
     r"lm_head": r"language_model.lm_head",
     r"model\.norm\.": r"language_model.model.norm.",
     r"model\.embed_tokens": r"language_model.model.embed_tokens",
     r"model\.vision2text": r"multi_modal_projector",
+    r"ln_q": r"layer_norm",
 }
 
 
@@ -82,7 +83,7 @@ def convert_state_dict_to_hf(state_dict):
 
 
 def convert_mplugdocowl_llama_to_hf(
-    text_model_id, output_hub_path, old_state_dict_id, pretrained=True
+    text_model_id, output_hub_path, vision_model_id, old_state_dict_id, pretrained=False
 ):
     if not pretrained:
         torch.set_default_dtype(torch.float16)
@@ -140,19 +141,19 @@ def convert_mplugdocowl_llama_to_hf(
         model.save_pretrained("/raid/dana/mplug_model_hf_chat/")
         processor.save_pretrained("/raid/dana/mplug_model_hf_chat/")
     else:
-        model = MPLUGDocOwlForConditionalGeneration.from_pretrained("/raid/dana/mplug_model_hf/")
+        model = MPLUGDocOwlForConditionalGeneration.from_pretrained("/raid/dana/mplug_model_hf_chat/")
         model.to(torch.float16)
-        processor = MPLUGDocOwlProcessor.from_pretrained("/raid/dana/mplug_model_hf/")
+        processor = MPLUGDocOwlProcessor.from_pretrained("/raid/dana/mplug_model_hf_chat/")
     breakpoint()
     from PIL import Image
 
-    # image = Image.open("/raid/dana/test_image.png")
-    #image = Image.open("/raid/dana/examples_Rebecca_(1939_poster)_Small.jpeg")
-    image = Image.open('/raid/dana/fflw0023_1.png')
+    image = Image.open("/raid/dana/test_image.png")
+    image = Image.open("/raid/dana/examples_Rebecca_(1939_poster)_Small.jpeg")
+    #image = Image.open('/raid/dana/fflw0023_1.png')
     # query = "<image>Recognize text in the image."
-    # query = "<image>What's the value of the Very well bar in the 65+ age group? Answer the question with detailed explanation."
-    query = "<image>Parse texts in the image."
-    #query = "<image>What is the name of the movie in the poster? Provide detailed explanation."
+    #query = "<image>What's the value of the Very well bar in the 65+ age group? Answer the question with detailed explanation."
+    #query = "<image>Parse texts in the image."
+    query = "<image>What is the name of the movie in the poster? Provide detailed explanation."
     output = processor(images=image, text=query)
 
     device = torch.device("cuda:0")
@@ -165,7 +166,7 @@ def convert_mplugdocowl_llama_to_hf(
         tokens = model.generate(output["input_ids"],pixel_values = output['pixel_values'], max_new_tokens=512)
     except AttributeError as e:
         raise (e)
-
+    breakpoint()
     model.push_to_hub(output_hub_path)
     processor.push_to_hub(output_hub_path)
 
@@ -193,7 +194,7 @@ def main():
     )
     args = parser.parse_args()
     convert_mplugdocowl_llama_to_hf(
-        args.text_model_id, args.vision_model_id, args.output_hub_path, args.old_state_dict_id
+        args.text_model_id,  args.vision_model_id, args.output_hub_path, args.old_state_dict_id
     )
 
 

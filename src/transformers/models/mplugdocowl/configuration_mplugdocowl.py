@@ -21,46 +21,7 @@ from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING
 
-
 logger = logging.get_logger(__name__)
-
-
-class MplugDocOwlHReducerConfig(PretrainedConfig):
-    model_type = "mplug_docowl_hreducer"
-
-    def __init__(
-        self,
-        hidden_size=1024,
-        initializer_range=0.02,
-        layer_norm_eps=1e-6,
-        conv_shape="1x4",
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.hidden_size = hidden_size
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.conv_shape = conv_shape
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        # get the visual_abstractor config dict if we are loading from MplugOwlConfig
-        if config_dict.get("model_type") == "mplug-docowl":
-            config_dict = config_dict["hreducer_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
-
-
-DEFAULT_VISUAL_CONFIG = {"visual_hreducer": MplugDocOwlHReducerConfig().to_dict()}
-
 
 class MPLUGDocOwlConfig(PretrainedConfig):
     r"""

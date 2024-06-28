@@ -101,7 +101,7 @@ MPLUGDOCOWL_START_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
+    "The bare MPLUGDocOwl Model outputting raw hidden-states without any specific head on top.",
     MPLUGDOCOWL_START_DOCSTRING,
 )
 class MPLUGDocOwlPreTrainedModel(PreTrainedModel):
@@ -193,18 +193,53 @@ MPLUGDOCOWL_INPUTS_DOCSTRING = r"""
 
 
 class MPLUGDocOwlHReducer(MPLUGDocOwlPreTrainedModel):
-    def __init__(self, config, language_hidden_size):
+
+    r"""
+    MPLUGDocOwlHReducer is a spatial-aware vision-to-text module designed for Visual Document Understanding. 
+    This model component processes high-resolution text-rich images by reducing the visual sequence length while 
+    preserving spatial information. It uses a convolutional layer followed by a fully connected layer to align 
+    visual features with language embeddings.
+
+    Unlike other popular vision-to-text modules such as MLPs or cross-attention modules with learnable queries, 
+    the H-Reducer is specifically designed to handle high-resolution images efficiently without losing spatial 
+    coherence. See the paper https://arxiv.org/pdf/2403.12895 for more details. 
+
+    Attributes:
+        config (Config): Model configuration containing hyperparameters for the language model and hreducer.
+        conv_shape (tuple): Shape of the convolutional layer derived from the configuration, set to (1, 4) for 
+                            horizontal text coherence.
+        layer_norm (torch.nn.LayerNorm): Layer normalization applied to the hidden states.
+        conv_patch (int): The product of the convolution shape dimensions, representing the number of visual features 
+                          combined by the convolutional layer.
+        reducer_before (torch.nn.Sequential): Sequential model containing a convolutional layer and GELU activation 
+                                              for initial reduction of visual features.
+        reducer (torch.nn.Conv2d): Convolutional layer for further reduction of visual feature length.
+        visual_fc (torch.nn.Linear): Fully connected layer to project visual features into the language embedding space.
+        vit_eos (torch.nn.Parameter): End-of-sequence token for visual transformer.
+
+    Methods:
+        __init__(config):
+            Initializes the MPLUGDocOwlHReducer with the given configuration.
+        forward(encoder_hidden_states=None):
+            Processes the encoder hidden states to reduce visual feature length and align them with language embeddings.
+    """
+
+
+    def __init__(self, config):
+        r"""
+        Initializes the MPLUGDocOwlHReducer with the given configuration.
+
+        Args:
+            config (Config): Model configuration containing various hyperparameters.
+        """
         super().__init__(config)
         self.config = config
         self.conv_shape = (
             int(self.config.hreducer_conv_shape.split("x")[0]),
             int(self.config.hreducer_conv_shape.split("x")[1]),
-        )  #
+        )  
+        self.layer_norm = torch.nn.LayerNorm(self.config.hreducer_hidden_size, eps=1e-6)
         self.conv_patch = self.conv_shape[0] * self.conv_shape[1]
-        ## feature interaction with a conv layer
-        #FIXME removing it for now
-        #self.reducer_conv = nn.Conv2d(self.config.hreducer_hidden_size, self.conv_patch*self.config.hreducer_hidden_size, kernel_size=self.conv_shape, stride=self.conv_shape, bias=True)
-        #self.reducer_activation = ACT2FN[self.config.hreducer_activation]
         self.reducer_before = torch.nn.Sequential(
     nn.Conv2d(
         self.config.hreducer_hidden_size,
@@ -224,15 +259,21 @@ class MPLUGDocOwlHReducer(MPLUGDocOwlPreTrainedModel):
             bias=True,
         )
         ## align visual features with language embedding with fc
-        self.visual_fc = torch.nn.Linear(self.config.hreducer_hidden_size, language_hidden_size)
-        self.vit_eos = torch.nn.Parameter(torch.randn(1, 1, language_hidden_size))
+        self.visual_fc = torch.nn.Linear(self.config.hreducer_hidden_size, config.text_config.hidden_size)
+        self.vit_eos = torch.nn.Parameter(torch.randn(1, 1, config.text_config.hidden_size))
         self.post_init()
 
     def forward(self, encoder_hidden_states=None):
         r"""
+        Processes the encoder hidden states to reduce visual feature length and align them with language embeddings.
+
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, `optional`):
             batch_size is the number of all images (global+crop) in a batch
             Sequence of hidden-states at the output of the last layer of the encoder.
+        
+            Returns:
+        torch.FloatTensor: The processed sequence output with reduced visual feature length and aligned with language embeddings.
+        
         """
         encoder_hidden_states = encoder_hidden_states[:, 1:, :]  # remove the first cls token
         B, L, C = encoder_hidden_states.shape  # B, 1024=(448/14)^2, 1024
@@ -275,8 +316,7 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
         super().__init__(config)
 
         self.vision_tower = MPLUGDocOwlVisionModel(config.vision_config)
-        language_hidden_size = config.text_config.hidden_size
-        self.multi_modal_projector = MPLUGDocOwlHReducer(config, language_hidden_size)
+        self.multi_modal_projector = MPLUGDocOwlHReducer(config)
         self.vocab_size = config.text_config.vocab_size
 
         self.language_model = MPLUGDocOwlForCausalLM(config.text_config)
@@ -362,7 +402,7 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
         if labels is not None:
             final_labels[batch_indices, text_to_overwrite] = labels[batch_indices, non_image_indices]
 
-        # 5. Fill the embeddings corresponding to the images. Anything that is n.....≥≥.≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥≥.≥ot `text_positions` needs filling (#29835)
+        # 5. Fill the embeddings corresponding to the images. Anything that is not `text_positions` needs filling (#29835)
         image_to_overwrite = torch.full(
             (batch_size, max_embed_dim), True, dtype=torch.bool, device=inputs_embeds.device
         )

@@ -14,14 +14,17 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# mPLUGDocOwl1.5
+# mPLUG-DocOwl1.5
 
 ## Overview
 
-The mPLUGDocOwl1.5 model was proposed in [mPLUG-DocOwl 1.5: Unified Structure Learning for OCR-free Document Understanding](https://arxiv.org/pdf/2403.12895) by Anwen Hu, Haiyang Xu, Jiabo Ye, Ming Yan
+The mPLUG-DocOwl1.5 model was proposed in [mPLUG-DocOwl 1.5: Unified Structure Learning for OCR-free Document Understanding](https://arxiv.org/pdf/2403.12895) by Anwen Hu, Haiyang Xu, Jiabo Ye, Ming Yan
 Liang Zhang, Bo Zhang, Chen Li, Ji Zhang, Qin Jin, Fei Huang, Jingren Zhou.
-MPLUGDocOwl1.5 is a multimodal model designed for text-rich images. It features the H-Reducer vision-to-text module, which preserves spatial relationships and efficiently processes high-resolution document images by merging visual features horizontally.
+
+MPLUG-DocOwl1.5 is a multimodal model designed for text-rich images. It features the H-Reducer vision-to-text module, which preserves spatial relationships and efficiently processes high-resolution document images by merging visual features horizontally.
+
 The model employs Unified Structure Learning with structure-aware parsing tasks and multi-grained text localization tasks, teaching it to parse text using line feeds, spaces, and extended Markdown syntax, which enhances the model's ability to correlate text with specific positions in the image.
+
 DocOwl 1.5 undergoes a two-stage training process: Unified Structure Learning followed by Multi-task Tuning among Downstream Tasks. The high-quality DocReason25K dataset boosts reasoning abilities, allowing DocOwl 1.5-Chat to balance concise answers and detailed explanations.
 
 The abstract from the paper is the following:

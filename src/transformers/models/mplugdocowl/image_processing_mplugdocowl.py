@@ -48,95 +48,44 @@ logger = logging.get_logger(__name__)
 if is_vision_available():
     import PIL
 
-
 GRID_DICT = {
     "grid_1": [(1, 1)],
-    "grid_4": [(1, 1), (1, 2), (2, 1), (1, 3), (3, 1), (2, 2), (1, 4), (4, 1)],
-    "grid_9": [
-        (1, 1),
-        (1, 2),
-        (2, 1),
-        (1, 3),
-        (3, 1),
-        (2, 2),
-        (1, 4),
-        (4, 1),
-        (1, 5),
-        (5, 1),
-        (1, 6),
-        (6, 1),
-        (2, 3),
-        (3, 2),
-        (1, 7),
-        (7, 1),
-        (4, 2),
-        (2, 4),
-        (1, 8),
-        (8, 1),
-        (3, 3),
-        (1, 9),
-        (9, 1),
-    ],
+    "grid_4": [(1, 1), (1, 2), (2, 1), (1, 3), (3, 1), (2, 2), (1, 4), (4, 1)], 
+    "grid_9": [(1, 1),(1, 2),(2, 1),(1, 3),(3, 1),(2, 2),(1, 4),(4, 1),(1, 5),(5, 1),(1, 6),(6, 1), (2, 3), (3, 2), (1, 7), (7, 1), (4, 2), (2, 4), (1, 8), (8, 1), (3, 3), (1, 9), (9, 1),],
     "grid_3x3": [(3, 3)],
-    "grid_20": [
-        (1, 1),
-        (1, 2),
-        (2, 1),
-        (1, 3),
-        (3, 1),
-        (1, 4),
-        (2, 2),
-        (4, 1),
-        (1, 5),
-        (5, 1),
-        (1, 6),
-        (2, 3),
-        (3, 2),
-        (6, 1),
-        (1, 7),
-        (7, 1),
-        (1, 8),
-        (2, 4),
-        (4, 2),
-        (8, 1),
-        (1, 9),
-        (3, 3),
-        (9, 1),
-        (1, 10),
-        (2, 5),
-        (5, 2),
-        (10, 1),
-        (1, 11),
-        (11, 1),
-        (2, 6),
-        (3, 4),
-        (4, 3),
-        (6, 2),
-        (2, 7),
-        (7, 2),
-        (3, 5),
-        (5, 3),
-        (2, 8),
-        (4, 4),
-        (8, 2),
-        (2, 9),
-        (3, 6),
-        (6, 3),
-        (9, 2),
-        (2, 10),
-        (4, 5),
-        (5, 4),
-        (10, 2),
-    ],
-}
-
+    "grid_20": [(1, 1), (1, 2), (2, 1), (1, 3), (3, 1), (1, 4), (2, 2), (4, 1), (1, 5), (5, 1), (1, 6), (2, 3), (3, 2), (6, 1), (1, 7), (7, 1), (1, 8), (2, 4), (4, 2), (8, 1), (1, 9), (3, 3), (9, 1), (1, 10), (2, 5), (5, 2), (10, 1), (1, 11), (11, 1), (2, 6), (3, 4), (4, 3), (6, 2), (2, 7), (7, 2), (3, 5), (5, 3), (2, 8), (4, 4), (8, 2), (2, 9), (3, 6), (6, 3), (9, 2), (2, 10), (4, 5), (5, 4), (10, 2), ], 
+    }
 
 # FIXME write the documentation for these functions
 def box_area(boxes):
+    r"""
+    Compute the area of each bounding box in a given set of bounding boxes.
+
+    Args:
+        boxes (np.ndarray): An array of shape (N, 4) containing N bounding boxes,
+                            each represented by the coordinates [x_min, y_min, x_max, y_max].
+
+    Returns:
+        np.ndarray: An array of shape (N,) containing the area of each bounding box.
+    """
     return (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
 
 
 def box_iou(boxes1, area1, boxes2, eps=1e-5):
+    r"""
+    Compute the Intersection over Union (IoU) between two sets of bounding boxes.
+
+    Args:
+        boxes1 (np.ndarray): An array of shape (N, 4) containing N bounding boxes.
+        area1 (np.ndarray): An array of shape (N,) containing the area of each bounding box in boxes1.
+        boxes2 (np.ndarray): An array of shape (M, 4) containing M bounding boxes.
+        eps (float, optional): A small value to avoid division by zero. Defaults to 1e-5.
+
+    Returns:
+        tuple: A tuple containing:
+            - np.ndarray: An array of shape (N, M) containing the IoU between each pair of boxes from boxes1 and boxes2.
+            - np.ndarray: An array of shape (N, M) containing the union areas of each pair of boxes.
+    """
     area2 = box_area(boxes2)
 
     lt = np.maximum(boxes1[:, None, :2], boxes2[:, :2])  # [N,M,2]
@@ -153,6 +102,18 @@ def box_iou(boxes1, area1, boxes2, eps=1e-5):
 
 
 def anchor_rank(anchors, anchors_areas, input_image_size, eps=1e-5):
+    r"""
+    Rank anchors based on their IoU and shape-adaptive IoU with respect to an input image size.
+
+    Args:
+        anchors (np.ndarray): An array of shape (N, 4) containing N anchors.
+        anchors_areas (np.ndarray): An array of shape (N,) containing the area of each anchor.
+        input_image_size (tuple): A tuple (height, width) representing the size of the input image.
+        eps (float, optional): A small value to avoid division by zero. Defaults to 1e-5.
+
+    Returns:
+        int: The index of the selected anchor with the highest rank.
+    """
     input_image_bbox = np.array([[0, 0, input_image_size[1], input_image_size[0]]])
 
     boxes1 = anchors
@@ -179,6 +140,21 @@ def anchor_resize(
     grid_dict: Dict[str, List[Tuple[int, int]]] = GRID_DICT,
     resample=PILImageResampling.BICUBIC,
 ):
+    r"""
+    Resize an image based on selected anchor and its associated size.
+
+    Args:
+        image (ImageInput): The input image to be resized.
+        anchors (str, optional): The key for selecting anchor sizes from the grid_dict. Defaults to "grid_9".
+        size (Dict[str, int], optional): A dictionary containing the target size for resizing. Defaults to None.
+        grid_dict (Dict[str, List[Tuple[int, int]]], optional): A dictionary containing the anchor grid configurations. Defaults to GRID_DICT.
+        resample (PILImageResampling, optional): The resampling method to use. Defaults to PILImageResampling.BICUBIC.
+
+    Returns:
+        tuple: A tuple containing:
+            - List[np.ndarray]: A list containing the resized image.
+            - int: The index of the selected anchor.
+    """
     # Convert anchors to xyxy format
     anchors = [tuple(_) for _ in grid_dict[anchors]]
     size = size["width"]
@@ -201,6 +177,62 @@ def shape_adaptive_cropping(
     add_global_img: bool = True,
     selected_anchor: int = None,
 ):
+    r"""
+    Perform shape-adaptive cropping on image patches based on selected anchor size.
+
+    This function is designed to handle images with various aspect ratios and resolutions by cropping
+    the image into multiple sub-images using a shape-adaptive grid. The goal is to preserve the resolution
+    and aspect ratio as much as possible to prevent text blur and distortion, which is critical for tasks
+    requiring visually-situated language understanding.
+
+    Args:
+        image_patches (ImageInput): The input image patches to be cropped.
+        size (Dict[str, int], optional): A dictionary containing the target size for cropping. The size
+                                         is expected to have a key "width". Defaults to None.
+        anchors (str, optional): The key for selecting anchor sizes from the grid_dict. Defaults to "grid_9".
+        grid_dict (Dict[str, List[Tuple[int, int]]], optional): A dictionary containing the anchor grid
+                                                                configurations. Defaults to GRID_DICT.
+        add_global_img (bool, optional): Whether to add the global image to the list of cropped patches.
+                                         Defaults to True.
+        selected_anchor (int, optional): The index of the selected anchor for cropping. If None, the
+                                         function will select an anchor based on the shape-adaptive
+                                         criteria. Defaults to None.
+
+    Returns:
+        tuple: A tuple containing:
+            - List[np.ndarray]: A list of cropped image patches.
+            - np.ndarray: An array containing the positions of the patches.
+            - int: The number of patches.
+            - int: The maximum anchor size.
+    
+    Notes:
+        The function first converts the input anchors to a format suitable for cropping. It then reshapes
+        the image patches according to the selected anchor size. The resulting sub-images maintain the 
+        resolution and aspect ratio of the original image as much as possible.
+        Find more details in the paper https://arxiv.org/pdf/2310.05126.
+    
+    Example:
+        Consider:
+        nh (int): Number of rows in the grid.
+        nw (int): Number of columns in the grid.
+        Hv (int): Height of the visual encoder input.
+        Wv (int): Width of the visual encoder input.
+        Nc (int): Maximum number of cells (sub-images) in the grid.
+
+        The grid configurations and their selection are based on two main criteria:
+        1. Resolution coherence (Srr): This measures the IoU between the input image resolution and the grid resolution.
+           Srr(I, g) = IoU((H, W), (nh * Hv, nw * Wv))
+        2. Shape similarity (Sra): This measures the IoU between the input image aspect ratio and the grid aspect ratio.
+           Sra(I, g) = IoU((H, W), (nh, nw))
+
+        The matched grid is selected by maximizing the matching score:
+           g* = argmax (Sra(I, g) + Srr(I, g))
+
+        After selecting the appropriate grid, the input image is resized to (nh * Hv, nw * Wv) and cropped into nh * nw local images.
+        Additionally, to maintain the global structure information of the image, the input image is resized to (Hv, Wv) as a global image.
+    
+    """
+    
     anchors = [tuple(_) for _ in grid_dict[anchors]]
     size = size["width"]
 

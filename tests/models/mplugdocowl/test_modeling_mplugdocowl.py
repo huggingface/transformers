@@ -31,7 +31,8 @@ from transformers.testing_utils import (
 )
 
 from ...test_modeling_common import floats_tensor, ids_tensor
-
+from ...test_configuration_common import ConfigTester
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 if is_torch_available():
     import torch
@@ -41,57 +42,56 @@ else:
 if is_vision_available():
     from PIL import Image
 
-
 class MPLUGDocOwlVisionText2TextModelTester:
     def __init__(
         self,
         parent,
         ignore_index=-100,
-        image_token_index=32000,
-        hreducer_hidden_size=1024,
+        image_token_index=0,
+        projector_hidden_act="gelu",
+        seq_length=7,
+        vision_feature_select_strategy="default",
+        hreducer_hidden_size=32,
         hreducer_initializer_range=0.02,
         hreducer_layer_norm=1e-6,
         hreducer_conv_shape="1x4",
-        projector_hidden_act="gelu",
-        seq_length=7,
-        vision_feature_select_strategy="full",
-        vision_feature_layer=-2,
+        vision_feature_layer=-1,
         text_config={
             "model_type": "llama",
             "seq_length": 7,
-            # "is_training": True,
+            "is_training": True,
             "use_input_mask": True,
             "use_token_type_ids": False,
             "use_labels": True,
-            "vocab_size": 32000,
-            "hidden_size": 4096,
-            "num_hidden_layers": 32,
-            "num_attention_heads": 32,
-            "intermediate_size": 11008,
-            "hidden_act": "silu",
-            # "hidden_dropout_prob": 0.1,
-            # "attention_probs_dropout_prob": 0.1,
+            "vocab_size": 99,
+            "hidden_size": 32,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 4,
+            "intermediate_size": 37,
+            "hidden_act": "gelu",
+            "hidden_dropout_prob": 0.1,
+            "attention_probs_dropout_prob": 0.1,
             "max_position_embeddings": 512,
-            # "type_vocab_size": 16,
-            # "type_sequence_label_size": 2,
+            "type_vocab_size": 16,
+            "type_sequence_label_size": 2,
             "initializer_range": 0.02,
-            # "num_labels": 3,
-            # "num_choices": 4,
+            "num_labels": 3,
+            "num_choices": 4,
             "pad_token_id": 0,
         },
         is_training=True,
         vision_config={
-            "image_size": 448,
-            "patch_size": 14,
+            "image_size": 30,
+            "patch_size": 2,
             "num_channels": 3,
-            # "is_training": True,
-            "hidden_size": 1024,
-            "projection_dim": 1024,
-            "num_hidden_layers": 24,
-            "num_attention_heads": 16,
-            # "intermediate_size": 37,
-            # "dropout": 0.1,
-            "attention_dropout": 0.0,
+            "is_training": True,
+            "hidden_size": 32,
+            "projection_dim": 32,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 4,
+            "intermediate_size": 37,
+            "dropout": 0.1,
+            "attention_dropout": 0.1,
             "initializer_range": 0.02,
         },
     ):
@@ -104,6 +104,10 @@ class MPLUGDocOwlVisionText2TextModelTester:
         self.text_config = text_config
         self.vision_config = vision_config
         self.seq_length = seq_length
+        self.hreducer_hidden_size = hreducer_hidden_size
+        self.hreducer_initializer_range = hreducer_initializer_range
+        self.hreducer_layer_norm = hreducer_layer_norm
+        self.hreducer_conv_shape = hreducer_conv_shape
 
         self.num_hidden_layers = text_config["num_hidden_layers"]
         self.vocab_size = text_config["vocab_size"]
@@ -113,7 +117,7 @@ class MPLUGDocOwlVisionText2TextModelTester:
 
         self.batch_size = 3
         self.num_channels = 3
-        self.image_size = 448
+        self.image_size = 336
         self.encoder_seq_length = 231
 
     def get_config(self):
@@ -152,28 +156,13 @@ class MPLUGDocOwlVisionText2TextModelTester:
         }
         return config, inputs_dict
 
-    def create_and_check_mplugdocowl_model_fp16_forward(self, config, input_ids, pixel_values, attention_mask):
-        model = MPLUGDocOwlForConditionalGeneration(config=config)
-        model.to(torch_device)
-        model.eval()
-        with torch.autocast(device_type="cuda", dtype=torch.float16):
-            logits = model(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                pixel_values=pixel_values.to(torch.float16),
-                return_dict=True,
-            )["logits"]
-        self.parent.assertFalse(torch.isnan(logits).any().item())
-
-
-'''
 @require_torch
 class MPLUGDocOwlForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
     """
     Model tester for `MPLUGDocOwlForConditionalGeneration`.
     """
 
-    all_model_classes = (MPLUGDocOwlForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (MPLUGDocOwlForConditionalGeneration, ) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
 
@@ -198,10 +187,7 @@ class MPLUGDocOwlForConditionalGenerationModelTest(ModelTesterMixin, unittest.Te
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
-
 '''
-
-
 @require_torch
 class MPLUGDocOwlForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
@@ -273,6 +259,7 @@ class MPLUGDocOwlForConditionalGenerationIntegrationTest(unittest.TestCase):
             EXPECTED_DECODED_TEXT,
         )
 '''
+"""
     @slow
     def test_small_model_integration_test_mplugdocowl_single(self):
         # Let' s make sure we test the preprocessing to replace what is used
@@ -293,8 +280,7 @@ class MPLUGDocOwlForConditionalGenerationIntegrationTest(unittest.TestCase):
             processor.decode(output[0], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
-'''
-
+"""
 """
     @slow
     @require_bitsandbytes
