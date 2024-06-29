@@ -4,6 +4,7 @@ import math
 from typing import Optional, Tuple, Union
 
 import tensorflow as tf
+from tensorflow import keras
 from tensorflow.keras.layers import Dense, Dropout
 from tensorflow.keras.losses import SparseCategoricalCrossentropy
 
@@ -661,7 +662,7 @@ class TFPhi3Model(TFPhi3PreTrainedModel):
 
 # Claude: Translated from PyTorch to TensorFlow
 @tf.keras.utils.register_keras_serializable()
-class TFPhi3MainLayer(tf.keras.layers.Layer):
+class TFPhi3MainLayer(keras.layers.Layer):
     config_class = Phi3Config
 
     def __init__(self, config, *inputs, **kwargs):
