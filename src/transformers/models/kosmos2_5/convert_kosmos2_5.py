@@ -27,7 +27,7 @@ KEYS_TO_MODIFY_MAPPING = {
 KEYS_TO_IGNORE = [
     # this buffer in the original code is only used to send weights to the desired device
     "gpt_model.decoder.embed_positions._float_tensor",
-    # this weight is never used in the forward in the original KOSMOS-2)
+    # this weight is never used in the forward in the original KOSMOS-2.5)
     "gpt_model.decoder.self_attn_sope.scale",
 ]
 
