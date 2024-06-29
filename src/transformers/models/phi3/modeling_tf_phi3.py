@@ -159,7 +159,7 @@ class TFPhi3YarnScaledRotaryEmbedding(tf.keras.layers.Layer):
         self.original_max_position_embeddings = config.original_max_position_embeddings
 
     def build(self, input_shape):
-        super(TFPhi3YarnScaledRotaryEmbedding, self).build(input_shape)
+        super().build(input_shape)
 
     def call(self, x, position_ids, seq_len=None):
         seq_len = tf.reduce_max(position_ids) + 1
@@ -253,7 +253,7 @@ class TFPhi3MLP(tf.keras.layers.Layer):
     def build(self, input_shape=None):
         self.gate_up_proj.build(input_shape)
         self.down_proj.build([input_shape[0], self.config.intermediate_size])
-        super(TFPhi3MLP, self).build(input_shape)
+        super().build(input_shape)
 
 
 def repeat_kv(hidden_states: tf.Tensor, n_rep: int) -> tf.Tensor:
@@ -408,7 +408,7 @@ class TFPhi3Attention(tf.keras.layers.Layer):
     def build(self, input_shape=None):
         self.qkv_proj.build(input_shape)
         self.o_proj.build([input_shape[0], input_shape[1], self.hidden_size])
-        super(TFPhi3Attention, self).build(input_shape)
+        super().build(input_shape)
 
 
 class TFPhi3DecoderLayer(tf.keras.layers.Layer):
@@ -490,7 +490,7 @@ class TFPhi3DecoderLayer(tf.keras.layers.Layer):
         self.mlp.build(input_shape)
         self.input_layernorm.build(input_shape)
         self.post_attention_layernorm.build(input_shape)
-        super(TFPhi3DecoderLayer, self).build(input_shape)
+        super().build(input_shape)
 
 
 PHI3_START_DOCSTRING = r"""
@@ -831,7 +831,10 @@ class TFPhi3MainLayer(tf.keras.layers.Layer):
             input_shape = [None, self.config.max_position_embeddings]
         # Check if input_shape is a dictionary and extract shapes
         if isinstance(input_shape, dict):
-            input_shape = input_shape["input_ids"]
+            if "input_ids" in input_shape.keys():
+                input_shape = input_shape["input_ids"]
+            else:
+                input_shape = input_shape["inputs_embeds"]
         if getattr(self, "embed_tokens", None) is not None:
             with tf.name_scope(self.embed_tokens.name):
                 self.embed_tokens.build(input_shape)
@@ -961,7 +964,10 @@ class TFPhi3ForSequenceClassification(TFPhi3PreTrainedModel):
     def build(self, input_shape):
         # Build the underlying model layers
         if isinstance(input_shape, dict):
-            input_shape = input_shape["input_ids"]
+            if "input_ids" in input_shape.keys():
+                input_shape = input_shape["input_ids"]
+            else:
+                input_shape = input_shape["inputs_embeds"]
 
         self.model.build(input_shape)
         self.score.build((input_shape[0], self.config.hidden_size))
@@ -987,12 +993,13 @@ class TFPhi3ForSequenceClassification(TFPhi3PreTrainedModel):
 
         if input_ids is not None:
             batch_size = tf.shape(input_ids)[0]
+            sequence_lengths = tf.reduce_max(tf.cast(tf.not_equal(input_ids, self.config.pad_token_id), tf.int32), axis=-1) - 1
         else:
             batch_size = tf.shape(inputs_embeds)[0]
+            sequence_lengths = tf.reduce_max(tf.cast(tf.not_equal(inputs_embeds, self.config.pad_token_id), tf.int32), axis=-1) - 1
 
         if self.config.pad_token_id is None:
             raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
-        sequence_lengths = tf.reduce_max(tf.cast(tf.not_equal(input_ids, self.config.pad_token_id), tf.int32), axis=-1) - 1
         pooled_logits = tf.gather(logits, sequence_lengths, batch_dims=1)
 
         loss = None
