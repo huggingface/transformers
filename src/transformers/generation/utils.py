@@ -2535,10 +2535,15 @@ class GenerationMixin:
                 model_kwargs["use_cache"] = True
                 model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
-                # encode the given prefix and prepare model inputs; encoder-decoder model process the prefix and save
-                # the `encoder_outputs`
-                outputs = self(
-                    **model_inputs, return_dict=True, output_hidden_states=True, output_attentions=output_attentions
+                # Forward pass to get next token
+                logits = self(
+                    tokens=model_inputs["input_ids"],
+                    input_pos=model_inputs["cache_position"][..., -1].flatten(),
+                )
+                # Restore CausalLMOutputWithPast in order to run in eager compile
+                outputs = CausalLMOutputWithPast(
+                    logits=logits,
+                    past_key_values=self.static_kv_cache,
                 )
 
                 # last decoder hidden states will be used to compute the degeneration penalty (cosine similarity with

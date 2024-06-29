@@ -951,6 +951,29 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
+        self.max_seq_len = config.max_length
+
+        # Initialize Static KV Cache
+        if config.use_cache:
+            # TODO: Need to read the cache implementation at config time.
+            # Currently cache_implementation is set/get at generation time.
+            self.static_kv_cache = StaticCache(
+                config,
+                1,  # batch_size
+                config.max_length,
+                "cpu",
+            )
+
+            causal_mask = torch.tril(
+                torch.ones(
+                    self.max_seq_len,
+                    self.max_seq_len,
+                    dtype=torch.bool,
+                    device="cpu",
+                )
+            )
+            self.register_buffer("mask", causal_mask, persistent=False)
+
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -972,9 +995,33 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
     def get_decoder(self):
         return self.model
 
+    def forward(
+        self,
+        tokens: torch.Tensor,
+        input_pos: Optional[torch.Tensor],
+    ) -> torch.Tensor:
+        r"""
+        Top-level forward called by generation and inference engine.
+        The signature and return must match exactly with ExecuTorch llama runner.
+        """
+        if self.static_kv_cache:
+            assert input_pos is not None, "input_pos must be provided when static kv cache is used"
+
+        bsz, seqlen = tokens.shape
+        attn_mask = self.mask[input_pos, :seqlen]
+        internal_out = self._forward(
+            input_ids=tokens,
+            attention_mask=attn_mask,
+            position_ids=input_pos.unsqueeze(0),
+            cache_position=input_pos,
+            past_key_values=self.static_kv_cache,
+            use_cache=self.config.use_cache,
+        )
+        return internal_out.logits
+
     @add_start_docstrings_to_model_forward(GEMMA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
-    def forward(
+    def _forward(
         self,
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
