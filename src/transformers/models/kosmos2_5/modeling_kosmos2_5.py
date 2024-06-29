@@ -1363,18 +1363,17 @@ class Kosmos2_5TextSdpaAttention(Kosmos2_5TextAttention):
     `LlamaAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
     SDPA API.
     """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
     # Adapted from LlamaAttention.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: bool = False,
-        use_cache: bool = False,
-        cache_position: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         if output_attentions:
             logger.warning_once(
@@ -1383,16 +1382,15 @@ class Kosmos2_5TextSdpaAttention(Kosmos2_5TextAttention):
             )
             return super().forward(
                 hidden_states=hidden_states,
-                attention_mask=attention_mask,
-                position_ids=position_ids,
+                encoder_hidden_states=encoder_hidden_states,
                 past_key_value=past_key_value,
+                attention_mask=attention_mask,
+                layer_head_mask=layer_head_mask,
                 output_attentions=output_attentions,
-                use_cache=use_cache,
-                cache_position=cache_position,
             )
+
         is_cross_attention = encoder_hidden_states is not None
         bsz, q_len, _ = hidden_states.size()
-
         # use encoder_hidden_states if cross attention
         current_states = encoder_hidden_states if encoder_hidden_states is not None else hidden_states
         # checking that the `sequence_length` of the `past_key_value` is the same as the he provided
@@ -1408,7 +1406,7 @@ class Kosmos2_5TextSdpaAttention(Kosmos2_5TextAttention):
                 # reuse k, v, self_attention
                 key_states = torch.cat([past_key_value[0], key_states], dim=2)
                 value_states = torch.cat([past_key_value[1], value_states], dim=2)
-        
+
         query_states = self._shape(self.q_proj(hidden_states))
         
         if self.is_decoder:
@@ -1435,7 +1433,7 @@ class Kosmos2_5TextSdpaAttention(Kosmos2_5TextAttention):
             value_states,
             attn_mask=causal_mask,
             dropout_p=self.dropout if self.training else 0.0,
-            is_causal = self.is_causal
+            is_causal=is_causal,
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
