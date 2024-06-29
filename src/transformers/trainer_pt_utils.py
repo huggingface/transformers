@@ -24,6 +24,7 @@ import math
 import os
 import sys
 import warnings
+from itertools import chain
 from collections.abc import Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -1379,13 +1380,21 @@ class LayerWiseDummyScheduler(LRScheduler):
     """
 
     def __init__(self, *args, **kwargs):
-        optimizer = LayerWiseDummyOptimizer()
+        optimizer = LayerWiseDummyOptimizer(**kwargs)
         last_epoch = -1
         verbose = False
         super().__init__(optimizer, last_epoch, verbose)
 
     def get_lr(self):
-        return [group["lr"] for group in self.optimizer.param_groups]
+        # default value
+        lrs = [1e-3]
+
+        # we take each lr in the parameters if they exist, assumes the optimizer to be the `LayerWiseDummyOptimizer`
+        if self.optimizer is not None:
+            param_wise_lrs = [[group["lr"] for group in optim.param_groups] for optim in self.optimizer.optimizer_dict.values()]
+            lrs = list(chain(*param_wise_lrs))
+
+        return lrs
 
     def _get_closed_form_lr(self):
         return self.base_lrs
