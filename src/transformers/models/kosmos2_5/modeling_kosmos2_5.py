@@ -53,7 +53,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = Kosmos2_5Config
 
-# -100.0
 # Copied from ...models.llama.modeling_llama._get_unpad_data
 def _get_unpad_data(attention_mask):
     seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
@@ -427,8 +426,6 @@ except ImportError:
 except Exception:
     logger.warning("Discovered apex but it failed to load, falling back to Kosmos2_5LayerNorm")
     pass
-
-# ALL_LAYERNORM_LAYERS.append(Kosmos2_5LayerNorm)
 
 # Copied from ...models.pix2struct.modeling_pix2struct.Pix2StructVisionEmbeddings -> Kosmos2_5VisionEmbeddings
 class Kosmos2_5VisionEmbeddings(nn.Module):
@@ -2320,38 +2317,30 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from .. import AutoProcessor, Kosmos2_5ForConditionalGeneration
+        >>> import torch
+        >>> from transformers import AutoProcessor, Kosmos2_5ForConditionalGeneration
 
-        >>> model = Kosmos2_5ForConditionalGeneration.from_pretrained("microsoft/kosmos2.5")
-        >>> processor = AutoProcessor.from_pretrained("microsoft/kosmos2.5")
+        >>> repo = "microsoft/kosmos-2.5"
+        >>> device = "cuda:0"
+        >>> dtype = torch.bfloat16 # torch.float16
+        >>> model = Kosmos2_5ForConditionalGeneration.from_pretrained(repo, device_map=device, torch_dtype=dtype)
+        >>> processor = AutoProcessor.from_pretrained(repo)
 
-        >>> url = "https://huggingface.co/microsoft/microsoft/kosmos2.5/resolve/main/snowman.jpg"
+        >>> url = "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
+
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> prompt = "<ocr>" # <md>
 
         >>> inputs = processor(text=prompt, images=image, return_tensors="pt")
+        >>> height, width = inputs.pop("height"), inputs.pop("width")
+        >>> inputs = {k: v.to(device) if v is not None else None for k, v in inputs.items()}
+        >>> inputs["flattened_patches"] = inputs["flattened_patches"].to(dtype)
 
-        >>> generated_ids = model.generate(
-        ...     pixel_values=inputs["pixel_values"],
-        ...     input_ids=inputs["input_ids"],
-        ...     attention_mask=inputs["attention_mask"],
-        ...     image_embeds=None,
-        ...     image_embeds_position_mask=inputs["image_embeds_position_mask"],
-        ...     use_cache=True,
-        ...     max_new_tokens=64,
-        ... )
+        >>> generated_ids = model.generate(**inputs,max_new_tokens=1024)
         >>> generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-        >>> processed_text = processor.post_process_generation(generated_text, cleanup_and_extract=False)
-        >>> processed_text
-        '<grounding> An image of<phrase> a snowman</phrase><object><patch_index_0044><patch_index_0863></object> warming himself by<phrase> a fire</phrase><object><patch_index_0005><patch_index_0911></object>.'
-
-        >>> caption, entities = processor.post_process_generation(generated_text)
-        >>> caption
-        'An image of a snowman warming himself by a fire.'
-
-        >>> entities
-        [('a snowman', (12, 21), [(0.390625, 0.046875, 0.984375, 0.828125)]), ('a fire', (41, 47), [(0.171875, 0.015625, 0.484375, 0.890625)])]
+        >>> generated_text
+        '<ocr><bbox><x_53><y_573><x_69><y_606></bbox>1\n<bbox><x_79><y_573><x_464><y_612></bbox>[REG] BLACK SAKURA\n<bbox><x_690><y_569><x_810><y_606></bbox>45,455\n<bbox><x_53><y_614><x_69><y_648></bbox>1\n<bbox><x_79><y_614><x_468><y_650></bbox>COOKIE DOH SAUCES\n<bbox><x_788><y_609><x_812><y_644></bbox>0\n<bbox><x_50><y_658><x_69><y_693></bbox>1\n<bbox><x_79><y_658><x_358><y_693></bbox>NATA DE COCO\n<bbox><x_790><y_652><x_814><y_687></bbox>0\n<bbox><x_31><y_742><x_820><y_781></bbox>Sub Total 45,455\n<bbox><x_27><y_781><x_822><y_827></bbox>PB1 (10%) 4,545\n<bbox><x_27><y_826><x_824><y_872></bbox>Rounding 0\n<bbox><x_24><y_872><x_827><y_921></bbox>Total 50,000\n<bbox><x_17><y_1056><x_836><y_1108></bbox>Card Payment 50,000\n'
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
