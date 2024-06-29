@@ -126,6 +126,9 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "SeamlessM4TTextToUnitModel",  # Building part of bigger (tested) model.
     "SeamlessM4TCodeHifiGan",  # Building part of bigger (tested) model.
     "SeamlessM4TTextToUnitForConditionalGeneration",  # Building part of bigger (tested) model.
+    "Kosmos2_5TextModel", # Building part of bigger (tested) model.
+    "Kosmos2_5TextForCausalLM", # Building part of bigger (tested) model.
+    "Kosmos2_5VisionModel" # Building part of bigger (tested) model.
 ]
 
 # Update this list with test files that don't have a tester with a `all_model_classes` variable and which don't

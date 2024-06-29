@@ -20,18 +20,13 @@ bf16 now
 from typing import List, Optional, Union
 
 from ...image_processing_utils import BatchFeature
-from ...image_utils import ImageInput, is_batched
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import (
-    BatchEncoding,
     PaddingStrategy,
-    PreTokenizedInput,
     TextInput,
     TruncationStrategy,
 )
-from ...utils import TensorType, is_torch_available, is_vision_available, logging
-from ...utils.import_utils import requires_backends
-
+from ...utils import TensorType, is_torch_available
 if is_torch_available():
     import torch
 

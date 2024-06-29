@@ -57,9 +57,8 @@ def convert_kosmos2_checkpoint_to_pytorch(checkpoint_path, pytorch_dump_folder_p
             continue
         renamed_key = rename_key(key)
         converted_state_dict[renamed_key] = state_dict[key]
-    # 
 
-    # set 
+    # set
     # check weight loading
     # check whether the state in converted_state_dict is the same as the state in the model
     model.load_state_dict(converted_state_dict, strict=True)
@@ -71,10 +70,20 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--kosmos2_checkpoint_path", default="ckpt.pt", type=str, required=False, help="Path the official PyTorch dump."
+        "--kosmos2_checkpoint_path",
+        default="ckpt.pt",
+        type=str,
+        required=False,
+        help="Path the official PyTorch dump.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default="ckpt", type=str, required=False, help="Path to the output PyTorch model."
+        "--pytorch_dump_folder_path",
+        default="ckpt",
+        type=str,
+        required=False,
+        help="Path to the output PyTorch model.",
     )
     args = parser.parse_args()
-    convert_kosmos2_checkpoint_to_pytorch(args.kosmos2_checkpoint_path, args.pytorch_dump_folder_path)
+    convert_kosmos2_checkpoint_to_pytorch(
+        args.kosmos2_checkpoint_path, args.pytorch_dump_folder_path
+    )
