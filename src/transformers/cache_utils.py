@@ -23,8 +23,7 @@ if is_hqq_available():
 logger = logging.get_logger(__name__)
 
 
-@dataclass
-class Cache:
+class Cache(torch.nn.Module):
     """
     Base, abstract class for all caches. The actual data structure is specific to each subclass.
     """
@@ -819,15 +818,22 @@ class StaticCache(Cache):
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
         cache_shape = (max_batch_size, self.num_key_value_heads, self.max_cache_len, self.head_dim)
-        for _ in range(config.num_hidden_layers):
+        print(f"DEBUG: StaticCache size: [max_batch_size={cache_shape[0]}, n_heads={cache_shape[1]}, max_seq_len={cache_shape[2]}, head_dim={cache_shape[3]}]")
+        for idx in range(config.num_hidden_layers):
             # Note: `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
             # breaks when updating the cache.
-            new_layer_key_cache = torch.zeros(cache_shape, dtype=self.dtype, device=device)
-            new_layer_value_cache = torch.zeros(cache_shape, dtype=self.dtype, device=device)
-            torch._dynamo.mark_static_address(new_layer_key_cache)
-            torch._dynamo.mark_static_address(new_layer_value_cache)
-            self.key_cache.append(new_layer_key_cache)
-            self.value_cache.append(new_layer_value_cache)
+            self.register_buffer(
+                f"key_cache_{idx}", torch.zeros(cache_shape, dtype=dtype, device=device)
+            )
+            self.register_buffer(
+                f"val_cache_{idx}", torch.zeros(cache_shape, dtype=dtype, device=device)
+            )
+            key_cache = getattr(self, f"key_cache_{idx}")
+            val_cache = getattr(self, f"val_cache_{idx}")
+            torch._dynamo.mark_static_address(key_cache)
+            torch._dynamo.mark_static_address(val_cache)
+            self.key_cache.append(key_cache)
+            self.value_cache.append(val_cache)
 
     def update(
         self,
