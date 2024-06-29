@@ -19,6 +19,8 @@ bf16 now
 
 from typing import List, Optional, Union
 
+from ...image_processing_utils import BatchFeature
+from ...image_utils import ImageInput, is_batched
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
 from ...utils import TensorType
@@ -51,58 +53,65 @@ class Kosmos2_5Processor(ProcessorMixin):
     def __call__(
         self,
         images=None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[TextInput, List[TextInput]] = None,
         add_special_tokens: bool = True,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
+        padding: Union[bool, str, PaddingStrategy] = True,
+        truncation: Union[bool, str, TruncationStrategy] = True,
         max_length: Optional[int] = None,
         max_patches: Optional[int] = 4096,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
         return_attention_mask: Optional[bool] = None,
-        return_overflowing_tokens: bool = False,
-        return_special_tokens_mask: bool = False,
-        return_offsets_mapping: bool = False,
-        return_token_type_ids: bool = False,
-        return_length: bool = False,
-        verbose: bool = True,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        return_tensors: Optional[Union[str, TensorType]] = "pt",
         **kwargs,
-    ) -> BatchEncoding:
+    ) -> BatchFeature:
         """
         This method uses [`Kosmos2_5ImageProcessor.preprocess`] method to prepare image(s) for the model, and
-        [`T5TokenizerFast.__call__`] to prepare text for the model.
+        [`PreTrainedTokenizerFast.__call__`] to prepare text for the model.
 
         Please refer to the docstring of the above two methods for more information.
+
+        The rest of this documentation shows the arguments specific to `Kosmos2_5Processor`.
         """
         if images is None and text is None:
             raise ValueError("You have to specify either images or text.")
 
-        encoding_image_processor = self.image_processor(
-            images, return_tensors=return_tensors, max_patches=max_patches, **kwargs
-        )
+        encoding = BatchFeature()
 
-        # use updates or pop
-        promt_ids = self.tokenizer(text, return_tensors="pt").input_ids[0].tolist()
-        input_ids = [0, 100283] + [0] * 2048 + [100284] + promt_ids
-        image_embeds_position_mask = [0, -1] + [1]*2048 + [-1]+ [0]*(len(promt_ids))
-        attention_mask = [1, 1] + [1]*2048 + [1]*(1+len(promt_ids))
-        
-        input_ids = torch.LongTensor(input_ids).unsqueeze(0)
-        attention_mask = torch.Tensor(attention_mask).unsqueeze(0)
-        image_embeds_position_mask = torch.LongTensor(image_embeds_position_mask).unsqueeze(0)
+        if images is not None:
+            image_encoding = self.image_processor(
+                images, return_tensors=return_tensors, max_patches=max_patches, **kwargs
+            )
+            image_encoding.pop("rows")
+            image_encoding.pop("cols")
+            encoding.update(image_encoding)
 
-        return {
-            "flattened_patches": encoding_image_processor.flattened_patches,
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-            "image_attention_mask" : encoding_image_processor.attention_mask,
-            "image_embeds_position_mask": image_embeds_position_mask,
-            "image_embeds": None,
-            "height": encoding_image_processor.height,
-            "width": encoding_image_processor.width,
-        }
+        if text is not None:
+            # use updates or pop
+            input = self.tokenizer(text, 
+                                        add_special_tokens=add_special_tokens,
+                                        padding=padding,
+                                        truncation=truncation,
+                                        max_length=max_length,
+                                        stride=stride,
+                                        pad_to_multiple_of=pad_to_multiple_of,
+                                        return_attention_mask=return_attention_mask,
+                                        return_tensors="pt")
 
+            batch_size, seq_len = input.input_ids.shape
+            additional_tokens = [0, 100283] + [0] * 2048 + [100284]
+            additional_tokens_tensor = torch.tensor(additional_tokens).unsqueeze(0).repeat(batch_size, 1)
+            input_ids = torch.cat([additional_tokens_tensor, input.input_ids], dim=1)
+
+            image_embeds_position_mask = [0, -1] + [1] * 2048 + [-1] + [0] * seq_len
+            image_embeds_position_mask = torch.LongTensor(image_embeds_position_mask).unsqueeze(0).repeat(batch_size, 1)
+
+            added_attention_mask = [1, 1] + [1]*2048 + [1]
+            added_attention_mask_tensor = torch.tensor(added_attention_mask).unsqueeze(0).repeat(batch_size, 1)
+            attention_mask = torch.cat([added_attention_mask_tensor, input.attention_mask], dim=1)
+            encoding.update({"input_ids": input_ids, "attention_mask": attention_mask, "image_embeds_position_mask": image_embeds_position_mask})
+
+        return encoding
 
     def batch_decode(self, *args, **kwargs):
         """
