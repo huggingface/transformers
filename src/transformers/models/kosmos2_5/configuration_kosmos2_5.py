@@ -270,7 +270,7 @@ class Kosmos2_5Config(PretrainedConfig):
             Dictionary of configuration options used to initialize [`Kosmos2_5TextConfig`].
         vision_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`Kosmos2_5VisionConfig`].
-        latent_query_num (`int`, *optional*, defaults to 64):
+        latent_query_num (`int`, *optional*, defaults to 2048):
             The number of latent query tokens that represent the image features used in the text decoder component.
         kwargs (*optional*):
             Dictionary of keyword arguments.

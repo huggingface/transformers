@@ -87,9 +87,10 @@ class Kosmos2_5ImageProcessor(BaseImageProcessor):
             deviation.
         patch_size (`Dict[str, int]`, *optional*, defaults to `{"height": 16, "width": 16}`):
             The patch size to use for the image. According to Kosmos2_5 paper and code, the patch size is 16x16.
-        max_patches (`int`, *optional*, defaults to 2048):
+        max_patches (`int`, *optional*, defaults to 4096):
             The maximum number of patches to extract from the image as per the [Kosmos2_5
             paper](https://arxiv.org/pdf/2210.03347.pdf).
+        lazy (`bool`, *optional*, defaults to `False`): <fill_docstring>
     """
 
     model_input_names = ["flattened_patches"]
