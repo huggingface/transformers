@@ -97,7 +97,6 @@ class Kosmos2_5TextConfig(PretrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        _attn_implementation="flash_attention_2",
         **kwargs,
     ):
         super().__init__(
@@ -122,7 +121,6 @@ class Kosmos2_5TextConfig(PretrainedConfig):
         self.init_std = init_std
         self.scale_embedding = scale_embedding
         self.use_cache = use_cache
-        self._attn_implementation = _attn_implementation
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
@@ -220,7 +218,6 @@ class Kosmos2_5VisionConfig(PretrainedConfig):
         seq_len=4096,
         relative_attention_num_buckets=32,
         relative_attention_max_distance=128,
-        _attn_implementation="flash_attention_2", #"sdpa", # eager
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -240,7 +237,6 @@ class Kosmos2_5VisionConfig(PretrainedConfig):
         self.relative_attention_num_buckets = relative_attention_num_buckets
         self.relative_attention_max_distance = relative_attention_max_distance
         self.d_kv = d_kv
-        self._attn_implementation = _attn_implementation
 
     @classmethod
     def from_pretrained(
@@ -302,7 +298,6 @@ class Kosmos2_5Config(PretrainedConfig):
         text_config=None,
         vision_config=None,
         latent_query_num=2048,
-        _attn_implementation = "eager",
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -317,7 +312,6 @@ class Kosmos2_5Config(PretrainedConfig):
         self.vision_config = Kosmos2_5VisionConfig(**vision_config)
 
         self.latent_query_num = latent_query_num
-        self._attn_implementation = _attn_implementation
     
     @classmethod
     def from_text_vision_configs(
