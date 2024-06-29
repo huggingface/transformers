@@ -23,9 +23,11 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, is_batched
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
-from ...utils import TensorType
-import torch
+from ...utils import TensorType, is_torch_available, is_vision_available, logging
+from ...utils.import_utils import requires_backends
 
+if is_torch_available():
+    import torch
 
 class Kosmos2_5Processor(ProcessorMixin):
     r"""
