@@ -22,12 +22,19 @@ from typing import List, Optional, Union
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, is_batched
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
+from ...tokenization_utils_base import (
+    BatchEncoding,
+    PaddingStrategy,
+    PreTokenizedInput,
+    TextInput,
+    TruncationStrategy,
+)
 from ...utils import TensorType, is_torch_available, is_vision_available, logging
 from ...utils.import_utils import requires_backends
 
 if is_torch_available():
     import torch
+
 
 class Kosmos2_5Processor(ProcessorMixin):
     r"""
@@ -90,28 +97,46 @@ class Kosmos2_5Processor(ProcessorMixin):
 
         if text is not None:
             # use updates or pop
-            input = self.tokenizer(text, 
-                                        add_special_tokens=add_special_tokens,
-                                        padding=padding,
-                                        truncation=truncation,
-                                        max_length=max_length,
-                                        stride=stride,
-                                        pad_to_multiple_of=pad_to_multiple_of,
-                                        return_attention_mask=return_attention_mask,
-                                        return_tensors="pt")
+            input = self.tokenizer(
+                text,
+                add_special_tokens=add_special_tokens,
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                stride=stride,
+                pad_to_multiple_of=pad_to_multiple_of,
+                return_attention_mask=return_attention_mask,
+                return_tensors="pt",
+            )
 
             batch_size, seq_len = input.input_ids.shape
             additional_tokens = [0, 100283] + [0] * 2048 + [100284]
-            additional_tokens_tensor = torch.tensor(additional_tokens).unsqueeze(0).repeat(batch_size, 1)
+            additional_tokens_tensor = (
+                torch.tensor(additional_tokens).unsqueeze(0).repeat(batch_size, 1)
+            )
             input_ids = torch.cat([additional_tokens_tensor, input.input_ids], dim=1)
 
             image_embeds_position_mask = [0, -1] + [1] * 2048 + [-1] + [0] * seq_len
-            image_embeds_position_mask = torch.LongTensor(image_embeds_position_mask).unsqueeze(0).repeat(batch_size, 1)
+            image_embeds_position_mask = (
+                torch.LongTensor(image_embeds_position_mask)
+                .unsqueeze(0)
+                .repeat(batch_size, 1)
+            )
 
-            added_attention_mask = [1, 1] + [1]*2048 + [1]
-            added_attention_mask_tensor = torch.tensor(added_attention_mask).unsqueeze(0).repeat(batch_size, 1)
-            attention_mask = torch.cat([added_attention_mask_tensor, input.attention_mask], dim=1)
-            encoding.update({"input_ids": input_ids, "attention_mask": attention_mask, "image_embeds_position_mask": image_embeds_position_mask})
+            added_attention_mask = [1, 1] + [1] * 2048 + [1]
+            added_attention_mask_tensor = (
+                torch.tensor(added_attention_mask).unsqueeze(0).repeat(batch_size, 1)
+            )
+            attention_mask = torch.cat(
+                [added_attention_mask_tensor, input.attention_mask], dim=1
+            )
+            encoding.update(
+                {
+                    "input_ids": input_ids,
+                    "attention_mask": attention_mask,
+                    "image_embeds_position_mask": image_embeds_position_mask,
+                }
+            )
 
         return encoding
 

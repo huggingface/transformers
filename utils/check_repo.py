@@ -316,6 +316,9 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "SegGptForImageSegmentation",
     "SiglipVisionModel",
     "SiglipTextModel",
+    "Kosmos2_5TextModel",
+    "Kosmos2_5TextForCausalLM",
+    "Kosmos2_5VisionModel"
 ]
 
 # DO NOT edit this list!
