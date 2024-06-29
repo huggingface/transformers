@@ -123,22 +123,31 @@ class Kosmos2_5TextConfig(PretrainedConfig):
         self.use_cache = use_cache
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
+    def from_pretrained(
+        cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
+    ) -> "PretrainedConfig":
         cls._set_token_in_kwargs(kwargs)
 
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
+        config_dict, kwargs = cls.get_config_dict(
+            pretrained_model_name_or_path, **kwargs
+        )
 
         # get the text config dict if we are loading from Kosmos2_5Config
         if config_dict.get("model_type") == "kosmos-2.5":
             config_dict = config_dict["text_config"]
 
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
+        if (
+            "model_type" in config_dict
+            and hasattr(cls, "model_type")
+            and config_dict["model_type"] != cls.model_type
+        ):
             logger.warning(
                 f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
                 f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
             )
 
         return cls.from_dict(config_dict, **kwargs)
+
 
 class Kosmos2_5VisionConfig(PretrainedConfig):
     r"""
@@ -244,19 +253,26 @@ class Kosmos2_5VisionConfig(PretrainedConfig):
     ) -> "PretrainedConfig":
         cls._set_token_in_kwargs(kwargs)
 
-        config_dict, kwargs = cls.get_config_dict(pretrainehidden_size_name_or_path, **kwargs)
+        config_dict, kwargs = cls.get_config_dict(
+            pretrainehidden_size_name_or_path, **kwargs
+        )
 
         # get the vision config dict if we are loading from Kosmos2_5Config
         if config_dict.get("model_type") == "Kosmos2_5":
             config_dict = config_dict["vision_config"]
 
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
+        if (
+            "model_type" in config_dict
+            and hasattr(cls, "model_type")
+            and config_dict["model_type"] != cls.model_type
+        ):
             logger.warning(
                 f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
                 f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
             )
 
         return cls.from_dict(config_dict, **kwargs)
+
 
 class Kosmos2_5Config(PretrainedConfig):
     r"""
@@ -303,19 +319,26 @@ class Kosmos2_5Config(PretrainedConfig):
         super().__init__(**kwargs)
         if text_config is None:
             text_config = {}
-            logger.info("text_config is None. Initializing the Kosmos2_5TextConfig with default values.")
+            logger.info(
+                "text_config is None. Initializing the Kosmos2_5TextConfig with default values."
+            )
         if vision_config is None:
             vision_config = {}
-            logger.info("vision_config is None. Initializing the Kosmos2_5VisionConfig with default values.")
+            logger.info(
+                "vision_config is None. Initializing the Kosmos2_5VisionConfig with default values."
+            )
 
         self.text_config = Kosmos2_5TextConfig(**text_config)
         self.vision_config = Kosmos2_5VisionConfig(**vision_config)
 
         self.latent_query_num = latent_query_num
-    
+
     @classmethod
     def from_text_vision_configs(
-        cls, text_config: Kosmos2_5TextConfig, vision_config: Kosmos2_5VisionConfig, **kwargs
+        cls,
+        text_config: Kosmos2_5TextConfig,
+        vision_config: Kosmos2_5VisionConfig,
+        **kwargs,
     ):
         r"""
         Instantiate a [`Pix2StructConfig`] (or a derived class) from pix2struct text model configuration and pix2struct
@@ -325,5 +348,8 @@ class Kosmos2_5Config(PretrainedConfig):
             [`Pix2StructConfig`]: An instance of a configuration object
         """
 
-        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
-
+        return cls(
+            text_config=text_config.to_dict(),
+            vision_config=vision_config.to_dict(),
+            **kwargs,
+        )
