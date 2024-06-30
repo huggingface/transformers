@@ -88,7 +88,6 @@ class Kosmos2_5ImageProcessor(BaseImageProcessor):
         max_patches (`int`, *optional*, defaults to 4096):
             The maximum number of patches to extract from the image as per the [Kosmos2_5
             paper](https://arxiv.org/pdf/2309.11419).
-        lazy (`bool`, *optional*, defaults to `False`): <fill_docstring>
     """
 
     model_input_names = ["flattened_patches"]
@@ -99,7 +98,6 @@ class Kosmos2_5ImageProcessor(BaseImageProcessor):
         do_normalize: bool = True,
         patch_size: Dict[str, int] = None,
         max_patches: int = 4096,
-        lazy: bool = False,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -107,7 +105,6 @@ class Kosmos2_5ImageProcessor(BaseImageProcessor):
         self.do_normalize = do_normalize
         self.do_convert_rgb = do_convert_rgb
         self.max_patches = max_patches
-        self.lazy = lazy
 
     def extract_flattened_patches(
         self,
@@ -143,9 +140,6 @@ class Kosmos2_5ImageProcessor(BaseImageProcessor):
 
         # maximize scale s.t.
         scale = math.sqrt(max_patches * (patch_height / image_height) * (patch_width / image_width))
-        if scale > 1 and self.lazy:
-            # that means we need to extend the image, which is unnecessary
-            scale = 1
         num_feasible_rows = max(min(math.floor(scale * image_height / patch_height), max_patches), 1)
         num_feasible_cols = max(min(math.floor(scale * image_width / patch_width), max_patches), 1)
         resized_height = max(num_feasible_rows * patch_height, 1)
