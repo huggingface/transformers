@@ -128,12 +128,12 @@ def set_recursively(key, value, full_name, weight_type, hf_pointer):
         if hasattr(hf_pointer, "weight_g"):
             hf_pointer.weight_g.data = value
         else:
-            hf_pointer.parametrizations.weight.original0 = value
+            hf_pointer.parametrizations.weight.original0.data = value
     elif weight_type == "weight_v":
         if hasattr(hf_pointer, "weight_v"):
             hf_pointer.weight_v.data = value
         else:
-            hf_pointer.parametrizations.weight.original1 = value
+            hf_pointer.parametrizations.weight.original1.data = value
     elif weight_type == "bias":
         hf_pointer.bias.data = value
     elif weight_type == "param":
