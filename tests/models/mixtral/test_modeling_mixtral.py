@@ -398,11 +398,11 @@ class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
         )
 
-    @unittest.skip("Mixtral buffers include complex numbers, which breaks this test")
+    @unittest.skip(reason="Mixtral buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip("Mixtral uses GQA on all models so the KV cache is a non standard format")
+    @unittest.skip(reason="Mixtral uses GQA on all models so the KV cache is a non standard format")
     def test_past_key_values_format(self):
         pass
 
@@ -490,7 +490,7 @@ class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest("Mixtral flash attention does not support right padding")
+        self.skipTest(reason="Mixtral flash attention does not support right padding")
 
     # Ignore copy
     def test_load_balancing_loss(self):

@@ -335,10 +335,12 @@ class SiglipTextModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @unittest.skip
     # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.test_training
     def test_training(self):
         pass
 
+    @unittest.skip
     # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.test_training_gradient_checkpointing
     def test_training_gradient_checkpointing(self):
         pass
@@ -443,6 +445,12 @@ class SiglipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
+    # MP works but offload doesn't work when the MultiheadAttention is offloaded
+    # TODO: One potential solution would be to add to set preload_module_classes = ["SiglipMultiheadAttentionPoolingHead"]
+    # in the dispatch_model function
+    test_cpu_offload = False
+    test_disk_offload_safetensors = False
+    test_disk_offload_bin = False
 
     # Copied from tests.models.clip.test_modeling_clip.CLIPModelTest.setUp with CLIP->Siglip
     def setUp(self):
@@ -496,7 +504,7 @@ class SiglipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     # Copied from tests.models.clip.test_modeling_clip.CLIPModelTest._create_and_check_torchscript with CLIP->Siglip
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
-            return
+            self.skipTest(reason="test_torchscript is set to False")
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.torchscript = True
@@ -618,6 +626,12 @@ class SiglipForImageClassificationModelTest(ModelTesterMixin, PipelineTesterMixi
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
+    # MP works but offload doesn't work when the MultiheadAttention is offloaded
+    # TODO: One potential solution would be to add to set preload_module_classes = ["SiglipMultiheadAttentionPoolingHead"]
+    # in the dispatch_model function
+    test_cpu_offload = False
+    test_disk_offload_safetensors = False
+    test_disk_offload_bin = False
 
     def setUp(self):
         self.model_tester = SiglipForImageClassificationModelTester(self)

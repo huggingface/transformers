@@ -21,7 +21,7 @@ entrypoints==0.3
 filelock==3.0.12
 future==0.18.3
 html5lib==1.0.1
-idna==2.8
+idna==3.7
 ipaddr==2.2.0
 ipykernel==5.3.4
 ipython
@@ -90,7 +90,7 @@ tornado==6.4.1
 tqdm==4.66.3
 traitlets
 git+https://github.com/huggingface/transformers.git
-urllib3==1.26.18
+urllib3==1.26.19
 wcwidth==0.2.5
 webencodings==0.5.1
 wget==3.2

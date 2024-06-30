@@ -26,7 +26,6 @@ from transformers import (
     AddedToken,
     CodeLlamaTokenizer,
     CodeLlamaTokenizerFast,
-    is_torch_available,
 )
 from transformers.convert_slow_tokenizer import convert_slow_tokenizer
 from transformers.testing_utils import (
@@ -42,10 +41,6 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
-
-
-if is_torch_available():
-    pass
 
 
 @require_sentencepiece
@@ -220,7 +215,7 @@ class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @require_torch
     def test_batch_tokenization(self):
         if not self.test_seq2seq:
-            return
+            self.skipTest(reason="test_seq2seq is False")
 
         tokenizers = self.get_tokenizers()
         for tokenizer in tokenizers:
@@ -240,7 +235,7 @@ class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         return_tensors="pt",
                     )
                 except NotImplementedError:
-                    return
+                    self.skipTest(reason="Encountered NotImplementedError when calling tokenizer")
                 self.assertEqual(batch.input_ids.shape[1], 3)
                 # max_target_length will default to max_length if not specified
                 batch = tokenizer(text, max_length=3, return_tensors="pt")
@@ -251,7 +246,7 @@ class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertEqual(batch_encoder_only.attention_mask.shape[1], 3)
                 self.assertNotIn("decoder_input_ids", batch_encoder_only)
 
-    @unittest.skip("Unfortunately way too slow to build a BPE with SentencePiece.")
+    @unittest.skip(reason="Unfortunately way too slow to build a BPE with SentencePiece.")
     def test_save_slow_from_fast_and_reload_fast(self):
         pass
 
@@ -306,11 +301,11 @@ class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             pickled_tokenizer = pickle.dumps(tokenizer)
         pickle.loads(pickled_tokenizer)
 
-    @unittest.skip("worker 'gw4' crashed on CI, passing locally.")
+    @unittest.skip(reason="worker 'gw4' crashed on CI, passing locally.")
     def test_pickle_subword_regularization_tokenizer(self):
         pass
 
-    @unittest.skip("worker 'gw4' crashed on CI, passing locally.")
+    @unittest.skip(reason="worker 'gw4' crashed on CI, passing locally.")
     def test_subword_regularization_tokenizer(self):
         pass
 
@@ -493,7 +488,7 @@ class LlamaIntegrationTest(unittest.TestCase):
         pyth_tokenizer = self.tokenizer
         rust_tokenizer = self.rust_tokenizer
 
-        dataset = load_dataset("code_x_glue_ct_code_to_text", "go")
+        dataset = load_dataset("google/code_x_glue_ct_code_to_text", "go")
         for item in tqdm.tqdm(dataset["validation"]):
             string = item["code"]
             encoded1 = pyth_tokenizer.encode(string)
@@ -506,7 +501,7 @@ class LlamaIntegrationTest(unittest.TestCase):
 
             self.assertEqual(decoded1, decoded2)
 
-        dataset = load_dataset("xnli", "all_languages")
+        dataset = load_dataset("facebook/xnli", "all_languages")
 
         for item in tqdm.tqdm(dataset["train"]):
             for string in item["premise"].values():

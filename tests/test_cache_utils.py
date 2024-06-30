@@ -452,6 +452,6 @@ class CacheIntegrationTest(unittest.TestCase):
         decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
         self.assertListEqual(decoded, EXPECTED_GENERATION)
 
-    @unittest.skip("TODO @gante static cache's does not support beam search yet")
+    @unittest.skip(reason="TODO @gante static cache's does not support beam search yet")
     def test_static_cache_beam_search(self):
         pass

@@ -93,6 +93,7 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         ids = tokenizer.encode(txt, add_special_tokens=False)
         return txt, ids
 
+    @unittest.skip
     def test_pretokenized_inputs(self):
         pass
 

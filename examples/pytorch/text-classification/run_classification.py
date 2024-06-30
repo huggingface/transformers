@@ -47,7 +47,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.42.0.dev0")
+check_min_version("4.43.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/text-classification/requirements.txt")
 
@@ -87,7 +87,7 @@ class DataTrainingArguments:
         },
     )
     text_column_delimiter: Optional[str] = field(
-        default=" ", metadata={"help": "THe delimiter to use to join text columns into a single sentence."}
+        default=" ", metadata={"help": "The delimiter to use to join text columns into a single sentence."}
     )
     train_split_name: Optional[str] = field(
         default=None,
@@ -132,6 +132,10 @@ class DataTrainingArguments:
                 "than this will be truncated, sequences shorter will be padded."
             )
         },
+    )
+    preprocessing_num_workers: Optional[int] = field(
+        default=None,
+        metadata={"help": "The number of processes to use for the preprocessing."},
     )
     overwrite_cache: bool = field(
         default=False, metadata={"help": "Overwrite the cached preprocessed datasets or not."}
@@ -240,9 +244,9 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option "
-                "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
-                "execute code present on the Hub on your local machine."
+                "Whether to trust the execution of code from datasets/models defined on the Hub."
+                " This option should only be set to `True` for repositories you trust and in which you have read the"
+                " code, as it will execute code present on the Hub on your local machine."
             )
         },
     )
@@ -338,6 +342,7 @@ def main():
             data_args.dataset_config_name,
             cache_dir=model_args.cache_dir,
             token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
         )
         # Try print some info about the dataset
         logger.info(f"Dataset loaded: {raw_datasets}")
@@ -572,6 +577,7 @@ def main():
         raw_datasets = raw_datasets.map(
             preprocess_function,
             batched=True,
+            num_proc=data_args.preprocessing_num_workers,
             load_from_cache_file=not data_args.overwrite_cache,
             desc="Running tokenizer on dataset",
         )

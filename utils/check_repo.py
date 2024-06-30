@@ -93,6 +93,7 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "RecurrentGemmaModel",  # Building part of bigger (tested) model.
     "FuyuForCausalLM",  # Not tested fort now
     "InstructBlipQFormerModel",  # Building part of bigger (tested) model.
+    "InstructBlipVideoQFormerModel",  # Building part of bigger (tested) model.
     "UMT5EncoderModel",  # Building part of bigger (tested) model.
     "Blip2QFormerModel",  # Building part of bigger (tested) model.
     "ErnieMForInformationExtraction",
@@ -250,6 +251,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "GPTSw3DoubleHeadsModel",
     "InstructBlipVisionModel",
     "InstructBlipQFormerModel",
+    "InstructBlipVideoVisionModel",
+    "InstructBlipVideoQFormerModel",
     "LayoutLMForQuestionAnswering",
     "LukeForMaskedLM",
     "LukeForEntityClassification",

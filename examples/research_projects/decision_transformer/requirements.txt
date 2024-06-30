@@ -79,7 +79,7 @@ gym-notices==0.0.6
 h5py==3.6.0
 huggingface-hub==0.4.0
 hypothesis==6.39.4
-idna==3.3
+idna==3.7
 imageio==2.16.1
 importlib-metadata==4.11.3
 importlib-resources==5.4.0
@@ -229,7 +229,7 @@ tzlocal==4.1
 unidic==1.1.0
 unidic-lite==1.0.8
 uritemplate==4.1.1
-urllib3==1.26.18
+urllib3==1.26.19
 wasabi==0.9.0
 wcwidth==0.2.5
 websocket-client==1.3.1

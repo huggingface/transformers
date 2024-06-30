@@ -132,6 +132,7 @@ if is_torch_available():
 
 # for version specific tests in TrainerIntegrationTest
 require_accelerate_version_min_0_28 = partial(require_accelerate, min_version="0.28")
+require_accelerate_version_min_0_30 = partial(require_accelerate, min_version="0.30")
 GRAD_ACCUM_KWARGS_VERSION_AVAILABLE = is_accelerate_available("0.28")
 if is_accelerate_available():
     from accelerate import Accelerator
@@ -1230,6 +1231,97 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
             trainer.train()
             trainer.evaluate()
+
+    def test_get_eval_dataloader_without_persistent_workers(self):
+        train_dataset = RegressionDataset()
+        config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)
+        tiny_gpt2 = GPT2LMHeadModel(config)
+        args = TrainingArguments("./test", report_to="none", dataloader_persistent_workers=False)
+
+        # Single evaluation dataset
+        eval_dataset = RegressionDataset()
+        trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset, eval_dataset=eval_dataset)
+        # Mocking the prepare method to avoid the dataloader changing with each call to get_eval_dataloader
+        trainer.accelerator.prepare = lambda x: x
+
+        default_dataloader = trainer.get_eval_dataloader()
+        dataloader_with_dataset = trainer.get_eval_dataloader(eval_dataset)
+
+        self.assertEqual(default_dataloader.dataset, eval_dataset)
+        self.assertEqual(dataloader_with_dataset.dataset, eval_dataset)
+        self.assertNotEqual(default_dataloader, dataloader_with_dataset)
+
+        # Multiple evaluation datasets
+        first_dataset = RegressionDataset()
+        second_dataset = RegressionDataset()
+        trainer = Trainer(
+            tiny_gpt2,
+            args,
+            train_dataset=train_dataset,
+            eval_dataset={"first": first_dataset, "second": second_dataset},
+        )
+        # Mocking the prepare method to avoid the dataloader changing with each call to get_eval_dataloader
+        trainer.accelerator.prepare = lambda x: x
+
+        first_dataloader = trainer.get_eval_dataloader("first")
+        first_dataloader_repeated = trainer.get_eval_dataloader("first")
+        second_dataloader = trainer.get_eval_dataloader("second")
+        second_dataloader_repeated = trainer.get_eval_dataloader("second")
+
+        self.assertEqual(first_dataset, first_dataloader.dataset)
+        self.assertEqual(first_dataloader.dataset, first_dataloader_repeated.dataset)
+        self.assertEqual(second_dataset, second_dataloader.dataset)
+        self.assertEqual(second_dataloader.dataset, second_dataloader_repeated.dataset)
+        self.assertNotEqual(first_dataloader, first_dataloader_repeated)
+        self.assertNotEqual(second_dataloader, second_dataloader_repeated)
+
+    def test_get_eval_dataloader_with_persistent_workers(self):
+        train_dataset = RegressionDataset()
+        config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)
+        tiny_gpt2 = GPT2LMHeadModel(config)
+        args = TrainingArguments(
+            "./test",
+            report_to="none",
+            dataloader_persistent_workers=True,
+            dataloader_num_workers=2,
+        )
+
+        # Single evaluation dataset
+        eval_dataset = RegressionDataset()
+        trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset, eval_dataset=eval_dataset)
+        # Mocking the prepare method to avoid the dataloader changing with each call to get_eval_dataloader
+        trainer.accelerator.prepare = lambda x: x
+
+        default_dataloader = trainer.get_eval_dataloader()
+        dataloader_with_dataset = trainer.get_eval_dataloader(eval_dataset)
+
+        self.assertEqual(default_dataloader.dataset, eval_dataset)
+        self.assertEqual(dataloader_with_dataset.dataset, eval_dataset)
+        self.assertEqual(default_dataloader, dataloader_with_dataset)
+
+        # Multiple evaluation datasets
+        first_dataset = RegressionDataset()
+        second_dataset = RegressionDataset()
+        trainer = Trainer(
+            tiny_gpt2,
+            args,
+            train_dataset=train_dataset,
+            eval_dataset={"first": first_dataset, "second": second_dataset},
+        )
+        # Mocking the prepare method to avoid the dataloader changing with each call to get_eval_dataloader
+        trainer.accelerator.prepare = lambda x: x
+
+        first_dataloader = trainer.get_eval_dataloader("first")
+        first_dataloader_repeated = trainer.get_eval_dataloader("first")
+        second_dataloader = trainer.get_eval_dataloader("second")
+        second_dataloader_repeated = trainer.get_eval_dataloader("second")
+
+        self.assertEqual(first_dataset, first_dataloader.dataset)
+        self.assertEqual(first_dataloader.dataset, first_dataloader_repeated.dataset)
+        self.assertEqual(second_dataset, second_dataloader.dataset)
+        self.assertEqual(second_dataloader.dataset, second_dataloader_repeated.dataset)
+        self.assertEqual(first_dataloader, first_dataloader_repeated)
+        self.assertEqual(second_dataloader, second_dataloader_repeated)
 
     @require_lomo
     @require_torch_gpu
@@ -2975,7 +3067,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertAlmostEqual(metrics["eval_loss"], original_eval_loss)
         torchdynamo.reset()
 
-    @unittest.skip("torch 2.0.0 gives `ModuleNotFoundError: No module named 'torchdynamo'`.")
+    @unittest.skip(reason="torch 2.0.0 gives `ModuleNotFoundError: No module named 'torchdynamo'`.")
     @require_torch_non_multi_gpu
     @require_torchdynamo
     def test_torchdynamo_memory(self):
@@ -3474,6 +3566,17 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 self.assertIn("torch_dtype", args_dict)
                 self.assertEqual(args_dict["torch_dtype"], dtype)
 
+    @require_accelerate_version_min_0_30
+    def test_eval_use_gather_object(self):
+        train_dataset = RegressionDataset()
+        eval_dataset = RegressionDataset()
+        model = RegressionDictModel()
+        args = TrainingArguments("./regression", report_to="none", eval_use_gather_object=True)
+        trainer = Trainer(model, args, train_dataset=train_dataset, eval_dataset=eval_dataset)
+        trainer.train()
+        _ = trainer.evaluate()
+        _ = trainer.predict(eval_dataset)
+
 
 @require_torch
 @is_staging_test
@@ -3577,7 +3680,7 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
     def test_push_to_hub_with_saves_each_n_steps(self):
         num_gpus = max(1, backend_device_count(torch_device))
         if num_gpus > 2:
-            return
+            self.skipTest(reason="More than 2 GPUs available")
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             trainer = get_regression_trainer(

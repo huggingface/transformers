@@ -28,6 +28,7 @@ from ..cache_utils import (
     Cache,
     DynamicCache,
     HQQQuantizedCache,
+    HybridCache,
     QuantizedCacheConfig,
     QuantoQuantizedCache,
     SlidingWindowCache,
@@ -112,7 +113,7 @@ logger = logging.get_logger(__name__)
 if is_accelerate_available():
     from accelerate.hooks import AlignDevicesHook, add_hook_to_module
 
-NEED_SETUP_CACHE_CLASSES_MAPPING = {"static": StaticCache, "sliding_window": SlidingWindowCache}
+NEED_SETUP_CACHE_CLASSES_MAPPING = {"static": StaticCache, "sliding_window": SlidingWindowCache, "hybrid": HybridCache}
 QUANT_BACKEND_CLASSES_MAPPING = {"quanto": QuantoQuantizedCache, "HQQ": HQQQuantizedCache}
 
 
@@ -575,8 +576,12 @@ class GenerationMixin:
         # no user input -> use decoder_start_token_id as decoder_input_ids
         if decoder_input_ids is None:
             decoder_input_ids = decoder_start_token_id
-        # exception: Donut checkpoints have task-specific decoder starts and don't expect a BOS token
-        elif self.config.model_type == "vision-encoder-decoder" and "donut" in self.name_or_path.lower():
+        # exception: Donut checkpoints have task-specific decoder starts and don't expect a BOS token. Note that the
+        # original checkpoints can't be detected through `self.__class__.__name__.lower()`, needing custom logic.
+        # See: https://github.com/huggingface/transformers/pull/31470
+        elif "donut" in self.__class__.__name__.lower() or (
+            self.config.model_type == "vision-encoder-decoder" and "donut" in self.config.encoder.model_type.lower()
+        ):
             pass
         elif self.config.model_type in ["whisper"]:
             pass
@@ -1390,11 +1395,13 @@ class GenerationMixin:
             return model_kwargs
 
         past_length = 0
-        if "past_key_values" in model_kwargs:
-            if isinstance(model_kwargs["past_key_values"], Cache):
-                past_length = model_kwargs["past_key_values"].get_seq_length()
-            else:
-                past_length = model_kwargs["past_key_values"][0][0].shape[2]
+        if model_kwargs.get("past_key_values") is not None:
+            cache = model_kwargs["past_key_values"]
+            if not isinstance(cache, Cache):
+                past_length = cache[0][0].shape[2]
+            elif hasattr(cache, "get_seq_length") and cache.get_seq_length() is not None:
+                past_length = cache.get_seq_length()
+
         if "inputs_embeds" in model_kwargs:
             cur_len = model_kwargs["inputs_embeds"].shape[1]
         else:
@@ -1640,8 +1647,6 @@ class GenerationMixin:
             else:
                 synced_gpus = False
 
-        tokenizer = kwargs.pop("tokenizer", None)
-
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
 
@@ -1737,7 +1742,9 @@ class GenerationMixin:
                         "issue: https://github.com/huggingface/transformers/issues/28981"
                     )
                 model_kwargs["past_key_values"] = self._get_cache(
-                    generation_config.cache_implementation, batch_size, generation_config.max_length
+                    generation_config.cache_implementation,
+                    getattr(generation_config, "num_beams", 1) * batch_size,
+                    generation_config.max_length,
                 )
             elif generation_config.cache_implementation == "quantized":
                 if not self._supports_quantized_cache:
@@ -1828,6 +1835,12 @@ class GenerationMixin:
                 raise ValueError("assisted generate requires `use_cache=True`")
             if generation_config.cache_implementation == "static":
                 raise ValueError("assisted generate is not supported with `static_cache`")
+            if self._is_stateful:
+                # In assisted generation we need the ability to confirm whether the model would pick certain tokens,
+                # which is not possible with stateful models (they can't reset to a previous subset of generated text)
+                raise ValueError(
+                    f"assisted generation is not supported with stateful models, such as {self.__class__.__name__}"
+                )
 
             # 11. Get the candidate generator, given the parameterization
             candidate_generator = self._get_candidate_generator(
@@ -1865,6 +1878,11 @@ class GenerationMixin:
         elif generation_mode == GenerationMode.CONTRASTIVE_SEARCH:
             if not model_kwargs["use_cache"]:
                 raise ValueError("Contrastive search requires `use_cache=True`")
+            if self._is_stateful:
+                # Just like assisted generation, we need to be able to rollback to a previous state (see comment above)
+                raise ValueError(
+                    f"contrastive search is not supported with stateful models, such as {self.__class__.__name__}"
+                )
 
             result = self._contrastive_search(
                 input_ids,
@@ -3684,11 +3702,10 @@ class GenerationMixin:
         model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
 
         # This is needed if return_dict_in_generate is True
+        start_from_empty_dynamic_cache = False
         if isinstance(model_kwargs.get("past_key_values", None), DynamicCache):
             if len(model_kwargs["past_key_values"]) == 0:
                 start_from_empty_dynamic_cache = True
-        else:
-            start_from_empty_dynamic_cache = False
 
         this_peer_finished = False
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
