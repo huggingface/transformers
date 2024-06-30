@@ -2874,6 +2874,12 @@ class GroundingDinoLoss(nn.Module):
             generalized_box_iou(center_to_corners_format(source_boxes), center_to_corners_format(target_boxes))
         )
         losses["loss_giou"] = loss_giou.sum() / num_boxes
+
+        # calculate the x,y and h,w loss
+        with torch.no_grad():
+            losses["loss_xy"] = loss_bbox[..., :2].sum() / num_boxes
+            losses["loss_hw"] = loss_bbox[..., 2:].sum() / num_boxes
+
         return losses
 
     @torch.no_grad()
@@ -2906,9 +2912,9 @@ class GroundingDinoLoss(nn.Module):
         batch_idx = torch.cat([torch.full_like(target, i) for i, (_, target) in enumerate(indices)])
         target_idx = torch.cat([target for (_, target) in indices])
         return batch_idx, target_idx
-    
+
     # Ignore copy
-    def _get_label_map(self, outputs):
+    def _get_label_maps(self, outputs):
         """
         Computes a mapping between the tokens associated with the prompt labels in the logit space with shape (batch_size, num_labels, hidden_size)
         where `num_labels` is defined by the number of classes in the input prompt.
@@ -2919,7 +2925,8 @@ class GroundingDinoLoss(nn.Module):
 
         This is used in `loss_labels` and in the `GroundingDinoHungarianMatcher`.)
         """
-        input_ids = outputs["input_ids"] # (batch_size, num_tokens)
+        batch_size, num_boxes, hidden_size = outputs["logits"].shape
+        input_ids = outputs["input_ids"]  # (batch_size, num_tokens)
         # Add [PAD] token to the list of special tokens
         delimiter_tokens = torch.tensor(SPECIAL_TOKENS + [0], device=input_ids.device)
 
@@ -2928,12 +2935,22 @@ class GroundingDinoLoss(nn.Module):
         # Easy to get the delimiter indices (only the valid ones i.e. diff between two consecutive delimiters is > 1)
         # Have to update the class_labels in the targets with previous amount of labels as the number of labes in prompt might be different.
         # Have to update the delimiter_indices with seq_len.
-        for ids in input_ids:
-            delimiter_token_mask = torch.isin(ids, delimiter_tokens)
-            delimiter_indices = delimiter_token_mask.nonzero()
+        delimiter_token_masks = torch.isin(input_ids, delimiter_tokens)
+        label_maps = ()
+        for delimiter_token_mask in delimiter_token_masks:
+            label_map_within_batch = []
+            delimiter_indices = torch.where(delimiter_token_mask)[0]
+            for i in range(len(delimiter_indices) - 1):
+                start = delimiter_indices[i]
+                end = delimiter_indices[i + 1]
+                if end - start > 1:
+                    label_map = torch.zeros(hidden_size, device=input_ids.device)
+                    label_map[start + 1 : end] = 1
+                    label_map_within_batch.append(label_map)
 
-        # Placeholder for the label map
-        label_map = torch.zeros_like(...)
+            label_maps += (torch.stack(label_map_within_batch),)
+
+        return label_maps
 
     def get_loss(self, loss, outputs, targets, indices, num_boxes):
         loss_map = {
@@ -2959,10 +2976,20 @@ class GroundingDinoLoss(nn.Module):
         """
         outputs_without_aux = {k: v for k, v in outputs.items() if k != "auxiliary_outputs" and k != "enc_outputs"}
 
-        label_map = self._get_label_map(outputs)
+        outputs_without_aux["label_maps"] = self._get_label_maps(outputs)
 
         # Retrieve the matching between the outputs of the last layer and the targets
         indices = self.matcher(outputs_without_aux, targets)
+
+        # Create one_hot based on the matching indices
+        one_hot = torch.zeros_like(
+            outputs["logits"], device=outputs["logits"].device, dtype=torch.long
+        )  # (batch_size, num_queries, hidden_dim)
+        class_labels = [target["class_labels"] for target in targets]
+        for i, (source, target) in enumerate(indices):
+            labels = class_labels[i][target]
+            one_hot[i, source] = outputs_without_aux["label_maps"][i][labels].to(torch.long)
+        outputs_without_aux["one_hot"] = one_hot
 
         # Compute the average number of target boxes accross all nodes, for normalization purposes
         num_boxes = sum(len(t["class_labels"]) for t in targets)
