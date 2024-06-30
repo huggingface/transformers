@@ -287,13 +287,10 @@ class baizeTokenizerFast(PreTrainedTokenizerFast):
         template = template.replace("DEFAULT_SYSTEM_MESSAGE", default_message)
 
         return template
-
-    # TODO ArthurZ let's rely on the template processor instead, refactor all fast tokenizers
-    # Copied from transformers.models.baize.tokenization_baize.baizeTokenizer.build_inputs_with_special_tokens
+        
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         bos_token_id = [self.bos_token_id] if self.add_bos_token else []
-        eos_token_id = [self.eos_token_id] if self.add_eos_token else []
-
+        eos_token_id = [self.eos_token_id] if self.add_eos_token else []=
         output = bos_token_id + token_ids_0 + eos_token_id
 
         if token_ids_1 is not None:
