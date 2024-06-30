@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 The HuggingFace Inc. team.
+# Copyright 2024 Microsoft Research and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@ from ...image_processing_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import PaddingStrategy, TextInput, TruncationStrategy
 from ...utils import TensorType, is_torch_available
+
 
 if is_torch_available():
     import torch
