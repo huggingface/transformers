@@ -97,6 +97,9 @@ class GraniteConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         mlp_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
+        m_emb (`float`, *optional*): embedding multiplier
+        m_width (`float`, *optional*): divisor for output logits
+        m_residual (`float, *optional*): residual multiplier
 
     ```python
     >>> from transformers import GraniteModel, GraniteConfig
