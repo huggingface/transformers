@@ -508,7 +508,10 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         output_native = tokenizer.batch_decode(output_native)
 
         model = GraniteForCausalLM.from_pretrained(
-            "meta-granite/Granite-2-7b-hf", load_in_4bit=True, device_map={"": 0}, attn_implementation="flash_attention_2"
+            "meta-granite/Granite-2-7b-hf",
+            load_in_4bit=True,
+            device_map={"": 0},
+            attn_implementation="flash_attention_2",
         )
 
         output_fa_2 = model.generate(**inputs, max_new_tokens=20, do_sample=False)
@@ -734,7 +737,9 @@ class GraniteIntegrationTest(unittest.TestCase):
             "Simply put, the theory of relativity states that ",
             "My favorite all time favorite condiment is ketchup.",
         ]
-        tokenizer = GraniteTokenizer.from_pretrained("meta-granite/Granite-2-7b-hf", pad_token="</s>", padding_side="right")
+        tokenizer = GraniteTokenizer.from_pretrained(
+            "meta-granite/Granite-2-7b-hf", pad_token="</s>", padding_side="right"
+        )
         model = GraniteForCausalLM.from_pretrained(
             "meta-granite/Granite-2-7b-hf", device_map="sequential", torch_dtype=torch.float16
         )
