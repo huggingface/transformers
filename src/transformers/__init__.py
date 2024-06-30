@@ -2441,8 +2441,12 @@ else:
     _import_structure["models.baize"].extend(
         [
             "baizeForCausalLM",
+            "baizeForQuestionAnswering",
+            "baizeForSequenceClassification",
+            "baizeForTokenClassification",
             "baizeModel",
             "baizePreTrainedModel",
+            
         ]
     )
     _import_structure["models.llava"].extend(
@@ -4691,8 +4695,6 @@ else:
 
 # Direct imports for type-checking
 if TYPE_CHECKING:
-    # Configuration
-    # Agents
     from .agents import (
         Agent,
         CodeAgent,
@@ -6916,6 +6918,9 @@ if TYPE_CHECKING:
         )
         from .models.baize import (
             baizeForCausalLM,
+            baizeForQuestionAnswering,
+            baizeForSequenceClassification,
+            baizeForTokenClassification,
             baizeModel,
             baizePreTrainedModel,
         )
