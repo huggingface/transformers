@@ -521,6 +521,8 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             if self.type == "seq2seq_whisper":
                 if stride is not None:
                     out["stride"] = stride
+                if 'output_scores' in generate_kwargs.keys():
+                    out["output_scores"] = tokens['scores']
 
         else:
             inputs = {

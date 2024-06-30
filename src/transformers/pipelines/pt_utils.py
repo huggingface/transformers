@@ -278,14 +278,15 @@ class PipelinePackIterator(PipelineIterator):
                 else:
                     observed_batch_size = first_tensor.shape[0]
                 if 0 < observed_batch_size < self.loader_batch_size:
-                    # could be last batch so we can't unroll as many
-                    # elements.
                     self.loader_batch_size = observed_batch_size
                 self._loader_batch_data = processed
                 self._loader_batch_index = 0
                 while self._loader_batch_index < self.loader_batch_size:
                     item = self.loader_batch_item()
                     is_last = item.pop("is_last")
+                    #Added exception for output_scores, i.e, Whisper output logits as it has no correlation with batch size
+                    if 'output_scores' in item.keys():
+                        item['output_scores'] = processed['output_scores']
                     accumulator.append(item)
                     if is_last:
                         return accumulator
