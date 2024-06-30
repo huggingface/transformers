@@ -15,11 +15,11 @@
 
 import argparse
 import copy
+import glob
 import os
-import random
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
-import glob
+
 import yaml
 
 
@@ -206,9 +206,9 @@ class CircleCIJob:
             test_command = f"({test_command} | tee tests_output.txt)"
         steps.append({"run": {"name": "Run tests", "command": test_command}})
 
-        steps.append({"run": {"name": "Skipped tests", "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --skip"}})
-        steps.append({"run": {"name": "Failed tests",  "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --fail"}})
-        steps.append({"run": {"name": "Errors",        "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --errors"}})
+        steps.append({"run": {"name": "Skipped tests", "when": "always", "command": "python3 .circleci/parse_test_outputs.py --file tests_output.txt --skip"}})
+        steps.append({"run": {"name": "Failed tests",  "when": "always", "command": "python3 .circleci/parse_test_outputs.py --file tests_output.txt --fail"}})
+        steps.append({"run": {"name": "Errors",        "when": "always", "command": "python3 .circleci/parse_test_outputs.py --file tests_output.txt --errors"}})
 
         steps.append({"store_test_results": {"path": "test-results"}})
         steps.append({"store_artifacts": {"path": "tests_output.txt"}})
