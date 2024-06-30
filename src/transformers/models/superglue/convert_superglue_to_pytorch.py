@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert SuperGlue checkpoints from timm."""
 
-
 import argparse
 import json
 from dataclasses import dataclass, field
