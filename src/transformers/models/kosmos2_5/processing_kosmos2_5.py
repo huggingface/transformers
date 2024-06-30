@@ -14,15 +14,13 @@
 # limitations under the License.
 """
 Processor class for Kosmos2_5.
-bf16 now
 """
 
 from typing import List, Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import (PaddingStrategy, TextInput,
-                                        TruncationStrategy)
+from ...tokenization_utils_base import PaddingStrategy, TextInput, TruncationStrategy
 from ...utils import TensorType, is_torch_available
 
 if is_torch_available():
@@ -104,25 +102,17 @@ class Kosmos2_5Processor(ProcessorMixin):
 
             batch_size, seq_len = input.input_ids.shape
             additional_tokens = [0, 100283] + [0] * 2048 + [100284]
-            additional_tokens_tensor = (
-                torch.tensor(additional_tokens).unsqueeze(0).repeat(batch_size, 1)
-            )
+            additional_tokens_tensor = torch.tensor(additional_tokens).unsqueeze(0).repeat(batch_size, 1)
             input_ids = torch.cat([additional_tokens_tensor, input.input_ids], dim=1)
 
             image_embeds_position_mask = [0, -1] + [1] * 2048 + [-1] + [0] * seq_len
             image_embeds_position_mask = (
-                torch.LongTensor(image_embeds_position_mask)
-                .unsqueeze(0)
-                .repeat(batch_size, 1)
+                torch.LongTensor(image_embeds_position_mask).unsqueeze(0).repeat(batch_size, 1)
             )
 
             added_attention_mask = [1, 1] + [1] * 2048 + [1]
-            added_attention_mask_tensor = (
-                torch.tensor(added_attention_mask).unsqueeze(0).repeat(batch_size, 1)
-            )
-            attention_mask = torch.cat(
-                [added_attention_mask_tensor, input.attention_mask], dim=1
-            )
+            added_attention_mask_tensor = torch.tensor(added_attention_mask).unsqueeze(0).repeat(batch_size, 1)
+            attention_mask = torch.cat([added_attention_mask_tensor, input.attention_mask], dim=1)
             encoding.update(
                 {
                     "input_ids": input_ids,
