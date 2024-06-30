@@ -452,6 +452,7 @@ _import_structure = {
     "models.gpt_neox_japanese": ["GPTNeoXJapaneseConfig"],
     "models.gpt_sw3": [],
     "models.gptj": ["GPTJConfig"],
+    "models.granite": ["GraniteConfig"],
     "models.grounding_dino": [
         "GroundingDinoConfig",
         "GroundingDinoProcessor",
@@ -509,7 +510,6 @@ _import_structure = {
     "models.levit": ["LevitConfig"],
     "models.lilt": ["LiltConfig"],
     "models.llama": ["LlamaConfig"],
-    "models.granite": ["GraniteConfig"],
     "models.llava": [
         "LlavaConfig",
         "LlavaProcessor",
@@ -2267,6 +2267,16 @@ else:
             "GPTJPreTrainedModel",
         ]
     )
+    _import_structure["models.granite"].extend(
+        [
+            "GraniteForCausalLM",
+            "GraniteForQuestionAnswering",
+            "GraniteForSequenceClassification",
+            "GraniteForTokenClassification",
+            "GraniteModel",
+            "GranitePreTrainedModel",
+        ]
+    )
     _import_structure["models.grounding_dino"].extend(
         [
             "GroundingDinoForObjectDetection",
@@ -2434,16 +2444,6 @@ else:
             "LlamaForTokenClassification",
             "LlamaModel",
             "LlamaPreTrainedModel",
-        ]
-    )
-    _import_structure["models.granite"].extend(
-        [
-            "GraniteForCausalLM",
-            "GraniteForQuestionAnswering",
-            "GraniteForSequenceClassification",
-            "GraniteForTokenClassification",
-            "GraniteModel",
-            "GranitePreTrainedModel",
         ]
     )
     _import_structure["models.llava"].extend(
