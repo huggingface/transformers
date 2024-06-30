@@ -34,7 +34,7 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC_ = "LightGlueConfig"
 
-_CHECKPOINT_FOR_DOC_ = "stevenbucaille/superglue_indoor"
+_CHECKPOINT_FOR_DOC_ = "stevenbucaille/lightglue"
 
 
 def concat_attentions_tuples_pair(
@@ -169,13 +169,12 @@ def batch_hidden_states(
     return [stack_hidden_states_list(element) for element in list_of_tuples]
 
 
-def normalize_keypoints(keypoints: torch.Tensor, height: int, width: int):
-    """Normalize keypoints locations based on image image_shape"""
-    one = keypoints.new_tensor(1)
-    size = torch.stack([one * width, one * height])[None]
-    center = size / 2
-    scaling = size.max(1, keepdim=True).values * 0.7
-    return (keypoints - center[:, None, :]) / scaling[:, None, :]
+def normalize_keypoints(keypoints: torch.Tensor, height: int, width: int) -> torch.Tensor:
+    size = torch.tensor([width, height], device=keypoints.device, dtype=keypoints.dtype)[None]
+    shift = size / 2
+    scale = size.max(-1).values / 2
+    keypoints = (keypoints - shift[..., None, :]) / scale[..., None, None]
+    return keypoints
 
 
 def log_sinkhorn_iterations(
@@ -265,16 +264,11 @@ def rotate_half(x: torch.Tensor) -> torch.Tensor:
     return torch.stack((-x2, x1), dim=-1).flatten(start_dim=-2)
 
 
-def apply_cached_rotary_emb(freqs: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
-    return (t * freqs[0]) + (rotate_half(t) * freqs[1])
-
-
-def normalize_keypoints(keypoints: torch.Tensor, height: int, width: int) -> torch.Tensor:
-    size = torch.tensor([width, height], device=keypoints.device, dtype=keypoints.dtype)[None]
-    shift = size / 2
-    scale = size.max(-1).values / 2
-    keypoints = (keypoints - shift[..., None, :]) / scale[..., None, None]
-    return keypoints
+def rotary_position_embedding(encoded_keypoints: torch.Tensor, state: torch.Tensor) -> torch.Tensor:
+    first = state * encoded_keypoints[0]
+    rotated = rotate_half(state)
+    second = rotated * encoded_keypoints[1]
+    return first + second
 
 
 def eager_attention(q, k, v):
@@ -289,9 +283,7 @@ class LightGluePositionalEncoder(nn.Module):
     def __init__(self, config: LightGlueConfig):
         super().__init__()
 
-        M = 2 + 2 * config.add_scale_ori
-        F_dim = M
-        self.projector = nn.Linear(M, config.descriptor_dim // config.num_heads // 2, bias=False)
+        self.projector = nn.Linear(2, config.descriptor_dim // config.num_heads // 2, bias=False)
         self.gamma = 1.0
         nn.init.normal_(self.projector.weight.data, mean=0, std=self.gamma**-2)
 
@@ -310,7 +302,7 @@ class LightGlueAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-    def forward(self, q, k, v):
+    def forward(self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         output, attention = eager_attention(q, k, v)
         return output, attention
 
@@ -319,7 +311,7 @@ class LightGlueFlashAttention(LightGlueAttention):
     def __init__(self, config):
         super().__init__(config)
 
-    def forward(self, q, k, v):
+    def forward(self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor) -> Tuple[torch.Tensor, None]:
         attn_output = flash_attn_func(q, k, v)
         return attn_output, None
 
@@ -328,7 +320,7 @@ class LightGlueSdpaAttention(LightGlueAttention):
     def __init__(self, config):
         super().__init__(config)
 
-    def forward(self, q, k, v):
+    def forward(self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor) -> Tuple[torch.Tensor, None]:
         attn_output = torch.nn.functional.scaled_dot_product_attention(q, k, v)
         return attn_output, None
 
@@ -375,12 +367,12 @@ class LightGlueSelfAttentionBlock(nn.Module):
         keypoints: torch.Tensor,
         output_hidden_states: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor], torch.Tensor]:
+    ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor]], Optional[Tuple[torch.Tensor]]]:
         qkv = self.Wqkv(descriptors)
         qkv = qkv.unflatten(-1, (self.num_heads, -1, 3)).transpose(1, 2)
         q, k, v = qkv[..., 0], qkv[..., 1], qkv[..., 2]
-        q = apply_cached_rotary_emb(keypoints, q)
-        k = apply_cached_rotary_emb(keypoints, k)
+        q = rotary_position_embedding(keypoints, q)
+        k = rotary_position_embedding(keypoints, k)
 
         if output_attentions and isinstance(self.attention, (LightGlueSdpaAttention, LightGlueFlashAttention)):
             context, attention = eager_attention(q, k, v)
@@ -423,14 +415,16 @@ class LightGlueCrossAttentionBlock(nn.Module):
             ]
         )
 
-    def input_projection(self, descriptors):
+    def input_projection(self, descriptors: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         qk = self.to_qk(descriptors)
         v = self.to_v(descriptors)
         qk = qk.unflatten(-1, (self.num_heads, -1)).transpose(1, 2)
         v = v.unflatten(-1, (self.num_heads, -1)).transpose(1, 2)
         return qk, v
 
-    def forward_ffn(self, input, output_hidden_states: Optional[bool] = False):
+    def forward_ffn(
+        self, input, output_hidden_states: Optional[bool] = False
+    ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor]]]:
         all_hidden_states = () if output_hidden_states else None
         for layer in self.ffn:
             input = layer(input)
@@ -439,7 +433,9 @@ class LightGlueCrossAttentionBlock(nn.Module):
         output = input
         return output, all_hidden_states
 
-    def forward_message(self, descriptors, context, output_hidden_states: Optional[bool] = False):
+    def forward_message(
+        self, descriptors, context, output_hidden_states: Optional[bool] = False
+    ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor]]]:
         context = context.transpose(1, 2).flatten(start_dim=-2)
         message = self.to_out(context)
         input = torch.cat([descriptors, message], -1)
@@ -459,7 +455,7 @@ class LightGlueCrossAttentionBlock(nn.Module):
         descriptors_1: torch.Tensor,
         output_hidden_states: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor, Optional[Tuple[torch.Tensor]], Optional[Tuple[torch.Tensor]]]:
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
@@ -508,7 +504,7 @@ class LightGlueTransformerLayer(nn.Module):
         keypoints1: torch.Tensor,
         output_hidden_states: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
-    ) -> torch.Tensor:
+    ) -> Tuple[torch.Tensor, torch.Tensor, Optional[Tuple[torch.Tensor]], Optional[Tuple[torch.Tensor]]]:
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
         if output_hidden_states:
@@ -548,16 +544,18 @@ class LightGlueTransformerLayer(nn.Module):
         return descriptors_0, descriptors_1, all_hidden_states, all_attentions
 
 
-def sigmoid_log_double_softmax(sim: torch.Tensor, z0: torch.Tensor, z1: torch.Tensor) -> torch.Tensor:
+def sigmoid_log_double_softmax(
+    similarity: torch.Tensor, matchability_0: torch.Tensor, matchability_1: torch.Tensor
+) -> torch.Tensor:
     """create the log assignment matrix from logits and similarity"""
-    b, m, n = sim.shape
-    certainties = nn.functional.logsigmoid(z0) + nn.functional.logsigmoid(z1).transpose(1, 2)
-    scores0 = nn.functional.log_softmax(sim, 2)
-    scores1 = nn.functional.log_softmax(sim.transpose(-1, -2).contiguous(), 2).transpose(-1, -2)
-    scores = sim.new_full((b, m + 1, n + 1), 0)
-    scores[:, :m, :n] = scores0 + scores1 + certainties
-    scores[:, :-1, -1] = nn.functional.logsigmoid(-z0.squeeze(-1))
-    scores[:, -1, :-1] = nn.functional.logsigmoid(-z1.squeeze(-1))
+    batch_size, num_keypoints_0, num_keypoints_1 = similarity.shape
+    certainties = nn.functional.logsigmoid(matchability_0) + nn.functional.logsigmoid(matchability_1).transpose(1, 2)
+    scores0 = nn.functional.log_softmax(similarity, 2)
+    scores1 = nn.functional.log_softmax(similarity.transpose(-1, -2).contiguous(), 2).transpose(-1, -2)
+    scores = similarity.new_full((batch_size, num_keypoints_0 + 1, num_keypoints_1 + 1), 0)
+    scores[:, :num_keypoints_0, :num_keypoints_1] = scores0 + scores1 + certainties
+    scores[:, :-1, -1] = nn.functional.logsigmoid(-matchability_0.squeeze(-1))
+    scores[:, -1, :-1] = nn.functional.logsigmoid(-matchability_1.squeeze(-1))
     return scores
 
 
@@ -569,16 +567,15 @@ class LightGlueMatchAssignmentLayer(nn.Module):
         self.final_projection = nn.Linear(self.descriptor_dim, self.descriptor_dim, bias=True)
         self.matchability = nn.Linear(self.descriptor_dim, 1, bias=True)
 
-    def forward(self, descriptors0: torch.Tensor, descriptors1: torch.Tensor) -> torch.Tensor:
-        m_descriptors0 = self.final_projection(descriptors0)
-        m_descriptors1 = self.final_projection(descriptors1)
-        _, _, d = m_descriptors0.shape
-        m_descriptors0 = m_descriptors0 / self.descriptor_dim**0.25
-        m_descriptors1 = m_descriptors1 / self.descriptor_dim**0.25
-        sim = torch.einsum("bmd,bnd->bmn", m_descriptors0, m_descriptors1)
-        z0 = self.matchability(descriptors0)
-        z1 = self.matchability(descriptors1)
-        scores = sigmoid_log_double_softmax(sim, z0, z1)
+    def forward(self, descriptors_0: torch.Tensor, descriptors_1: torch.Tensor) -> torch.Tensor:
+        m_descriptors_0 = self.final_projection(descriptors_0)
+        m_descriptors_1 = self.final_projection(descriptors_1)
+        m_descriptors_0 = m_descriptors_0 / self.descriptor_dim**0.25
+        m_descriptors_1 = m_descriptors_1 / self.descriptor_dim**0.25
+        similarity = torch.einsum("bmd,bnd->bmn", m_descriptors_0, m_descriptors_1)
+        matchability_0 = self.matchability(descriptors_0)
+        matchability_1 = self.matchability(descriptors_1)
+        scores = sigmoid_log_double_softmax(similarity, matchability_0, matchability_1)
         return scores
 
     def get_matchability(self, descriptors: torch.Tensor) -> torch.Tensor:
@@ -597,7 +594,9 @@ class LightGlueTokenConfidenceLayer(nn.Module):
         return token
 
 
-def filter_matches(scores: torch.Tensor, threshold: float):
+def filter_matches(
+    scores: torch.Tensor, threshold: float
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """obtain matches from a log assignment matrix [Bx M+1 x N+1]"""
     max_0, max_1 = scores[:, :-1, :-1].max(2), scores[:, :-1, :-1].max(1)
     matches_0, matches_1 = max_0.indices, max_1.indices
@@ -672,7 +671,19 @@ LIGHTGLUE_INPUTS_DOCSTRING = r"""
     LIGHTGLUE_START_DOCSTRING,
 )
 class LightGlueForKeypointMatching(LightGluePreTrainedModel):
-    """TODO: Add docstring"""
+    """
+    LightGlue is a model matching keypoints in images by leveraging detections from a keypoint detector such as
+    SuperPoint. It is based on the SuperGlue architecture and is designed to be lightweight and efficient.
+    It consists of :
+        1. Keypoint Encoder
+        2. A Graph Neural Network with self and cross attention layers
+        3. Matching Assignment layers
+
+    The correspondence ids use -1 to indicate non-matching points.
+
+    Philipp Lindenberger, Paul-Edouard Sarlin and Marc Pollefeys. LightGlue: Local Feature Matching at Light Speed.
+    In ICCV 2023. https://arxiv.org/pdf/2306.13643.pdf
+    """
 
     def __init__(self, config: LightGlueConfig):
         super().__init__(config)

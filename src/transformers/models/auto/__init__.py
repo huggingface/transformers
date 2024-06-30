@@ -81,7 +81,6 @@ else:
         "MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING",
         "MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING",
         "MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING",
-        "MODEL_FOR_IMAGE_MATCHING_MAPPING",
         "AutoModel",
         "AutoBackbone",
         "AutoModelForAudioClassification",
@@ -120,7 +119,6 @@ else:
         "AutoModelWithLMHead",
         "AutoModelForZeroShotImageClassification",
         "AutoModelForZeroShotObjectDetection",
-        "AutoModelForImageMatching",
     ]
 
 try:
@@ -239,7 +237,6 @@ if TYPE_CHECKING:
             MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING,
             MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
             MODEL_FOR_IMAGE_MAPPING,
-            MODEL_FOR_KEYPOINT_MATCHING_MAPPING,
             MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,
             MODEL_FOR_IMAGE_TO_IMAGE_MAPPING,
             MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING,
@@ -281,7 +278,6 @@ if TYPE_CHECKING:
             AutoModelForDepthEstimation,
             AutoModelForDocumentQuestionAnswering,
             AutoModelForImageClassification,
-            AutoModelForImageMatching,
             AutoModelForImageSegmentation,
             AutoModelForImageToImage,
             AutoModelForInstanceSegmentation,
