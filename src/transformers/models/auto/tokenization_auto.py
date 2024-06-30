@@ -44,6 +44,7 @@ from .configuration_auto import (
     replace_list_option_in_docstrings,
 )
 
+
 if is_tokenizers_available():
     from ...tokenization_utils_fast import PreTrainedTokenizerFast
 else:
