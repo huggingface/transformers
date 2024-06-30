@@ -4,7 +4,6 @@ from fairseq.checkpoint_utils import load_checkpoint_to_cpu
 
 from transformers import Kosmos2_5Config, Kosmos2_5ForConditionalGeneration
 
-
 KEYS_TO_MODIFY_MAPPING = {
     "gpt_model.decoder.output_projection": "text_model.lm_head",
     "gpt_model.decoder": "text_model.model",
