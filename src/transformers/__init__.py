@@ -5103,6 +5103,7 @@ if TYPE_CHECKING:
         GPTNeoXJapaneseConfig,
     )
     from .models.gptj import GPTJConfig
+    from .models.granite import GraniteConfig
     from .models.grounding_dino import (
         GroundingDinoConfig,
         GroundingDinoProcessor,
@@ -5162,7 +5163,6 @@ if TYPE_CHECKING:
     from .models.levit import LevitConfig
     from .models.lilt import LiltConfig
     from .models.llama import LlamaConfig
-    from .models.granite import GraniteConfig
     from .models.llava import (
         LlavaConfig,
         LlavaProcessor,
@@ -6783,6 +6783,14 @@ if TYPE_CHECKING:
             GPTJModel,
             GPTJPreTrainedModel,
         )
+        from .models.granite import (
+            GraniteForCausalLM,
+            GraniteForQuestionAnswering,
+            GraniteForSequenceClassification,
+            GraniteForTokenClassification,
+            GraniteModel,
+            GranitePreTrainedModel,
+        )
         from .models.grounding_dino import (
             GroundingDinoForObjectDetection,
             GroundingDinoModel,
@@ -6911,14 +6919,6 @@ if TYPE_CHECKING:
             LlamaForTokenClassification,
             LlamaModel,
             LlamaPreTrainedModel,
-        )
-        from .models.granite import (
-            GraniteForCausalLM,
-            GraniteForQuestionAnswering,
-            GraniteForSequenceClassification,
-            GraniteForTokenClassification,
-            GraniteModel,
-            GranitePreTrainedModel,
         )
         from .models.llava import (
             LlavaForConditionalGeneration,
