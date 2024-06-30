@@ -137,6 +137,9 @@ class GraniteConfig(PretrainedConfig):
         attention_bias=False,
         attention_dropout=0.0,
         mlp_bias=False,
+        m_emb=None,
+        m_width=None,
+        m_residual=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -162,6 +165,10 @@ class GraniteConfig(PretrainedConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.mlp_bias = mlp_bias
+
+        self.m_emb = m_emb
+        self.m_width = m_width
+        self.m_residual = m_residual
 
         super().__init__(
             pad_token_id=pad_token_id,

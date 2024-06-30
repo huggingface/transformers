@@ -677,7 +677,6 @@ GRANITE_ATTENTION_CLASSES = {
 }
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer with LLAMA->GRANITE,Llama->Granite
 class GraniteDecoderLayer(nn.Module):
     def __init__(self, config: GraniteConfig, layer_idx: int):
         super().__init__()
@@ -688,6 +687,8 @@ class GraniteDecoderLayer(nn.Module):
         self.mlp = GraniteMLP(config)
         self.input_layernorm = GraniteRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = GraniteRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+        self.m_residual = config.m_residual
 
     def forward(
         self,
@@ -733,12 +734,20 @@ class GraniteDecoderLayer(nn.Module):
             use_cache=use_cache,
             cache_position=cache_position,
         )
+
+        if self.m_residual is not None:
+            hidden_states = hidden_states * self.m_residual
+
         hidden_states = residual + hidden_states
 
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
+
+        if self.m_residual is not None:
+            hidden_states = hidden_states * self.m_residual
+
         hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
@@ -876,7 +885,6 @@ GRANITE_INPUTS_DOCSTRING = r"""
     "The bare Granite Model outputting raw hidden-states without any specific head on top.",
     GRANITE_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_llama.LlamaModel with LLAMA->GRANITE,Llama->Granite
 class GraniteModel(GranitePreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`GraniteDecoderLayer`]
@@ -896,6 +904,8 @@ class GraniteModel(GranitePreTrainedModel):
         )
         self.norm = GraniteRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
+
+        self.m_emb = config.m_emb
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -940,6 +950,9 @@ class GraniteModel(GranitePreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
+
+        if self.m_emb is not None:
+            inputs_embeds = inputs_embeds * self.m_emb
 
         return_legacy_cache = False
         if use_cache and not isinstance(past_key_values, Cache):  # kept for BC (non `Cache` `past_key_values` inputs)
@@ -1104,7 +1117,6 @@ class GraniteModel(GranitePreTrainedModel):
         return causal_mask
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM with LLAMA->GRANITE,Llama->Granite,llama->granite
 class GraniteForCausalLM(GranitePreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1113,6 +1125,8 @@ class GraniteForCausalLM(GranitePreTrainedModel):
         self.model = GraniteModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+
+        self.m_width = config.m_width
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1204,6 +1218,9 @@ class GraniteForCausalLM(GranitePreTrainedModel):
         else:
             logits = self.lm_head(hidden_states)
         logits = logits.float()
+
+        if self.m_width is not None:
+            logits = logits / self.m_width
 
         loss = None
         if labels is not None:
