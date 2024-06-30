@@ -66,6 +66,19 @@ The original code can be found [here](https://github.com/haotian-liu/LLaVA/tree/
 "<|im_start|>system\nAnswer the questions.<|im_end|><|im_start|>user\n<image>\nWhat is shown in this image?<|im_end|><|im_start|>assistant\n"
 ```
 
+llama3-llava-next-8b-hf requires the following format:
+
+```bash
+"<|start_header_id|>system<|end_header_id|>\n\nYou are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.<|eot_id|><|start_header_id|><|start_header_id|>user<|end_header_id|>\n\n<image>\nWhat is shown in this image?<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n"
+```
+
+llava-next-72b-hf and llava-next-110b-hf require the following format:
+
+```bash
+"<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\n<image>\nWhat is shown in this image?<|im_end|>\n<|im_start|>assistant\n"
+```
+
+
 ## Usage example
 
 ### Single image inference
