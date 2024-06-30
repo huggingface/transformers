@@ -30,7 +30,7 @@ class GraniteConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GraniteModel`]. It is used to instantiate an Granite
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the Granite-7B.
+    defaults will yield a similar configuration to that of the Granite-3B.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -59,8 +59,7 @@ class GraniteConfig(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 2048):
-            The maximum sequence length that this model might ever be used with. Granite 1 supports up to 2048 tokens,
-            Granite 2 up to 4096, CodeGranite up to 16384.
+            The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         rms_norm_eps (`float`, *optional*, defaults to 1e-06):
@@ -89,7 +88,7 @@ class GraniteConfig(PretrainedConfig):
             `{"type": strategy name, "factor": scaling factor}`. When using this flag, don't update
             `max_position_embeddings` to the expected new maximum. See the following thread for more information on how
             these scaling strategies behave:
-            https://www.reddit.com/r/LocalGranite/comments/14mrgpr/dynamically_scaled_rope_further_increases/. This is an
+            https://www.reddit.com/r/LocalLLaMA/comments/14mrgpr/dynamically_scaled_rope_further_increases/. This is an
             experimental feature, subject to breaking API changes in future versions.
         attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
@@ -104,7 +103,7 @@ class GraniteConfig(PretrainedConfig):
     ```python
     >>> from transformers import GraniteModel, GraniteConfig
 
-    >>> # Initializing a Granite granite-7b style configuration
+    >>> # Initializing a Granite granite-3b style configuration
     >>> configuration = GraniteConfig()
 
     >>> # Initializing a model from the granite-7b style configuration
