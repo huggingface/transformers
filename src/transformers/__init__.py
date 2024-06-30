@@ -481,8 +481,8 @@ _import_structure = {
     ],
     "models.kosmos2_5": [
         "Kosmos2_5Config",
-        "Kosmos2_5Processor",
         "Kosmos2_5ImageProcessor",
+        "Kosmos2_5Processor",
     ],
     "models.layoutlm": [
         "LayoutLMConfig",
@@ -5089,8 +5089,8 @@ if TYPE_CHECKING:
     )
     from .models.kosmos2_5 import (
         Kosmos2_5Config,
-        Kosmos2_5Processor,
         Kosmos2_5ImageProcessor,
+        Kosmos2_5Processor,
     )
     from .models.layoutlm import (
         LayoutLMConfig,

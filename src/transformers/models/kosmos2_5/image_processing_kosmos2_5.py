@@ -87,7 +87,7 @@ class Kosmos2_5ImageProcessor(BaseImageProcessor):
             The patch size to use for the image. According to Kosmos2_5 paper and code, the patch size is 16x16.
         max_patches (`int`, *optional*, defaults to 4096):
             The maximum number of patches to extract from the image as per the [Kosmos2_5
-            paper](https://arxiv.org/pdf/2210.03347.pdf).
+            paper](https://arxiv.org/pdf/2309.11419).
         lazy (`bool`, *optional*, defaults to `False`): <fill_docstring>
     """
 

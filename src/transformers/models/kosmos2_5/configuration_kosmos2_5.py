@@ -12,12 +12,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" KOSMOS-2.5.5 model configuration"""
+"""KOSMOS-2.5.5 model configuration"""
 
 import os
 from typing import Union
-from ...utils import logging
+
 from ...configuration_utils import PretrainedConfig
+from ...utils import logging
+
 
 logger = logging.get_logger(__name__)
 
@@ -27,7 +29,7 @@ class Kosmos2_5TextConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`Kosmos2_5TextModel`]. It is used to instantiate a
     KOSMOS-2.5 text decoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the text decoder of the KOSMOS-2.5
-    [microsoft/KOSMOS-2.5-patch14-224](https://huggingface.co/microsoft/KOSMOS-2.5-patch14-224) architecture.
+    [microsoft/KOSMOS-2.5](https://huggingface.co/microsoft/KOSMOS-2.5) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -123,24 +125,16 @@ class Kosmos2_5TextConfig(PretrainedConfig):
         self.use_cache = use_cache
 
     @classmethod
-    def from_pretrained(
-        cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
-    ) -> "PretrainedConfig":
+    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
         cls._set_token_in_kwargs(kwargs)
 
-        config_dict, kwargs = cls.get_config_dict(
-            pretrained_model_name_or_path, **kwargs
-        )
+        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the text config dict if we are loading from Kosmos2_5Config
         if config_dict.get("model_type") == "kosmos-2.5":
             config_dict = config_dict["text_config"]
 
-        if (
-            "model_type" in config_dict
-            and hasattr(cls, "model_type")
-            and config_dict["model_type"] != cls.model_type
-        ):
+        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
             logger.warning(
                 f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
                 f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
@@ -188,11 +182,6 @@ class Kosmos2_5VisionConfig(PretrainedConfig):
             testing).
         seq_len (`int`, *optional*, defaults to 4096):
             Maximum sequence length (here number of patches) supported by the model.
-        relative_attention_num_buckets (`int`, *optional*, defaults to 32):
-            The number of buckets to use for each attention layer.
-        relative_attention_max_distance (`int`, *optional*, defaults to 128):
-            The maximum distance (in tokens) to use for each attention layer.
-
     Example:
 
     ```python
@@ -225,8 +214,6 @@ class Kosmos2_5VisionConfig(PretrainedConfig):
         initializer_range=1e-10,
         initializer_factor=1.0,
         seq_len=4096,
-        relative_attention_num_buckets=32,
-        relative_attention_max_distance=128,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -243,8 +230,6 @@ class Kosmos2_5VisionConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.dense_act_fn = dense_act_fn
         self.seq_len = seq_len
-        self.relative_attention_num_buckets = relative_attention_num_buckets
-        self.relative_attention_max_distance = relative_attention_max_distance
         self.d_kv = d_kv
 
     @classmethod
@@ -253,19 +238,13 @@ class Kosmos2_5VisionConfig(PretrainedConfig):
     ) -> "PretrainedConfig":
         cls._set_token_in_kwargs(kwargs)
 
-        config_dict, kwargs = cls.get_config_dict(
-            pretrainehidden_size_name_or_path, **kwargs
-        )
+        config_dict, kwargs = cls.get_config_dict(pretrainehidden_size_name_or_path, **kwargs)
 
         # get the vision config dict if we are loading from Kosmos2_5Config
         if config_dict.get("model_type") == "Kosmos2_5":
             config_dict = config_dict["vision_config"]
 
-        if (
-            "model_type" in config_dict
-            and hasattr(cls, "model_type")
-            and config_dict["model_type"] != cls.model_type
-        ):
+        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
             logger.warning(
                 f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
                 f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
@@ -319,14 +298,10 @@ class Kosmos2_5Config(PretrainedConfig):
         super().__init__(**kwargs)
         if text_config is None:
             text_config = {}
-            logger.info(
-                "text_config is None. Initializing the Kosmos2_5TextConfig with default values."
-            )
+            logger.info("text_config is None. Initializing the Kosmos2_5TextConfig with default values.")
         if vision_config is None:
             vision_config = {}
-            logger.info(
-                "vision_config is None. Initializing the Kosmos2_5VisionConfig with default values."
-            )
+            logger.info("vision_config is None. Initializing the Kosmos2_5VisionConfig with default values.")
 
         self.text_config = Kosmos2_5TextConfig(**text_config)
         self.vision_config = Kosmos2_5VisionConfig(**vision_config)
