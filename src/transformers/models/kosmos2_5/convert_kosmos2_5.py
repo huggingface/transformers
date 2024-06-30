@@ -2,8 +2,8 @@ import argparse
 
 from fairseq.checkpoint_utils import load_checkpoint_to_cpu
 
-from modeling_kosmos2_5 import Kosmos2_5ForConditionalGeneration
-from configuration_kosmos2_5 import Kosmos2_5Config
+from transformers import Kosmos2_5Config, Kosmos2_5ForConditionalGeneration
+
 
 KEYS_TO_MODIFY_MAPPING = {
     "gpt_model.decoder.output_projection": "text_model.lm_head",

@@ -21,12 +21,10 @@ from typing import List, Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import (
-    PaddingStrategy,
-    TextInput,
-    TruncationStrategy,
-)
+from ...tokenization_utils_base import (PaddingStrategy, TextInput,
+                                        TruncationStrategy)
 from ...utils import TensorType, is_torch_available
+
 if is_torch_available():
     import torch
 
