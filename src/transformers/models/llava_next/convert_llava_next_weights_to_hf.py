@@ -174,7 +174,10 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
         model.resize_token_embeddings(num_tokens, pad_to_multiple_of=pad_shape)
         model.language_model.model.embed_tokens.weight.data[vocab_size:] = torch.stack(
             tuple(
-                (dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[vocab_size:].shape[0]))
+                (
+                    dist.sample()
+                    for _ in range(model.language_model.model.embed_tokens.weight.data[vocab_size:].shape[0])
+                )
             ),
             dim=0,
         )
@@ -282,7 +285,8 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
             )
         elif model_id == "lmms-lab/llava-next-110b":
             # Not yet checked against reference
-            expected_slice = torch.tensor([[-2.5449, -1.6738, -2.0371], [1.0811, 3.4961, 5.0312], [1.7803, 2.5137, 2.4277]],
+            expected_slice = torch.tensor(
+                [[-2.5449, -1.6738, -2.0371], [1.0811, 3.4961, 5.0312], [1.7803, 2.5137, 2.4277]],
                 dtype=torch.float32,
                 device=device,
             )
@@ -316,7 +320,7 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     elif model_id == "lmms-lab/llava-next-72b":
         expected_text = "system\nYou are a helpful assistant.\nuser\n\nWhat is shown in this image?\nassistant\nThe image displays a radar chart, also known as a spider chart or a star chart, which is a graphical method of displaying multivariate data in the form of a two-dimensional chart of three or more quantitative variables represented on axes starting from the same point. Each axis represents a different variable, and the value of each variable is represented by the distance from the center of the chart to the point where the axis intersects with the line representing that variable's value.\n\nIn this particular chart, there are several axes"
     elif model_id == "lmms-lab/llava-next-110b":
-        expected_text = 'system\nYou are a helpful assistant.\nuser\n\nWhat is shown in this image?\nassistant\nThe image shows a radar chart comparing the performance of different models on various visual question answering (VQA) benchmarks. Each colored line represents a different model, and the distance from the center of the chart indicates the score or performance level of the model on a particular benchmark. The benchmarks are labeled around the edges of the chart, and include VQA v2, GQA, VizWiz, TextVQA, MMBench-CN, MME, and others. The chart allows for a'
+        expected_text = "system\nYou are a helpful assistant.\nuser\n\nWhat is shown in this image?\nassistant\nThe image shows a radar chart comparing the performance of different models on various visual question answering (VQA) benchmarks. Each colored line represents a different model, and the distance from the center of the chart indicates the score or performance level of the model on a particular benchmark. The benchmarks are labeled around the edges of the chart, and include VQA v2, GQA, VizWiz, TextVQA, MMBench-CN, MME, and others. The chart allows for a"
     else:
         raise ValueError(f"Model {model_id} not supported")
 
@@ -328,9 +332,15 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     cats_image = Image.open(requests.get(url, stream=True).raw)
 
+    if model_id == "lmms-lab/llama3-llava-next-8b":
+        cats_prompt = "<|start_header_id|>system<|end_header_id|>\n\nYou are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.<|eot_id|><|start_header_id|><|start_header_id|>user<|end_header_id|>\n\n<image>\nHow many cats are there?<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n"
+        processor.tokenizer.padding_side = "left"
+    else:
+        cats_prompt = "[INST] <image>\nHow many cats are there? [/INST]"
+
     inputs = processor(
         images=[image, cats_image],
-        text=[prompt, "[INST] <image>\nHow many cats are there? [/INST]"],
+        text=[prompt, cats_prompt],
         padding=True,
         return_tensors="pt",
     ).to(device)
@@ -379,7 +389,7 @@ if __name__ == "__main__":
             "liuhaotian/llava-v1.6-34b",
             "lmms-lab/llama3-llava-next-8b",
             "lmms-lab/llava-next-72b",
-            "lmms-lab/llava-next-110b"
+            "lmms-lab/llava-next-110b",
         ],
         required=False,
     )
