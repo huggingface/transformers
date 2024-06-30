@@ -168,7 +168,6 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
             remove_dc_offset=True,
         )
 
-        # Transpose each feature matrix in the batch
         features_batch = [features.T for features in features_batch]
 
         return features_batch
@@ -283,12 +282,12 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
         elif isinstance(raw_speech, np.ndarray) and raw_speech.dtype is np.dtype(np.float64):
             raw_speech = raw_speech.astype(np.float32)
 
-        # always return batch
-        if not is_batched:
-            raw_speech = [raw_speech]
-
-        # extract fbank features
-        features = [self._extract_fbank_features(waveform) for waveform in raw_speech]
+        # Extract fbank features, ensuring the result is always a batch
+        features = (
+            [self._extract_fbank_features(raw_speech)]
+            if not is_batched
+            else self._extract_fbank_features_batch(raw_speech)
+        )
 
         if do_normalize_per_mel_bins:
             # torch defaults to ddof=1, and numpy defaults to ddof=0
