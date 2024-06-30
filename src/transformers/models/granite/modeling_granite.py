@@ -234,7 +234,6 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaAttention with Llama->Granite
 class GraniteAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -258,6 +257,7 @@ class GraniteAttention(nn.Module):
         self.max_position_embeddings = config.max_position_embeddings
         self.rope_theta = config.rope_theta
         self.is_causal = True
+        self.attention_multiplier = config.attention_multiplier
 
         if (self.head_dim * self.num_heads) != self.hidden_size:
             raise ValueError(
@@ -348,7 +348,11 @@ class GraniteAttention(nn.Module):
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
+        attention_multiplier = self.attention_multiplier
+        if attention_multiplier is None:
+            attention_multiplier = 1 / math.sqrt(self.head_dim)
+
+        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * attention_multiplier
 
         if attention_mask is not None:  # no matter the length, we just slice it
             causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
@@ -382,7 +386,6 @@ class GraniteAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2 with Llama->Granite
 class GraniteFlashAttention2(GraniteAttention):
     """
     Granite flash attention module. This module inherits from `GraniteAttention` as the weights of the module stays
@@ -472,7 +475,7 @@ class GraniteFlashAttention2(GraniteAttention):
             value_states = value_states.to(target_dtype)
 
         attn_output = self._flash_attention_forward(
-            query_states, key_states, value_states, attention_mask, q_len, dropout=dropout_rate
+            query_states, key_states, value_states, attention_mask, q_len, dropout=dropout_rate, softmax_scale=self.attention_multiplier
         )
 
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
@@ -581,7 +584,6 @@ class GraniteFlashAttention2(GraniteAttention):
         )
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaSdpaAttention with Llama->Granite
 class GraniteSdpaAttention(GraniteAttention):
     """
     Granite attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
@@ -660,6 +662,7 @@ class GraniteSdpaAttention(GraniteAttention):
             attn_mask=causal_mask,
             dropout_p=self.attention_dropout if self.training else 0.0,
             is_causal=is_causal,
+            scale=self.attention_multiplier,
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous()

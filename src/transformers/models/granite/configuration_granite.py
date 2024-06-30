@@ -98,7 +98,8 @@ class GraniteConfig(PretrainedConfig):
             Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
         m_emb (`float`, *optional*): embedding multiplier
         m_width (`float`, *optional*): divisor for output logits
-        m_residual (`float, *optional*): residual multiplier
+        m_residual (`float`, *optional*): residual multiplier
+        attention_multiplier (`float`, *optional*): attention multiplier. Defaults to 1 / sqrt(head_dim):
 
     ```python
     >>> from transformers import GraniteModel, GraniteConfig
@@ -142,6 +143,7 @@ class GraniteConfig(PretrainedConfig):
         m_emb=None,
         m_width=None,
         m_residual=None,
+        attention_multiplier=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -171,6 +173,7 @@ class GraniteConfig(PretrainedConfig):
         self.m_emb = m_emb
         self.m_width = m_width
         self.m_residual = m_residual
+        self.attention_multiplier = attention_multiplier
 
         super().__init__(
             pad_token_id=pad_token_id,
