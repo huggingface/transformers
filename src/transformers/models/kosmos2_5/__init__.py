@@ -24,8 +24,8 @@ from ...utils import (
 
 _import_structure = {
     "configuration_kosmos2_5": ["Kosmos2_5Config"],
-    "processing_kosmos2_5": ["Kosmos2_5Processor"],
     "image_processing_kosmos2_5": ["Kosmos2_5ImageProcessor"],
+    "processing_kosmos2_5": ["Kosmos2_5Processor"],
 }
 
 try:
@@ -43,8 +43,8 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_kosmos2_5 import Kosmos2_5Config
-    from .processing_kosmos2_5 import Kosmos2_5Processor
     from .image_processing_kosmos2_5 import Kosmos2_5ImageProcessor
+    from .processing_kosmos2_5 import Kosmos2_5Processor
 
     try:
         if not is_torch_available():
@@ -61,6 +61,4 @@ if TYPE_CHECKING:
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(
-        __name__, globals()["__file__"], _import_structure
-    )
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)

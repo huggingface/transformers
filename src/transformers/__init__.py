@@ -482,6 +482,7 @@ _import_structure = {
     "models.kosmos2_5": [
         "Kosmos2_5Config",
         "Kosmos2_5Processor",
+        "Kosmos2_5ImageProcessor",
     ],
     "models.layoutlm": [
         "LayoutLMConfig",
@@ -1140,7 +1141,7 @@ else:
     _import_structure["models.idefics"].extend(["IdeficsImageProcessor"])
     _import_structure["models.idefics2"].extend(["Idefics2ImageProcessor"])
     _import_structure["models.imagegpt"].extend(["ImageGPTFeatureExtractor", "ImageGPTImageProcessor"])
-    _import_structure["models.kosmos2_5"].extend(["Kosmos2_5ImageProcessor"])
+    _import_structure["models.kosmos2_5"].extend(["Kosmos2_5ImageProcessor", "Kosmos2_5Processor"])
     _import_structure["models.layoutlmv2"].extend(["LayoutLMv2FeatureExtractor", "LayoutLMv2ImageProcessor"])
     _import_structure["models.layoutlmv3"].extend(["LayoutLMv3FeatureExtractor", "LayoutLMv3ImageProcessor"])
     _import_structure["models.levit"].extend(["LevitFeatureExtractor", "LevitImageProcessor"])
@@ -2349,7 +2350,7 @@ else:
             "Kosmos2_5ForConditionalGeneration",
             "Kosmos2_5Model",
             "Kosmos2_5PreTrainedModel",
-     ]
+        ]
     )
     _import_structure["models.layoutlm"].extend(
         [
@@ -5088,8 +5089,8 @@ if TYPE_CHECKING:
     )
     from .models.kosmos2_5 import (
         Kosmos2_5Config,
-        Kosmos2_5ImageProcessor,
         Kosmos2_5Processor,
+        Kosmos2_5ImageProcessor,
     )
     from .models.layoutlm import (
         LayoutLMConfig,
@@ -5774,6 +5775,7 @@ if TYPE_CHECKING:
         from .models.idefics import IdeficsImageProcessor
         from .models.idefics2 import Idefics2ImageProcessor
         from .models.imagegpt import ImageGPTFeatureExtractor, ImageGPTImageProcessor
+        from .models.kosmos2_5 import Kosmos2_5ImageProcessor, Kosmos2_5Processor
         from .models.layoutlmv2 import (
             LayoutLMv2FeatureExtractor,
             LayoutLMv2ImageProcessor,

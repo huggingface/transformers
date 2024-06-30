@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Image processor class for Kosmos2_5."""
-import io
+
 import math
 from typing import Dict, Optional, Union
 
@@ -62,12 +62,8 @@ def torch_extract_patches(image_tensor, patch_height, patch_width):
     requires_backends(torch_extract_patches, ["torch"])
 
     image_tensor = image_tensor.unsqueeze(0)
-    patches = torch.nn.functional.unfold(
-        image_tensor, (patch_height, patch_width), stride=(patch_height, patch_width)
-    )
-    patches = patches.reshape(
-        image_tensor.size(0), image_tensor.size(1), patch_height, patch_width, -1
-    )
+    patches = torch.nn.functional.unfold(image_tensor, (patch_height, patch_width), stride=(patch_height, patch_width))
+    patches = patches.reshape(image_tensor.size(0), image_tensor.size(1), patch_height, patch_width, -1)
     patches = patches.permute(0, 4, 2, 3, 1).reshape(
         image_tensor.size(2) // patch_height,
         image_tensor.size(3) // patch_width,
@@ -107,9 +103,7 @@ class Kosmos2_5ImageProcessor(BaseImageProcessor):
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
-        self.patch_size = (
-            patch_size if patch_size is not None else {"height": 16, "width": 16}
-        )
+        self.patch_size = patch_size if patch_size is not None else {"height": 16, "width": 16}
         self.do_normalize = do_normalize
         self.do_convert_rgb = do_convert_rgb
         self.max_patches = max_patches
@@ -141,27 +135,19 @@ class Kosmos2_5ImageProcessor(BaseImageProcessor):
         requires_backends(self.extract_flattened_patches, "torch")
 
         # convert to torch
-        image = to_channel_dimension_format(
-            image, ChannelDimension.FIRST, input_data_format
-        )
+        image = to_channel_dimension_format(image, ChannelDimension.FIRST, input_data_format)
         image = torch.from_numpy(image)
 
         patch_height, patch_width = patch_size["height"], patch_size["width"]
         image_height, image_width = get_image_size(image, ChannelDimension.FIRST)
 
         # maximize scale s.t.
-        scale = math.sqrt(
-            max_patches * (patch_height / image_height) * (patch_width / image_width)
-        )
+        scale = math.sqrt(max_patches * (patch_height / image_height) * (patch_width / image_width))
         if scale > 1 and self.lazy:
             # that means we need to extend the image, which is unnecessary
             scale = 1
-        num_feasible_rows = max(
-            min(math.floor(scale * image_height / patch_height), max_patches), 1
-        )
-        num_feasible_cols = max(
-            min(math.floor(scale * image_width / patch_width), max_patches), 1
-        )
+        num_feasible_rows = max(min(math.floor(scale * image_height / patch_height), max_patches), 1)
+        num_feasible_cols = max(min(math.floor(scale * image_width / patch_width), max_patches), 1)
         resized_height = max(num_feasible_rows * patch_height, 1)
         resized_width = max(num_feasible_cols * patch_width, 1)
 
@@ -185,18 +171,8 @@ class Kosmos2_5ImageProcessor(BaseImageProcessor):
         patches = patches.reshape([rows * columns, depth])
 
         # [rows * columns, 1]
-        row_ids = (
-            torch.arange(rows)
-            .reshape([rows, 1])
-            .repeat(1, columns)
-            .reshape([rows * columns, 1])
-        )
-        col_ids = (
-            torch.arange(columns)
-            .reshape([1, columns])
-            .repeat(rows, 1)
-            .reshape([rows * columns, 1])
-        )
+        row_ids = torch.arange(rows).reshape([rows, 1]).repeat(1, columns).reshape([rows * columns, 1])
+        col_ids = torch.arange(columns).reshape([1, columns]).repeat(rows, 1).reshape([rows * columns, 1])
 
         # Offset by 1 so the ids do not contain zeros, which represent padding.
         row_ids += 1
@@ -211,9 +187,7 @@ class Kosmos2_5ImageProcessor(BaseImageProcessor):
         result = torch.cat([row_ids, col_ids, patches], -1)
 
         # [max_patches, 2 + patch_height * patch_width * image_channels]
-        result = torch.nn.functional.pad(
-            result, [0, 0, 0, max_patches - (rows * columns)]
-        ).float()
+        result = torch.nn.functional.pad(result, [0, 0, 0, max_patches - (rows * columns)]).float()
 
         result = to_numpy_array(result)
 
@@ -309,9 +283,7 @@ class Kosmos2_5ImageProcessor(BaseImageProcessor):
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
-        do_convert_rgb = (
-            do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
-        )
+        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
         patch_size = patch_size if patch_size is not None else self.patch_size
         max_patches = max_patches if max_patches is not None else self.max_patches
 
@@ -338,10 +310,7 @@ class Kosmos2_5ImageProcessor(BaseImageProcessor):
             input_data_format = infer_channel_dimension_format(images[0])
 
         if do_normalize:
-            images = [
-                self.normalize(image=image, input_data_format=input_data_format)
-                for image in images
-            ]
+            images = [self.normalize(image=image, input_data_format=input_data_format) for image in images]
 
         # convert to torch tensor and permute
         images = [
@@ -361,9 +330,7 @@ class Kosmos2_5ImageProcessor(BaseImageProcessor):
         images = [image[0] for image in images]
 
         # create attention mask in numpy
-        attention_masks = [
-            (image.sum(axis=-1) != 0).astype(np.float32) for image in images
-        ]
+        attention_masks = [(image.sum(axis=-1) != 0).astype(np.float32) for image in images]
 
         encoded_outputs = BatchFeature(
             data={
