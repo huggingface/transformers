@@ -2685,6 +2685,7 @@ class GroundingDinoHungarianMatcher(nn.Module):
             raise ValueError("All costs of the Matcher can't be 0")
 
     @torch.no_grad()
+    # Ignore copy
     def forward(self, outputs, targets):
         """
         Args:
@@ -2692,6 +2693,7 @@ class GroundingDinoHungarianMatcher(nn.Module):
                 A dictionary that contains at least these entries:
                 * "logits": Tensor of dim [batch_size, num_queries, num_classes] with the classification logits
                 * "pred_boxes": Tensor of dim [batch_size, num_queries, 4] with the predicted box coordinates.
+                * "label_maps": Tuple of tensors of dim [num_classes, hidden_dim].
             targets (`List[dict]`):
                 A list of targets (len(targets) = batch_size), where each target is a dict containing:
                 * "class_labels": Tensor of dim [num_target_boxes] (where num_target_boxes is the number of
@@ -2708,11 +2710,16 @@ class GroundingDinoHungarianMatcher(nn.Module):
         batch_size, num_queries = outputs["logits"].shape[:2]
 
         # We flatten to compute the cost matrices in a batch
-        out_prob = outputs["logits"].flatten(0, 1).sigmoid()  # [batch_size * num_queries, num_classes]
+        out_prob = outputs["logits"].flatten(0, 1).sigmoid()  # [batch_size * num_queries, hidden_dim]
         out_bbox = outputs["pred_boxes"].flatten(0, 1)  # [batch_size * num_queries, 4]
+        label_maps = outputs["label_maps"]
+
+        # First take the label map for each class in each batch and then concatenate them
+        label_maps = torch.cat([label_map[v["class_labels"]] for v in targets for label_map in label_maps])
+        # Normalize label maps based on number of tokens per class
+        label_maps = label_maps / label_maps.sum(dim=-1, keepdim=True)
 
         # Also concat the target labels and boxes
-        target_ids = torch.cat([v["class_labels"] for v in targets])
         target_bbox = torch.cat([v["boxes"] for v in targets])
 
         # Compute the classification cost.
@@ -2720,7 +2727,8 @@ class GroundingDinoHungarianMatcher(nn.Module):
         gamma = 2.0
         neg_cost_class = (1 - alpha) * (out_prob**gamma) * (-(1 - out_prob + 1e-8).log())
         pos_cost_class = alpha * ((1 - out_prob) ** gamma) * (-(out_prob + 1e-8).log())
-        class_cost = pos_cost_class[:, target_ids] - neg_cost_class[:, target_ids]
+        # Compute the classification cost by taking pos and neg cost in the appropriate index
+        class_cost = (pos_cost_class - neg_cost_class) @ label_maps.t()
 
         # Compute the L1 cost between boxes
         bbox_cost = torch.cdist(out_bbox, target_bbox, p=1)
@@ -2762,7 +2770,7 @@ class GroundingDinoLoss(nn.Module):
         self.focal_alpha = focal_alpha
         self.losses = losses
 
-    # removed logging parameter, which was part of the original implementation
+    # Ignore copy
     def loss_labels(self, outputs, targets, indices, num_boxes):
         """
         Classification loss (Binary focal loss) targets dicts must contain the key "class_labels" containing a tensor
@@ -2770,29 +2778,53 @@ class GroundingDinoLoss(nn.Module):
         """
         if "logits" not in outputs:
             raise KeyError("No logits were found in the outputs")
+        if "one_hot_labels" not in outputs:
+            raise KeyError("No one_hot_labels were found in the outputs")
+        if "text_mask" not in outputs:
+            raise KeyError("No text_mask were found in the outputs")
+
         source_logits = outputs["logits"]
+        # TODO maybe create one_hot and text_mask here (pass attention mask to outputs)
+        target_classes_onehot = outputs["one_hot"]
+        text_mask = outputs["text_mask"]
 
-        idx = self._get_source_permutation_idx(indices)
-        target_classes_o = torch.cat([t["class_labels"][J] for t, (_, J) in zip(targets, indices)])
-        target_classes = torch.full(
-            source_logits.shape[:2], self.num_classes, dtype=torch.int64, device=source_logits.device
-        )
-        target_classes[idx] = target_classes_o
+        ### New implementation
+        batch_size, num_queries, hidden_dim = source_logits.shape
 
-        target_classes_onehot = torch.zeros(
-            [source_logits.shape[0], source_logits.shape[1], source_logits.shape[2] + 1],
-            dtype=source_logits.dtype,
-            layout=source_logits.layout,
-            device=source_logits.device,
-        )
-        target_classes_onehot.scatter_(2, target_classes.unsqueeze(-1), 1)
+        if text_mask is not None:
+            text_mask = text_mask.repeat(1, num_queries)
+            text_mask = text_mask.view(batch_size, -1, hidden_dim)
+            source_logits = torch.masked_select(source_logits, text_mask)
+            target_classes_onehot = torch.masked_select(target_classes_onehot, text_mask)
 
-        target_classes_onehot = target_classes_onehot[:, :, :-1]
-        loss_ce = (
-            sigmoid_focal_loss(source_logits, target_classes_onehot, num_boxes, alpha=self.focal_alpha, gamma=2)
-            * source_logits.shape[1]
-        )
+        target_classes_onehot = target_classes_onehot.float()
+        loss_ce = sigmoid_focal_loss(source_logits, target_classes_onehot, num_boxes, alpha=self.focal_alpha, gamma=2)
+
         losses = {"loss_ce": loss_ce}
+        # return losses
+
+        ### Old implementation
+        # idx = self._get_source_permutation_idx(indices)
+        # target_classes_o = torch.cat([t["class_labels"][J] for t, (_, J) in zip(targets, indices)])
+        # target_classes = torch.full(
+        #     source_logits.shape[:2], self.num_classes, dtype=torch.int64, device=source_logits.device
+        # )
+        # target_classes[idx] = target_classes_o
+
+        # target_classes_onehot = torch.zeros(
+        #     [source_logits.shape[0], source_logits.shape[1], source_logits.shape[2] + 1],
+        #     dtype=source_logits.dtype,
+        #     layout=source_logits.layout,
+        #     device=source_logits.device,
+        # )
+        # target_classes_onehot.scatter_(2, target_classes.unsqueeze(-1), 1)
+
+        # target_classes_onehot = target_classes_onehot[:, :, :-1]
+        # loss_ce = (
+        #     sigmoid_focal_loss(source_logits, target_classes_onehot, num_boxes, alpha=self.focal_alpha, gamma=2)
+        #     * source_logits.shape[1]
+        # )
+        # losses = {"loss_ce": loss_ce}
 
         return losses
 
@@ -2813,7 +2845,7 @@ class GroundingDinoLoss(nn.Module):
         losses = {"cardinality_error": card_err}
         return losses
 
-    # Copied from transformers.models.detr.modeling_detr.DetrLoss.loss_boxes
+    # Ignore copy
     def loss_boxes(self, outputs, targets, indices, num_boxes):
         """
         Compute the losses related to the bounding boxes, the L1 regression loss and the GIoU loss.
@@ -2836,6 +2868,12 @@ class GroundingDinoLoss(nn.Module):
             generalized_box_iou(center_to_corners_format(source_boxes), center_to_corners_format(target_boxes))
         )
         losses["loss_giou"] = loss_giou.sum() / num_boxes
+
+        # calculate the x,y and h,w loss
+        with torch.no_grad():
+            losses["loss_xy"] = loss_bbox[..., :2].sum() / num_boxes
+            losses["loss_hw"] = loss_bbox[..., 2:].sum() / num_boxes
+
         return losses
 
     # Copied from transformers.models.detr.modeling_detr.DetrLoss._get_source_permutation_idx
@@ -2851,9 +2889,9 @@ class GroundingDinoLoss(nn.Module):
         batch_idx = torch.cat([torch.full_like(target, i) for i, (_, target) in enumerate(indices)])
         target_idx = torch.cat([target for (_, target) in indices])
         return batch_idx, target_idx
-    
+
     # Ignore copy
-    def _get_label_map(self, outputs):
+    def _get_label_maps(self, outputs):
         """
         Computes a mapping between the tokens associated with the prompt labels in the logit space with shape (batch_size, num_labels, hidden_size)
         where `num_labels` is defined by the number of classes in the input prompt.
@@ -2864,7 +2902,8 @@ class GroundingDinoLoss(nn.Module):
 
         This is used in `loss_labels` and in the `GroundingDinoHungarianMatcher`.)
         """
-        input_ids = outputs["input_ids"] # (batch_size, num_tokens)
+        batch_size, num_boxes, hidden_size = outputs["logits"].shape
+        input_ids = outputs["input_ids"]  # (batch_size, num_tokens)
         # Add [PAD] token to the list of special tokens
         delimiter_tokens = torch.tensor(SPECIAL_TOKENS + [0], device=input_ids.device)
 
@@ -2873,12 +2912,22 @@ class GroundingDinoLoss(nn.Module):
         # Easy to get the delimiter indices (only the valid ones i.e. diff between two consecutive delimiters is > 1)
         # Have to update the class_labels in the targets with previous amount of labels as the number of labes in prompt might be different.
         # Have to update the delimiter_indices with seq_len.
-        for ids in input_ids:
-            delimiter_token_mask = torch.isin(ids, delimiter_tokens)
-            delimiter_indices = delimiter_token_mask.nonzero()
+        delimiter_token_masks = torch.isin(input_ids, delimiter_tokens)
+        label_maps = ()
+        for delimiter_token_mask in delimiter_token_masks:
+            label_map_within_batch = []
+            delimiter_indices = torch.where(delimiter_token_mask)[0]
+            for i in range(len(delimiter_indices) - 1):
+                start = delimiter_indices[i]
+                end = delimiter_indices[i + 1]
+                if end - start > 1:
+                    label_map = torch.zeros(hidden_size, device=input_ids.device)
+                    label_map[start + 1 : end] = 1
+                    label_map_within_batch.append(label_map)
 
-        # Placeholder for the label map
-        label_map = torch.zeros_like(...)
+            label_maps += (torch.stack(label_map_within_batch),)
+
+        return label_maps
 
     def get_loss(self, loss, outputs, targets, indices, num_boxes):
         loss_map = {
@@ -2904,10 +2953,20 @@ class GroundingDinoLoss(nn.Module):
         """
         outputs_without_aux = {k: v for k, v in outputs.items() if k != "auxiliary_outputs" and k != "enc_outputs"}
 
-        label_map = self._get_label_map(outputs)
+        outputs_without_aux["label_maps"] = self._get_label_maps(outputs)
 
         # Retrieve the matching between the outputs of the last layer and the targets
         indices = self.matcher(outputs_without_aux, targets)
+
+        # Create one_hot based on the matching indices
+        one_hot = torch.zeros_like(
+            outputs["logits"], device=outputs["logits"].device, dtype=torch.long
+        )  # (batch_size, num_queries, hidden_dim)
+        class_labels = [target["class_labels"] for target in targets]
+        for i, (source, target) in enumerate(indices):
+            labels = class_labels[i][target]
+            one_hot[i, source] = outputs_without_aux["label_maps"][i][labels].to(torch.long)
+        outputs_without_aux["one_hot"] = one_hot
 
         # Compute the average number of target boxes accross all nodes, for normalization purposes
         num_boxes = sum(len(t["class_labels"]) for t in targets)
