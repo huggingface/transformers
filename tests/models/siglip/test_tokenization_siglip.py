@@ -18,9 +18,9 @@ import os
 import tempfile
 import unittest
 
-from transformers import SPIECE_UNDERLINE, AddedToken, BatchEncoding, SiglipTokenizer
+from transformers import SPIECE_UNDERLINE, AddedToken, BatchEncoding, SiglipTokenizer, SiglipTokenizerFast
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, slow
-from transformers.utils import cached_property, is_tf_available, is_torch_available
+from transformers.utils import cached_property, is_torch_available
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -29,10 +29,6 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
 if is_torch_available():
     FRAMEWORK = "pt"
-elif is_tf_available():
-    FRAMEWORK = "tf"
-else:
-    FRAMEWORK = "jax"
 
 
 @require_sentencepiece
@@ -40,7 +36,8 @@ else:
 class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_id = "google/siglip-base-patch16-224"
     tokenizer_class = SiglipTokenizer
-    test_rust_tokenizer = False
+    rust_tokenizer_class = SiglipTokenizerFast
+    test_rust_tokenizer = True
     test_sentencepiece = True
     test_sentencepiece_ignore_case = True
 
@@ -138,6 +135,10 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     # Copied from tests.models.t5.test_tokenization_t5.T5TokenizationTest.get_tokenizer with T5->Siglip
     def get_tokenizer(self, **kwargs) -> SiglipTokenizer:
         return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
+
+    # Copied from tests.models.t5.test_tokenization_t5.T5TokenizationTest.get_rust_tokenizer with T5->Siglip
+    def get_rust_tokenizer(self, **kwargs) -> SiglipTokenizerFast:
+        return self.rust_tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
 
     # Copied from tests.models.t5.test_tokenization_t5.T5TokenizationTest.test_rust_and_python_full_tokenizers with T5->Siglip
     def test_rust_and_python_full_tokenizers(self):

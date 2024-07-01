@@ -17,6 +17,7 @@ from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
     is_sentencepiece_available,
+    is_tokenizers_available,
     is_torch_available,
     is_vision_available,
 )
@@ -38,6 +39,15 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["tokenization_siglip"] = ["SiglipTokenizer"]
+
+
+try:
+    if not is_tokenizers_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["tokenization_siglip_fast"] = ["SiglipTokenizerFast"]
 
 
 try:
@@ -78,6 +88,14 @@ if TYPE_CHECKING:
         pass
     else:
         from .tokenization_siglip import SiglipTokenizer
+
+    try:
+        if not is_tokenizers_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .tokenization_siglip_fast import SiglipTokenizerFast
 
     try:
         if not is_vision_available():
