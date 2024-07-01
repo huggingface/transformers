@@ -565,10 +565,10 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         """
         max_new_tokens = 30
 
-        tokenizer = AutoTokenizer.from_pretrained("saibo/granite-1B")
+        tokenizer = AutoTokenizer.from_pretrained("mayank-mishra/granite-3b-mup")
 
         model_sdpa = GraniteForCausalLM.from_pretrained(
-            "saibo/granite-1B",
+            "mayank-mishra/granite-3b-mup",
             torch_dtype=torch.float16,
             low_cpu_mem_usage=True,
         ).to(torch_device)
@@ -576,7 +576,7 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
 
         model_eager = GraniteForCausalLM.from_pretrained(
-            "saibo/granite-1B",
+            "mayank-mishra/granite-3b-mup",
             torch_dtype=torch.float16,
             low_cpu_mem_usage=True,
             attn_implementation="eager",
