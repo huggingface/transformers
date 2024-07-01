@@ -4827,10 +4827,9 @@ class Trainer:
             wrapper = "DeepSpeed" if self.is_deepspeed_enabled else "FSDP"
             raise ValueError(f"{wrapper} can't be used with `save_only_model` along with `load_best_model_at_end`.")
 
-        # `auto_find_batch_size` isn't yet supported with DeepSpeed/FSDP
-        if (self.is_deepspeed_enabled or self.is_fsdp_enabled) and self.args.auto_find_batch_size:
-            wrapper = "DeepSpeed" if self.is_deepspeed_enabled else "FSDP"
-            raise NotImplementedError(f"`{wrapper}` doesn't support `auto_find_batch_size`.")
+        # `auto_find_batch_size` isn't yet supported with DeepSpeed
+        if self.is_deepspeed_enabled and self.args.auto_find_batch_size:
+            raise NotImplementedError(f"`DeepSpeed` doesn't support `auto_find_batch_size`.")
 
     def propagate_args_to_deepspeed(self, auto_find_batch_size=False):
         """
