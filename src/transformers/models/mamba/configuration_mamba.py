@@ -79,6 +79,8 @@ class MambaConfig(PretrainedConfig):
             Whether or not to rescale `out_proj` weights when initializing.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the cache should be used.
+        classifier_dropout (`float`, *optional*, defaults to 0.1):
+            The dropout ratio for the classification head in [`MambaForSequenceClassification`] model.
 
 
     Example:
@@ -123,6 +125,7 @@ class MambaConfig(PretrainedConfig):
         time_step_floor=1e-4,
         rescale_prenorm_residual=False,
         use_cache=True,
+        classifier_dropout=0.1,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -149,5 +152,6 @@ class MambaConfig(PretrainedConfig):
         self.rescale_prenorm_residual = rescale_prenorm_residual
         self.residual_in_fp32 = residual_in_fp32
         self.use_cache = use_cache
+        self.classifier_dropout = classifier_dropout
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, pad_token_id=pad_token_id, **kwargs)
