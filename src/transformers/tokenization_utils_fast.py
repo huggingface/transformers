@@ -31,6 +31,7 @@ from tokenizers.trainers import BpeTrainer, UnigramTrainer, WordLevelTrainer, Wo
 
 from .convert_slow_tokenizer import convert_slow_tokenizer
 from .integrations.ggml import convert_gguf_tokenizer
+from .integrations.tiktoken import convert_tiktoken_tokenizer
 from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_utils_base import (
@@ -54,6 +55,7 @@ logger = logging.get_logger(__name__)
 TOKENIZER_FILE = "tokenizer.json"
 SPECIAL_TOKENS_MAP_FILE = "special_tokens_map.json"
 TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
+VOCAB_FILE = "tokenizer.model"
 
 # Slow tokenizers have an additional added tokens files
 ADDED_TOKENS_FILE = "added_tokens.json"
@@ -74,7 +76,7 @@ MODEL_TO_TRAINER_MAPPING = {
     "WordPiece": WordPieceTrainer,
 }
 
-VOCAB_FILES_NAMES = {"tokenizer_file": TOKENIZER_FILE}
+VOCAB_FILES_NAMES = {"tokenizer_file": TOKENIZER_FILE, "vocab_file": VOCAB_FILE}
 
 
 @add_end_docstrings(INIT_TOKENIZER_DOCSTRING)
@@ -98,11 +100,12 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         tokenizer_object = kwargs.pop("tokenizer_object", None)
         slow_tokenizer = kwargs.pop("__slow_tokenizer", None)
         gguf_file = kwargs.pop("gguf_file", None)
+        tiktoken_file = kwargs.pop("tiktoken_file", None)
         fast_tokenizer_file = kwargs.pop("tokenizer_file", None)
         from_slow = kwargs.pop("from_slow", False)
         added_tokens_decoder = kwargs.pop("added_tokens_decoder", {})
 
-        if from_slow and slow_tokenizer is None and self.slow_tokenizer_class is None:
+        if from_slow and slow_tokenizer is None and self.slow_tokenizer_class is None and not tiktoken_file:
             raise ValueError(
                 "Cannot instantiate this tokenizer from a slow version. If it's based on sentencepiece, make sure you "
                 "have sentencepiece installed."
@@ -110,12 +113,14 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
         if tokenizer_object is not None:
             fast_tokenizer = copy.deepcopy(tokenizer_object)
-        elif fast_tokenizer_file is not None and not from_slow:
+        elif fast_tokenizer_file is not None and not from_slow and not tiktoken_file:
             # We have a serialization from tokenizers which let us directly build the backend
             fast_tokenizer = TokenizerFast.from_file(fast_tokenizer_file)
         elif slow_tokenizer is not None:
             # We need to convert a slow tokenizer to build the backend
             fast_tokenizer = convert_slow_tokenizer(slow_tokenizer)
+        elif tiktoken_file is not None:
+            fast_tokenizer = convert_tiktoken_tokenizer(kwargs.get("vocab_file"))
         elif gguf_file is not None:
             # We need to convert a slow tokenizer to build the backend
             gguf_param = load_gguf_checkpoint(kwargs.get("vocab_file"))

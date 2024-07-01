@@ -24,14 +24,17 @@ from datasets import load_dataset
 from transformers import (
     SPIECE_UNDERLINE,
     AddedToken,
+    AutoTokenizer,
     LlamaTokenizer,
     LlamaTokenizerFast,
+    PreTrainedTokenizerFast,
 )
 from transformers.convert_slow_tokenizer import convert_slow_tokenizer
 from transformers.testing_utils import (
     get_tests_dir,
     nested_simplify,
     require_jinja,
+    require_read_token,
     require_sentencepiece,
     require_tokenizers,
     require_torch,
@@ -822,3 +825,28 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         self.assertEqual(input_ids, [284, 1, 156])
         tokens = self.tokenizer.tokenize("No <s> ▁He")
         self.assertEqual(tokens, ["▁No", "<s>", "▁He"])  # spaces are eaten by rstrip / lstrip
+
+
+@require_read_token
+class TikTokenIntegrationTests(unittest.TestCase):
+    """
+    A class that regroups important test to make sure that we properly handle the special tokens.
+    """
+
+    def test_tiktoken_llama(self):
+        model_path = "hf-internal-testing/Llama3-Instruct-Internal"
+        model_file_name = "tokenizer.model"
+
+        tiktoken_tokenizer = AutoTokenizer.from_pretrained(model_path, tiktoken_file=model_file_name, from_slow=True)
+        self.assertTrue(isinstance(tiktoken_tokenizer, PreTrainedTokenizerFast))
+        self.assertEqual(tiktoken_tokenizer.vocab_files_names["vocab_file"], model_file_name)
+        tokens = tiktoken_tokenizer.encode("Hey there")
+        self.assertEqual(tokens, [19182, 1070])
+
+        tmpdirname = tempfile.mkdtemp()
+        tokenizer_reloaded = AutoTokenizer.from_pretrained(tmpdirname)
+        self.assertTrue(isinstance(tokenizer_reloaded, PreTrainedTokenizerFast))
+        self.assertEqual(tokenizer_reloaded.vocab_files_names["vocab_file"], model_file_name)
+        tokens = tokenizer_reloaded.encode("Hey there")
+        self.assertEqual(tokens, [19182, 1070])
+        shutil.rmtree(tmpdirname)
