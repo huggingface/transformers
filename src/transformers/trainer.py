@@ -4829,7 +4829,7 @@ class Trainer:
 
         # `auto_find_batch_size` isn't yet supported with DeepSpeed
         if self.is_deepspeed_enabled and self.args.auto_find_batch_size:
-            raise NotImplementedError(f"`DeepSpeed` doesn't support `auto_find_batch_size`.")
+            raise NotImplementedError("`DeepSpeed` doesn't support `auto_find_batch_size`.")
 
     def propagate_args_to_deepspeed(self, auto_find_batch_size=False):
         """
