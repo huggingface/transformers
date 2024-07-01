@@ -151,7 +151,7 @@ The $ACTION_JSON_BLOB should only contain a SINGLE action, do NOT return a list 
   "action_input": $INPUT
 }<end_action>
 
-Make sure to have the $INPUT as a dictionnary in the right format for the tool you are using, and do not put variable names as input if you can find the right values.
+Make sure to have the $INPUT as a dictionary in the right format for the tool you are using, and do not put variable names as input if you can find the right values.
 
 You should ALWAYS use the following format:
 
