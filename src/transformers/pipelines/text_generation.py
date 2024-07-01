@@ -137,11 +137,10 @@ class TextGenerationPipeline(Pipeline):
 
         add_special_tokens = False
         if "add_special_tokens" in generate_kwargs:
-            preprocess_params["add_special_tokens"] = generate_kwargs["add_special_tokens"]
-            add_special_tokens = generate_kwargs["add_special_tokens"]
+            add_special_tokens = preprocess_params["add_special_tokens"] = generate_kwargs.pop("add_special_tokens")
 
         if "padding" in generate_kwargs:
-            preprocess_params["padding"] = generate_kwargs["padding"]
+            preprocess_params["padding"] = generate_kwargs.pop("padding")
 
         if truncation is not None:
             preprocess_params["truncation"] = truncation

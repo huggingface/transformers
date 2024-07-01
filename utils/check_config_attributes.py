@@ -41,6 +41,7 @@ SPECIAL_CASES_TO_ALLOW = {
         "expert_layer_offset",
         "expert_layer_period",
     ],
+    "Gemma2Config": ["tie_word_embeddings"],
     # used to compute the property `self.chunk_length`
     "EncodecConfig": ["overlap"],
     # used to compute the property `self.layers_block_type`

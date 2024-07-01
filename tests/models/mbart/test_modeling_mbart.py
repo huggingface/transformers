@@ -240,7 +240,6 @@ class MBartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     all_generative_model_classes = (MBartForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "conversational": MBartForConditionalGeneration,
             "feature-extraction": MBartModel,
             "fill-mask": MBartForConditionalGeneration,
             "question-answering": MBartForQuestionAnswering,
@@ -497,7 +496,7 @@ class MBartCC25IntegrationTest(AbstractSeq2SeqIntegrationTest):
     ]
     tgt_text = ["Şeful ONU declară că nu există o soluţie militară în Siria", "to be padded"]
 
-    @unittest.skip("This test is broken, still generates english")
+    @unittest.skip(reason="This test is broken, still generates english")
     def test_cc25_generate(self):
         inputs = self.tokenizer([self.src_text[0]], return_tensors="pt").to(torch_device)
         translated_tokens = self.model.generate(
@@ -732,6 +731,6 @@ class MBartStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, u
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_attention_mask_past(*config_and_inputs)
 
+    @unittest.skip(reason="Decoder cannot retain gradients")
     def test_retain_grad_hidden_states_attentions(self):
-        # decoder cannot keep gradients
         return

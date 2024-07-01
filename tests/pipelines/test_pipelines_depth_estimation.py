@@ -95,7 +95,7 @@ class DepthEstimationPipelineTests(unittest.TestCase):
         )
 
     @require_tf
-    @unittest.skip("Depth estimation is not implemented in TF")
+    @unittest.skip(reason="Depth estimation is not implemented in TF")
     def test_small_model_tf(self):
         pass
 
@@ -115,4 +115,4 @@ class DepthEstimationPipelineTests(unittest.TestCase):
     @require_torch
     def test_small_model_pt(self):
         # This is highly irregular to have no small tests.
-        self.skipTest("There is not hf-internal-testing tiny model for either GLPN nor DPT")
+        self.skipTest(reason="There is not hf-internal-testing tiny model for either GLPN nor DPT")

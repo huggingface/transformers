@@ -313,6 +313,8 @@ class GenerationConfig(PushToHubMixin):
             Arguments used in the key-value cache class can be passed in `cache_config`. Can be passed as a `Dict` and
             it will be converted to its repsective `CacheConfig` internally.
             Otherwise can be passed as a `CacheConfig` class matching the indicated `cache_implementation`.
+        return_legacy_cache (`bool`, *optional*, default to `True`):
+            Whether to return the legacy or new format of the cache when `DynamicCache` is used by default.
 
         > Wild card
 
@@ -398,12 +400,13 @@ class GenerationConfig(PushToHubMixin):
         # Cache implementation
         self.cache_implementation = kwargs.pop("cache_implementation", None)
         self.cache_config = kwargs.pop("cache_config", None)
-        if self.cache_implementation is not None:
+        if self.cache_implementation is not None and self.cache_implementation in NEEDS_CACHE_CONFIG:
             cache_config_class = NEEDS_CACHE_CONFIG[self.cache_implementation]
             if self.cache_config is None:
                 self.cache_config = cache_config_class()
             elif isinstance(self.cache_config, dict):
                 self.cache_config = cache_config_class.from_dict(self.cache_config)
+        self.return_legacy_cache = kwargs.pop("return_legacy_cache", True)
 
         # Prompt lookup decoding
         self.prompt_lookup_num_tokens = kwargs.pop("prompt_lookup_num_tokens", None)
@@ -515,7 +518,7 @@ class GenerationConfig(PushToHubMixin):
         if self.pad_token_id is not None and self.pad_token_id < 0:
             warnings.warn(
                 f"`pad_token_id` should be positive but got {self.pad_token_id}. This will cause errors when batch generating, if there is padding. "
-                "Please set `pas_token_id` explicitly by `model.generation_config.pad_token_id=PAD_TOKEN_ID` to avoid errors in generation, and ensure your `input_ids` input does not have negative values."
+                "Please set `pad_token_id` explicitly by `model.generation_config.pad_token_id=PAD_TOKEN_ID` to avoid errors in generation, and ensure your `input_ids` input does not have negative values."
             )
 
         # Validation of attribute relations:

@@ -54,7 +54,7 @@ def get_clean_message_list(message_list: List[Dict[str, str]], role_conversions:
             message["role"] = role_conversions[role]
 
         if len(final_message_list) > 0 and message["role"] == final_message_list[-1]["role"]:
-            final_message_list[-1]["content"] += "\n===\n" + message["content"]
+            final_message_list[-1]["content"] += "\n=======\n" + message["content"]
         else:
             final_message_list.append(message)
     return final_message_list

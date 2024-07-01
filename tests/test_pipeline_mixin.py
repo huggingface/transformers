@@ -33,7 +33,6 @@ from transformers.utils import direct_transformers_import, logging
 
 from .pipelines.test_pipelines_audio_classification import AudioClassificationPipelineTests
 from .pipelines.test_pipelines_automatic_speech_recognition import AutomaticSpeechRecognitionPipelineTests
-from .pipelines.test_pipelines_conversational import ConversationalPipelineTests
 from .pipelines.test_pipelines_depth_estimation import DepthEstimationPipelineTests
 from .pipelines.test_pipelines_document_question_answering import DocumentQuestionAnsweringPipelineTests
 from .pipelines.test_pipelines_feature_extraction import FeatureExtractionPipelineTests
@@ -65,7 +64,6 @@ from .pipelines.test_pipelines_zero_shot_object_detection import ZeroShotObjectD
 pipeline_test_mapping = {
     "audio-classification": {"test": AudioClassificationPipelineTests},
     "automatic-speech-recognition": {"test": AutomaticSpeechRecognitionPipelineTests},
-    "conversational": {"test": ConversationalPipelineTests},
     "depth-estimation": {"test": DepthEstimationPipelineTests},
     "document-question-answering": {"test": DocumentQuestionAnsweringPipelineTests},
     "feature-extraction": {"test": FeatureExtractionPipelineTests},
@@ -250,7 +248,7 @@ class PipelineTesterMixin:
                     f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')} is skipped: Could not load the "
                     f"processor from `{repo_id}` with `{processor_name}`."
                 )
-                return
+                self.skipTest(f"Could not load the processor from {repo_id} with {processor_name}.")
 
         # TODO: Maybe not upload such problematic tiny models to Hub.
         if tokenizer is None and processor is None:
@@ -258,7 +256,7 @@ class PipelineTesterMixin:
                 f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')} is skipped: Could not find or load "
                 f"any tokenizer / processor from `{repo_id}`."
             )
-            return
+            self.skipTest(f"Could not find or load any tokenizer / processor from {repo_id}.")
 
         # TODO: We should check if a model file is on the Hub repo. instead.
         try:
@@ -268,7 +266,7 @@ class PipelineTesterMixin:
                 f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')} is skipped: Could not find or load "
                 f"the model from `{repo_id}` with `{model_architecture}`."
             )
-            return
+            self.skipTest(f"Could not find or load the model from {repo_id} with {model_architecture}.")
 
         pipeline_test_class_name = pipeline_test_mapping[task]["test"].__name__
         if self.is_pipeline_test_to_skip_more(pipeline_test_class_name, model.config, model, tokenizer, processor):
@@ -277,7 +275,9 @@ class PipelineTesterMixin:
                 f"currently known to fail for: model `{model_architecture.__name__}` | tokenizer "
                 f"`{tokenizer_name}` | processor `{processor_name}`."
             )
-            return
+            self.skipTest(
+                f"Test is known to fail for: model `{model_architecture.__name__}` | tokenizer `{tokenizer_name}` | processor `{processor_name}`."
+            )
 
         # validate
         validate_test_components(self, task, model, tokenizer, processor)
@@ -297,7 +297,7 @@ class PipelineTesterMixin:
                 f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')} is skipped: Could not get the "
                 "pipeline for testing."
             )
-            return
+            self.skipTest(reason="Could not get the pipeline for testing.")
 
         task_test.run_pipeline_test(pipeline, examples)
 
@@ -314,12 +314,8 @@ class PipelineTesterMixin:
                     yield copy.deepcopy(random.choice(examples))
 
             out = []
-            if task == "conversational":
-                for item in pipeline(data(10), batch_size=4, max_new_tokens=5):
-                    out.append(item)
-            else:
-                for item in pipeline(data(10), batch_size=4):
-                    out.append(item)
+            for item in pipeline(data(10), batch_size=4):
+                out.append(item)
             self.assertEqual(len(out), 10)
 
         run_batch_test(pipeline, examples)
@@ -331,10 +327,6 @@ class PipelineTesterMixin:
     @is_pipeline_test
     def test_pipeline_automatic_speech_recognition(self):
         self.run_task_tests(task="automatic-speech-recognition")
-
-    @is_pipeline_test
-    def test_pipeline_conversational(self):
-        self.run_task_tests(task="conversational")
 
     @is_pipeline_test
     @require_vision

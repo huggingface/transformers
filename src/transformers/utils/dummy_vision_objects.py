@@ -9,6 +9,13 @@ class ImageProcessingMixin(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class BaseImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class ImageFeatureExtractionMixin(metaclass=DummyObject):
     _backends = ["vision"]
 
@@ -296,6 +303,13 @@ class ImageGPTImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class InstructBlipVideoImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class LayoutLMv2FeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
@@ -339,6 +353,13 @@ class LevitImageProcessor(metaclass=DummyObject):
 
 
 class LlavaNextImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class LlavaNextVideoImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):
@@ -479,6 +500,13 @@ class PoolFormerImageProcessor(metaclass=DummyObject):
 
 
 class PvtImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class RTDetrImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):

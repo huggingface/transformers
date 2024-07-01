@@ -82,11 +82,12 @@ pip install -q datasets transformers evaluate
 
 ```py
 >>> import json
->>> from huggingface_hub import cached_download, hf_hub_url
+>>> from pathlib import Path
+>>> from huggingface_hub import hf_hub_download
 
 >>> repo_id = "huggingface/label-files"
 >>> filename = "ade20k-id2label.json"
->>> id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename, repo_type="dataset")), "r"))
+>>> id2label = json.loads(Path(hf_hub_download(repo_id, filename, repo_type="dataset")).read_text())
 >>> id2label = {int(k): v for k, v in id2label.items()}
 >>> label2id = {v: k for k, v in id2label.items()}
 >>> num_labels = len(id2label)
@@ -94,13 +95,13 @@ pip install -q datasets transformers evaluate
 
 ## 전처리하기[[preprocess]
 
-다음 단계는 모델에 사용할 이미지와 주석을 준비하기 위해 SegFormer 이미지 프로세서를 불러오는 것입니다. 우리가 사용하는 데이터 세트와 같은 일부 데이터 세트는 배경 클래스로 제로 인덱스를 사용합니다. 하지만 배경 클래스는 150개의 클래스에 실제로는 포함되지 않기 때문에 `reduce_labels=True` 를 설정해 모든 레이블에서 배경 클래스를 제거해야 합니다. 제로 인덱스는 `255`로 대체되므로 SegFormer의 손실 함수에서 무시됩니다:
+다음 단계는 모델에 사용할 이미지와 주석을 준비하기 위해 SegFormer 이미지 프로세서를 불러오는 것입니다. 우리가 사용하는 데이터 세트와 같은 일부 데이터 세트는 배경 클래스로 제로 인덱스를 사용합니다. 하지만 배경 클래스는 150개의 클래스에 실제로는 포함되지 않기 때문에 `do_reduce_labels=True` 를 설정해 모든 레이블에서 배경 클래스를 제거해야 합니다. 제로 인덱스는 `255`로 대체되므로 SegFormer의 손실 함수에서 무시됩니다:
 
 ```py
 >>> from transformers import AutoImageProcessor
 
 >>> checkpoint = "nvidia/mit-b0"
->>> image_processor = AutoImageProcessor.from_pretrained(checkpoint, reduce_labels=True)
+>>> image_processor = AutoImageProcessor.from_pretrained(checkpoint, do_reduce_labels=True)
 ```
 
 <frameworkcontent>
