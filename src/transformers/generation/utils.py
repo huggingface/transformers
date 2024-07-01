@@ -1535,6 +1535,26 @@ class GenerationMixin:
         generation_config.pad_token_id = pad_token_id
         generation_config.decoder_start_token_id = decoder_start_token_id
 
+    def _expand_outputs(self, outputs, expand_size):
+        if isinstance(outputs, dict):
+            for k in outputs.keys():
+                outputs[k] = self._expand_outputs(outputs[k], expand_size)
+        elif isinstance(outputs, DynamicCache):
+            outputs.key_cache = self._expand_outputs(outputs.key_cache, expand_size)
+            outputs.value_cache = self._expand_outputs(outputs.value_cache, expand_size)
+        elif isinstance(outputs, list):
+            for i in range(len(outputs)):
+                outputs[i] = self._expand_outputs(outputs[i], expand_size)
+        elif isinstance(outputs, tuple):
+            new_outputs = []
+            for i in range(len(outputs)):
+                new_outputs.append(self._expand_outputs(outputs[i], expand_size))
+            outputs = tuple(new_outputs)
+        elif isinstance(outputs, torch.Tensor):
+            outputs = outputs.repeat_interleave(expand_size, dim=0)
+
+        return outputs
+
     @torch.no_grad()
     def generate(
         self,
@@ -1941,15 +1961,7 @@ class GenerationMixin:
                 max_length=generation_config.max_length,
             )
 
-            # 13. interleave input_ids with `num_beams` additional sequences per batch
-            input_ids, model_kwargs = self._expand_inputs_for_generation(
-                input_ids=input_ids,
-                expand_size=generation_config.num_beams,
-                is_encoder_decoder=self.config.is_encoder_decoder,
-                **model_kwargs,
-            )
-
-            # 14. run beam sample
+            # 13. run beam sample
             result = self._beam_search(
                 input_ids,
                 beam_scorer,
@@ -2836,19 +2848,14 @@ class GenerationMixin:
         batch_size = len(beam_scorer._beam_hyps)
         num_beams = beam_scorer.num_beams
 
-        batch_beam_size, cur_len = input_ids.shape
+        cur_len = input_ids.shape[-1]
         model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
-
-        if num_beams * batch_size != batch_beam_size:
-            raise ValueError(
-                f"Batch dimension of `input_ids` should be {num_beams * batch_size}, but is {batch_beam_size}."
-            )
 
         # init attention / hidden states / scores tuples
         scores = () if (return_dict_in_generate and output_scores) else None
         raw_logits = () if (return_dict_in_generate and output_logits) else None
         beam_indices = (
-            tuple(() for _ in range(batch_beam_size)) if (return_dict_in_generate and output_scores) else None
+            tuple(() for _ in range(num_beams * batch_size)) if (return_dict_in_generate and output_scores) else None
         )
         decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
         cross_attentions = () if (return_dict_in_generate and output_attentions) else None
@@ -2875,7 +2882,7 @@ class GenerationMixin:
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
             # if sequential is True, split the input to batches of batch_size and run sequentially
-            if sequential:
+            if sequential and input_ids.shape[0] == num_beams * batch_size:
                 if any(
                     model_name in self.__class__.__name__.lower()
                     for model_name in [
@@ -2896,7 +2903,7 @@ class GenerationMixin:
                     )
 
                 inputs_per_sub_batches = _split_model_inputs(
-                    model_inputs, split_size=batch_size, full_batch_size=batch_beam_size
+                    model_inputs, split_size=batch_size, full_batch_size=num_beams * batch_size
                 )
                 outputs_per_sub_batch = [
                     self(
@@ -2921,6 +2928,17 @@ class GenerationMixin:
             if synced_gpus and this_peer_finished:
                 cur_len = cur_len + 1
                 continue  # don't waste resources running the code we don't need
+
+            if input_ids.shape[0] != num_beams * batch_size:
+                input_ids, model_kwargs = self._expand_inputs_for_generation(
+                    input_ids=input_ids,
+                    expand_size=generation_config.num_beams,
+                    is_encoder_decoder=self.config.is_encoder_decoder,
+                    **model_kwargs,
+                )
+
+            if outputs.logits.shape[0] != num_beams * batch_size:
+                outputs = self._expand_outputs(outputs, num_beams)
 
             # Clone is needed to avoid keeping a hanging ref to outputs.logits which may be very large for first iteration
             # (the clone itself is always small)
