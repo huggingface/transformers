@@ -3121,7 +3121,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
             assistant_model=assistant,
             max_new_tokens=20,
         )
-        self.assertTrue(input_length <= out.shape[-1] <= 20)
+        self.assertTrue(input_length <= out.shape[-1] <= input_length + 20)
 
     @slow
     @require_torch_gpu
@@ -3145,7 +3145,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
             assistant_model=assistant,
             max_new_tokens=20,
         )
-        self.assertTrue(input_length <= out.shape[-1] <= 20)
+        self.assertTrue(input_length <= out.shape[-1] <= input_length + 20)
 
 
 @require_torch
