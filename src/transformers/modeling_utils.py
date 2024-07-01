@@ -2518,9 +2518,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Save the model
         if state_dict is None:
-            # if any model parameters are offloaded to the disk, make module map
-            if hasattr(self, "hf_device_map") and (
-                "cpu" in self.hf_device_map.values() or "disk" in self.hf_device_map.values()
+            # if any model parameters are offloaded, make module map
+            if (
+                hasattr(self, "hf_device_map")
+                and len(set(self.hf_device_map.values())) > 1
+                and ("cpu" in self.hf_device_map.values() or "disk" in self.hf_device_map.values())
             ):
                 warnings.warn(
                     "Attempting to save a model with offloaded modules. Ensure that unallocated cpu memory exceeds the `shard_size` (5GB default)"
@@ -2532,7 +2534,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
                     for key in module_state_dict:
                         module_map[name + f".{key}"] = module
-
             state_dict = model_to_save.state_dict()
 
         # Translate state_dict from smp to hf if saving with smp >= 1.10
@@ -2655,7 +2656,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 and reg.fullmatch(filename_no_suffix) is not None
             ):
                 os.remove(full_filename)
-
         # Save the model
         for shard_file, tensors in state_dict_split.filename_to_tensors.items():
             shard = {tensor: state_dict[tensor] for tensor in tensors}
@@ -2667,15 +2667,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         f"Please upgrade accelerate with `pip install -U accelerate`"
                     )
                 # init state_dict for this shard
-                state_dict = {name: "" for name in shard}
+                shard_state_dict = {name: "" for name in shard}
                 for module_name in shard:
                     module = module_map[module_name]
                     # update state dict with onloaded parameters
-                    state_dict = get_state_dict_from_offload(module, module_name, state_dict)
+                    shard_state_dict = get_state_dict_from_offload(module, module_name, shard_state_dict)
 
                 # assign shard to be the completed state dict
-                shard = state_dict
-                del state_dict
+                shard = shard_state_dict
+                del shard_state_dict
                 gc.collect()
 
             if safe_serialization:
