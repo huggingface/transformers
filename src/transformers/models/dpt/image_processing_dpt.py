@@ -482,3 +482,46 @@ class DPTImageProcessor(BaseImageProcessor):
             semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
 
         return semantic_segmentation
+
+    def post_process_depth_estimation(self, outputs, target_sizes: List[Tuple] = None):
+        """
+        Converts the output of [`DPTForDepthEstimation`] into depth estimation maps. Only supports PyTorch.
+
+        Args:
+            outputs ([`DPTForDepthEstimation`]):
+                Raw outputs of the model.
+            target_sizes (`List[Tuple]` of length `batch_size`, *optional*):
+                List of tuples corresponding to the requested final size (height, width) of each prediction. If unset,
+                predictions will not be resized.
+
+        Returns:
+            depth_estimation: `List[torch.Tensor]` of length `batch_size`, where each item is a depth estimation map of
+            shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is specified). Each entry of
+            each `torch.Tensor` correspond to a depth value.
+        """
+        predicted_depth = outputs.predicted_depth
+
+        # Resize predicted depth maps
+        if target_sizes is not None:
+            if len(predicted_depth) != len(target_sizes):
+                raise ValueError(
+                    "Make sure that you pass in as many target sizes as the batch dimension of the predicted depth maps"
+                )
+
+            if is_torch_tensor(target_sizes):
+                target_sizes = target_sizes.numpy()
+
+            depth_estimation = []
+
+            for idx in range(len(predicted_depth)):
+                resized_depth = torch.nn.functional.interpolate(
+                    predicted_depth[idx].unsqueeze(0).unsqueeze(0),
+                    size=target_sizes[idx],
+                    mode="bicubic",
+                    align_corners=False,
+                )
+                depth_estimation.append(resized_depth.squeeze())
+        else:
+            depth_estimation = [predicted_depth[i] for i in range(predicted_depth.shape[0])]
+
+        return depth_estimation
