@@ -16,12 +16,26 @@
 Speech processor class for Wav2Vec2
 """
 
+import sys
+from typing import List, Optional, Union
+
+
+if sys.version_info >= (3, 11):
+    from typing import Unpack
+else:
+    from typing_extensions import Unpack
+
 import warnings
 from contextlib import contextmanager
 
-from ...processing_utils import ProcessorMixin
+from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...tokenization_utils_base import AudioInput, PreTokenizedInput, TextInput
 from .feature_extraction_wav2vec2 import Wav2Vec2FeatureExtractor
 from .tokenization_wav2vec2 import Wav2Vec2CTCTokenizer
+
+
+class Wav2Vec2ProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {}
 
 
 class Wav2Vec2Processor(ProcessorMixin):
@@ -66,35 +80,47 @@ class Wav2Vec2Processor(ProcessorMixin):
 
             return cls(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
-    def __call__(self, *args, **kwargs):
+    def __call__(
+        self,
+        audio: AudioInput = None,
+        text: Optional[Union[str, List[str], TextInput, PreTokenizedInput]] = None,
+        images=None,
+        videos=None,
+        **kwargs: Unpack[Wav2Vec2ProcessorKwargs],
+    ):
         """
         When used in normal mode, this method forwards all its arguments to Wav2Vec2FeatureExtractor's
         [`~Wav2Vec2FeatureExtractor.__call__`] and returns its output. If used in the context
         [`~Wav2Vec2Processor.as_target_processor`] this method forwards all its arguments to PreTrainedTokenizer's
         [`~PreTrainedTokenizer.__call__`]. Please refer to the docstring of the above two methods for more information.
         """
-        # For backward compatibility
-        if self._in_target_context_manager:
-            return self.current_processor(*args, **kwargs)
 
         if "raw_speech" in kwargs:
             warnings.warn("Using `raw_speech` as a keyword argument is deprecated. Use `audio` instead.")
             audio = kwargs.pop("raw_speech")
-        else:
-            audio = kwargs.pop("audio", None)
-        sampling_rate = kwargs.pop("sampling_rate", None)
-        text = kwargs.pop("text", None)
-        if len(args) > 0:
-            audio = args[0]
-            args = args[1:]
 
         if audio is None and text is None:
             raise ValueError("You need to specify either an `audio` or `text` input to process.")
 
+        output_kwargs = self._merge_kwargs(
+            Wav2Vec2ProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+
+        # For backward compatibility
+        if self._in_target_context_manager:
+            return self.current_processor(
+                audio,
+                **output_kwargs["audio_kwargs"],
+                **output_kwargs["text_kwargs"],
+                **output_kwargs["common_kwargs"],
+            )
+
         if audio is not None:
-            inputs = self.feature_extractor(audio, *args, sampling_rate=sampling_rate, **kwargs)
+            inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
         if text is not None:
-            encodings = self.tokenizer(text, **kwargs)
+            encodings = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
         if text is None:
             return inputs
