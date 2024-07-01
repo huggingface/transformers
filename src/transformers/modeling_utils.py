@@ -38,7 +38,8 @@ from huggingface_hub import split_torch_state_dict_into_shards
 from packaging import version
 from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss, Identity
-from torch.utils.checkpoint import checkpoint
+from deepspeed.runtime.activation_checkpointing.checkpointing import checkpoint
+#from torch.utils.checkpoint import checkpoint
 
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
