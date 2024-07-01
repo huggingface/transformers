@@ -787,7 +787,7 @@ class Mask4DTestHard(unittest.TestCase):
         torch.cuda.empty_cache()
 
     def setUp(self):
-        model_name = "TinyGranite/TinyGranite-1.1B-Chat-v1.0"
+        model_name = "mayank-mishra/granite-3b-mup"
         self.model_dtype = torch.float32
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.model = GraniteForCausalLM.from_pretrained(model_name, torch_dtype=self.model_dtype).to(torch_device)
