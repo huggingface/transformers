@@ -1292,16 +1292,16 @@ class PushInProgress:
 
 
 cache_version_file = os.path.join(TRANSFORMERS_CACHE, "version.txt")
+cache_is_not_empty = os.path.isdir(TRANSFORMERS_CACHE) and len(os.listdir(TRANSFORMERS_CACHE)) > 0
+
 if not os.path.isfile(cache_version_file):
-    cache_version = 0
+    cache_version = 0 if cache_is_not_empty else 1
 else:
     with open(cache_version_file) as f:
         try:
             cache_version = int(f.read())
         except ValueError:
             cache_version = 0
-
-cache_is_not_empty = os.path.isdir(TRANSFORMERS_CACHE) and len(os.listdir(TRANSFORMERS_CACHE)) > 0
 
 if cache_version < 1 and cache_is_not_empty:
     if is_offline_mode():
