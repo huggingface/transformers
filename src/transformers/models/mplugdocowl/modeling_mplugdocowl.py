@@ -23,7 +23,6 @@ from torch import nn
 
 from ... import PreTrainedModel
 from ...cache_utils import Cache
-from ...activations import ACT2FN
 from ...modeling_outputs import ModelOutput
 from ...utils import (
     add_start_docstrings,
@@ -110,7 +109,7 @@ class MPLUGDocOwlPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["MPLUGDocOwlAttention"]
     _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
+    _supports_flash_attn_2 = False
 
     @property
     def _supports_sdpa(self):
@@ -195,23 +194,23 @@ MPLUGDOCOWL_INPUTS_DOCSTRING = r"""
 class MPLUGDocOwlHReducer(MPLUGDocOwlPreTrainedModel):
 
     r"""
-    MPLUGDocOwlHReducer is a spatial-aware vision-to-text module designed for Visual Document Understanding. 
-    This model component processes high-resolution text-rich images by reducing the visual sequence length while 
-    preserving spatial information. It uses a convolutional layer followed by a fully connected layer to align 
+    MPLUGDocOwlHReducer is a spatial-aware vision-to-text module designed for Visual Document Understanding.
+    This model component processes high-resolution text-rich images by reducing the visual sequence length while
+    preserving spatial information. It uses a convolutional layer followed by a fully connected layer to align
     visual features with language embeddings.
 
-    Unlike other popular vision-to-text modules such as MLPs or cross-attention modules with learnable queries, 
-    the H-Reducer is specifically designed to handle high-resolution images efficiently without losing spatial 
-    coherence. See the paper https://arxiv.org/pdf/2403.12895 for more details. 
+    Unlike other popular vision-to-text modules such as MLPs or cross-attention modules with learnable queries,
+    the H-Reducer is specifically designed to handle high-resolution images efficiently without losing spatial
+    coherence. See the paper https://arxiv.org/pdf/2403.12895 for more details.
 
     Attributes:
         config (Config): Model configuration containing hyperparameters for the language model and hreducer.
-        conv_shape (tuple): Shape of the convolutional layer derived from the configuration, set to (1, 4) for 
+        conv_shape (tuple): Shape of the convolutional layer derived from the configuration, set to (1, 4) for
                             horizontal text coherence.
         layer_norm (torch.nn.LayerNorm): Layer normalization applied to the hidden states.
-        conv_patch (int): The product of the convolution shape dimensions, representing the number of visual features 
+        conv_patch (int): The product of the convolution shape dimensions, representing the number of visual features
                           combined by the convolutional layer.
-        reducer_before (torch.nn.Sequential): Sequential model containing a convolutional layer and GELU activation 
+        reducer_before (torch.nn.Sequential): Sequential model containing a convolutional layer and GELU activation
                                               for initial reduction of visual features.
         reducer (torch.nn.Conv2d): Convolutional layer for further reduction of visual feature length.
         visual_fc (torch.nn.Linear): Fully connected layer to project visual features into the language embedding space.
@@ -224,32 +223,33 @@ class MPLUGDocOwlHReducer(MPLUGDocOwlPreTrainedModel):
             Processes the encoder hidden states to reduce visual feature length and align them with language embeddings.
     """
 
-
     def __init__(self, config):
         r"""
         Initializes the MPLUGDocOwlHReducer with the given configuration.
 
         Args:
             config (Config): Model configuration containing various hyperparameters.
+
         """
+
         super().__init__(config)
         self.config = config
         self.conv_shape = (
             int(self.config.hreducer_conv_shape.split("x")[0]),
             int(self.config.hreducer_conv_shape.split("x")[1]),
-        )  
+        )
         self.layer_norm = torch.nn.LayerNorm(self.config.hreducer_hidden_size, eps=1e-6)
         self.conv_patch = self.conv_shape[0] * self.conv_shape[1]
         self.reducer_before = torch.nn.Sequential(
-    nn.Conv2d(
-        self.config.hreducer_hidden_size,
-        self.conv_patch * self.config.hreducer_hidden_size,
-        kernel_size=self.conv_shape,
-        stride=self.conv_shape,
-        bias=True,
-    ),
-    nn.GELU(),
-)
+            nn.Conv2d(
+                self.config.hreducer_hidden_size,
+                self.conv_patch * self.config.hreducer_hidden_size,
+                kernel_size=self.conv_shape,
+                stride=self.conv_shape,
+                bias=True,
+            ),
+            nn.GELU(),
+        )
         ## reduce visual feature length with a conv layer
         self.reducer = nn.Conv2d(
             self.config.hreducer_hidden_size,
@@ -261,6 +261,7 @@ class MPLUGDocOwlHReducer(MPLUGDocOwlPreTrainedModel):
         ## align visual features with language embedding with fc
         self.visual_fc = torch.nn.Linear(self.config.hreducer_hidden_size, config.text_config.hidden_size)
         self.vit_eos = torch.nn.Parameter(torch.randn(1, 1, config.text_config.hidden_size))
+        self.gradient_checkpointing = False
         self.post_init()
 
     def forward(self, encoder_hidden_states=None):
@@ -270,11 +271,12 @@ class MPLUGDocOwlHReducer(MPLUGDocOwlPreTrainedModel):
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, `optional`):
             batch_size is the number of all images (global+crop) in a batch
             Sequence of hidden-states at the output of the last layer of the encoder.
-        
+
             Returns:
         torch.FloatTensor: The processed sequence output with reduced visual feature length and aligned with language embeddings.
-        
+
         """
+
         encoder_hidden_states = encoder_hidden_states[:, 1:, :]  # remove the first cls token
         B, L, C = encoder_hidden_states.shape  # B, 1024=(448/14)^2, 1024
         H = int(torch.sqrt(torch.tensor(L)))
@@ -283,7 +285,7 @@ class MPLUGDocOwlHReducer(MPLUGDocOwlPreTrainedModel):
         encoder_hidden_states = encoder_hidden_states.view(B, C, H, H)  # (BCHH)
 
         hidden_states = self.reducer_before(encoder_hidden_states)  # B 4D H W/4
-        #hidden_states = self.reducer_activation(hidden_states)
+        # hidden_states = self.reducer_activation(hidden_states)
         B, XD, H, W_div_X = hidden_states.shape
         X = self.conv_patch
         D = XD // X
@@ -478,7 +480,9 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
         >>> generate_ids = model.generate(**inputs, max_new_tokens=15)
         >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "USER:  \nWhat's the content of the image? ASSISTANT: The image features a busy city street with a stop sign prominently displayed"
-        ```"""
+        ```
+
+        """
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -652,6 +656,3 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
 
     def _reorder_cache(self, *args, **kwargs):
         return self.language_model._reorder_cache(*args, **kwargs)
-
-
-# model.forward(input_ids=output['input_ids'], pixel_values = output['pixel_values'],attention_mask=output['attention_mask'], patch_positions=output['patch_positions'])

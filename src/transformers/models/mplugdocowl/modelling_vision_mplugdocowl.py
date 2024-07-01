@@ -57,6 +57,7 @@ def clip_loss(similarity: torch.Tensor) -> torch.Tensor:
     image_loss = contrastive_loss(similarity.t())
     return (caption_loss + image_loss) / 2.0
 
+
 @dataclass
 class MPLUGDocOwlOutput(ModelOutput):
     """
@@ -115,8 +116,8 @@ class MPLUGDocOwlVisionEmbeddings(nn.Module):
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches + 1
         self.position_embedding = nn.Parameter(torch.randn(1, self.num_patches + 1, self.embed_dim))
-        #self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
-        self.pre_layernorm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)  
+        # self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
+        self.pre_layernorm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
         batch_size = pixel_values.shape[0]
@@ -428,7 +429,7 @@ class MPLUGDocOwlEncoder(nn.Module):
                     hidden_states,
                     attention_mask,
                 )
-   
+
             else:
                 layer_outputs = encoder_layer(
                     hidden_states,
@@ -449,6 +450,7 @@ class MPLUGDocOwlEncoder(nn.Module):
         return BaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
+
 
 class MPLUGDocOwlVisionTransformer(PreTrainedModel):
     def __init__(self, config: MPLUGDocOwlConfig):

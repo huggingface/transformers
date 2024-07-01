@@ -50,11 +50,85 @@ if is_vision_available():
 
 GRID_DICT = {
     "grid_1": [(1, 1)],
-    "grid_4": [(1, 1), (1, 2), (2, 1), (1, 3), (3, 1), (2, 2), (1, 4), (4, 1)], 
-    "grid_9": [(1, 1),(1, 2),(2, 1),(1, 3),(3, 1),(2, 2),(1, 4),(4, 1),(1, 5),(5, 1),(1, 6),(6, 1), (2, 3), (3, 2), (1, 7), (7, 1), (4, 2), (2, 4), (1, 8), (8, 1), (3, 3), (1, 9), (9, 1),],
+    "grid_4": [(1, 1), (1, 2), (2, 1), (1, 3), (3, 1), (2, 2), (1, 4), (4, 1)],
+    "grid_9": [
+        (1, 1),
+        (1, 2),
+        (2, 1),
+        (1, 3),
+        (3, 1),
+        (2, 2),
+        (1, 4),
+        (4, 1),
+        (1, 5),
+        (5, 1),
+        (1, 6),
+        (6, 1),
+        (2, 3),
+        (3, 2),
+        (1, 7),
+        (7, 1),
+        (4, 2),
+        (2, 4),
+        (1, 8),
+        (8, 1),
+        (3, 3),
+        (1, 9),
+        (9, 1),
+    ],
     "grid_3x3": [(3, 3)],
-    "grid_20": [(1, 1), (1, 2), (2, 1), (1, 3), (3, 1), (1, 4), (2, 2), (4, 1), (1, 5), (5, 1), (1, 6), (2, 3), (3, 2), (6, 1), (1, 7), (7, 1), (1, 8), (2, 4), (4, 2), (8, 1), (1, 9), (3, 3), (9, 1), (1, 10), (2, 5), (5, 2), (10, 1), (1, 11), (11, 1), (2, 6), (3, 4), (4, 3), (6, 2), (2, 7), (7, 2), (3, 5), (5, 3), (2, 8), (4, 4), (8, 2), (2, 9), (3, 6), (6, 3), (9, 2), (2, 10), (4, 5), (5, 4), (10, 2), ], 
-    }
+    "grid_20": [
+        (1, 1),
+        (1, 2),
+        (2, 1),
+        (1, 3),
+        (3, 1),
+        (1, 4),
+        (2, 2),
+        (4, 1),
+        (1, 5),
+        (5, 1),
+        (1, 6),
+        (2, 3),
+        (3, 2),
+        (6, 1),
+        (1, 7),
+        (7, 1),
+        (1, 8),
+        (2, 4),
+        (4, 2),
+        (8, 1),
+        (1, 9),
+        (3, 3),
+        (9, 1),
+        (1, 10),
+        (2, 5),
+        (5, 2),
+        (10, 1),
+        (1, 11),
+        (11, 1),
+        (2, 6),
+        (3, 4),
+        (4, 3),
+        (6, 2),
+        (2, 7),
+        (7, 2),
+        (3, 5),
+        (5, 3),
+        (2, 8),
+        (4, 4),
+        (8, 2),
+        (2, 9),
+        (3, 6),
+        (6, 3),
+        (9, 2),
+        (2, 10),
+        (4, 5),
+        (5, 4),
+        (10, 2),
+    ],
+}
+
 
 # FIXME write the documentation for these functions
 def box_area(boxes):
@@ -133,6 +207,7 @@ def anchor_rank(anchors, anchors_areas, input_image_size, eps=1e-5):
 
     return index
 
+
 def anchor_resize(
     image: ImageInput,
     anchors: str = "grid_9",
@@ -204,13 +279,13 @@ def shape_adaptive_cropping(
             - np.ndarray: An array containing the positions of the patches.
             - int: The number of patches.
             - int: The maximum anchor size.
-    
+
     Notes:
         The function first converts the input anchors to a format suitable for cropping. It then reshapes
-        the image patches according to the selected anchor size. The resulting sub-images maintain the 
+        the image patches according to the selected anchor size. The resulting sub-images maintain the
         resolution and aspect ratio of the original image as much as possible.
         Find more details in the paper https://arxiv.org/pdf/2310.05126.
-    
+
     Example:
         Consider:
         nh (int): Number of rows in the grid.
@@ -230,9 +305,9 @@ def shape_adaptive_cropping(
 
         After selecting the appropriate grid, the input image is resized to (nh * Hv, nw * Wv) and cropped into nh * nw local images.
         Additionally, to maintain the global structure information of the image, the input image is resized to (Hv, Wv) as a global image.
-    
+
     """
-    
+
     anchors = [tuple(_) for _ in grid_dict[anchors]]
     size = size["width"]
 

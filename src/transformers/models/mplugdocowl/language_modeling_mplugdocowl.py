@@ -27,18 +27,16 @@ import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, StaticCache
 from ...modeling_attn_mask_utils import (
-    AttentionMaskConverter,
     _prepare_4d_causal_attention_mask,
 )
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
-    SequenceClassifierOutputWithPast,
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
@@ -66,6 +64,7 @@ def _get_unpad_data(attention_mask):
         max_seqlen_in_batch,
     )
 
+
 # Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->MPLUGDocOwl
 class MPLUGDocOwlRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
@@ -86,6 +85,7 @@ class MPLUGDocOwlRMSNorm(nn.Module):
 
 ALL_LAYERNORM_LAYERS.append(MPLUGDocOwlRMSNorm)
 
+
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->MPLUGDocOwl
 class MPLUGDocOwlRotaryEmbedding(torch.nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
@@ -95,7 +95,7 @@ class MPLUGDocOwlRotaryEmbedding(torch.nn.Module):
         self.max_position_embeddings = max_position_embeddings
         self.base = base
         inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim))
-        self.register_buffer("inv_freq", inv_freq, persistent = False)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
 
         # Build here to make `torch.jit.trace` work.
         self._set_cos_sin_cache(
@@ -122,6 +122,7 @@ class MPLUGDocOwlRotaryEmbedding(torch.nn.Module):
             self.sin_cached[:, :, :seq_len, ...].to(dtype=x.dtype),
         )
 
+
 # Copied from transformers.models.llama.modeling_llama.LlamaLinearScalingRotaryEmbedding with Llama->MPLUGDocOwl
 class MPLUGDocOwlLinearScalingRotaryEmbedding(MPLUGDocOwlRotaryEmbedding):
     """MPLUGDocOwlRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
@@ -141,7 +142,8 @@ class MPLUGDocOwlLinearScalingRotaryEmbedding(MPLUGDocOwlRotaryEmbedding):
         self.register_buffer("cos_cached", emb.cos()[None, None, :, :].to(dtype), persistent=False)
         self.register_buffer("sin_cached", emb.sin()[None, None, :, :].to(dtype), persistent=False)
 
-# Copied from transformers.models.llama.modeling_llama.LlamaNTKScalingRotaryEmbedding with Llama->MPLUGDocOwl
+
+# Copied from transformers.models.llama.modeling_llama.LlamaDynamicNTKScalingRotaryEmbedding with Llama->MPLUGDocOwl
 class MPLUGDocOwlDynamicNTKScalingRotaryEmbedding(MPLUGDocOwlRotaryEmbedding):
     """MPLUGDocOwlRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
 
@@ -185,6 +187,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
 
+
 # Copied from transformers.models.llama.modeling_llama.LlamaMLP with Llama->MPLUGDocOwl
 class MPLUGDocOwlMLP(nn.Module):
     def __init__(self, config):
@@ -214,8 +217,9 @@ class MPLUGDocOwlMLP(nn.Module):
             down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
         return down_proj
-    
-# Copied from transformers.models.llama.modeling_llama.repeat_kv 
+
+
+# Copied from transformers.models.llama.modeling_llama.repeat_kv
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
@@ -227,54 +231,55 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
+
 class MultiwayNetwork(nn.Module):
     r"""
-        A multi-path network that applies different modules to different parts of the input tensor based on provided indices.
-        This approach is particularly useful for handling multi-modal data by projecting visual and language features into a shared semantic space while preserving their distinctive properties. 
-        Formally it is refered to as Modality Adaptive Module (MAM). More details are in the paper: https://arxiv.org/pdf/2311.04257.
+    A multi-path network that applies different modules to different parts of the input tensor based on provided indices.
+    This approach is particularly useful for handling multi-modal data by projecting visual and language features into a shared semantic space while preserving their distinctive properties.
+    Formally it is refered to as Modality Adaptive Module (MAM). More details are in the paper: https://arxiv.org/pdf/2311.04257.
 
-        Args:
-            module_provider (Callable): A callable that returns an instance of the module to be applied to the inputs.
-            num_multiway (int, optional): The number of different modules to use. Defaults to 2.
+    Args:
+        module_provider (Callable): A callable that returns an instance of the module to be applied to the inputs.
+        num_multiway (int, optional): The number of different modules to use. Defaults to 2.
 
-        Methods:
-            forward(hidden_states, multiway_indices):
-                Applies the corresponding module to each part of the hidden states as indicated by multiway_indices.
+    Methods:
+        forward(hidden_states, multiway_indices):
+            Applies the corresponding module to each part of the hidden states as indicated by multiway_indices.
 
-                Args:
-                    hidden_states (torch.Tensor): The input tensor of shape (batch_size, seq_length, hidden_size).
-                    multiway_indices (torch.Tensor): A tensor of indices indicating which module to apply to each part of hidden_states.
+            Args:
+                hidden_states (torch.Tensor): The input tensor of shape (batch_size, seq_length, hidden_size).
+                multiway_indices (torch.Tensor): A tensor of indices indicating which module to apply to each part of hidden_states.
 
-                Returns:
-                    torch.Tensor: The output tensor after applying the selected modules.
+            Returns:
+                torch.Tensor: The output tensor after applying the selected modules.
 
-        Example:
-            Given a vision-language sequence \(X \in \mathbb{R}^{(L_V + L_T) \times d}\) and modality indicators \(M \in \{0, 1\}^{(L_V + L_T) \times d}\),
-            where \(L_V\) and \(L_T\) are the lengths of the visual and textual sequences respectively,
-            the modality separated operation \(\phi\) is defined as:
+    Example:
+        Given a vision-language sequence \(X \in \mathbb{R}^{(L_V + L_T) \times d}\) and modality indicators \(M \in \{0, 1\}^{(L_V + L_T) \times d}\),
+        where \(L_V\) and \(L_T\) are the lengths of the visual and textual sequences respectively,
+        the modality separated operation \(\phi\) is defined as:
 
-            \[\widetilde{H}^{l-1} = \text{LNV}(\phi(H^{l-1}, M, 0)) + \text{LNT}(\phi(H^{l-1}, M, 1))\]
+        \[\widetilde{H}^{l-1} = \text{LNV}(\phi(H^{l-1}, M, 0)) + \text{LNT}(\phi(H^{l-1}, M, 1))\]
 
-            Here, \(\phi\) is the modality separated operation, \(M\) indicates the modality (0 for visual, 1 for language),
-            and \(\text{LNV}\) and \(\text{LNT}\) are layer normalizations for visual and language features respectively.
+        Here, \(\phi\) is the modality separated operation, \(M\) indicates the modality (0 for visual, 1 for language),
+        and \(\text{LNV}\) and \(\text{LNT}\) are layer normalizations for visual and language features respectively.
 
-            The query, key, and value projections are formulated as follows:
+        The query, key, and value projections are formulated as follows:
 
-            - Query Projection:
-            \[Q^l = H^{l-1} W_Q^l\]
+        - Query Projection:
+        \[Q^l = H^{l-1} W_Q^l\]
 
-            - Key Projection:
-            \[K^l = \phi(\widetilde{H}^{l-1}, M, 0) W_{K0}^l + \phi(\widetilde{H}^{l-1}, M, 1) W_{K1}^l\]
+        - Key Projection:
+        \[K^l = \phi(\widetilde{H}^{l-1}, M, 0) W_{K0}^l + \phi(\widetilde{H}^{l-1}, M, 1) W_{K1}^l\]
 
-            - Value Projection:
-            \[V^l = \phi(H^{l-1}, M, 0) W_{V0}^l + \phi(H^{l-1}, M, 1) W_{V1}^l\]
+        - Value Projection:
+        \[V^l = \phi(H^{l-1}, M, 0) W_{V0}^l + \phi(H^{l-1}, M, 1) W_{V1}^l\]
 
-            The attention context features for the \(l\)-th layer are computed as:
+        The attention context features for the \(l\)-th layer are computed as:
 
-            \[C^l = \text{Softmax}\left(\frac{Q^l K^{l \top}}{\sqrt{d}}\right) V^l\]
+        \[C^l = \text{Softmax}\left(\frac{Q^l K^{l \top}}{\sqrt{d}}\right) V^l\]
 
-            Where \(Q^l\), \(K^l\), and \(V^l\) are the query, key, and value projections respectively, and \(d\) is the dimension of the head.
-        """
+        Where \(Q^l\), \(K^l\), and \(V^l\) are the query, key, and value projections respectively, and \(d\) is the dimension of the head.
+    """
 
     def __init__(self, module_provider, num_multiway=2):
         super(MultiwayNetwork, self).__init__()
@@ -298,6 +303,7 @@ class MultiwayNetwork(nn.Module):
                 output_hidden_states[local_indices] = output
 
         return output_hidden_states.contiguous()
+
 
 class MultiwayAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
@@ -395,7 +401,7 @@ class MultiwayAttention(nn.Module):
         if past_key_value is not None:
             kv_seq_len += past_key_value[0].shape[-2]
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
-        #cos, sin = self.rotary_emb(value_states, position_ids)
+        # cos, sin = self.rotary_emb(value_states, position_ids)
 
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
@@ -444,6 +450,241 @@ class MultiwayAttention(nn.Module):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
+
+
+# Copied from transformers.models.llama.modeling_llama.LlamaAttention with Llama->MPLUGDocOwl
+class MPLUGDocOwlAttention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
+    def __init__(self, config: MPLUGDocOwlConfig, layer_idx: Optional[int] = None):
+        super().__init__()
+        self.config = config
+        self.layer_idx = layer_idx
+        if layer_idx is None:
+            logger.warning_once(
+                f"Instantiating {self.__class__.__name__} without passing a `layer_idx` is not recommended and will "
+                "lead to errors during the forward call if caching is used. Please make sure to provide a `layer_idx` "
+                "when creating this class."
+            )
+
+        self.attention_dropout = config.attention_dropout
+        self.hidden_size = config.hidden_size
+        self.num_heads = config.num_attention_heads
+        self.head_dim = self.hidden_size // self.num_heads
+        self.num_key_value_heads = config.num_key_value_heads
+        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
+        self.max_position_embeddings = config.max_position_embeddings
+        self.rope_theta = config.rope_theta
+        self.is_causal = True
+
+        if (self.head_dim * self.num_heads) != self.hidden_size:
+            raise ValueError(
+                f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
+                f" and `num_heads`: {self.num_heads})."
+            )
+
+        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)
+        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
+        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
+        self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=config.attention_bias)
+        self._init_rope()
+
+    def _init_rope(self):
+        if self.config.rope_scaling is None:
+            self.rotary_emb = MPLUGDocOwlRotaryEmbedding(
+                self.head_dim,
+                max_position_embeddings=self.max_position_embeddings,
+                base=self.rope_theta,
+            )
+        else:
+            scaling_type = self.config.rope_scaling["type"]
+            scaling_factor = self.config.rope_scaling["factor"]
+            if scaling_type == "linear":
+                self.rotary_emb = MPLUGDocOwlLinearScalingRotaryEmbedding(
+                    self.head_dim,
+                    max_position_embeddings=self.max_position_embeddings,
+                    scaling_factor=scaling_factor,
+                    base=self.rope_theta,
+                )
+            elif scaling_type == "dynamic":
+                self.rotary_emb = MPLUGDocOwlDynamicNTKScalingRotaryEmbedding(
+                    self.head_dim,
+                    max_position_embeddings=self.max_position_embeddings,
+                    scaling_factor=scaling_factor,
+                    base=self.rope_theta,
+                )
+            else:
+                raise ValueError(f"Unknown RoPE scaling type {scaling_type}")
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Cache] = None,
+        output_attentions: bool = False,
+        use_cache: bool = False,
+        cache_position: Optional[torch.LongTensor] = None,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        bsz, q_len, _ = hidden_states.size()
+
+        if self.config.pretraining_tp > 1:
+            key_value_slicing = (self.num_key_value_heads * self.head_dim) // self.config.pretraining_tp
+            query_slices = self.q_proj.weight.split(
+                (self.num_heads * self.head_dim) // self.config.pretraining_tp, dim=0
+            )
+            key_slices = self.k_proj.weight.split(key_value_slicing, dim=0)
+            value_slices = self.v_proj.weight.split(key_value_slicing, dim=0)
+
+            query_states = [F.linear(hidden_states, query_slices[i]) for i in range(self.config.pretraining_tp)]
+            query_states = torch.cat(query_states, dim=-1)
+
+            key_states = [F.linear(hidden_states, key_slices[i]) for i in range(self.config.pretraining_tp)]
+            key_states = torch.cat(key_states, dim=-1)
+
+            value_states = [F.linear(hidden_states, value_slices[i]) for i in range(self.config.pretraining_tp)]
+            value_states = torch.cat(value_states, dim=-1)
+
+        else:
+            query_states = self.q_proj(hidden_states)
+            key_states = self.k_proj(hidden_states)
+            value_states = self.v_proj(hidden_states)
+
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+
+        cos, sin = self.rotary_emb(value_states, position_ids)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        if past_key_value is not None:
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+        key_states = repeat_kv(key_states, self.num_key_value_groups)
+        value_states = repeat_kv(value_states, self.num_key_value_groups)
+
+        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
+
+        if attention_mask is not None:  # no matter the length, we just slice it
+            causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+            attn_weights = attn_weights + causal_mask
+
+        # upcast attention to fp32
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
+        attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
+        attn_output = torch.matmul(attn_weights, value_states)
+
+        if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
+            raise ValueError(
+                f"`attn_output` should be of size {(bsz, self.num_heads, q_len, self.head_dim)}, but is"
+                f" {attn_output.size()}"
+            )
+
+        attn_output = attn_output.transpose(1, 2).contiguous()
+
+        attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
+
+        if self.config.pretraining_tp > 1:
+            attn_output = attn_output.split(self.hidden_size // self.config.pretraining_tp, dim=2)
+            o_proj_slices = self.o_proj.weight.split(self.hidden_size // self.config.pretraining_tp, dim=1)
+            attn_output = sum([F.linear(attn_output[i], o_proj_slices[i]) for i in range(self.config.pretraining_tp)])
+        else:
+            attn_output = self.o_proj(attn_output)
+
+        if not output_attentions:
+            attn_weights = None
+
+        return attn_output, attn_weights, past_key_value
+
+
+# Copied from transformers.models.llama.modeling_llama.LlamaSdpaAttention with Llama->MPLUGDocOwl
+class MPLUGDocOwlSdpaAttention(MPLUGDocOwlAttention):
+    """
+    MPLUGDocOwl attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
+    `MPLUGDocOwlAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
+    SDPA API.
+    """
+
+    # Adapted from MPLUGDocOwlAttention.forward
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Cache] = None,
+        output_attentions: bool = False,
+        use_cache: bool = False,
+        cache_position: Optional[torch.LongTensor] = None,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        if output_attentions:
+            # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
+            logger.warning_once(
+                "LlamaModel is using LlamaSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
+                'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+            )
+            return super().forward(
+                hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                past_key_value=past_key_value,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                cache_position=cache_position,
+            )
+
+        bsz, q_len, _ = hidden_states.size()
+
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
+
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+
+        cos, sin = self.rotary_emb(value_states, position_ids)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        if past_key_value is not None:
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+        key_states = repeat_kv(key_states, self.num_key_value_groups)
+        value_states = repeat_kv(value_states, self.num_key_value_groups)
+
+        causal_mask = attention_mask
+        if attention_mask is not None:
+            causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
+
+        # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
+        # Reference: https://github.com/pytorch/pytorch/issues/112577.
+        if query_states.device.type == "cuda" and causal_mask is not None:
+            query_states = query_states.contiguous()
+            key_states = key_states.contiguous()
+            value_states = value_states.contiguous()
+
+        # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
+        # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
+        is_causal = True if causal_mask is None and q_len > 1 else False
+
+        attn_output = torch.nn.functional.scaled_dot_product_attention(
+            query_states,
+            key_states,
+            value_states,
+            attn_mask=causal_mask,
+            dropout_p=self.attention_dropout if self.training else 0.0,
+            is_causal=is_causal,
+        )
+
+        attn_output = attn_output.transpose(1, 2).contiguous()
+        attn_output = attn_output.view(bsz, q_len, self.hidden_size)
+
+        attn_output = self.o_proj(attn_output)
+
+        return attn_output, None, past_key_value
 
 
 MPLUGDocOwl_START_DOCSTRING = r"""
@@ -544,9 +785,11 @@ class MPLUGDocOwlPreTrainedLanguageModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["MPLUGDocOwlDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn_2 = True
+    _supports_flash_attn_2 = False
     _supports_cache_class = True
     _supports_static_cache = True
+    _supports_sdpa = False
+
 
 MPLUGDocOwl_INPUTS_DOCSTRING = r"""
     Args:
@@ -728,15 +971,13 @@ class MPLUGDocOwlLanguageModel(MPLUGDocOwlPreTrainedLanguageModel):
         next_decoder_cache = () if use_cache else None
 
         for idx, decoder_layer in enumerate(self.layers):
-
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
-                 layer_outputs = self._gradient_checkpointing_func(
+                layer_outputs = self._gradient_checkpointing_func(
                     decoder_layer.__call__,
                     hidden_states,
                     position_ids,
@@ -744,7 +985,7 @@ class MPLUGDocOwlLanguageModel(MPLUGDocOwlPreTrainedLanguageModel):
                     output_attentions,
                     use_cache,
                 )
-                  
+
             else:
                 layer_outputs = decoder_layer(
                     hidden_states,
@@ -791,18 +1032,18 @@ class MPLUGDocOwlLanguageModel(MPLUGDocOwlPreTrainedLanguageModel):
         # KV cache is used. This is an issue for torch.compile which then recaptures cudagraphs at each decode steps due to the dynamic shapes.
         # (`recording cudagraph tree for symint key 13`, etc.), which is VERY slow. A workaround is `@torch.compiler.disable`, but this prevents using
         # `fullgraph=True`. See more context in https://github.com/huggingface/transformers/pull/29114
-
+        """
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
             return None
-
+        """
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
         # to infer the attention mask.
         past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
         using_static_cache = isinstance(past_key_values, StaticCache)
-
+        """
         # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
         if self.config._attn_implementation == "sdpa" and not using_static_cache and not output_attentions:
             if AttentionMaskConverter._ignore_causal_mask_sdpa(
@@ -812,7 +1053,7 @@ class MPLUGDocOwlLanguageModel(MPLUGDocOwlPreTrainedLanguageModel):
                 is_training=self.training,
             ):
                 return None
-
+        """
         dtype, device = input_tensor.dtype, input_tensor.device
         min_dtype = torch.finfo(dtype).min
         sequence_length = input_tensor.shape[1]
@@ -846,18 +1087,21 @@ class MPLUGDocOwlLanguageModel(MPLUGDocOwlPreTrainedLanguageModel):
                 causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
                     padding_mask, min_dtype
                 )
+        """
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
             and attention_mask.device.type == "cuda"
             and not output_attentions
         ):
+
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
             # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
             # Details: https://github.com/pytorch/pytorch/issues/110213
             causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
-
+        """
         return causal_mask
+
 
 class MPLUGDocOwlForCausalLM(MPLUGDocOwlPreTrainedLanguageModel):
     _tied_weights_keys = ["lm_head.weight"]

@@ -14,11 +14,9 @@
 # limitations under the License.
 """Testing suite for the PyTorch MPLUGDocOwl model."""
 
-import gc
 import unittest
 
 from transformers import (
-    AutoProcessor,
     MPLUGDocOwlConfig,
     MPLUGDocOwlForConditionalGeneration,
     is_torch_available,
@@ -26,13 +24,12 @@ from transformers import (
 )
 from transformers.testing_utils import (
     require_torch,
-    slow,
     torch_device,
 )
 
-from ...test_modeling_common import floats_tensor, ids_tensor
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+
 
 if is_torch_available():
     import torch
@@ -40,7 +37,8 @@ else:
     is_torch_greater_or_equal_than_2_0 = False
 
 if is_vision_available():
-    from PIL import Image
+    pass
+
 
 class MPLUGDocOwlVisionText2TextModelTester:
     def __init__(
@@ -54,7 +52,7 @@ class MPLUGDocOwlVisionText2TextModelTester:
         hreducer_hidden_size=32,
         hreducer_initializer_range=0.02,
         hreducer_layer_norm=1e-6,
-        hreducer_conv_shape="1x4",
+        hreducer_conv_shape="1x2",
         vision_feature_layer=-1,
         text_config={
             "model_type": "llama",
@@ -118,10 +116,14 @@ class MPLUGDocOwlVisionText2TextModelTester:
         self.batch_size = 3
         self.num_channels = 3
         self.image_size = 336
-        self.encoder_seq_length = 231
+        self.encoder_seq_length = 112
 
     def get_config(self):
         return MPLUGDocOwlConfig(
+            hreducer_conv_shape=self.hreducer_conv_shape,
+            hreducer_hidden_size=self.hreducer_hidden_size,
+            hreducer_initializer_range=self.hreducer_initializer_range,
+            hreducer_layer_norm=self.hreducer_layer_norm,
             text_config=self.text_config,
             vision_config=self.vision_config,
             ignore_index=self.ignore_index,
@@ -156,13 +158,27 @@ class MPLUGDocOwlVisionText2TextModelTester:
         }
         return config, inputs_dict
 
+    def create_and_check_mplugdocowl_model_fp16_forward(self, config, input_ids, pixel_values, attention_mask):
+        model = MPLUGDocOwlForConditionalGeneration(config=config)
+        model.to(torch_device)
+        model.eval()
+        with torch.autocast(device_type="cuda", dtype=torch.float16):
+            logits = model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                pixel_values=pixel_values.to(torch.bfloat16),
+                return_dict=True,
+            )["logits"]
+        self.parent.assertFalse(torch.isnan(logits).any().item())
+
+
 @require_torch
 class MPLUGDocOwlForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
     """
     Model tester for `MPLUGDocOwlForConditionalGeneration`.
     """
 
-    all_model_classes = (MPLUGDocOwlForConditionalGeneration, ) if is_torch_available() else ()
+    all_model_classes = (MPLUGDocOwlForConditionalGeneration,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
 
@@ -187,7 +203,9 @@ class MPLUGDocOwlForConditionalGenerationModelTest(ModelTesterMixin, unittest.Te
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
-'''
+
+
+"""
 @require_torch
 class MPLUGDocOwlForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
@@ -258,7 +276,7 @@ class MPLUGDocOwlForConditionalGenerationIntegrationTest(unittest.TestCase):
             self.processor.decode(output[0,inputs["input_ids"].shape[1]:], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
-'''
+"""
 """
     @slow
     def test_small_model_integration_test_mplugdocowl_single(self):

@@ -13,15 +13,15 @@
 # limitations under the License.
 """ MPLUGDocOwl model configuration"""
 
-import os
 import warnings
-from typing import Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING
 
+
 logger = logging.get_logger(__name__)
+
 
 class MPLUGDocOwlConfig(PretrainedConfig):
     r"""
@@ -81,7 +81,7 @@ class MPLUGDocOwlConfig(PretrainedConfig):
         hreducer_hidden_size=1024,
         hreducer_initializer_range=0.02,
         hreducer_layer_norm=1e-6,
-        hreducer_activation='gelu',
+        hreducer_activation="gelu",
         hreducer_conv_shape="1x4",
         ignore_index=-100,
         image_token_index=32000,
