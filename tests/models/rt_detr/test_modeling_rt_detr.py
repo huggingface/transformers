@@ -91,7 +91,7 @@ class RTDetrModelTester:
         label_noise_ratio=0.5,
         box_noise_scale=1.0,
         learn_initial_query=False,
-        anchor_image_size=[64, 64],
+        anchor_image_size=None,
         image_size=64,
         disable_custom_kernels=True,
         with_box_refine=True,

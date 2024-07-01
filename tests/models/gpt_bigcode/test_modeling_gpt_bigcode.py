@@ -458,27 +458,27 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip("MQA models does not support retain_grad")
+    @unittest.skip(reason="MQA models does not support retain_grad")
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    @unittest.skip("Contrastive search not supported due to non-standard caching mechanism")
+    @unittest.skip(reason="Contrastive search not supported due to non-standard caching mechanism")
     def test_contrastive_generate(self):
         pass
 
-    @unittest.skip("Contrastive search not supported due to non-standard caching mechanism")
+    @unittest.skip(reason="Contrastive search not supported due to non-standard caching mechanism")
     def test_contrastive_generate_dict_outputs_use_cache(self):
         pass
 
-    @unittest.skip("CPU offload seems to be broken for some reason - tiny models keep hitting corner cases")
+    @unittest.skip(reason="CPU offload seems to be broken for some reason - tiny models keep hitting corner cases")
     def test_cpu_offload(self):
         pass
 
-    @unittest.skip("Disk offload seems to be broken for some reason - tiny models keep hitting corner cases")
+    @unittest.skip(reason="Disk offload seems to be broken for some reason - tiny models keep hitting corner cases")
     def test_disk_offload(self):
         pass
 
-    @unittest.skip("BigCodeGPT has a non-standard KV cache format.")
+    @unittest.skip(reason="BigCodeGPT has a non-standard KV cache format.")
     def test_past_key_values_format(self):
         pass
 

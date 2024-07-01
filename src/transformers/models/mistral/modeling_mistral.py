@@ -208,7 +208,6 @@ class MistralAttention(nn.Module):
             base=self.rope_theta,
         )
 
-    # Copied from transformers.models.gemma.modeling_gemma.GemmaAttention.forward with Gemma->Mistral
     def forward(
         self,
         hidden_states: torch.Tensor,

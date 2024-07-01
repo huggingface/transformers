@@ -433,11 +433,11 @@ class Qwen2MoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
             (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
         )
 
-    @unittest.skip("Qwen2Moe buffers include complex numbers, which breaks this test")
+    @unittest.skip(reason="Qwen2Moe buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip("Qwen2Moe uses GQA on all models so the KV cache is a non standard format")
+    @unittest.skip(reason="Qwen2Moe uses GQA on all models so the KV cache is a non standard format")
     def test_past_key_values_format(self):
         pass
 
@@ -525,7 +525,7 @@ class Qwen2MoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest("Qwen2Moe flash attention does not support right padding")
+        self.skipTest(reason="Qwen2Moe flash attention does not support right padding")
 
     # Ignore copy
     def test_load_balancing_loss(self):
