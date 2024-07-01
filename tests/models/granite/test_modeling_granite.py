@@ -14,7 +14,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch Granite model."""
 
-import gc
 import tempfile
 import unittest
 
@@ -22,7 +21,7 @@ import pytest
 from packaging import version
 from parameterized import parameterized
 
-from transformers import AutoTokenizer, GraniteConfig, StaticCache, is_torch_available, set_seed
+from transformers import AutoTokenizer, GraniteConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
