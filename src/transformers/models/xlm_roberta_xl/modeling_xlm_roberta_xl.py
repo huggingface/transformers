@@ -572,6 +572,7 @@ class XLMRobertaXLPreTrainedModel(PreTrainedModel):
 
     config_class = XLMRobertaXLConfig
     base_model_prefix = "roberta"
+    _no_split_modules = ["XLMRobertaXLEmbeddings", "XLMRobertaXLLayer"]
 
     # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
     def _init_weights(self, module):

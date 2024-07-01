@@ -19,7 +19,6 @@ import inspect
 import os
 import tempfile
 import unittest
-from typing import Dict, List, Tuple
 
 import numpy as np
 from datasets import Audio, load_dataset
@@ -178,29 +177,35 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             expected_arg_names = ["input_values", "padding_mask", "bandwidth"]
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
-    @unittest.skip("The EncodecModel is not transformers based, thus it does not have `inputs_embeds` logics")
+    @unittest.skip(reason="The EncodecModel is not transformers based, thus it does not have `inputs_embeds` logics")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip("The EncodecModel is not transformers based, thus it does not have `inputs_embeds` logics")
-    def test_model_common_attributes(self):
+    @unittest.skip(reason="The EncodecModel is not transformers based, thus it does not have `inputs_embeds` logics")
+    def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip("The EncodecModel is not transformers based, thus it does not have the usual `attention` logic")
+    @unittest.skip(
+        reason="The EncodecModel is not transformers based, thus it does not have the usual `attention` logic"
+    )
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    @unittest.skip("The EncodecModel is not transformers based, thus it does not have the usual `attention` logic")
+    @unittest.skip(
+        reason="The EncodecModel is not transformers based, thus it does not have the usual `attention` logic"
+    )
     def test_torchscript_output_attentions(self):
         pass
 
-    @unittest.skip("The EncodecModel is not transformers based, thus it does not have the usual `hidden_states` logic")
+    @unittest.skip(
+        reason="The EncodecModel is not transformers based, thus it does not have the usual `hidden_states` logic"
+    )
     def test_torchscript_output_hidden_state(self):
         pass
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
-            return
+            self.skipTest(reason="test_torchscript is set to False")
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.torchscript = True
@@ -288,7 +293,9 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             # (Even with this call, there are still memory leak by ~0.04MB)
             self.clear_torch_jit_class_registry()
 
-    @unittest.skip("The EncodecModel is not transformers based, thus it does not have the usual `attention` logic")
+    @unittest.skip(
+        reason="The EncodecModel is not transformers based, thus it does not have the usual `attention` logic"
+    )
     def test_attention_outputs(self):
         pass
 
@@ -321,19 +328,21 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             hidden_states_with_chunk = model(**inputs)[0]
             self.assertTrue(torch.allclose(hidden_states_no_chunk, hidden_states_with_chunk, atol=1e-3))
 
-    @unittest.skip("The EncodecModel is not transformers based, thus it does not have the usual `hidden_states` logic")
+    @unittest.skip(
+        reason="The EncodecModel is not transformers based, thus it does not have the usual `hidden_states` logic"
+    )
     def test_hidden_states_output(self):
         pass
 
-    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
     def test_save_load_low_cpu_mem_usage(self):
         pass
 
-    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
     def test_save_load_low_cpu_mem_usage_checkpoints(self):
         pass
 
-    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
     def test_save_load_low_cpu_mem_usage_no_safetensors(self):
         pass
 
@@ -375,31 +384,21 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                 tuple_output = model(**tuple_inputs, return_dict=False, **additional_kwargs)
                 dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs)
 
-                def recursive_check(tuple_object, dict_object):
-                    if isinstance(tuple_object, (List, Tuple)):
-                        for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
-                            recursive_check(tuple_iterable_value, dict_iterable_value)
-                    elif isinstance(tuple_object, Dict):
-                        for tuple_iterable_value, dict_iterable_value in zip(
-                            tuple_object.values(), dict_object.values()
-                        ):
-                            recursive_check(tuple_iterable_value, dict_iterable_value)
-                    elif tuple_object is None:
-                        return
-                    else:
-                        self.assertTrue(
-                            torch.allclose(
-                                set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), atol=1e-5
-                            ),
-                            msg=(
-                                "Tuple and dict output are not equal. Difference:"
-                                f" {torch.max(torch.abs(tuple_object - dict_object))}. Tuple has `nan`:"
-                                f" {torch.isnan(tuple_object).any()} and `inf`: {torch.isinf(tuple_object)}. Dict has"
-                                f" `nan`: {torch.isnan(dict_object).any()} and `inf`: {torch.isinf(dict_object)}."
-                            ),
-                        )
+                self.assertTrue(isinstance(tuple_output, tuple))
+                self.assertTrue(isinstance(dict_output, dict))
 
-                recursive_check(tuple_output, dict_output)
+                for tuple_value, dict_value in zip(tuple_output, dict_output.values()):
+                    self.assertTrue(
+                        torch.allclose(
+                            set_nan_tensor_to_zero(tuple_value), set_nan_tensor_to_zero(dict_value), atol=1e-5
+                        ),
+                        msg=(
+                            "Tuple and dict output are not equal. Difference:"
+                            f" {torch.max(torch.abs(tuple_value - dict_value))}. Tuple has `nan`:"
+                            f" {torch.isnan(tuple_value).any()} and `inf`: {torch.isinf(tuple_value)}. Dict has"
+                            f" `nan`: {torch.isnan(dict_value).any()} and `inf`: {torch.isinf(dict_value)}."
+                        ),
+                    )
 
         for model_class in self.all_model_classes:
             model = model_class(config)
@@ -462,7 +461,9 @@ class EncodecIntegrationTest(unittest.TestCase):
             "1.5": [371955],
             "24.0": [6659962],
         }
-        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        librispeech_dummy = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
+        )
         model_id = "facebook/encodec_24khz"
 
         model = EncodecModel.from_pretrained(model_id).to(torch_device)
@@ -516,7 +517,9 @@ class EncodecIntegrationTest(unittest.TestCase):
             "3.0": [144259, 146765, 156435, 176871, 161971],
             "24.0": [1568553, 1294948, 1306190, 1464747, 1663150],
         }
-        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        librispeech_dummy = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
+        )
         model_id = "facebook/encodec_48khz"
 
         model = EncodecModel.from_pretrained(model_id).to(torch_device)
@@ -578,7 +581,9 @@ class EncodecIntegrationTest(unittest.TestCase):
                 [85561, 81870, 76953, 48967, 79315, 85442, 81479, 107241],
             ],
         }
-        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        librispeech_dummy = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
+        )
         model_id = "facebook/encodec_48khz"
 
         model = EncodecModel.from_pretrained(model_id).to(torch_device)

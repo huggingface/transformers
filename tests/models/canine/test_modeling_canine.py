@@ -441,7 +441,7 @@ class CanineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def test_headmasking(self):
         if not self.test_head_masking:
-            return
+            self.skipTest(reason="test_head_masking is set to False")
 
         global_rng.seed(42)
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -496,7 +496,7 @@ class CanineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             check_attentions_validity(outputs.attentions)
 
-    @unittest.skip("CANINE does not have a get_input_embeddings() method.")
+    @unittest.skip(reason="CANINE does not have a get_input_embeddings() method.")
     def test_inputs_embeds(self):
         # ViT does not use inputs_embeds
         pass
@@ -505,8 +505,8 @@ class CanineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_inputs_embeds_matches_input_ids(self):
         pass
 
-    @unittest.skip("CANINE does not have a get_input_embeddings() method.")
-    def test_model_common_attributes(self):
+    @unittest.skip(reason="CANINE does not have a get_input_embeddings() method.")
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip(

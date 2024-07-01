@@ -40,6 +40,7 @@ from .utils import (
     ExplicitEnum,
     cached_property,
     is_accelerate_available,
+    is_ipex_available,
     is_safetensors_available,
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
@@ -464,8 +465,8 @@ class TrainingArguments:
             Use in conjunction with `load_best_model_at_end` and `metric_for_best_model` to specify if better models
             should have a greater metric or not. Will default to:
 
-            - `True` if `metric_for_best_model` is set to a value that isn't `"loss"` or `"eval_loss"`.
-            - `False` if `metric_for_best_model` is not set, or set to `"loss"` or `"eval_loss"`.
+            - `True` if `metric_for_best_model` is set to a value that doesn't end in `"loss"`.
+            - `False` if `metric_for_best_model` is not set, or set to a value that ends in `"loss"`.
         ignore_data_skip (`bool`, *optional*, defaults to `False`):
             When resuming training, whether or not to skip the epochs and batches to get the data loading at the same
             stage as in the previous training. If set to `True`, the training will begin faster (as that skipping step
@@ -772,8 +773,11 @@ class TrainingArguments:
             that takes a boolean argument `compute_result`, which when passed `True`, will trigger the final global
             summary statistics from the batch-level summary statistics you've accumulated over the evaluation set.
 
-        sanity_evaluation(`bool`, *optional*, defaults to `False`):
-            Whether or not to perform a sanity check to ensure that the validation steps works correctly. It will be performed before the training.
+        eval_on_start (`bool`, *optional*, defaults to `False`):
+            Whether to perform a evaluation step (sanity check) before the training to ensure the validation steps works correctly.
+
+        eval_use_gather_object (`bool`, *optional*, defaults to `False`):
+            Whether to run recursively gather object in a nested list/tuple/dictionary of objects from all devices.
     """
 
     framework = "pt"
@@ -1457,10 +1461,17 @@ class TrainingArguments:
         metadata={"help": "Break eval metrics calculation into batches to save memory."},
     )
 
-    sanity_evaluation: bool = field(
+    eval_on_start: bool = field(
         default=False,
         metadata={
             "help": "Whether to run through the entire `evaluation` step at the very beginning of training as a sanity check."
+        },
+    )
+
+    eval_use_gather_object: Optional[bool] = field(
+        default=False,
+        metadata={
+            "help": "Whether to run recursively gather object in a nested list/tuple/dictionary of objects from all devices."
         },
     )
 
@@ -1592,7 +1603,7 @@ class TrainingArguments:
         ) and self.metric_for_best_model is None:
             self.metric_for_best_model = "loss"
         if self.greater_is_better is None and self.metric_for_best_model is not None:
-            self.greater_is_better = self.metric_for_best_model not in ["loss", "eval_loss"]
+            self.greater_is_better = not (self.metric_for_best_model.endswith("loss"))
         if self.run_name is None:
             self.run_name = self.output_dir
         if self.framework == "pt" and is_torch_available():
@@ -1991,6 +2002,12 @@ class TrainingArguments:
                 FutureWarning,
             )
 
+        if self.eval_use_gather_object and not is_accelerate_available("0.30.0"):
+            raise ValueError(
+                "--eval_use_gather_object requires Accelerate to be version of `accelerate` < 0.30.0."
+                "This is not supported and we recommend you to update your version."
+            )
+
     def __str__(self):
         self_as_dict = asdict(self)
 
@@ -2136,6 +2153,8 @@ class TrainingArguments:
             if self.use_cpu:
                 device = torch.device("cpu")
             elif is_torch_xpu_available():
+                if not is_ipex_available() and not is_accelerate_available("0.32.0.dev"):
+                    raise ImportError("Using the XPU PyTorch backend requires `accelerate>=0.32.0.dev`")
                 device = torch.device("xpu:0")
                 torch.xpu.set_device(device)
             elif is_torch_mlu_available():
@@ -2370,6 +2389,18 @@ class TrainingArguments:
         )
         return warmup_steps
 
+    def _dict_torch_dtype_to_str(self, d: Dict[str, Any]) -> None:
+        """
+        Checks whether the passed dictionary and its nested dicts have a *torch_dtype* key and if it's not None,
+        converts torch.dtype to a string of just the type. For example, `torch.float32` get converted into *"float32"*
+        string, which can then be stored in the json format.
+        """
+        if d.get("torch_dtype", None) is not None and not isinstance(d["torch_dtype"], str):
+            d["torch_dtype"] = str(d["torch_dtype"]).split(".")[1]
+        for value in d.values():
+            if isinstance(value, dict):
+                self._dict_torch_dtype_to_str(value)
+
     def to_dict(self):
         """
         Serializes this instance while replace `Enum` by their values (for JSON serialization support). It obfuscates
@@ -2388,6 +2419,8 @@ class TrainingArguments:
             # Handle the accelerator_config if passed
             if is_accelerate_available() and isinstance(v, AcceleratorConfig):
                 d[k] = v.to_dict()
+        self._dict_torch_dtype_to_str(d)
+
         return d
 
     def to_json_string(self):
@@ -2725,7 +2758,7 @@ class TrainingArguments:
 
         Calling this method will set `self.push_to_hub` to `True`, which means the `output_dir` will begin a git
         directory synced with the repo (determined by `model_id`) and the content will be pushed each time a save is
-        triggered (depending on`self.save_strategy`). Calling [`~Trainer.save_model`] will also trigger a push.
+        triggered (depending on your `self.save_strategy`). Calling [`~Trainer.save_model`] will also trigger a push.
 
         </Tip>
 

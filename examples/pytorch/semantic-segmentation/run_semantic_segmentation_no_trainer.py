@@ -18,6 +18,7 @@ import argparse
 import json
 import math
 import os
+import warnings
 from functools import partial
 from pathlib import Path
 
@@ -49,7 +50,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.42.0.dev0")
+check_min_version("4.43.0.dev0")
 
 logger = get_logger(__name__)
 
@@ -84,6 +85,11 @@ def parse_args():
         type=str,
         help="Name of the dataset on the hub.",
         default="segments/sidewalk-semantic",
+    )
+    parser.add_argument(
+        "--do_reduce_labels",
+        action="store_true",
+        help="Whether or not to reduce all labels by 1 and replace background by 255.",
     )
     parser.add_argument(
         "--reduce_labels",
@@ -174,12 +180,11 @@ def parse_args():
     parser.add_argument("--hub_token", type=str, help="The token to use to push to the Model Hub.")
     parser.add_argument(
         "--trust_remote_code",
-        type=bool,
-        default=False,
+        action="store_true",
         help=(
-            "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option "
-            "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
-            "execute code present on the Hub on your local machine."
+            "Whether to trust the execution of code from datasets/models defined on the Hub."
+            " This option should only be set to `True` for repositories you trust and in which you have read the"
+            " code, as it will execute code present on the Hub on your local machine."
         ),
     )
     parser.add_argument(
@@ -218,6 +223,14 @@ def parse_args():
             raise ValueError(
                 "Need an `output_dir` to create a repo when `--push_to_hub` or `with_tracking` is specified."
             )
+
+    # Deprecation
+    if args.reduce_labels:
+        args.do_reduce_labels = args.reduce_labels
+        warnings.warn(
+            "The `reduce_labels` argument is deprecated and will be removed in v4.45. Please use `do_reduce_labels` instead.",
+            FutureWarning,
+        )
 
     if args.output_dir is not None:
         os.makedirs(args.output_dir, exist_ok=True)
@@ -280,7 +293,7 @@ def main():
     # In distributed training, the load_dataset function guarantees that only one local process can concurrently
     # download the dataset.
     # TODO support datasets from local folders
-    dataset = load_dataset(args.dataset_name, cache_dir=args.cache_dir)
+    dataset = load_dataset(args.dataset_name, cache_dir=args.cache_dir, trust_remote_code=args.trust_remote_code)
 
     # Rename column names to standardized names (only "image" and "label" need to be present)
     if "pixel_values" in dataset["train"].column_names:
@@ -315,11 +328,11 @@ def main():
         args.model_name_or_path, trust_remote_code=args.trust_remote_code
     )
     model = AutoModelForSemanticSegmentation.from_pretrained(
-        args.model_name_or_path, config=config, trust_remote_code=args.trust_remote_code
+        args.model_name_or_path,
+        config=config,
+        trust_remote_code=args.trust_remote_code,
+        do_reduce_labels=args.do_reduce_labels,
     )
-    # `reduce_labels` is a property of dataset labels, in case we use image_processor
-    # pretrained on another dataset we should override the default setting
-    image_processor.do_reduce_labels = args.reduce_labels
 
     # Define transforms to be applied to each image and target.
     if "shortest_edge" in image_processor.size:
@@ -329,7 +342,7 @@ def main():
         height, width = image_processor.size["height"], image_processor.size["width"]
     train_transforms = A.Compose(
         [
-            A.Lambda(name="reduce_labels", mask=reduce_labels_transform if args.reduce_labels else None, p=1.0),
+            A.Lambda(name="reduce_labels", mask=reduce_labels_transform if args.do_reduce_labels else None, p=1.0),
             # pad image with 255, because it is ignored by loss
             A.PadIfNeeded(min_height=height, min_width=width, border_mode=0, value=255, p=1.0),
             A.RandomCrop(height=height, width=width, p=1.0),
@@ -340,7 +353,7 @@ def main():
     )
     val_transforms = A.Compose(
         [
-            A.Lambda(name="reduce_labels", mask=reduce_labels_transform if args.reduce_labels else None, p=1.0),
+            A.Lambda(name="reduce_labels", mask=reduce_labels_transform if args.do_reduce_labels else None, p=1.0),
             A.Resize(height=height, width=width, p=1.0),
             A.Normalize(mean=image_processor.image_mean, std=image_processor.image_std, max_pixel_value=255.0, p=1.0),
             ToTensorV2(),

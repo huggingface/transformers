@@ -450,7 +450,7 @@ class AwqFusedTest(unittest.TestCase):
         outputs = model.generate(**inputs, max_new_tokens=12)
         self.assertEqual(tokenizer.decode(outputs[0], skip_special_tokens=True), self.EXPECTED_GENERATION_CUSTOM_MODEL)
 
-    @unittest.skip("Not enough GPU memory on CI runners")
+    @unittest.skip(reason="Not enough GPU memory on CI runners")
     @require_torch_multi_gpu
     def test_generation_mixtral_fused(self):
         """
