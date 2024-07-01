@@ -348,6 +348,7 @@ class GPT2FlashAttention2(GPT2Attention):
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
+    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -431,7 +432,16 @@ class GPT2FlashAttention2(GPT2Attention):
             key = key.to(target_dtype)
             value = value.to(target_dtype)
 
-        attn_output = _flash_attention_forward(query, key, value, attention_mask, query_length, dropout=attn_dropout)
+        attn_output = _flash_attention_forward(
+            query,
+            key,
+            value,
+            attention_mask,
+            query_length,
+            dropout=attn_dropout,
+            is_causal=self.is_causal,
+            use_top_left_mask=self._flash_attn_uses_top_left_mask,
+        )
 
         attn_weights_reshaped = attn_output.reshape(bsz, query_length, self.num_heads * self.head_dim)
         attn_output = self.c_proj(attn_weights_reshaped)

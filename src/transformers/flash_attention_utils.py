@@ -62,10 +62,6 @@ def _upad_input(query_layer, key_layer, value_layer, attention_mask, query_lengt
     )
 
 
-def _pad_input(query_layer, key_layer, value_layer, **kwargs):
-    return pad_input(query_layer, key_layer, value_layer, **kwargs)
-
-
 def _flash_attention_forward(
     query_states,
     key_states,
@@ -75,9 +71,9 @@ def _flash_attention_forward(
     dropout=0.0,
     softmax_scale=None,
     is_causal=False,
-    _flash_attn_uses_top_left_mask=False,
     sliding_window=None,
     cache_position=0,
+    use_top_left_mask: bool = False,
 ):
     """
     Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
@@ -98,10 +94,10 @@ def _flash_attention_forward(
         softmax_scale (`float`, *optional*):
             The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
     """
-    if not _flash_attn_uses_top_left_mask:
+    if not use_top_left_mask:
         causal = is_causal
     else:
-        # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in LlamaFlashAttention2 __init__.
+        # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__.
         causal = is_causal and query_length != 1
 
     use_sliding_windows = (
@@ -131,7 +127,7 @@ def _flash_attention_forward(
             causal=causal,
             **flash_kwargs,
         )
-        attn_output = _pad_input(attn_output_unpad, indices_q, batch_size, query_length)
+        attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
     else:
         attn_output = flash_attn_func(
             query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=causal, **flash_kwargs

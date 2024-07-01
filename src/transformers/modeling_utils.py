@@ -101,6 +101,7 @@ from .utils.import_utils import (
 )
 from .utils.quantization_config import BitsAndBytesConfig, QuantizationMethod
 
+
 XLA_USE_BF16 = os.environ.get("XLA_USE_BF16", "0").upper()
 XLA_DOWNCAST_BF16 = os.environ.get("XLA_DOWNCAST_BF16", "0").upper()
 

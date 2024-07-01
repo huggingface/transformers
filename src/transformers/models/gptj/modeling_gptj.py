@@ -278,6 +278,7 @@ class GPTJFlashAttention2(GPTJAttention):
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
+    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -400,6 +401,8 @@ class GPTJFlashAttention2(GPTJAttention):
             attention_mask,
             query_length,
             dropout=attention_dropout,
+            is_causal=self.is_causal,
+            use_top_left_mask=self._flash_attn_uses_top_left_mask,
         )
 
         # Reshape outputs

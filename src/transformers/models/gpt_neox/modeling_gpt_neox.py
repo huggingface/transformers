@@ -301,6 +301,7 @@ class GPTNeoXFlashAttention2(GPTNeoXAttention):
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
+    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -366,10 +367,18 @@ class GPTNeoXFlashAttention2(GPTNeoXAttention):
 
         # Compute attention
         attn_weights = _flash_attention_forward(
-            query, key, value, attention_mask, query_length, dropout=attention_dropout, softmax_scale=self.norm_factor
+            query,
+            key,
+            value,
+            attention_mask,
+            query_length,
+            dropout=attention_dropout,
+            softmax_scale=self.norm_factor,
+            is_causal=self.is_causal,
+            use_top_left_mask=self._flash_attn_uses_top_left_mask,
         )
 
-        # Reshape outpu
+        # Reshape outputs
         attn_output = attn_weights.reshape(
             attn_weights.shape[0], attn_weights.shape[1], self.num_attention_heads * self.head_size
         )

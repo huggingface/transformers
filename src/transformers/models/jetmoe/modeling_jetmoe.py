@@ -633,6 +633,7 @@ class JetMoeSdpaAttention(JetMoeAttention):
 
 
 class JetMoeFlashAttention2(JetMoeAttention):
+    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -726,7 +727,14 @@ class JetMoeFlashAttention2(JetMoeAttention):
             value_states = value_states.to(target_dtype)
 
         attn_output = _flash_attention_forward(
-            query_states, key_states, value_states, attention_mask, q_len, dropout=dropout_rate
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            q_len,
+            dropout=dropout_rate,
+            use_top_left_mask=self._flash_attn_uses_top_left_mask,
+            is_causal=self.is_causal,
         ).to(input_dtype)
 
         # output projection
