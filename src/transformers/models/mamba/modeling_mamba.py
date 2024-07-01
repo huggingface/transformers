@@ -24,6 +24,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
+from ...cache_utils import MambaCache
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
@@ -55,72 +56,6 @@ is_fast_path_available = all(
 
 _CHECKPOINT_FOR_DOC = "state-spaces/mamba-130m-hf"
 _CONFIG_FOR_DOC = "MambaConfig"
-
-
-class MambaCache:
-    """
-    Arguments:
-        config: MambaConfig
-        batch_size: int
-        dtype: torch.dtype
-        device: torch.device
-
-    Attributes:
-        dtype: torch.dtype
-        intermediate_size: int
-        ssm_state_size: int
-        conv_kernel_size: int
-        conv_states: torch.Tensor [layer_idx, batch_size, intermediate_size, conv_kernel_size]
-        ssm_states: torch.Tensor [layer_idx, batch_size, intermediate_size, ssm_state_size]
-    """
-
-    def __init__(
-        self, config: MambaConfig, batch_size: int, dtype: torch.dtype = torch.float16, device: Optional[str] = None
-    ):
-        self.dtype = dtype
-        self.intermediate_size = config.intermediate_size
-        self.ssm_state_size = config.state_size
-        self.conv_kernel_size = config.conv_kernel
-
-        self.conv_states: torch.Tensor = torch.zeros(
-            config.num_hidden_layers,
-            batch_size,
-            self.intermediate_size,
-            self.conv_kernel_size,
-            device=device,
-            dtype=dtype,
-        )
-        self.ssm_states: torch.Tensor = torch.zeros(
-            config.num_hidden_layers,
-            batch_size,
-            self.intermediate_size,
-            self.ssm_state_size,
-            device=device,
-            dtype=dtype,
-        )
-
-        torch._dynamo.mark_static_address(self.conv_states)
-        torch._dynamo.mark_static_address(self.ssm_states)
-
-    def update_conv_state(
-        self, layer_idx: int, new_conv_state: torch.Tensor, cache_position: torch.LongTensor
-    ) -> torch.Tensor:
-        conv_state = self.conv_states[layer_idx]
-        cache_position = cache_position.clamp(0, self.conv_kernel_size - 1)
-
-        conv_state = conv_state.roll(shifts=-1, dims=-1)
-        conv_state[:, :, cache_position] = new_conv_state.to(conv_state.device)
-        self.conv_states[layer_idx].zero_()
-        self.conv_states[layer_idx] += conv_state
-        return self.conv_states[layer_idx]
-
-    def update_ssm_state(self, layer_idx: int, new_ssm_state: torch.Tensor):
-        self.ssm_states[layer_idx] = new_ssm_state.to(self.ssm_states.device)
-        return self.ssm_states[layer_idx]
-
-    def reset(self):
-        self.conv_states.zero_()
-        self.ssm_states.zero_()
 
 
 class MambaMixer(nn.Module):
@@ -403,6 +338,7 @@ class MambaPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["MambaBlock"]
     supports_gradient_checkpointing = True
     _is_stateful = True
+    cache_name = "cache_params"
 
     def _init_weights(self, module):
         """Initialize the weights."""
@@ -744,32 +680,6 @@ class MambaForCausalLM(MambaPreTrainedModel):
             }
         )
         return model_inputs
-
-    def setup_cache_for_generation(
-        self,
-        model_kwargs: Dict[str, Any],
-        cache_implementation: str,
-        max_batch_size: int,
-        **kwargs,
-    ):
-        if cache_implementation != "mamba":
-            raise ValueError(
-                "Only `MambaCache` can be used on mamba model, please specify `cache_implementation` to `mamba` in `model.generate`"
-            )
-        if hasattr(self, "_cache"):
-            assert isinstance(self._cache, MambaCache), "Only `MambaCache` can be used on mamba model"
-            need_new_cache = self._cache.conv_states.shape[1] != max_batch_size
-        else:
-            need_new_cache = True
-
-        if need_new_cache:
-            self._cache = MambaCache(
-                config=self.config, batch_size=max_batch_size, dtype=self.dtype, device=self.device
-            )
-        else:
-            self._cache.reset()
-        model_kwargs["cache_params"] = self._cache
-        return model_kwargs
 
     @add_start_docstrings_to_model_forward(MAMBA_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
