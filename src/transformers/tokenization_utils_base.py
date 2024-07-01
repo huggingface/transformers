@@ -1704,8 +1704,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         """
         Converts a list of dictionaries with `"role"` and `"content"` keys to a list of token
         ids. This method is intended for use with chat models, and will read the tokenizer's chat_template attribute to
-        determine the format and control tokens to use when converting. When chat_template is None, it will fall back
-        to the default_chat_template specified at the class level.
+        determine the format and control tokens to use when converting.
 
         Args:
             conversation (Union[List[Dict[str, str]], List[List[Dict[str, str]]]]): A list of dicts
@@ -2035,21 +2034,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             )
 
         return chat_template
-
-    @property
-    def default_chat_template(self):
-        """
-        This template formats inputs in the standard ChatML format. See
-        https://github.com/openai/openai-python/blob/main/chatml.md
-        """
-        return (
-            "{% for message in messages %}"
-            "{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}"
-            "{% endfor %}"
-            "{% if add_generation_prompt %}"
-            "{{ '<|im_start|>assistant\n' }}"
-            "{% endif %}"
-        )
 
     @classmethod
     def from_pretrained(
