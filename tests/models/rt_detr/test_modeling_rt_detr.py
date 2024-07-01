@@ -626,8 +626,8 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                                 f"Mean is {round_mean}, but should be in [0, 1]"
                             )
 
-        if failed_cases:
-            raise AssertionError("\n" + "\n".join(failed_cases))
+        message = "\n" + "\n".join(failed_cases)
+        self.assertTrue(not failed_cases, message)
 
     @parameterized.expand(["float32", "float16", "bfloat16"])
     @require_torch_gpu
