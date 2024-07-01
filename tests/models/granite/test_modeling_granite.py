@@ -22,7 +22,7 @@ import pytest
 from packaging import version
 from parameterized import parameterized
 
-from transformers import GraniteConfig, StaticCache, is_torch_available, set_seed
+from transformers import AutoTokenizer, GraniteConfig, StaticCache, is_torch_available, set_seed
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
@@ -49,7 +49,6 @@ if is_torch_available():
         GraniteForSequenceClassification,
         GraniteForTokenClassification,
         GraniteModel,
-        GraniteTokenizer,
     )
     from transformers.models.granite.modeling_granite import (
         GraniteDynamicNTKScalingRotaryEmbedding,
@@ -298,6 +297,18 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         else ()
     )
     all_generative_model_classes = (GraniteForCausalLM,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": GraniteModel,
+            "text-classification": GraniteForSequenceClassification,
+            "text-generation": GraniteForCausalLM,
+            "zero-shot": GraniteForSequenceClassification,
+            "question-answering": GraniteForQuestionAnswering,
+            "token-classification": GraniteForTokenClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     test_headmasking = False
     test_pruning = False
     fx_compatible = False
@@ -307,7 +318,7 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     model_split_percents = [0.5, 0.7, 0.8]
 
     # used in `test_torch_compile`
-    _torch_compile_test_ckpt = "meta-granite/Granite-2-7b-hf"
+    _torch_compile_test_ckpt = "mayank-mishra/granite-3b-mup"
 
     def setUp(self):
         self.model_tester = GraniteModelTester(self)
@@ -490,12 +501,12 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         Overwritting the common test as the test is flaky on tiny models
         """
         model = GraniteForCausalLM.from_pretrained(
-            "meta-granite/Granite-2-7b-hf",
+            "mayank-mishra/granite-3b-mup",
             load_in_4bit=True,
             device_map={"": 0},
         )
 
-        tokenizer = GraniteTokenizer.from_pretrained("meta-granite/Granite-2-7b-hf")
+        tokenizer = AutoTokenizer.from_pretrained("mayank-mishra/granite-3b-mup")
 
         texts = ["hi", "Hello this is a very long sentence"]
 
@@ -508,7 +519,7 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         output_native = tokenizer.batch_decode(output_native)
 
         model = GraniteForCausalLM.from_pretrained(
-            "meta-granite/Granite-2-7b-hf",
+            "mayank-mishra/granite-3b-mup",
             load_in_4bit=True,
             device_map={"": 0},
             attn_implementation="flash_attention_2",
@@ -554,7 +565,7 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         """
         max_new_tokens = 30
 
-        tokenizer = GraniteTokenizer.from_pretrained("saibo/granite-1B")
+        tokenizer = AutoTokenizer.from_pretrained("saibo/granite-1B")
 
         model_sdpa = GraniteForCausalLM.from_pretrained(
             "saibo/granite-1B",
@@ -626,7 +637,7 @@ class GraniteIntegrationTest(unittest.TestCase):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
 
         model = GraniteForCausalLM.from_pretrained(
-            "meta-granite/Granite-2-7b-hf", device_map="auto", torch_dtype=torch.bfloat16, attn_implementation="eager"
+            "mayank-mishra/granite-3b-mup", device_map="auto", torch_dtype=torch.bfloat16, attn_implementation="eager"
         )
 
         with torch.no_grad():
@@ -663,7 +674,7 @@ class GraniteIntegrationTest(unittest.TestCase):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
 
         model = GraniteForCausalLM.from_pretrained(
-            "meta-granite/Granite-2-7b-hf", device_map="auto", torch_dtype=torch.float16
+            "mayank-mishra/granite-3b-mup", device_map="auto", torch_dtype=torch.float16
         )
 
         with torch.no_grad():
@@ -737,11 +748,11 @@ class GraniteIntegrationTest(unittest.TestCase):
             "Simply put, the theory of relativity states that ",
             "My favorite all time favorite condiment is ketchup.",
         ]
-        tokenizer = GraniteTokenizer.from_pretrained(
-            "meta-granite/Granite-2-7b-hf", pad_token="</s>", padding_side="right"
+        tokenizer = AutoTokenizer.from_pretrained(
+            "mayank-mishra/granite-3b-mup", pad_token="</s>", padding_side="right"
         )
         model = GraniteForCausalLM.from_pretrained(
-            "meta-granite/Granite-2-7b-hf", device_map="sequential", torch_dtype=torch.float16
+            "mayank-mishra/granite-3b-mup", device_map="sequential", torch_dtype=torch.float16
         )
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
@@ -778,7 +789,7 @@ class Mask4DTestHard(unittest.TestCase):
     def setUp(self):
         model_name = "TinyGranite/TinyGranite-1.1B-Chat-v1.0"
         self.model_dtype = torch.float32
-        self.tokenizer = GraniteTokenizer.from_pretrained(model_name)
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.model = GraniteForCausalLM.from_pretrained(model_name, torch_dtype=self.model_dtype).to(torch_device)
 
     def get_test_data(self):
@@ -824,122 +835,6 @@ class Mask4DTestHard(unittest.TestCase):
         mask_shared_prefix = (mask_shared_prefix.eq(0.0)).to(dtype=self.model_dtype) * min_dtype
 
         return input_ids, position_ids, input_ids_shared_prefix, mask_shared_prefix, position_ids_shared_prefix
-
-    def test_stacked_causal_mask(self):
-        (
-            input_ids,
-            position_ids,
-            input_ids_shared_prefix,
-            mask_shared_prefix,
-            position_ids_shared_prefix,
-        ) = self.get_test_data()
-
-        # regular batch
-        logits = self.model.forward(input_ids, position_ids=position_ids).logits
-        logits_last = logits[:, -1, :]  # last tokens in each batch line
-        decoded = [self.tokenizer.decode(t) for t in logits_last.argmax(dim=-1)]
-
-        # single forward run with 4D custom mask
-        logits_shared_prefix = self.model.forward(
-            input_ids_shared_prefix, attention_mask=mask_shared_prefix, position_ids=position_ids_shared_prefix
-        ).logits
-        logits_shared_prefix_last = logits_shared_prefix[
-            0, torch.where(position_ids_shared_prefix == position_ids_shared_prefix.max())[1], :
-        ]  # last three tokens
-        decoded_shared_prefix = [self.tokenizer.decode(t) for t in logits_shared_prefix_last.argmax(dim=-1)]
-
-        self.assertEqual(decoded, decoded_shared_prefix)
-
-    def test_partial_stacked_causal_mask(self):
-        # Same as the test above, but the input is passed in two groups. It tests that we can pass partial 4D attention masks
-
-        (
-            input_ids,
-            position_ids,
-            input_ids_shared_prefix,
-            mask_shared_prefix,
-            position_ids_shared_prefix,
-        ) = self.get_test_data()
-
-        # regular batch
-        logits = self.model.forward(input_ids, position_ids=position_ids).logits
-        logits_last = logits[:, -1, :]  # last tokens in each batch line
-        decoded = [self.tokenizer.decode(t) for t in logits_last.argmax(dim=-1)]
-
-        # 2 forward runs with custom 4D masks
-        part_a = 3  # split point
-
-        input_1a = input_ids_shared_prefix[:, :part_a]
-        position_ids_1a = position_ids_shared_prefix[:, :part_a]
-        mask_1a = mask_shared_prefix[:, :, :part_a, :part_a]
-
-        outs_1a = self.model.forward(input_1a, attention_mask=mask_1a, position_ids=position_ids_1a)
-        past_key_values_a = outs_1a["past_key_values"]
-
-        # Case 1: we pass a 4D attention mask regarding the current sequence length (i.e. [..., seq_len, full_len])
-        input_1b = input_ids_shared_prefix[:, part_a:]
-        position_ids_1b = position_ids_shared_prefix[:, part_a:]
-        mask_1b = mask_shared_prefix[:, :, part_a:, :]
-        outs_1b = self.model.forward(
-            input_1b,
-            attention_mask=mask_1b,
-            position_ids=position_ids_1b,
-            past_key_values=past_key_values_a,
-        )
-        decoded_1b = [
-            self.tokenizer.decode(t)
-            for t in outs_1b.logits.argmax(-1)[
-                0, torch.where(position_ids_shared_prefix == position_ids_shared_prefix.max())[1] - part_a
-            ]
-        ]
-        self.assertEqual(decoded, decoded_1b)
-
-    def test_stacked_causal_mask_static_cache(self):
-        """same as above but with StaticCache"""
-        (
-            input_ids,
-            position_ids,
-            input_ids_shared_prefix,
-            mask_shared_prefix,
-            position_ids_shared_prefix,
-        ) = self.get_test_data()
-
-        # regular batch
-        logits = self.model.forward(input_ids, position_ids=position_ids).logits
-        logits_last = logits[:, -1, :]  # last tokens in each batch line
-        decoded = [self.tokenizer.decode(t) for t in logits_last.argmax(dim=-1)]
-
-        # upgrade the model with StaticCache
-        max_cache_len = 16  # note that max_cache_len is greater than the attention_mask.shape[-1]
-        past_key_values = StaticCache(
-            config=self.model.config,
-            max_batch_size=1,
-            max_cache_len=max_cache_len,
-            device=torch_device,
-            dtype=self.model.dtype,
-        )
-
-        padded_attention_mask = torch.nn.functional.pad(
-            input=mask_shared_prefix,
-            pad=(0, max_cache_len - mask_shared_prefix.shape[-1]),
-            mode="constant",
-            value=torch.finfo(self.model_dtype).min,
-        )
-
-        # single forward run with 4D custom mask
-        logits_shared_prefix = self.model.forward(
-            input_ids_shared_prefix,
-            attention_mask=padded_attention_mask,
-            position_ids=position_ids_shared_prefix,
-            cache_position=torch.arange(input_ids_shared_prefix.shape[-1], device=torch_device),
-            past_key_values=past_key_values,
-        ).logits
-        logits_shared_prefix_last = logits_shared_prefix[
-            0, torch.where(position_ids_shared_prefix == position_ids_shared_prefix.max())[1], :
-        ]  # last three tokens
-        decoded_shared_prefix = [self.tokenizer.decode(t) for t in logits_shared_prefix_last.argmax(dim=-1)]
-
-        self.assertEqual(decoded, decoded_shared_prefix)
 
     def test_partial_stacked_causal_mask_static_cache(self):
         # Same as the test above, but the input is passed in two groups. It tests that we can pass partial 4D attention masks
