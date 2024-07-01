@@ -475,7 +475,13 @@ class GraniteFlashAttention2(GraniteAttention):
             value_states = value_states.to(target_dtype)
 
         attn_output = self._flash_attention_forward(
-            query_states, key_states, value_states, attention_mask, q_len, dropout=dropout_rate, softmax_scale=self.attention_multiplier
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            q_len,
+            dropout=dropout_rate,
+            softmax_scale=self.attention_multiplier,
         )
 
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()

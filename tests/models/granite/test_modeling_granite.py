@@ -617,7 +617,7 @@ class GraniteIntegrationTest(unittest.TestCase):
 
     @slow
     @require_read_token
-    def test_model_7b_logits(self):
+    def test_model_3b_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
 
         model = GraniteForCausalLM.from_pretrained(
@@ -629,23 +629,17 @@ class GraniteIntegrationTest(unittest.TestCase):
 
         # fmt: off
         # Expected mean on dim = -1
-        EXPECTED_MEAN = {
-            7: torch.tensor([[-6.6420, -4.1227, -4.9809, -3.2041, 0.8261, -3.0052, 1.2957, -3.3648]]),
-            8: torch.tensor([[-6.6544, -4.1259, -4.9840, -3.2456,  0.8261, -3.0124,  1.2971, -3.3641]])
-        }
+        EXPECTED_MEAN = torch.tensor([[-3.5317, -1.3615, -3.6600, -2.4882, -1.4590, -1.5573, -2.7445, -2.2035]])
 
-        self.assertTrue(torch.allclose(EXPECTED_MEAN[self.cuda_compute_capability_major_version].to(torch_device), out.logits.mean(-1), atol=1e-2, rtol=1e-2))
+        self.assertTrue(torch.allclose(EXPECTED_MEAN.to(torch_device), out.logits.mean(-1), atol=1e-2, rtol=1e-2))
 
         # slicing logits[0, 0, 0:15]
-        EXPECTED_SLICE = {
-            7: torch.tensor([-12.8125, -7.3359, -0.4846, -8.0234, -7.2383, -7.9922, -6.4805, -7.7344, -7.8125, -7.0078, -6.1797, -7.1094, -1.8633, 1.9736, -8.6016]),
-            8: torch.tensor([-12.8281,  -7.4609,  -0.4668,  -8.0703,  -7.2539,  -8.0078,  -6.4961, -7.7734,  -7.8516,  -7.0352,  -6.2188,  -7.1367,  -1.8564,   1.9922, -8.6328])
-        }
+        EXPECTED_SLICE = torch.tensor([4.2118, -5.1181, -5.1250, -5.1181, -5.1215, 3.1250, 2.9948, -5.1250, -5.1250, -5.1250, -1.8108, 2.9080, 0.6523, 3.0608, -4.2326])
         # fmt: on
 
         self.assertTrue(
             torch.allclose(
-                EXPECTED_SLICE[self.cuda_compute_capability_major_version].to(torch_device),
+                EXPECTED_SLICE.to(torch_device),
                 out.logits[0, 0, :15],
                 atol=1e-3,
                 rtol=1e-3,
