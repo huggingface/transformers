@@ -104,7 +104,7 @@ def set_recursively(key, value, full_name, weight_type, hf_pointer):
         elif weight_type == "weight_v" and not hasattr(hf_pointer, "weight_v"):
             hf_shape = hf_pointer.parametrizations.weight.original1.shape
         else:
-            hf_shape = getattr(hf_pointer, weight_type).shape    
+            hf_shape = getattr(hf_pointer, weight_type).shape
     elif weight_type is not None and weight_type == "param":
         shape_pointer = hf_pointer
         for attribute in hf_param_name.split("."):
