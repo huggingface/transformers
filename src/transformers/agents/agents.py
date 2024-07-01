@@ -311,7 +311,7 @@ class Agent:
         self,
         tools: Union[List[Tool], Toolbox],
         llm_engine: Callable = HfEngine(),
-        system_prompt=DEFAULT_CODE_GRAMMAR,
+        system_prompt=DEFAULT_REACT_CODE_SYSTEM_PROMPT,
         tool_description_template=None,
         additional_args={},
         max_iterations: int = 6,

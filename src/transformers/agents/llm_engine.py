@@ -80,7 +80,12 @@ class HfEngine:
         messages = get_clean_message_list(messages, role_conversions=llama_role_conversions)
 
         # Get LLM output
-        response = self.client.chat_completion(messages, stop=stop_sequences, grammar=grammar, max_tokens=1500)
+        response = self.client.chat_completion(
+            messages,
+            stop=stop_sequences,
+            max_tokens=1500,
+            response_format={"type": "regex", "value": grammar}
+        )
         response = response.choices[0].message.content
 
         # Remove stop sequences from LLM output
