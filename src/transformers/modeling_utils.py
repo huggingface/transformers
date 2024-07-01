@@ -2519,8 +2519,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Save the model
         if state_dict is None:
             # if any model parameters are offloaded, make module map
-            if hasattr(self, "hf_device_map") and len(set(self.hf_device_map.values()))>1 and (
-                "cpu" in self.hf_device_map.values() or "disk" in self.hf_device_map.values()
+            if (
+                hasattr(self, "hf_device_map")
+                and len(set(self.hf_device_map.values())) > 1
+                and ("cpu" in self.hf_device_map.values() or "disk" in self.hf_device_map.values())
             ):
                 warnings.warn(
                     "Attempting to save a model with offloaded modules. Ensure that unallocated cpu memory exceeds the `shard_size` (5GB default)"
