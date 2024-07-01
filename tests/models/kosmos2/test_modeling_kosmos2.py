@@ -23,8 +23,8 @@ import unittest
 import numpy as np
 import requests
 
-from transformers import AutoModelForVision2Seq, AutoProcessor, Kosmos2Config
-from transformers.models.kosmos2.configuration_kosmos2 import Kosmos2TextConfig, Kosmos2VisionConfig
+from transformers import AutoModelForVision2Seq, AutoProcessor, Kosmos2_5Config
+from transformers.models.kosmos2_5.configuration_kosmos2_5 import Kosmos2_5TextConfig, Kosmos2_5VisionConfig
 from transformers.testing_utils import IS_ROCM_SYSTEM, require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -42,14 +42,14 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import Kosmos2ForConditionalGeneration, Kosmos2Model
+    from transformers import Kosmos2_5ForConditionalGeneration, Kosmos2_5Model
 
 
 if is_vision_available():
     from PIL import Image
 
 
-class Kosmos2VisionModelTester:
+class Kosmos2_5VisionModelTester:
     def __init__(
         self,
         parent,
@@ -93,7 +93,7 @@ class Kosmos2VisionModelTester:
         return config, pixel_values
 
     def get_config(self):
-        return Kosmos2VisionConfig(
+        return Kosmos2_5VisionConfig(
             image_size=self.image_size,
             patch_size=self.patch_size,
             num_channels=self.num_channels,
@@ -113,7 +113,7 @@ class Kosmos2VisionModelTester:
         return config, inputs_dict
 
 
-class Kosmos2TextModelTester:
+class Kosmos2_5TextModelTester:
     def __init__(
         self,
         parent,
@@ -167,7 +167,7 @@ class Kosmos2TextModelTester:
         return config, input_ids, input_mask
 
     def get_config(self):
-        return Kosmos2TextConfig(
+        return Kosmos2_5TextConfig(
             vocab_size=self.vocab_size,
             embed_dim=self.hidden_size,
             layers=self.num_hidden_layers,
@@ -185,7 +185,7 @@ class Kosmos2TextModelTester:
         return config, inputs_dict
 
 
-class Kosmos2ModelTester:
+class Kosmos2_5ModelTester:
     def __init__(self, parent, text_kwargs=None, vision_kwargs=None, latent_query_num=3, is_training=True):
         if text_kwargs is None:
             text_kwargs = {}
@@ -193,8 +193,8 @@ class Kosmos2ModelTester:
             vision_kwargs = {}
 
         self.parent = parent
-        self.text_model_tester = Kosmos2TextModelTester(parent, **text_kwargs)
-        self.vision_model_tester = Kosmos2VisionModelTester(parent, **vision_kwargs)
+        self.text_model_tester = Kosmos2_5TextModelTester(parent, **text_kwargs)
+        self.vision_model_tester = Kosmos2_5VisionModelTester(parent, **vision_kwargs)
         self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.latent_query_num = latent_query_num
         self.is_training = is_training
@@ -212,14 +212,14 @@ class Kosmos2ModelTester:
         return config, input_ids, attention_mask, image_embeds_position_mask, pixel_values
 
     def get_config(self):
-        return Kosmos2Config(
+        return Kosmos2_5Config(
             self.text_model_tester.get_config().to_dict(),
             self.vision_model_tester.get_config().to_dict(),
             latent_query_num=self.latent_query_num,
         )
 
     def create_and_check_model(self, config, input_ids, attention_mask, image_embeds_position_mask, pixel_values):
-        model = Kosmos2Model(config).to(torch_device).eval()
+        model = Kosmos2_5Model(config).to(torch_device).eval()
         with torch.no_grad():
             result = model(pixel_values, input_ids, image_embeds_position_mask, attention_mask)
         self.parent.assertEqual(
@@ -244,11 +244,11 @@ class Kosmos2ModelTester:
 
 
 @require_torch
-class Kosmos2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (Kosmos2Model, Kosmos2ForConditionalGeneration) if is_torch_available() else ()
-    all_generative_model_classes = (Kosmos2ForConditionalGeneration,) if is_torch_available() else ()
+class Kosmos2_5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    all_model_classes = (Kosmos2_5Model, Kosmos2_5ForConditionalGeneration) if is_torch_available() else ()
+    all_generative_model_classes = (Kosmos2_5ForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": Kosmos2Model, "image-to-text": Kosmos2ForConditionalGeneration}
+        {"feature-extraction": Kosmos2_5Model, "image-to-text": Kosmos2_5ForConditionalGeneration}
         if is_torch_available()
         else {}
     )
@@ -268,7 +268,7 @@ class Kosmos2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         inputs_dict = copy.deepcopy(inputs_dict)
 
         if return_labels:
-            if model_class.__name__ == "Kosmos2ForConditionalGeneration":
+            if model_class.__name__ == "Kosmos2_5ForConditionalGeneration":
                 inputs_dict["labels"] = torch.zeros(
                     (self.model_tester.text_model_tester.batch_size, self.model_tester.text_model_tester.seq_length),
                     dtype=torch.long,
@@ -278,8 +278,8 @@ class Kosmos2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         return inputs_dict
 
     def setUp(self):
-        self.model_tester = Kosmos2ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Kosmos2Config, hidden_size=37)
+        self.model_tester = Kosmos2_5ModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=Kosmos2_5Config, hidden_size=37)
 
     # overwrite from common to skip `image_to_text_projection.latent_query`
     def test_initialization(self):
@@ -424,7 +424,7 @@ class Kosmos2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     @slow
     def test_model_from_pretrained(self):
         model_name = "microsoft/kosmos-2-patch14-224"
-        model = Kosmos2Model.from_pretrained(model_name)
+        model = Kosmos2_5Model.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
     def _create_and_check_torchscript(self, config, inputs_dict):
@@ -510,7 +510,7 @@ class Kosmos2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
 # We will verify our results on an image of cute cats
 def prepare_img():
-    url = "https://huggingface.co/hf-internal-testing/Kosmos2-test-image/resolve/main/demo.jpg"
+    url = "https://huggingface.co/hf-internal-testing/Kosmos2_5-test-image/resolve/main/demo.jpg"
     im = Image.open(requests.get(url, stream=True).raw)
     return im
 
@@ -518,7 +518,7 @@ def prepare_img():
 @require_vision
 @require_torch
 @slow
-class Kosmos2ModelIntegrationTest(unittest.TestCase):
+class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
     def run_example(self, prompt, image, model, processor):
         inputs = processor(text=prompt, images=image, return_tensors="pt", padding=True).to(torch_device)
 
@@ -545,13 +545,13 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
         return scores, generated_ids, generated_text, processed_text, final_text_with_entities
 
     def test_snowman_image_captioning(self):
-        url = "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/snowman.png"
+        url = "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
 
         image = Image.open(requests.get(url, stream=True).raw)
         image.save("new_image.jpg")
         image = Image.open("new_image.jpg")
 
-        model = AutoModelForVision2Seq.from_pretrained("microsoft/kosmos-2-patch14-224").to(torch_device)
+        model = AutoModelForVision2Seq.from_pretrained("microsoft/kosmos-2.5", device_map=torch_device)
         processor = AutoProcessor.from_pretrained("microsoft/kosmos-2-patch14-224")
 
         prompt = "<grounding>An image of"
