@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The Gemma2 model was proposed in [Gemma2: Open Models Based on Gemini Technology and Research]([https://blog.google/technology/developers/google-gemma-2/]) by Gemma2 Team, Google.
+The Gemma2 model was proposed in [Gemma2: Open Models Based on Gemini Technology and Research](https://blog.google/technology/developers/google-gemma-2/) by Gemma2 Team, Google.
 Two Gemma2 models are released, with parameters sizes of 9 billion (9B) and 27 billion (27B).
 
 The abstract from the blog post is the following:
