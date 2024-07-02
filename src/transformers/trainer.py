@@ -124,6 +124,7 @@ from .trainer_utils import (
     enable_full_determinism,
     find_executable_batch_size,
     get_last_checkpoint,
+    get_checkpoints,
     has_length,
     neftune_post_forward_hook,
     number_of_arguments,
@@ -209,6 +210,7 @@ else:
 
 if is_safetensors_available():
     import safetensors.torch
+
 
 if is_peft_available():
     from peft import PeftModel
@@ -1895,17 +1897,37 @@ class Trainer:
 
         # Load potential model checkpoint
         if isinstance(resume_from_checkpoint, bool) and resume_from_checkpoint:
-            resume_from_checkpoint = get_last_checkpoint(args.output_dir)
-            if resume_from_checkpoint is None:
+            checkpoints = get_checkpoints(args.output_dir, reverse=True)
+            if not checkpoints:
                 raise ValueError(f"No valid checkpoint found in output directory ({args.output_dir})")
+        else:
+            checkpoints = [resume_from_checkpoint] if resume_from_checkpoint else []
 
-        if resume_from_checkpoint is not None:
+        if len(checkpoints) > 0:
             if not is_sagemaker_mp_enabled() and not self.is_deepspeed_enabled and not self.is_fsdp_enabled:
-                self._load_from_checkpoint(resume_from_checkpoint)
+                for checkpoint in checkpoints:
+                    try:
+                        self._load_from_checkpoint(checkpoint)
+                        checkpoints = [checkpoint]
+                        break
+                    except (ValueError, safetensors.SafetensorError) as e:
+                        logger.warning(f"Error loading checkpoint {checkpoint}: {e}\nMoving onto next checkpoint.")
+                else:
+                    raise ValueError(f"No more checkpoints found in output directory ({args.output_dir}), all failed to load.")
+
             # In case of repeating the find_executable_batch_size, set `self._train_batch_size` properly
-            state = TrainerState.load_from_json(os.path.join(resume_from_checkpoint, TRAINER_STATE_NAME))
-            if state.train_batch_size is not None:
-                self._train_batch_size = state.train_batch_size
+            for checkpoint in checkpoints:
+                try:
+                    state = TrainerState.load_from_json(os.path.join(checkpoint, TRAINER_STATE_NAME))
+                    if state.train_batch_size is not None:
+                        self._train_batch_size = state.train_batch_size
+                    resume_from_checkpoint = checkpoint
+                    break
+                except OSError:
+                    logger.warning(f"Error loading checkpoint {checkpoint}: {e}\nMoving onto next checkpoint.")
+            else:
+                raise ValueError(f"No more checkpoints found in output directory ({args.output_dir}), all failed to load.")
+
 
         # If model was re-initialized, put it on the right device and update self.model_wrapped
         if model_reloaded:
