@@ -26,7 +26,7 @@ import requests
 
 from transformers import AutoModelForVision2Seq, AutoProcessor, Kosmos2_5Config
 from transformers.models.kosmos2_5.configuration_kosmos2_5 import Kosmos2_5TextConfig, Kosmos2_5VisionConfig
-from transformers.testing_utils import IS_ROCM_SYSTEM, require_torch, require_torch, require_torch_gpu, require_vision, slow, torch_device
+from transformers.testing_utils import IS_ROCM_SYSTEM, require_torch, require_torch, require_torch_gpu,require_torch_sdpa, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -436,18 +436,27 @@ class Kosmos2_5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
     def test_model_parallelism(self):
         super().test_model_parallelism()
-    
+
+    # TODO: ydshieh
     @require_torch_gpu
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         self.skipTest(reason="kosmos-2.5 flash attention does not support right padding")
     
+    # TODO: ydshieh
     @require_torch_gpu
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference_equivalence(self):
         self.skipTest(reason="kosmos-2.5 test : the dummy inputs should be tweaked: dummy_input = inputs_dict")
+    
+    # TODO: ydshieh
+    @require_torch_sdpa
+    @require_torch_gpu
+    @slow
+    def test_sdpa_can_dispatch_on_flash(self):
+        self.skipTest(reason='_update_causal_mask is not implemented yet which fails this test')
     
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
