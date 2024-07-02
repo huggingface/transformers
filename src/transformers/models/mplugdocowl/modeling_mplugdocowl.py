@@ -120,6 +120,112 @@ class MPLUGDocOwlPreTrainedModel(PreTrainedModel):
         return self.language_model._supports_sdpa
 
 
+class MPLUGDocOwlHReducer(MPLUGDocOwlPreTrainedModel):
+    r"""
+    MPLUGDocOwlHReducer is a spatial-aware vision-to-text module designed for Visual Document Understanding.
+    This component processes high-resolution text-rich images by reducing the visual sequence length while
+    preserving spatial information. It uses a convolutional layer followed by a fully connected layer to align
+    visual features with language embeddings.
+
+    Unlike other popular vision-to-text modules such as MLPs or cross-attention modules with learnable queries,
+    the H-Reducer is specifically designed to handle high-resolution images efficiently without losing spatial
+    coherence. See the paper https://arxiv.org/pdf/2403.12895 for more details.
+
+    Attributes:
+        config (Config): Model configuration containing hyperparameters for the language model and hreducer.
+
+    Methods:
+        __init__(config):
+            Initializes the MPLUGDocOwlHReducer with the given configuration.
+        forward(encoder_hidden_states=None):
+            Processes the encoder hidden states to reduce visual feature length and align them with language embeddings.
+    """
+
+    def __init__(self, config):
+        r"""
+        Initializes the MPLUGDocOwlHReducer with the given configuration.
+
+        Args:
+            config (Config): Model configuration containing various hyperparameters.
+
+        """
+
+        super().__init__(config)
+        self.config = config
+        self.conv_shape = (
+            int(self.config.hreducer_conv_shape.split("x")[0]),
+            int(self.config.hreducer_conv_shape.split("x")[1]),
+        )
+        self.layer_norm = torch.nn.LayerNorm(self.config.hreducer_hidden_size, eps=self.config.hreducer_layer_norm)
+        self.conv_patch = self.conv_shape[0] * self.conv_shape[1]
+        self.reducer_before = torch.nn.Sequential(
+            nn.Conv2d(
+                self.config.hreducer_hidden_size,
+                self.conv_patch * self.config.hreducer_hidden_size,
+                kernel_size=self.conv_shape,
+                stride=self.conv_shape,
+                bias=True,
+            ),
+            nn.GELU(),
+        )
+        ## reduce visual feature length with a conv layer
+        self.reducer = nn.Conv2d(
+            self.config.hreducer_hidden_size,
+            self.config.hreducer_hidden_size,
+            kernel_size=self.conv_shape,
+            stride=self.conv_shape,
+            bias=True,
+        )
+        ## align visual features with language embedding with fc
+        self.visual_fc = torch.nn.Linear(self.config.hreducer_hidden_size, config.text_config.hidden_size)
+        self.vit_eos = torch.nn.Parameter(torch.randn(1, 1, config.text_config.hidden_size))
+        self.gradient_checkpointing = False
+        self.post_init()
+
+    def forward(self, encoder_hidden_states=None):
+        r"""
+        Processes the encoder hidden states to reduce visual feature length and align them with language embeddings.
+
+        encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, `optional`):
+            batch_size is the number of all images (global+crop) in a batch
+            Sequence of hidden-states at the output of the last layer of the encoder.
+
+            Returns:
+        torch.FloatTensor: The processed sequence output with reduced visual feature length and aligned with language embeddings.
+
+        """
+        encoder_hidden_states = encoder_hidden_states[:, 1:, :]  # remove the first cls token
+        B, L, C = encoder_hidden_states.shape  # B, 1024=(448/14)^2, 1024
+        H = int(torch.sqrt(torch.tensor(L)))
+        encoder_hidden_states = encoder_hidden_states.transpose(2, 1)
+
+        encoder_hidden_states = encoder_hidden_states.view(B, C, H, H)  # (BCHH)
+
+        hidden_states = self.reducer_before(encoder_hidden_states)  # B 4D H W/4
+        # hidden_states = self.reducer_activation(hidden_states)
+        B, XD, H, W_div_X = hidden_states.shape
+        X = self.conv_patch
+        D = XD // X
+
+        hidden_states = hidden_states.view(B, X, D, H, W_div_X)
+
+        hidden_states = hidden_states.permute(0, 2, 3, 4, 1)
+
+        hidden_states = hidden_states.reshape(B, D, H, W_div_X * X)
+
+        sequence_output = self.reducer(hidden_states)  # B,C,H,W -> B,C,H/conv_shape[0],W/(conv_shape[1])
+        sequence_output = sequence_output.flatten(2).transpose(
+            1, 2
+        )  # B,C,H/conv_shape[0],W/(conv_shape[1]) -> B,C,L/conv_patch -> B,L/conv_patch,C
+        sequence_output = sequence_output.transpose(0, 1).contiguous()  # L/conv_patch, B, C
+
+        sequence_output = self.visual_fc(sequence_output)  # L/conv_patch, B, h
+        sequence_output = sequence_output.transpose(0, 1).contiguous()  # B, s/4, h
+        sequence_output = torch.cat([sequence_output, self.vit_eos.repeat(B, 1, 1)], dim=1)
+
+        return sequence_output
+
+
 MPLUGDOCOWL_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -132,7 +238,7 @@ MPLUGDOCOWL_INPUTS_DOCSTRING = r"""
             [What are input IDs?](../glossary#input-ids)
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
             The tensors corresponding to the input images. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`MPLUGDocOwlImageProcessor.__call__`] for details ([]`MPLUGDocOwlProcessor`] uses
+            [`mPLUGDocOwlImageProcessor`]. See [`MPLUGDocOwlImageProcessor.__call__`] for details ([`MPLUGDocOwlProcessor`] uses
             [`MPLUGDocOwlImageProcessor`] for processing images).
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
@@ -189,124 +295,6 @@ MPLUGDOCOWL_INPUTS_DOCSTRING = r"""
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
-
-
-class MPLUGDocOwlHReducer(MPLUGDocOwlPreTrainedModel):
-
-    r"""
-    MPLUGDocOwlHReducer is a spatial-aware vision-to-text module designed for Visual Document Understanding.
-    This model component processes high-resolution text-rich images by reducing the visual sequence length while
-    preserving spatial information. It uses a convolutional layer followed by a fully connected layer to align
-    visual features with language embeddings.
-
-    Unlike other popular vision-to-text modules such as MLPs or cross-attention modules with learnable queries,
-    the H-Reducer is specifically designed to handle high-resolution images efficiently without losing spatial
-    coherence. See the paper https://arxiv.org/pdf/2403.12895 for more details.
-
-    Attributes:
-        config (Config): Model configuration containing hyperparameters for the language model and hreducer.
-        conv_shape (tuple): Shape of the convolutional layer derived from the configuration, set to (1, 4) for
-                            horizontal text coherence.
-        layer_norm (torch.nn.LayerNorm): Layer normalization applied to the hidden states.
-        conv_patch (int): The product of the convolution shape dimensions, representing the number of visual features
-                          combined by the convolutional layer.
-        reducer_before (torch.nn.Sequential): Sequential model containing a convolutional layer and GELU activation
-                                              for initial reduction of visual features.
-        reducer (torch.nn.Conv2d): Convolutional layer for further reduction of visual feature length.
-        visual_fc (torch.nn.Linear): Fully connected layer to project visual features into the language embedding space.
-        vit_eos (torch.nn.Parameter): End-of-sequence token for visual transformer.
-
-    Methods:
-        __init__(config):
-            Initializes the MPLUGDocOwlHReducer with the given configuration.
-        forward(encoder_hidden_states=None):
-            Processes the encoder hidden states to reduce visual feature length and align them with language embeddings.
-    """
-
-    def __init__(self, config):
-        r"""
-        Initializes the MPLUGDocOwlHReducer with the given configuration.
-
-        Args:
-            config (Config): Model configuration containing various hyperparameters.
-
-        """
-
-        super().__init__(config)
-        self.config = config
-        self.conv_shape = (
-            int(self.config.hreducer_conv_shape.split("x")[0]),
-            int(self.config.hreducer_conv_shape.split("x")[1]),
-        )
-        self.layer_norm = torch.nn.LayerNorm(self.config.hreducer_hidden_size, eps=1e-6)
-        self.conv_patch = self.conv_shape[0] * self.conv_shape[1]
-        self.reducer_before = torch.nn.Sequential(
-            nn.Conv2d(
-                self.config.hreducer_hidden_size,
-                self.conv_patch * self.config.hreducer_hidden_size,
-                kernel_size=self.conv_shape,
-                stride=self.conv_shape,
-                bias=True,
-            ),
-            nn.GELU(),
-        )
-        ## reduce visual feature length with a conv layer
-        self.reducer = nn.Conv2d(
-            self.config.hreducer_hidden_size,
-            self.config.hreducer_hidden_size,
-            kernel_size=self.conv_shape,
-            stride=self.conv_shape,
-            bias=True,
-        )
-        ## align visual features with language embedding with fc
-        self.visual_fc = torch.nn.Linear(self.config.hreducer_hidden_size, config.text_config.hidden_size)
-        self.vit_eos = torch.nn.Parameter(torch.randn(1, 1, config.text_config.hidden_size))
-        self.gradient_checkpointing = False
-        self.post_init()
-
-    def forward(self, encoder_hidden_states=None):
-        r"""
-        Processes the encoder hidden states to reduce visual feature length and align them with language embeddings.
-
-        encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, `optional`):
-            batch_size is the number of all images (global+crop) in a batch
-            Sequence of hidden-states at the output of the last layer of the encoder.
-
-            Returns:
-        torch.FloatTensor: The processed sequence output with reduced visual feature length and aligned with language embeddings.
-
-        """
-
-        encoder_hidden_states = encoder_hidden_states[:, 1:, :]  # remove the first cls token
-        B, L, C = encoder_hidden_states.shape  # B, 1024=(448/14)^2, 1024
-        H = int(torch.sqrt(torch.tensor(L)))
-        encoder_hidden_states = encoder_hidden_states.transpose(2, 1)
-
-        encoder_hidden_states = encoder_hidden_states.view(B, C, H, H)  # (BCHH)
-
-        hidden_states = self.reducer_before(encoder_hidden_states)  # B 4D H W/4
-        # hidden_states = self.reducer_activation(hidden_states)
-        B, XD, H, W_div_X = hidden_states.shape
-        X = self.conv_patch
-        D = XD // X
-
-        hidden_states = hidden_states.view(B, X, D, H, W_div_X)
-
-        hidden_states = hidden_states.permute(0, 2, 3, 4, 1)
-
-        hidden_states = hidden_states.reshape(B, D, H, W_div_X * X)
-
-        sequence_output = self.reducer(hidden_states)  # B,C,H,W -> B,C,H/conv_shape[0],W/(conv_shape[1])
-        sequence_output = sequence_output.flatten(2).transpose(
-            1, 2
-        )  # B,C,H/conv_shape[0],W/(conv_shape[1]) -> B,C,L/conv_patch -> B,L/conv_patch,C
-        sequence_output = sequence_output.transpose(0, 1).contiguous()  # L/conv_patch, B, C
-
-        sequence_output = self.visual_fc(sequence_output)  # L/conv_patch, B, h
-        sequence_output = sequence_output.transpose(0, 1).contiguous()  # B, s/4, h
-        sequence_output = torch.cat([sequence_output, self.vit_eos.repeat(B, 1, 1)], dim=1)
-
-        return sequence_output
 
 
 @add_start_docstrings(

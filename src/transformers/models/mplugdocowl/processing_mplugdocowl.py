@@ -16,7 +16,6 @@
 Processor class for MPLUGDocOwl.
 """
 
-
 from typing import List, Optional, Union
 
 # FIXME need to add image processing class name
@@ -49,6 +48,34 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
 
     def __init__(self, image_processor=None, tokenizer=None):
         super().__init__(image_processor, tokenizer)
+
+    def generate_text_with_placeholders(
+        self, text, patch_positions, anchor_max, num_patches, add_textual_crop_indicator
+    ):
+        media_token = "<image>"
+        assert media_token in text
+        text_list = text.split(media_token)
+        text = "USER: "
+        image_token_ptr = 0
+
+        for next_text in text_list[1:]:
+            if add_textual_crop_indicator:
+                # Generate image placeholders with interleaved textual crop indicator
+                for patch_pos in patch_positions.tolist():
+                    if patch_pos[0] == anchor_max and patch_pos[1] == anchor_max:
+                        text += "<global_img><image>"
+                    else:
+                        row_col = f"row{patch_pos[0]}_col{patch_pos[1]}"
+                        text += f"<crop_img_{row_col}><image>"
+            else:
+                # Generate successive image placeholders for an image, 1 crop img == 1
+                text += "<image>" * num_patches
+
+            text += next_text
+            image_token_ptr += 1
+
+        text += " ASSISTANT:"
+        return text
 
     def __call__(
         self,
@@ -125,39 +152,17 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
         else:
             pixel_values = None
         # text prpeocessing
-        media_token = "<image>"
-        assert media_token in text
         patch_positions = pixel_values["patch_positions"]
         num_patches = pixel_values["num_patches"]
         anchor_max = pixel_values["anchor_max"]
-
-        text_list = text.split(media_token)
-
-        text = "USER: "
-        # text = text_list[0]
-        image_token_ptr = 0
-        for next_text in text_list[1:]:
-            if add_textual_crop_indicator:
-                # generate image placeholders with interleaved texutual crop indicator
-                # e.g. <global_img><|image|><crop_img_row0_col0><|image|><crop_img_row0_col1><|image|>...
-                for patch_pos in patch_positions.tolist():
-                    # global non-crop image
-                    # breakpoint()
-                    if patch_pos[0] == anchor_max and patch_pos[1] == anchor_max:
-                        text += "<global_img><image>"
-                    else:
-                        row_col = "row" + str(patch_pos[0]) + "_col" + str(patch_pos[1])
-                        text += "<crop_img_" + row_col + "><image>"
-            else:
-                # generate successive image placeholders for a image, 1 crop img == 1 <|image|>
-                text += "<image>" * num_patches
-            text += next_text
-            image_token_ptr += 1
-
-        text = text + " ASSISTANT:"
-        # input_ids = tokenizer_image_token(text, self.tokenizer, IMAGE_TOKEN_INDEX, return_tensors=return_tensors).unsqueeze(0)
+        breakpoint()
+        texts = [
+            self.generate_text_with_placeholders(txt, patch_pos, anch_max, n_patches, add_textual_crop_indicator)
+            for txt, patch_pos, anch_max, n_patches in zip(text, patch_positions, anchor_max, num_patches)
+        ]
+        breakpoint()
         text_inputs = self.tokenizer(
-            text, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length
+            texts, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length
         )
 
         return BatchFeature(

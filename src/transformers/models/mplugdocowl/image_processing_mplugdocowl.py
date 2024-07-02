@@ -130,7 +130,6 @@ GRID_DICT = {
 }
 
 
-# FIXME write the documentation for these functions
 def box_area(boxes):
     r"""
     Compute the area of each bounding box in a given set of bounding boxes.
@@ -241,7 +240,7 @@ def anchor_resize(
     target_size = anchors[selected_anchor][2:].astype(int)  # target width, height
     resized_img = image.resize((target_size[0], target_size[1]), resample=resample)
     resized_img = np.array(resized_img)
-    return [resized_img], selected_anchor
+    return (resized_img, selected_anchor)
 
 
 def shape_adaptive_cropping(
@@ -253,7 +252,7 @@ def shape_adaptive_cropping(
     selected_anchor: int = None,
 ):
     r"""
-    Perform shape-adaptive cropping on image patches based on selected anchor size.
+    Performs shape-adaptive cropping on image patches based on selected anchor size.
 
     This function is designed to handle images with various aspect ratios and resolutions by cropping
     the image into multiple sub-images using a shape-adaptive grid. The goal is to preserve the resolution
@@ -307,7 +306,6 @@ def shape_adaptive_cropping(
         Additionally, to maintain the global structure information of the image, the input image is resized to (Hv, Wv) as a global image.
 
     """
-
     anchors = [tuple(_) for _ in grid_dict[anchors]]
     size = size["width"]
 
@@ -458,7 +456,7 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> np.ndarray:
-        """
+        r"""
         Resize an image. The shortest edge of the image is resized to size["shortest_edge"], with the longest edge
         resized to keep the input aspect ratio.
 
@@ -634,8 +632,30 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
             ]
 
         if do_anchor_resize:
-            output = [self.anchor_resize(image, size) for image in patch_images][0]
-            patch_images, selected_anchor = output[0], output[1]
+            breakpoint()
+            output = [self.anchor_resize(image, size) for image in patch_images]
+            breakpoint()
+            patch_images, selected_anchors = output[0], output[1]
+            breakpoint()
+            # images.extend(patch_images)
+
+        if do_shape_adaptive_cropping:
+            breakpoint()
+            output = [
+                self.adaptive_crop(image_patches=image, size=size, selected_anchor=selected_anchor)[0]
+                for (image, selected_anchor) in output
+            ]
+            breakpoint()
+            output = np.array(output)
+            breakpoint()
+            patch_images, patch_positions, num_patches, anchor_max = (
+                output[:, 0],
+                output[:, 1],
+                output[:, 2],
+                output[:, 3],
+            )
+
+            # del images[1:]
             images.extend(patch_images)
 
         if do_rescale:
@@ -654,15 +674,6 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
                 self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
                 for image in images
             ]
-        if do_shape_adaptive_cropping:
-            output = [
-                self.adaptive_crop(image_patches=image, size=size, selected_anchor=selected_anchor)
-                for image in images[1:]
-            ][0]
-            patch_images, patch_positions, num_patches, anchor_max = output[0], output[1], output[2], output[3]
-
-            del images[1:]
-            images.extend(patch_images)
 
         images = [
             to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images

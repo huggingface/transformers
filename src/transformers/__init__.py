@@ -2515,10 +2515,7 @@ else:
         ]
     )
     _import_structure["models.mplugdocowl"].extend(
-        [
-            "MPLUGDocOwlForConditionalGeneration",
-            "MPLUGDocOwlPreTrainedModel",
-        ]
+        ["MPLUGDocOwlForConditionalGeneration", "MPLUGDocOwlHReducer", "MPLUGDocOwlPreTrainedModel"]
     )
     _import_structure["models.mpnet"].extend(
         [
@@ -5782,6 +5779,7 @@ if TYPE_CHECKING:
             MobileNetV2ImageProcessor,
         )
         from .models.mobilevit import MobileViTFeatureExtractor, MobileViTImageProcessor
+        from .models.mplugdocowl import MPLUGDocOwlImageProcessor
         from .models.nougat import NougatImageProcessor
         from .models.oneformer import OneFormerImageProcessor
         from .models.owlv2 import Owlv2ImageProcessor
@@ -5809,7 +5807,6 @@ if TYPE_CHECKING:
         from .models.vitmatte import VitMatteImageProcessor
         from .models.vivit import VivitImageProcessor
         from .models.yolos import YolosFeatureExtractor, YolosImageProcessor
-
     # Modeling
     try:
         if not is_torch_available():
@@ -6906,6 +6903,7 @@ if TYPE_CHECKING:
         )
         from .models.mplugdocowl import (
             MPLUGDocOwlForConditionalGeneration,
+            MPLUGDocOwlHReducer,
             MPLUGDocOwlPreTrainedModel,
         )
         from .models.mpnet import (

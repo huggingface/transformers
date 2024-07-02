@@ -18,6 +18,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 _import_structure = {
     "configuration_mplugdocowl": ["MPLUGDocOwlConfig"],
+    "modeling_mplugdocowl": ["MPLUGDocOwlHReducer"],
     "processing_mplugdocowl": ["MPLUGDocOwlProcessor"],
 }
 
@@ -38,11 +39,13 @@ else:
     _import_structure["modeling_mplugdocowl"] = [
         "MPLUGDocOwlForConditionalGeneration",
         "MPLUGDocOwlPreTrainedModel",
+        "MPLUGDocOwlHReducer",
     ]
 
 
 if TYPE_CHECKING:
     from .configuration_mplugdocowl import MPLUGDocOwlConfig
+    from .modeling_mplugdocowl import MPLUGDocOwlHReducer
     from .processing_mplugdocowl import MPLUGDocOwlProcessor
 
     try:
@@ -61,6 +64,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_mplugdocowl import (
             MPLUGDocOwlForConditionalGeneration,
+            MPLUGDocOwlHReducer,
             MPLUGDocOwlPreTrainedModel,
         )
 
