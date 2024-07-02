@@ -740,3 +740,34 @@ class ChineseCLIPModelIntegrationTest(unittest.TestCase):
         expected_probs = torch.tensor([[1.2686e-03, 5.4499e-02, 6.7968e-04, 9.4355e-01]], device=torch_device)
 
         self.assertTrue(torch.allclose(probs, expected_probs, atol=5e-3))
+
+    @slow
+    def test_inference_interpolate_pos_encoding(self):
+        # ViT models have an `interpolate_pos_encoding` argument in their forward method,
+        # allowing to interpolate the pre-trained position embeddings in order to use
+        # the model on higher resolutions. The DINO model by Facebook AI leverages this
+        # to visualize self-attention on higher resolution images.
+        model_name = "OFA-Sys/chinese-clip-vit-base-patch16"
+        model = ChineseCLIPModel.from_pretrained(model_name).to(torch_device)
+
+        image_processor = ChineseCLIPProcessor.from_pretrained(model_name)
+
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        inputs = image_processor(text="what's in the image", images=image, return_tensors="pt").to(torch_device)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs, interpolate_pos_encoding=True)
+
+        # verify the logits
+        expected_shape = torch.Size((1, 197, 768))
+
+        self.assertEqual(outputs.vision_model_output.last_hidden_state.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [[-0.3374, 0.3212, -0.1293], [-0.2208, -0.6150, 0.7010], [-0.1901, -0.6576, 0.4843]]
+        ).to(torch_device)
+
+        self.assertTrue(
+            torch.allclose(outputs.vision_model_output.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4)
+        )
