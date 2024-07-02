@@ -227,7 +227,7 @@ class CircleCIJob:
 torch_and_tf_job = CircleCIJob(
     "torch_and_tf",
     docker_image=[{"image":"huggingface/transformers-torch-tf-light"}],
-    install_steps=["uv venv && uv pip install ."],
+    install_steps=["uv venv && uv pip install .", "pip uninstall -y torch torchvision torchaudio", "pip install torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 --index-url https://download.pytorch.org/whl/test/cpu"],
     additional_env={"RUN_PT_TF_CROSS_TESTS": True},
     marker="is_pt_tf_cross_test",
     pytest_options={"rA": None, "durations": 0},
@@ -238,7 +238,7 @@ torch_and_flax_job = CircleCIJob(
     "torch_and_flax",
     additional_env={"RUN_PT_FLAX_CROSS_TESTS": True},
     docker_image=[{"image":"huggingface/transformers-torch-jax-light"}],
-    install_steps=["uv venv && uv pip install ."],
+    install_steps=["uv venv && uv pip install .", "pip uninstall -y torch torchvision torchaudio", "pip install torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 --index-url https://download.pytorch.org/whl/test/cpu"],
     marker="is_pt_flax_cross_test",
     pytest_options={"rA": None, "durations": 0},
 )
@@ -254,7 +254,7 @@ torch_job = CircleCIJob(
 tokenization_job = CircleCIJob(
     "tokenization",
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
-    install_steps=["uv venv && uv pip install ."],
+    install_steps=["uv venv && uv pip install .", "pip uninstall -y torch torchvision torchaudio", "pip install torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 --index-url https://download.pytorch.org/whl/test/cpu"],
     parallelism=6,
     pytest_num_workers=16
 )
@@ -300,7 +300,7 @@ custom_tokenizers_job = CircleCIJob(
     "custom_tokenizers",
     additional_env={"RUN_CUSTOM_TOKENIZERS": True},
     docker_image=[{"image": "huggingface/transformers-custom-tokenizers"}],
-    install_steps=["uv venv","uv pip install -e ."],
+    install_steps=["uv venv","uv pip install -e .", "pip uninstall -y torch torchvision torchaudio", "pip install torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 --index-url https://download.pytorch.org/whl/test/cpu"],
     parallelism=None,
     resource_class=None,
     tests_to_run=[
@@ -339,6 +339,7 @@ hub_job = CircleCIJob(
         "uv venv && uv pip install .",
         'git config --global user.email "ci@dummy.com"',
         'git config --global user.name "ci"',
+        "pip uninstall -y torch torchvision torchaudio", "pip install torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 --index-url https://download.pytorch.org/whl/test/cpu"
     ],
     marker="is_staging_test",
     pytest_num_workers=1,
@@ -352,6 +353,7 @@ onnx_job = CircleCIJob(
         "uv venv && uv pip install .",
         "uv pip install --upgrade eager pip",
         "uv pip install .[torch,tf,testing,sentencepiece,onnxruntime,vision,rjieba]",
+        "pip uninstall -y torch torchvision torchaudio", "pip install torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 --index-url https://download.pytorch.org/whl/test/cpu"
     ],
     pytest_options={"k onnx": None},
     pytest_num_workers=1,
@@ -360,7 +362,7 @@ onnx_job = CircleCIJob(
 
 exotic_models_job = CircleCIJob(
     "exotic_models",
-    install_steps=["uv venv && uv pip install ."],
+    install_steps=["uv venv && uv pip install .", "pip uninstall -y torch torchvision torchaudio", "pip install torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 --index-url https://download.pytorch.org/whl/test/cpu"],
     docker_image=[{"image":"huggingface/transformers-exotic-models"}],
     tests_to_run=[
         "tests/models/*layoutlmv*",
@@ -378,7 +380,7 @@ exotic_models_job = CircleCIJob(
 repo_utils_job = CircleCIJob(
     "repo_utils",
     docker_image=[{"image":"huggingface/transformers-consistency"}],
-    install_steps=["uv venv && uv pip install ."],
+    install_steps=["uv venv && uv pip install .", "pip uninstall -y torch torchvision torchaudio", "pip install torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 --index-url https://download.pytorch.org/whl/test/cpu"],
     parallelism=None,
     pytest_num_workers=1,
     resource_class="large",
