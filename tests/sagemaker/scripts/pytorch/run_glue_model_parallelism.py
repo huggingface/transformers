@@ -253,7 +253,7 @@ def main():
     # download the dataset.
     if data_args.task_name is not None:
         # Downloading and loading a dataset from the hub.
-        datasets = load_dataset("glue", data_args.task_name)
+        datasets = load_dataset("nyu-mll/glue", data_args.task_name)
     else:
         # Loading a dataset from your local files.
         # CSV/JSON training and evaluation files are needed.

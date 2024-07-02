@@ -20,7 +20,7 @@ import tempfile
 
 from transformers import is_torch_available
 
-from .test_configuration_utils import config_common_kwargs
+from .utils.test_configuration_utils import config_common_kwargs
 
 
 class ConfigTester(object):

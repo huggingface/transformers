@@ -137,11 +137,10 @@ class TextGenerationPipeline(Pipeline):
 
         add_special_tokens = False
         if "add_special_tokens" in generate_kwargs:
-            preprocess_params["add_special_tokens"] = generate_kwargs["add_special_tokens"]
-            add_special_tokens = generate_kwargs["add_special_tokens"]
+            add_special_tokens = preprocess_params["add_special_tokens"] = generate_kwargs.pop("add_special_tokens")
 
         if "padding" in generate_kwargs:
-            preprocess_params["padding"] = generate_kwargs["padding"]
+            preprocess_params["padding"] = generate_kwargs.pop("padding")
 
         if truncation is not None:
             preprocess_params["truncation"] = truncation
@@ -267,31 +266,33 @@ class TextGenerationPipeline(Pipeline):
         prompt_text,
         prefix="",
         handle_long_generation=None,
-        add_special_tokens=False,
+        add_special_tokens=None,
         truncation=None,
-        padding=False,
+        padding=None,
         max_length=None,
         **generate_kwargs,
     ):
         if isinstance(prompt_text, Chat):
+            # Only set non-None tokenizer kwargs, so as to rely on the tokenizer's defaults
+            tokenizer_kwargs = {}
+            for tokenizer_kwarg_name in ["truncation", "padding", "max_length"]:
+                if locals()[tokenizer_kwarg_name] is not None:
+                    tokenizer_kwargs[tokenizer_kwarg_name] = locals()[tokenizer_kwarg_name]
             inputs = self.tokenizer.apply_chat_template(
                 prompt_text.messages,
-                truncation=truncation,
-                padding=padding,
-                max_length=max_length,
                 add_generation_prompt=True,
                 return_dict=True,
                 return_tensors=self.framework,
+                **tokenizer_kwargs,
             )
         else:
-            inputs = self.tokenizer(
-                prefix + prompt_text,
-                truncation=truncation,
-                padding=padding,
-                max_length=max_length,
-                add_special_tokens=add_special_tokens,
-                return_tensors=self.framework,
-            )
+            # Only set non-None tokenizer kwargs, so as to rely on the tokenizer's defaults
+            tokenizer_kwargs = {}
+            for tokenizer_kwarg_name in ["add_special_tokens", "truncation", "padding", "max_length"]:
+                if locals()[tokenizer_kwarg_name] is not None:
+                    tokenizer_kwargs[tokenizer_kwarg_name] = locals()[tokenizer_kwarg_name]
+            inputs = self.tokenizer(prefix + prompt_text, return_tensors=self.framework, **tokenizer_kwargs)
+
         inputs["prompt_text"] = prompt_text
 
         if handle_long_generation == "hole":

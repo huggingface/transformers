@@ -98,6 +98,8 @@ class Mask2FormerImageProcessingTester(unittest.TestCase):
             image = image_inputs[0]
             if isinstance(image, Image.Image):
                 w, h = image.size
+            elif isinstance(image, np.ndarray):
+                h, w = image.shape[0], image.shape[1]
             else:
                 h, w = image.shape[1], image.shape[2]
             if w < h:
@@ -149,6 +151,7 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
     image_processing_class = Mask2FormerImageProcessor if (is_vision_available() and is_torch_available()) else None
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = Mask2FormerImageProcessingTester(self)
 
     @property

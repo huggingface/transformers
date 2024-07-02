@@ -258,7 +258,9 @@ class SeamlessM4TFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
             self.assertTrue(pt_processed.input_features.dtype == torch.float32)
 
     def _load_datasample(self, id):
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        ds = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
+        )
         # automatic decoding with librispeech
         speech_sample = ds.sort("id")[id]["audio"]["array"]
 
