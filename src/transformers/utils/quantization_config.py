@@ -24,7 +24,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from packaging import version
 
-from ..utils import is_auto_awq_available, is_hqq_available, is_torch_available, logging
+from ..utils import is_auto_awq_available, is_gradio_client_available, is_hqq_available, is_torch_available, logging
 
 
 if is_torch_available():
@@ -1047,3 +1047,61 @@ class EetqConfig(QuantizationConfigMixin):
         accepted_weights = ["int8"]
         if self.weights not in accepted_weights:
             raise ValueError(f"Only support weights in {accepted_weights} but found {self.weights}")
+
+
+@dataclass
+class GgufConfig(QuantizationConfigMixin):
+    """
+    This is an experimental config class that should be used only when calling `trainer.push_to_hub(gguf_config=gguf_config)`.
+    Do not expect to use it in `AutoModelForxxx.from_pretrained()`.
+
+    Args:
+        quantization_method (`str`):
+            The quantization method to use, supported methods can be found at: https://huggingface.co/spaces/gguf-org/gguf-my-repo
+        space_name (`str`, *optional*, defaults to `"ggml-org/gguf-my-repo"`):
+            Hub ID of the conversion space to use, modify it at your own risk!
+        private (`bool`, *optional*, defaults to `False`):
+            Whether to push the final GGUF file on a private repository.
+        duplicate_space (`bool`, *optional*, defaults to `False`):
+            Whether to duplicate the conversion space or not. This is useful to avoid queue issues if one uses the official
+            Space.
+    """
+
+    def __init__(
+        self,
+        quantization_method: str,
+        space_name: Optional[str] = "ggml-org/gguf-my-repo",
+        private: Optional[bool] = False,
+        duplicate_space: Optional[bool] = False,
+    ):
+        self.quantization_method = quantization_method
+        self.private = private
+        self.space_name = space_name
+        self.duplicate_space = duplicate_space
+
+        self.post_init()
+
+    def post_init(self):
+        r"""
+        Safety checker that arguments are correct
+        """
+        accepted_quant_methods = [
+            "Q2_K",
+            "Q3_K_S",
+            "Q3_K_M",
+            "Q3_K_L",
+            "Q4_0",
+            "Q4_K_S",
+            "Q4_K_M",
+            "Q5_0",
+            "Q5_K_S",
+            "Q5_K_M",
+            "Q6_K",
+            "Q8_0",
+        ]
+
+        if not is_gradio_client_available():
+            raise ValueError("`gradio_client` is required to use` `GgufConfig` - pip install -U `gradio_client`")
+
+        if self.quantization_method not in accepted_quant_methods:
+            raise ValueError(f"Only support weights in {accepted_quant_methods} but found {self.quantization_method}")

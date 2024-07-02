@@ -166,7 +166,7 @@ from .utils import (
     logging,
     strtobool,
 )
-from .utils.quantization_config import QuantizationMethod
+from .utils.quantization_config import GgufConfig, QuantizationMethod
 
 
 DEFAULT_CALLBACKS = [DefaultFlowCallback]
@@ -4264,6 +4264,11 @@ class Trainer:
             progress of the commit if `blocking=True`.
         """
         model_name = kwargs.pop("model_name", None)
+
+        # If one passes `gguf_config`, will create a GGUF converted model using
+        # `https://huggingface.co/spaces/ggml-org/gguf-my-repo` Space.
+        gguf_config = kwargs.pop("gguf_config", None)
+
         if model_name is None and self.args.should_save:
             if self.args.hub_model_id is None:
                 model_name = Path(self.args.output_dir).name
@@ -4298,11 +4303,17 @@ class Trainer:
                 if model_tag not in kwargs["tags"]:
                     kwargs["tags"].append(model_tag)
 
+        if gguf_config is not None:
+            if "tags" not in kwargs:
+                kwargs["tags"] = []
+            kwargs["tags"].append("gguf_generated_from_trainer")
+
         self.create_model_card(model_name=model_name, **kwargs)
 
         # Wait for the current upload to be finished.
         self._finish_current_push()
-        return upload_folder(
+
+        upload_results = upload_folder(
             repo_id=self.hub_model_id,
             folder_path=self.args.output_dir,
             commit_message=commit_message,
@@ -4310,6 +4321,38 @@ class Trainer:
             run_as_future=not blocking,
             ignore_patterns=["_*", f"{PREFIX_CHECKPOINT_DIR}-*"],
         )
+
+        if gguf_config is not None:
+            if not isinstance(gguf_config, GgufConfig):
+                raise ValueError("Please pass an instance of `GgufConfig`")
+
+            from gradio_client import Client
+            from huggingface_hub.utils import get_token_to_send
+
+            if get_token_to_send(token) is None:
+                logger.warning(
+                    "Make sure to login with `huggingface-cli login` before running the GGUF conversion, will silently ignore the GGUF conversion."
+                )
+                return upload_results
+
+            if gguf_config.duplicate_space:
+                client = Client.duplicate(gguf_config.space_name, hf_token=get_token_to_send(token))
+            else:
+                client = Client(gguf_config.space_name)
+
+            job = client.submit(
+                model_id=self.hub_model_id,
+                q_method=gguf_config.quantization_method,
+                private_repo=gguf_config.private,
+                token=get_token_to_send(token),
+                api_name="/predict",
+            )
+
+            logger.info(
+                f"GGUF conversion Space is running with the status {job.status().code} - please monitor your HF profile to see if the converted model has been pushed"
+            )
+
+        return upload_results
 
     #
     # Deprecated code
