@@ -72,7 +72,6 @@ def _flash_attention_forward(
     softmax_scale=None,
     is_causal=False,
     sliding_window=None,
-    cache_position=0,
     use_top_left_mask: bool = False,
 ):
     """
@@ -100,8 +99,9 @@ def _flash_attention_forward(
         # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__.
         causal = is_causal and query_length != 1
 
+    # Assuming 4D tensors, key_states.shape[1] is the key/value sequence length (source length).
     use_sliding_windows = (
-        _flash_supports_window_size and sliding_window is not None and cache_position > sliding_window
+        _flash_supports_window_size and sliding_window is not None and key_states.shape[1] > sliding_window
     )
     flash_kwargs = {"window_size": (sliding_window, sliding_window)} if use_sliding_windows else {}
 

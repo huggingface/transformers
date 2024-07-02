@@ -388,7 +388,6 @@ class MistralFlashAttention2(MistralAttention):
             q_len,
             dropout=dropout_rate,
             sliding_window=getattr(self.config, "sliding_window", None),
-            cache_postion=cache_position,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
             is_causal=self.is_causal,
         )
