@@ -425,7 +425,6 @@ class GemmaFlashAttention2(LlamaFlashAttention2):
             q_len,
             dropout=dropout_rate,
             sliding_window=getattr(self, "sliding_window", None),
-            cache_position=cache_position,
             is_causal=self.is_causal,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
         )

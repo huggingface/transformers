@@ -406,7 +406,6 @@ class Starcoder2FlashAttention2(Starcoder2Attention):
             q_len,
             dropout=dropout_rate,
             sliding_windows=getattr(self.config, "sliding_window", None),
-            cache_position=kv_seq_len,
         )
 
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
