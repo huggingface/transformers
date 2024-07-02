@@ -246,7 +246,7 @@ torch_and_flax_job = CircleCIJob(
 torch_job = CircleCIJob(
     "torch",
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
-    install_steps=["uv venv && uv pip install .", "pip uninstall -y torch torchvision torchaudio", "pip install torch==2.4.0 torch==0.19.0 torchaudio==2.4.0 --index-url https://download.pytorch.org/whl/test/cpu"],
+    install_steps=["uv venv && uv pip install .", "pip uninstall -y torch torchvision torchaudio", "pip install torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 --index-url https://download.pytorch.org/whl/test/cpu"],
     parallelism=6,
     pytest_num_workers=16
 )
@@ -282,7 +282,7 @@ pipelines_torch_job = CircleCIJob(
     "pipelines_torch",
     additional_env={"RUN_PIPELINE_TESTS": True},
     docker_image=[{"image":"huggingface/transformers-torch-light"}],
-    install_steps=["uv venv && uv pip install .", "pip uninstall -y torch torchvision torchaudio", "pip install torch==2.4.0 torch==0.19.0 torchaudio==2.4.0 --index-url https://download.pytorch.org/whl/test/cpu"],
+    install_steps=["uv venv && uv pip install .", "pip uninstall -y torch torchvision torchaudio", "pip install torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 --index-url https://download.pytorch.org/whl/test/cpu"],
     marker="is_pipeline_test",
 )
 
@@ -317,7 +317,7 @@ examples_torch_job = CircleCIJob(
     cache_name="torch_examples",
     docker_image=[{"image":"huggingface/transformers-examples-torch"}],
     # TODO @ArthurZucker remove this once docker is easier to build
-    install_steps=["uv venv && uv pip install . && uv pip install -r examples/pytorch/_tests_requirements.txt", "pip uninstall -y torch torchvision torchaudio", "pip install torch==2.4.0 torch==0.19.0 torchaudio==2.4.0 --index-url https://download.pytorch.org/whl/test/cpu"],
+    install_steps=["uv venv && uv pip install . && uv pip install -r examples/pytorch/_tests_requirements.txt", "pip uninstall -y torch torchvision torchaudio", "pip install torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 --index-url https://download.pytorch.org/whl/test/cpu"],
     pytest_num_workers=1,
 )
 
