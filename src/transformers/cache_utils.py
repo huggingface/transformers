@@ -395,21 +395,21 @@ class DynamicCache(Cache):
                 cache.update(key_states, value_states, layer_idx)
         return cache
 
-    def crop(self, maximum_length: int):
-        """Crop the past key values up to a new `maximum_length` in terms of tokens. `maximum_length` can also be
-        negative to remove `maximum_length` tokens. This is used in assisted decoding and contrastive search."""
+    def crop(self, max_length: int):
+        """Crop the past key values up to a new `max_length` in terms of tokens. `max_length` can also be
+        negative to remove `max_length` tokens. This is used in assisted decoding and contrastive search."""
 
         # In case it is negative
-        if maximum_length < 0:
-            maximum_length = self.get_seq_length() - abs(maximum_length)
+        if max_length < 0:
+            max_length = self.get_seq_length() - abs(max_length)
 
-        if self.get_seq_length() <= maximum_length:
+        if self.get_seq_length() <= max_length:
             return
 
-        self._seen_tokens = maximum_length
+        self._seen_tokens = max_length
         for idx in range(len(self.key_cache)):
-            self.key_cache[idx] = self.key_cache[idx][..., :maximum_length, :]
-            self.value_cache[idx] = self.value_cache[idx][..., :maximum_length, :]
+            self.key_cache[idx] = self.key_cache[idx][..., :max_length, :]
+            self.value_cache[idx] = self.value_cache[idx][..., :max_length, :]
 
     def batch_split(self, full_batch_size: int, split_size: int) -> List["DynamicCache"]:
         """Split the current instance into a list of `DynamicCache` by the batch size. This will be used by
@@ -970,3 +970,125 @@ class SlidingWindowCache(StaticCache):
         # in theory there is no limit because the sliding window size is fixed
         # no matter how long the sentence is
         return None
+
+
+class HybridCache(Cache):
+    def __init__(self, config: PretrainedConfig, max_batch_size, max_cache_len, device="cpu", dtype=None) -> None:
+        if not hasattr(config, "sliding_window") or config.sliding_window is None:
+            raise ValueError(
+                "Setting `cache_implementation` to 'sliding_window' requires the model config supporting "
+                "sliding window attention, please check if there is a `sliding_window` field in the model "
+                "config and it's not set to None."
+            )
+        self.max_cache_len = max_cache_len
+        self.max_batch_size = max_batch_size
+        # Some model define a custom `head_dim` != config.hidden_size // config.num_attention_heads
+        self.head_dim = (
+            config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
+        )
+
+        self.dtype = dtype if dtype is not None else torch.float32
+        self.num_key_value_heads = (
+            config.num_attention_heads if config.num_key_value_heads is None else config.num_key_value_heads
+        )
+        self.is_sliding = torch.tensor(
+            [i % 2 for i in range(config.num_hidden_layers)], dtype=torch.bool, device=device
+        )
+        self.key_cache: List[torch.Tensor] = []
+        self.value_cache: List[torch.Tensor] = []
+        global_cache_shape = (max_batch_size, self.num_key_value_heads, max_cache_len, self.head_dim)
+        sliding_cache_shape = (
+            max_batch_size,
+            self.num_key_value_heads,
+            min(config.sliding_window, max_cache_len),
+            self.head_dim,
+        )
+        for i in range(config.num_hidden_layers):
+            # Note: `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
+            # breaks when updating the cache.
+            cache_shape = global_cache_shape if not self.is_sliding[i] else sliding_cache_shape
+            new_layer_key_cache = torch.zeros(cache_shape, dtype=self.dtype, device=device)
+            new_layer_value_cache = torch.zeros(cache_shape, dtype=self.dtype, device=device)
+            torch._dynamo.mark_static_address(new_layer_key_cache)
+            torch._dynamo.mark_static_address(new_layer_value_cache)
+            self.key_cache.append(new_layer_key_cache)
+            self.value_cache.append(new_layer_value_cache)
+
+    def _sliding_update(self, cache_position, layer_idx, key_states, value_states, k_out, v_out, max_cache_len):
+        if cache_position.shape[0] > max_cache_len:
+            k_out = key_states[:, :, -max_cache_len:, :]
+            v_out = value_states[:, :, -max_cache_len:, :]
+            # Assumption: caches are all zeros at this point, `+=` is equivalent to `=` but compile-friendly
+            self.key_cache[layer_idx] += k_out
+            self.value_cache[layer_idx] += v_out
+            # we should return the whole states instead of k_out, v_out to take the whole prompt
+            # into consideration when building kv cache instead of just throwing away tokens outside of the window
+            return key_states, value_states
+
+        slicing = torch.ones(max_cache_len, dtype=torch.long, device=value_states.device).cumsum(0)
+        cache_position = cache_position.clamp(0, max_cache_len - 1)
+        to_shift = cache_position >= max_cache_len - 1
+        indices = (slicing + to_shift[-1].int() - 1) % max_cache_len
+        k_out = k_out[:, :, indices]
+        v_out = v_out[:, :, indices]
+
+        k_out[:, :, cache_position] = key_states
+        v_out[:, :, cache_position] = value_states
+        # `_.zero()` followed by `+=` is equivalent `=`, but compile-friendly (without graph breaks due to assignment)
+        self.key_cache[layer_idx].zero_()
+        self.value_cache[layer_idx].zero_()
+
+        self.key_cache[layer_idx] += k_out
+        self.value_cache[layer_idx] += v_out
+        return k_out, v_out
+
+    def _static_update(self, cache_position, layer_idx, key_states, value_states, k_out, v_out, max_cache_len):
+        k_out[:, :, cache_position] = key_states
+        v_out[:, :, cache_position] = value_states
+
+        self.key_cache[layer_idx] = k_out
+        self.value_cache[layer_idx] = v_out
+        return k_out, v_out
+
+    def update(
+        self,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        layer_idx: int,
+        cache_kwargs: Optional[Dict[str, Any]] = None,
+        sliding_window: Optional[int] = None,
+    ) -> Tuple[torch.Tensor]:
+        cache_position = cache_kwargs.get("cache_position")
+        self.key_cache[layer_idx] = self.key_cache[layer_idx].to(device=key_states.device)
+        self.value_cache[layer_idx] = self.value_cache[layer_idx].to(device=value_states.device)
+        k_out = self.key_cache[layer_idx]
+        v_out = self.value_cache[layer_idx]
+        if sliding_window:
+            update_fn = self._sliding_update
+        else:
+            update_fn = self._static_update
+
+        return update_fn(
+            cache_position,
+            layer_idx,
+            key_states,
+            value_states,
+            k_out,
+            v_out,
+            k_out.shape[2],
+        )
+
+    def get_max_length(self) -> Optional[int]:
+        # in theory there is no limit because the sliding window size is fixed
+        # no matter how long the sentence is
+        return self.max_cache_len
+
+    def get_seq_length(self, layer_idx: Optional[int] = 0):
+        return None
+
+    def reset(self):
+        """Resets the cache values while preserving the objects"""
+        for layer_idx in range(len(self.key_cache)):
+            # In-place ops prevent breaking the static address
+            self.key_cache[layer_idx].zero_()
+            self.value_cache[layer_idx].zero_()

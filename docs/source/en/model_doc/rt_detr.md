@@ -35,24 +35,35 @@ The model version was contributed by [rafaelpadilla](https://huggingface.co/rafa
 Initially, an image is processed using a pre-trained convolutional neural network, specifically a Resnet-D variant as referenced in the original code. This network extracts features from the final three layers of the architecture. Following this, a hybrid encoder is employed to convert the multi-scale features into a sequential array of image features. Then, a decoder, equipped with auxiliary prediction heads is used to refine the object queries. This process facilitates the direct generation of bounding boxes, eliminating the need for any additional post-processing to acquire the logits and coordinates for the bounding boxes.
 
 ```py
-from transformers import RTDetrForObjectDetection, RTDetrImageProcessor
-from PIL import Image
-import json
-import torch
-import requests
+>>> import torch
+>>> import requests
 
-url = 'http://images.cocodataset.org/val2017/000000039769.jpg' 
-image = Image.open(requests.get(url, stream=True).raw)
+>>> from PIL import Image
+>>> from transformers import RTDetrForObjectDetection, RTDetrImageProcessor
 
-image_processor = RTDetrImageProcessor.from_pretrained("PekingU/rtdetr_r50vd")
-model = RTDetrForObjectDetection.from_pretrained("PekingU/rtdetr_r50vd")
+>>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg' 
+>>> image = Image.open(requests.get(url, stream=True).raw)
 
-inputs = image_processor(images=image, return_tensors="pt")
+>>> image_processor = RTDetrImageProcessor.from_pretrained("PekingU/rtdetr_r50vd")
+>>> model = RTDetrForObjectDetection.from_pretrained("PekingU/rtdetr_r50vd")
 
-with torch.no_grad():
-   outputs = model(**inputs)
+>>> inputs = image_processor(images=image, return_tensors="pt")
 
-results = image_processor.post_process_object_detection(outputs, target_sizes=torch.tensor([image.size[::-1]), threshold=0.3)
+>>> with torch.no_grad():
+...     outputs = model(**inputs)
+
+>>> results = image_processor.post_process_object_detection(outputs, target_sizes=torch.tensor([image.size[::-1]]), threshold=0.3)
+
+>>> for result in results:
+...     for score, label_id, box in zip(result["scores"], result["labels"], result["boxes"]):
+...         score, label = score.item(), label_id.item()
+...         box = [round(i, 2) for i in box.tolist()]
+...         print(f"{model.config.id2label[label]}: {score:.2f} {box}")
+sofa: 0.97 [0.14, 0.38, 640.13, 476.21]
+cat: 0.96 [343.38, 24.28, 640.14, 371.5]
+cat: 0.96 [13.23, 54.18, 318.98, 472.22]
+remote: 0.95 [40.11, 73.44, 175.96, 118.48]
+remote: 0.92 [333.73, 76.58, 369.97, 186.99]
 ```
 
 ## RTDetrConfig

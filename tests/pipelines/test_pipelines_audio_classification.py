@@ -132,6 +132,6 @@ class AudioClassificationPipelineTests(unittest.TestCase):
         )
 
     @require_tf
-    @unittest.skip("Audio classification is not implemented for TF")
+    @unittest.skip(reason="Audio classification is not implemented for TF")
     def test_small_model_tf(self):
         pass

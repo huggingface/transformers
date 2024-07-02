@@ -346,6 +346,7 @@ class MarianModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         model.resize_decoder_token_embeddings(config.vocab_size + 1)
         self.assertEqual(model.lm_head.weight.shape, (config.vocab_size + 1, config.d_model))
 
+    @unittest.skip
     def test_tie_word_embeddings_decoder(self):
         pass
 
@@ -367,15 +368,15 @@ class MarianModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
     def test_save_load_low_cpu_mem_usage(self):
         pass
 
-    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
     def test_save_load_low_cpu_mem_usage_checkpoints(self):
         pass
 
-    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
     def test_save_load_low_cpu_mem_usage_no_safetensors(self):
         pass
 
@@ -899,6 +900,6 @@ class MarianStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, 
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_attention_mask_past(*config_and_inputs)
 
+    @unittest.skip(reason="Decoder cannot keep gradients")
     def test_retain_grad_hidden_states_attentions(self):
-        # decoder cannot keep gradients
         return
