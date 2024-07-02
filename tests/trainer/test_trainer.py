@@ -1690,7 +1690,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         with tempfile.TemporaryDirectory() as tmpdir:
             learning_rate = 2e-4
             num_train_epochs = 2
-            num_warmup_steps = 10
+            num_warmup_steps = 5
 
             # Trainer without inf/nan filter
             args = TrainingArguments(
