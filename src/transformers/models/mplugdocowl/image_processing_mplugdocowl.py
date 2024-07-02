@@ -374,8 +374,8 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
             Can be overridden by the `image_std` parameter in the `preprocess` method.
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Whether to convert the image to RGB.
-        do_shape_adaptive_cropping (`bool`, *optional*, defaults to `True`): <fill_docstring>
-        do_anchor_resize (`bool`, *optional*, defaults to `True`): <fill_docstring>
+        do_anchor_resize (`bool`, *optional*, defaults to `True`): Whether to resize the image based on the specified anchor. Should be called before do_shape_adaptive_cropping. 
+        do_shape_adaptive_cropping (`bool`, *optional*, defaults to `True`): Whether to do a shape adaptive cropping of the input image. Should be only called if the do_anchor_resize is called. 
     """
 
     model_input_names = ["pixel_values"]

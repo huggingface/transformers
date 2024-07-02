@@ -39,9 +39,9 @@ class MPLUGDocOwlConfig(PretrainedConfig):
             The config object or dictionary of the vision backbone.
         text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `LlamaConfig`):
             The config object or dictionary of the text backbone.
-        hreducer_hidden_size (`<fill_type>`, *optional*, defaults to 1024): <fill_docstring>
-        hreducer_layer_norm (`<fill_type>`, *optional*, defaults to 1e-06): <fill_docstring>
-        hreducer_conv_shape (`<fill_type>`, *optional*, defaults to `"1x4"`): <fill_docstring>
+        hreducer_hidden_size (`int`, *optional*, defaults to 1024): The hidden size for the hreducer.
+        hreducer_layer_norm (`float`, *optional*, defaults to 1e-06): The layer normalization parameter for the hreducer.
+        hreducer_conv_shape (`str`, *optional*, defaults to `"1x4"`): The kernel size for the convolutional layer in the hreducer.
         ignore_index (`int`, *optional*, defaults to -100):
             The ignore index for the loss function.
         image_token_index (`int`, *optional*, defaults to 32000):
