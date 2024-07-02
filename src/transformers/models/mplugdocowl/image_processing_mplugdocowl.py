@@ -339,7 +339,7 @@ def shape_adaptive_cropping(
 
 class MPLUGDocOwlImageProcessor(BaseImageProcessor):
     r"""
-    Constructs a MPLUGDocOwl image processor.
+    Constructs a MPLUGDocOwlImageProcessor.
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):

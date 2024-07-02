@@ -806,6 +806,7 @@ OBJECTS_TO_IGNORE = [
     "ZeroShotClassificationPipeline",
     "ZeroShotImageClassificationPipeline",
     "ZeroShotObjectDetectionPipeline",
+    "MPLUGDocOwlImageProcessor"
 ]
 
 # Supported math operations when interpreting the value of defaults.
