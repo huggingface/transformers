@@ -273,14 +273,17 @@ class TextGenerationPipeline(Pipeline):
         **generate_kwargs,
     ):
         if isinstance(prompt_text, Chat):
+            # Only set non-None tokenizer kwargs, so as to rely on the tokenizer's defaults
+            tokenizer_kwargs = {}
+            for tokenizer_kwarg_name in ["truncation", "padding", "max_length"]:
+                if locals()[tokenizer_kwarg_name] is not None:
+                    tokenizer_kwargs[tokenizer_kwarg_name] = locals()[tokenizer_kwarg_name]
             inputs = self.tokenizer.apply_chat_template(
                 prompt_text.messages,
-                truncation=truncation,
-                padding=padding,
-                max_length=max_length,
                 add_generation_prompt=True,
                 return_dict=True,
                 return_tensors=self.framework,
+                **tokenizer_kwargs,
             )
         else:
             # Only set non-None tokenizer kwargs, so as to rely on the tokenizer's defaults
