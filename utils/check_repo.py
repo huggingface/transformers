@@ -319,6 +319,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "SegGptForImageSegmentation",
     "SiglipVisionModel",
     "SiglipTextModel",
+    "ViTPoseForPoseEstimation",
 ]
 
 # DO NOT edit this list!
@@ -980,6 +981,8 @@ UNDOCUMENTED_OBJECTS = [
     "logging",  # External module
     "requires_backends",  # Internal function
     "AltRobertaModel",  # Internal module
+    "ViTPoseBackbone",  # Internal module
+    "ViTPoseBackboneConfig",  # Internal module
 ]
 
 # This list should be empty. Objects in it should get their own doc page.
