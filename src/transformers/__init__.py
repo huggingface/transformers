@@ -926,6 +926,7 @@ _import_structure = {
         "AqlmConfig",
         "AwqConfig",
         "BitsAndBytesConfig",
+        "CompressedTensorsConfig",
         "EetqConfig",
         "GPTQConfig",
         "HqqConfig",
