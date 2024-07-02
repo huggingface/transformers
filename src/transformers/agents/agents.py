@@ -337,6 +337,7 @@ class Agent:
                 self._toolbox.add_base_tools(add_python_interpreter=(self.__class__ == ReactJsonAgent))
         else:
             self._toolbox = Toolbox(tools, add_base_tools=add_base_tools)
+        self._toolbox.add_tool(FinalAnswerTool())
 
         self.system_prompt = format_prompt_with_tools(
             self._toolbox, self.system_prompt_template, self.tool_description_template
@@ -631,8 +632,6 @@ class ReactAgent(Agent):
             tool_description_template=tool_description_template,
             **kwargs,
         )
-        if "final_answer" not in self._toolbox.tools:
-            self._toolbox.add_tool(FinalAnswerTool())
 
     def provide_final_answer(self, task) -> str:
         """

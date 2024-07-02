@@ -50,7 +50,7 @@ We implement two versions of ReactJsonAgent:
 
 ![Framework of a React Agent](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/blog/open-source-llms-as-agents/ReAct.png)
 
-For example, here is how a ReAct agent would work its way through the following question.
+For example, here is how a ReAct Code agent would work its way through the following question.
 
 ```py3
 >>> agent.run(
@@ -188,7 +188,7 @@ You can still authorize additional imports by passing the authorized modules as 
 >>> from transformers import ReactCodeAgent
 
 >>> agent = ReactCodeAgent(tools=[], additional_authorized_imports=['requests', 'bs4'])
->>>agent.run("Could you get me the title of the page at url 'https://huggingface.co/blog'?")
+>>> agent.run("Could you get me the title of the page at url 'https://huggingface.co/blog'?")
 
 (...)
 'Hugging Face – Blog'
@@ -255,6 +255,13 @@ agent = ReactJsonAgent(tools=[PythonInterpreterTool()], system_prompt="{your_cus
 > [!WARNING]
 > Please make sure to define the `<<tool_descriptions>>` string somewhere in the `template` so the agent is aware 
 of the available tools.
+
+
+### Inspecting an agent run
+
+Here are a few useful attributes to inspect what happened after a run:
+- `agent.logs` stores the fine-grained logs of the agent. At every step of the agent's run, everything gets stored in a dictionary that then is appended to `agent.logs`.
+- Running `agent.write_inner_memory_from_logs()` creates an inner memory of the agent's logs for the LLM to view, as a list of chat messages. This method goes over each step of the log and only stores what it's interested in as a message: for instance, it will save the system prompt and task in separate messages, then for each step it will store the LLM output as a message, and the tool call output as another message. Use this if you want a higher-level view of what has happened - but not every log will be transcripted by this method.
 
 ## Tools
 
@@ -379,7 +386,7 @@ And the output:
 `"The most downloaded model for the 'text-to-video' task is ByteDance/AnimateDiff-Lightning."`
 
 
-### Manage agent toolbox
+### Manage your agent's toolbox
 
 If you have already initialized an agent, it is inconvenient to reinitialize it from scratch with a tool you want to use. With Transformers, you can manage an agent's toolbox by adding or replacing a tool.
 
