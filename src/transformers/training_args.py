@@ -773,8 +773,11 @@ class TrainingArguments:
             that takes a boolean argument `compute_result`, which when passed `True`, will trigger the final global
             summary statistics from the batch-level summary statistics you've accumulated over the evaluation set.
 
-        eval_on_start(`bool`, *optional*, defaults to `False`):
+        eval_on_start (`bool`, *optional*, defaults to `False`):
             Whether to perform a evaluation step (sanity check) before the training to ensure the validation steps works correctly.
+
+        eval_use_gather_object (`bool`, *optional*, defaults to `False`):
+            Whether to run recursively gather object in a nested list/tuple/dictionary of objects from all devices.
     """
 
     framework = "pt"
@@ -1465,6 +1468,13 @@ class TrainingArguments:
         },
     )
 
+    eval_use_gather_object: Optional[bool] = field(
+        default=False,
+        metadata={
+            "help": "Whether to run recursively gather object in a nested list/tuple/dictionary of objects from all devices."
+        },
+    )
+
     def __post_init__(self):
         # Parse in args that could be `dict` sent in from the CLI as a string
         for field in _VALID_DICT_FIELDS:
@@ -1990,6 +2000,12 @@ class TrainingArguments:
                 "`--hub_model_id` instead and pass the full repo name to this argument (in this case "
                 f"{self.hub_model_id}).",
                 FutureWarning,
+            )
+
+        if self.eval_use_gather_object and not is_accelerate_available("0.30.0"):
+            raise ValueError(
+                "--eval_use_gather_object requires Accelerate to be version of `accelerate` < 0.30.0."
+                "This is not supported and we recommend you to update your version."
             )
 
     def __str__(self):
