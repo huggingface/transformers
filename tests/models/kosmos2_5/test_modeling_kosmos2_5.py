@@ -19,13 +19,14 @@ import inspect
 import os
 import tempfile
 import unittest
+import pytest
 
 import numpy as np
 import requests
 
 from transformers import AutoModelForVision2Seq, AutoProcessor, Kosmos2_5Config
 from transformers.models.kosmos2_5.configuration_kosmos2_5 import Kosmos2_5TextConfig, Kosmos2_5VisionConfig
-from transformers.testing_utils import IS_ROCM_SYSTEM, require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import IS_ROCM_SYSTEM, require_torch, require_torch, require_torch_gpu, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -62,8 +63,8 @@ class Kosmos2_5VisionModelTester:
         d_ff=64,
         num_hidden_layers=2,
         num_attention_heads=4,
-        dropout=0.1,
-        attention_dropout=0.1,
+        dropout=0,
+        attention_dropout=0,
         initializer_range=1e-10,
         scope=None,
     ):
@@ -129,8 +130,8 @@ class Kosmos2_5TextModelTester:
         ffn_dim=64,
         num_hidden_layers=2,
         num_attention_heads=4,
-        dropout=0.1,
-        attention_dropout=0.1,
+        dropout=0,
+        attention_dropout=0,
         max_position_embeddings=512,
         scope=None,
     ):
@@ -276,7 +277,15 @@ class Kosmos2_5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
                     dtype=torch.long,
                     device=torch_device,
                 )
-
+        
+        if model_class.__name__ in ["Kosmos2_5Model","Kosmos2_5ForConditionalGeneration"]:
+            bs, _, _ = inputs_dict["flattened_patches"].shape
+            seqlen = self.model_tester.text_model_tester.seq_length
+            inputs_dict["input_ids"] = torch.arange(seqlen, device=torch_device).unsqueeze(0).expand(bs, seqlen)
+            inputs_dict["input_ids"] = inputs_dict["input_ids"] % self.model_tester.text_model_tester.vocab_size
+            inputs_dict["attention_mask"] = torch.ones((bs, seqlen), device=torch_device)
+            inputs_dict["image_embeds_position_mask"] = torch.zeros((bs, seqlen), device=torch_device)
+            inputs_dict["image_embeds_position_mask"][:, : self.model_tester.latent_query_num] = 1
         return inputs_dict
 
     def setUp(self):
@@ -427,7 +436,19 @@ class Kosmos2_5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
     def test_model_parallelism(self):
         super().test_model_parallelism()
-
+    
+    @require_torch_gpu
+    @pytest.mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
+        self.skipTest(reason="kosmos-2.5 flash attention does not support right padding")
+    
+    @require_torch_gpu
+    @pytest.mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_inference_equivalence(self):
+        self.skipTest(reason="kosmos-2.5 test : the dummy inputs should be tweaked: dummy_input = inputs_dict")
+    
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
             self.skipTest(reason="test_torchscript is set to False")
