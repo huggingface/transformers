@@ -1942,8 +1942,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Update base model and current model config
         if hasattr(self.config, "text_config"):
             self.config.text_config.vocab_size = model_embeds.weight.shape[0]
-        # TODO: to be removed after v4.42, config.vocab_size is deprecated for models that have a config.text_config
-        self.config.vocab_size = model_embeds.weight.shape[0]
+        else:
+            self.config.vocab_size = model_embeds.weight.shape[0]
         self.vocab_size = model_embeds.weight.shape[0]
 
         # Tie weights again if needed
