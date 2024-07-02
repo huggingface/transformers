@@ -169,7 +169,6 @@ class Toolbox:
         self._tools = {tool.name: tool for tool in tools}
         if add_base_tools:
             self.add_base_tools()
-        self.add_tool(FinalAnswerTool())
         self._load_tools_if_needed()
 
     def add_base_tools(self, add_python_interpreter: bool = False):
@@ -338,6 +337,7 @@ class Agent:
                 self._toolbox.add_base_tools(add_python_interpreter=(self.__class__ == ReactJsonAgent))
         else:
             self._toolbox = Toolbox(tools, add_base_tools=add_base_tools)
+        self._toolbox.add_tool(FinalAnswerTool())
 
         self.system_prompt = format_prompt_with_tools(
             self._toolbox, self.system_prompt_template, self.tool_description_template
