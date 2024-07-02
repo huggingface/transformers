@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Image processor class for DPT."""
+"""Image processor class for ZoeDepth."""
 
 import math
 from typing import Dict, Iterable, List, Optional, Tuple, Union
@@ -20,7 +20,7 @@ from typing import Dict, Iterable, List, Optional, Tuple, Union
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import pad, resize, to_channel_dimension_format
+from ...image_transforms import PaddingMode, pad, to_channel_dimension_format
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -30,22 +30,20 @@ from ...image_utils import (
     get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
-    is_torch_available,
-    is_torch_tensor,
     make_list_of_images,
     to_numpy_array,
     valid_images,
-    validate_kwargs,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, is_vision_available, logging
+from ...utils import TensorType, is_torch_available, is_vision_available, logging, requires_backends
 
-
-if is_torch_available():
-    import torch
 
 if is_vision_available():
     import PIL
+
+if is_torch_available():
+    import torch
+    from torch import nn
 
 
 logger = logging.get_logger(__name__)
@@ -58,11 +56,8 @@ def get_resize_output_image_size(
     multiple: int,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ) -> Tuple[int, int]:
-    def constrain_to_multiple_of(val, multiple, min_val=0, max_val=None):
-        x = round(val / multiple) * multiple
-
-        if max_val is not None and x > max_val:
-            x = math.floor(val / multiple) * multiple
+    def constrain_to_multiple_of(val, multiple, min_val=0):
+        x = (np.round(val / multiple) * multiple).astype(int)
 
         if x < min_val:
             x = math.ceil(val / multiple) * multiple
@@ -93,23 +88,13 @@ def get_resize_output_image_size(
     return (new_height, new_width)
 
 
-class DPTImageProcessor(BaseImageProcessor):
+class ZoeDepthImageProcessor(BaseImageProcessor):
     r"""
-    Constructs a DPT image processor.
+    Constructs a ZoeDepth image processor.
 
     Args:
-        do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the image's (height, width) dimensions. Can be overidden by `do_resize` in `preprocess`.
-        size (`Dict[str, int]` *optional*, defaults to `{"height": 384, "width": 384}`):
-            Size of the image after resizing. Can be overidden by `size` in `preprocess`.
-        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
-            Defines the resampling filter to use if resizing the image. Can be overidden by `resample` in `preprocess`.
-        keep_aspect_ratio (`bool`, *optional*, defaults to `False`):
-            If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved. Can
-            be overidden by `keep_aspect_ratio` in `preprocess`.
-        ensure_multiple_of (`int`, *optional*, defaults to 1):
-            If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Can be overidden
-            by `ensure_multiple_of` in `preprocess`.
+        do_pad (`bool`, *optional*, defaults to `True`):
+            Whether to apply pad the input.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether to rescale the image by the specified scale `rescale_factor`. Can be overidden by `do_rescale` in
             `preprocess`.
@@ -124,47 +109,61 @@ class DPTImageProcessor(BaseImageProcessor):
         image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
-        do_pad (`bool`, *optional*, defaults to `False`):
-            Whether to apply center padding. This was introduced in the DINOv2 paper, which uses the model in
-            combination with DPT.
-        size_divisor (`int`, *optional*):
-            If `do_pad` is `True`, pads the image dimensions to be divisible by this value. This was introduced in the
-            DINOv2 paper, which uses the model in combination with DPT.
+        do_resize (`bool`, *optional*, defaults to `True`):
+            Whether to resize the image's (height, width) dimensions. Can be overidden by `do_resize` in `preprocess`.
+        size (`Dict[str, int]` *optional*, defaults to `{"height": 384, "width": 512}`):
+            Size of the image after resizing. Size of the image after resizing. If `keep_aspect_ratio` is `True`,
+            the image is resized by choosing the smaller of the height and width scaling factors and using it for both dimensions.
+            If `ensure_multiple_of` is also set, the image is further resized to a size that is a multiple of this value.
+            Can be overidden by `size` in `preprocess`.
+        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
+            Defines the resampling filter to use if resizing the image. Can be overidden by `resample` in `preprocess`.
+        keep_aspect_ratio (`bool`, *optional*, defaults to `True`):
+            If `True`, the image is resized by choosing the smaller of the height and width scaling factors and using it for
+            both dimensions. This ensures that the image is scaled down as little as possible while still fitting within the
+            desired output size. In case `ensure_multiple_of` is also set, the image is further resized to a size that is a
+            multiple of this value by flooring the height and width to the nearest multiple of this value.
+            Can be overidden by `keep_aspect_ratio` in `preprocess`.
+        ensure_multiple_of (`int`, *optional*, defaults to 32):
+            If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Works by flooring
+            the height and width to the nearest multiple of this value.
+
+            Works both with and without `keep_aspect_ratio` being set to `True`. Can be overidden by `ensure_multiple_of`
+            in `preprocess`.
     """
 
     model_input_names = ["pixel_values"]
 
     def __init__(
         self,
-        do_resize: bool = True,
-        size: Dict[str, int] = None,
-        resample: PILImageResampling = PILImageResampling.BICUBIC,
-        keep_aspect_ratio: bool = False,
-        ensure_multiple_of: int = 1,
+        do_pad: bool = True,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
-        do_pad: bool = False,
-        size_divisor: int = None,
+        do_resize: bool = True,
+        size: Dict[str, int] = None,
+        resample: PILImageResampling = PILImageResampling.BILINEAR,
+        keep_aspect_ratio: bool = True,
+        ensure_multiple_of: int = 32,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
-        size = size if size is not None else {"height": 384, "width": 384}
+        self.do_rescale = do_rescale
+        self.rescale_factor = rescale_factor
+        self.do_pad = do_pad
+        self.do_normalize = do_normalize
+        self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
+        self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
+        size = size if size is not None else {"height": 384, "width": 512}
         size = get_size_dict(size)
         self.do_resize = do_resize
         self.size = size
         self.keep_aspect_ratio = keep_aspect_ratio
         self.ensure_multiple_of = ensure_multiple_of
         self.resample = resample
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
-        self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
-        self.do_pad = do_pad
-        self.size_divisor = size_divisor
+
         self._valid_processor_keys = [
             "images",
             "do_resize",
@@ -178,7 +177,6 @@ class DPTImageProcessor(BaseImageProcessor):
             "image_mean",
             "image_std",
             "do_pad",
-            "size_divisor",
             "return_tensors",
             "data_format",
             "input_data_format",
@@ -190,10 +188,9 @@ class DPTImageProcessor(BaseImageProcessor):
         size: Dict[str, int],
         keep_aspect_ratio: bool = False,
         ensure_multiple_of: int = 1,
-        resample: PILImageResampling = PILImageResampling.BICUBIC,
+        resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
     ) -> np.ndarray:
         """
         Resize an image to target size `(size["height"], size["width"])`. If `keep_aspect_ratio` is `True`, the image
@@ -209,16 +206,19 @@ class DPTImageProcessor(BaseImageProcessor):
                 If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved.
             ensure_multiple_of (`int`, *optional*, defaults to 1):
                 The image is resized to a size that is a multiple of this value.
-            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
+            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
                 Defines the resampling filter to use if resizing the image. Otherwise, the image is resized to size
                 specified in `size`.
-            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
-                Resampling filter to use when resiizing the image.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
             input_data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the input image. If not provided, it will be inferred.
         """
+        if input_data_format is None:
+            input_data_format = infer_channel_dimension_format(image)
+
+        data_format = data_format if data_format is not None else input_data_format
+
         size = get_size_dict(size)
         if "height" not in size or "width" not in size:
             raise ValueError(f"The size dictionary must contain the keys 'height' and 'width'. Got {size.keys()}")
@@ -230,30 +230,52 @@ class DPTImageProcessor(BaseImageProcessor):
             multiple=ensure_multiple_of,
             input_data_format=input_data_format,
         )
-        return resize(
-            image,
-            size=output_size,
-            resample=resample,
-            data_format=data_format,
-            input_data_format=input_data_format,
-            **kwargs,
+
+        height, width = output_size
+
+        torch_image = torch.from_numpy(image).unsqueeze(0)
+        torch_image = torch_image.permute(0, 3, 1, 2) if input_data_format == "channels_last" else torch_image
+
+        # TODO support align_corners=True in image_transforms.resize
+        requires_backends(self, "torch")
+        resample_to_mode = {PILImageResampling.BILINEAR: "bilinear", PILImageResampling.BICUBIC: "bicubic"}
+        mode = resample_to_mode[resample]
+        resized_image = nn.functional.interpolate(
+            torch_image, (int(height), int(width)), mode=mode, align_corners=True
         )
+        resized_image = resized_image.squeeze().numpy()
+
+        resized_image = to_channel_dimension_format(
+            resized_image, data_format, input_channel_dim=ChannelDimension.FIRST
+        )
+
+        return resized_image
 
     def pad_image(
         self,
         image: np.array,
-        size_divisor: int,
+        mode: PaddingMode = PaddingMode.REFLECT,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ):
         """
-        Center pad an image to be a multiple of `multiple`.
+        Pad an image as done in the original ZoeDepth implementation.
+
+        Padding fixes the boundary artifacts in the output depth map.
+        Boundary artifacts are sometimes caused by the fact that the model is trained on NYU raw dataset
+        which has a black or white border around the image. This function pads the input image and crops
+        the prediction back to the original size / view.
 
         Args:
             image (`np.ndarray`):
                 Image to pad.
-            size_divisor (`int`):
-                The width and height of the image will be padded to a multiple of this number.
+            mode (`PaddingMode`):
+                The padding mode to use. Can be one of:
+                    - `"constant"`: pads with a constant value.
+                    - `"reflect"`: pads with the reflection of the vector mirrored on the first and last values of the
+                    vector along each axis.
+                    - `"replicate"`: pads with the replication of the last value on the edge of the array along each axis.
+                    - `"symmetric"`: pads with the reflection of the vector mirrored along the edge of the array.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -266,43 +288,36 @@ class DPTImageProcessor(BaseImageProcessor):
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
-
-        def _get_pad(size, size_divisor):
-            new_size = math.ceil(size / size_divisor) * size_divisor
-            pad_size = new_size - size
-            pad_size_left = pad_size // 2
-            pad_size_right = pad_size - pad_size_left
-            return pad_size_left, pad_size_right
-
-        if input_data_format is None:
-            input_data_format = infer_channel_dimension_format(image)
-
         height, width = get_image_size(image, input_data_format)
 
-        pad_size_left, pad_size_right = _get_pad(height, size_divisor)
-        pad_size_top, pad_size_bottom = _get_pad(width, size_divisor)
+        pad_height = int(np.sqrt(height / 2) * 3)
+        pad_width = int(np.sqrt(width / 2) * 3)
 
-        return pad(image, ((pad_size_left, pad_size_right), (pad_size_top, pad_size_bottom)), data_format=data_format)
+        return pad(
+            image,
+            padding=((pad_height, pad_height), (pad_width, pad_width)),
+            mode=mode,
+            data_format=data_format,
+            input_data_format=input_data_format,
+        )
 
     def preprocess(
         self,
         images: ImageInput,
-        do_resize: bool = None,
-        size: int = None,
-        keep_aspect_ratio: bool = None,
-        ensure_multiple_of: int = None,
-        resample: PILImageResampling = None,
+        do_pad: bool = None,
         do_rescale: bool = None,
         rescale_factor: float = None,
         do_normalize: bool = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
-        do_pad: bool = None,
-        size_divisor: int = None,
+        do_resize: bool = None,
+        size: int = None,
+        keep_aspect_ratio: bool = None,
+        ensure_multiple_of: int = None,
+        resample: PILImageResampling = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.
@@ -311,20 +326,8 @@ class DPTImageProcessor(BaseImageProcessor):
             images (`ImageInput`):
                 Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
-            do_resize (`bool`, *optional*, defaults to `self.do_resize`):
-                Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
-                Size of the image after reszing. If `keep_aspect_ratio` is `True`, the image is resized to the largest
-                possible size such that the aspect ratio is preserved. If `ensure_multiple_of` is set, the image is
-                resized to a size that is a multiple of this value.
-            keep_aspect_ratio (`bool`, *optional*, defaults to `self.keep_aspect_ratio`):
-                Whether to keep the aspect ratio of the image. If False, the image will be resized to (size, size). If
-                True, the image will be resized to keep the aspect ratio and the size will be the maximum possible.
-            ensure_multiple_of (`int`, *optional*, defaults to `self.ensure_multiple_of`):
-                Ensure that the image size is a multiple of this value.
-            resample (`int`, *optional*, defaults to `self.resample`):
-                Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`, Only
-                has an effect if `do_resize` is set to `True`.
+            do_pad (`bool`, *optional*, defaults to `self.do_pad`):
+                Whether to pad the input image.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
                 Whether to rescale the image values between [0 - 1].
             rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
@@ -335,6 +338,25 @@ class DPTImageProcessor(BaseImageProcessor):
                 Image mean.
             image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
                 Image standard deviation.
+            do_resize (`bool`, *optional*, defaults to `self.do_resize`):
+                Whether to resize the image.
+            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+                Size of the image after resizing. If `keep_aspect_ratio` is `True`, he image is resized by choosing the smaller of
+                the height and width scaling factors and using it for both dimensions. If `ensure_multiple_of` is also set,
+                the image is further resized to a size that is a multiple of this value.
+            keep_aspect_ratio (`bool`, *optional*, defaults to `self.keep_aspect_ratio`):
+                If `True` and `do_resize=True`, the image is resized by choosing the smaller of the height and width scaling factors and using it for
+                both dimensions. This ensures that the image is scaled down as little as possible while still fitting within the
+                desired output size. In case `ensure_multiple_of` is also set, the image is further resized to a size that is a
+                multiple of this value by flooring the height and width to the nearest multiple of this value.
+            ensure_multiple_of (`int`, *optional*, defaults to `self.ensure_multiple_of`):
+                If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Works by flooring
+                the height and width to the nearest multiple of this value.
+
+                Works both with and without `keep_aspect_ratio` being set to `True`. Can be overidden by `ensure_multiple_of` in `preprocess`.
+            resample (`int`, *optional*, defaults to `self.resample`):
+                Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`, Only
+                has an effect if `do_resize` is set to `True`.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
@@ -365,11 +387,8 @@ class DPTImageProcessor(BaseImageProcessor):
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
         do_pad = do_pad if do_pad is not None else self.do_pad
-        size_divisor = size_divisor if size_divisor is not None else self.size_divisor
 
         images = make_list_of_images(images)
-
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
         if not valid_images(images):
             raise ValueError(
@@ -382,8 +401,6 @@ class DPTImageProcessor(BaseImageProcessor):
             do_normalize=do_normalize,
             image_mean=image_mean,
             image_std=image_std,
-            do_pad=do_pad,
-            size_divisibility=size_divisor,
             do_resize=do_resize,
             size=size,
             resample=resample,
@@ -401,6 +418,15 @@ class DPTImageProcessor(BaseImageProcessor):
             # We assume that all images have the same channel dimension format.
             input_data_format = infer_channel_dimension_format(images[0])
 
+        if do_rescale:
+            images = [
+                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+                for image in images
+            ]
+
+        if do_pad:
+            images = [self.pad_image(image=image, input_data_format=input_data_format) for image in images]
+
         if do_resize:
             images = [
                 self.resize(
@@ -414,21 +440,9 @@ class DPTImageProcessor(BaseImageProcessor):
                 for image in images
             ]
 
-        if do_rescale:
-            images = [
-                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
-                for image in images
-            ]
-
         if do_normalize:
             images = [
                 self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
-                for image in images
-            ]
-
-        if do_pad:
-            images = [
-                self.pad_image(image=image, size_divisor=size_divisor, input_data_format=input_data_format)
                 for image in images
             ]
 
@@ -438,47 +452,3 @@ class DPTImageProcessor(BaseImageProcessor):
 
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
-
-    # Copied from transformers.models.beit.image_processing_beit.BeitImageProcessor.post_process_semantic_segmentation with Beit->DPT
-    def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple] = None):
-        """
-        Converts the output of [`DPTForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
-
-        Args:
-            outputs ([`DPTForSemanticSegmentation`]):
-                Raw outputs of the model.
-            target_sizes (`List[Tuple]` of length `batch_size`, *optional*):
-                List of tuples corresponding to the requested final size (height, width) of each prediction. If unset,
-                predictions will not be resized.
-
-        Returns:
-            semantic_segmentation: `List[torch.Tensor]` of length `batch_size`, where each item is a semantic
-            segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
-            specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
-        """
-        # TODO: add support for other frameworks
-        logits = outputs.logits
-
-        # Resize logits and compute semantic segmentation maps
-        if target_sizes is not None:
-            if len(logits) != len(target_sizes):
-                raise ValueError(
-                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
-                )
-
-            if is_torch_tensor(target_sizes):
-                target_sizes = target_sizes.numpy()
-
-            semantic_segmentation = []
-
-            for idx in range(len(logits)):
-                resized_logits = torch.nn.functional.interpolate(
-                    logits[idx].unsqueeze(dim=0), size=target_sizes[idx], mode="bilinear", align_corners=False
-                )
-                semantic_map = resized_logits[0].argmax(dim=0)
-                semantic_segmentation.append(semantic_map)
-        else:
-            semantic_segmentation = logits.argmax(dim=1)
-            semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
-
-        return semantic_segmentation

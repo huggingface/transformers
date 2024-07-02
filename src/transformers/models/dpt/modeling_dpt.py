@@ -1021,7 +1021,7 @@ class DPTNeck(nn.Module):
 
 class DPTDepthEstimationHead(nn.Module):
     """
-    Output head head consisting of 3 convolutional layers. It progressively halves the feature dimension and upsamples
+    Output head consisting of 3 convolutional layers. It progressively halves the feature dimension and upsamples
     the predictions to the input resolution after the first convolutional layer (details can be found in the paper's
     supplementary material).
     """
