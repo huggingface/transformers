@@ -178,7 +178,10 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
         patch_positions = pixel_values["patch_positions"]
         num_patches = pixel_values["num_patches"]
         anchor_max = pixel_values["anchor_max"]
-
+        
+        if not isinstance(text, list):
+            text = [text]
+        
         texts = [
             self.generate_text_with_placeholders(txt, patch_pos, anch_max, n_patches, add_textual_crop_indicator)
             for txt, patch_pos, anch_max, n_patches in zip(text, patch_positions, anchor_max, num_patches)

@@ -83,13 +83,13 @@ def convert_state_dict_to_hf(state_dict):
 
 
 def convert_mplugdocowl_llama_to_hf(
-    text_model_id, output_hub_path, vision_model_id, old_state_dict_id, pretrained=True
+    text_model_id, output_hub_path, vision_model_id, old_state_dict_id, pretrained=False
 ):
     if not pretrained:
         torch.set_default_dtype(torch.float16)
         text_config = AutoConfig.from_pretrained(text_model_id)
 
-        tokenizer = AutoTokenizer.from_pretrained(text_model_id)
+        tokenizer = AutoTokenizer.from_pretrained(text_model_id, padding_side='left')
         tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False), special_tokens=True)
         tokenizer.add_special_tokens({"pad_token": "<pad>"})
 
@@ -153,24 +153,24 @@ def convert_mplugdocowl_llama_to_hf(
     ]
 
     image1 = Image.open("/raid/dana/test_image.tif")
-    image2 = Image.open("/raid/dana/test_image.png")
-    inputs = processor(prompts, images=[image1, image2], return_tensors="pt", padding=True)
+    #image2 = Image.open("/raid/dana/test_image.png")
+    #inputs = processor(prompts, images=[image1, image2], return_tensors="pt", padding=True)
 
-    output = model.generate(**inputs, max_new_tokens=20)
-    (processor.batch_decode(output, skip_special_tokens=True),)
+    #output = model.generate(**inputs, max_new_tokens=20)
+    #(processor.batch_decode(output, skip_special_tokens=True),)
     # image = Image.open("/raid/dana/test_image.png")
     # image = Image.open("/raid/dana/examples_Rebecca_(1939_poster)_Small.jpeg")
     # image = Image.open('/raid/dana/fflw0023_1.png')
-    # query = "<image>Recognize text in the image."
+    query = "<image>Recognize text in the image."
     # query = "<image>What's the value of the Very well bar in the 65+ age group? Answer the question with detailed explanation."
     # query = "<image>Parse texts in the image."
     # query = "<image>What is the name of the movie in the poster? Provide detailed explanation."
 
     # image = Image.open('/raid/dana/rnbx0223_193.png')
     # query = '<image>What is the Compound Annual Growth Rate (CAGR) for total assets?'
-    # output = processor(images=image, text=query)
-    # tokens = model.generate(output["input_ids"], pixel_values=output["pixel_values"], max_new_tokens=512)
-    # processor.decode(tokens[0, output["input_ids"].shape[1]:], skip_special_tokens = True)
+    output = processor(images=image1, text=query)
+    tokens = model.generate(output["input_ids"], pixel_values=output["pixel_values"], max_new_tokens=512)
+    processor.decode(tokens[0, output["input_ids"].shape[1]:], skip_special_tokens = True)
     # device = torch.device("cuda:0")
     # output.to(device)
     # model.to(device)
