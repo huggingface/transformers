@@ -179,17 +179,17 @@ class CircleCIJob:
             command = f'echo {tests} | tr " " "\\n" >> tests.txt'
             steps.append({"run": {"name": "Get tests", "command": command}})
 
-            command = 'TESTS=$(circleci tests split tests.txt) && echo $TESTS > splitted_tests.txt'
+            command = 'TESTS=$(circleci tests split tests.txt) && echo $TESTS > split_tests.txt'
             steps.append({"run": {"name": "Split tests", "command": command}})
 
             steps.append({"store_artifacts": {"path": "tests.txt"}})
-            steps.append({"store_artifacts": {"path": "splitted_tests.txt"}})
+            steps.append({"store_artifacts": {"path": "split_tests.txt"}})
 
             test_command = ""
             if self.command_timeout:
                 test_command = f"timeout {self.command_timeout} "
             test_command += f"python3 -m pytest -rsfE -p no:warnings --tb=short  -o junit_family=xunit1 --junitxml=test-results/junit.xml -n {self.pytest_num_workers} " + " ".join(pytest_flags)
-            test_command += " $(cat splitted_tests.txt)"
+            test_command += " $(cat split_tests.txt)"
         if self.marker is not None:
             test_command += f" -m {self.marker}"
 
