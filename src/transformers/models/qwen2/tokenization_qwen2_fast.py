@@ -31,7 +31,7 @@ VOCAB_FILES_NAMES = {
 }
 
 
-MAX_MODEL_INPUT_SIZES = {"qwen/qwen-tokenizer": 32768}
+MAX_MODEL_INPUT_SIZES = {"Qwen/Qwen1.5-7B": 32768}
 
 
 class Qwen2TokenizerFast(PreTrainedTokenizerFast):
@@ -45,7 +45,7 @@ class Qwen2TokenizerFast(PreTrainedTokenizerFast):
     ```python
     >>> from transformers import Qwen2TokenizerFast
 
-    >>> tokenizer = Qwen2TokenizerFast.from_pretrained("Qwen/Qwen-tokenizer")
+    >>> tokenizer = Qwen2TokenizerFast.from_pretrained("Qwen/Qwen1.5-7B")
     >>> tokenizer("Hello world")["input_ids"]
     [9707, 1879]
 

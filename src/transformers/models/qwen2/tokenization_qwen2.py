@@ -34,7 +34,7 @@ VOCAB_FILES_NAMES = {
 }
 
 
-MAX_MODEL_INPUT_SIZES = {"qwen/qwen-tokenizer": 32768}
+MAX_MODEL_INPUT_SIZES = {"Qwen/Qwen1.5-7B": 32768}
 
 PRETOKENIZE_REGEX = r"""(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+"""
 
@@ -90,7 +90,7 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
     ```python
     >>> from transformers import Qwen2Tokenizer
 
-    >>> tokenizer = Qwen2Tokenizer.from_pretrained("Qwen/Qwen-tokenizer")
+    >>> tokenizer = Qwen2Tokenizer.from_pretrained("Qwen/Qwen1.5-7B")
     >>> tokenizer("Hello world")["input_ids"]
     [9707, 1879]
 
