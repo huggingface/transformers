@@ -5,15 +5,21 @@ from typing import Dict
 from ..utils import add_end_docstrings, is_tf_available, is_torch_available
 from .base import Pipeline, build_pipeline_init_args
 
+try:
+    if is_torch_available():
+        from ..models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
+        from .pt_utils import KeyDataset
+except ImportError:
+    MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = None
+    KeyDataset = None
 
-if is_torch_available():
-    from ..models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
-    from .pt_utils import KeyDataset
+try:
+    if is_tf_available():
+        import tensorflow as tf
+        from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
+except ImportError:
+    TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = None
 
-if is_tf_available():
-    import tensorflow as tf
-
-    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 
 
 class ReturnType(enum.Enum):
