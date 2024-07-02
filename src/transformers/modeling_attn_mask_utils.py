@@ -176,10 +176,20 @@ class AttentionMaskConverter:
         """
         Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
         """
-        bsz, src_len = mask.size()
+        bsz, *_, src_len = mask.size()
         tgt_len = tgt_len if tgt_len is not None else src_len
 
-        expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
+        if mask.ndim == 2:
+            # 2D mask with `[bsz, src_seq_len]` -> `[bsz, 1, tgt_seq_len, src_seq_len]`
+            expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
+        elif mask.ndim == 3:
+            # 3D mask with `[bsz, tgt_seq_len, src_seq_len]` -> `[bsz, 1, tgt_seq_len, src_seq_len]`
+            expanded_mask = mask.unsqueeze(1).to(dtype)
+        elif mask.ndim == 4:
+            # alread 4D mask with `[bsz, 1, tgt_seq_len, src_seq_len]`
+            expanded_mask = mask.to(dtype)
+        else:
+            raise ValueError(f"unsupport mask shape {mask.shape}")
 
         inverted_mask = 1.0 - expanded_mask
 
@@ -436,7 +446,7 @@ def _prepare_4d_attention_mask_for_sdpa(mask: torch.Tensor, dtype: torch.dtype, 
         tgt_len (`int`):
             The target length or query length the created mask shall have.
     """
-    _, key_value_length = mask.shape
+    *_, key_value_length = mask.shape
     tgt_len = tgt_len if tgt_len is not None else key_value_length
 
     is_tracing = (
