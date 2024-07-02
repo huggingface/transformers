@@ -662,10 +662,157 @@ class LlamaSdpaAttention(LlamaAttention):
         return attn_output, None, past_key_value
 
 
+class LlamaInfiniAttention(LlamaAttention):
+    def __init__(
+        self,
+        config: LlamaConfig,
+        layer_idx: Optional[int] = None,
+    ):
+        super().__init__(config, layer_idx)
+
+        # F.sigmoid(Tensor(-6.)) = 0.002 ; so at start all heads will use current ctx no history
+        # init values not specified in paper
+        self.gate = nn.Parameter(torch.full((1, self.num_heads, 1, 1), -6.0))
+        self.segment_size = config.segment_size
+        self.delta_update = config.delta_update
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Cache] = None,
+        output_attentions: bool = False,
+        use_cache: bool = False,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        M_s = None
+        Z_s = None
+
+        bsz, seq_len, hidden_dim = hidden_states.size()
+        segments = torch.tensor_split(
+            hidden_states,
+            list(range(self.segment_size, seq_len, self.segment_size)),
+            dim=1,
+        )
+
+        output = torch.empty(bsz, seq_len, hidden_dim, device=hidden_states.device, dtype=hidden_states.dtype)
+
+        for idx, segment in enumerate(segments):
+            bsz, segment_len, _ = segment.size()
+
+            query_states = self.q_proj(segment)
+            key_states = self.k_proj(segment)
+            value_states = self.v_proj(segment)
+
+            query_states = query_states.view(bsz, segment_len, self.num_heads, self.head_dim).transpose(1, 2)
+            key_states = key_states.view(bsz, segment_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+            value_states = value_states.view(bsz, segment_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+
+            A_mem = self._retrieve_from_memory(query_states, M_s, Z_s)
+
+            M_s, Z_s = self._update_memory(M_s=M_s, Z_s=Z_s, K=key_states, V=value_states, delta=self.delta_update)
+
+            # Rotary embeddings
+            cos, sin = self.rotary_emb(value_states, position_ids)
+
+            query_states, key_states = apply_rotary_pos_emb(
+                query_states,
+                key_states,
+                cos[:, :segment_len, :],
+                sin[:, :segment_len, :],
+                None,
+            )
+
+            # TODO: KV cache for infini attention
+            # if past_key_value is not None:
+            #     # sin and cos are specific to RoPE models; cache_position needed for the static cache
+            #     cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+            #     key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+            # GQA
+            key_states = repeat_kv(key_states, self.num_key_value_groups)
+            value_states = repeat_kv(value_states, self.num_key_value_groups)
+
+            # mask = attention_mask
+            # if attention_mask is not None:
+            #     mask_size = min(self.segment_size, q_len)
+            #     mask = mask[:, :, : mask_size, :mask_size]
+
+            # ^ commenting this
+            # TODO: fix mask, for just using is_casual=True in FA for now
+            mask = None
+
+            attn_output = torch.nn.functional.scaled_dot_product_attention(
+                query_states,
+                key_states,
+                value_states,
+                attn_mask=mask,
+                is_causal=True,
+                dropout_p=self.attention_dropout if self.training else 0.0,
+            )
+
+            # eqn... 6
+            gate = F.sigmoid(self.gate)
+
+            A_out = gate * A_mem + (1 - gate) * attn_output
+
+            A_out = A_out.transpose(1, 2).contiguous()
+            A_out = A_out.view(bsz, segment_len, self.hidden_size)
+
+            segment_output = self.o_proj(A_out)
+            sidx = self.segment_size*idx
+            output[:, sidx : sidx + segment_len, :] = segment_output
+
+        return output, None, None
+
+    def _retrieve_from_memory(self, Q: torch.Tensor, M_s: torch.Tensor, Z_s: torch.Tensor) -> torch.Tensor:
+        # eq... 3
+        if M_s is None:
+            return torch.zeros_like(Q, device=Q.device, dtype=Q.dtype)
+        
+        # for GQA we need
+        if Q.shape[1]!=M_s.shape[1]:
+            kv_per_head = Q.shape[1]//M_s.shape[1]
+            M_s = torch.repeat_interleave(M_s,kv_per_head,dim=1)
+            Z_s = torch.repeat_interleave(Z_s,kv_per_head,dim=1)
+        
+        Q_sig = F.elu(Q) + 1
+        M_s = torch.matmul(Q_sig, M_s)
+        Z_s = torch.matmul(Q_sig, Z_s.transpose(-2, -1))
+        A_mem = M_s / Z_s
+        return A_mem
+
+    def _update_memory(
+        self, M_s: torch.Tensor, Z_s: torch.Tensor, K: torch.Tensor, V: torch.Tensor, delta: bool = True
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        # ... eq 4 & 5
+        K_sig = F.elu(K) + 1
+
+        # for 1st segmemt states are 0
+        if M_s is None:
+            M_s = torch.matmul(K_sig.transpose(-2, -1), V)
+            Z_s = K_sig.sum(dim=2, keepdim=True)
+            return M_s, Z_s
+
+        if delta:
+            # eqn...5 last part
+            V_mem = torch.matmul(K_sig, M_s) / (torch.matmul(K_sig, Z_s.transpose(-2,-1)))
+            V_d = V - V_mem
+        else:
+            V_d = V
+        # state update as per eq 4 & 5
+        M_s = M_s + torch.matmul(K_sig.transpose(-2, -1), V_d)
+        Z_s = Z_s + K_sig.sum(dim=2, keepdim=True)
+        return M_s, Z_s
+
+
 LLAMA_ATTENTION_CLASSES = {
-    "eager": LlamaAttention,
+    "eager": LlamaInfiniAttention,
     "flash_attention_2": LlamaFlashAttention2,
     "sdpa": LlamaSdpaAttention,
+    # "infini":LlamaInfiniAttention, Only 3 modes are supported Overring eager for testing
 }
 
 
