@@ -88,3 +88,16 @@ If you're interested in submitting a resource to be included here, please feel f
 [[autodoc]] Blip2ForConditionalGeneration
     - forward
     - generate
+
+## Blip2ForImageTextRetrieval
+
+[[autodoc]] Blip2ForImageTextRetrieval
+    - forward
+
+## Blip2TextModelWithProjection
+
+[[autodoc]] Blip2TextModelWithProjection
+
+## Blip2VisionModelWithProjection
+
+[[autodoc]] Blip2VisionModelWithProjection
