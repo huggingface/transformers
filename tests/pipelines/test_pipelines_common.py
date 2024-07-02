@@ -840,9 +840,7 @@ class CustomPipelineTest(unittest.TestCase):
     def test_chunk_pipeline_batching_single_file(self):
         # Make sure we have cached the pipeline.
         pipe = pipeline(model="hf-internal-testing/tiny-random-Wav2Vec2ForCTC")
-        ds = datasets.load_dataset(
-            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
-        ).sort("id")
+        ds = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
         audio = ds[40]["audio"]["array"]
 
         pipe = pipeline(model="hf-internal-testing/tiny-random-Wav2Vec2ForCTC")

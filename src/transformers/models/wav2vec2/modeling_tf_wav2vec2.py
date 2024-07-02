@@ -1542,7 +1542,7 @@ class TFWav2Vec2Model(TFWav2Vec2PreTrainedModel):
         ...     return batch
 
 
-        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True)
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.map(map_to_array)
 
         >>> input_values = processor(ds["speech"][0], return_tensors="tf").input_values  # Batch size 1
@@ -1654,7 +1654,7 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
         ...     return batch
 
 
-        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True)
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.map(map_to_array)
 
         >>> input_values = processor(ds["speech"][0], return_tensors="tf").input_values  # Batch size 1
