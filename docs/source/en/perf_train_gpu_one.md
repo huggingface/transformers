@@ -41,21 +41,22 @@ hyperparameter tuning, you should determine which batch size yields the best res
 
 The methods and tools covered in this guide can be classified based on the effect they have on the training process:
 
-| Method/tool                                                | Improves training speed | Optimizes memory utilization |
-|:-----------------------------------------------------------|:------------------------|:-----------------------------|
-| [Batch size choice](#batch-size-choice)                    | Yes                     | Yes                          |
-| [Gradient accumulation](#gradient-accumulation)            | No                      | Yes                          |
-| [Gradient checkpointing](#gradient-checkpointing)          | No                      | Yes                          |
-| [Mixed precision training](#mixed-precision-training)      | Yes                     | (No)                         |
-| [Optimizer choice](#optimizer-choice)                      | Yes                     | Yes                          |
-| [Data preloading](#data-preloading)                        | Yes                     | No                           |
-| [DeepSpeed Zero](#deepspeed-zero)                          | No                      | Yes                          |
-| [torch.compile](#using-torchcompile)                       | Yes                     | No                           |
-| [Parameter-Efficient Fine Tuning (PEFT)](#using--peft)            | No                      | Yes                          |
+| Method/tool                                                                                                                                             | Improves training speed | Optimizes memory utilization |
+|:--------------------------------------------------------------------------------------------------------------------------------------------------------|:------------------------|:-----------------------------|
+| [Batch size choice](#batch-size-choice)                                                                                                                 | Yes                     | Yes                          |
+| [Gradient accumulation](#gradient-accumulation)                                                                                                         | No                      | Yes                          |
+| [Gradient checkpointing](#gradient-checkpointing)                                                                                                       | No                      | Yes                          |
+| [Mixed precision training](#mixed-precision-training)                                                                                                   | Yes                     | Maybe*                       |
+| [torch_empty_cache_steps](https://huggingface.co/docs/transformers/main/en/main_classes/trainer#transformers.TrainingArguments.torch_empty_cache_steps) | No                      | Yes                          |
+| [Optimizer choice](#optimizer-choice)                                                                                                                   | Yes                     | Yes                          |
+| [Data preloading](#data-preloading)                                                                                                                     | Yes                     | No                           |
+| [DeepSpeed Zero](#deepspeed-zero)                                                                                                                       | No                      | Yes                          |
+| [torch.compile](#using-torchcompile)                                                                                                                    | Yes                     | No                           |
+| [Parameter-Efficient Fine Tuning (PEFT)](#using--peft)                                                                                                  | No                      | Yes                          |
  
 <Tip>
 
-Note: when using mixed precision with a small model and a large batch size, there will be some memory savings but with a 
+*Note: when using mixed precision with a small model and a large batch size, there will be some memory savings but with a 
 large model and a small batch size, the memory use will be larger.
 
 </Tip>
