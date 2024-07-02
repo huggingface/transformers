@@ -892,6 +892,7 @@ class Pix2StructTextAttention(nn.Module):
 
 # Copied from transformers.models.t5.modeling_t5.T5LayerSelfAttention with T5LayerNorm->Pix2StructLayerNorm,T5Attention->Pix2StructTextAttention,self.SelfAttention->self.attention,config.d_model->config.hidden_size
 class Pix2StructTextLayerSelfAttention(nn.Module):
+    # Ignore copy
     def __init__(self, config, has_relative_attention_bias=False):
         super().__init__()
         self.attention = Pix2StructTextAttention(config, has_relative_attention_bias=has_relative_attention_bias)
@@ -925,6 +926,7 @@ class Pix2StructTextLayerSelfAttention(nn.Module):
 
 # Copied from transformers.models.t5.modeling_t5.T5LayerCrossAttention with T5LayerNorm->Pix2StructLayerNorm,T5Attention->Pix2StructTextAttention,self.EncDecAttention->self.attention,config.d_model->config.hidden_size
 class Pix2StructTextLayerCrossAttention(nn.Module):
+    # Ignore copy
     def __init__(self, config):
         super().__init__()
         self.attention = Pix2StructTextAttention(config, has_relative_attention_bias=False)

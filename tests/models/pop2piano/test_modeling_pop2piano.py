@@ -26,7 +26,6 @@ from transformers.feature_extraction_utils import BatchFeature
 from transformers.testing_utils import (
     require_essentia,
     require_librosa,
-    require_onnx,
     require_scipy,
     require_torch,
     slow,
@@ -610,7 +609,7 @@ class Pop2PianoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         model = Pop2PianoForConditionalGeneration.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
-    @require_onnx
+    @unittest.skip("ONNX support deprecated")
     def test_export_to_onnx(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         model = Pop2PianoForConditionalGeneration(config_and_inputs[0]).to(torch_device)
@@ -620,7 +619,7 @@ class Pop2PianoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 (config_and_inputs[1], config_and_inputs[3], config_and_inputs[2]),
                 f"{tmpdirname}/Pop2Piano_test.onnx",
                 export_params=True,
-                opset_version=9,
+                opset_version=14,
                 input_names=["input_ids", "decoder_input_ids"],
             )
 

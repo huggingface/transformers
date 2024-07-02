@@ -25,6 +25,12 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...modeling_attn_mask_utils import (
+    _prepare_4d_attention_mask,
+    _prepare_4d_attention_mask_for_sdpa,
+    _prepare_4d_causal_attention_mask,
+    _prepare_4d_causal_attention_mask_for_sdpa,
+)
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -317,6 +323,41 @@ class MT5Attention(nn.Module):
         values = values.permute([2, 0, 1]).unsqueeze(0)  # shape (1, num_heads, query_length, key_length)
         return values
 
+    def _shape(self, states, batch_size):
+        """projection"""
+        return states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
+
+    def _unshape(self, states, batch_size):
+        """reshape"""
+        return states.transpose(1, 2).contiguous().view(batch_size, -1, self.inner_dim)
+
+    def _project(self, hidden_states, proj_layer, key_value_states, past_key_value, batch_size):
+        """projects hidden states correctly to key/query states"""
+        if key_value_states is None:
+            # self-attn
+            # (batch_size, n_heads, seq_length, dim_per_head)
+            hidden_states = self._shape(proj_layer(hidden_states), batch_size)
+        elif past_key_value is None:
+            # cross-attn
+            # (batch_size, n_heads, seq_length, dim_per_head)
+            hidden_states = self._shape(proj_layer(key_value_states), batch_size)
+
+        if past_key_value is not None:
+            if key_value_states is None:
+                # self-attn
+                # (batch_size, n_heads, key_length, dim_per_head)
+                hidden_states = torch.cat([past_key_value, hidden_states], dim=2)
+            elif past_key_value.shape[2] != key_value_states.shape[1]:
+                # checking that the `sequence_length` of the `past_key_value` is the same as
+                # the provided `key_value_states` to support prefix tuning
+                # cross-attn
+                # (batch_size, n_heads, seq_length, dim_per_head)
+                hidden_states = self._shape(proj_layer(key_value_states), batch_size)
+            else:
+                # cross-attn
+                hidden_states = past_key_value
+        return hidden_states
+
     def forward(
         self,
         hidden_states,
@@ -348,50 +389,25 @@ class MT5Attention(nn.Module):
 
         key_length = real_seq_length if key_value_states is None else key_value_states.shape[1]
 
-        def shape(states):
-            """projection"""
-            return states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
-
-        def unshape(states):
-            """reshape"""
-            return states.transpose(1, 2).contiguous().view(batch_size, -1, self.inner_dim)
-
-        def project(hidden_states, proj_layer, key_value_states, past_key_value):
-            """projects hidden states correctly to key/query states"""
-            if key_value_states is None:
-                # self-attn
-                # (batch_size, n_heads, seq_length, dim_per_head)
-                hidden_states = shape(proj_layer(hidden_states))
-            elif past_key_value is None:
-                # cross-attn
-                # (batch_size, n_heads, seq_length, dim_per_head)
-                hidden_states = shape(proj_layer(key_value_states))
-
-            if past_key_value is not None:
-                if key_value_states is None:
-                    # self-attn
-                    # (batch_size, n_heads, key_length, dim_per_head)
-                    hidden_states = torch.cat([past_key_value, hidden_states], dim=2)
-                elif past_key_value.shape[2] != key_value_states.shape[1]:
-                    # checking that the `sequence_length` of the `past_key_value` is the same as
-                    # the provided `key_value_states` to support prefix tuning
-                    # cross-attn
-                    # (batch_size, n_heads, seq_length, dim_per_head)
-                    hidden_states = shape(proj_layer(key_value_states))
-                else:
-                    # cross-attn
-                    hidden_states = past_key_value
-            return hidden_states
-
         # get query states
-        query_states = shape(self.q(hidden_states))  # (batch_size, n_heads, seq_length, dim_per_head)
+        query_states = self._shape(
+            self.q(hidden_states), batch_size
+        )  # (batch_size, n_heads, seq_length, dim_per_head)
 
         # get key/value states
-        key_states = project(
-            hidden_states, self.k, key_value_states, past_key_value[0] if past_key_value is not None else None
+        key_states = self._project(
+            hidden_states,
+            self.k,
+            key_value_states,
+            past_key_value[0] if past_key_value is not None else None,
+            batch_size,
         )
-        value_states = project(
-            hidden_states, self.v, key_value_states, past_key_value[1] if past_key_value is not None else None
+        value_states = self._project(
+            hidden_states,
+            self.v,
+            key_value_states,
+            past_key_value[1] if past_key_value is not None else None,
+            batch_size,
         )
 
         # compute scores
@@ -436,7 +452,9 @@ class MT5Attention(nn.Module):
         if layer_head_mask is not None:
             attn_weights = attn_weights * layer_head_mask
 
-        attn_output = unshape(torch.matmul(attn_weights, value_states))  # (batch_size, seq_length, dim)
+        attn_output = self._unshape(
+            torch.matmul(attn_weights, value_states), batch_size
+        )  # (batch_size, seq_length, dim)
         attn_output = self.o(attn_output)
 
         present_key_value_state = (key_states, value_states) if (self.is_decoder and use_cache) else None
@@ -447,11 +465,141 @@ class MT5Attention(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.t5.modeling_t5.T5SdpaAttention with T5->MT5
+class MT5SdpaAttention(MT5Attention):
+    def forward(
+        self,
+        hidden_states,
+        mask=None,
+        key_value_states=None,
+        position_bias=None,
+        past_key_value=None,
+        layer_head_mask=None,
+        query_length=None,
+        use_cache=False,
+        output_attentions=False,
+    ):
+        """
+        Self-attention (if key_value_states is None) or attention over source sentence (provided by key_value_states).
+        """
+        if output_attentions or layer_head_mask is not None:
+            logger.warning_once(
+                "MT5Model is using MT5SdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True` or `layer_head_mask` not None. Falling back to the manual attention"
+                ' implementation, but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+            )
+            return super().forward(
+                hidden_states,
+                mask=mask,
+                key_value_states=key_value_states,
+                position_bias=position_bias,
+                past_key_value=past_key_value,
+                layer_head_mask=layer_head_mask,
+                query_length=query_length,
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+            )
+        # Input is (batch_size, seq_length, dim)
+        # Mask is (batch_size, key_length) (non-causal) or (batch_size, key_length, key_length)
+        # past_key_value[0] is (batch_size, n_heads, q_len - 1, dim_per_head)
+        batch_size, seq_length = hidden_states.shape[:2]
+
+        real_seq_length = seq_length
+
+        if past_key_value is not None:
+            if len(past_key_value) != 2:
+                raise ValueError(
+                    f"past_key_value should have 2 past states: keys and values. Got { len(past_key_value)} past states"
+                )
+            real_seq_length += past_key_value[0].shape[2] if query_length is None else query_length
+
+        key_length = real_seq_length if key_value_states is None else key_value_states.shape[1]
+
+        # get query states
+        query_states = self._shape(
+            self.q(hidden_states), batch_size
+        )  # (batch_size, n_heads, seq_length, dim_per_head)
+
+        # get key/value states
+        key_states = self._project(
+            hidden_states,
+            self.k,
+            key_value_states,
+            past_key_value[0] if past_key_value is not None else None,
+            batch_size,
+        )
+        value_states = self._project(
+            hidden_states,
+            self.v,
+            key_value_states,
+            past_key_value[1] if past_key_value is not None else None,
+            batch_size,
+        )
+
+        if position_bias is None:
+            if not self.has_relative_attention_bias:
+                position_bias = torch.zeros(
+                    (1, self.n_heads, real_seq_length, key_length),
+                    device=query_states.device,
+                    dtype=query_states.dtype,
+                )
+                if self.gradient_checkpointing and self.training:
+                    position_bias.requires_grad = True
+            else:
+                position_bias = self.compute_bias(real_seq_length, key_length, device=query_states.device)
+
+            # if key and values are already calculated
+            # we want only the last query position bias
+            if past_key_value is not None:
+                position_bias = position_bias[:, :, -hidden_states.size(1) :, :]
+
+            if mask is not None:
+                position_bias = position_bias + mask  # (batch_size, n_heads, seq_length, key_length)
+
+        if self.pruned_heads:
+            mask = torch.ones(position_bias.shape[1])
+            mask[list(self.pruned_heads)] = 0
+            position_bias_masked = position_bias[:, mask.bool()]
+        else:
+            position_bias_masked = position_bias
+
+        # spda kernels require tensors to have stride=1 in the last dimension
+        # .contiguous() does not behave correctly for tensors with singleton dimensions
+        # the following is a workaround as suggested in https://github.com/pytorch/pytorch/issues/127523
+        if position_bias_masked.stride(-1) != 1:
+            position_bias_masked = torch.clone(position_bias_masked, memory_format=torch.contiguous_format)
+
+        attn_output = self._unshape(
+            torch.nn.functional.scaled_dot_product_attention(
+                query_states,
+                key_states,
+                value_states,
+                attn_mask=position_bias_masked,
+                dropout_p=self.dropout if self.training else 0.0,
+                scale=1.0,
+            ),
+            batch_size,
+        )
+        attn_output = self.o(attn_output)
+
+        present_key_value_state = (key_states, value_states) if (self.is_decoder and use_cache) else None
+        outputs = (attn_output,) + (present_key_value_state,) + (position_bias,)
+
+        return outputs
+
+
+MT5_ATTENTION_CLASSES = {
+    "eager": MT5Attention,
+    "sdpa": MT5SdpaAttention,
+}
+
+
 # Copied from transformers.models.t5.modeling_t5.T5LayerSelfAttention with T5->MT5
 class MT5LayerSelfAttention(nn.Module):
     def __init__(self, config, has_relative_attention_bias=False):
         super().__init__()
-        self.SelfAttention = MT5Attention(config, has_relative_attention_bias=has_relative_attention_bias)
+        self.SelfAttention = MT5_ATTENTION_CLASSES[config._attn_implementation](
+            config, has_relative_attention_bias=has_relative_attention_bias
+        )
         self.layer_norm = MT5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
@@ -484,7 +632,9 @@ class MT5LayerSelfAttention(nn.Module):
 class MT5LayerCrossAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.EncDecAttention = MT5Attention(config, has_relative_attention_bias=False)
+        self.EncDecAttention = MT5_ATTENTION_CLASSES[config._attn_implementation](
+            config, has_relative_attention_bias=False
+        )
         self.layer_norm = MT5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
@@ -781,6 +931,7 @@ class MT5PreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["MT5Block"]
     _keep_in_fp32_modules = ["wo"]
+    _supports_sdpa = True
 
     @property
     def dummy_inputs(self):
@@ -895,6 +1046,7 @@ class MT5Stack(MT5PreTrainedModel):
         )
         self.final_layer_norm = MT5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
+        self._use_sdpa = config._attn_implementation == "sdpa"
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -999,9 +1151,7 @@ class MT5Stack(MT5PreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         batch_size, seq_length = input_shape
-
-        # required mask seq length can be calculated via length of past
-        mask_seq_length = past_key_values[0][0].shape[2] + seq_length if past_key_values is not None else seq_length
+        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         if use_cache is True:
             if not self.is_decoder:
@@ -1012,11 +1162,27 @@ class MT5Stack(MT5PreTrainedModel):
             past_key_values = [None] * len(self.block)
 
         if attention_mask is None:
-            attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
+            attention_mask = torch.ones(batch_size, past_key_values_length + seq_length, device=inputs_embeds.device)
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape)
+        if self._use_sdpa and head_mask is None and not output_attentions:
+            extended_attention_mask = (
+                _prepare_4d_causal_attention_mask_for_sdpa(
+                    attention_mask,
+                    input_shape,
+                    inputs_embeds,
+                    past_key_values_length,
+                )
+                if self.is_decoder
+                else _prepare_4d_attention_mask_for_sdpa(attention_mask, inputs_embeds.dtype)
+            )
+        else:
+            extended_attention_mask = (
+                _prepare_4d_causal_attention_mask(attention_mask, input_shape, inputs_embeds, past_key_values_length)
+                if self.is_decoder
+                else _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
+            )
 
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
@@ -1027,7 +1193,18 @@ class MT5Stack(MT5PreTrainedModel):
                 encoder_attention_mask = torch.ones(
                     encoder_hidden_shape, device=inputs_embeds.device, dtype=torch.long
                 )
-            encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
+            if self._use_sdpa and cross_attn_head_mask is None and not output_attentions:
+                encoder_extended_attention_mask = _prepare_4d_attention_mask_for_sdpa(
+                    encoder_attention_mask,
+                    inputs_embeds.dtype,
+                    tgt_len=input_shape[-1],
+                )
+            else:
+                encoder_extended_attention_mask = _prepare_4d_attention_mask(
+                    encoder_attention_mask,
+                    inputs_embeds.dtype,
+                    tgt_len=input_shape[-1],
+                )
         else:
             encoder_extended_attention_mask = None
 
