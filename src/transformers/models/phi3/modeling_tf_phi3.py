@@ -1002,7 +1002,7 @@ class TFPhi3ForSequenceClassification(TFPhi3PreTrainedModel):
                 input_shape = input_shape["inputs_embeds"]
 
         self.model.build(input_shape)
-        self.score.build((input_shape[0], self.config.hidden_size))
+        self.score.build(self.config.hidden_size)
         super().build(input_shape)
 
     @unpack_inputs
