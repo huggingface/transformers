@@ -56,7 +56,7 @@ RUN python3 -m pip install --no-cache-dir gguf
 RUN python3 -m pip install --no-cache-dir https://github.com/casper-hansen/AutoAWQ/releases/download/v0.2.3/autoawq-0.2.3+cu118-cp38-cp38-linux_x86_64.whl
 
 # Add quanto for quantization testing
-RUN python3 -m pip install --no-cache-dir quanto
+RUN python3 -m pip install --no-cache-dir optimum-quanto
 
 # Add eetq for quantization testing
 RUN python3 -m pip install git+https://github.com/NetEase-FuXi/EETQ.git

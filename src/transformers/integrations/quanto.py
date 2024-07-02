@@ -45,7 +45,7 @@ def replace_with_quanto_layers(
             should not be passed by the user.
     """
     from accelerate import init_empty_weights
-    from quanto import QLayerNorm, QLinear, qfloat8, qint2, qint4, qint8
+    from optimum.quanto import QLayerNorm, QLinear, qfloat8, qint2, qint4, qint8
 
     w_mapping = {"float8": qfloat8, "int8": qint8, "int4": qint4, "int2": qint2}
     a_mapping = {None: None, "float8": qfloat8, "int8": qint8}

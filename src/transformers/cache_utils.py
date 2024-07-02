@@ -9,13 +9,11 @@ import torch
 from packaging import version
 
 from .configuration_utils import PretrainedConfig
-from .utils import is_hqq_available, is_quanto_available, logging
+from .utils import is_hqq_available, is_optimum_quanto_available, logging
 
 
-if is_quanto_available():
-    quanto_version = version.parse(importlib.metadata.version("quanto"))
-    if quanto_version >= version.parse("0.2.0"):
-        from quanto import AffineQuantizer, MaxOptimizer, qint2, qint4
+if is_optimum_quanto_available():
+    from optimum.quanto import AffineQuantizer, MaxOptimizer, qint2, qint4
 
 if is_hqq_available():
     from hqq.core.quantize import Quantizer as HQQQuantizer

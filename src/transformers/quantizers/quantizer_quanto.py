@@ -23,7 +23,7 @@ from .quantizers_utils import get_module_from_name
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
-from ..utils import is_accelerate_available, is_quanto_available, is_torch_available, logging
+from ..utils import is_accelerate_available, is_optimum_quanto_available, is_torch_available, logging
 from ..utils.quantization_config import QuantoConfig
 
 
@@ -57,8 +57,10 @@ class QuantoHfQuantizer(HfQuantizer):
             )
 
     def validate_environment(self, *args, **kwargs):
-        if not is_quanto_available():
-            raise ImportError("Loading a quanto quantized model requires quanto library (`pip install quanto`)")
+        if not is_optimum_quanto_available():
+            raise ImportError(
+                "Loading a quanto quantized model requires optimum-quanto library (`pip install optimum-quanto`)"
+            )
         if not is_accelerate_available():
             raise ImportError(
                 "Loading a quanto quantized model requires accelerate library (`pip install accelerate`)"
@@ -81,11 +83,11 @@ class QuantoHfQuantizer(HfQuantizer):
         return torch_dtype
 
     def update_missing_keys(self, model, missing_keys: List[str], prefix: str) -> List[str]:
-        import quanto
+        from optimum.quanto import QModuleMixin
 
         not_missing_keys = []
         for name, module in model.named_modules():
-            if isinstance(module, quanto.QModuleMixin):
+            if isinstance(module, QModuleMixin):
                 for missing in missing_keys:
                     if (
                         (name in missing or name in f"{prefix}.{missing}")
@@ -106,7 +108,7 @@ class QuantoHfQuantizer(HfQuantizer):
         """
         Check if a parameter needs to be quantized.
         """
-        import quanto
+        from optimum.quanto import QModuleMixin
 
         device_map = kwargs.get("device_map", None)
         param_device = kwargs.get("param_device", None)
@@ -119,7 +121,7 @@ class QuantoHfQuantizer(HfQuantizer):
 
         module, tensor_name = get_module_from_name(model, param_name)
         # We only quantize the weights and the bias is not quantized.
-        if isinstance(module, quanto.QModuleMixin) and "weight" in tensor_name:
+        if isinstance(module, QModuleMixin) and "weight" in tensor_name:
             # if the weights are quantized, don't need to recreate it again with `create_quantized_param`
             return not module.frozen
         else:

@@ -136,7 +136,6 @@ _optimum_available = _is_package_available("optimum")
 _auto_gptq_available = _is_package_available("auto_gptq")
 # `importlib.metadata.version` doesn't work with `awq`
 _auto_awq_available = importlib.util.find_spec("awq") is not None
-_quanto_available = _is_package_available("quanto")
 _pandas_available = _is_package_available("pandas")
 _peft_available = _is_package_available("peft")
 _phonemizer_available = _is_package_available("phonemizer")
@@ -862,8 +861,8 @@ def is_auto_awq_available():
     return _auto_awq_available
 
 
-def is_quanto_available():
-    return _quanto_available
+def is_optimum_quanto_available():
+    return importlib.util.find_spec("optimum.quanto") is not None
 
 
 def is_auto_gptq_available():
