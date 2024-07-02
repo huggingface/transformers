@@ -43,13 +43,15 @@ _CONFIG_FOR_DOC = "Phi3Config"
 logger = logging.get_logger(__name__)
 class TFPhi3RMSNorm(tf.keras.layers.Layer):
     def __init__(self, hidden_size, eps=1e-6, **kwargs):
-        super(TFPhi3RMSNorm, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.hidden_size = hidden_size
         self.variance_epsilon = eps
-        self.weight = self.add_weight(name='weight',
-                                      shape=[hidden_size],
-                                      initializer='ones',
-                                      trainable=True)
+
+    def build(self, input_shape=None):
+        self.weight = self.add_weight(shape=[self.hidden_size],
+                                initializer='ones',
+                                trainable=True,
+                                name="weight")
 
     def call(self, inputs):
         input_dtype = inputs.dtype
@@ -227,8 +229,8 @@ class TFPhi3MLP(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super(TFPhi3MLP, self).__init__(**kwargs)
         self.config = config
-        self.gate_up_proj = tf.keras.layers.Dense(2 * config.intermediate_size, use_bias=False)
-        self.down_proj = tf.keras.layers.Dense(config.hidden_size, use_bias=False)
+        self.gate_up_proj = tf.keras.layers.Dense(2 * config.intermediate_size, use_bias=False, name="gate_up_proj")
+        self.down_proj = tf.keras.layers.Dense(config.hidden_size, use_bias=False, name="down_proj")
         self.activation_fn = self.get_activation_function(config.hidden_act)
 
     def get_activation_function(self, activation_name):
@@ -252,8 +254,15 @@ class TFPhi3MLP(tf.keras.layers.Layer):
         return self.down_proj(up_states)
 
     def build(self, input_shape=None):
-        self.gate_up_proj.build(input_shape)
-        self.down_proj.build([input_shape[0], self.config.intermediate_size])
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "gate_up_proj", None) is not None:
+            with tf.name_scope(self.gate_up_proj.name):
+                self.gate_up_proj.build(self.config.hidden_size)
+        if getattr(self, "down_proj", None) is not None:
+            with tf.name_scope(self.down_proj.name):
+                self.down_proj.build(self.config.intermediate_size)
         super().build(input_shape)
 
 
@@ -302,8 +311,8 @@ class TFPhi3Attention(tf.keras.layers.Layer):
             )
 
         op_size = self.num_heads * self.head_dim + 2 * (self.num_key_value_heads * self.head_dim)
-        self.o_proj = Dense(self.hidden_size, use_bias=False, name="o_proj")
-        self.qkv_proj = Dense(op_size, use_bias=False, name="qkv_proj")
+        self.o_proj = tf.keras.layers.Dense(self.hidden_size, use_bias=False, name="o_proj")
+        self.qkv_proj = tf.keras.layers.Dense(op_size, use_bias=False, name="qkv_proj")
         self._init_rope()
 
     def _init_rope(self):
@@ -407,8 +416,21 @@ class TFPhi3Attention(tf.keras.layers.Layer):
         return attn_output, attn_weights, past_key_value
 
     def build(self, input_shape=None):
-        self.qkv_proj.build(input_shape)
-        self.o_proj.build([input_shape[0], input_shape[1], self.hidden_size])
+        if self.built:
+            return
+        self.built = True
+
+        if getattr(self, "o_proj", None) is not None:
+            with tf.name_scope(self.o_proj.name):
+                self.o_proj.build([None, self.num_heads * self.head_dim])
+        if getattr(self, "qkv_proj", None) is not None:
+            with tf.name_scope(self.qkv_proj.name):
+                self.qkv_proj.build([None, self.hidden_size])
+
+        if getattr(self, "rotary_emb", None) is not None:
+            with tf.name_scope(self.rotary_emb.name):
+                self.rotary_emb.build(None)
+
         super().build(input_shape)
 
 
@@ -487,12 +509,21 @@ class TFPhi3DecoderLayer(tf.keras.layers.Layer):
         return outputs
 
     def build(self, input_shape=None):
-        self.self_attn.build(input_shape)
-        self.mlp.build(input_shape)
-        self.input_layernorm.build(input_shape)
-        self.post_attention_layernorm.build(input_shape)
-        super().build(input_shape)
-
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "self_attn", None) is not None:
+            with tf.name_scope(self.self_attn.name):
+                self.self_attn.build(None)
+        if getattr(self, "mlp", None) is not None:
+            with tf.name_scope(self.mlp.name):
+                self.mlp.build(None)
+        if getattr(self, "input_layernorm", None) is not None:
+            with tf.name_scope(self.input_layernorm.name):
+                self.input_layernorm.build(None)
+        if getattr(self, "post_attention_layernorm", None) is not None:
+            with tf.name_scope(self.post_attention_layernorm.name):
+                self.post_attention_layernorm.build(None)
 
 PHI3_START_DOCSTRING = r"""
     This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the generic methods the
