@@ -2127,8 +2127,9 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
     def __init__(self, config: Kosmos2_5Config):
         super().__init__(config)
 
-        self.text_model = Kosmos2_5TextModel(config.text_config)
-        self.vision_model = Kosmos2_5VisionModel(config.vision_config)
+        self.text_model = Kosmos2_5TextModel.from_config(config.text_config, attn_implementation=config._attn_implementation)
+        self.vision_model = Kosmos2_5VisionModel.from_config(config.vision_config, attn_implementation=config._attn_implementation)
+        self.image_to_text_projection = Kosmos2_5ImageToTextProjection(config)
         self.image_to_text_projection = Kosmos2_5ImageToTextProjection(config)
 
         # Initialize weights and apply final processing
@@ -2262,7 +2263,6 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel):
 
     def __init__(self, config: Kosmos2_5TextConfig):
         super().__init__(config)
-
         self.model = Kosmos2_5TextTransformer(config)
         self.lm_head = nn.Linear(in_features=config.embed_dim, out_features=config.vocab_size, bias=False)
 
@@ -2444,8 +2444,9 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel):
     _tied_weights_keys = ["text_model.lm_head.weight"]
 
     def __init__(self, config: Kosmos2_5Config):
+        config.text_config.update({"_attn_implementation": config._attn_implementation})
+        config.vision_config.update({"_attn_implementation": config._attn_implementation})
         super().__init__(config)
-
         self.text_model = Kosmos2_5TextForCausalLM(config.text_config)
         self.vision_model = Kosmos2_5VisionModel(config.vision_config)
         self.image_to_text_projection = Kosmos2_5ImageToTextProjection(config)
