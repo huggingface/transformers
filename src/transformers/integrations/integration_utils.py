@@ -51,7 +51,7 @@ if is_torch_available():
     import torch
 
 # comet_ml requires to be imported before any ML frameworks
-_MIN_COMET_VERSION = "3.43.1"
+_MIN_COMET_VERSION = "3.43.2"
 try:
     _comet_version = importlib.metadata.version("comet_ml")
     _is_comet_installed = True
@@ -985,16 +985,27 @@ class CometCallback(TrainerCallback):
 
     def setup(self, args, state, model):
         """
-        Setup the optional Comet.ml integration.
+        Setup the optional Comet integration.
 
         Environment:
-        - **COMET_MODE** (`str`, *optional*, defaults to `ONLINE`):
-            Whether to create an online, offline experiment or disable Comet logging. Can be `OFFLINE`, `ONLINE`, or
-            `DISABLED`.
+        - **COMET_MODE** (`str`, *optional*, default to `get_or_create`):
+            Control whether to create and log to a new Comet experiment or append to an existing experiment.
+            It accepts the following values:
+                * `get_or_create`: Decides automatically depending if
+                  `COMET_EXPERIMENT_KEY` is set and whether an Experiment
+                  with that key already exists or not.
+                * `create`: Always create a new Comet Experiment.
+                * `get`: Always try to append to an Existing Comet Experiment.
+                  Requires `COMET_EXPERIMENT_KEY` to be set.
+                * `ONLINE`: **deprecated**, used to create an online
+                  Experiment. Use `COMET_START_ONLINE=1` instead.
+                * `OFFLINE`: **deprecated**, used to created an offline
+                  Experiment. Use `COMET_START_ONLINE=0` instead.
+                * `DISABLED`: **deprecated**, used to disable Comet logging.
+                  Use the `--report_to` flag to control the integrations used
+                  for logging result instead.
         - **COMET_PROJECT_NAME** (`str`, *optional*):
             Comet project name for experiments.
-        - **COMET_OFFLINE_DIRECTORY** (`str`, *optional*):
-            Folder to use for saving offline experiments when `COMET_MODE` is `OFFLINE`.
         - **COMET_LOG_ASSETS** (`str`, *optional*, defaults to `TRUE`):
             Whether or not to log training assets (tf event logs, checkpoints, etc), to Comet. Can be `TRUE`, or
             `FALSE`.
@@ -1036,12 +1047,14 @@ class CometCallback(TrainerCallback):
 
             import comet_ml
 
-            self._experiment = comet_ml.start(online=online, mode=mode)
-            self._experiment.__internal_api__set_model_graph__(model, framework="transformers")
-
             # Do not use the default run_name as the experiment name
             if args.run_name is not None and args.run_name != args.output_dir:
-                self._experiment.set_name(args.run_name)
+                experiment_config = comet_ml.ExperimentConfig(name=args.run_name)
+            else:
+                experiment_config = comet_ml.ExperimentConfig()
+
+            self._experiment = comet_ml.start(online=online, mode=mode, experiment_config=experiment_config)
+            self._experiment.__internal_api__set_model_graph__(model, framework="transformers")
 
             params = {"args": args.to_dict()}
 

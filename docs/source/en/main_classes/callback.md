@@ -34,7 +34,7 @@ By default, `TrainingArguments.report_to` is set to `"all"`, so a [`Trainer`] wi
 - [`~integrations.TensorBoardCallback`] if tensorboard is accessible (either through PyTorch >= 1.4
   or tensorboardX).
 - [`~integrations.WandbCallback`] if [wandb](https://www.wandb.com/) is installed.
-- [`~integrations.CometCallback`] if [comet_ml](https://www.comet.ml/site/) is installed.
+- [`~integrations.CometCallback`] if [comet_ml](https://www.comet.com/site/) is installed.
 - [`~integrations.MLflowCallback`] if [mlflow](https://www.mlflow.org/) is installed.
 - [`~integrations.NeptuneCallback`] if [neptune](https://neptune.ai/) is installed.
 - [`~integrations.AzureMLCallback`] if [azureml-sdk](https://pypi.org/project/azureml-sdk/) is
