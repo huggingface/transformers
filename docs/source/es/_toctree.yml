@@ -17,6 +17,8 @@
     title: Fine-tuning a un modelo pre-entrenado
   - local: accelerate
     title: Entrenamiento distribuido con 🤗 Accelerate
+    local: peft
+    title: Carga los adaptadores con 🤗 PEFT
   - local: model_sharing
     title: Compartir un modelo
   title: Tutoriales
