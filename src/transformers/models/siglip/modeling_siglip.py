@@ -1234,7 +1234,12 @@ class SiglipModel(SiglipPreTrainedModel):
 
         loss = None
         if return_loss:
-            raise NotImplementedError("SigLIP loss to be implemented")
+            # Adapted from https://github.com/google-research/big_vision/blob/01edb81a4716f93a48be43b3a4af14e29cdb3a7f/big_vision/trainers/proj/image_text/siglip.py#L287
+            eye = torch.eye(logits_per_text.size(0), device=logits_per_text.device)
+            m1_diag1 = -torch.ones_like(logits_per_text) + 2 * eye
+            loglik = torch.nn.functional.logsigmoid(m1_diag1 * logits_per_text)
+            nll = -torch.sum(loglik, dim=-1)
+            loss = nll.mean()
 
         if not return_dict:
             output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
