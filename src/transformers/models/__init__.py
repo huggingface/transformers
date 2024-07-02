@@ -226,6 +226,7 @@ from . import (
     timesformer,
     timm_backbone,
     trocr,
+    turbosparsemixtral,
     tvp,
     udop,
     umt5,

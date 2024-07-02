@@ -731,6 +731,7 @@ _import_structure = {
         "TrOCRConfig",
         "TrOCRProcessor",
     ],
+    "models.turbosparsemixtral": ["TurboSparseMixtralConfig"],
     "models.tvp": [
         "TvpConfig",
         "TvpProcessor",
@@ -3285,6 +3286,15 @@ else:
             "TrOCRPreTrainedModel",
         ]
     )
+    _import_structure["models.turbosparsemixtral"].extend(
+        [
+            "TurboSparseMixtralForCausalLM",
+            "TurboSparseMixtralForSequenceClassification",
+            "TurboSparseMixtralForTokenClassification",
+            "TurboSparseMixtralModel",
+            "TurboSparseMixtralPreTrainedModel",
+        ]
+    )
     _import_structure["models.tvp"].extend(
         [
             "TvpForVideoGrounding",
@@ -5409,6 +5419,7 @@ if TYPE_CHECKING:
         TrOCRConfig,
         TrOCRProcessor,
     )
+    from .models.turbosparsemixtral import TurboSparseMixtralConfig
     from .models.tvp import (
         TvpConfig,
         TvpProcessor,
@@ -7563,6 +7574,13 @@ if TYPE_CHECKING:
         from .models.trocr import (
             TrOCRForCausalLM,
             TrOCRPreTrainedModel,
+        )
+        from .models.turbosparsemixtral import (
+            TurboSparseMixtralForCausalLM,
+            TurboSparseMixtralForSequenceClassification,
+            TurboSparseMixtralForTokenClassification,
+            TurboSparseMixtralModel,
+            TurboSparseMixtralPreTrainedModel,
         )
         from .models.tvp import (
             TvpForVideoGrounding,

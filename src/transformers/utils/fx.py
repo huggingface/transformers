@@ -164,6 +164,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "speech_to_text_2",
     "swin",
     "t5",
+    "turbosparsemixtral",
     "trocr",
     "vit",
     "xglm",

@@ -299,6 +299,7 @@ Flax), PyTorch, and/or TensorFlow.
 |        [Trajectory Transformer](model_doc/trajectory_transformer)        |       ✅        |         ❌         |      ❌      |
 |                  [Transformer-XL](model_doc/transfo-xl)                  |       ✅        |         ✅         |      ❌      |
 |                         [TrOCR](model_doc/trocr)                         |       ✅        |         ❌         |      ❌      |
+|            [TurboSparseMixtral](model_doc/turbosparsemixtral)            |       ✅        |         ❌         |      ❌      |
 |                          [TVLT](model_doc/tvlt)                          |       ✅        |         ❌         |      ❌      |
 |                           [TVP](model_doc/tvp)                           |       ✅        |         ❌         |      ❌      |
 |                          [UDOP](model_doc/udop)                          |       ✅        |         ❌         |      ❌      |
