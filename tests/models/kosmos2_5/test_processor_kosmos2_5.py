@@ -38,10 +38,15 @@ if is_vision_available():
 
     from transformers import (
         AutoProcessor,
-        Kosmos2_5ImageProcessor,
+        CLIPImageProcessor,
         Kosmos2_5Processor,
         PreTrainedTokenizerFast,
+        XLMRobertaTokenizer,
+        XLMRobertaTokenizerFast,
     )
+
+
+SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
 
 @require_sentencepiece
@@ -51,9 +56,11 @@ class Kosmos2_5_5ProcessorTest(unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 
-        image_processor = Kosmos2_5ImageProcessor()
+        image_processor = CLIPImageProcessor()
 
-        fast_tokenizer = PreTrainedTokenizerFast.from_pretrained("microsoft/kosmos-2.5", use_fast=True)
+        # We have a SentencePiece fixture for testing
+        slow_tokenizer = XLMRobertaTokenizer(SAMPLE_VOCAB)
+        fast_tokenizer = XLMRobertaTokenizerFast(__slow_tokenizer=slow_tokenizer)
 
         processor = Kosmos2_5Processor(image_processor, fast_tokenizer)
         processor.save_pretrained(self.tmpdirname)
@@ -80,10 +87,10 @@ class Kosmos2_5_5ProcessorTest(unittest.TestCase):
 
     def test_image_procesor_load_save_reload(self):
         # make sure load from Hub repo. -> save -> reload locally work
-        image_processor = Kosmos2_5ImageProcessor.from_pretrained("microsoft/kosmos-2.5")
+        image_processor = CLIPImageProcessor.from_pretrained("microsoft/kosmos-2.5")
         with TemporaryDirectory() as tmp_dir:
             image_processor.save_pretrained(tmp_dir)
-            reloaded_image_processor = Kosmos2_5ImageProcessor.from_pretrained(tmp_dir)
+            reloaded_image_processor = CLIPImageProcessor.from_pretrained(tmp_dir)
             assert image_processor.to_dict() == reloaded_image_processor.to_dict()
             assert image_processor.to_json_string() == reloaded_image_processor.to_json_string()
 
@@ -91,18 +98,18 @@ class Kosmos2_5_5ProcessorTest(unittest.TestCase):
         processor = Kosmos2_5Processor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())
         processor.save_pretrained(self.tmpdirname)
 
-        tokenizer_add_kwargs = self.get_tokenizer(bos_token="<s>", eos_token="<\s>")
+        tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
         image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
 
         processor = Kosmos2_5Processor.from_pretrained(
-            self.tmpdirname, bos_token="<s>", eos_token="<\s>", do_normalize=False, padding_value=1.0
+            self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
         )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
         self.assertIsInstance(processor.tokenizer, PreTrainedTokenizerFast)
 
         self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.image_processor, Kosmos2_5ImageProcessor)
+        self.assertIsInstance(processor.image_processor, CLIPImageProcessor)
 
     def test_image_processor(self):
         image_processor = self.get_image_processor()
@@ -145,7 +152,7 @@ class Kosmos2_5_5ProcessorTest(unittest.TestCase):
         inputs = processor(text=input_str, images=image_input)
 
         self.assertListEqual(
-            list(inputs.keys()), ["flattened_patches", "input_ids", "attention_mask", "image_embeds_position_mask"]
+            list(inputs.keys()), ["pixel_values", "input_ids", "attention_mask", "image_embeds_position_mask"]
         )
 
         # test if it raises when no input is passed
@@ -177,7 +184,7 @@ class Kosmos2_5_5ProcessorTest(unittest.TestCase):
         # both image and text
         inputs = processor(text=input_str, images=image_input)
         self.assertListEqual(
-            list(inputs.keys()), ["flattened_patches", "input_ids", "attention_mask", "image_embeds_position_mask"]
+            list(inputs.keys()), ["pixel_values", "input_ids", "attention_mask", "image_embeds_position_mask"]
         )
 
         # only text
@@ -186,11 +193,11 @@ class Kosmos2_5_5ProcessorTest(unittest.TestCase):
 
         # only image
         inputs = processor(images=image_input)
-        self.assertListEqual(list(inputs.keys()), ["flattened_patches"])
+        self.assertListEqual(list(inputs.keys()), ["pixel_values"])
 
     @require_torch
     def test_full_processor(self):
-        url = "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
+        url = "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/two_dogs.jpg"
 
         processor = Kosmos2_5Processor.from_pretrained("microsoft/kosmos-2.5")
 
@@ -243,7 +250,7 @@ class Kosmos2_5_5ProcessorTest(unittest.TestCase):
         ]
         # fmt: on
 
-        EXPECTED_flattened_patches_1 = np.array(
+        EXPECTED_PIXEL_VALUES_1 = np.array(
             [
                 [
                     [-0.6535852551460266, -0.6389868259429932, -0.6243883967399597],
@@ -262,7 +269,7 @@ class Kosmos2_5_5ProcessorTest(unittest.TestCase):
                 ],
             ]
         )
-        EXPECTED_flattened_patches_2 = np.array(
+        EXPECTED_PIXEL_VALUES_2 = np.array(
             [
                 [
                     [-0.4346088469028473, -0.47840413451194763, -0.7849710583686829],
@@ -389,7 +396,7 @@ class Kosmos2_5_5ProcessorTest(unittest.TestCase):
         num_image_tokens = 64
 
         outputs = processor(images=image, text=texts[0], bboxes=None, add_eos_token=True)
-        self.assertTupleEqual(outputs.flattened_patches[0].shape, (3, 224, 224))
+        self.assertTupleEqual(outputs.pixel_values[0].shape, (3, 224, 224))
         self.assertListEqual(
             outputs.input_ids,
             [0, 64003] + list(range(4, 4 + num_image_tokens)) + [64004] + expected_input_ids[0][1:],
@@ -398,8 +405,8 @@ class Kosmos2_5_5ProcessorTest(unittest.TestCase):
             outputs.image_embeds_position_mask,
             [0] * 2 + [1] * num_image_tokens + [0] + [0] * (len(expected_input_ids[0]) - 1),
         )
-        np.testing.assert_allclose(outputs.flattened_patches[0][:3, :3, :3], EXPECTED_flattened_patches_1, atol=1e-9)
-        np.testing.assert_allclose(outputs.flattened_patches[0][:3, -3:, -3:], EXPECTED_flattened_patches_2, atol=1e-9)
+        np.testing.assert_allclose(outputs.pixel_values[0][:3, :3, :3], EXPECTED_PIXEL_VALUES_1, atol=1e-9)
+        np.testing.assert_allclose(outputs.pixel_values[0][:3, -3:, -3:], EXPECTED_PIXEL_VALUES_2, atol=1e-9)
 
         # test with image in batch (right padding)
         outputs = processor(
@@ -410,12 +417,12 @@ class Kosmos2_5_5ProcessorTest(unittest.TestCase):
             padding=True,
             add_eos_token=True,
         )
-        self.assertTupleEqual(outputs.flattened_patches.shape, (4, 3, 224, 224))
+        self.assertTupleEqual(outputs.pixel_values.shape, (4, 3, 224, 224))
         np.testing.assert_allclose(
-            outputs.flattened_patches[:, :3, :3, :3].numpy(), [EXPECTED_flattened_patches_1] * len(batch_image), atol=1e-9
+            outputs.pixel_values[:, :3, :3, :3].numpy(), [EXPECTED_PIXEL_VALUES_1] * len(batch_image), atol=1e-9
         )
         np.testing.assert_allclose(
-            outputs.flattened_patches[:, :3, -3:, -3:].numpy(), [EXPECTED_flattened_patches_2] * len(batch_image), atol=1e-9
+            outputs.pixel_values[:, :3, -3:, -3:].numpy(), [EXPECTED_PIXEL_VALUES_2] * len(batch_image), atol=1e-9
         )
         # padding on the right: the `[1:]` below is because the part for `BOS` is already added in the beginning of each (dynamically computed) expected value  # noqa
         # fmt: off

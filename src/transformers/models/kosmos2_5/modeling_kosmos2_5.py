@@ -32,6 +32,7 @@ from ...modeling_outputs import (
     CausalLMOutputWithCrossAttentions,
 )
 from ...modeling_utils import PreTrainedModel
+from ...configuration_utils import PretrainedConfig
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -46,6 +47,7 @@ from .configuration_kosmos2_5 import (
     Kosmos2_5TextConfig,
     Kosmos2_5VisionConfig,
 )
+import os
 
 
 if is_flash_attn_2_available():
@@ -453,6 +455,7 @@ except Exception:
 class Kosmos2_5VisionEmbeddings(nn.Module):
     def __init__(self, config: Kosmos2_5VisionConfig) -> None:
         super().__init__()
+        self.config = config
         self.patch_projection = nn.Linear(config.patch_embed_hidden_size, config.hidden_size)
 
         self.row_embedder = nn.Embedding(config.seq_len, config.hidden_size)
@@ -484,6 +487,7 @@ class Kosmos2_5VisionEmbeddings(nn.Module):
 class Kosmos2_5VisionMlp(nn.Module):
     def __init__(self, config: Kosmos2_5VisionConfig):
         super().__init__()
+        self.config = config
         self.wi_0 = nn.Linear(config.hidden_size, config.d_ff, bias=False)
         self.wi_1 = nn.Linear(config.hidden_size, config.d_ff, bias=False)
         self.wo = nn.Linear(config.d_ff, config.hidden_size, bias=False)
@@ -514,6 +518,7 @@ class Kosmos2_5VisionMlp(nn.Module):
 class Kosmos2_5VisionAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.config = config
         self.hidden_size = config.hidden_size
         self.key_value_proj_dim = config.d_kv
         self.n_heads = config.num_attention_heads
@@ -615,7 +620,7 @@ class Kosmos2_5VisionFlashAttention2(Kosmos2_5VisionAttention):
             elif hasattr(self.config, "_pre_quantization_dtype"):
                 target_dtype = self.config._pre_quantization_dtype
             else:
-                target_dtype = self.q_proj.weight.dtype
+                target_dtype = self.query.weight.dtype
 
             logger.warning_once(
                 f"The input hidden states seems to be silently casted in float32, this might be related to"
@@ -762,6 +767,9 @@ class Kosmos2_5VisionFlashAttention2(Kosmos2_5VisionAttention):
 
 
 class Kosmos2_5VisionSdpaAttention(Kosmos2_5VisionAttention):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
     def forward(
         self,
         hidden_states,
@@ -810,7 +818,7 @@ class Kosmos2_5VisionSdpaAttention(Kosmos2_5VisionAttention):
             key_states,
             value_states,
             attn_mask=attention_mask,
-            dropout_p=self.attention_dropout if self.training else 0.0,
+            dropout_p=self.dropout if self.training else 0.0,
             is_causal=is_causal,
         )
         attn_output = attn_output.transpose(1, 2).contiguous()
@@ -938,6 +946,7 @@ class Kosmos2_5VisionEncoder(nn.Module):
 
 # Pix2StructVisionModel -> Kosmos2_5VisionModel
 class Kosmos2_5VisionModel(PreTrainedModel):
+    _no_split_modules = ["Kosmos2_5VisionEmbeddings", "Kosmos2_5VisionLayer", "Kosmos2_5LayerNorm"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
 
@@ -1687,7 +1696,6 @@ class Kosmos2_5TextTransformer(nn.Module):
             padding_idx=config.pad_token_id,
         )
         self.segment_emb = nn.Embedding(2, config.embed_dim)
-
         self.layers = nn.ModuleList([Kosmos2_5TextBlock(config) for _ in range(config.layers)])
         self.layer_norm = nn.LayerNorm(config.embed_dim, config.layer_norm_eps)
 
@@ -1987,38 +1995,38 @@ class Kosmos2_5PreTrainedModel(PreTrainedModel):
             std = self.config.text_config.init_std
 
         if isinstance(module, Kosmos2_5VisionEmbeddings):
-            nn.init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
-            nn.init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
-            nn.init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
+            nn.init.normal_(module.column_embedder.weight, std=module.config.initializer_range * factor)
+            nn.init.normal_(module.row_embedder.weight, std=module.config.initializer_range * factor)
+            nn.init.normal_(module.patch_projection.weight, std=module.config.initializer_range * factor)
         elif isinstance(module, Kosmos2_5VisionAttention):
-            in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
-            out_proj_std = (module.embed_dim**-0.5) * factor
-            nn.init.normal_(module.q_proj.weight, std=in_proj_std)
-            nn.init.normal_(module.k_proj.weight, std=in_proj_std)
-            nn.init.normal_(module.v_proj.weight, std=in_proj_std)
-            nn.init.normal_(module.out_proj.weight, std=out_proj_std)
-            if module.q_proj.bias is not None:
-                module.q_proj.bias.data.zero_()
-            if module.k_proj.bias is not None:
-                module.k_proj.bias.data.zero_()
-            if module.v_proj.bias is not None:
-                module.v_proj.bias.data.zero_()
-            if module.out_proj.bias is not None:
-                module.out_proj.bias.data.zero_()
+            in_proj_std = (module.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
+            out_proj_std = (module.hidden_size**-0.5) * factor
+            nn.init.normal_(module.query.weight, std=in_proj_std)
+            nn.init.normal_(module.key.weight, std=in_proj_std)
+            nn.init.normal_(module.value.weight, std=in_proj_std)
+            nn.init.normal_(module.output.weight, std=out_proj_std)
+            if module.query.bias is not None:
+                module.query.bias.data.zero_()
+            if module.key.bias is not None:
+                module.key.bias.data.zero_()
+            if module.value.bias is not None:
+                module.value.bias.data.zero_()
+            if module.output.bias is not None:
+                module.output.bias.data.zero_()
         elif isinstance(module, Kosmos2_5VisionMlp):
             in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
-            nn.init.normal_(module.fc1.weight, std=fc_std)
-            nn.init.normal_(module.fc2.weight, std=in_proj_std)
-            if module.fc1.bias is not None:
-                module.fc1.bias.data.zero_()
-            if module.fc2.bias is not None:
-                module.fc2.bias.data.zero_()
+            nn.init.normal_(module.wi_0.weight, std=fc_std)
+            nn.init.normal_(module.wi_1.weight, std=in_proj_std)
+            if module.wi_0.bias is not None:
+                module.wi_0.bias.data.zero_()
+            if module.wi_1.bias is not None:
+                module.wi_1.bias.data.zero_()
         elif isinstance(module, Kosmos2_5VisionLayer):
-            module.pre_layrnorm.bias.data.zero_()
-            module.pre_layrnorm.weight.data.fill_(1.0)
-            module.post_layernorm.bias.data.zero_()
-            module.post_layernorm.weight.data.fill_(1.0)
+            # module.pre_mlp_layer_norm.bias.data.zero_()
+            module.pre_mlp_layer_norm.weight.data.fill_(1.0)
+            # module.pre_attention_layer_norm.bias.data.zero_()
+            module.pre_attention_layer_norm.weight.data.fill_(1.0)
         elif isinstance(module, Kosmos2_5TextAttention):
             nn.init.normal_(module.q_proj.weight, std=std)
             nn.init.normal_(module.k_proj.weight, std=std)
@@ -2127,9 +2135,8 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
     def __init__(self, config: Kosmos2_5Config):
         super().__init__(config)
 
-        self.text_model = Kosmos2_5TextModel.from_config(config.text_config, attn_implementation=config._attn_implementation)
-        self.vision_model = Kosmos2_5VisionModel.from_config(config.vision_config, attn_implementation=config._attn_implementation)
-        self.image_to_text_projection = Kosmos2_5ImageToTextProjection(config)
+        self.text_model = Kosmos2_5TextModel(config.text_config)
+        self.vision_model = Kosmos2_5VisionModel(config.vision_config)
         self.image_to_text_projection = Kosmos2_5ImageToTextProjection(config)
 
         # Initialize weights and apply final processing
@@ -2210,8 +2217,7 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
             )
-            # The whole `last_hidden_state` through `post_layernorm` instead of just `pooled_output`.
-            image_embeds = self.vision_model.model.post_layernorm(vision_model_output[0])
+            image_embeds = vision_model_output[0]
             # normalized features
             image_embeds = nn.functional.normalize(image_embeds, dim=-1)
             image_embeds, projection_attentions = self.image_to_text_projection(image_embeds)
@@ -2263,6 +2269,7 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel):
 
     def __init__(self, config: Kosmos2_5TextConfig):
         super().__init__(config)
+
         self.model = Kosmos2_5TextTransformer(config)
         self.lm_head = nn.Linear(in_features=config.embed_dim, out_features=config.vocab_size, bias=False)
 
@@ -2444,13 +2451,11 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel):
     _tied_weights_keys = ["text_model.lm_head.weight"]
 
     def __init__(self, config: Kosmos2_5Config):
-        config.text_config.update({"_attn_implementation": config._attn_implementation})
-        config.vision_config.update({"_attn_implementation": config._attn_implementation})
         super().__init__(config)
-        self.text_model = Kosmos2_5TextForCausalLM(config.text_config)
-        self.vision_model = Kosmos2_5VisionModel(config.vision_config)
+        self.text_model = Kosmos2_5TextForCausalLM.from_config(config.text_config, attn_implementation=config._attn_implementation)
+        self.vision_model = Kosmos2_5VisionModel.from_config(config.vision_config, attn_implementation=config._attn_implementation)
         self.image_to_text_projection = Kosmos2_5ImageToTextProjection(config)
-
+        breakpoint()
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -2544,7 +2549,7 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel):
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
             )
-            image_embeds = vision_model_output.last_hidden_state
+            image_embeds = vision_model_output[0]
             image_embeds = nn.functional.normalize(vision_model_output[0], dim=-1)
             image_embeds, projection_attentions = self.image_to_text_projection(image_embeds)
 
