@@ -114,6 +114,7 @@ from . import (
     instructblip,
     instructblipvideo,
     jamba,
+    mamba2,
     jetmoe,
     kosmos2,
     layoutlm,
