@@ -2436,3 +2436,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Chat is not supported")
     def test_chat_template(self):
         pass
+
+    @unittest.skip("Chat is not supported")
+    def test_chat_template_return_assistant_tokens_mask(self):
+        pass
