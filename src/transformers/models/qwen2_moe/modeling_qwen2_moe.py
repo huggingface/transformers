@@ -493,7 +493,14 @@ class Qwen2MoeFlashAttention2(Qwen2MoeAttention):
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
 
-        sliding_window = self.sliding_window if self.layer_idx >= self.config.max_window_layers else None
+        if (
+            self.config.use_sliding_window
+            and getattr(self.config, "sliding_window", None) is not None
+            and self.layer_idx >= self.config.max_window_layers
+        ):
+            sliding_window = self.config.sliding_window
+        else:
+            sliding_window = None
 
         attn_output = _flash_attention_forward(
             query_states,

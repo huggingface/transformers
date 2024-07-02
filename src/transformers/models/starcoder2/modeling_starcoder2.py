@@ -405,7 +405,9 @@ class Starcoder2FlashAttention2(Starcoder2Attention):
             attention_mask,
             q_len,
             dropout=dropout_rate,
-            sliding_windows=getattr(self.config, "sliding_window", None),
+            sliding_window=getattr(self.config, "sliding_window", None),
+            is_causal=self.is_causal,
+            use_top_left_mask=self._flash_attn_uses_top_left_mask,
         )
 
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()

@@ -1,4 +1,5 @@
 import inspect
+from typing import Optional
 
 import torch
 import torch.nn.functional as F
@@ -67,10 +68,10 @@ def _flash_attention_forward(
     key_states,
     value_states,
     attention_mask,
-    query_length,
-    dropout=0.0,
-    softmax_scale=None,
-    is_causal=False,
+    query_length: int,
+    is_causal: bool,
+    dropout: float = 0.0,
+    softmax_scale: Optional[float] = None,
     sliding_window=None,
     use_top_left_mask: bool = False,
 ):

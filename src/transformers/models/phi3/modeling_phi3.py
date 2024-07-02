@@ -521,6 +521,8 @@ class Phi3FlashAttention2(Phi3Attention):
             q_len,
             dropout=attn_dropout,
             sliding_window=getattr(self.config, "sliding_window", None),
+            use_top_left_mask=self._flash_attn_uses_top_left_mask,
+            is_causal=self.is_causal,
         )
 
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()

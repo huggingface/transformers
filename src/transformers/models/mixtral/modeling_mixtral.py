@@ -490,6 +490,7 @@ class MixtralFlashAttention2(MixtralAttention):
             q_len,
             dropout=dropout_rate,
             sliding_window=getattr(self.config, "sliding_window", None),
+            is_causal=self.is_causal,
         )
 
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
