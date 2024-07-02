@@ -123,6 +123,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("ibert", "IBertModel"),
         ("idefics", "IdeficsModel"),
         ("idefics2", "Idefics2Model"),
+        ("imagebind", "ImageBindModel"),
         ("imagegpt", "ImageGPTModel"),
         ("informer", "InformerModel"),
         ("jamba", "JambaModel"),
@@ -1243,6 +1244,7 @@ MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("chinese_clip", "ChineseCLIPModel"),
         ("clip", "CLIPModel"),
         ("clipseg", "CLIPSegModel"),
+        ("imagebind", "ImageBindModel"),
         ("siglip", "SiglipModel"),
     ]
 )
