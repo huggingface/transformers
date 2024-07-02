@@ -90,7 +90,7 @@ class SuperPointKeypointDescriptionOutput(ModelOutput):
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
             Loss computed during training.
         keypoints (`torch.FloatTensor` of shape `(batch_size, num_keypoints, 2)`):
-            Relative (x, y) coordinates of predicted keypoints in a given image.
+            Absolute (x, y) coordinates of predicted keypoints in a given image.
         scores (`torch.FloatTensor` of shape `(batch_size, num_keypoints)`):
             Scores of predicted keypoints.
         descriptors (`torch.FloatTensor` of shape `(batch_size, num_keypoints, descriptor_size)`):
@@ -306,7 +306,7 @@ class SuperPointDescriptorDecoder(nn.Module):
     def _sample_descriptors(keypoints, descriptors, scale: int = 8) -> torch.Tensor:
         """Interpolate descriptors at keypoint locations"""
         batch_size, num_channels, height, width = descriptors.shape
-        keypoints = keypoints - scale / 2 + 0.5
+        keypoints = (keypoints - scale / 2 + 0.5).type(descriptors.dtype)
         divisor = torch.tensor([[(width * scale - scale / 2 - 0.5), (height * scale - scale / 2 - 0.5)]])
         divisor = divisor.to(keypoints)
         keypoints /= divisor
@@ -471,11 +471,14 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
 
         maximum_num_keypoints = max(keypoints.shape[0] for keypoints in list_keypoints)
 
-        keypoints = torch.zeros((batch_size, maximum_num_keypoints, 2), device=pixel_values.device)
-        scores = torch.zeros((batch_size, maximum_num_keypoints), device=pixel_values.device)
+        keypoints = torch.zeros(
+            (batch_size, maximum_num_keypoints, 2), device=pixel_values.device, dtype=pixel_values.dtype
+        )
+        scores = torch.zeros((batch_size, maximum_num_keypoints), device=pixel_values.device, dtype=pixel_values.dtype)
         descriptors = torch.zeros(
             (batch_size, maximum_num_keypoints, self.config.descriptor_decoder_dim),
             device=pixel_values.device,
+            dtype=pixel_values.dtype,
         )
         mask = torch.zeros((batch_size, maximum_num_keypoints), device=pixel_values.device, dtype=torch.int)
 
