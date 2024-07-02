@@ -1231,6 +1231,7 @@ else:
         "TextDataset",
         "TextDatasetForNextSentencePrediction",
     ]
+    _import_structure["flash_attention_utils"]: []
     _import_structure["generation"].extend(
         [
             "AlternatingCodebooksLogitsProcessor",
