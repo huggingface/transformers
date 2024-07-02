@@ -514,13 +514,17 @@ class TrainerUtilsTest(unittest.TestCase):
         concat_container = EvalLoopContainer(do_nested_concat=True, padding_index=-100)
         concat_container.add(batch_1)
         concat_container.add(batch_2)
-        concat_container.to_cpu_and_numpy()
-        arrays = concat_container.get_arrays()
+        arrays = concat_container.get(to_numpy=True)
+        tensors = concat_container.get(to_numpy=False)
 
         # Test two nested batches concatenation
+        self.assertIsInstance(tensors, list)
+        self.assertEqual(len(tensors), 3)
+        self.assertIsInstance(tensors[0], torch.Tensor)
         self.assertIsInstance(arrays, list)
         self.assertEqual(len(arrays), 3)
         self.assertIsInstance(arrays[0], np.ndarray)
+        self.assertTrue(np.allclose(arrays[0], tensors[0].numpy()))
         self.assertEqual(arrays[0].shape, (12, 5))
         self.assertIsInstance(arrays[1], dict)
         self.assertIsInstance(arrays[1]["loss"], np.ndarray)
@@ -537,12 +541,21 @@ class TrainerUtilsTest(unittest.TestCase):
         list_container = EvalLoopContainer(do_nested_concat=False)
         list_container.add(batch_1)
         list_container.add(batch_2)
-        list_container.to_cpu_and_numpy()
-        arrays = list_container.get_arrays()
+        arrays = list_container.get(to_numpy=True)
+        tensors = list_container.get(to_numpy=False)
 
         self.assertEqual(len(arrays), 2)
         self.assertIsInstance(arrays, list)
         np_batch_1, np_batch_2 = arrays
+
+        self.assertIsInstance(tensors, list)
+        self.assertEqual(len(tensors), 2)
+        torch_batch_1, torch_batch_2 = tensors
+
+        self.assertIsInstance(torch_batch_1, list)
+        self.assertEqual(len(torch_batch_1), 3)
+        self.assertIsInstance(torch_batch_1[0], torch.Tensor)
+        self.assertTrue(np.allclose(np_batch_1[0], torch_batch_1[0].numpy()))
 
         self.assertIsInstance(np_batch_1, list)
         self.assertEqual(len(np_batch_1), 3)
@@ -565,16 +578,16 @@ class TrainerUtilsTest(unittest.TestCase):
         self.assertEqual(np_batch_2[2][1].shape, (4, 6))
 
         # Test no batches
-        none_arr = EvalLoopContainer(do_nested_concat=True, padding_index=-100).get_arrays()
+        none_arr = EvalLoopContainer(do_nested_concat=True, padding_index=-100).get()
         self.assertIsNone(none_arr)
 
-        none_arr = EvalLoopContainer(do_nested_concat=False).get_arrays()
+        none_arr = EvalLoopContainer(do_nested_concat=False).get()
         self.assertIsNone(none_arr)
 
         # Test one batch
         concat_container = EvalLoopContainer(do_nested_concat=True, padding_index=-100)
         concat_container.add(batch_1)
-        arrays = concat_container.get_arrays()
+        arrays = concat_container.get(to_numpy=True)
         self.assertIsInstance(arrays, list)
         self.assertEqual(len(arrays), 3)
         self.assertIsInstance(arrays[0], np.ndarray)

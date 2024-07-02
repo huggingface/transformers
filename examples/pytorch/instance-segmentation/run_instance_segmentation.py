@@ -262,8 +262,8 @@ class Evaluator:
         Returns:
             Mapping[str, float]: Metrics in a form of dictionary {<metric_name>: <metric_value>}
         """
-        prediction_batch = nested_cpu(evaluation_results.predictions)
-        target_batch = nested_cpu(evaluation_results.label_ids)
+        prediction_batch = evaluation_results.predictions
+        target_batch = evaluation_results.label_ids
 
         # For metric computation we need to provide:
         #  - targets in a form of list of dictionaries with keys "masks", "labels"
@@ -353,6 +353,7 @@ def main():
 
     # Set default training arguments for instance segmentation
     training_args.eval_do_concat_batches = False
+    training_args.eval_numpify_tensors = False
     training_args.batch_eval_metrics = True
     training_args.remove_unused_columns = False
 
