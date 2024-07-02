@@ -50,7 +50,7 @@ We implement two versions of ReactJsonAgent:
 
 ![Framework of a React Agent](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/blog/open-source-llms-as-agents/ReAct.png)
 
-For example, here is how a ReAct agent would work its way through the following question.
+For example, here is how a ReAct Code agent would work its way through the following question.
 
 ```py3
 >>> agent.run(
