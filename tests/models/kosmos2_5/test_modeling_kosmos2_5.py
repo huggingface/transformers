@@ -26,7 +26,6 @@ import requests
 
 from transformers import AutoProcessor, Kosmos2_5Config
 from transformers.models.kosmos2_5.configuration_kosmos2_5 import Kosmos2_5TextConfig, Kosmos2_5VisionConfig
-from transformers.models.kosmos2_5.modeling_kosmos2_5 import Kosmos2_5ForConditionalGeneration, Kosmos2_5Model
 from transformers.testing_utils import (
     require_torch,
     require_torch_gpu,
@@ -312,6 +311,11 @@ class Kosmos2_5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
                     if name == "image_to_text_projection.latent_query":
                         # The original code use ` nn.Parameter(torch.randn(...))` for which this test won't pass.
                         continue
+                    self.assertIn(
+                        ((param.data.mean() * 1e9).round() / 1e9).item(),
+                        [0.0, 1.0],
+                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                    )
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
