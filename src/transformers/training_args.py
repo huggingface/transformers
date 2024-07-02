@@ -270,11 +270,11 @@ class TrainingArguments:
         torch_empty_cache_steps (`int`, *optional*):
             Number of steps to wait before calling `torch.cuda.empty_cache()`. If left unset or set to None, cache will not be emptied.
 
-            <tip>
+            <Tip>
 
             This can help avoid CUDA out-of-memory errors by lowering peak VRAM usage at a cost of about [10% slower performance](https://github.com/huggingface/transformers/issues/31372).
 
-            </tip>
+            </Tip>
 
         learning_rate (`float`, *optional*, defaults to 5e-5):
             The initial learning rate for [`AdamW`] optimizer.
