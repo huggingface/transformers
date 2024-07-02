@@ -183,7 +183,10 @@ class AttentionMaskConverter:
 
         inverted_mask = 1.0 - expanded_mask
 
-        return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
+        # using torch.finfo causes overflow when using F.scaled_dot_product_attention.
+        # it is safe using torch.finfo(dtype).min / 2 instead of torch.finfo(dtype).min.
+        # especially for bfloat16.
+        return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min / 2)
 
     @staticmethod
     def _unmask_unattended(
