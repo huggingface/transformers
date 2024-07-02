@@ -133,6 +133,10 @@ jobs:
         working-directory: /transformers
         run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
 
+      - name: Reinstall torch 2.4 RC
+        working-directory: /transformers
+        run: python3 -m pip uninstall -y torch torchvision torchaudio && python3 -m pip install torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 --index-url https://download.pytorch.org/whl/test/cu121
+
       - name: NVIDIA-SMI
         run: |
           nvidia-smi
@@ -234,6 +238,10 @@ jobs:
         working-directory: /transformers
         run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
 
+      - name: Reinstall torch 2.4 RC
+        working-directory: /transformers
+        run: python3 -m pip uninstall -y torch torchvision torchaudio && python3 -m pip install torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 --index-url https://download.pytorch.org/whl/test/cu121
+
       - name: NVIDIA-SMI
         run: |
           nvidia-smi
@@ -291,6 +299,9 @@ jobs:
         run: |
           python3 -m pip install -U datasets
           python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
+
+      - name: Reinstall torch 2.4 RC
+        run: python3 -m pip uninstall -y torch torchvision torchaudio && python3 -m pip install torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 --index-url https://download.pytorch.org/whl/test/cu121
 
       - name: Remove cached torch extensions
         run: rm -rf /github/home/.cache/torch_extensions/
@@ -374,6 +385,10 @@ jobs:
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers
         run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
+
+      - name: Reinstall torch 2.4 RC
+        working-directory: /transformers
+        run: python3 -m pip uninstall -y torch torchvision torchaudio && python3 -m pip install torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 --index-url https://download.pytorch.org/whl/test/cu121
 
       - name: NVIDIA-SMI
         run: |

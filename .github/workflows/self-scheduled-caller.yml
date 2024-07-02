@@ -7,7 +7,7 @@ on:
     - cron: "17 2 * * *"
   push:
     branches:
-      - run_scheduled_ci*
+      - trigger_ci_with_torch_2_4
 
 jobs:
   model-ci:
