@@ -1034,7 +1034,9 @@ class Trainer:
             optimizer = self.optimizer.optimizer
         else:
             optimizer = self.optimizer
-        self.create_scheduler(num_training_steps=num_training_steps, num_train_epochs=num_train_epochs, optimizer=optimizer)
+        self.create_scheduler(
+            num_training_steps=num_training_steps, num_train_epochs=num_train_epochs, optimizer=optimizer
+        )
 
     def get_decay_parameter_names(self, model) -> List[str]:
         """
@@ -1433,7 +1435,9 @@ class Trainer:
             raise ValueError(f"Trainer cannot instantiate unsupported optimizer: {args.optim}")
         return optimizer_cls, optimizer_kwargs
 
-    def create_scheduler(self, num_training_steps: int, num_train_epochs: int, optimizer: torch.optim.Optimizer = None):
+    def create_scheduler(
+        self, num_training_steps: int, num_train_epochs: int, optimizer: torch.optim.Optimizer = None
+    ):
         """
         Setup the scheduler. The optimizer of the trainer must have been set up either before this method is called or
         passed as an argument.

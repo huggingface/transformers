@@ -454,13 +454,21 @@ def get_wsd_schedule(
     return LambdaLR(optimizer, lr_lambda, last_epoch)
 
 
-
-def _get_staggered_schedule_with_linear_modifier_lr_lambda(current_step: int, steps_per_stagger: int, modifier: float, min_lr: float):
+def _get_staggered_schedule_with_linear_modifier_lr_lambda(
+    current_step: int, steps_per_stagger: int, modifier: float, min_lr: float
+):
     current_epoch = current_step // steps_per_stagger
     return max(min_lr, 1.0 - (current_epoch * modifier))
 
 
-def get_staggered_schedule_with_linear_modifier(optimizer: Optimizer, num_training_steps: int, num_train_epochs: int, modifier: float, min_lr: float, last_epoch: int = -1):
+def get_staggered_schedule_with_linear_modifier(
+    optimizer: Optimizer,
+    num_training_steps: int,
+    num_train_epochs: int,
+    modifier: float,
+    min_lr: float,
+    last_epoch: int = -1,
+):
     """
     Create a schedule with a staggered learning rate that remains constant throughout the epoch, and decreases linearly by a given modifier at the end of each epoch.
 
@@ -482,10 +490,9 @@ def get_staggered_schedule_with_linear_modifier(optimizer: Optimizer, num_traini
         _get_staggered_schedule_with_linear_modifier_lr_lambda,
         steps_per_stagger=steps_per_stagger,
         modifier=modifier,
-        min_lr=min_lr
+        min_lr=min_lr,
     )
     return LambdaLR(optimizer, lr_lambda, last_epoch=last_epoch)
-
 
 
 TYPE_TO_SCHEDULER_FUNCTION = {
@@ -575,7 +582,12 @@ def get_scheduler(
             raise ValueError(f"{name} requires `num_training_steps`, please provide that argument.")
         if num_train_epochs is None:
             raise ValueError(f"{name} requires `num_train_epochs`, please provide that argument.")
-        return schedule_func(optimizer, num_training_steps=num_training_steps, num_train_epochs=num_train_epochs, **scheduler_specific_kwargs)
+        return schedule_func(
+            optimizer,
+            num_training_steps=num_training_steps,
+            num_train_epochs=num_train_epochs,
+            **scheduler_specific_kwargs,
+        )
 
     # All other schedulers require `num_warmup_steps`
     if num_warmup_steps is None:
