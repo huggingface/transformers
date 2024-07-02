@@ -34,6 +34,9 @@ from .tools import (
     load_tool,
 )
 
+DEFAULT_JSON_GRAMMAR = '^(Thought: .+?\nAction:\s*\{\s*"action":\s*"\w+",\s*"action_input":\s*\{(?:.|\s)+?\}\s*\}<end_action>)$'
+DEFAULT_CODE_GRAMMAR = '/^(Thought: .+?\nCode:\n```py\n(?:.|\s)+?\n```<end_action>)$'
+
 
 if is_pygments_available():
     from pygments import highlight
@@ -308,7 +311,7 @@ class Agent:
         self,
         tools: Union[List[Tool], Toolbox],
         llm_engine: Callable = HfEngine(),
-        system_prompt=DEFAULT_REACT_JSON_SYSTEM_PROMPT,
+        system_prompt=DEFAULT_REACT_CODE_SYSTEM_PROMPT,
         tool_description_template=None,
         additional_args={},
         max_iterations: int = 6,
@@ -316,6 +319,7 @@ class Agent:
         add_base_tools: bool = False,
         verbose: int = 0,
         memory_verbose: bool = False,
+        grammar=DEFAULT_CODE_GRAMMAR,
     ):
         self.agent_name = self.__class__.__name__
         self.llm_engine = llm_engine
@@ -327,6 +331,7 @@ class Agent:
         self.max_iterations = max_iterations
         self.logger = logger
         self.tool_parser = tool_parser
+        self.grammar = grammar
 
         if isinstance(tools, Toolbox):
             self._toolbox = tools
@@ -508,6 +513,7 @@ class CodeAgent(Agent):
         llm_engine: Callable = HfEngine(),
         system_prompt: str = DEFAULT_CODE_SYSTEM_PROMPT,
         tool_description_template: str = DEFAULT_TOOL_DESCRIPTION_TEMPLATE,
+        grammar: str = DEFAULT_CODE_GRAMMAR,
         additional_authorized_imports: Optional[List[str]] = None,
         **kwargs,
     ):
@@ -516,6 +522,7 @@ class CodeAgent(Agent):
             llm_engine=llm_engine,
             system_prompt=system_prompt,
             tool_description_template=tool_description_template,
+            grammar=grammar,
             **kwargs,
         )
 
@@ -622,6 +629,7 @@ class ReactAgent(Agent):
         llm_engine: Callable = HfEngine(),
         system_prompt: str = DEFAULT_REACT_CODE_SYSTEM_PROMPT,
         tool_description_template: str = DEFAULT_TOOL_DESCRIPTION_TEMPLATE,
+        grammar: str = DEFAULT_CODE_GRAMMAR,
         **kwargs,
     ):
         super().__init__(
@@ -629,6 +637,7 @@ class ReactAgent(Agent):
             llm_engine=llm_engine,
             system_prompt=system_prompt,
             tool_description_template=tool_description_template,
+            grammar=grammar,
             **kwargs,
         )
         if "final_answer" not in self._toolbox.tools:
@@ -741,6 +750,7 @@ class ReactJsonAgent(ReactAgent):
         llm_engine: Callable = HfEngine(),
         system_prompt: str = DEFAULT_REACT_JSON_SYSTEM_PROMPT,
         tool_description_template: str = DEFAULT_TOOL_DESCRIPTION_TEMPLATE,
+        grammar: str = DEFAULT_JSON_GRAMMAR,
         **kwargs,
     ):
         super().__init__(
@@ -748,6 +758,7 @@ class ReactJsonAgent(ReactAgent):
             llm_engine=llm_engine,
             system_prompt=system_prompt,
             tool_description_template=tool_description_template,
+            grammar=grammar,
             **kwargs,
         )
 
@@ -770,7 +781,11 @@ class ReactJsonAgent(ReactAgent):
         self.logger.info(self.prompt[-1])
 
         try:
-            llm_output = self.llm_engine(self.prompt, stop_sequences=["<end_action>", "Observation:"])
+            llm_output = self.llm_engine(
+                self.prompt,
+                stop_sequences=["<end_action>", "Observation:"],
+                grammar=self.grammar,
+            )
         except Exception as e:
             raise AgentGenerationError(f"Error in generating llm output: {e}.")
         self.logger.debug("===== Output message of the LLM: =====")
@@ -835,6 +850,7 @@ class ReactCodeAgent(ReactAgent):
         llm_engine: Callable = HfEngine(),
         system_prompt: str = DEFAULT_REACT_CODE_SYSTEM_PROMPT,
         tool_description_template: str = DEFAULT_TOOL_DESCRIPTION_TEMPLATE,
+        grammar: str = DEFAULT_CODE_GRAMMAR,
         additional_authorized_imports: Optional[List[str]] = None,
         **kwargs,
     ):
@@ -843,6 +859,7 @@ class ReactCodeAgent(ReactAgent):
             llm_engine=llm_engine,
             system_prompt=system_prompt,
             tool_description_template=tool_description_template,
+            grammar=grammar,
             **kwargs,
         )
 
@@ -878,7 +895,11 @@ class ReactCodeAgent(ReactAgent):
         self.logger.info(self.prompt[-2:])
 
         try:
-            llm_output = self.llm_engine(self.prompt, stop_sequences=["<end_action>", "Observation:"])
+            llm_output = self.llm_engine(
+                self.prompt,
+                stop_sequences=["<end_action>", "Observation:"],
+                grammar=self.grammar,
+            )
         except Exception as e:
             raise AgentGenerationError(f"Error in generating llm output: {e}.")
 
