@@ -1127,6 +1127,7 @@ class EncoderDecoderCache(Cache):
         self.self_attention_cache.batch_select_indices(indices)
         self.cross_attention_cache.batch_select_indices(indices)
 
+
 class HybridCache(Cache):
     def __init__(self, config: PretrainedConfig, max_batch_size, max_cache_len, device="cpu", dtype=None) -> None:
         if not hasattr(config, "sliding_window") or config.sliding_window is None:
