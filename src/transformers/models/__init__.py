@@ -58,6 +58,7 @@ from . import (
     cpmant,
     ctrl,
     cvt,
+    dab_detr,
     data2vec,
     dbrx,
     deberta,
