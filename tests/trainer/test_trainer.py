@@ -786,6 +786,33 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertEqual(trainer.lr_scheduler.patience, 5)
         self.assertEqual(trainer.lr_scheduler.cooldown, 2)
 
+    def test_staggered_linear_lr(self):
+        train_dataset = RegressionDataset()
+        model = RegressionModel()
+        num_steps = 10
+        extra_kwargs = {
+            "modifier": 0.01,
+            "min_lr": 1e-5,
+        }
+        args = TrainingArguments(
+            "./regression",
+            lr_scheduler_type="staggered_linear",
+            lr_scheduler_kwargs=extra_kwargs,
+            learning_rate=0.2,
+            num_train_epochs=10,
+            report_to="none",
+        )
+        trainer = Trainer(model, args, train_dataset=train_dataset)
+        trainer.create_optimizer_and_scheduler(num_training_steps=num_steps, num_train_epochs=10)
+
+        # Checking that the scheduler was created
+        self.assertIsNotNone(trainer.lr_scheduler)
+
+        trainer.train()
+
+        # 0.2 * (1.0 - 0.01 * 10) = 0.18
+        self.assertTrue(0.17999 < trainer.lr_scheduler.get_last_lr()[0] < 0.180001)
+
     def test_reduce_lr_on_plateau(self):
         # test the ReduceLROnPlateau scheduler
 

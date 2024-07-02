@@ -454,6 +454,40 @@ def get_wsd_schedule(
     return LambdaLR(optimizer, lr_lambda, last_epoch)
 
 
+
+def _get_staggered_schedule_with_linear_modifier_lr_lambda(current_step: int, steps_per_stagger: int, modifier: float, min_lr: float):
+    current_epoch = current_step // steps_per_stagger
+    return max(min_lr, 1.0 - (current_epoch * modifier))
+
+
+def get_staggered_schedule_with_linear_modifier(optimizer: Optimizer, num_training_steps: int, num_train_epochs: int, modifier: float, min_lr: float, last_epoch: int = -1):
+    """
+    Create a schedule with a staggered learning rate that remains constant throughout the epoch, and decreases linearly by a given modifier at the end of each epoch.
+
+    Args:
+        optimizer ([`~torch.optim.Optimizer`]):
+            The optimizer for which to schedule the learning rate.
+        modifier (`float`):
+            The modifier to decrease the learning rate at the end of each epoch.
+        min_lr (`float`):
+            The minimum learning rate to use.
+
+    Return:
+        `torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
+    """
+
+    steps_per_stagger = num_training_steps // num_train_epochs
+
+    lr_lambda = partial(
+        _get_staggered_schedule_with_linear_modifier_lr_lambda,
+        steps_per_stagger=steps_per_stagger,
+        modifier=modifier,
+        min_lr=min_lr
+    )
+    return LambdaLR(optimizer, lr_lambda, last_epoch=last_epoch)
+
+
+
 TYPE_TO_SCHEDULER_FUNCTION = {
     SchedulerType.LINEAR: get_linear_schedule_with_warmup,
     SchedulerType.COSINE: get_cosine_schedule_with_warmup,
@@ -465,6 +499,7 @@ TYPE_TO_SCHEDULER_FUNCTION = {
     SchedulerType.REDUCE_ON_PLATEAU: get_reduce_on_plateau_schedule,
     SchedulerType.COSINE_WITH_MIN_LR: get_cosine_with_min_lr_schedule_with_warmup,
     SchedulerType.WARMUP_STABLE_DECAY: get_wsd_schedule,
+    SchedulerType.STAGGERED_LINEAR: get_staggered_schedule_with_linear_modifier,
 }
 
 
@@ -473,6 +508,7 @@ def get_scheduler(
     optimizer: Optimizer,
     num_warmup_steps: Optional[int] = None,
     num_training_steps: Optional[int] = None,
+    num_train_epochs: Optional[int] = None,
     scheduler_specific_kwargs: Optional[dict] = None,
 ):
     """
@@ -488,6 +524,9 @@ def get_scheduler(
             optional), the function will raise an error if it's unset and the scheduler type requires it.
         num_training_steps (`int``, *optional*):
             The number of training steps to do. This is not required by all schedulers (hence the argument being
+            optional), the function will raise an error if it's unset and the scheduler type requires it.
+        num_train_epochs (`int`, *optional*):
+            The number of training epochs to do. This is not required by all schedulers (hence the argument being
             optional), the function will raise an error if it's unset and the scheduler type requires it.
         scheduler_specific_kwargs (`dict`, *optional*):
             Extra parameters for schedulers such as cosine with restarts. Mismatched scheduler types and scheduler
@@ -529,6 +568,14 @@ def get_scheduler(
 
     if name == SchedulerType.REDUCE_ON_PLATEAU:
         return schedule_func(optimizer, **scheduler_specific_kwargs)
+
+    if name == SchedulerType.STAGGERED_LINEAR:
+        # Requires `num_training_steps` but not `num_warmup_steps`
+        if num_training_steps is None:
+            raise ValueError(f"{name} requires `num_training_steps`, please provide that argument.")
+        if num_train_epochs is None:
+            raise ValueError(f"{name} requires `num_train_epochs`, please provide that argument.")
+        return schedule_func(optimizer, num_training_steps=num_training_steps, num_train_epochs=num_train_epochs, **scheduler_specific_kwargs)
 
     # All other schedulers require `num_warmup_steps`
     if num_warmup_steps is None:

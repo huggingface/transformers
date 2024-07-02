@@ -1020,7 +1020,7 @@ class Trainer:
         # We use the same batch_size as for eval.
         return self.accelerator.prepare(DataLoader(test_dataset, **dataloader_params))
 
-    def create_optimizer_and_scheduler(self, num_training_steps: int):
+    def create_optimizer_and_scheduler(self, num_training_steps: int, num_train_epochs: int = 1):
         """
         Setup the optimizer and the learning rate scheduler.
 
@@ -1034,7 +1034,7 @@ class Trainer:
             optimizer = self.optimizer.optimizer
         else:
             optimizer = self.optimizer
-        self.create_scheduler(num_training_steps=num_training_steps, optimizer=optimizer)
+        self.create_scheduler(num_training_steps=num_training_steps, num_train_epochs=num_train_epochs, optimizer=optimizer)
 
     def get_decay_parameter_names(self, model) -> List[str]:
         """
@@ -1433,13 +1433,15 @@ class Trainer:
             raise ValueError(f"Trainer cannot instantiate unsupported optimizer: {args.optim}")
         return optimizer_cls, optimizer_kwargs
 
-    def create_scheduler(self, num_training_steps: int, optimizer: torch.optim.Optimizer = None):
+    def create_scheduler(self, num_training_steps: int, num_train_epochs: int, optimizer: torch.optim.Optimizer = None):
         """
         Setup the scheduler. The optimizer of the trainer must have been set up either before this method is called or
         passed as an argument.
 
         Args:
             num_training_steps (int): The number of training steps to do.
+            num_train_epochs (int): The number of training epochs to do.
+            optimizer (`torch.optim.Optimizer`, *optional*): The optimizer to use. If not set, use `self.optimizer`.
         """
         if self.lr_scheduler is None:
             self.lr_scheduler = get_scheduler(
@@ -1447,6 +1449,7 @@ class Trainer:
                 optimizer=self.optimizer if optimizer is None else optimizer,
                 num_warmup_steps=self.args.get_warmup_steps(num_training_steps),
                 num_training_steps=num_training_steps,
+                num_train_epochs=num_train_epochs,
                 scheduler_specific_kwargs=self.args.lr_scheduler_kwargs,
             )
             self._created_lr_scheduler = True
@@ -2030,7 +2033,7 @@ class Trainer:
             self.optimizer, self.lr_scheduler = deepspeed_init(self, num_training_steps=max_steps)
 
         if not delay_optimizer_creation:
-            self.create_optimizer_and_scheduler(num_training_steps=max_steps)
+            self.create_optimizer_and_scheduler(num_training_steps=max_steps, num_train_epochs=num_train_epochs)
 
         self.state = TrainerState(
             stateful_callbacks=[
@@ -2077,7 +2080,7 @@ class Trainer:
             if use_accelerator_prepare:
                 self._fsdp_qlora_plugin_updates()
                 self.model = self.accelerator.prepare(self.model)
-            self.create_optimizer_and_scheduler(num_training_steps=max_steps)
+            self.create_optimizer_and_scheduler(num_training_steps=max_steps, num_train_epochs=num_train_epochs)
 
         # prepare using `accelerator` prepare
         if use_accelerator_prepare:
