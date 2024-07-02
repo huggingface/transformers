@@ -13,15 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
-import shutil
-import tempfile
 import unittest
-from tempfile import TemporaryDirectory
-
-import numpy as np
-import pytest
-import requests
 
 from transformers.testing_utils import (
     require_vision,
@@ -30,12 +22,12 @@ from transformers.utils import is_vision_available
 
 
 if is_vision_available():
-    from PIL import Image
-
     from transformers import (
         AutoProcessor,
         AutoTokenizer,
     )
+
+
 @require_vision
 class LlavaProcessorTest(unittest.TestCase):
     def test_can_load_various_tokenizers(self):

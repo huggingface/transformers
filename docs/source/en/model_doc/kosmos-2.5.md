@@ -35,12 +35,12 @@ alt="drawing" width="600"/>
 from PIL import Image
 import requests
 import torch
-from transformers import AutoProcessor, AutoModelForVision2Seq
+from transformers import AutoProcessor, Kosmos2_5ForConditionalGeneration
 import re
 repo = "kirp/kosmos2_5"
 device = "cuda:0"
 dtype = torch.bfloat16
-model = AutoModelForVision2Seq.from_pretrained(repo, device_map=device, torch_dtype=dtype)
+model = Kosmos2_5ForConditionalGeneration.from_pretrained(repo, device_map=device, torch_dtype=dtype)
 processor = AutoProcessor.from_pretrained(repo)
 url = "https://huggingface.co/kirp/kosmos2_5/resolve/main/receipt_00008.png"
 image = Image.open(requests.get(url, stream=True).raw)
