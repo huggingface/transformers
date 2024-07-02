@@ -29,6 +29,7 @@ from ..cache_utils import (
     DynamicCache,
     EncoderDecoderCache,
     HQQQuantizedCache,
+    HybridCache,
     QuantizedCacheConfig,
     QuantoQuantizedCache,
     SlidingWindowCache,
@@ -113,7 +114,7 @@ logger = logging.get_logger(__name__)
 if is_accelerate_available():
     from accelerate.hooks import AlignDevicesHook, add_hook_to_module
 
-NEED_SETUP_CACHE_CLASSES_MAPPING = {"static": StaticCache, "sliding_window": SlidingWindowCache}
+NEED_SETUP_CACHE_CLASSES_MAPPING = {"static": StaticCache, "sliding_window": SlidingWindowCache, "hybrid": HybridCache}
 QUANT_BACKEND_CLASSES_MAPPING = {"quanto": QuantoQuantizedCache, "HQQ": HQQQuantizedCache}
 
 
@@ -1396,11 +1397,12 @@ class GenerationMixin:
 
         past_length = 0
         if model_kwargs.get("past_key_values") is not None:
-            past_key_values = model_kwargs["past_key_values"]
-            if isinstance(past_key_values, (Cache, EncoderDecoderCache)):
-                past_length = past_key_values.get_seq_length()
-            else:
-                past_length = past_key_values[0][0].shape[2]
+            cache = model_kwargs["past_key_values"]
+            if not isinstance(cache, Cache):
+                past_length = cache[0][0].shape[2]
+            elif hasattr(cache, "get_seq_length") and cache.get_seq_length() is not None:
+                past_length = cache.get_seq_length()
+
         if "inputs_embeds" in model_kwargs:
             cur_len = model_kwargs["inputs_embeds"].shape[1]
         else:
@@ -1759,7 +1761,10 @@ class GenerationMixin:
                         "issue: https://github.com/huggingface/transformers/issues/28981"
                     )
                 model_kwargs["past_key_values"] = self._get_cache(
-                    generation_config.cache_implementation, batch_size, generation_config.max_length, model_kwargs
+                    generation_config.cache_implementation,
+                    getattr(generation_config, "num_beams", 1) * batch_size,
+                    generation_config.max_length,
+                    model_kwargs,
                 )
             elif generation_config.cache_implementation == "quantized":
                 if not self._supports_quantized_cache:
