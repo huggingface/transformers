@@ -287,6 +287,11 @@ _import_structure = {
         "CodeGenConfig",
         "CodeGenTokenizer",
     ],
+    "models.cogvlm": [
+        "CogvlmConfig",
+        "CogvlmProcessor",
+        "CogvlmVisionConfig",
+    ],
     "models.cohere": ["CohereConfig"],
     "models.conditional_detr": ["ConditionalDetrConfig"],
     "models.convbert": [
@@ -1657,6 +1662,13 @@ else:
             "CodeGenForCausalLM",
             "CodeGenModel",
             "CodeGenPreTrainedModel",
+        ]
+    )
+    _import_structure["models.cogvlm"].extend(
+        [
+            "CogvlmForCausalLM",
+            "CogvlmModel",
+            "CogvlmPreTrainedModel",
         ]
     )
     _import_structure["models.cohere"].extend(["CohereForCausalLM", "CohereModel", "CoherePreTrainedModel"])
@@ -4907,6 +4919,11 @@ if TYPE_CHECKING:
         CodeGenConfig,
         CodeGenTokenizer,
     )
+    from .models.cogvlm import (
+        CogvlmConfig,
+        CogvlmProcessor,
+        CogvlmVisionConfig,
+    )
     from .models.cohere import CohereConfig
     from .models.conditional_detr import (
         ConditionalDetrConfig,
@@ -6273,6 +6290,11 @@ if TYPE_CHECKING:
             CodeGenForCausalLM,
             CodeGenModel,
             CodeGenPreTrainedModel,
+        )
+        from .models.cogvlm import (
+            CogvlmForCausalLM,
+            CogvlmModel,
+            CogvlmPreTrainedModel,
         )
         from .models.cohere import (
             CohereForCausalLM,
