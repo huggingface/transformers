@@ -248,7 +248,6 @@ def shape_adaptive_cropping(
     size: Dict[str, int] = None,
     anchors: str = "grid_9",
     grid_dict: Dict[str, List[Tuple[int, int]]] = GRID_DICT,
-    add_global_img: bool = True,
     selected_anchor: int = None,
 ):
     r"""
@@ -332,9 +331,28 @@ def shape_adaptive_cropping(
     )
 
     patch_position = patch_position.reshape(-1, 2)
-    if add_global_img:
-        patch_position = np.vstack((np.ones((1, 2), dtype=np.int64) * anchor_max, patch_position))
+    patch_position = np.vstack((np.ones((1, 2), dtype=np.int64) * anchor_max, patch_position))
     return image_patches_list, patch_position, patch_position.shape[0], anchor_max
+
+
+def add_global_image(images, patch_images):
+    """
+    This function takes a list of global images and a list of lists containing patch images,
+    and combines them such that each image is followed by its corresponding patch images.
+
+    :param images: List of global images
+    :param patch_images: List of lists of patch images corresponding to each image
+    :return: A new list with images followed by their corresponding patch images
+    """
+    # Create a new list to store the combined elements
+    combined_images = []
+
+    # Combine elements
+    for image, patches in zip(images, patch_images):
+        combined_images.append(image)
+        combined_images.extend(patches)
+
+    return combined_images
 
 
 class MPLUGDocOwlImageProcessor(BaseImageProcessor):
@@ -374,8 +392,8 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
             Can be overridden by the `image_std` parameter in the `preprocess` method.
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Whether to convert the image to RGB.
-        do_anchor_resize (`bool`, *optional*, defaults to `True`): Whether to resize the image based on the specified anchor. Should be called before do_shape_adaptive_cropping. 
-        do_shape_adaptive_cropping (`bool`, *optional*, defaults to `True`): Whether to do a shape adaptive cropping of the input image. Should be only called if the do_anchor_resize is called. 
+        do_anchor_resize (`bool`, *optional*, defaults to `True`): Whether to resize the image based on the specified anchor. Should be called before do_shape_adaptive_cropping.
+        do_shape_adaptive_cropping (`bool`, *optional*, defaults to `True`): Whether to do a shape adaptive cropping of the input image. Should be only called if the do_anchor_resize is called.
     """
 
     model_input_names = ["pixel_values"]
@@ -395,6 +413,7 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
         do_convert_rgb: bool = True,
         do_shape_adaptive_cropping: bool = True,
         do_anchor_resize: bool = True,
+        do_add_global_image: bool = True,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -416,6 +435,7 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
         self.do_convert_rgb = do_convert_rgb
         self.do_shape_adaptive_cropping = do_shape_adaptive_cropping
         self.do_anchor_resize = do_anchor_resize
+        self.do_add_global_image = do_add_global_image
         self._valid_processor_keys = [
             "images",
             "do_resize",
@@ -446,6 +466,13 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
         selected_anchor: int = None,
     ):
         return shape_adaptive_cropping(image_patches=image_patches, size=size, selected_anchor=selected_anchor)
+
+    def add_global_image(
+        self,
+        images: List,
+        patch_images: List,
+    ):
+        return add_global_image(images=images, patch_images=patch_images)
 
     def resize(
         self,
@@ -515,6 +542,7 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         do_shape_adaptive_cropping: bool = True,
         do_anchor_resize: bool = True,
+        do_add_global_image: bool = True,
         **kwargs,
     ) -> PIL.Image.Image:
         """
@@ -585,6 +613,7 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
             do_shape_adaptive_cropping if do_shape_adaptive_cropping is not None else self.do_shape_adaptive_cropping
         )
         do_anchor_resize = do_anchor_resize if do_anchor_resize is not None else self.do_anchor_resize
+        do_add_global_image = do_add_global_image if do_add_global_image is not None else self.do_add_global_image
         validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
         images = make_list_of_images(images)
@@ -632,31 +661,19 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
             ]
 
         if do_anchor_resize:
-            breakpoint()
             output = [self.anchor_resize(image, size) for image in patch_images]
-            breakpoint()
-            patch_images, selected_anchors = output[0], output[1]
-            breakpoint()
-            # images.extend(patch_images)
 
         if do_shape_adaptive_cropping:
-            breakpoint()
             output = [
-                self.adaptive_crop(image_patches=image, size=size, selected_anchor=selected_anchor)[0]
+                self.adaptive_crop(image_patches=image, size=size, selected_anchor=selected_anchor)
                 for (image, selected_anchor) in output
             ]
-            breakpoint()
-            output = np.array(output)
-            breakpoint()
-            patch_images, patch_positions, num_patches, anchor_max = (
-                output[:, 0],
-                output[:, 1],
-                output[:, 2],
-                output[:, 3],
-            )
+            patch_images, patch_positions, num_patches, anchor_max = zip(*output)
 
-            # del images[1:]
-            images.extend(patch_images)
+        if do_add_global_image:
+            images = self.add_global_image(images, patch_images)
+        else:
+            images = [patch for sublist in patch_images for patch in sublist]
 
         if do_rescale:
             images = [

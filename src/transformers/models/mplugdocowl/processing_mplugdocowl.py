@@ -16,8 +16,7 @@
 Processor class for MPLUGDocOwl.
 """
 
-
-from typing import List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 # FIXME need to add image processing class name
 # from transformers.models.mplugdocowl.image_processing_mplugdocowl import MPLUGDocOwlImageProcessor
@@ -45,7 +44,7 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
 
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "MPLUGDocOwlImageProcessor"
-    tokenizer_class = "AutoTokenizer" 
+    tokenizer_class = "AutoTokenizer"
 
     def __init__(self, image_processor=None, tokenizer=None):
         super().__init__(image_processor, tokenizer)
@@ -53,6 +52,19 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
     def generate_text_with_placeholders(
         self, text, patch_positions, anchor_max, num_patches, add_textual_crop_indicator
     ):
+        """
+        Generates a text string with placeholders for images and optional textual crop indicators.
+
+        Parameters:
+        - text (str): The input text containing <image> tokens where image placeholders should be inserted.
+        - patch_positions (numpy.ndarray): Array of patch positions indicating the location of cropped images.
+        - anchor_max (int): The maximum anchor value used to identify global images.
+        - num_patches (int): The number of patches (or cropped images) to be represented in the text.
+        - add_textual_crop_indicator (bool): Flag indicating whether to add textual crop indicators in the output.
+
+        Returns:
+        - str: The generated text with appropriate image placeholders and optional crop indicators.
+        """
         media_token = "<image>"
         assert media_token in text
         text_list = text.split(media_token)
@@ -87,6 +99,15 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length=None,
         do_rescale: bool = True,
+        do_convert_rgb: bool = True,
+        do_resize: bool = True,
+        do_normalize: bool = None,
+        image_mean: Optional[Union[float, List[float]]] = (0.48145466, 0.4578275, 0.40821073),
+        image_std: Optional[Union[float, List[float]]] = (0.26862954, 0.26130258, 0.27577711),
+        size: Dict[str, int] = {"width": 448, "height": 448},
+        do_anchor_resize: bool = True,
+        do_shape_adaptive_cropping: bool = True,
+        do_add_global_image: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
     ) -> BatchFeature:
         """
@@ -140,15 +161,16 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
             pixel_values = self.image_processor(
                 images,
                 do_rescale=do_rescale,
-                do_convert_rgb=True,
-                do_shape_adaptive_cropping=True,
-                do_resize=True,
-                do_normalize=True,
+                do_convert_rgb=do_convert_rgb,
+                do_shape_adaptive_cropping=do_shape_adaptive_cropping,
+                do_resize=do_resize,
+                do_normalize=do_normalize,
                 return_tensors=return_tensors,
-                image_mean=(0.48145466, 0.4578275, 0.40821073),
-                image_std=(0.26862954, 0.26130258, 0.27577711),
-                size={"width": 448, "height": 448},
-                do_anchor_resize=True,
+                image_mean=image_mean,
+                image_std=image_std,
+                size=size,
+                do_anchor_resize=do_anchor_resize,
+                do_add_global_image=do_add_global_image,
             )
         else:
             pixel_values = None
@@ -156,12 +178,12 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
         patch_positions = pixel_values["patch_positions"]
         num_patches = pixel_values["num_patches"]
         anchor_max = pixel_values["anchor_max"]
-        breakpoint()
+
         texts = [
             self.generate_text_with_placeholders(txt, patch_pos, anch_max, n_patches, add_textual_crop_indicator)
             for txt, patch_pos, anch_max, n_patches in zip(text, patch_positions, anchor_max, num_patches)
         ]
-        breakpoint()
+
         text_inputs = self.tokenizer(
             texts, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length
         )
