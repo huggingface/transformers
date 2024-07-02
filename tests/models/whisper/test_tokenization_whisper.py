@@ -14,6 +14,8 @@
 
 import unittest
 
+import numpy as np
+
 from transformers.models.whisper import WhisperTokenizer, WhisperTokenizerFast
 from transformers.models.whisper.tokenization_whisper import _combine_tokens_into_words, _find_longest_common_sequence
 from transformers.testing_utils import slow
@@ -250,6 +252,39 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         fast_tokenizer_prompt_ids = rust_tokenizer.get_prompt_ids(prompt)
 
         self.assertListEqual(tokenizer_prompt_ids.tolist(), fast_tokenizer_prompt_ids.tolist())
+
+    def test_tokenizer_decode_prompt(self):
+        prompt_text = "What does the fox say?"
+        input_text = "Hatee hatee hatee ho"
+
+        tokenizer = self.get_tokenizer()
+        rust_tokenizer = self.get_rust_tokenizer()
+
+        # encode prompt and input text using tokenizer
+        prompt_ids = tokenizer.get_prompt_ids(prompt_text, return_tensors="np")
+        input_ids = tokenizer(input_text, return_tensors="np").input_ids[0]
+        input_ids = np.hstack([prompt_ids, input_ids])
+
+        # encode using fast tokenizer
+        rust_prompt_ids = rust_tokenizer.get_prompt_ids(prompt_text, return_tensors="np")
+        rust_input_ids = rust_tokenizer(input_text, return_tensors="np").input_ids[0]
+        rust_input_ids = np.hstack([rust_prompt_ids, rust_input_ids])
+
+        # check with prompt in output
+        pred_text = tokenizer.decode(input_ids, skip_special_tokens=False)
+        rust_pred_text = rust_tokenizer.decode(rust_input_ids, skip_special_tokens=False)
+
+        # check correctness for both tokenizers
+        expected_text = f"<|startofprev|> {prompt_text}<|startoftranscript|><|notimestamps|>{input_text}<|endoftext|>"
+        self.assertEqual(pred_text.strip(), expected_text)
+        self.assertEqual(rust_pred_text.strip(), expected_text)
+
+        # check stripping prompt from output
+        pred_text = tokenizer.decode(input_ids, skip_special_tokens=True)
+        rust_pred_text = tokenizer.decode(input_ids, skip_special_tokens=True)
+
+        self.assertEqual(pred_text.strip(), input_text)
+        self.assertEqual(rust_pred_text.strip(), input_text)
 
     def test_combine_tokens_into_words(self):
         tokenizer = self.get_tokenizer()
