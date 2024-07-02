@@ -2686,14 +2686,6 @@ class GenerationMixin:
                         if self.config.is_encoder_decoder
                         else (outputs.hidden_states,)
                     )
-
-            if (
-                hasattr(generation_config, "assistant_confidence_threshold")
-                and generation_config.assistant_confidence_threshold > 0
-            ):    
-                p = next_token_scores.softmax(-1).max(-1).values
-                if p < generation_config.assistant_confidence_threshold:
-                    this_peer_finished = True
             
             # token selection
             if do_sample:
@@ -2701,6 +2693,17 @@ class GenerationMixin:
                 next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
             else:
                 next_tokens = torch.argmax(next_token_scores, dim=-1)
+            
+            if (
+                hasattr(generation_config, "assistant_confidence_threshold")
+                and generation_config.assistant_confidence_threshold > 0
+            ):    
+                if do_sample:
+                    p = probs[torch.arange(probs.size(0)), next_tokens]
+                else:
+                    p = next_token_scores.softmax(-1).max(-1).values
+                if p < generation_config.assistant_confidence_threshold:
+                    this_peer_finished = True
 
             # finished sentences should have their next token be a padding token
             if has_eos_stopping_criteria:
