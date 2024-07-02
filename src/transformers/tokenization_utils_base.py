@@ -1703,8 +1703,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         """
         Converts a list of dictionaries with `"role"` and `"content"` keys to a list of token
         ids. This method is intended for use with chat models, and will read the tokenizer's chat_template attribute to
-        determine the format and control tokens to use when converting. When chat_template is None, it will fall back
-        to the default_chat_template specified at the class level.
+        determine the format and control tokens to use when converting.
 
         Args:
             conversation (Union[List[Dict[str, str]], List[List[Dict[str, str]]]]): A list of dicts
@@ -1763,55 +1762,35 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         if tokenizer_kwargs is None:
             tokenizer_kwargs = {}
-
-        using_default_template = False
-
         # First, handle the cases when the model has a dict of multiple templates
-        if isinstance(self.chat_template, dict) or (
-            self.chat_template is None and isinstance(self.default_chat_template, dict)
-        ):
-            if self.chat_template is not None:
-                template_dict = self.chat_template
-                using_default_dict = False
-            else:
-                template_dict = self.default_chat_template
-                using_default_dict = True
-            if chat_template is not None and chat_template in template_dict:
+        if isinstance(self.chat_template, dict):
+            if chat_template is not None and chat_template in self.chat_template:
                 # The user can pass the name of a template to the chat template argument instead of an entire template
-                chat_template = template_dict[chat_template]
-                if using_default_dict:
-                    using_default_template = True
+                chat_template = self.chat_template[chat_template]
             elif chat_template is None:
-                if tools is not None and "tool_use" in template_dict:
-                    chat_template = template_dict["tool_use"]
-                elif "default" in template_dict:
-                    chat_template = template_dict["default"]
+                if tools is not None and "tool_use" in self.chat_template:
+                    chat_template = self.chat_template["tool_use"]
+                elif "default" in self.chat_template:
+                    chat_template = self.chat_template["default"]
                 else:
                     raise ValueError(
                         "This model has multiple chat templates with no default specified! Please either pass a chat "
                         "template or the name of the template you wish to use to the `chat_template` argument. Available "
-                        f"template names are {sorted(template_dict.keys())}."
+                        f"template names are {sorted(self.chat_template.keys())}."
                     )
-                if using_default_dict:
-                    using_default_template = True
 
         elif chat_template is None:
             # These are the cases when the model has a single template
-            # priority: `chat_template` argument > `tokenizer.chat_template` > `tokenizer.default_chat_template
+            # priority: `chat_template` argument > `tokenizer.chat_template` attribute
             if self.chat_template is not None:
                 chat_template = self.chat_template
             else:
-                chat_template = self.default_chat_template
-                using_default_template = True
-
-        if using_default_template:
-            logger.warning_once(
-                "No chat template is set for this tokenizer, falling back to a default class-level template. This is "
-                "very error-prone, because models are often trained with templates different from the class default! "
-                "Default chat templates are a legacy feature and will be removed in Transformers v4.43, at which "
-                "point any code depending on them will stop working. We recommend setting a valid chat template before "
-                "then to ensure that this model continues working without issues."
-            )
+                raise ValueError(
+                    "Cannot apply chat template because this tokenizer does not have a chat template! "
+                    "If you're sure this model has been trained for chat, please set an appropriate Jinja template "
+                    "as the tokenizer.chat_template attribute. For more information, see "
+                    "https://huggingface.co/docs/transformers/main/en/chat_templating"
+                )
 
         # Compilation function uses a cache to avoid recompiling the same template
         compiled_template = self._compile_jinja_template(chat_template)
@@ -1907,21 +1886,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         jinja_env.filters["tojson"] = tojson
         jinja_env.globals["raise_exception"] = raise_exception
         return jinja_env.from_string(chat_template)
-
-    @property
-    def default_chat_template(self):
-        """
-        This template formats inputs in the standard ChatML format. See
-        https://github.com/openai/openai-python/blob/main/chatml.md
-        """
-        return (
-            "{% for message in messages %}"
-            "{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}"
-            "{% endfor %}"
-            "{% if add_generation_prompt %}"
-            "{{ '<|im_start|>assistant\n' }}"
-            "{% endif %}"
-        )
 
     @classmethod
     def from_pretrained(
