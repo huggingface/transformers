@@ -616,6 +616,9 @@ def prepare_text():
     return text
 
 
+def prepare_for_loss(): ...
+
+
 @require_timm
 @require_vision
 @slow
@@ -741,3 +744,18 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs1.logits, outputs_batched.logits[:1], atol=1e-3))
         # For some reason 12 elements are > 1e-3, but the rest are fine
         self.assertTrue(torch.allclose(outputs2.logits, outputs_batched.logits[1:], atol=1.8e-3))
+
+    def test_grounding_dino_loss(self):
+        model = GroundingDinoForObjectDetection.from_pretrained("IDEA-Research/grounding-dino-tiny").to(torch_device)
+
+        processor = self.default_processor
+        image, text, labels = prepare_for_loss()
+        encoding = processor(images=image, text=text, return_tensors="pt").to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(labels=labels, **encoding)
+
+        # test loss
+        loss = outputs.loss
+        expected_loss = ...
+        self.assertEqual(loss.item(), expected_loss, msg="Loss is not matching expected value")

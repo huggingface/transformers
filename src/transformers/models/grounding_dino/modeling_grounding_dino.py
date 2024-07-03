@@ -3184,6 +3184,8 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
             outputs_loss = {}
             outputs_loss["logits"] = logits
             outputs_loss["pred_boxes"] = pred_boxes
+            outputs_loss["input_ids"] = input_ids
+            outputs_loss["attention_mask"] = attention_mask
             if self.config.auxiliary_loss:
                 auxiliary_outputs = self._set_aux_loss(outputs_class, outputs_coord)
                 outputs_loss["auxiliary_outputs"] = auxiliary_outputs
