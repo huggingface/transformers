@@ -73,7 +73,7 @@ from transformers.utils.import_utils import (
 )
 
 
-sys.path.append(str(Path(__file__).parent.parent / "utils"))
+sys.path.append(str(Path(__file__).parent.parent.parent / "utils"))
 
 from test_module.custom_configuration import CustomConfig, NoSuperInitConfig  # noqa E402
 
