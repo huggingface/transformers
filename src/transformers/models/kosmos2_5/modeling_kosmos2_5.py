@@ -1994,6 +1994,8 @@ class Kosmos2_5PreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.column_embedder.weight, std=std)
             nn.init.normal_(module.row_embedder.weight, std=std)
             nn.init.normal_(module.patch_projection.weight, std=std)
+            if module.patch_projection.bias is not None:
+                module.patch_projection.bias.data.zero_()
         elif isinstance(module, Kosmos2_5VisionAttention):
             in_proj_std = (module.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             out_proj_std = (module.hidden_size**-0.5) * factor
@@ -2014,10 +2016,13 @@ class Kosmos2_5PreTrainedModel(PreTrainedModel):
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
             nn.init.normal_(module.wi_0.weight, std=fc_std)
             nn.init.normal_(module.wi_1.weight, std=in_proj_std)
+            nn.init.normal_(module.wo.weight, std=fc_std)
             if module.wi_0.bias is not None:
                 module.wi_0.bias.data.zero_()
             if module.wi_1.bias is not None:
                 module.wi_1.bias.data.zero_()
+            if module.wo.bias is not None:
+                module.wo.bias.data.zero_()
         elif isinstance(module, Kosmos2_5VisionLayer):
             module.pre_mlp_layer_norm.weight.data.fill_(1.0)
             module.pre_attention_layer_norm.weight.data.fill_(1.0)
