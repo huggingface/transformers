@@ -111,7 +111,7 @@ print(generated_texts)
 
 ## Streaming
 
-For a better generation experience, we can use text streaming. transformers comes with [streaming tools](https://huggingface.co/docs/transformers/en/internal/generation_utils#transformers.TextStreamer) under the hood, namely, `TextStreamer` and `TextIteratorStreamer`. We will now use `TextIteratorStreamer` with IDEFICS-8B.
+We can use [text streaming](./generation_strategies#streaming) for a better generation experience. Transformers supports streaming with the [`TextStreamer`] or [`TextIteratorStreamer`] classes. We will use the [`TextIteratorStreamer`] with IDEFICS-8B.
 
 Assume we have an application that keeps chat history and takes in the new user input, using `TextIteratorStreamer` is very simple. We will preprocess the inputs as usual, initialize `TextIteratorStreamer` to handle the generation in a separate thread and stream the generated text tokens in real-time. We will pass any generation arguments to the streamer as well.
 
