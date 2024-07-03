@@ -43,6 +43,4 @@ torchrun --nproc_per_node $NPROC_PER_NODE \
     --gradient_checkpointing no \
     --logging_steps 100 \
     --$PRECISION \
-    --deepspeed $FSDP_CONFIG >./$JOB_NAME.log 2>&1 &
-
-tail -f ./$JOB_NAME.log
+    --deepspeed $FSDP_CONFIG 2>&1 | tee ./$JOB_NAME.log

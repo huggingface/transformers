@@ -38,6 +38,7 @@ torchrun --nproc_per_node $NPROC_PER_NODE \
     --config_name ./Meta-Llama-3-8B/ \
     --tokenizer_name ./Meta-Llama-3-8B/ \
     --trust_remote_code true \
+    --low_cpu_mem_usage true \
     --cache_dir ./cache \
     --block_size $SEQLEN \
     --optim adamw_torch \
@@ -47,6 +48,5 @@ torchrun --nproc_per_node $NPROC_PER_NODE \
     --logging_steps 100 \
     --$PRECISION \
     --fsdp "full_shard" \
-    --fsdp_config $FSDP_CONFIG >./$JOB_NAME.log 2>&1 &
+    --fsdp_config $FSDP_CONFIG 2>&1 | tee ./$JOB_NAME.log
 
-tail -f ./$JOB_NAME.log

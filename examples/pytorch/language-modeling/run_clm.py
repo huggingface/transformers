@@ -23,6 +23,8 @@ https://huggingface.co/models?filter=text-generation
 import torchacc
 torchacc.utils.patch.patch_llama(True)
 
+from torchdistx import deferred_init
+
 import logging
 import math
 import os
@@ -439,9 +441,14 @@ def main():
             attn_implementation='flash_attention_2'
         )
     else:
-        model = AutoModelForCausalLM.from_config(config, trust_remote_code=model_args.trust_remote_code, attn_implementation='flash_attention_2')
-        n_params = sum({p.data_ptr(): p.numel() for p in model.parameters()}.values())
-        logger.info(f"Training new model from scratch - Total size={n_params/2**20:.2f}M params")
+        if os.getenv('LOW_CPU_MEM_USAGE', '0') == '1':
+            init_fn = lambda func, *args, **kwargs: deferred_init.deferred_init(func, *args, **kwargs)
+            model = init_fn(AutoModelForCausalLM.from_config, config, trust_remote_code=model_args.trust_remote_code, attn_implementation='flash_attention_2')
+        else:
+            model = AutoModelForCausalLM.from_config(config, trust_remote_code=model_args.trust_remote_code, attn_implementation='flash_attention_2')
+        #n_params = sum({p.data_ptr(): p.numel() for p in model.parameters()}.values())
+        #logger.info(f"Training new model from scratch - Total size={n_params/2**20:.2f}M params")
+
 
     # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
     # on a small vocab and want a smaller embedding size, remove this test.
