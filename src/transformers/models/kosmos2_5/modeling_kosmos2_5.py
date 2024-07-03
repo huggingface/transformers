@@ -32,7 +32,6 @@ from ...modeling_outputs import (
     CausalLMOutputWithCrossAttentions,
 )
 from ...modeling_utils import PreTrainedModel
-from ...configuration_utils import PretrainedConfig
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -47,7 +46,6 @@ from .configuration_kosmos2_5 import (
     Kosmos2_5TextConfig,
     Kosmos2_5VisionConfig,
 )
-import os
 
 
 if is_flash_attn_2_available():

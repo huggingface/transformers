@@ -175,11 +175,6 @@ class Kosmos2_5VisionConfig(PretrainedConfig):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 1e-10):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float`, *optional*, defaults to 1.0):
-            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
-            testing).
         seq_len (`int`, *optional*, defaults to 4096):
             Maximum sequence length (here number of patches) supported by the model.
     Example:
@@ -211,8 +206,6 @@ class Kosmos2_5VisionConfig(PretrainedConfig):
         layer_norm_eps=1e-6,
         dropout_rate=0.0,
         attention_dropout=0.0,
-        initializer_range=1e-10,
-        initializer_factor=1.0,
         seq_len=4096,
         **kwargs,
     ):
@@ -224,8 +217,6 @@ class Kosmos2_5VisionConfig(PretrainedConfig):
         self.dropout_rate = dropout_rate
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.initializer_range = initializer_range
-        self.initializer_factor = initializer_factor
         self.attention_dropout = attention_dropout
         self.layer_norm_eps = layer_norm_eps
         self.dense_act_fn = dense_act_fn
