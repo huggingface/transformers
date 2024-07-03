@@ -272,12 +272,17 @@ class TextGenerationPipeline(Pipeline):
         max_length=None,
         **generate_kwargs,
     ):
+        # Only set non-None tokenizer kwargs, so as to rely on the tokenizer's defaults
+        tokenizer_kwargs = {
+            "add_special_tokens": add_special_tokens,
+            "truncation": truncation,
+            "padding": padding,
+            "max_length": max_length,
+        }
+        tokenizer_kwargs = {key: value for key, value in tokenizer_kwargs.items() if value is not None}
+
         if isinstance(prompt_text, Chat):
-            # Only set non-None tokenizer kwargs, so as to rely on the tokenizer's defaults
-            tokenizer_kwargs = {}
-            for tokenizer_kwarg_name in ["truncation", "padding", "max_length"]:
-                if locals()[tokenizer_kwarg_name] is not None:
-                    tokenizer_kwargs[tokenizer_kwarg_name] = locals()[tokenizer_kwarg_name]
+            tokenizer_kwargs.pop("add_special_tokens", None)  # ignore add_special_tokens on chats
             inputs = self.tokenizer.apply_chat_template(
                 prompt_text.messages,
                 add_generation_prompt=True,
@@ -286,11 +291,6 @@ class TextGenerationPipeline(Pipeline):
                 **tokenizer_kwargs,
             )
         else:
-            # Only set non-None tokenizer kwargs, so as to rely on the tokenizer's defaults
-            tokenizer_kwargs = {}
-            for tokenizer_kwarg_name in ["add_special_tokens", "truncation", "padding", "max_length"]:
-                if locals()[tokenizer_kwarg_name] is not None:
-                    tokenizer_kwargs[tokenizer_kwarg_name] = locals()[tokenizer_kwarg_name]
             inputs = self.tokenizer(prefix + prompt_text, return_tensors=self.framework, **tokenizer_kwargs)
 
         inputs["prompt_text"] = prompt_text
