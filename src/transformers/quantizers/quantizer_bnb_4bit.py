@@ -249,6 +249,8 @@ class Bnb4BitHfQuantizer(HfQuantizer):
                 device_map = {"": torch.cuda.current_device()}
             elif is_torch_xpu_available():
                 device_map = {"": f"xpu:{torch.xpu.current_device()}"}
+            else:
+                device_map = {"": "cpu"}
             logger.info(
                 "The device_map was not initialized. "
                 "Setting device_map to {'':torch.cuda.current_device()}. "
