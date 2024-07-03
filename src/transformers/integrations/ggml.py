@@ -44,6 +44,7 @@ GGML_TYPES = {
     "Q4_K": 12,
     "Q5_K": 13,
     "Q6_K": 14,
+    "BF16": 30,
 }
 
 # The Blocksizes are reported in bytes
@@ -492,6 +493,11 @@ def load_dequant_gguf_tensor(shape, ggml_type, data):
         values = data
     elif ggml_type == GGML_TYPES["F16"]:
         values = data
+    elif ggml_type == GGML_TYPES["BF16"]:
+        import torch
+        data_uint8 = data.view(np.uint8)
+        tensor_uint8 = torch.from_numpy(data_uint8)
+        values = tensor_uint8.view(torch.bfloat16).float().numpy()
     elif ggml_type == GGML_TYPES["Q8_0"]:
         values = dequantize_q8_0(data)
     elif ggml_type == GGML_TYPES["Q4_0"]:
