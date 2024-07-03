@@ -48,7 +48,7 @@ from .configuration_phi3 import Phi3Config
 
 
 if is_flash_attn_2_available():
-    from ...flash_attention_utils import _flash_attention_forward
+    from ...modeling_flash_attention_utils import _flash_attention_forward
 
 logger = logging.get_logger(__name__)
 

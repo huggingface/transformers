@@ -1231,7 +1231,6 @@ else:
         "TextDataset",
         "TextDatasetForNextSentencePrediction",
     ]
-    _import_structure["flash_attention_utils"]: []
     _import_structure["generation"].extend(
         [
             "AlternatingCodebooksLogitsProcessor",
@@ -1284,6 +1283,7 @@ else:
             "WhisperTimeStampLogitsProcessor",
         ]
     )
+    _import_structure["modeling_flash_attention_utils"]: []
     _import_structure["modeling_outputs"] = []
     _import_structure["modeling_utils"] = ["PreTrainedModel"]
 

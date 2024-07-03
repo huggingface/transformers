@@ -48,7 +48,7 @@ from .configuration_gpt_neo import GPTNeoConfig
 
 
 if is_flash_attn_2_available():
-    from ...flash_attention_utils import _flash_attention_forward
+    from ...modeling_flash_attention_utils import _flash_attention_forward
 
 
 # This makes `_prepare_4d_causal_attention_mask` a leaf function in the FX graph.

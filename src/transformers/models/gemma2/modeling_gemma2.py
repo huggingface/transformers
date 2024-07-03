@@ -29,7 +29,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...flash_attention_utils import _flash_attention_forward
+from ...modeling_flash_attention_utils import _flash_attention_forward
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -49,7 +49,7 @@ from .configuration_gemma2 import Gemma2Config
 
 
 if is_flash_attn_2_available():
-    from ...flash_attention_utils import _flash_attention_forward
+    from ...modeling_flash_attention_utils import _flash_attention_forward
 
 
 def _get_unpad_data(attention_mask):

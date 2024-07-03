@@ -43,7 +43,7 @@ from .configuration_gpt_neox import GPTNeoXConfig
 
 
 if is_flash_attn_2_available():
-    from ...flash_attention_utils import _flash_attention_forward
+    from ...modeling_flash_attention_utils import _flash_attention_forward
 
 logger = logging.get_logger(__name__)
 
