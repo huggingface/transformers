@@ -1,0 +1,13 @@
+{
+    "train_batch_size": 8,
+    "train_micro_batch_size_per_gpu": 1,
+    "optimizer": {
+        "type": "AdamW"
+    },
+    "zero_optimization": {
+        "stage": 3
+    },
+    "bf16": {
+        "enabled": true
+    }
+}
