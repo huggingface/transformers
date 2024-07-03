@@ -93,6 +93,30 @@ final_answer("got an error")
 ```<end_code>
 """
 
+def fake_react_code_functiondef(messages, stop_sequences=None) -> str:
+    prompt = str(messages)
+    if "special_marker" not in prompt:
+        return """
+Thought: Let's define the function. special_marker
+Code:
+```py
+import numpy as np
+
+def moving_average(x, w):
+    return np.convolve(x, np.ones(w), 'valid') / w
+```<end_code>
+"""
+    else:  # We're at step 2
+        return """
+Thought: I can now answer the initial question
+Code:
+```py
+x, w = [0, 1, 2, 3, 4, 5], 2
+res = moving_average(x, w)
+final_answer(res)
+```<end_code>
+"""
+
 
 def fake_code_llm_oneshot(messages, stop_sequences=None) -> str:
     return """
@@ -192,3 +216,8 @@ Action:
         # check that python_interpreter base tool does not get added to code agents
         agent = ReactCodeAgent(tools=[], llm_engine=fake_react_code_llm, add_base_tools=True)
         assert len(agent.toolbox.tools) == 6  # added final_answer tool + 5 base tools (excluding interpreter)
+
+    def test_function_persistence_across_steps(self):
+        agent = ReactCodeAgent(tools=[], llm_engine=fake_react_code_functiondef, max_iterations=2, additional_authorized_imports=["numpy"])
+        res = agent.run("ok")
+        assert res.to_raw()[0] == 0.5

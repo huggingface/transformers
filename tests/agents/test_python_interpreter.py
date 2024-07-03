@@ -660,7 +660,6 @@ add_one(1, 1)
 """
         state = {}
         result = evaluate_python_code(code, {"print": print, "range": range, "ord": ord, "chr": chr}, state=state)
-        print(state)
         assert result == 2
 
         # test returning None
@@ -672,5 +671,4 @@ returns_none(1)
 """
         state = {}
         result = evaluate_python_code(code, {"print": print, "range": range, "ord": ord, "chr": chr}, state=state)
-        print(state)
         assert result is None
