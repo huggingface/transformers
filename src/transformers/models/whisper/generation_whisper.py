@@ -126,12 +126,24 @@ def _get_attr_from_logit_processors(logits_processor, logit_processor_class, att
 
 
 def _pad_to_max_length(
-    current_segments, pad_token_id, device, padding="right", bos_token_tensor=None, cut_off_length=None
+    current_segments,
+    pad_token_id,
+    device,
+    padding_side="right",
+    padding="longest",
+    bos_token_tensor=None,
+    cut_off_length=None,
 ):
     max_total_length = 0
     sequences = []
-    if padding not in ["right", "left"]:
-        raise ValueError(f"`padding` must be either 'right' or 'left', not {padding}")
+
+    if padding_side not in ["right", "left"]:
+        raise ValueError(f"`padding_side` must be either 'right' or 'left', not {padding_side}")
+
+    if padding not in ["longest", "max_length"]:
+        raise ValueError(f"`padding` must be either 'longest' or 'max_length', not {padding}")
+    elif padding == "max_length" and cut_off_length is None:
+        raise ValueError("`cut_off_length` must be specified when `padding='max_length'`")
 
     for current_segment_list in current_segments:
         if current_segment_list is not None and len([d["tokens"] for d in current_segment_list]) > 0:
@@ -150,9 +162,10 @@ def _pad_to_max_length(
         else:
             sequences.append(torch.tensor([], device=device))
 
+    max_total_length = cut_off_length + 1 if padding == "max_length" else max_total_length
     for i in range(len(current_segments)):
         pad_length = max_total_length - len(sequences[i])
-        pad = (0, pad_length) if padding == "right" else (pad_length, 0)
+        pad = (0, pad_length) if padding_side == "right" else (pad_length, 0)
         sequences[i] = F.pad(sequences[i], pad=pad, value=pad_token_id)
 
     sequences = torch.stack(sequences, dim=0)
@@ -671,7 +684,7 @@ class WhisperGenerationMixin:
                 synced_gpus=synced_gpus,
                 return_token_timestamps=return_token_timestamps,
                 do_condition_on_prev_tokens=do_condition_on_prev_tokens,
-                is_shortform=is_shortform,
+                batch_size=batch_size,
                 kwargs=kwargs,
             )
 
@@ -712,7 +725,7 @@ class WhisperGenerationMixin:
         )
 
         sequences = _pad_to_max_length(
-            final_segments, generation_config.pad_token_id, device=self.device, padding="right"
+            final_segments, generation_config.pad_token_id, device=self.device, padding_side="right"
         )
 
         # 8. If we return all segments, the predicted output sequences are put under `"sequences"`.
@@ -774,7 +787,7 @@ class WhisperGenerationMixin:
         synced_gpus,
         return_token_timestamps,
         do_condition_on_prev_tokens,
-        is_shortform,
+        batch_size,
         kwargs,
     ):
         kwargs = copy.copy(kwargs)
@@ -798,6 +811,18 @@ class WhisperGenerationMixin:
             for key in ["do_sample", "temperature", "num_beams"]:
                 if key in generate_kwargs:
                     del generate_kwargs[key]
+
+            cur_bsz = segment_input.shape[0]
+            if generation_config.cache_implementation == "static" and cur_bsz < batch_size:
+                segment_input = F.pad(segment_input, (0, 0, 0, 0, 0, batch_size - cur_bsz), value=0)
+                decoder_input_ids = F.pad(
+                    decoder_input_ids, (0, 0, 0, batch_size - cur_bsz), value=generation_config.pad_token_id
+                )
+                if generate_kwargs.get("decoder_attention_mask") is not None:
+                    generate_kwargs["decoder_attention_mask"] = F.pad(
+                        generate_kwargs["decoder_attention_mask"], (0, 0, 0, batch_size - cur_bsz), value=True
+                    )
+
             seek_outputs = super().generate(
                 segment_input,
                 generation_config=generation_config,
@@ -819,6 +844,10 @@ class WhisperGenerationMixin:
                 generation_config=generation_config,
                 is_shortform=is_shortform,
             )
+
+            if cur_bsz < batch_size:
+                seek_sequences = seek_sequences[:cur_bsz]
+                seek_outputs = seek_outputs[:cur_bsz]
 
             # 6.7 Extract cut sequences from every sequence and check if fallback should be applied
             # Loop over each decoded audio individually as each decoding can be of a different length
@@ -1613,11 +1642,14 @@ class WhisperGenerationMixin:
                 one_tensor = torch.ones((cur_bsz, 1), device=device, dtype=torch.long)
                 prev_ids = prev_start_of_text * one_tensor[0] if prev_start_of_text is not None else None
 
+            padding = "max_length" if generation_config.cache_implementation == "static" else "longest"
+
             prev_tokens = _pad_to_max_length(
                 active_segments,
                 generation_config.pad_token_id,
                 device=device,
-                padding="left",
+                padding_side="left",
+                padding=padding,
                 bos_token_tensor=prev_ids,
                 cut_off_length=cut_off_length,
             )
