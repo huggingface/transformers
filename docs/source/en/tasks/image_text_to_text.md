@@ -91,7 +91,7 @@ messages = [
 ]
 ```
 
-We will now call `apply_chat_template` method of the processor and preprocess the output of it along with the image inputs.
+We will now call the processors' [`~ProcessorMixin.apply_chat_template`] method to preprocess its output along with the image inputs.
 
 ```python
 prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
