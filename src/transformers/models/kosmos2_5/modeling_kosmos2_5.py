@@ -1984,15 +1984,20 @@ class Kosmos2_5PreTrainedModel(PreTrainedModel):
         """Initialize the weights"""
         if isinstance(self, (Kosmos2_5TextModel, Kosmos2_5TextForCausalLM)):
             std = self.config.init_std
+            factor = self.config.initializer_factor
+            initializer_range = self.config.initializer_range
         elif isinstance(self, (Kosmos2_5Model, Kosmos2_5ForConditionalGeneration)):
             std = self.config.text_config.init_std
+            factor = self.config.text_config.initializer_factor
+            initializer_range = self.config.text_config.initializer_range
+
         if isinstance(module, Kosmos2_5VisionEmbeddings):
-            nn.init.normal_(module.column_embedder.weight,mean=0.0,std=std)
-            nn.init.normal_(module.row_embedder.weight, mean=0.0,std=std)
-            nn.init.normal_(module.patch_projection.weight,mean=0.0,std=std)
+            nn.init.normal_(module.column_embedder.weight,std=std)
+            nn.init.normal_(module.row_embedder.weight, std=std)
+            nn.init.normal_(module.patch_projection.weight,std=std)
         elif isinstance(module, Kosmos2_5VisionAttention):
-            in_proj_std = (module.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5)
-            out_proj_std = (module.hidden_size**-0.5)
+            in_proj_std = (module.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
+            out_proj_std = (module.hidden_size**-0.5) * factor
             nn.init.normal_(module.query.weight, std=in_proj_std)
             nn.init.normal_(module.key.weight, std=in_proj_std)
             nn.init.normal_(module.value.weight, std=in_proj_std)
@@ -2006,8 +2011,8 @@ class Kosmos2_5PreTrainedModel(PreTrainedModel):
             if module.output.bias is not None:
                 module.output.bias.data.zero_()
         elif isinstance(module, Kosmos2_5VisionMlp):
-            in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5)
-            fc_std = (2 * module.config.hidden_size) ** -0.5
+            in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
+            fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
             nn.init.normal_(module.wi_0.weight, std=fc_std)
             nn.init.normal_(module.wi_1.weight, std=in_proj_std)
             if module.wi_0.bias is not None:
@@ -2046,10 +2051,10 @@ class Kosmos2_5PreTrainedModel(PreTrainedModel):
             if module.dense.bias is not None:
                 module.dense.bias.data.zero_()
         elif isinstance(module, Kosmos2_5TextTransformer):
-            module.embed_tokens.weight.data.normal_(mean=0.0, std=std)
+            module.embed_tokens.weight.data.normal_( std=std)
             if module.embed_tokens.padding_idx is not None:
                 module.embed_tokens.weight.data[module.embed_tokens.padding_idx].zero_()
-            module.segment_emb.weight.data.normal_(mean=0.0, std=std)
+            module.segment_emb.weight.data.normal_( std=std)
 
 
 class Kosmos2_5TextModel(Kosmos2_5PreTrainedModel):
