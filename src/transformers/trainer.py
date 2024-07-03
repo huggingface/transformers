@@ -1020,7 +1020,7 @@ class Trainer:
         # We use the same batch_size as for eval.
         return self.accelerator.prepare(DataLoader(test_dataset, **dataloader_params))
 
-    def create_optimizer_and_scheduler(self, num_training_steps: int, num_train_epochs: int = 1):
+    def create_optimizer_and_scheduler(self, num_training_steps: int, num_train_epochs: Optional[int] = None):
         """
         Setup the optimizer and the learning rate scheduler.
 
@@ -1436,7 +1436,7 @@ class Trainer:
         return optimizer_cls, optimizer_kwargs
 
     def create_scheduler(
-        self, num_training_steps: int, num_train_epochs: int, optimizer: torch.optim.Optimizer = None
+        self, num_training_steps: int, num_train_epochs: Optional[int] = None, optimizer: torch.optim.Optimizer = None
     ):
         """
         Setup the scheduler. The optimizer of the trainer must have been set up either before this method is called or
