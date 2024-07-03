@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 [[open-in-colab]]
 
-Image-text-to-text models, also known as vision language models, are language models that can take image input. These models can tackle various tasks, from visual question answering to image segmentation. This task has many similarities to `image-to-text` with some overlapping use cases like image captioning. `image-to-text` models take only image input and often accomplish a specific task, meanwhile `image-text-to-text` models take open-ended text and image inputs and are more generalist models.
+Image-text-to-text models, also known as vision language models (VLMs), are language models that take an image input. These models can tackle various tasks, from visual question answering to image segmentation. This task shares many similarities with image-to-text, but with some overlapping use cases like image captioning. Image-to-text models only take image inputs and often accomplish a specific task, whereas VLMs take open-ended text and image inputs and are more generalist models.
 
 In this guide, we will do a brief overview of these models and show how to use transformers to infer `image-text-to-text` models. To begin with, there are multiple types of vision language models: base models that are used for fine-tuning, chat fine-tuned (or chatty) models for conversation and instruction fine-tuned models. Here we will see how to infer an instruction-tuned model. 
 
