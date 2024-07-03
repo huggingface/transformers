@@ -1211,10 +1211,10 @@ class HybridCache(Cache):
         key_states: torch.Tensor,
         value_states: torch.Tensor,
         layer_idx: int,
-        cache_kwargs: Optional[Dict[str, Any]] = None,
-        sliding_window: Optional[int] = None,
+        cache_kwargs: Optional[Dict[str, Any]] = None
     ) -> Tuple[torch.Tensor]:
         cache_position = cache_kwargs.get("cache_position")
+        sliding_window = cache_kwargs.get("sliding_window")
         self.key_cache[layer_idx] = self.key_cache[layer_idx].to(device=key_states.device)
         self.value_cache[layer_idx] = self.value_cache[layer_idx].to(device=value_states.device)
         k_out = self.key_cache[layer_idx]
