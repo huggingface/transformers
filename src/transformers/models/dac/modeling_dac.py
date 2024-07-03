@@ -86,7 +86,7 @@ class DacEncoderOutput(ModelOutput):
 class DacDecoderOutput(ModelOutput):
     """
     Args:
-        audio_values (`torch.Tensor` of shape `(batch_size, input_length)`):
+        audio_values (`torch.FloatTensor`  of shape `(batch_size, input_length)`, *optional*):
             Decoded audio values, obtained using the decoder part of Dac.
     """
 
