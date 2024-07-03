@@ -655,6 +655,9 @@ def prepare_text():
     return text
 
 
+def prepare_for_loss(): ...
+
+
 @require_timm
 @require_vision
 @slow
