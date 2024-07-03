@@ -51,7 +51,18 @@ model = Idefics2ForConditionalGeneration.from_pretrained(
 processor = AutoProcessor.from_pretrained("HuggingFaceM4/idefics2-8b")
 ```
 
-This model has a chat template format that's required for the input. Moreover, the model can also accept multiple images as input in a single conversation or message. We will now prepare the inputs. 
+This model has a [chat template](./chat_templating) format that's required for the input. Moreover, the model can also accept multiple images as input in a single conversation or message. We will now prepare the inputs. 
+
+The image inputs look like the following.
+
+<div class="flex justify-center">
+     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/cats.png" alt="Two cats sitting on a net"/>
+</div>
+
+<div class="flex justify-center">
+     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg" alt="A bee on a pink flower"/>
+</div>
+
 
 ```python
 from PIL import Image
@@ -184,10 +195,11 @@ for value in generator:
 # In
 # In this
 # In this image ...
-``` 
+```
+
 ## Fit models in smaller hardware
 
-VLMs are often large and need to be optimized to fit in smaller hardware. Transformers supports many model quantization libraries, and here we will only show int8 quantization with Quanto. 
+VLMs are often large and need to be optimized to fit in smaller hardware. Transformers supports many model quantization libraries, and here we will only show int8 quantization with [Quanto](./quantization/quanto#quanto). 
 
 First, install dependencies.
 
