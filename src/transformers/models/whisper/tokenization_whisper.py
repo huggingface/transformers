@@ -1029,12 +1029,15 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
                 # merges later and decode into text.
                 current_tokens.append(token)
                 if return_timestamps == "word":
-                    start_time = round(token_timestamps[i] + time_offset, 2)
-                    if i + 1 < len(token_timestamps):
-                        end_time = round(token_timestamps[i + 1] + time_offset, 2)
+                    if (i != len(token_timestamps)):
+                        start_time = round(token_timestamps[i] + time_offset, 2)
+                        if i + 1 < len(token_timestamps):
+                            end_time = round(token_timestamps[i + 1] + time_offset, 2)
+                        else:
+                            end_time = None  # should never happen
+                        current_token_timestamps.append((start_time, end_time))
                     else:
-                        end_time = None  # should never happen
-                    current_token_timestamps.append((start_time, end_time))
+                        pass
 
         if "stride" in output:
             time_offset += chunk_len - stride_right
@@ -1199,13 +1202,26 @@ def _find_longest_common_sequence(sequences, token_timestamp_sequences=None):
 
 def _collate_word_timestamps(tokenizer, tokens, token_timestamps, language):
     words, _, token_indices = _combine_tokens_into_words(tokenizer, tokens, language)
-    timings = [
-        {
-            "text": word,
-            "timestamp": (token_timestamps[indices[0]][0], token_timestamps[indices[-1]][1]),
-        }
-        for word, indices in zip(words, token_indices)
-    ]
+    timings = []
+
+    for word, indices in zip(words, token_indices):
+        if indices[0] < len(token_timestamps) and indices[-1] < len(token_timestamps):
+            timings.append({
+                "text": word,
+                "timestamp": (token_timestamps[indices[0]][0], token_timestamps[indices[-1]][1]),
+            })
+        else:
+            for ind in indices:
+                ind_start_time = token_timestamps[ind][0]
+                ind_end_time = token_timestamps[ind][1]
+
+                if ind_end_time is None:
+                    return timings
+
+                timings.append({
+                    "text": word,
+                    "timestamp": (ind_start_time, ind_end_time)
+                })
     return timings
 
 
