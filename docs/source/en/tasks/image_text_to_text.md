@@ -51,7 +51,7 @@ model = Idefics2ForConditionalGeneration.from_pretrained(
 processor = AutoProcessor.from_pretrained("HuggingFaceM4/idefics2-8b")
 ```
 
-This model has a chat template format that's required to input. Moreover, the model can also input multiple images in single conversation or a single message. We will now prepare the inputs. 
+This model has a chat template format that's required for the input. Moreover, the model can also accept multiple images as input in a single conversation or message. We will now prepare the inputs. 
 
 ```python
 from PIL import Image
