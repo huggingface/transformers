@@ -778,7 +778,10 @@ def evaluate_ast(
 
 
 def evaluate_python_code(
-    code: str, tools: Optional[Dict[str, Callable]] = None, state: Optional[Dict[str, Any]] = None, authorized_imports: List[str] = LIST_SAFE_MODULES
+    code: str,
+    tools: Optional[Dict[str, Callable]] = None,
+    state: Optional[Dict[str, Any]] = None,
+    authorized_imports: List[str] = LIST_SAFE_MODULES,
 ):
     """
     Evaluate a python expression using the content of the variables stored in a state and only evaluating a given set

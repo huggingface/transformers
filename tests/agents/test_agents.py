@@ -93,6 +93,7 @@ final_answer("got an error")
 ```<end_code>
 """
 
+
 def fake_react_code_functiondef(messages, stop_sequences=None) -> str:
     prompt = str(messages)
     if "special_marker" not in prompt:
@@ -218,6 +219,8 @@ Action:
         assert len(agent.toolbox.tools) == 6  # added final_answer tool + 5 base tools (excluding interpreter)
 
     def test_function_persistence_across_steps(self):
-        agent = ReactCodeAgent(tools=[], llm_engine=fake_react_code_functiondef, max_iterations=2, additional_authorized_imports=["numpy"])
+        agent = ReactCodeAgent(
+            tools=[], llm_engine=fake_react_code_functiondef, max_iterations=2, additional_authorized_imports=["numpy"]
+        )
         res = agent.run("ok")
         assert res.to_raw()[0] == 0.5

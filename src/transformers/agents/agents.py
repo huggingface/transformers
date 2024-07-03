@@ -857,7 +857,10 @@ class ReactCodeAgent(ReactAgent):
         self.additional_authorized_imports = additional_authorized_imports if additional_authorized_imports else []
         self.authorized_imports = list(set(LIST_SAFE_MODULES) | set(self.additional_authorized_imports))
         self.system_prompt = self.system_prompt.replace("<<authorized_imports>>", str(self.authorized_imports))
-        self.available_tools = {**BASE_PYTHON_TOOLS.copy(), **self.toolbox.tools} # This list can be augmented by the code agent creating some new functions
+        self.available_tools = {
+            **BASE_PYTHON_TOOLS.copy(),
+            **self.toolbox.tools,
+        }  # This list can be augmented by the code agent creating some new functions
 
     def step(self):
         """
