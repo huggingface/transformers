@@ -712,7 +712,11 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix):
             if child is not None:
                 load(child, state_dict, prefix + name + ".")
 
-    load(model_to_load, state_dict, prefix=start_prefix)
+    # Adjust and remove our `start_prefix` as we don't need it anymore
+    state_dict = {
+        key[len(start_prefix) :] if key.startswith(start_prefix) else key: value for key, value in state_dict.items()
+    }
+    model_to_load.load_state_dict(state_dict, assign=True, strict=False)
     # Delete `state_dict` so it could be collected by GC earlier. Note that `state_dict` is a copy of the argument, so
     # it's safe to delete it.
     del state_dict
