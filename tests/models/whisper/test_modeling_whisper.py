@@ -3416,7 +3416,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             "no_speech_threshold": 0.6,
             "temperature": (0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
             "compression_ratio_threshold": 1.35,
-            "condition_on_prev_tokens": True,  # conditioning on prev tokens introduces a recompile on the second decoding step
+            "condition_on_prev_tokens": True,  # conditioning on prev tokens introduces a recompile on the second time step
             "logprob_threshold": -1.0,
             "num_beams": 1,
         }
