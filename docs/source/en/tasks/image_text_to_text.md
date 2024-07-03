@@ -113,7 +113,7 @@ print(generated_texts)
 
 We can use [text streaming](./generation_strategies#streaming) for a better generation experience. Transformers supports streaming with the [`TextStreamer`] or [`TextIteratorStreamer`] classes. We will use the [`TextIteratorStreamer`] with IDEFICS-8B.
 
-Assume we have an application that keeps chat history and takes in the new user input, using `TextIteratorStreamer` is very simple. We will preprocess the inputs as usual, initialize `TextIteratorStreamer` to handle the generation in a separate thread and stream the generated text tokens in real-time. We will pass any generation arguments to the streamer as well.
+Assume we have an application that keeps chat history and takes in the new user input. We will preprocess the inputs as usual and initialize [`TextIteratorStreamer`] to handle the generation in a separate thread. This allows you to stream the generated text tokens in real-time. Any generation arguments can be passed to [`TextIteratorStreamer`].
 
 ```python
 import time
