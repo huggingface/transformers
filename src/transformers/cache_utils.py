@@ -1148,7 +1148,7 @@ class HybridCache(Cache):
             config.num_attention_heads if config.num_key_value_heads is None else config.num_key_value_heads
         )
         self.is_sliding = torch.tensor(
-            [i % 2 for i in range(config.num_hidden_layers)], dtype=torch.bool, device=device
+            [not bool(i % 2) for i in range(config.num_hidden_layers)], dtype=torch.bool, device=device
         )
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
