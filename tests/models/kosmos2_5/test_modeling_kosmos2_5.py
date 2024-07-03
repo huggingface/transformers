@@ -72,7 +72,6 @@ class Kosmos2_5VisionModelTester:
         num_attention_heads=4,
         dropout=0,
         attention_dropout=0,
-        initializer_range=1e-10,
         scope=None,
     ):
         self.parent = parent
@@ -88,7 +87,6 @@ class Kosmos2_5VisionModelTester:
         self.patch_embed_hidden_size = patch_size * patch_size * num_channels
         self.dropout = dropout
         self.attention_dropout = attention_dropout
-        self.initializer_range = initializer_range
         self.scope = scope
 
         # in ViT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
@@ -113,7 +111,6 @@ class Kosmos2_5VisionModelTester:
             patch_embed_hidden_size=self.patch_embed_hidden_size,
             dropout=self.dropout,
             attention_dropout=self.attention_dropout,
-            initializer_range=self.initializer_range,
         )
 
     def prepare_config_and_inputs_for_common(self):

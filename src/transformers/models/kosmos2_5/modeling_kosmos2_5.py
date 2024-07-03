@@ -1982,11 +1982,6 @@ class Kosmos2_5PreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(self, Kosmos2_5VisionModel):
-            factor = self.config.initializer_factor
-        elif isinstance(self, (Kosmos2_5Model, Kosmos2_5ForConditionalGeneration)):
-            factor = self.config.vision_config.initializer_factor
-
         if isinstance(self, (Kosmos2_5TextModel, Kosmos2_5TextForCausalLM)):
             std = self.config.init_std
         elif isinstance(self, (Kosmos2_5Model, Kosmos2_5ForConditionalGeneration)):
@@ -1996,8 +1991,8 @@ class Kosmos2_5PreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.row_embedder.weight, mean=0.0,std=std)
             nn.init.normal_(module.patch_projection.weight,mean=0.0,std=std)
         elif isinstance(module, Kosmos2_5VisionAttention):
-            in_proj_std = (module.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
-            out_proj_std = (module.hidden_size**-0.5) * factor
+            in_proj_std = (module.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5)
+            out_proj_std = (module.hidden_size**-0.5)
             nn.init.normal_(module.query.weight, std=in_proj_std)
             nn.init.normal_(module.key.weight, std=in_proj_std)
             nn.init.normal_(module.value.weight, std=in_proj_std)
@@ -2011,8 +2006,8 @@ class Kosmos2_5PreTrainedModel(PreTrainedModel):
             if module.output.bias is not None:
                 module.output.bias.data.zero_()
         elif isinstance(module, Kosmos2_5VisionMlp):
-            in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
-            fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
+            in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5)
+            fc_std = (2 * module.config.hidden_size) ** -0.5
             nn.init.normal_(module.wi_0.weight, std=fc_std)
             nn.init.normal_(module.wi_1.weight, std=in_proj_std)
             if module.wi_0.bias is not None:
