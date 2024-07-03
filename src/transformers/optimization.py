@@ -475,6 +475,10 @@ def get_staggered_schedule_with_linear_modifier(
     Args:
         optimizer ([`~torch.optim.Optimizer`]):
             The optimizer for which to schedule the learning rate.
+        num_training_steps (`int`):
+            The total number of training steps.
+        num_train_epochs (`int`):
+            The total number of training epochs.
         modifier (`float`):
             The modifier to decrease the learning rate at the end of each epoch.
         min_lr (`float`):
