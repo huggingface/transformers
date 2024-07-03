@@ -1493,8 +1493,11 @@ class GenerationMixin:
                 device = self.device
 
             token = token_kwargs if token_kwargs is not None else token_self
-            if token is None or isinstance(token, torch.Tensor):
+            if token is None:
                 return token
+            elif isinstance(token, torch.Tensor):
+                return token.to(device)
+
             return torch.tensor(token, device=device, dtype=torch.long)
 
         bos_token_id = _tensor_or_none(
