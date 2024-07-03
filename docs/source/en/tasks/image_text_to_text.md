@@ -1,0 +1,208 @@
+<!--Copyright 2024 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+
+⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+rendered properly in your Markdown viewer.
+
+-->
+
+# Image-text-to-text
+
+[[open-in-colab]]
+
+Image-text-to-text models, also known as vision language models, are language models that can take image input. These models can tackle various tasks, from visual question answering to image segmentation. This task has many similarities to `image-to-text` with some overlapping use cases like image captioning. `image-to-text` models take only image input and often accomplish a specific task, meanwhile `image-text-to-text` models take open-ended text and image inputs and are more generalist models.
+
+In this guide, we will do a brief overview of these models and show how to use transformers to infer `image-text-to-text` models. To begin with, there are multiple types of vision language models: base models that are used for fine-tuning, chat fine-tuned (or chatty) models for conversation and instruction fine-tuned models. Here we will see how to infer an instruction-tuned model. 
+
+Let's begin installing the dependencies.
+
+```bash
+pip install -q transformers accelerate flash_attn 
+```
+
+Let's initialize the model and the processor. 
+
+```python
+from transformers import AutoProcessor, Idefics2ForConditionalGeneration
+import torch
+
+device = torch.device("cuda")
+model = Idefics2ForConditionalGeneration.from_pretrained(
+        "HuggingFaceM4/idefics2-8b",
+        torch_dtype=torch.bfloat16,
+        _attn_implementation="flash_attention_2",
+    ).to(device)
+
+processor = AutoProcessor.from_pretrained("HuggingFaceM4/idefics2-8b")
+```
+
+This model has a chat template format that's required to input. Moreover, the model can also input multiple images in single conversation or a single message. We will now prepare the inputs. 
+
+```python
+from PIL import Image
+import requests
+
+img_urls =["https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/cats.png",
+           "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg"]
+images = [Image.open(requests.get(img_urls[0], stream=True).raw),
+          Image.open(requests.get(img_urls[1], stream=True).raw)]
+```
+
+The chat template looks like following. We can feed conversation turns and input the last message by appending it at the end of the template. 
+
+
+```python
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "image"},
+            {"type": "text", "text": "What do we see in this image?"},
+        ]
+    },
+    {
+        "role": "assistant",
+        "content": [
+            {"type": "text", "text": "In this image we can see two cats on the nets."},
+        ]
+    },
+    {
+        "role": "user",
+        "content": [
+            {"type": "image"},
+            {"type": "text", "text": "And how about this image?"},
+        ]
+    },       
+]
+```
+
+We will now call `apply_chat_template` method of the processor and preprocess the output of it along with the image inputs.
+
+```python
+prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
+inputs = processor(text=prompt, images=[images[0], images[1]], return_tensors="pt")
+inputs = {k: v.to(device) for k, v in inputs.items()}
+```
+
+We can now pass the preprocessed inputs to the model.
+
+```python
+generated_ids = model.generate(**inputs, max_new_tokens=500)
+generated_texts = processor.batch_decode(generated_ids, skip_special_tokens=True)
+
+print(generated_texts)
+## ['User: What do we see in this image? \nAssistant: In this image we can see two cats on the nets. \nUser: And how about this image? \nAssistant: In this image we can see flowers, plants and insect.']
+```
+
+## Streaming
+
+For a better generation experience, we can use text streaming. transformers comes with [streaming tools](https://huggingface.co/docs/transformers/en/internal/generation_utils#transformers.TextStreamer) under the hood, namely, `TextStreamer` and `TextIteratorStreamer`. We will now use `TextIteratorStreamer` with IDEFICS-8B.
+
+Assume we have an application that keeps chat history and takes in the new user input, using `TextIteratorStreamer` is very simple. We will preprocess the inputs as usual, initialize `TextIteratorStreamer` to handle the generation in a separate thread and stream the generated text tokens in real-time. We will pass any generation arguments to the streamer as well.
+
+```python
+import time
+from transformers import TextIteratorStreamer
+from threading import Thread
+
+def model_inference(
+    user_prompt,
+    chat_history,
+    max_new_tokens,
+    images
+):
+    user_prompt = {
+          "role": "user",
+          "content": [
+              {"type": "image"},
+              {"type": "text", "text": user_prompt},
+          ]
+      }
+    chat_history.append(user_prompt)
+    streamer = TextIteratorStreamer(
+        processor.tokenizer,
+        skip_prompt=True,
+        timeout=5.0,
+    )
+
+    generation_args = {
+        "max_new_tokens": max_new_tokens,
+        "streamer": streamer,
+        "do_sample": False
+    }
+    
+    prompt = processor.apply_chat_template(chat_history, add_generation_prompt=True)
+    inputs = processor(
+        text=prompt,
+        images=images,
+        return_tensors="pt",
+    )
+    inputs = {k: v.to(device) for k, v in inputs.items()}
+    generation_args.update(inputs)
+
+    thread = Thread(
+        target=model.generate,
+        kwargs=generation_args,
+    )
+    thread.start()
+
+    acc_text = ""
+    for text_token in streamer:
+        time.sleep(0.04)
+        acc_text += text_token
+        if acc_text.endswith("<end_of_utterance>"):
+            acc_text = acc_text[:-18]
+        yield acc_text
+```
+
+Now let's call the `model_inference` function we created and stream the values. 
+
+```python
+generator = model_inference(user_prompt = "And what is in this image?",
+    chat_history = messages,
+    max_new_tokens = 100,
+    images = images)
+
+for value in generator:
+  print(value)
+
+# In
+# In this
+# In this image ...
+``` 
+## Fit models in smaller hardware
+
+Vision language models are often large and needs optimization to fit them in smaller hardware. transformers supports many model quantization libraries, and here we will only show int8 quantization with Quanto. 
+
+First, install dependencies.
+
+```bash
+pip install -U quanto bitsandbytes
+```
+
+To quantize model during loading, we need to first create `QuantoConfig`. We can load the model like usual, but just pass `quantization_config` during model initialization.
+
+```python
+from transformers import Idefics2ForConditionalGeneration, AutoTokenizer, QuantoConfig
+
+model_id = "HuggingFaceM4/idefics2-8b"
+quantization_config = QuantoConfig(weights="int8")
+quantized_model = Idefics2ForConditionalGeneration.from_pretrained(model_id, device_map="cuda", quantization_config=quantization_config)
+```
+
+And that's it, we can use the model the same way with no changes.
+
+## Further Reading
+
+Here are some resources you can read about `image-text-to-text` task.
+
+- [`image-text-to-text` task page](https://huggingface.co/tasks/image-text-to-text) covers model types, use cases, datasets and more. 
+- [Vision Language Models Explained](https://huggingface.co/blog/vlms) is a blog post that covers everything about vision language models and supervised fine-tuning using [TRL](https://huggingface.co/docs/trl/en/index).
