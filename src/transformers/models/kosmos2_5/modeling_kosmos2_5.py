@@ -1993,11 +1993,10 @@ class Kosmos2_5PreTrainedModel(PreTrainedModel):
             std = self.config.init_std
         elif isinstance(self, (Kosmos2_5Model, Kosmos2_5ForConditionalGeneration)):
             std = self.config.text_config.init_std
-
         if isinstance(module, Kosmos2_5VisionEmbeddings):
-            nn.init.normal_(module.column_embedder.weight,mean=0.0,std=module.config.initializer_range * factor)
-            nn.init.normal_(module.row_embedder.weight, mean=0.0,std=module.config.initializer_range * factor)
-            nn.init.normal_(module.patch_projection.weight,mean=0.0,std=module.config.initializer_range * factor)
+            nn.init.normal_(module.column_embedder.weight,mean=0.0,std=std)
+            nn.init.normal_(module.row_embedder.weight, mean=0.0,std=std)
+            nn.init.normal_(module.patch_projection.weight,mean=0.0,std=std)
         elif isinstance(module, Kosmos2_5VisionAttention):
             in_proj_std = (module.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             out_proj_std = (module.hidden_size**-0.5) * factor
