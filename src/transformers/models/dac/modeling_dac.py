@@ -44,11 +44,11 @@ class DacOutput(ModelOutput):
     Args:
         loss (`torch.Tensor`):
             Loss from the encoder model, comprising the weighted combination of the commitment and codebook losses.
-        audio_values (`torch.Tensor` of shape `(batch_size, 1, input_length)`):
+        audio_values (`torch.Tensor` of shape `(batch_size, input_length)`):
             Decoded audio data.
         quantized_representation (`torch.Tensor` of shape `(batch_size, dimension, time_steps)`):
             Quantized continuous representation of input.
-        codebook_indices (`torch.Tensor` of shape `(batch_size, num_codebooks, time_steps)`):
+        audio_codes (`torch.Tensor` of shape `(batch_size, num_codebooks, time_steps)`):
             Codebook indices for each codebook (quantized discrete representation of input).
         projected_latents (`torch.Tensor` of shape `(batch_size, num_codebooks * dimension, time_steps)`):
             Projected latents (continuous representation of input before quantization).
@@ -57,7 +57,7 @@ class DacOutput(ModelOutput):
     loss: torch.FloatTensor = None
     audio_values: torch.FloatTensor = None
     quantized_representation: torch.FloatTensor = None
-    codebook_indices: torch.FloatTensor = None
+    audio_codes: torch.FloatTensor = None
     projected_latents: torch.FloatTensor = None
 
 
@@ -69,7 +69,7 @@ class DacEncoderOutput(ModelOutput):
             Loss from the encoder model, comprising the weighted combination of the commitment and codebook losses.
         quantized_representation (`torch.Tensor` of shape `(batch_size, dimension, time_steps)`, *optional*):
             Quantized continuous representation of input.
-        codebook_indices (`torch.Tensor` of shape `(batch_size, num_codebooks, time_steps)`, *optional*):
+        audio_codes (`torch.Tensor` of shape `(batch_size, num_codebooks, time_steps)`, *optional*):
             Codebook indices for each codebook (quantized discrete representation of input).
         projected_latents (`torch.Tensor` of shape `(batch_size, num_codebooks * dimension, time_steps)`, *optional*):
             Projected latents (continuous representation of input before quantization).
@@ -77,16 +77,17 @@ class DacEncoderOutput(ModelOutput):
 
     loss: torch.FloatTensor = None
     quantized_representation: torch.FloatTensor = None
-    codebook_indices: torch.FloatTensor = None
+    audio_codes: torch.FloatTensor = None
     projected_latents: torch.FloatTensor = None
 
 
 @dataclass
+# Copied from transformers.models.encodec.modeling_encodec.EncodecDecoderOutput with Encodec->Dac, segment_length->input_length
 class DacDecoderOutput(ModelOutput):
     """
     Args:
-        audio_values (`torch.Tensor` of shape `(batch_size, 1, input_length)`):
-            Decoded audio data.
+        audio_values (`torch.Tensor` of shape `(batch_size, input_length)`):
+            Decoded audio values, obtained using the decoder part of Dac.
     """
 
     audio_values: torch.FloatTensor = None
@@ -143,14 +144,14 @@ class DacVectorQuantize(nn.Module):
                 Commitment loss to train encoder to predict vectors closer to codebook entries, shape `(1)`.
             codebook_loss : torch.Tensor
                 Codebook loss to update the codebook, shape `(1)`.
-            codebook_indices (`torch.Tensor` of shape `(batch_size, time_steps)`):
+            audio_codes (`torch.Tensor` of shape `(batch_size, time_steps)`):
                 Codebook indices for each codebook, quantized discrete representation of input,
             projected_latents : torch.Tensor of shape `(batch_size, num_codebooks * dimension, time_steps)`
                 Projected latents (continuous representation of input before quantization),
         """
 
         projected_latents = self.in_proj(hidden_state)
-        quantized_representation, codebook_indices = self.decode_latents(projected_latents)
+        quantized_representation, audio_codes = self.decode_latents(projected_latents)
 
         commitment_loss = F.mse_loss(projected_latents, quantized_representation.detach(), reduction="none").mean(
             [1, 2]
@@ -162,7 +163,7 @@ class DacVectorQuantize(nn.Module):
         )  # noop in forward pass, straight-through gradient estimator in backward pass
         quantized_representation = self.out_proj(quantized_representation)
 
-        return quantized_representation, commitment_loss, codebook_loss, codebook_indices, projected_latents
+        return quantized_representation, commitment_loss, codebook_loss, audio_codes, projected_latents
 
     def decode_latents(self, hidden_states):
         batch_size, hidden_dim, sequence_length = hidden_states.shape
@@ -304,7 +305,7 @@ class DacResidualVectorQuantize(nn.Module):
         Returns:
             quantized_representation (`torch.Tensor` of shape `(batch_size, dimension, time_steps)`, *optional*):
                 Quantized continuous representation of input.
-            codebook_indices (`torch.Tensor` of shape `(batch_size, num_codebooks, time_steps)`, *optional*):
+            audio_codes (`torch.Tensor` of shape `(batch_size, num_codebooks, time_steps)`, *optional*):
                 Codebook indices for each codebook (quantized discrete representation of input).
             projected_latents (`torch.Tensor` of shape `(batch_size, num_codebooks * dimension, time_steps)`, *optional*):
                 Projected latents (continuous representation of input before quantization).
@@ -319,7 +320,7 @@ class DacResidualVectorQuantize(nn.Module):
         commitment_loss = 0
         codebook_loss = 0
 
-        codebook_indices = []
+        audio_codes = []
         projected_latents = []
 
         n_quantizers = n_quantizers if n_quantizers is not None else self.n_codebooks
@@ -347,20 +348,20 @@ class DacResidualVectorQuantize(nn.Module):
             commitment_loss += commitment_loss_i * mask
             codebook_loss += codebook_loss_i * mask
 
-            codebook_indices.append(indices_i)
+            audio_codes.append(indices_i)
             projected_latents.append(projected_latents_i)
 
-        codebook_indices = torch.stack(codebook_indices, dim=1)
+        audio_codes = torch.stack(audio_codes, dim=1)
         projected_latents = torch.cat(projected_latents, dim=1)
 
-        return quantized_representation, codebook_indices, projected_latents, commitment_loss, codebook_loss
+        return quantized_representation, audio_codes, projected_latents, commitment_loss, codebook_loss
 
-    def from_codes(self, codebook_indices: torch.Tensor):
+    def from_codes(self, audio_codes: torch.Tensor):
         """
         Reconstructs the continuous representation from quantized codes.
 
         Args:
-            codebook_indices (`torch.Tensor` of shape `(batch_size, num_codebooks, time_steps)`):
+            audio_codes (`torch.Tensor` of shape `(batch_size, num_codebooks, time_steps)`):
                 Quantized discrete representation of input.
 
         Returns:
@@ -369,17 +370,17 @@ class DacResidualVectorQuantize(nn.Module):
             projected_latents (`torch.Tensor`):
                 List of projected latents (continuous representations of input before quantization)
                 for each codebook.
-            codebook_indices (`torch.Tensor`):
+            audio_codes (`torch.Tensor`):
                 Codebook indices for each codebook.
         """
         quantized_representation = 0.0
         projected_latents = []
-        n_codebooks = codebook_indices.shape[1]
+        n_codebooks = audio_codes.shape[1]
         for i in range(n_codebooks):
-            projected_latents_i = self.quantizers[i].codebook(codebook_indices[:, i, :]).transpose(1, 2)
+            projected_latents_i = self.quantizers[i].codebook(audio_codes[:, i, :]).transpose(1, 2)
             projected_latents.append(projected_latents_i)
             quantized_representation += self.quantizers[i].out_proj(projected_latents_i)
-        return quantized_representation, torch.cat(projected_latents, dim=1), codebook_indices
+        return quantized_representation, torch.cat(projected_latents, dim=1), audio_codes
 
     def from_latents(self, latents: torch.Tensor):
         """Reconstructs the quantized representation from unquantized latents.
@@ -456,7 +457,6 @@ class DacEncoder(nn.Module):
     def __init__(self, config: DacConfig):
         super().__init__()
 
-        # d_model = config.encoder_hidden_size
         strides = config.downsampling_ratios
         # Create first convolution
         self.conv1 = weight_norm(nn.Conv1d(1, config.encoder_hidden_size, kernel_size=7, padding=3))
@@ -568,7 +568,7 @@ class DacModel(DacPreTrainedModel):
                 Loss from the encoder model, comprising the weighted combination of the commitment and codebook losses.
             quantized_representation (`torch.Tensor` of shape `(batch_size, dimension, time_steps)`):
                 Quantized continuous representation of input.
-            codebook_indices (`torch.Tensor` of shape `(batch_size, num_codebooks, time_steps)`):
+            audio_codes (`torch.Tensor` of shape `(batch_size, num_codebooks, time_steps)`):
                 Codebook indices for each codebook (quantized discrete representation of input),
             projected_latents (`torch.Tensor` of shape `(batch_size, num_codebooks * dimension, time_steps)`):
                 Projected latents (continuous representation of input before quantization),
@@ -576,36 +576,48 @@ class DacModel(DacPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         quantized_representation = self.encoder(input_values)
-        quantized_representation, codebook_indices, projected_latents, commitment_loss, codebook_loss = self.quantizer(
+        quantized_representation, audio_codes, projected_latents, commitment_loss, codebook_loss = self.quantizer(
             quantized_representation, n_quantizers
         )
 
         loss = self.config.commitment_loss_weight * commitment_loss + self.config.codebook_loss_weight * codebook_loss
 
         if not return_dict:
-            return (loss, quantized_representation, codebook_indices, projected_latents)
+            return (loss, quantized_representation, audio_codes, projected_latents)
 
-        return DacEncoderOutput(loss, quantized_representation, codebook_indices, projected_latents)
+        return DacEncoderOutput(loss, quantized_representation, audio_codes, projected_latents)
 
     def decode(
         self,
-        quantized_representation: torch.Tensor,
+        quantized_representation: Optional[torch.Tensor],
+        audio_codes: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
     ):
         """Decode given latent codes and return audio data
 
         Args:
             quantized_representation (torch.Tensor of shape `(batch_size, dimension, time_steps)`):
-                Quantized continuous representation of input
+                Quantized continuous representation of input.
+            audio_codes (`torch.Tensor` of shape `(batch_size, num_codebooks, time_steps)`, *optional*):
+                The codebook indices for each codebook, representing the quantized discrete
+                representation of the input. This parameter should be provided if you want
+                to decode directly from the audio codes (it will overwrite quantized_representation).
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         Returns:
-            audio_values (`torch.Tensor` of shape `(batch_size, 1, input_length)`):
+            audio_values (`torch.Tensor` of shape `(batch_size, input_length)`):
                 Decoded audio data.
         """
+
+        if quantized_representation is None and audio_codes is None:
+            raise ValueError("Either `quantized_representation` or `audio_codes` must be provided.")
+
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
-        audio_values = self.decoder(quantized_representation)
+        if audio_codes is not None:
+            quantized_representation = self.quantizer.from_codes(audio_codes)[0]
+
+        audio_values = self.decoder(quantized_representation).squeeze(1)
 
         if not return_dict:
             return (audio_values,)
@@ -624,11 +636,11 @@ class DacModel(DacPreTrainedModel):
         Returns:
             loss (`torch.Tensor` of shape `(batch_size, 1)`):
                 Loss from the encoder model, comprising the weighted combination of the commitment and codebook losses.
-            audio_values (`torch.Tensor` of shape `(batch_size, 1, input_length)`):
+            audio_values (`torch.Tensor` of shape `(batch_size, input_length)`):
                 Decoded audio data.
             quantized_representation (`torch.Tensor` of shape `(batch_size, dimension, time_steps)`):
                 Quantized continuous representation of input.
-            codebook_indices: (`torch.Tensor` of shape `(batch_size, num_codebooks, time_steps)`):
+            audio_codes: (`torch.Tensor` of shape `(batch_size, num_codebooks, time_steps)`):
                 Codebook indices for each codebook (quantized discrete representation of input).
             projected_latents (torch.Tensor` of shape `(batch_size, num_codebooks * dimension, time_steps)`):
                 Projected latents (continuous representation of input before quantization),
@@ -637,7 +649,7 @@ class DacModel(DacPreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.return_dict
         length = input_values.shape[-1]
-        loss, quantized_representation, codebook_indices, projected_latents = self.encode(
+        loss, quantized_representation, audio_codes, projected_latents = self.encode(
             input_values, n_quantizers, return_dict=False
         )
         audio_values = self.decode(quantized_representation, return_dict=False)
@@ -648,6 +660,6 @@ class DacModel(DacPreTrainedModel):
             audio_values = audio_values[..., :length]
 
         if not return_dict:
-            return (loss, audio_values, quantized_representation, codebook_indices, projected_latents)
+            return (loss, audio_values, quantized_representation, audio_codes, projected_latents)
 
-        return DacOutput(loss, audio_values, quantized_representation, codebook_indices, projected_latents)
+        return DacOutput(loss, audio_values, quantized_representation, audio_codes, projected_latents)

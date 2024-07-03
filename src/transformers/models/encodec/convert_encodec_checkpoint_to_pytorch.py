@@ -31,6 +31,7 @@ from transformers import (
 # https://huggingface.co/facebook/musicgen-small/resolve/main/compression_state_dict.bin
 # https://dl.fbaipublicfiles.com/encodec/v0/encodec_48khz-7e698e3e.th
 
+
 logging.set_verbosity_info()
 logger = logging.get_logger("transformers.models.encodec")
 

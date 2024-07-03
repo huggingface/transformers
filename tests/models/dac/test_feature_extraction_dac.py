@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021-2023 HuggingFace Inc.
+# Copyright 2024 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -162,6 +162,8 @@ class DacFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Test
         input_values = feature_extractor(input_audio, return_tensors="pt")["input_values"]
         self.assertEqual(input_values.shape, (1, 1, 93696))
         self.assertTrue(torch.allclose(input_values[0, 0, :30], EXPECTED_INPUT_VALUES, atol=1e-4))
+        audio_input_end = torch.tensor(input_audio[0][-30:], dtype=torch.float32)
+        self.assertTrue(torch.allclose(input_values[0, 0, -46:-16], audio_input_end, atol=1e-4))
 
     def test_truncation_and_padding(self):
         input_audio = self._load_datasamples(2)

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -51,20 +51,22 @@ def prepare_inputs_dict(
 
 
 @require_torch
+# Copied from transformers.tests.encodec.test_modeling_encodec.EncodecModelTester with Encodec->Dac
 class DacModelTester:
+    # Ignore copy
     def __init__(
         self,
         parent,
-        batch_size=5,
+        batch_size=3,
         num_channels=1,
         is_training=False,
-        intermediate_size=15992,
-        encoder_hidden_size=64,
-        downsampling_ratios=[2, 4, 5, 8],
-        decoder_hidden_size=1536,
-        n_codebooks=12,
-        codebook_size=1024,
-        codebook_dim=8,
+        intermediate_size=1024,
+        encoder_hidden_size=16,
+        downsampling_ratios=[2, 4, 4],
+        decoder_hidden_size=16,
+        n_codebooks=6,
+        codebook_size=512,
+        codebook_dim=4,
         quantizer_dropout=0.0,
         commitment_loss_weight=0.25,
         codebook_loss_weight=1.0,
@@ -104,11 +106,12 @@ class DacModelTester:
 
         return config, inputs_dict
 
+    # Ignore copy
     def get_config(self):
         return DacConfig(
             encoder_hidden_size=self.encoder_hidden_size,
             downsampling_ratios=self.downsampling_ratios,
-            decoder_dim=self.decoder_hidden_size,
+            decoder_hidden_size=self.decoder_hidden_size,
             n_codebooks=self.n_codebooks,
             codebook_size=self.codebook_size,
             codebook_dim=self.codebook_dim,
@@ -117,17 +120,17 @@ class DacModelTester:
             codebook_loss_weight=self.codebook_loss_weight,
         )
 
+    # Ignore copy
     def create_and_check_model_forward(self, config, inputs_dict):
         model = DacModel(config=config).to(torch_device).eval()
 
         input_values = inputs_dict["input_values"]
         result = model(input_values)
-        self.parent.assertEqual(
-            result.audio_values.shape, (self.batch_size, self.num_channels, self.intermediate_size)
-        )
+        self.parent.assertEqual(result.audio_values.shape, (self.batch_size, self.intermediate_size))
 
 
 @require_torch
+# Copied from transformers.tests.encodec.test_modeling_encodec.EncodecModelTest with Encodec->Dac
 class DacModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (DacModel,) if is_torch_available() else ()
     is_encoder_decoder = True
@@ -168,6 +171,7 @@ class DacModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
+            # Ignore copy
             expected_arg_names = ["input_values", "n_quantizers", "return_dict"]
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
@@ -374,6 +378,7 @@ class DacModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
             check_equivalence(model, tuple_inputs, dict_inputs)
 
+    # Ignore copy
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -421,19 +426,19 @@ class DacIntegrationTest(unittest.TestCase):
             "dac_16khz": {
                 "loss": 24.873,
                 "quantized_representation": -22443.92,
-                "codebook_indices": 1763635,
+                "audio_codes": 1763635,
                 "projected_latents": 1891.828,
             },
             "dac_24khz": {
                 "loss": 28.091,
                 "quantized_representation": 7952.426,
-                "codebook_indices": 7133234,
+                "audio_codes": 7133234,
                 "projected_latents": -2933.110,
             },
             "dac_44khz": {
                 "loss": 24.1003,
                 "quantized_representation": 10457.930,
-                "codebook_indices": 2282129,
+                "audio_codes": 2282129,
                 "projected_latents": 2074.932,
             },
         }
@@ -479,7 +484,7 @@ class DacIntegrationTest(unittest.TestCase):
                 max_length = min(arr_enc_dec.shape[-1], arr.shape[-1])
 
                 arr_cut = arr[0, :max_length].copy()
-                arr_enc_dec_cut = arr_enc_dec[0, :max_length].copy()
+                arr_enc_dec_cut = arr_enc_dec[:max_length].copy()
 
                 # make sure audios are more or less equal
                 rmse = compute_rmse(arr_cut, arr_enc_dec_cut)
@@ -496,19 +501,19 @@ class DacIntegrationTest(unittest.TestCase):
             "dac_16khz": {
                 "loss": 40.7245,
                 "quantized_representation": -39568.0898,
-                "codebook_indices": 4166923,
+                "audio_codes": 4166923,
                 "projected_latents": 1526.3572,
             },
             "dac_24khz": {
                 "loss": 49.0317,
                 "quantized_representation": 40920.2500,
-                "codebook_indices": 17405028,
+                "audio_codes": 17405028,
                 "projected_latents": -5158.3975,
             },
             "dac_44khz": {
                 "loss": 38.9014,
                 "quantized_representation": -5212.0156,
-                "codebook_indices": 5736248,
+                "audio_codes": 5736248,
                 "projected_latents": 1636.0724,
             },
         }
@@ -555,8 +560,8 @@ class DacIntegrationTest(unittest.TestCase):
 
                 max_length = min(arr_enc_dec.shape[-1], arr.shape[-1])
 
-                arr_cut = arr[:, :, :max_length].copy()
-                arr_enc_dec_cut = arr_enc_dec[:, :, :max_length].copy()
+                arr_cut = arr[:, 0, :max_length].copy()
+                arr_enc_dec_cut = arr_enc_dec[:, :max_length].copy()
 
                 # make sure audios are more or less equal
                 rmse = compute_rmse(arr_cut, arr_enc_dec_cut)

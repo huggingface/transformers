@@ -14,6 +14,8 @@
 # limitations under the License.
 """Dac model configuration"""
 
+import math
+
 import numpy as np
 
 from ...configuration_utils import PretrainedConfig
@@ -48,10 +50,12 @@ class DacConfig(PretrainedConfig):
             Dimension of the codebook vectors. If not defined, uses `encoder_hidden_size`.
         quantizer_dropout (`bool`, *optional*, defaults to 0):
             Whether to apply dropout to the quantizer.
-        commitment_loss_weight (float, optional, defaults to 0.25, *optional*, defaults to 0.25):
+        commitment_loss_weight (float, *optional*, defaults to 0.25):
             Weight of the commitment loss term in the VQVAE loss function.
-        codebook_loss_weight (float, optional, defaults to 1.0, *optional*, defaults to 1.0):
+        codebook_loss_weight (float, *optional*, defaults to 1.0):
             Weight of the codebook loss term in the VQVAE loss function.
+        sampling_rate (`int`, *optional*, defaults to 16000):
+            The sampling rate at which the audio waveform should be digitalized expressed in hertz (Hz).
     Example:
 
     ```python
@@ -80,6 +84,7 @@ class DacConfig(PretrainedConfig):
         quantizer_dropout=0,
         commitment_loss_weight=0.25,
         codebook_loss_weight=1.0,
+        sampling_rate=16000,
         **kwargs,
     ):
         self.encoder_hidden_size = encoder_hidden_size
@@ -90,6 +95,7 @@ class DacConfig(PretrainedConfig):
         self.codebook_size = codebook_size
         self.codebook_dim = codebook_dim
         self.quantizer_dropout = quantizer_dropout
+        self.sampling_rate = sampling_rate
 
         self.hidden_size = encoder_hidden_size * (2 ** len(downsampling_ratios))
 
@@ -98,3 +104,8 @@ class DacConfig(PretrainedConfig):
         self.codebook_loss_weight = codebook_loss_weight
 
         super().__init__(**kwargs)
+
+    @property
+    def frame_rate(self) -> int:
+        hop_length = np.prod(self.upsampling_ratios)
+        return math.ceil(self.sampling_rate / hop_length)
