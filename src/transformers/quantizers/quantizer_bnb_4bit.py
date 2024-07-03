@@ -23,7 +23,13 @@ from .quantizers_utils import get_module_from_name
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
-from ..utils import is_accelerate_available, is_bitsandbytes_available, is_torch_available, logging
+from ..utils import (
+    is_accelerate_available,
+    is_bitsandbytes_available,
+    is_torch_available,
+    is_torch_xpu_available,
+    logging,
+)
 
 
 if is_torch_available():
@@ -58,8 +64,6 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             self.modules_to_not_convert = self.quantization_config.llm_int8_skip_modules
 
     def validate_environment(self, *args, **kwargs):
-        if not torch.cuda.is_available():
-            raise RuntimeError("No GPU found. A GPU is needed for quantization.")
         if not is_accelerate_available():
             raise ImportError("Using `bitsandbytes` 4-bit quantization requires Accelerate: `pip install accelerate`")
         if not is_bitsandbytes_available():
@@ -241,7 +245,10 @@ class Bnb4BitHfQuantizer(HfQuantizer):
     # Copied from transformers.quantizers.quantizer_bnb_8bit.Bnb8BitHfQuantizer.update_device_map
     def update_device_map(self, device_map):
         if device_map is None:
-            device_map = {"": torch.cuda.current_device()}
+            if torch.cuda.is_available():
+                device_map = {"": torch.cuda.current_device()}
+            elif is_torch_xpu_available():
+                device_map = {"": f"xpu:{torch.xpu.current_device()}"}
             logger.info(
                 "The device_map was not initialized. "
                 "Setting device_map to {'':torch.cuda.current_device()}. "
