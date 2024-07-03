@@ -125,6 +125,17 @@ Thought: I should multiply 2 by 3.6452. special_marker
 Code:
 ```py
 result = python_interpreter(code="2*3.6452")
+final_answer(result)
+```
+"""
+
+
+def fake_code_llm_no_return(messages, stop_sequences=None) -> str:
+    return """
+Thought: I should multiply 2 by 3.6452. special_marker
+Code:
+```py
+result = python_interpreter(code="2*3.6452")
 print(result)
 ```
 """
@@ -182,7 +193,7 @@ Action:
     def test_react_fails_max_iterations(self):
         agent = ReactCodeAgent(
             tools=[PythonInterpreterTool()],
-            llm_engine=fake_code_llm_oneshot,  # use this callable because it never ends
+            llm_engine=fake_code_llm_no_return,  # use this callable because it never ends
             max_iterations=5,
         )
         agent.run("What is 2 multiplied by 3.6452?")
