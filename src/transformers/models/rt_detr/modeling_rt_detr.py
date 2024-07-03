@@ -1657,7 +1657,8 @@ class RTDetrModel(RTDetrPreTrainedModel):
 
     @lru_cache(maxsize=32)
     def generate_anchors(self, spatial_shapes=None, grid_size=0.05):
-        # We always generate anchors in float32 to preserve original model code
+        # We always generate anchors in float32 to preserve equivalence between
+        # dynamic and static anchor inference
         dtype = torch.float32
 
         if spatial_shapes is None:
