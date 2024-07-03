@@ -195,7 +195,7 @@ First, install dependencies.
 pip install -U quanto bitsandbytes
 ```
 
-To quantize model during loading, we need to first create `QuantoConfig`. We can load the model like usual, but just pass `quantization_config` during model initialization.
+To quantize a model during loading, we need to first create [`QuantoConfig`]. Then load the model as usual, but pass `quantization_config` during model initialization.
 
 ```python
 from transformers import Idefics2ForConditionalGeneration, AutoTokenizer, QuantoConfig
