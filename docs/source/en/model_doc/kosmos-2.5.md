@@ -37,7 +37,7 @@ import requests
 import torch
 from transformers import AutoProcessor, Kosmos2_5ForConditionalGeneration
 import re
-repo = "kirp/kosmos2_5"
+repo = "microsoft/kosmos-2.5"
 device = "cuda:0"
 dtype = torch.bfloat16
 model = Kosmos2_5ForConditionalGeneration.from_pretrained(repo, device_map=device, torch_dtype=dtype)

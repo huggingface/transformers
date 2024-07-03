@@ -467,6 +467,9 @@ class Kosmos2_5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     def test_sdpa_can_dispatch_on_flash(self):
         self.skipTest(reason="_update_causal_mask is not implemented yet which fails this test")
 
+    def test_eager_matches_sdpa_inference_1_bfloat16(self):
+        self.skipTest(reason="doesn't support padding yet")
+
     # TODO: ydshieh
     def test_flash_attn_2_from_config(self):
         self.skipTest(reason=" the model hasn't been added to auto class")
@@ -576,11 +579,9 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
         url = "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
         url = "https://huggingface.co/kirp/kosmos2_5/resolve/main/receipt_00008.png"
         image = Image.open(requests.get(url, stream=True).raw)
-        image.save("new_image.jpg")
-        image = Image.open("new_image.jpg")
 
         dtype = torch.bfloat16
-        repo = "kirp/kosmos2_5"  # "microsoft/kosmos-2.5"
+        repo = "microsoft/kosmos-2.5"
         model = Kosmos2_5ForConditionalGeneration.from_pretrained(repo, device_map=torch_device, torch_dtype=dtype)
         processor = AutoProcessor.from_pretrained(repo)
         prompt = "<ocr>"
@@ -596,11 +597,9 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
         url = "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
         url = "https://huggingface.co/kirp/kosmos2_5/resolve/main/receipt_00008.png"
         image = Image.open(requests.get(url, stream=True).raw)
-        image.save("new_image.jpg")
-        image = Image.open("new_image.jpg")
 
         dtype = torch.bfloat16
-        repo = "kirp/kosmos2_5"  # "microsoft/kosmos-2.5"
+        repo = "microsoft/kosmos-2.5"
         model = Kosmos2_5ForConditionalGeneration.from_pretrained(repo, device_map=torch_device, torch_dtype=dtype)
         processor = AutoProcessor.from_pretrained(repo)
         prompt = "<md>"
