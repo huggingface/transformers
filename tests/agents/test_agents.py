@@ -160,8 +160,8 @@ Action:
     def test_fake_react_code_agent(self):
         agent = ReactCodeAgent(tools=[PythonInterpreterTool()], llm_engine=fake_react_code_llm)
         output = agent.run("What is 2 multiplied by 3.6452?")
-        assert isinstance(output, AgentText)
-        assert output == "7.2904"
+        assert isinstance(output, float)
+        assert output == 7.2904
         assert agent.logs[0]["task"] == "What is 2 multiplied by 3.6452?"
         assert float(agent.logs[1]["observation"].strip()) - 12.511648 < 1e-6
         assert agent.logs[2]["tool_call"] == {
@@ -223,4 +223,4 @@ Action:
             tools=[], llm_engine=fake_react_code_functiondef, max_iterations=2, additional_authorized_imports=["numpy"]
         )
         res = agent.run("ok")
-        assert res.to_raw()[0] == 0.5
+        assert res[0] == 0.5
