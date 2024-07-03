@@ -63,7 +63,7 @@ images = [Image.open(requests.get(img_urls[0], stream=True).raw),
           Image.open(requests.get(img_urls[1], stream=True).raw)]
 ```
 
-The chat template looks like following. We can feed conversation turns and input the last message by appending it at the end of the template. 
+Below is an example of the chat template. We can feed conversation turns and the last message as an input by appending it at the end of the template. 
 
 
 ```python
