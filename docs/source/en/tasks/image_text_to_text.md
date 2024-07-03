@@ -187,7 +187,7 @@ for value in generator:
 ``` 
 ## Fit models in smaller hardware
 
-Vision language models are often large and needs optimization to fit them in smaller hardware. transformers supports many model quantization libraries, and here we will only show int8 quantization with Quanto. 
+VLMs are often large and need to be optimized to fit in smaller hardware. Transformers supports many model quantization libraries, and here we will only show int8 quantization with Quanto. 
 
 First, install dependencies.
 
