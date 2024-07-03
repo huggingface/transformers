@@ -549,7 +549,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         output = speech_recognizer([filename], chunk_length_s=5, batch_size=4)
         self.assertEqual(output, [{"text": " A man said to the universe, Sir, I exist."}])
 
-
     @require_torch
     @slow
     def test_torch_whisper_batched(self):
@@ -562,8 +561,8 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         sample = ds[:2]["audio"]
 
         EXPECTED_OUTPUT = [
-            {'text': ' Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.'},
-            {'text': " Nor is Mr. Quilters' manner less interesting than his matter."},
+            {"text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel."},
+            {"text": " Nor is Mr. Quilters' manner less interesting than his matter."},
         ]
 
         output = speech_recognizer(sample, batch_size=2)
