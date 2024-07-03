@@ -1509,6 +1509,37 @@ class TikTokenConverter:
         return tokenizer
 
 
+class LlamaTikTokenConverter(TikTokenConverter):
+    def tokenizer(self):
+        vocab_scores, merges = self.extract_vocab_merges_from_model(self.vocab_file)
+        tokenizer = Tokenizer(BPE(vocab_scores, merges, fuse_unk=False))
+        if hasattr(tokenizer.model, "ignore_merges"):
+            tokenizer.model.ignore_merges = True
+        num_reserved_special_tokens = 256
+        special_tokens = [
+                             "<|begin_of_text|>",
+                             "<|end_of_text|>",
+                             "<|reserved_special_token_0|>",
+                             "<|reserved_special_token_1|>",
+                             "<|reserved_special_token_2|>",
+                             "<|reserved_special_token_3|>",
+                             "<|start_header_id|>",
+                             "<|end_header_id|>",
+                             "<|reserved_special_token_4|>",
+                             "<|eot_id|>",
+                             "<|python_tag|>",
+                             "<|image|>",
+                             "<|video|>"  # end of turn
+                         ] + [f"<|reserved_special_token_{i}|>" for i in range(5, num_reserved_special_tokens - 5)]
+        tokenizer.add_special_tokens(special_tokens)
+        return tokenizer
+
+
+TIKTOKEN_CONVERTERS = {
+    "LlamaTokenizerFast": LlamaTikTokenConverter,
+    "PreTrainedTokenizerFast": TikTokenConverter,
+}
+
 SLOW_TO_FAST_CONVERTERS = {
     "AlbertTokenizer": AlbertConverter,
     "BartTokenizer": RobertaConverter,
@@ -1584,6 +1615,10 @@ def convert_slow_tokenizer(transformer_tokenizer) -> Tokenizer:
     """
 
     tokenizer_class_name = transformer_tokenizer.__class__.__name__
+
+    if tokenizer_class_name in TIKTOKEN_CONVERTERS:
+        converter_class = TIKTOKEN_CONVERTERS[tokenizer_class_name]
+        return converter_class(transformer_tokenizer.vocab_file).converted()
 
     if tokenizer_class_name not in SLOW_TO_FAST_CONVERTERS:
         raise ValueError(
