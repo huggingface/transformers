@@ -89,7 +89,7 @@ def convert_mplugdocowl_llama_to_hf(
         torch.set_default_dtype(torch.float16)
         text_config = AutoConfig.from_pretrained(text_model_id)
 
-        tokenizer = AutoTokenizer.from_pretrained(text_model_id, padding_side='left')
+        tokenizer = AutoTokenizer.from_pretrained(text_model_id)
         tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False), special_tokens=True)
         tokenizer.add_special_tokens({"pad_token": "<pad>"})
 
@@ -144,7 +144,7 @@ def convert_mplugdocowl_llama_to_hf(
         model = MPLUGDocOwlForConditionalGeneration.from_pretrained("/raid/dana/mplug_model_hf_chat/")
         model.to(torch.float16)
         processor = MPLUGDocOwlProcessor.from_pretrained("/raid/dana/mplug_model_hf_chat/")
-    breakpoint()
+    
     from PIL import Image
 
     prompts = [
@@ -169,8 +169,8 @@ def convert_mplugdocowl_llama_to_hf(
     # image = Image.open('/raid/dana/rnbx0223_193.png')
     # query = '<image>What is the Compound Annual Growth Rate (CAGR) for total assets?'
     output = processor(images=image1, text=query)
-    tokens = model.generate(output["input_ids"], pixel_values=output["pixel_values"], max_new_tokens=512)
-    processor.decode(tokens[0, output["input_ids"].shape[1]:], skip_special_tokens = True)
+    #tokens = model.generate(output["input_ids"], pixel_values=output["pixel_values"], max_new_tokens=512)
+    #processor.decode(tokens[0, output["input_ids"].shape[1]:], skip_special_tokens = True)
     # device = torch.device("cuda:0")
     # output.to(device)
     # model.to(device)

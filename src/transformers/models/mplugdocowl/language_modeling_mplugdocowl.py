@@ -85,7 +85,7 @@ class MPLUGDocOwlRMSNorm(nn.Module):
 
 ALL_LAYERNORM_LAYERS.append(MPLUGDocOwlRMSNorm)
 
-
+'''
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->MPLUGDocOwl
 class MPLUGDocOwlRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
@@ -114,7 +114,43 @@ class MPLUGDocOwlRotaryEmbedding(nn.Module):
             cos = emb.cos()
             sin = emb.sin()
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+'''
 
+# Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->MPLUGDocOwl
+class MPLUGDocOwlRotaryEmbedding(torch.nn.Module):
+    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
+        super().__init__()
+
+        self.dim = dim
+        self.max_position_embeddings = max_position_embeddings
+        self.base = base
+        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim))
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+
+        # Build here to make `torch.jit.trace` work.
+        self._set_cos_sin_cache(
+            seq_len=max_position_embeddings, device=self.inv_freq.device, dtype=torch.get_default_dtype()
+        )
+
+    def _set_cos_sin_cache(self, seq_len, device, dtype):
+        self.max_seq_len_cached = seq_len
+        t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
+
+        freqs = torch.einsum("i,j->ij", t, self.inv_freq)
+        # Different from paper, but it uses a different permutation in order to obtain the same calculation
+        emb = torch.cat((freqs, freqs), dim=-1)
+        self.register_buffer("cos_cached", emb.cos()[None, None, :, :].to(dtype), persistent=False)
+        self.register_buffer("sin_cached", emb.sin()[None, None, :, :].to(dtype), persistent=False)
+
+    def forward(self, x, seq_len=None):
+        # x: [bs, num_attention_heads, seq_len, head_size]
+        if seq_len > self.max_seq_len_cached:
+            self._set_cos_sin_cache(seq_len=seq_len, device=x.device, dtype=x.dtype)
+
+        return (
+            self.cos_cached[:, :, :seq_len, ...].to(dtype=x.dtype),
+            self.sin_cached[:, :, :seq_len, ...].to(dtype=x.dtype),
+        )
 
 # Copied from transformers.models.llama.modeling_llama.LlamaLinearScalingRotaryEmbedding with Llama->MPLUGDocOwl
 class MPLUGDocOwlLinearScalingRotaryEmbedding(MPLUGDocOwlRotaryEmbedding):
@@ -381,8 +417,8 @@ class MultiwayAttention(nn.Module):
         kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
             kv_seq_len += past_key_value[0].shape[-2]
-        #cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
-        cos, sin = self.rotary_emb(value_states, position_ids)
+        cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
+        #cos, sin = self.rotary_emb(value_states, position_ids)
 
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
@@ -432,7 +468,7 @@ class MultiwayAttention(nn.Module):
 
         return attn_output, attn_weights, past_key_value
 
-
+'''
 # Copied from transformers.models.llama.modeling_llama.LlamaAttention with Llama->MPLUGDocOwl
 class MPLUGDocOwlAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
@@ -666,7 +702,7 @@ class MPLUGDocOwlSdpaAttention(MPLUGDocOwlAttention):
         attn_output = self.o_proj(attn_output)
 
         return attn_output, None, past_key_value
-
+'''
 
 MPLUGDocOwl_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
@@ -869,7 +905,7 @@ class MPLUGDocOwlLanguageModel(MPLUGDocOwlPreTrainedLanguageModel):
         )
         self.norm = MPLUGDocOwlRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
-
+        
         # Initialize weights and apply final processing
         self.post_init()
 
