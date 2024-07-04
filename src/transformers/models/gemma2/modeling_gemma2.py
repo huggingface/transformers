@@ -249,7 +249,8 @@ class Gemma2Attention(nn.Module):
                 "sliding_window": self.sliding_window,
                 "cache_position": cache_position,
             }
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs, 
+                                                             sliding_window=self.sliding_window)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
@@ -338,7 +339,8 @@ class Gemma2FlashAttention2(Gemma2Attention):
                 "sliding_window": self.sliding_window,
                 "cache_position": cache_position,
             }
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs, 
+                                                             sliding_window=self.sliding_window)
 
         # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
         # to be able to avoid many of these transpose/reshape/view.
@@ -559,7 +561,8 @@ class Gemma2SdpaAttention(Gemma2Attention):
                 "sliding_window": self.sliding_window,
                 "cache_position": cache_position,
             }
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs, 
+                                                             sliding_window=self.sliding_window)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
