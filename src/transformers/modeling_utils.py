@@ -663,7 +663,15 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix):
         new_key = None
         if "gamma" in key:
             new_key = key.replace("gamma", "weight")
+            logger.warning(
+                f"A parameter name that contains `gamma` will be renamed internally. Please use a different name "
+                f"to suppress this warning."
+            )
         if "beta" in key:
+            logger.warning(
+                f"A parameter name that contains `beta` will be renamed internally. Please use a different name "
+                f"to suppress this warning."
+            )
             new_key = key.replace("beta", "bias")
         if new_key:
             old_keys.append(key)
@@ -807,8 +815,16 @@ def _load_state_dict_into_meta_model(
     for key in state_dict.keys():
         new_key = None
         if "gamma" in key:
+            logger.warning(
+                f"A parameter name that contains `gamma` will be renamed internally. Please use a different name "
+                f"to suppress this warning."
+            )
             new_key = key.replace("gamma", "weight")
         if "beta" in key:
+            logger.warning(
+                f"A parameter name that contains `beta` will be renamed internally. Please use a different name "
+                f"to suppress this warning."
+            )
             new_key = key.replace("beta", "bias")
         if new_key:
             old_keys.append(key)
@@ -1339,11 +1355,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         self.init_weights()
         self._backward_compatibility_gradient_checkpointing()
-        if hasattr(self, "gamma") or hasattr(self, "beta"):
-            logger.warning(
-                f"Parameter names `gamma` or `beta` for {self.__class__.__name__} will be renamed within the model. "
-                f"Please use different names to suppress this warning."
-            )
 
     def dequantize(self):
         """
@@ -3981,16 +3992,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         def _fix_key(key):
             if "beta" in key:
+                logger.warning(
+                    f"A parameter name that contains `beta` will be renamed internally. Please use a different name "
+                    f"to suppress this warning."
+                )
                 return key.replace("beta", "bias")
             if "gamma" in key:
+                logger.warning(
+                    f"A parameter name that contains `gamma` will be renamed internally. Please use a different name "
+                    f"to suppress this warning."
+                )
                 return key.replace("gamma", "weight")
             return key
-
-        if "beta" in loaded_keys or "gamma" in loaded_keys:
-            logger.warning(
-                f"Parameter names `gamma` or `beta` for {cls.__name__} will be renamed within the model. "
-                f"Please use different names to suppress this warning."
-            )
 
         original_loaded_keys = loaded_keys
         loaded_keys = [_fix_key(key) for key in loaded_keys]

@@ -1488,32 +1488,48 @@ class ModelUtilsTest(TestCasePlus):
             self.assertTrue(torch.allclose(outputs_from_saved["logits"], outputs["logits"]))
 
     def test_warning_for_beta_gamma_parameters(self):
-        class TestModel(PreTrainedModel):
+        class TestModelGamma(PreTrainedModel):
             def __init__(self, config):
                 super().__init__(config)
-                self.gamma = nn.Parameter(torch.ones(10))
+                self.gamma_param = nn.Parameter(torch.ones(10))
                 self.post_init()
 
             def forward(self):
-                return self.gamma.sum()
+                return self.gamma_param.sum()
 
         logger = logging.get_logger("transformers.modeling_utils")
         config = PretrainedConfig()
-        warning_msg = "Parameter names `gamma` or `beta` for TestModel will be renamed within the model."
+        warning_msg_gamma = "A parameter name that contains `gamma` will be renamed internally"
+        model = TestModelGamma(config)
 
-        with LoggingLevel(logging.WARNING):
-            with CaptureLogger(logger) as cl1:
-                model = TestModel(config)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            with LoggingLevel(logging.WARNING):
+                with CaptureLogger(logger) as cl1:
+                    TestModelGamma.from_pretrained(tmp_dir, config=config)
 
-        self.assertIn(warning_msg, cl1.out)
+        self.assertIn(warning_msg_gamma, cl1.out)
+
+        class TestModelBeta(PreTrainedModel):
+            def __init__(self, config):
+                super().__init__(config)
+                self.beta_param = nn.Parameter(torch.ones(10))
+                self.post_init()
+
+            def forward(self):
+                return self.beta_param.sum()
+
+        warning_msg_beta = "A parameter name that contains `beta` will be renamed internally"
+        model = TestModelBeta(config)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             model.save_pretrained(tmp_dir)
             with LoggingLevel(logging.WARNING):
                 with CaptureLogger(logger) as cl2:
-                    TestModel.from_pretrained(tmp_dir, config=config)
+                    TestModelBeta.from_pretrained(tmp_dir, config=config)
 
-        self.assertIn(warning_msg, cl2.out)
+        self.assertIn(warning_msg_beta, cl2.out)
+
 
 
 @slow
