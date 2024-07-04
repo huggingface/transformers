@@ -14,21 +14,18 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# dac
+# DAC
 
 ## Overview
 
-The dac model was proposed in [Descript Audio Codec: High-Fidelity Audio Compression with Improved RVQGAN](https://arxiv.org/abs/2306.06546) by <Rithesh Kumar, Prem Seetharaman, Alejandro Luebs, Ishaan Kumar, Kundan Kumar>.
+The DAC model was proposed in [Descript Audio Codec: High-Fidelity Audio Compression with Improved RVQGAN](https://arxiv.org/abs/2306.06546) by <Rithesh Kumar, Prem Seetharaman, Alejandro Luebs, Ishaan Kumar, Kundan Kumar>.
 
 The abstract from the paper is the following:
 
 *Language models have been successfully used to model natural signals, such as images, speech, and music. A key component of these models is a high quality neural compression model that can compress high-dimensional natural signals into lower dimensional discrete tokens. To that end, we introduce a high-fidelity universal neural audio compression algorithm that achieves ~90x compression of 44.1 KHz audio into tokens at just 8kbps bandwidth. We achieve this by combining advances in high-fidelity audio generation with better vector quantization techniques from the image domain, along with improved adversarial and reconstruction losses. We compress all domains (speech, environment, music, etc.) with a single universal model, making it widely applicable to generative modeling of all audio. We compare with competing audio compression algorithms, and find our method outperforms them significantly. We provide thorough ablations for every design choice, as well as open-source code and trained model weights. We hope our work can lay the foundation for the next generation of high-fidelity audio modeling.
 
-Tips:
-
 This model was contributed by [Kamil Akesbi](https://huggingface.co/kamilakesbi).
-The original code can be found [here](https://github.com/descriptinc/descript-audio-codec/tree/main?tab=readme-ov-file.
-
+The original code can be found [here](https://github.com/descriptinc/descript-audio-codec/tree/main?tab=readme-ov-file).
 
 ## Usage example 
 
@@ -46,11 +43,13 @@ Here is a quick example of how to encode and decode an audio using this model:
 >>> inputs = processor(raw_audio=audio_sample, sampling_rate=processor.sampling_rate, return_tensors="pt")
 
 >>> encoder_outputs = model.encode(inputs["input_values"])
+>>> # Get the intermediate audio codes
+>>> audio_codes = encoder_outputs.audio_codes
+>>> # Reconstruct the audio from its quantized representation
 >>> audio_values = model.decode(encoder_outputs.quantized_representation)
 >>> # or the equivalent with a forward pass
 >>> audio_values = model(inputs["input_values"]).audio_values
 ```
-
 
 ## DacConfig
 

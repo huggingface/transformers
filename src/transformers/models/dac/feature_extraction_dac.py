@@ -139,8 +139,6 @@ class DacFeatureExtractor(SequenceFeatureExtractor):
                 raise ValueError(f"Expected input shape (channels, length) but got shape {example.shape}")
             if self.feature_size == 1 and example.ndim != 1:
                 raise ValueError(f"Expected mono audio but example has {example.shape[-1]} channels")
-            if self.feature_size == 2 and example.shape[-1] != 2:
-                raise ValueError(f"Expected stereo audio but example has {example.shape[-1]} channels")
             if self.feature_size == 2:
                 raise ValueError("Stereo audio isn't supported for now")
 
@@ -156,7 +154,7 @@ class DacFeatureExtractor(SequenceFeatureExtractor):
             pad_to_multiple_of=self.hop_length,
         )
 
-        if padding is not False:
+        if padding:
             padded_inputs.input_values = padded_inputs.input_values[:, np.newaxis, :]
 
         input_values = []

@@ -50,7 +50,9 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
 
 
 @require_torch
+# Copied from transformers.tests.encodec.test_feature_extraction_dac.EncodecFeatureExtractionTester with Encodec->Dac
 class DacFeatureExtractionTester(unittest.TestCase):
+    # Ignore copy
     def __init__(
         self,
         parent,
@@ -72,6 +74,7 @@ class DacFeatureExtractionTester(unittest.TestCase):
         self.padding_value = padding_value
         self.sampling_rate = sampling_rate
 
+    # Ignore copy
     def prepare_feat_extract_dict(self):
         return {
             "feature_size": self.feature_size,
@@ -100,6 +103,7 @@ class DacFeatureExtractionTester(unittest.TestCase):
 
 
 @require_torch
+# Copied from transformers.tests.encodec.test_feature_extraction_dac.EnCodecFeatureExtractionTest with Encodec->Dac
 class DacFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
     feature_extraction_class = DacFeatureExtractor
 
@@ -165,6 +169,12 @@ class DacFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Test
         audio_input_end = torch.tensor(input_audio[0][-30:], dtype=torch.float32)
         self.assertTrue(torch.allclose(input_values[0, 0, -46:-16], audio_input_end, atol=1e-4))
 
+    # Ignore copy
+    @unittest.skip("The DAC model doesn't support stereo logic")
+    def test_integration_stereo(self):
+        pass
+
+    # Ignore copy
     def test_truncation_and_padding(self):
         input_audio = self._load_datasamples(2)
         # would be easier if the stride was like

@@ -220,6 +220,7 @@ def convert_checkpoint(
     config.decoder_hidden_size = metadata["decoder_dim"]
     config.upsampling_ratios = metadata["decoder_rates"]
     config.quantizer_dropout = float(metadata["quantizer_dropout"])
+    config.sampling_rate = sample_rate
 
     model = DacModel(config)
     feature_extractor = DacFeatureExtractor()
