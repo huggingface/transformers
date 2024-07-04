@@ -227,7 +227,6 @@ class MistralAttention(nn.Module):
             base=self.rope_theta,
         )
 
-    # Copied from transformers.models.gemma.modeling_gemma.GemmaAttention.forward with Gemma->Mistral
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1090,8 +1089,9 @@ class MistralModel(MistralPreTrainedModel):
             exclude_mask = torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
             if self.config.sliding_window is not None:
                 if not using_sliding_window_cache or sequence_length > self.config.sliding_window:
-                    exclude_mask |= torch.arange(target_length, device=device) <= (
-                        cache_position.reshape(-1, 1) - self.config.sliding_window
+                    exclude_mask.bitwise_or_(
+                        torch.arange(target_length, device=device)
+                        <= (cache_position.reshape(-1, 1) - self.config.sliding_window)
                     )
             causal_mask *= exclude_mask
             causal_mask = causal_mask[None, None, :, :].expand(input_tensor.shape[0], 1, -1, -1)

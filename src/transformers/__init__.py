@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.42.0.dev0"
+__version__ = "4.43.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -435,6 +435,7 @@ _import_structure = {
     ],
     "models.fuyu": ["FuyuConfig"],
     "models.gemma": ["GemmaConfig"],
+    "models.gemma2": ["Gemma2Config"],
     "models.git": [
         "GitConfig",
         "GitProcessor",
@@ -1211,6 +1212,7 @@ else:
         "Cache",
         "CacheConfig",
         "DynamicCache",
+        "EncoderDecoderCache",
         "HQQQuantizedCache",
         "QuantizedCache",
         "QuantizedCacheConfig",
@@ -2179,6 +2181,15 @@ else:
             "GemmaForTokenClassification",
             "GemmaModel",
             "GemmaPreTrainedModel",
+        ]
+    )
+    _import_structure["models.gemma2"].extend(
+        [
+            "Gemma2ForCausalLM",
+            "Gemma2ForSequenceClassification",
+            "Gemma2ForTokenClassification",
+            "Gemma2Model",
+            "Gemma2PreTrainedModel",
         ]
     )
     _import_structure["models.git"].extend(
@@ -5062,6 +5073,7 @@ if TYPE_CHECKING:
     )
     from .models.fuyu import FuyuConfig
     from .models.gemma import GemmaConfig
+    from .models.gemma2 import Gemma2Config
     from .models.git import (
         GitConfig,
         GitProcessor,
@@ -5884,6 +5896,7 @@ if TYPE_CHECKING:
             Cache,
             CacheConfig,
             DynamicCache,
+            EncoderDecoderCache,
             HQQQuantizedCache,
             QuantizedCache,
             QuantizedCacheConfig,
@@ -6693,6 +6706,13 @@ if TYPE_CHECKING:
             GemmaForTokenClassification,
             GemmaModel,
             GemmaPreTrainedModel,
+        )
+        from .models.gemma2 import (
+            Gemma2ForCausalLM,
+            Gemma2ForSequenceClassification,
+            Gemma2ForTokenClassification,
+            Gemma2Model,
+            Gemma2PreTrainedModel,
         )
         from .models.git import (
             GitForCausalLM,
