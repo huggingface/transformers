@@ -30,7 +30,9 @@ from transformers.testing_utils import (
     require_auto_gptq,
     require_quanto,
     require_torch,
+    require_torch_gpu,
     require_torch_multi_accelerator,
+    require_torch_multi_gpu,
     slow,
     torch_device,
 )
@@ -57,7 +59,7 @@ if is_torch_available():
         ImageGPTForCausalImageModeling,
         SpeechEncoderDecoderModel,
     )
-    from transformers.cache_utils import DynamicCache, QuantoQuantizedCache
+    from transformers.cache_utils import DynamicCache, EncoderDecoderCache, QuantoQuantizedCache
     from transformers.generation import (
         BeamSampleDecoderOnlyOutput,
         BeamSampleEncoderDecoderOutput,
@@ -1636,7 +1638,6 @@ class GenerationTesterMixin:
 
             config, input_ids, attention_mask = self._get_input_ids_and_config()
             config.use_cache = True
-            config.is_decoder = True
 
             model = model_class(config).to(torch_device).eval()
             generation_kwargs = {
@@ -1652,15 +1653,21 @@ class GenerationTesterMixin:
             set_seed(seed)
             legacy_results = model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
             set_seed(seed)
+            if config.is_encoder_decoder:
+                cache_cls = EncoderDecoderCache
+                past_key_values = cache_cls(DynamicCache(), DynamicCache())
+            else:
+                cache_cls = DynamicCache
+                past_key_values = cache_cls()
             new_results = model.generate(
-                input_ids, attention_mask=attention_mask, past_key_values=DynamicCache(), **generation_kwargs
+                input_ids, attention_mask=attention_mask, past_key_values=past_key_values, **generation_kwargs
             )
 
             # The two sets of generated sequences must match, despite the cache format between forward passes being
             # different
             self.assertListEqual(legacy_results.sequences.tolist(), new_results.sequences.tolist())
             self.assertTrue(isinstance(legacy_results.past_key_values, tuple))
-            self.assertTrue(isinstance(new_results.past_key_values, DynamicCache))
+            self.assertTrue(isinstance(new_results.past_key_values, cache_cls))
 
             # The contents of the two caches, when converted to the same format (in both directions!), must match
             legacy_cache = legacy_results.past_key_values
@@ -1675,7 +1682,7 @@ class GenerationTesterMixin:
                     )
 
             new_cache = new_results.past_key_values
-            legacy_cache_converted = DynamicCache.from_legacy_cache(legacy_results.past_key_values)
+            legacy_cache_converted = cache_cls.from_legacy_cache(legacy_results.past_key_values)
             for layer_idx in range(len(new_cache)):
                 for kv_idx in range(len(new_cache[layer_idx])):
                     self.assertTrue(
@@ -2082,6 +2089,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
             [1, 18],
         )
 
+    # TODO (joao): replace `stop_sequence` in the pipeline by the more recent `generate` functionality
     def test_stop_sequence_stopping_criteria(self):
         # PT-only test: TF doesn't have StoppingCriteria
         prompt = """Hello I believe in"""
@@ -2089,17 +2097,11 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         output = generator(prompt)
         self.assertEqual(
             output,
-            [
-                {
-                    "generated_text": (
-                        "Hello I believe in in in number number number number number number number number number"
-                    )
-                }
-            ],
+            [{"generated_text": ("Hello I believe in we we we we we we we we we")}],
         )
 
-        output = generator(prompt, stop_sequence=" number")
-        self.assertEqual(output, [{"generated_text": "Hello I believe in in in number"}])
+        output = generator(prompt, stop_sequence=" we")
+        self.assertEqual(output, [{"generated_text": "Hello I believe in we"}])
 
     def test_generate_non_nlp_input_ids_as_kwarg(self):
         # PT-only test: AFAIK there's no non-NLP model architecture in TF that supports `input_ids` as its only input
@@ -3096,6 +3098,54 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
 
         self.assertTrue(y_prob > 0.001 and n_prob > 0.001)
         self.assertTrue(y_prob <= 1.0 and n_prob <= 1.0)
+
+    @slow
+    @require_torch_multi_gpu
+    def test_assisted_decoding_in_different_gpu(self):
+        # PT-only test: TF doesn't support assisted decoding yet.
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM").to("cuda:0")
+        assistant = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM").to(
+            "cuda:1"
+        )
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
+        model.config.pad_token_id = tokenizer.eos_token_id
+        assistant.config.pad_token_id = tokenizer.eos_token_id
+
+        text = "Hello world"
+        tokenized_inputs = tokenizer([text], return_tensors="pt")
+        input_ids = tokenized_inputs.input_ids.to(torch_device)
+        input_length = input_ids.shape[-1]
+
+        out = model.generate(
+            input_ids,
+            assistant_model=assistant,
+            max_new_tokens=20,
+        )
+        self.assertTrue(input_length <= out.shape[-1] <= input_length + 20)
+
+    @slow
+    @require_torch_gpu
+    def test_assisted_decoding_in_gpu_cpu(self):
+        # PT-only test: TF doesn't support assisted decoding yet.
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM").to("cuda")
+        assistant = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM").to(
+            "cpu"
+        )
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
+        model.config.pad_token_id = tokenizer.eos_token_id
+        assistant.config.pad_token_id = tokenizer.eos_token_id
+
+        text = "Hello world"
+        tokenized_inputs = tokenizer([text], return_tensors="pt")
+        input_ids = tokenized_inputs.input_ids.to(torch_device)
+        input_length = input_ids.shape[-1]
+
+        out = model.generate(
+            input_ids,
+            assistant_model=assistant,
+            max_new_tokens=20,
+        )
+        self.assertTrue(input_length <= out.shape[-1] <= input_length + 20)
 
 
 @require_torch
