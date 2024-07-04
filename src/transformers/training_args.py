@@ -268,7 +268,7 @@ class TrainingArguments:
             Number of epochs or steps to wait for before the first evaluation can be performed, depending on the
             eval_strategy.
         torch_empty_cache_steps (`int`, *optional*):
-            Number of steps to wait before calling `torch.cuda.empty_cache()`. If left unset or set to None, cache will not be emptied.
+            Number of steps to wait before calling `torch.<device>.empty_cache()`. If left unset or set to None, cache will not be emptied.
 
             <Tip>
 
@@ -860,7 +860,7 @@ class TrainingArguments:
     torch_empty_cache_steps: Optional[int] = field(
         default=None,
         metadata={
-            "help": "Number of steps to wait before calling `torch.cuda.empty_cache()`."
+            "help": "Number of steps to wait before calling `torch.<device>.empty_cache()`."
             "This can help avoid CUDA out-of-memory errors by lowering peak VRAM usage at a cost of about [10% slower performance](https://github.com/huggingface/transformers/issues/31372)."
             "If left unset or set to None, cache will not be emptied."
         },

@@ -225,6 +225,11 @@ if is_accelerate_available():
         load_fsdp_optimizer,
         save_fsdp_model,
         save_fsdp_optimizer,
+        is_xpu_available,
+        is_mlu_available,
+        is_npu_available,
+        is_mps_available,
+        is_torch_version,
     )
 
     DATA_SAMPLERS = [RandomSampler]
@@ -3311,7 +3316,16 @@ class Trainer:
             self.args.torch_empty_cache_steps is not None
             and self.state.global_step % self.args.torch_empty_cache_steps == 0
         ):
-            torch.cuda.empty_cache()
+            if is_xpu_available():
+                torch.xpu.empty_cache()
+            elif is_mlu_available():
+                torch.mlu.empty_cache()
+            elif is_npu_available():
+                torch.npu.empty_cache()
+            elif is_torch_version(">=", "2.0") and is_mps_available():
+                torch.mps.empty_cache()
+            else:
+                torch.cuda.empty_cache()
 
         kwargs = {}
 
