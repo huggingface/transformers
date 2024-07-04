@@ -98,7 +98,7 @@ class GPT2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
-            return
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         tokenizer = self.get_tokenizer()
         rust_tokenizer = self.get_rust_tokenizer(add_prefix_space=True)
@@ -126,6 +126,7 @@ class GPT2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         input_bpe_tokens = [14, 15, 10, 9, 3, 2, 15, 19]
         self.assertListEqual(rust_tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
 
+    @unittest.skip
     def test_pretokenized_inputs(self, *args, **kwargs):
         # It's very difficult to mix/test pretokenization with byte-level
         # And get both GPT2 and Roberta to work at the same time (mostly an issue of adding a space before the string)
@@ -247,7 +248,7 @@ class GPT2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertTrue(decode_s.startswith(bos_token))
         self.assertTrue(all(d.startswith(bos_token) for d in decode_s2))
 
-    # tokenizer has no padding token
+    @unittest.skip(reason="tokenizer has no padding token")
     def test_padding_different_model_input_name(self):
         pass
 
@@ -331,7 +332,7 @@ class OPTTokenizationTest(unittest.TestCase):
         # Same as above
         self.assertEqual(tokens_ids, [2, 250, 1345, 9, 10, 4758])
 
-    @unittest.skip("This test is failing because of a bug in the fast tokenizer")
+    @unittest.skip(reason="This test is failing because of a bug in the fast tokenizer")
     def test_users_can_modify_bos(self):
         tokenizer = AutoTokenizer.from_pretrained("facebook/opt-350m", from_slow=True)
 

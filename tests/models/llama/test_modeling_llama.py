@@ -393,7 +393,7 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
         )
 
-    @unittest.skip("Llama buffers include complex numbers, which breaks this test")
+    @unittest.skip(reason="Llama buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):
         pass
 
@@ -710,7 +710,7 @@ class LlamaIntegrationTest(unittest.TestCase):
         # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
         # work as intended. See https://github.com/pytorch/pytorch/issues/121943
         if version.parse(torch.__version__) < version.parse("2.3.0"):
-            self.skipTest("This test requires torch >= 2.3 to run.")
+            self.skipTest(reason="This test requires torch >= 2.3 to run.")
 
         NUM_TOKENS_TO_GENERATE = 40
         # Note on `EXPECTED_TEXT_COMPLETION`'s diff: the current value matches the original test if the original test
@@ -729,11 +729,8 @@ class LlamaIntegrationTest(unittest.TestCase):
                 "my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p",
             ],
             7: [
-                "Simply put, the theory of relativity states that 1. surely nothing is faster than light.\nThe theory "
-                "goes that nothing travels faster than light, but the faster you go, the slower everything else will "
-                "be.\nThe theory of relativity",
-                "My favorite all time favorite condiment is ketchup. I love it on hamburgers, hot dogs, fries, eggs, "
-                "and even on a good old fashioned cheeseburger. I love it on everything. I love it so",
+                "Simply put, the theory of relativity states that 1) the speed of light is constant in all inertial reference frames, and 2) the laws of physics are the same for all inertial reference frames.\nThe theory of relativ",
+                "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p",
             ],
             9: [
                 "Simply put, the theory of relativity states that 1) the speed of light is constant in all inertial"

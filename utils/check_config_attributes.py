@@ -41,6 +41,7 @@ SPECIAL_CASES_TO_ALLOW = {
         "expert_layer_offset",
         "expert_layer_period",
     ],
+    "Gemma2Config": ["tie_word_embeddings"],
     # used to compute the property `self.chunk_length`
     "EncodecConfig": ["overlap"],
     # used to compute the property `self.layers_block_type`
@@ -61,8 +62,6 @@ SPECIAL_CASES_TO_ALLOW = {
     # `ignore_value` used during training (despite we don't have training script for these models yet)
     # `norm` used in conversion script (despite not using in the modeling file)
     "OneFormerConfig": ["ignore_value", "norm"],
-    # used during preprocessing and collation, see `collating_graphormer.py`
-    "GraphormerConfig": ["spatial_pos_max"],
     # used internally in the configuration class file
     "T5Config": ["feed_forward_proj"],
     # used internally in the configuration class file
@@ -134,20 +133,16 @@ SPECIAL_CASES_TO_ALLOW.update(
     {
         "CLIPSegConfig": True,
         "DeformableDetrConfig": True,
-        "DetaConfig": True,
         "DinatConfig": True,
         "DonutSwinConfig": True,
-        "EfficientFormerConfig": True,
         "FastSpeech2ConformerConfig": True,
         "FSMTConfig": True,
-        "JukeboxConfig": True,
         "LayoutLMv2Config": True,
         "MaskFormerSwinConfig": True,
         "MT5Config": True,
         # For backward compatibility with trust remote code models
         "MptConfig": True,
         "MptAttentionConfig": True,
-        "NatConfig": True,
         "OneFormerConfig": True,
         "PerceiverConfig": True,
         "RagConfig": True,

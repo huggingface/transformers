@@ -39,7 +39,7 @@ from ...file_utils import (
 from ...modeling_outputs import BaseModelOutput, DepthEstimatorOutput, SemanticSegmenterOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import ModelOutput, logging
+from ...utils import ModelOutput, logging, torch_int
 from ...utils.backbone_utils import load_backbone
 from .configuration_dpt import DPTConfig
 
@@ -226,7 +226,7 @@ class DPTViTEmbeddings(nn.Module):
         posemb_tok = posemb[:, :start_index]
         posemb_grid = posemb[0, start_index:]
 
-        old_grid_size = int(math.sqrt(len(posemb_grid)))
+        old_grid_size = torch_int(posemb_grid.size(0) ** 0.5)
 
         posemb_grid = posemb_grid.reshape(1, old_grid_size, old_grid_size, -1).permute(0, 3, 1, 2)
         posemb_grid = nn.functional.interpolate(posemb_grid, size=(grid_size_height, grid_size_width), mode="bilinear")
@@ -1071,10 +1071,10 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         super().__init__(config)
 
         self.backbone = None
-        if config.is_hybrid or config.backbone_config is None:
-            self.dpt = DPTModel(config, add_pooling_layer=False)
-        else:
+        if config.is_hybrid is False and (config.backbone_config is not None or config.backbone is not None):
             self.backbone = load_backbone(config)
+        else:
+            self.dpt = DPTModel(config, add_pooling_layer=False)
 
         # Neck
         self.neck = DPTNeck(config)
@@ -1136,6 +1136,10 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         >>> formatted = (output * 255 / np.max(output)).astype("uint8")
         >>> depth = Image.fromarray(formatted)
         ```"""
+        loss = None
+        if labels is not None:
+            raise NotImplementedError("Training is not implemented yet")
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1182,10 +1186,6 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         hidden_states = self.neck(hidden_states, patch_height, patch_width)
 
         predicted_depth = self.head(hidden_states)
-
-        loss = None
-        if labels is not None:
-            raise NotImplementedError("Training is not implemented yet")
 
         if not return_dict:
             if output_hidden_states:
@@ -1308,6 +1308,9 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
+        if labels is not None and self.config.num_labels == 1:
+            raise ValueError("The number of labels should be greater than one")
+
         outputs = self.dpt(
             pixel_values,
             head_mask=head_mask,
@@ -1342,22 +1345,19 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
 
         loss = None
         if labels is not None:
-            if self.config.num_labels == 1:
-                raise ValueError("The number of labels should be greater than one")
-            else:
-                # upsample logits to the images' original size
-                upsampled_logits = nn.functional.interpolate(
-                    logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
+            # upsample logits to the images' original size
+            upsampled_logits = nn.functional.interpolate(
+                logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
+            )
+            if auxiliary_logits is not None:
+                upsampled_auxiliary_logits = nn.functional.interpolate(
+                    auxiliary_logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
                 )
-                if auxiliary_logits is not None:
-                    upsampled_auxiliary_logits = nn.functional.interpolate(
-                        auxiliary_logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
-                    )
-                # compute weighted loss
-                loss_fct = CrossEntropyLoss(ignore_index=self.config.semantic_loss_ignore_index)
-                main_loss = loss_fct(upsampled_logits, labels)
-                auxiliary_loss = loss_fct(upsampled_auxiliary_logits, labels)
-                loss = main_loss + self.config.auxiliary_loss_weight * auxiliary_loss
+            # compute weighted loss
+            loss_fct = CrossEntropyLoss(ignore_index=self.config.semantic_loss_ignore_index)
+            main_loss = loss_fct(upsampled_logits, labels)
+            auxiliary_loss = loss_fct(upsampled_auxiliary_logits, labels)
+            loss = main_loss + self.config.auxiliary_loss_weight * auxiliary_loss
 
         if not return_dict:
             if output_hidden_states:

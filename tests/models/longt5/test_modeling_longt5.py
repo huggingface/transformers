@@ -504,7 +504,6 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     all_generative_model_classes = (LongT5ForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "conversational": LongT5ForConditionalGeneration,
             "feature-extraction": LongT5Model,
             "summarization": LongT5ForConditionalGeneration,
             "text2text-generation": LongT5ForConditionalGeneration,
@@ -643,7 +642,7 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
     def test_attention_outputs(self):
         if not self.has_attentions:
-            pass
+            self.skipTest(reason="has_attentions is set to False")
 
         else:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -770,7 +769,7 @@ class LongT5TGlobalModelTest(LongT5ModelTest):
 
     def test_attention_outputs(self):
         if not self.has_attentions:
-            pass
+            self.skipTest(reason="has_attentions is set to False")
 
         else:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1036,7 +1035,7 @@ class LongT5EncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_attention_outputs(self):
         if not self.has_attentions:
-            pass
+            self.skipTest(reason="has_attentions is set to False")
 
         else:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1108,7 +1107,7 @@ class LongT5EncoderOnlyTGlobalModelTest(LongT5EncoderOnlyModelTest):
 
     def test_attention_outputs(self):
         if not self.has_attentions:
-            pass
+            self.skipTest(reason="has_attentions is set to False")
 
         else:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
