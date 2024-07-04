@@ -569,9 +569,16 @@ class GemmaSdpaAttention(GemmaAttention):
         cos, sin = self.rotary_emb(value_states, position_ids)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
+        if q_len > 1:
+            # prefill
+            cache_position = torch.arange(cache_info._length, dtype=torch.int32, device=hidden_states.device)
+        else:
+            # decoding
+            cache_position = torch.tensor([cache_info._length - 1], dtype=torch.int32, device=hidden_states.device)
+
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_info": cache_info}
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
