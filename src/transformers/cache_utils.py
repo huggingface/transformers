@@ -23,13 +23,6 @@ if is_hqq_available():
 logger = logging.get_logger(__name__)
 
 
-class CacheInfo:
-
-    def __init__(self, position, length):
-        self.position = position
-        self._length = length
-
-
 @dataclass
 class Cache:
     """
