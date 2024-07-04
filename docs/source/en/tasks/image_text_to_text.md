@@ -219,7 +219,7 @@ quantized_model = Idefics2ForConditionalGeneration.from_pretrained(model_id, dev
 
 And that's it, we can use the model the same way with no changes.
 
-## Further Reading
+## Further Reading
 
 Here are some more resources for the image-text-to-text task.
 
