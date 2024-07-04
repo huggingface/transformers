@@ -192,7 +192,6 @@ MPLUGDOCOWL_INPUTS_DOCSTRING = r"""
 
 
 class MPLUGDocOwlHReducer(MPLUGDocOwlPreTrainedModel):
-
     r"""
      MPLUGDocOwlHReducer is a spatial-aware vision-to-text module designed for Visual Document Understanding.
      This component processes high-resolution text-rich images by reducing the visual sequence length while
@@ -205,16 +204,6 @@ class MPLUGDocOwlHReducer(MPLUGDocOwlPreTrainedModel):
 
     Attributes:
         config (Config): Model configuration containing hyperparameters for the language model and hreducer.
-        conv_shape (tuple): Shape of the convolutional layer derived from the configuration, set to (1, 4) for
-                            horizontal text coherence.
-        layer_norm (torch.nn.LayerNorm): Layer normalization applied to the hidden states.
-        conv_patch (int): The product of the convolution shape dimensions, representing the number of visual features
-                          combined by the convolutional layer.
-        reducer_before (torch.nn.Sequential): Sequential model containing a convolutional layer and GELU activation
-                                              for initial reduction of visual features.
-        reducer (torch.nn.Conv2d): Convolutional layer for further reduction of visual feature length.
-        visual_fc (torch.nn.Linear): Fully connected layer to project visual features into the language embedding space.
-        vit_eos (torch.nn.Parameter): End-of-sequence token for visual transformer.
 
     Methods:
         __init__(config):

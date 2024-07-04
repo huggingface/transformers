@@ -64,6 +64,7 @@ def _get_unpad_data(attention_mask):
         max_seqlen_in_batch,
     )
 
+
 # Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->MPLUGDocOwl
 class MPLUGDocOwlRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
@@ -83,6 +84,7 @@ class MPLUGDocOwlRMSNorm(nn.Module):
 
 
 ALL_LAYERNORM_LAYERS.append(MPLUGDocOwlRMSNorm)
+
 
 class MPLUGDocOwlRotaryEmbedding(torch.nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
@@ -181,6 +183,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
+
 
 class MPLUGDocOwlMLP(nn.Module):
     def __init__(self, config):
@@ -443,6 +446,7 @@ class MultiwayAttention(nn.Module):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
+
 
 MPLUGDocOwl_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the

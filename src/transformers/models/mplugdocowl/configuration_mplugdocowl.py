@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" MPLUGDocOwl model configuration"""
+"""MPLUGDocOwl model configuration"""
 
 import warnings
 
@@ -46,8 +46,6 @@ class MPLUGDocOwlConfig(PretrainedConfig):
             The ignore index for the loss function.
         image_token_index (`int`, *optional*, defaults to 32000):
             The image token index to encode the image prompt.
-        projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The activation function used by the multimodal projector.
 
     Example:
 

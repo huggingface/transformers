@@ -392,8 +392,9 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
             Can be overridden by the `image_std` parameter in the `preprocess` method.
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Whether to convert the image to RGB.
-        do_anchor_resize (`bool`, *optional*, defaults to `True`): Whether to resize the image based on the specified anchor. Should be called before do_shape_adaptive_cropping.
         do_shape_adaptive_cropping (`bool`, *optional*, defaults to `True`): Whether to do a shape adaptive cropping of the input image. Should be only called if the do_anchor_resize is called.
+        do_anchor_resize (`bool`, *optional*, defaults to `True`): Whether to resize the image based on the specified anchor. Should be called before do_shape_adaptive_cropping.
+        do_add_global_image (`bool`, *optional*, defaults to `True`): Whether to add the global image to the image input. 
     """
 
     model_input_names = ["pixel_values"]
@@ -648,7 +649,12 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
         if input_data_format is None:
             # We assume that all images have the same channel dimension format.
             input_data_format = infer_channel_dimension_format(images[0])
-
+        
+        if is_scaled_image(images[0]) and do_rescale:
+            logger.warning_once(
+                "It looks like you are trying to rescale already rescaled images. If the input"
+                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
+            )
         if do_center_crop:
             images = [
                 self.center_crop(image=image, size=crop_size, input_data_format=input_data_format) for image in images
@@ -681,11 +687,6 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
                 for image in images
             ]
 
-        if is_scaled_image(images[0]) and do_rescale:
-            logger.warning_once(
-                "It looks like you are trying to rescale already rescaled images. If the input"
-                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
-            )
         if do_normalize:
             images = [
                 self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)

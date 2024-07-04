@@ -2517,6 +2517,7 @@ else:
     _import_structure["models.mplugdocowl"].extend(
         [
             "MPLUGDocOwlForConditionalGeneration",
+            "MPLUGDocOwlHReducer",
             "MPLUGDocOwlPreTrainedModel",
         ]
     )
@@ -5782,6 +5783,7 @@ if TYPE_CHECKING:
             MobileNetV2ImageProcessor,
         )
         from .models.mobilevit import MobileViTFeatureExtractor, MobileViTImageProcessor
+        from .models.mplugdocowl import MPLUGDocOwlImageProcessor
         from .models.nougat import NougatImageProcessor
         from .models.oneformer import OneFormerImageProcessor
         from .models.owlv2 import Owlv2ImageProcessor
@@ -6906,6 +6908,7 @@ if TYPE_CHECKING:
         )
         from .models.mplugdocowl import (
             MPLUGDocOwlForConditionalGeneration,
+            MPLUGDocOwlHReducer,
             MPLUGDocOwlPreTrainedModel,
         )
         from .models.mpnet import (
