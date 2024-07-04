@@ -39,7 +39,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_gemma import Gemma2Config
+    from .configuration_gemma2 import Gemma2Config
 
     try:
         if not is_torch_available():
@@ -47,7 +47,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_gemma import (
+        from .modeling_gemma2 import (
             Gemma2ForCausalLM,
             Gemma2ForSequenceClassification,
             Gemma2ForTokenClassification,
