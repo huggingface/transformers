@@ -23,6 +23,13 @@ if is_hqq_available():
 logger = logging.get_logger(__name__)
 
 
+class CacheInfo:
+
+    def __init__(self, position, length):
+        self.position = position
+        self._length = length
+
+
 @dataclass
 class Cache:
     """
@@ -854,7 +861,7 @@ class StaticCache(Cache):
         Return:
             A tuple containing the updated key and value states.
         """
-        cache_position = cache_kwargs.get("cache_position")
+        cache_info = cache_kwargs.get("cache_info")
         k_out = self.key_cache[layer_idx]
         v_out = self.value_cache[layer_idx]
 
@@ -862,8 +869,8 @@ class StaticCache(Cache):
             k_out.copy_(key_states)
             v_out.copy_(value_states)
         else:
-            k_out[:, :, cache_position] = key_states
-            v_out[:, :, cache_position] = value_states
+            k_out[:, :, cache_info.position] = key_states
+            v_out[:, :, cache_info.position] = value_states
 
         return k_out, v_out
 
