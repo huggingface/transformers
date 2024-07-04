@@ -123,6 +123,7 @@ from . import (
     lilt,
     llama,
     llava,
+    mllama,
     llava_next,
     longformer,
     longt5,

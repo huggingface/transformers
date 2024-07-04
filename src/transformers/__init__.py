@@ -506,6 +506,10 @@ _import_structure = {
         "LlavaConfig",
         "LlavaProcessor",
     ],
+    "models.mllama": [
+        "MllamaConfig",
+        "MllamaProcessor",
+    ],
     "models.llava_next": [
         "LlavaNextConfig",
         "LlavaNextProcessor",
@@ -2407,6 +2411,12 @@ else:
         [
             "LlavaForConditionalGeneration",
             "LlavaPreTrainedModel",
+        ]
+    )
+    _import_structure["models.mllama"].extend(
+        [
+            "MllamaForConditionalGeneration",
+            "MllamaPreTrainedModel",
         ]
     )
     _import_structure["models.llava_next"].extend(
@@ -5101,6 +5111,10 @@ if TYPE_CHECKING:
         LlavaConfig,
         LlavaProcessor,
     )
+    from .models.mllama import (
+        MllamaConfig,
+        MllamaProcessor,
+    )
     from .models.llava_next import (
         LlavaNextConfig,
         LlavaNextProcessor,
@@ -6825,6 +6839,10 @@ if TYPE_CHECKING:
         from .models.llava import (
             LlavaForConditionalGeneration,
             LlavaPreTrainedModel,
+        )
+        from .models.mllama import (
+            MllamaForConditionalGeneration,
+            MllamaPreTrainedModel,
         )
         from .models.llava_next import (
             LlavaNextForConditionalGeneration,
