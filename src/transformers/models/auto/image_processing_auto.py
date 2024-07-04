@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING, Dict, Optional, Tuple, Union
 from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...image_processing_utils import BaseImageProcessor, ImageProcessingMixin
-from ...image_processing_utils_fast import BaseImageProcessorFast
+#from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...utils import (
     CONFIG_NAME,
     IMAGE_PROCESSOR_NAME,
