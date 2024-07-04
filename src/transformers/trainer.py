@@ -221,15 +221,15 @@ if is_accelerate_available():
         DistributedDataParallelKwargs,
         DistributedType,
         GradientAccumulationPlugin,
+        is_mlu_available,
+        is_mps_available,
+        is_npu_available,
+        is_torch_version,
+        is_xpu_available,
         load_fsdp_model,
         load_fsdp_optimizer,
         save_fsdp_model,
         save_fsdp_optimizer,
-        is_xpu_available,
-        is_mlu_available,
-        is_npu_available,
-        is_mps_available,
-        is_torch_version,
     )
 
     DATA_SAMPLERS = [RandomSampler]
