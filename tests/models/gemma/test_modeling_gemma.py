@@ -733,6 +733,9 @@ class GemmaIntegrationTest(unittest.TestCase):
 
     @require_read_token
     def test_model_7b_fp16(self):
+        if self.cuda_compute_capability_major_version == 7:
+            self.skipTest("This test is failing (`torch.compile` fails) on Nvidia T4 GPU.")
+
         model_id = "google/gemma-7b"
         EXPECTED_TEXTS = [
             """Hello I am doing a project on a 1999 4.0L 4x4. I""",
@@ -753,6 +756,9 @@ class GemmaIntegrationTest(unittest.TestCase):
 
     @require_read_token
     def test_model_7b_bf16(self):
+        if self.cuda_compute_capability_major_version == 7:
+            self.skipTest("This test is failing (`torch.compile` fails) on Nvidia T4 GPU.")
+
         model_id = "google/gemma-7b"
 
         # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
@@ -788,6 +794,9 @@ class GemmaIntegrationTest(unittest.TestCase):
 
     @require_read_token
     def test_model_7b_fp16_static_cache(self):
+        if self.cuda_compute_capability_major_version == 7:
+            self.skipTest("This test is failing (`torch.compile` fails) on Nvidia T4 GPU.")
+
         model_id = "google/gemma-7b"
         EXPECTED_TEXTS = [
             """Hello I am doing a project on a 1999 4.0L 4x4. I""",
