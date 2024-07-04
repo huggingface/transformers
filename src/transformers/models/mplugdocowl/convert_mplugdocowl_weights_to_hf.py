@@ -83,7 +83,7 @@ def convert_state_dict_to_hf(state_dict):
 
 
 def convert_mplugdocowl_llama_to_hf(
-    text_model_id, output_hub_path, vision_model_id, old_state_dict_id, pretrained=False
+    text_model_id, output_hub_path, vision_model_id, old_state_dict_id, pretrained=True
 ):
     if not pretrained:
         torch.set_default_dtype(torch.float16)

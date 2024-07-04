@@ -27,9 +27,9 @@ class MPLUGDocOwlConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MPLUGDocOwlForConditionalGeneration`]. It is used to instantiate an
     MPLUGDocOwl model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the MPLUGDocOwl-9B.
+    with the defaults will yield a similar configuration to that of the MPLUGDocOwl-Chat.
 
-    e.g. [mplugdocowl-hf/mplugdocowl-9b](https://huggingface.co/mplugdocowl-hf/mplugdocowl-9b)
+    e.g. [mplugdocowl-hf/mplugdocowl-Chat](https://huggingface.co/mplugdocowl-hf/mplugdocowl-Chat)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -39,10 +39,9 @@ class MPLUGDocOwlConfig(PretrainedConfig):
             The config object or dictionary of the vision backbone.
         text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `LlamaConfig`):
             The config object or dictionary of the text backbone.
-        hreducer_hidden_size (`<fill_type>`, *optional*, defaults to 1024): <fill_docstring>
-        hreducer_initializer_range (`<fill_type>`, *optional*, defaults to 0.02): <fill_docstring>
-        hreducer_layer_norm (`<fill_type>`, *optional*, defaults to 1e-06): <fill_docstring>
-        hreducer_conv_shape (`<fill_type>`, *optional*, defaults to `"1x4"`): <fill_docstring>
+        hreducer_hidden_size (`int`, *optional*, defaults to 1024): The hidden size for the hreducer.
+        hreducer_layer_norm (`float`, *optional*, defaults to 1e-06): The layer normalization parameter for the hreducer.
+        hreducer_conv_shape (`str`, *optional*, defaults to `"1x4"`): The kernel size for the convolutional layer in the hreducer.
         ignore_index (`int`, *optional*, defaults to -100):
             The ignore index for the loss function.
         image_token_index (`int`, *optional*, defaults to 32000):
@@ -61,10 +60,10 @@ class MPLUGDocOwlConfig(PretrainedConfig):
     >>> # Initializing a Llama config
     >>> text_config = LlamaConfig()
 
-    >>> # Initializing a MPLUGDocOwl mplugdocowl-1.5-7b style configuration
+    >>> # Initializing a MPLUGDocOwl mplugdocowl-1.5-Chat style configuration
     >>> configuration = MPLUGDocOwlConfig(vision_config, text_config)
 
-    >>> # Initializing a model from the mplugdocowl-1.5-7b style configuration
+    >>> # Initializing a model from the mplugdocowl-1.5-Chat style configuration
     >>> model = MPLUGDocOwlForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration
@@ -79,18 +78,14 @@ class MPLUGDocOwlConfig(PretrainedConfig):
         vision_config=None,
         text_config=None,
         hreducer_hidden_size=1024,
-        hreducer_initializer_range=0.02,
         hreducer_layer_norm=1e-6,
-        hreducer_activation="gelu",
         hreducer_conv_shape="1x4",
         ignore_index=-100,
         image_token_index=32000,
-        projector_hidden_act="gelu",
         **kwargs,
     ):
         self.ignore_index = ignore_index
         self.image_token_index = image_token_index
-        self.projector_hidden_act = projector_hidden_act
 
         if "vocab_size" in kwargs:
             warnings.warn(
@@ -131,10 +126,8 @@ class MPLUGDocOwlConfig(PretrainedConfig):
         self.text_config = text_config
         self._vocab_size = self.text_config.vocab_size
         self.hreducer_hidden_size = hreducer_hidden_size
-        self.hreducer_initializer_range = hreducer_initializer_range
         self.hreducer_layer_norm = hreducer_layer_norm
         self.hreducer_conv_shape = hreducer_conv_shape
-        self.hreducer_activation = hreducer_activation
         super().__init__(**kwargs)
 
     @property

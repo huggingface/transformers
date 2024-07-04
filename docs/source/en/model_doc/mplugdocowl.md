@@ -43,9 +43,14 @@ The original code can be found [here](https://github.com/X-PLUG/mPLUG-DocOwl/tre
 
 [[autodoc]] MPLUGDocOwlConfig
 
-## MPLUGDocOwlProcessor
+## MPLUGDocOwlImageProcessor
+[[autodoc]] MPLUGDocOwlImageProcessor
 
+## MPLUGDocOwlProcessor
 [[autodoc]] MPLUGDocOwlProcessor
+
+## MPLUGDocOwlHReducer
+[[autodoc]] MPLUGDocOwlHReducer
 
 ## MPLUGDocOwlForConditionalGeneration
 

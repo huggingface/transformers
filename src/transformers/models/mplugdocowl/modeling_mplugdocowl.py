@@ -194,10 +194,10 @@ MPLUGDOCOWL_INPUTS_DOCSTRING = r"""
 class MPLUGDocOwlHReducer(MPLUGDocOwlPreTrainedModel):
 
     r"""
-    MPLUGDocOwlHReducer is a spatial-aware vision-to-text module designed for Visual Document Understanding.
-    This model component processes high-resolution text-rich images by reducing the visual sequence length while
-    preserving spatial information. It uses a convolutional layer followed by a fully connected layer to align
-    visual features with language embeddings.
+     MPLUGDocOwlHReducer is a spatial-aware vision-to-text module designed for Visual Document Understanding.
+     This component processes high-resolution text-rich images by reducing the visual sequence length while
+     preserving spatial information. It uses a convolutional layer followed by a fully connected layer to align
+     visual features with language embeddings.
 
     Unlike other popular vision-to-text modules such as MLPs or cross-attention modules with learnable queries,
     the H-Reducer is specifically designed to handle high-resolution images efficiently without losing spatial
@@ -238,7 +238,7 @@ class MPLUGDocOwlHReducer(MPLUGDocOwlPreTrainedModel):
             int(self.config.hreducer_conv_shape.split("x")[0]),
             int(self.config.hreducer_conv_shape.split("x")[1]),
         )
-        self.layer_norm = torch.nn.LayerNorm(self.config.hreducer_hidden_size, eps=1e-6)
+        self.layer_norm = torch.nn.LayerNorm(self.config.hreducer_hidden_size, eps=self.config.hreducer_layer_norm)
         self.conv_patch = self.conv_shape[0] * self.conv_shape[1]
         self.reducer_before = torch.nn.Sequential(
             nn.Conv2d(
