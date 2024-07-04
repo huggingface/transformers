@@ -248,7 +248,7 @@ class GenerationConfig(PushToHubMixin):
         self.num_beams = kwargs.pop("num_beams", 1)
         self.num_beam_groups = kwargs.pop("num_beam_groups", 1)
         self.penalty_alpha = kwargs.pop("penalty_alpha", None)
-        self.use_cache = kwargs.pop("use_cache", True)
+        self.use_cache = kwargs.pop("use_cache", False)
 
         # Parameters for manipulation of the model output logits
         self.temperature = kwargs.pop("temperature", 1.0)

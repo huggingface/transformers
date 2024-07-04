@@ -20,6 +20,7 @@ import math
 import os
 import warnings
 from typing import List, Optional, Tuple, Union, Dict
+from matplotlib.pyplot import yticks
 
 import torch
 from torch import nn
@@ -91,14 +92,17 @@ def rotate_half(x):
 
 
 #@torch.jit.script
-def apply_rotary_pos_emb(x, cos, sin):
+def apply_rotary_pos_emb(x, cos, sin, seq_dimension):
     # NOTE: This could probably be moved to Triton
 
-    # Handle a possible sequence length mismatch in between q and k
-    cos = cos[:, :, : x.shape[-2], :]
-    sin = sin[:, :, : x.shape[-2], :]
+    # # Handle a possible sequence length mismatch in between q and k
+    # cos = cos[:, :, : x.shape[-2], :]
+    # sin = sin[:, :, : x.shape[-2], :]
+    res = torch.clone(x)
+    res[:, -cos.shape[seq_dimension]:] = (res[:, -cos.shape[seq_dimension]:] * cos) + (rotate_half(res[:, -cos.shape[seq_dimension]:]) * sin)
+    # return (x * cos) + (rotate_half(x) * sin)
 
-    return (x * cos) + (rotate_half(x) * sin)
+    return res
 
 #from xformers, modified to allow custom position indices (in minibatch)
 class RotaryEmbedding(torch.nn.Module):
@@ -126,52 +130,47 @@ class RotaryEmbedding(torch.nn.Module):
         inv_freq = 1.0 / (10000 ** (torch.arange(0, dim_model, 2).float() / dim_model))
         self.register_buffer("inv_freq", inv_freq)
 
-        self._seq_len_cached = None
-        self._cos_cached = None
-        self._sin_cached = None
+        # self._seq_len_cached = None
+        # self._cos_cached = None
+        # self._sin_cached = None
 
     def _update_cos_sin_tables(self, x, seq_dimension=1, custom_indices:torch.Tensor = None):
-        seq_len = x.shape[seq_dimension]
+        # seq_len = x.shape[seq_dimension]
 
         # Reset the tables if the sequence length has changed,
         # or if we're on a new device (possibly due to tracing for instance)
-        if (
-            seq_len != self._seq_len_cached
-            or self._cos_cached.device != x.device
-            or self._cos_cached.dtype != x.dtype
-            or custom_indices is not None #TODO: this invalidates cache on every forward if custom_indices are provided, is there another way? is it critical?
-        ):
-            self._seq_len_cached = seq_len
-            if custom_indices is None:
-                t = torch.arange(
-                    x.shape[seq_dimension], device=x.device, dtype=torch.float32
-                )
-            else:
-                t = custom_indices.float().to(x.device)
+    
+        self._seq_len_cached = None
+        if custom_indices is None:
+            t = torch.arange(
+                x.shape[seq_dimension], device=x.device, dtype=torch.float32
+            )
+        else:
+            t = custom_indices.float().to(x.device)
 
-            freqs = torch.einsum("...i,...j->...ij", t, self.inv_freq.to(x.dtype)) #yoel - added ellipsis to support minibatch 
-            emb = torch.cat((freqs, freqs), dim=-1).to(x.device)
-            assert len(emb.shape) in [2,3], "untested/unsupported currently"
-            self._cos_cached = emb.cos().to(x.dtype)
-            self._sin_cached = emb.sin().to(x.dtype)
-            for _ in range(4-len(emb.shape)):
-                self._cos_cached = self._cos_cached[None, ...]
-                self._sin_cached = self._sin_cached[None, ...]
-            
-        return self._cos_cached, self._sin_cached
+        freqs = torch.einsum("...i,...j->...ij", t, self.inv_freq.to(x.dtype)) #yoel - added ellipsis to support minibatch 
+        emb = torch.cat((freqs, freqs), dim=-1).to(x.device)
+        assert len(emb.shape) in [2,3], "untested/unsupported currently"
+        _cos_cached = emb.cos().to(x.dtype)
+        _sin_cached = emb.sin().to(x.dtype)
+        for _ in range(3-len(emb.shape)):
+            _cos_cached = _cos_cached[None, ...]
+            _sin_cached = _sin_cached[None, ...]
+        
+        return _cos_cached, _sin_cached
 
     def forward(
         self, q: torch.Tensor, k: torch.Tensor, custom_indices:torch.Tensor = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         # print("using RotaryEmbedding")
-        self._cos_cached, self._sin_cached = self._update_cos_sin_tables(
-            k, seq_dimension=-2,
+        _cos_cached, _sin_cached = self._update_cos_sin_tables(
+            q, seq_dimension=-2,
             custom_indices=custom_indices,
         )
 
         return (
-            apply_rotary_pos_emb(q, self._cos_cached, self._sin_cached),
-            apply_rotary_pos_emb(k, self._cos_cached, self._sin_cached),
+            apply_rotary_pos_emb(q, _cos_cached, _sin_cached, seq_dimension=-2),
+            apply_rotary_pos_emb(k, _cos_cached, _sin_cached, seq_dimension=-2),
         )
 
 
@@ -586,7 +585,8 @@ class T5Attention(nn.Module):
     
     def inject_position_embedding(self, position_ids_info_list, real_seq_length, key_length, key_states, query_states):
         position_bias = None
-        B,H,M,K = query_states.shape
+        B,H,M_QUERY,K = query_states.shape
+        M_KEY = key_states.shape[2]
         for position_ids, position_embedding_name in position_ids_info_list:
             pos_emb_type = self.positional_embedding_injected_in_attention[position_embedding_name]['type']
             if pos_emb_type in [POSITION_EMBEDDING_T5_DEFAULT_RELATIVE, POSITION_EMBEDDING_T5_RELATIVE]:
@@ -599,12 +599,12 @@ class T5Attention(nn.Module):
                 if self.gradient_checkpointing and self.training:
                     position_bias.requires_grad = True
                 query_states, key_states = self.rotary_op(
-                    query_states.permute(0,2,1,3).reshape(B,M,H*K), 
-                    key_states.permute(0,2,1,3).reshape(B,M,H*K),
+                    query_states.permute(0,2,1,3).reshape(B,M_QUERY,H*K), 
+                    key_states.permute(0,2,1,3).reshape(B,M_KEY,H*K),
                     custom_indices=position_ids
                     )
-                query_states = query_states.reshape(B,M,H,K).permute(0,2,1,3)
-                key_states = key_states.reshape(B,M,H,K).permute(0,2,1,3)
+                query_states = query_states.reshape(B,M_QUERY,H,K).permute(0,2,1,3)
+                key_states = key_states.reshape(B,M_KEY,H,K).permute(0,2,1,3)
             else:
                 raise Exception(f'Encountered pos_emb_type={pos_emb_type} but the only supported options to be injected inside attention are {SUPPORTED_POS_ENC_TYPES_INJECTED_IN_ATTENTION}')
         return position_bias, query_states, key_states
@@ -768,6 +768,7 @@ class T5Attention(nn.Module):
             # if key and values are already calculated
             # we want only the last query position bias
             if past_key_value is not None:
+                # print(position_bias.shape)
                 position_bias = position_bias[:, :, -hidden_states.size(1) :, :]
 
             if mask is not None:
@@ -2019,7 +2020,9 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
         >>> # studies have shown that owning a dog is good for you.
         ```"""
-
+        # temp fix
+        use_cache = False
+        
         if encoder_position_ids_dict is None:
             encoder_position_ids_dict = {}
         
@@ -2149,6 +2152,8 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         cross_attn_head_mask=None,
         use_cache=None,
         encoder_outputs=None,
+        encoder_position_ids_dict=None,
+        decoder_position_ids_dict=None,
         **kwargs,
     ):
         # cut decoder_input_ids if past is used
@@ -2165,6 +2170,8 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             "decoder_attention_mask": decoder_attention_mask,
             "cross_attn_head_mask": cross_attn_head_mask,
             "use_cache": use_cache,
+            "encoder_position_ids_dict": encoder_position_ids_dict,
+            "decoder_position_ids_dict": decoder_position_ids_dict,
         }
 
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
