@@ -1199,7 +1199,7 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
         past_key_values=None,
         attention_mask=None,
         inputs_embeds=None,
-        cache_length=None,
+        cached_length=None,
         use_cache=True,
         **kwargs,
     ):
@@ -1251,13 +1251,13 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
             model_inputs = {"input_ids": input_ids.contiguous()}
 
         input_length = position_ids.shape[-1] if position_ids is not None else input_ids.shape[-1]
-        if cache_length is None:
-            cache_length = past_length + input_length
+        if cached_length is None:
+            cached_length = past_length + input_length
 
         model_inputs.update(
             {
                 "position_ids": position_ids,
-                "cache_length": cache_length,
+                "cache_length": cached_length,
                 "past_key_values": past_key_values,
                 "use_cache": use_cache,
                 "attention_mask": attention_mask,
