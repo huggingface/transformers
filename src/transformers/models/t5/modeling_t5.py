@@ -774,14 +774,14 @@ class T5Attention(nn.Module):
             if mask is not None:
                 position_bias = position_bias + mask  # (batch_size, n_heads, seq_length, key_length)
 
-            if self.pruned_heads:
-                mask = torch.ones(position_bias.shape[1])
-                mask[list(self.pruned_heads)] = 0
-                position_bias_masked = position_bias[:, mask.bool()]
-            else:
-                position_bias_masked = position_bias
+        if self.pruned_heads:
+            mask = torch.ones(position_bias.shape[1])
+            mask[list(self.pruned_heads)] = 0
+            position_bias_masked = position_bias[:, mask.bool()]
+        else:
+            position_bias_masked = position_bias
 
-            add_to_scores = position_bias_masked
+        add_to_scores = position_bias_masked
             
         if self.memory_efficient_attention is None: #attention as it was originally implemented in the transformers repo                                   
             # compute scores
