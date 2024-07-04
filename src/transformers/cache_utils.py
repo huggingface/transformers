@@ -865,7 +865,7 @@ class StaticCache(Cache):
         k_out = self.key_cache[layer_idx]
         v_out = self.value_cache[layer_idx]
 
-        if cache_position is None:
+        if cache_info is None:
             k_out.copy_(key_states)
             v_out.copy_(value_states)
         else:
