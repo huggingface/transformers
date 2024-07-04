@@ -1543,7 +1543,6 @@ class ModelUtilsTest(TestCasePlus):
         self.assertIn(warning_msg_beta, cl2.out)
 
 
-
 @slow
 @require_torch
 class ModelOnTheFlyConversionTester(unittest.TestCase):
