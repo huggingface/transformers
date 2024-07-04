@@ -1252,7 +1252,8 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
 
         input_length = position_ids.shape[-1] if position_ids is not None else input_ids.shape[-1]
         if cached_length is None:
-            cached_length = past_length + input_length
+            # It must be a python int
+            cached_length = int(past_length + input_length)
 
         model_inputs.update(
             {
