@@ -16,39 +16,79 @@
 Processor class for MPLUGDocOwl.
 """
 
-
-from typing import List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 # FIXME need to add image processing class name
 # from transformers.models.mplugdocowl.image_processing_mplugdocowl import MPLUGDocOwlImageProcessor
 # FIXME change the import from transformers to import from ...
-from transformers.feature_extraction_utils import BatchFeature
-from transformers.image_utils import ImageInput
-from transformers.processing_utils import ProcessorMixin
-from transformers.tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
-from transformers.utils import TensorType
+from ...feature_extraction_utils import BatchFeature
+from ...image_utils import ImageInput
+from ...processing_utils import ProcessorMixin
+from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
+from ...utils import TensorType
 
 
 class MPLUGDocOwlProcessor(ProcessorMixin):
     r"""
     Constructs a MPLUGDocOwl processor which wraps a MPLUGDocOwl image processor and a MPLUGDocOwl tokenizer into a single processor.
 
-    [`MPLUGDocOwlProcessor`] offers all the functionalities of [`MPLUGDocOwlImageProcessor`] and [`AutoTokenizerFast`]. See the
+    [`MPLUGDocOwlProcessor`] offers all the functionalities of [`MPLUGDocOwlImageProcessor`] and [`AutoTokenizer`]. See the
     [`~MPLUGDocOwlProcessor.__call__`] and [`~MPLUGDocOwlProcessor.decode`] for more information.
 
     Args:
         image_processor ([`MPLUGDocOwlImageProcessor`], *optional*):
             The image processor is a required input.
-        tokenizer ([`AutoTokenizerFast`], *optional*):
+        tokenizer ([`AutoTokenizer`], *optional*):
             The tokenizer is a required input.
     """
 
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "MPLUGDocOwlImageProcessor"
-    tokenizer_class = "AutoTokenizer"  # , "AutoTokenizerFast")
+    tokenizer_class = "AutoTokenizer"
 
     def __init__(self, image_processor=None, tokenizer=None):
         super().__init__(image_processor, tokenizer)
+
+    def generate_text_with_placeholders(
+        self, text, patch_positions, anchor_max, num_patches, add_textual_crop_indicator
+    ):
+        """
+        Generates a text string with placeholders for images and optional textual crop indicators.
+
+        Parameters:
+        - text (str): The input text containing <image> tokens where image placeholders should be inserted.
+        - patch_positions (numpy.ndarray): Array of patch positions indicating the location of cropped images.
+        - anchor_max (int): The maximum anchor value used to identify global images.
+        - num_patches (int): The number of patches (or cropped images) to be represented in the text.
+        - add_textual_crop_indicator (bool): Flag indicating whether to add textual crop indicators in the output.
+
+        Returns:
+        - str: The generated text with appropriate image placeholders and optional crop indicators.
+        """
+        media_token = "<image>"
+        assert media_token in text
+        text_list = text.split(media_token)
+        text = "USER: "
+        image_token_ptr = 0
+
+        for next_text in text_list[1:]:
+            if add_textual_crop_indicator:
+                # Generate image placeholders with interleaved textual crop indicator
+                for patch_pos in patch_positions.tolist():
+                    if patch_pos[0] == anchor_max and patch_pos[1] == anchor_max:
+                        text += "<global_img><image>"
+                    else:
+                        row_col = f"row{patch_pos[0]}_col{patch_pos[1]}"
+                        text += f"<crop_img_{row_col}><image>"
+            else:
+                # Generate successive image placeholders for an image, 1 crop img == 1
+                text += "<image>" * num_patches
+
+            text += next_text
+            image_token_ptr += 1
+
+        text += " ASSISTANT:"
+        return text
 
     def __call__(
         self,
@@ -59,11 +99,20 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length=None,
         do_rescale: bool = True,
+        do_convert_rgb: bool = True,
+        do_resize: bool = True,
+        do_normalize: bool = None,
+        image_mean: Optional[Union[float, List[float]]] = (0.48145466, 0.4578275, 0.40821073),
+        image_std: Optional[Union[float, List[float]]] = (0.26862954, 0.26130258, 0.27577711),
+        size: Dict[str, int] = {"width": 448, "height": 448},
+        do_anchor_resize: bool = True,
+        do_shape_adaptive_cropping: bool = True,
+        do_add_global_image: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to AutoTokenizerFast's [`~AutoTokenizerFast.__call__`] if `text` is not `None` to encode
+        and `kwargs` arguments to AutoTokenizer's [`~AutoTokenizer.__call__`] if `text` is not `None` to encode
         the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
         MPLUGDocOwlImageProcessor's [`~MPLUGDocOwlImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
         of the above two methods for more information.
@@ -112,52 +161,34 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
             pixel_values = self.image_processor(
                 images,
                 do_rescale=do_rescale,
-                do_convert_rgb=True,
-                do_shape_adaptive_cropping=True,
-                do_resize=True,
-                do_normalize=True,
+                do_convert_rgb=do_convert_rgb,
+                do_shape_adaptive_cropping=do_shape_adaptive_cropping,
+                do_resize=do_resize,
+                do_normalize=do_normalize,
                 return_tensors=return_tensors,
-                image_mean=(0.48145466, 0.4578275, 0.40821073),
-                image_std=(0.26862954, 0.26130258, 0.27577711),
-                size={"width": 448, "height": 448},
-                do_anchor_resize=True,
+                image_mean=image_mean,
+                image_std=image_std,
+                size=size,
+                do_anchor_resize=do_anchor_resize,
+                do_add_global_image=do_add_global_image,
             )
         else:
             pixel_values = None
         # text prpeocessing
-        media_token = "<image>"
-        assert media_token in text
         patch_positions = pixel_values["patch_positions"]
         num_patches = pixel_values["num_patches"]
         anchor_max = pixel_values["anchor_max"]
+        
+        if not isinstance(text, list):
+            text = [text]
+        
+        texts = [
+            self.generate_text_with_placeholders(txt, patch_pos, anch_max, n_patches, add_textual_crop_indicator)
+            for txt, patch_pos, anch_max, n_patches in zip(text, patch_positions, anchor_max, num_patches)
+        ]
 
-        text_list = text.split(media_token)
-
-        text = "USER: "
-        # text = text_list[0]
-        image_token_ptr = 0
-        for next_text in text_list[1:]:
-            if add_textual_crop_indicator:
-                # generate image placeholders with interleaved texutual crop indicator
-                # e.g. <global_img><|image|><crop_img_row0_col0><|image|><crop_img_row0_col1><|image|>...
-                for patch_pos in patch_positions.tolist():
-                    # global non-crop image
-                    # breakpoint()
-                    if patch_pos[0] == anchor_max and patch_pos[1] == anchor_max:
-                        text += "<global_img><image>"
-                    else:
-                        row_col = "row" + str(patch_pos[0]) + "_col" + str(patch_pos[1])
-                        text += "<crop_img_" + row_col + "><image>"
-            else:
-                # generate successive image placeholders for a image, 1 crop img == 1 <|image|>
-                text += "<image>" * num_patches
-            text += next_text
-            image_token_ptr += 1
-
-        text = text + " ASSISTANT:"
-        # input_ids = tokenizer_image_token(text, self.tokenizer, IMAGE_TOKEN_INDEX, return_tensors=return_tensors).unsqueeze(0)
         text_inputs = self.tokenizer(
-            text, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length
+            texts, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length
         )
 
         return BatchFeature(
@@ -166,14 +197,14 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
 
     def batch_decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to AutoTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
+        This method forwards all its arguments to AutoTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
         refer to the docstring of this method for more information.
         """
         return self.tokenizer.batch_decode(*args, **kwargs)
 
     def decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to AutoTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
+        This method forwards all its arguments to AutoTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to
         the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
