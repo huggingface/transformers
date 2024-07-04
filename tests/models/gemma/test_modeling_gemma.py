@@ -824,7 +824,7 @@ class GemmaIntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = {
             7: [
                 "Hello I am doing a project for my school and I am trying to make a program that will take a number and then",
-                """Hi today I am going to talk about the new update for the game called "The new update" and I""",
+                "Hi today I am going to talk about the best way to get rid of acne. miniaturing is a very",
             ],
             8: [
                 "Hello I am doing a project for my school and I am trying to make a program that will take a number and then",
