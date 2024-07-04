@@ -861,16 +861,16 @@ class StaticCache(Cache):
         Return:
             A tuple containing the updated key and value states.
         """
-        cache_info = cache_kwargs.get("cache_info")
+        cache_position = cache_kwargs.get("cache_position")
         k_out = self.key_cache[layer_idx]
         v_out = self.value_cache[layer_idx]
 
-        if cache_info is None:
+        if cache_position is None:
             k_out.copy_(key_states)
             v_out.copy_(value_states)
         else:
-            k_out[:, :, cache_info.position] = key_states
-            v_out[:, :, cache_info.position] = value_states
+            k_out[:, :, cache_position] = key_states
+            v_out[:, :, cache_position] = value_states
 
         return k_out, v_out
 
