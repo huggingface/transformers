@@ -236,7 +236,7 @@ From here, just continue training like you would with a standard language modell
 
 <Tip>
 When tokenizing text that has been formatted with `apply_chat_template(tokenize=False)`, you should set the argument
-`add_special_tokens=False`. This will be done for you automatically if apply the chat template and tokenize it
+`add_special_tokens=False`. This will be done for you automatically if you apply the chat template and tokenize it
 at the same time, using `apply_chat_template(tokenize=True)`.
 
 Chat templates should always include all of the special tokens they need, and so adding extra special tokens with
