@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 The HuggingFace Inc. team.
+# Copyright 2024 TikTok and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,7 +14,6 @@
 # limitations under the License.
 # Depth-Anything-V2-Small model is under the Apache-2.0 license.
 # Depth-Anything-V2-Base/Large/Giant models are under the CC-BY-NC-4.0 license.
-
 """PyTorch Depth Anything V2 model."""
 
 from typing import List, Optional, Tuple, Union
@@ -305,8 +304,8 @@ class DepthAnythingV2ForDepthEstimation(DepthAnythingV2PreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("MackinationsAi/Depth-Anything-V2_Safetensors")
-        >>> model = AutoModelForDepthEstimation.from_pretrained("MackinationsAi/Depth-Anything-V2_Safetensors")
+        >>> image_processor = AutoImageProcessor.from_pretrained("MackinationsAi/depth-anything-v2-small-hf")
+        >>> model = AutoModelForDepthEstimation.from_pretrained("MackinationsAi/depth-anything-v2-small-hf")
 
         >>> # prepare image for the model
         >>> inputs = image_processor(images=image, return_tensors="pt")
@@ -365,3 +364,4 @@ class DepthAnythingV2ForDepthEstimation(DepthAnythingV2PreTrainedModel):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
         )
+        
