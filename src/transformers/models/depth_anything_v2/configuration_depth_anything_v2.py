@@ -32,7 +32,7 @@ class DepthAnythingV2Config(PretrainedConfig):
     This is the configuration class to store the configuration of a [`DepthAnythingV2Model`]. It is used to instantiate an DepthAnythingV2
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the DepthAnythingV2 Small model from the
-    [MackinationsAi/Depth-Anything-V2_Safetensors/Small-V2](https://huggingface.co/MackinationsAi/Depth-Anything-V2_Safetensors/blob/main/depth_anything_v2_vits.safetensors) architecture.
+    [MackinationsAi/depth-anything-v2-small-hf](https://huggingface.co/MackinationsAi/depth-anything-v2-small-hf) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
