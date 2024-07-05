@@ -12,8 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# Depth-Anything-V2-Small model is under the Apache-2.0 license.
-# Depth-Anything-V2-Base/Large/Giant models are under the CC-BY-NC-4.0 license.
 """Convert Depth Anything V2 checkpoints from the original repository. URL:
 https://github.com/MackinationsAi/Upgraded-Depth-Anything-V2"""
 
@@ -27,7 +25,7 @@ from PIL import Image
 
 from transformers import DepthAnythingV2Config, DepthAnythingV2ForDepthEstimation, Dinov2Config, DPTImageProcessor
 from transformers.utils import logging
-from safetensors.torch import load_file
+
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -195,7 +193,7 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
     filepath = hf_hub_download(
         repo_id="MackinationsAi/Depth-Anything-V2_Safetensors", filename=f"{filename}", repo_type="model"
     )
-    state_dict = load_file(filepath)
+    state_dict = torch.load(filepath, map_location="cpu")
     # rename keys
     rename_keys = create_rename_keys(config)
     for src, dest in rename_keys:
