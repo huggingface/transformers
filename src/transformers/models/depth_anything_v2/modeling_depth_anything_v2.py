@@ -173,7 +173,7 @@ class DepthAnythingV2PreActResidualLayer(nn.Module):
         return hidden_state + residual
 
 
-class DepthAnythingV2FeatureFusionLayer(nn.Module):
+class DepthAnythingFeatureFusionLayer(nn.Module):
     """Feature fusion layer, merges feature maps from different stages.
 
     Args:
@@ -218,7 +218,7 @@ class DepthAnythingV2FeatureFusionStage(nn.Module):
         super().__init__()
         self.layers = nn.ModuleList()
         for _ in range(len(config.neck_hidden_sizes)):
-            self.layers.append(DepthAnythingV2FeatureFusionLayer(config))
+            self.layers.append(DepthAnythingFeatureFusionLayer(config))
 
     def forward(self, hidden_states, size=None):
         # reversing the hidden_states, we start from the last
