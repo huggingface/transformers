@@ -28,7 +28,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import DepthAnythingV2ForDepthEstimation
+    from transformers import DepthAnythingForDepthEstimation
 
 
 if is_vision_available():
@@ -118,7 +118,7 @@ class DepthAnythingV2ModelTester:
     # Copied from tests.models.dpt.test_modeling_dpt_auto_backbone.DPTModelTester.create_and_check_for_depth_estimation with DPT->DepthAnything
     def create_and_check_for_depth_estimation(self, config, pixel_values, labels):
         config.num_labels = self.num_labels
-        model = DepthAnythingV2ForDepthEstimation(config)
+        model = DepthAnythingForDepthEstimation(config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
@@ -139,8 +139,8 @@ class DepthAnythingV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
     attention_mask and seq_length.
     """
 
-    all_model_classes = (DepthAnythingV2ForDepthEstimation,) if is_torch_available() else ()
-    pipeline_model_mapping = {"depth-estimation": DepthAnythingV2ForDepthEstimation} if is_torch_available() else {}
+    all_model_classes = (DepthAnythingForDepthEstimation,) if is_torch_available() else ()
+    pipeline_model_mapping = {"depth-estimation": DepthAnythingForDepthEstimation} if is_torch_available() else {}
 
     test_pruning = False
     test_resize_embeddings = False
@@ -202,7 +202,7 @@ class DepthAnythingV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
     @slow
     def test_model_from_pretrained(self):
         model_name = "MackinationsAi/depth-anything-v2-small-hf"
-        model = DepthAnythingV2ForDepthEstimation.from_pretrained(model_name)
+        model = DepthAnythingForDepthEstimation.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
     def test_backbone_selection(self):
@@ -247,7 +247,7 @@ def prepare_img():
 class DepthAnythingV2ModelIntegrationTest(unittest.TestCase):
     def test_inference(self):
         image_processor = DPTImageProcessor.from_pretrained("MackinationsAi/depth-anything-v2-small-hf")
-        model = DepthAnythingV2ForDepthEstimation.from_pretrained("MackinationsAi/depth-anything-v2-small-hf").to(torch_device)
+        model = DepthAnythingForDepthEstimation.from_pretrained("MackinationsAi/depth-anything-v2-small-hf").to(torch_device)
 
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
