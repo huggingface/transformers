@@ -78,7 +78,6 @@ class LlamaRMSNorm(nn.Module):
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.bias = nn.Parameter(torch.zeros(hidden_size))
         self.variance_epsilon = eps
 
     def forward(self, hidden_states):
@@ -86,7 +85,7 @@ class LlamaRMSNorm(nn.Module):
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype) + self.bias.to(input_dtype)
+        return self.weight * hidden_states.to(input_dtype)
 
 
 ALL_LAYERNORM_LAYERS.append(LlamaRMSNorm)
@@ -218,6 +217,9 @@ class LlamaMLP(nn.Module):
         self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
+        self.gate_proj = nn.Linear(
+            self.hidden_size, self.intermediate_size, bias=config.mlp_bias
+        )
         self.up_proj = nn.Linear(
             self.hidden_size, self.intermediate_size, bias=config.mlp_bias
         )
@@ -229,9 +231,17 @@ class LlamaMLP(nn.Module):
     def forward(self, x):
         if self.config.pretraining_tp > 1:
             slice = self.intermediate_size // self.config.pretraining_tp
+            gate_proj_slices = self.gate_proj.weight.split(slice, dim=0)
             up_proj_slices = self.up_proj.weight.split(slice, dim=0)
             down_proj_slices = self.down_proj.weight.split(slice, dim=1)
 
+            gate_proj = torch.cat(
+                [
+                    F.linear(x, gate_proj_slices[i])
+                    for i in range(self.config.pretraining_tp)
+                ],
+                dim=-1,
+            )
             up_proj = torch.cat(
                 [
                     F.linear(x, up_proj_slices[i])
@@ -240,14 +250,14 @@ class LlamaMLP(nn.Module):
                 dim=-1,
             )
 
-            intermediate_states = self.act_fn(up_proj).split(slice, dim=2)
+            intermediate_states = (self.act_fn(gate_proj) * up_proj).split(slice, dim=2)
             down_proj = [
                 F.linear(intermediate_states[i], down_proj_slices[i])
                 for i in range(self.config.pretraining_tp)
             ]
             down_proj = sum(down_proj)
         else:
-            down_proj = self.down_proj(self.act_fn(self.up_proj(x)))
+            down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
         return down_proj
 
@@ -855,12 +865,12 @@ class LlamaDecoderLayer(nn.Module):
                 into the model
         """
         residual = hidden_states
-        attention_layernorm_out = self.input_layernorm(hidden_states)
-        mlp_layernorm_out = self.post_attention_layernorm(hidden_states)
 
-        # Self attention.
-        attention_output, self_attn_weights, present_key_value = self.self_attn(
-            hidden_states=attention_layernorm_out,
+        hidden_states = self.input_layernorm(hidden_states)
+
+        # Self Attention
+        hidden_states, self_attn_weights, present_key_value = self.self_attn(
+            hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_value=past_key_value,
@@ -868,14 +878,15 @@ class LlamaDecoderLayer(nn.Module):
             use_cache=use_cache,
             cache_position=cache_position,
         )
+        hidden_states = residual + hidden_states
 
-        # MLP.
-        mlp_output = self.mlp(mlp_layernorm_out)
+        # Fully Connected
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
 
-        mlp_output += attention_output
-
-        output = residual + mlp_output
-        outputs = (output,)
+        outputs = (hidden_states,)
 
         if output_attentions:
             outputs += (self_attn_weights,)
