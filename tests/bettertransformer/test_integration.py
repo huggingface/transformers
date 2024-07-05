@@ -15,7 +15,6 @@
 
 import tempfile
 import unittest
-
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 from transformers.testing_utils import (
     is_torch_available,
@@ -24,63 +23,53 @@ from transformers.testing_utils import (
     slow,
 )
 
-
 if is_torch_available():
     import torch
-
 
 @require_torch
 @require_optimum
 @slow
 class BetterTransformerIntegrationTest(unittest.TestCase):
-    # refer to the full test suite in Optimum library:
-    # https://github.com/huggingface/optimum/tree/main/tests/bettertransformer
+    @classmethod
+    def setUpClass(cls):
+        cls.model_id = "hf-internal-testing/tiny-random-t5"
+        cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_id)
+        cls.model = AutoModelForSeq2SeqLM.from_pretrained(cls.model_id)
 
     def test_transform_and_reverse(self):
-        r"""
-        Classic tests to simply check if the conversion has been successfull.
         """
-        model_id = "hf-internal-testing/tiny-random-t5"
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        model = AutoModelForSeq2SeqLM.from_pretrained(model_id)
-
-        inp = tokenizer("This is me", return_tensors="pt")
-
-        model = model.to_bettertransformer()
-
-        self.assertTrue(any("BetterTransformer" in mod.__class__.__name__ for _, mod in model.named_modules()))
-
-        output = model.generate(**inp)
-
-        model = model.reverse_bettertransformer()
-
-        self.assertFalse(any("BetterTransformer" in mod.__class__.__name__ for _, mod in model.named_modules()))
-
+        Test to check if the conversion to BetterTransformer and back is successful.
+        """
+        inp = self.tokenizer("This is me", return_tensors="pt")
+        
+        self.model = self.model.to_bettertransformer()
+        self.assertTrue(any("BetterTransformer" in mod.__class__.__name__ for _, mod in self.model.named_modules()))
+        
+        output = self.model.generate(**inp)
+        
+        self.model = self.model.reverse_bettertransformer()
+        self.assertFalse(any("BetterTransformer" in mod.__class__.__name__ for _, mod in self.model.named_modules()))
+        
         with tempfile.TemporaryDirectory() as tmpdirname:
-            model.save_pretrained(tmpdirname)
-
+            self.model.save_pretrained(tmpdirname)
             model_reloaded = AutoModelForSeq2SeqLM.from_pretrained(tmpdirname)
-
             self.assertFalse(
                 any("BetterTransformer" in mod.__class__.__name__ for _, mod in model_reloaded.named_modules())
             )
-
             output_from_pretrained = model_reloaded.generate(**inp)
             self.assertTrue(torch.allclose(output, output_from_pretrained))
 
     def test_error_save_pretrained(self):
-        r"""
-        The save_pretrained method should raise a ValueError if the model is in BetterTransformer mode.
-        All should be good if the model is reversed.
         """
-        model_id = "hf-internal-testing/tiny-random-t5"
-        model = AutoModelForSeq2SeqLM.from_pretrained(model_id)
-
-        model = model.to_bettertransformer()
-
+        Test to ensure save_pretrained raises a ValueError if the model is in BetterTransformer mode.
+        """
+        self.model = self.model.to_bettertransformer()
         with tempfile.TemporaryDirectory() as tmpdirname:
             with self.assertRaises(ValueError):
-                model.save_pretrained(tmpdirname)
+                self.model.save_pretrained(tmpdirname)
+            
+            self.model = self.model.reverse_bettertransformer()
+            self.model.save_pretrained(tmpdirname)
 
-            model = model.reverse_bettertransformer()
-            model.save_pretrained(tmpdirname)
+if __name__ == "__main__":
+    unittest.main()
