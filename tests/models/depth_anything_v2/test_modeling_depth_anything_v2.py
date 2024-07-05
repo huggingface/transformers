@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 The HuggingFace Inc. team.
+# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,33 +12,24 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# Depth-Anything-V2-Small model is under the Apache-2.0 license.
-# Depth-Anything-V2-Base/Large/Giant models are under the CC-BY-NC-4.0 license.
-
-"""Convert Depth Anything V2 checkpoints from the original repository. URL:
-https://github.com/MackinationsAi/Upgraded-Depth-Anything-V2"""
-
 """Testing suite for the PyTorch Depth Anything V2 model."""
 
-from asyncio.log import logger
-import os
-import tempfile
 import unittest
 
 from transformers import DepthAnythingV2Config, Dinov2Config
 from transformers.file_utils import is_torch_available, is_vision_available
-from transformers.testing_utils import require_accelerate, require_torch, require_torch_gpu, require_vision, slow, torch_device
-
-from accelerate import init_empty_weights, infer_auto_device_map, dispatch_model
+from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, compute_module_sizes, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
+
 
 if is_torch_available():
     import torch
 
     from transformers import DepthAnythingV2ForDepthEstimation
+
 
 if is_vision_available():
     from PIL import Image
@@ -47,6 +38,7 @@ if is_vision_available():
 
 
 class DepthAnythingV2ModelTester:
+    # Copied from tests.models.dpt.test_modeling_dpt_auto_backbone.DPTModelTester.__init__
     def __init__(
         self,
         parent,
@@ -84,8 +76,10 @@ class DepthAnythingV2ModelTester:
         self.is_training = is_training
         self.neck_hidden_sizes = neck_hidden_sizes
         self.fusion_hidden_size = fusion_hidden_size
+        # DPT's sequence length
         self.seq_length = (self.image_size // self.patch_size) ** 2 + 1
 
+    # Copied from tests.models.dpt.test_modeling_dpt_auto_backbone.DPTModelTester.prepare_config_and_inputs
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
@@ -106,6 +100,7 @@ class DepthAnythingV2ModelTester:
             fusion_hidden_size=self.fusion_hidden_size,
         )
 
+    # Copied from tests.models.dpt.test_modeling_dpt_auto_backbone.DPTModelTester.get_backbone_config
     def get_backbone_config(self):
         return Dinov2Config(
             image_size=self.image_size,
@@ -120,6 +115,7 @@ class DepthAnythingV2ModelTester:
             reshape_hidden_states=self.reshape_hidden_states,
         )
 
+    # Copied from tests.models.dpt.test_modeling_dpt_auto_backbone.DPTModelTester.create_and_check_for_depth_estimation with DPT->DepthAnything
     def create_and_check_for_depth_estimation(self, config, pixel_values, labels):
         config.num_labels = self.num_labels
         model = DepthAnythingV2ForDepthEstimation(config)
@@ -128,6 +124,7 @@ class DepthAnythingV2ModelTester:
         result = model(pixel_values)
         self.parent.assertEqual(result.predicted_depth.shape, (self.batch_size, self.image_size, self.image_size))
 
+    # Copied from tests.models.dpt.test_modeling_dpt_auto_backbone.DPTModelTester.prepare_config_and_inputs_for_common
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values, labels = config_and_inputs
@@ -204,7 +201,7 @@ class DepthAnythingV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "MackinationsAi/Depth-Anything-V2_Safetensors/depth_anything_v2_vits.safetensors"
+        model_name = "MackinationsAi/depth-anything-v2-small-hf"
         model = DepthAnythingV2ForDepthEstimation.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
@@ -214,17 +211,22 @@ class DepthAnythingV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
                 model = model_class(config)
                 model.to(torch_device)
                 model.eval()
+
+                # Confirm out_indices propogated to backbone
                 self.assertEqual(len(model.backbone.out_indices), 2)
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
+        # Load a timm backbone
         config.backbone = "resnet18"
         config.use_pretrained_backbone = True
         config.use_timm_backbone = True
         config.backbone_config = None
+        # For transformer backbones we can't set the out_indices or just return the features
         config.backbone_kwargs = {"out_indices": (-2, -1)}
         _validate_backbone_init()
 
+        # Load a HF backbone
         config.backbone = "facebook/dinov2-small"
         config.use_pretrained_backbone = True
         config.use_timm_backbone = False
@@ -232,83 +234,8 @@ class DepthAnythingV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
         config.backbone_kwargs = {"out_indices": [-2, -1]}
         _validate_backbone_init()
 
-    @require_accelerate
-    @require_torch_gpu
-    def test_cpu_offload(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        for model_class in self.all_model_classes:
-            if model_class._no_split_modules is None:
-                continue
-
-            inputs_dict_class = self._prepare_for_class(inputs_dict, model_class)
-            model = model_class(config).eval()
-
-            # Use accelerate for CPU offloading
-            device_map = infer_auto_device_map(model, max_memory={0: "6GiB", "cpu": "48GiB"})
-            model = dispatch_model(model, device_map=device_map, offload_buffers=True)
-
-            torch.manual_seed(0)
-            base_output = model(**inputs_dict_class)
-
-            model_size = compute_module_sizes(model)[""]
-            max_gpu_sizes = [int(p * model_size) for p in self.model_split_percents[1:]]
-
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                model.save_pretrained(tmp_dir)
-                model = model_class.from_pretrained(tmp_dir).eval()
-                model = dispatch_model(model, device_map=device_map, offload_buffers=True)
-
-                for max_gpu_size in max_gpu_sizes:
-                    torch.manual_seed(0)
-                    offloaded_output = model(**inputs_dict_class)
-                    self.assertTrue(torch.allclose(base_output.predicted_depth, offloaded_output.predicted_depth, atol=1e-5))
-
-                # Explicitly delete temp files
-                try:
-                    os.remove(os.path.join(tmp_dir, 'model.safetensors'))
-                except OSError as e:
-                    logger.warning(f"Error removing temporary file: {e}")
-
-    @require_accelerate
-    @require_torch_gpu
-    def test_disk_offload_safetensors(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            if model_class._no_split_modules is None:
-                continue
-
-            inputs_dict_class = self._prepare_for_class(inputs_dict, model_class)
-            model = model_class(config).eval()
-            
-            # Use accelerate for disk offloading
-            device_map = infer_auto_device_map(model, max_memory={0: "6GiB", "cpu": "48GiB"})
-            model = dispatch_model(model, device_map=device_map, offload_buffers=True)
-            
-            torch.manual_seed(0)
-            base_output = model(**inputs_dict_class)
-
-            model_size = compute_module_sizes(model)[""]
-            max_gpu_sizes = [int(p * model_size) for p in self.model_split_percents[1:]]
-
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                model.save_pretrained(tmp_dir)
-                model = model_class.from_pretrained(tmp_dir).eval()
-                model = dispatch_model(model, device_map=device_map, offload_buffers=True)
-
-                for max_gpu_size in max_gpu_sizes:
-                    torch.manual_seed(0)
-                    offloaded_output = model(**inputs_dict_class)
-                    self.assertTrue(torch.allclose(base_output.predicted_depth, offloaded_output.predicted_depth, atol=1e-5))
-
-                # Explicitly delete temp files
-                try:
-                    os.remove(os.path.join(tmp_dir, 'model.safetensors'))
-                except OSError as e:
-                    logger.warning(f"Error removing temporary file: {e}")
-
-
+# We will verify our results on an image of cute cats
 def prepare_img():
     image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
     return image
@@ -325,10 +252,12 @@ class DepthAnythingV2ModelIntegrationTest(unittest.TestCase):
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
+        # forward pass
         with torch.no_grad():
             outputs = model(**inputs)
             predicted_depth = outputs.predicted_depth
 
+        # verify the predicted depth
         expected_shape = torch.Size([1, 518, 686])
         self.assertEqual(predicted_depth.shape, expected_shape)
 
