@@ -908,15 +908,14 @@ class GemmaModel(GemmaPreTrainedModel):
         if cache_length is None:
             cache_length = past_seen_tokens + inputs_embeds.shape[1]
 
-        cache_position = torch.arange(
-            past_seen_tokens, cache_length, device=inputs_embeds.device
-        )
-
         if position_ids is None:
+            cache_position = torch.arange(
+                past_seen_tokens, cache_length, device=inputs_embeds.device
+            )
             position_ids = cache_position.unsqueeze(0)
 
         causal_mask = self._update_causal_mask(
-            attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
+            attention_mask, inputs_embeds, cache_length, past_key_values, output_attentions
         )
 
         # embed positions
@@ -997,7 +996,7 @@ class GemmaModel(GemmaPreTrainedModel):
         self,
         attention_mask: torch.Tensor,
         input_tensor: torch.Tensor,
-        cache_position: torch.Tensor,
+        cache_length: torch.Tensor,
         past_key_values: Cache,
         output_attentions: bool,
     ):
@@ -1045,12 +1044,12 @@ class GemmaModel(GemmaPreTrainedModel):
                 raise ValueError("Custom 4D attention mask should be passed in inverted form with max==0`")
             causal_mask = attention_mask
         else:
-            causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
-            )
+            causal_mask = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
             if sequence_length != 1:
                 causal_mask = torch.triu(causal_mask, diagonal=1)
-            causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+            else:
+                # This computation is only required when `sequence_length = 1` in the case of static cache.
+                causal_mask *= torch.arange(target_length, device=device) > cache_length
             causal_mask = causal_mask[None, None, :, :].expand(input_tensor.shape[0], 1, -1, -1)
             if attention_mask is not None:
                 causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
