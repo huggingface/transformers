@@ -558,7 +558,6 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         stride = None
         for outputs in model_outputs:
             if self.framework == "pt" and outputs[key].dtype == torch.bfloat16:
-                # To enable using fp16 and bf16
                 items = outputs[key].float().numpy()
             else:
                 items = outputs[key].numpy()
