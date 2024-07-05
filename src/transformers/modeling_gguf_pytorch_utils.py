@@ -147,7 +147,7 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
 
             if architecture == "llama" and (".attn_k." in name or ".attn_q." in name):
                 num_heads = parsed_parameters["config"]["num_attention_heads"]
-                n_head_kv = parsed_parameters["config"]["num_key_value_heads"]
+                num_kv_heads = parsed_parameters["config"]["num_key_value_heads"]
                 if ".attn_q." in name:
                     weights = reverse_hf_permute(weights, num_heads, num_heads)
                 elif ".attn_k." in name:
