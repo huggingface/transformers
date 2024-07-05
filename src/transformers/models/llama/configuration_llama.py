@@ -122,7 +122,7 @@ class LlamaConfig(PretrainedConfig):
         num_hidden_layers=32,
         num_attention_heads=32,
         num_key_value_heads=None,
-        hidden_act="silu",
+        hidden_act="gelu",
         max_position_embeddings=2048,
         initializer_range=0.02,
         rms_norm_eps=1e-6,
@@ -137,6 +137,8 @@ class LlamaConfig(PretrainedConfig):
         attention_bias=False,
         attention_dropout=0.0,
         mlp_bias=False,
+        parallel_attn=False,
+        activation="gelu",
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -162,6 +164,8 @@ class LlamaConfig(PretrainedConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.mlp_bias = mlp_bias
+        self.parallel_attn = parallel_attn
+        self.activation = activation
 
         super().__init__(
             pad_token_id=pad_token_id,
@@ -180,7 +184,8 @@ class LlamaConfig(PretrainedConfig):
 
         if not isinstance(self.rope_scaling, dict) or len(self.rope_scaling) != 2:
             raise ValueError(
-                "`rope_scaling` must be a dictionary with two fields, `type` and `factor`, " f"got {self.rope_scaling}"
+                "`rope_scaling` must be a dictionary with two fields, `type` and `factor`, "
+                f"got {self.rope_scaling}"
             )
         rope_scaling_type = self.rope_scaling.get("type", None)
         rope_scaling_factor = self.rope_scaling.get("factor", None)
@@ -188,5 +193,11 @@ class LlamaConfig(PretrainedConfig):
             raise ValueError(
                 f"`rope_scaling`'s type field must be one of ['linear', 'dynamic'], got {rope_scaling_type}"
             )
-        if rope_scaling_factor is None or not isinstance(rope_scaling_factor, float) or rope_scaling_factor <= 1.0:
-            raise ValueError(f"`rope_scaling`'s factor field must be a float > 1, got {rope_scaling_factor}")
+        if (
+            rope_scaling_factor is None
+            or not isinstance(rope_scaling_factor, float)
+            or rope_scaling_factor <= 1.0
+        ):
+            raise ValueError(
+                f"`rope_scaling`'s factor field must be a float > 1, got {rope_scaling_factor}"
+            )

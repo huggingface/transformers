@@ -217,6 +217,46 @@ class LlamaMLP(nn.Module):
         self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
+        self.up_proj = nn.Linear(
+            self.hidden_size, self.intermediate_size, bias=config.mlp_bias
+        )
+        self.down_proj = nn.Linear(
+            self.intermediate_size, self.hidden_size, bias=config.mlp_bias
+        )
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, x):
+        if self.config.pretraining_tp > 1:
+            slice = self.intermediate_size // self.config.pretraining_tp
+            up_proj_slices = self.up_proj.weight.split(slice, dim=0)
+            down_proj_slices = self.down_proj.weight.split(slice, dim=1)
+
+            up_proj = torch.cat(
+                [
+                    F.linear(x, up_proj_slices[i])
+                    for i in range(self.config.pretraining_tp)
+                ],
+                dim=-1,
+            )
+
+            intermediate_states = (self.act_fn(up_proj)).split(slice, dim=2)
+            down_proj = [
+                F.linear(intermediate_states[i], down_proj_slices[i])
+                for i in range(self.config.pretraining_tp)
+            ]
+            down_proj = sum(down_proj)
+        else:
+            down_proj = self.down_proj(self.act_fn(self.up_proj(x)))
+
+        return down_proj
+
+
+class LlamaGatedMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
         self.gate_proj = nn.Linear(
             self.hidden_size, self.intermediate_size, bias=config.mlp_bias
         )
@@ -826,11 +866,15 @@ class LlamaDecoderLayer(nn.Module):
             config=config, layer_idx=layer_idx
         )
 
-        self.mlp = LlamaMLP(config)
+        self.mlp = (
+            LlamaGatedMLP(config) if config.activation == "swiglu" else LlamaMLP(config)
+        )
         self.input_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = LlamaRMSNorm(
             config.hidden_size, eps=config.rms_norm_eps
         )
+
+        self.parallel_attn = config.parallel_attn
 
     def forward(
         self,
@@ -864,7 +908,11 @@ class LlamaDecoderLayer(nn.Module):
                 Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
                 into the model
         """
+
         residual = hidden_states
+
+        if self.parallel_attn:
+            mlp_layernorm_out = self.post_attention_layernorm(hidden_states)
 
         hidden_states = self.input_layernorm(hidden_states)
 
@@ -878,13 +926,20 @@ class LlamaDecoderLayer(nn.Module):
             use_cache=use_cache,
             cache_position=cache_position,
         )
-        hidden_states = residual + hidden_states
 
-        # Fully Connected
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
+        if self.parallel_attn:
+            mlp_output = self.mlp(mlp_layernorm_out)
+            mlp_output += hidden_states
+            hidden_states = residual + mlp_output
+
+        else:
+            hidden_states = residual + hidden_states
+
+            # Fully Connected
+            residual = hidden_states
+            hidden_states = self.post_attention_layernorm(hidden_states)
+            hidden_states = self.mlp(hidden_states)
+            hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
 
