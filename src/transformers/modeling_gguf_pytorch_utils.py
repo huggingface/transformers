@@ -151,9 +151,9 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
                 num_heads = parsed_parameters["config"]["num_attention_heads"]
                 num_kv_heads = parsed_parameters["config"]["num_key_value_heads"]
                 if ".attn_q." in name:
-                    weights = reverse_hf_permute(weights, num_heads, num_heads)
+                    weights = reverse_permute_weights(weights, num_heads, num_heads)
                 elif ".attn_k." in name:
-                    weights = reverse_hf_permute(weights, num_heads, num_kv_heads)
+                    weights = reverse_permute_weights(weights, num_heads, num_kv_heads)
 
             for tensor_name in tensor_key_mapping:
                 if tensor_name in name:
@@ -168,7 +168,9 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
     return parsed_parameters
 
 
-def reverse_hf_permute(weights: np.ndarray, n_head: int, num_kv_heads: Optional[int] = None) -> np.ndarray:
+def reverse_permute_weights(weights: np.ndarray, n_head: int, num_kv_heads: Optional[int] = None) -> np.ndarray:
+    # Original permutation implementation
+    # https://github.com/ggerganov/llama.cpp/blob/a38b884c6c4b0c256583acfaaabdf556c62fabea/convert_hf_to_gguf.py#L1402-L1408
     if num_kv_heads is not None and n_head != num_kv_heads:
         n_head = num_kv_heads
 
