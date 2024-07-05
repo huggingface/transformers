@@ -32,7 +32,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_depth_anything"] = [
+    _import_structure["modeling_depth_anything_v2"] = [
         "DepthAnythingV2ForDepthEstimation",
         "DepthAnythingV2PreTrainedModel",
     ]

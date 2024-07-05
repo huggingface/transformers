@@ -21,7 +21,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The Depth Anything V2 model was proposed in [Depth Anything V2: Unleashing the Upgraded Power of V2 Large-Scale Unlabeled Data](https://arxiv.org/abs/2406.09414) by Lihe Yang, Bingyi Kang, Zilong Huang, Xiaogang Xu, Jiashi Feng, Hengshuang Zhao. Depth Anything V2 is based on the [DPT](https://arxiv.org/abs/2103.13413) architecture, trained on ~62 million images, obtaining state-of-the-art results for both relative and absolute depth estimation.
+The Depth Anything V2 model was proposed in [Depth Anything V2](https://arxiv.org/abs/2406.09414) by Lihe Yang, Bingyi Kang, Zilong Huang, Xiaogang Xu, Jiashi Feng, & Hengshuang Zhao. Depth Anything V2 is based on the [DPT](https://arxiv.org/abs/2103.13413) architecture, trained on ~62 million images, obtaining state-of-the-art results for both relative and absolute depth estimation.
 
 The abstract from the paper is the following:
 
@@ -31,9 +31,16 @@ The abstract from the paper is the following:
     2. Scaling up the capacity of our teacher model, and 
     3. Teaching student models via the bridge of large-scale pseudo-labeled real images. 
 
+Depth Anything V2 is trained from 595K synthetic labeled images & 62M+ real unlabeled images, providing the most capable monocular depth estimation (MDE) model with the following features:
+
+    - more fine-grained details than Depth Anything V1
+    - more robust than Depth Anything V1 & SD-based models (e.g., Marigold, Geowizard)
+    - more efficient (10x faster) & more lightweight than SD-based models
+    - impressive fine-tuned performance with our pre-trained models
+
 Compared with the latest models built on Stable Diffusion, our models are significantly more efficient (more than 10x faster) and more accurate. We offer models of different scales (ranging from 25M to 1.3B params) to support extensive scenarios. Benefiting from their strong generalization capability, we fine-tune them with metric depth labels to obtain our metric depth models. In addition to our models, considering the limited diversity and frequent noise in current test sets, we construct a versatile evaluation benchmark with precise annotations and diverse scenes to facilitate future research. Our better v2 depth model also results in a better depth-conditioned ControlNet.*
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/depth_anything_overview.jpg"
+<img src="https://huggingface.co/datasets/depth-anything/DA-2K/resolve/main/assets/DA-2K.png"
 alt="drawing" width="600"/>
 
 <small> Depth Anything overview. Taken from the <a href="https://arxiv.org/abs/2406.09414">original paper</a>.</small>
@@ -56,7 +63,7 @@ The pipeline allows to use the model in a few lines of code:
 >>> from safetensors.torch import load_file
 
 >>> # load pipe
->>> pipe = pipeline(task="depth-estimation", model="MackinationsAi/Depth-Anything-V2_Safetensors/depth_anything_v2_vits.safetensors")
+>>> pipe = pipeline(task="depth-estimation", model="MackinationsAi/depth_anything_v2_small_hf")
 
 >>> # load image
 >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
@@ -81,9 +88,9 @@ If you want to do the pre- and postprocessing yourself, here's how to do that:
 >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 >>> image = Image.open(requests.get(url, stream=True).raw)
 
->>> image_processor = AutoImageProcessor.from_pretrained("MackinationsAi/Depth-Anything-V2_Safetensors/depth_anything_v2_vits.safetensors")
+>>> image_processor = AutoImageProcessor.from_pretrained("MackinationsAi/depth_anything_v2_small_hf")
 
->>> model_config = "MackinationsAi/Depth-Anything-V2_Safetensors/depth_anything_v2_vits.safetensors"
+>>> model_config = "MackinationsAi/depth_anything_v2_small_hf"
 
 >>> state_dict = load_file(f"{model_config}")
 
@@ -101,7 +108,7 @@ If you want to do the pre- and postprocessing yourself, here's how to do that:
 >>> prediction = torch.nn.functional.interpolate(
 ...     predicted_depth.unsqueeze(1),
 ...     size=image.size[::-1],
-...     mode="bicubic",
+...     mode="bilinear",
 ...     align_corners=False,
 ...)
 
@@ -117,7 +124,7 @@ If you want to do the pre- and postprocessing yourself, here's how to do that:
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with the Upgraded Depth Anything V2 models.
 
 - [Monocular depth estimation task guide](../tasks/depth_estimation)
-- A notebook showcasing inference with [`DepthAnythingV2ForDepthEstimation`] can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/Depth%20Anything/Predicting_depth_in_an_image_with_Depth_Anything.ipynb). 🌎
+- A notebook showcasing inference with [`DepthAnythingV2ForDepthEstimation`] can be found [here](https://github.com/MackinationsAi/Transformers-Tutorials/blob/master/Depth%20Anything%20V2/Predicting_depth_in_an_image_with_Depth_Anything_V2.ipynb). 🌎
 
 If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
 

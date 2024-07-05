@@ -94,6 +94,7 @@ In Computer Vision:
 - [Semantic Segmentation with SegFormer](https://huggingface.co/nvidia/segformer-b0-finetuned-ade-512-512)
 - [Panoptic Segmentation with Mask2Former](https://huggingface.co/facebook/mask2former-swin-large-coco-panoptic)
 - [Depth Estimation with Depth Anything](https://huggingface.co/docs/transformers/main/model_doc/depth_anything)
+- [Depth Estimation with Depth Anything V2](https://huggingface.co/docs/transformers/main/model_doc/depth_anything_v2)
 - [Video Classification with VideoMAE](https://huggingface.co/docs/transformers/model_doc/videomae)
 - [Universal Segmentation with OneFormer](https://huggingface.co/shi-labs/oneformer_ade20k_dinat_large)
 

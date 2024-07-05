@@ -173,6 +173,7 @@ name_to_checkpoint = {
     "depth-anything-v2-small": "depth_anything_v2_vits.safetensors",
     "depth-anything-v2-base": "depth_anything_v2_vitb.safetensors",
     "depth-anything-v2-large": "depth_anything_v2_vitl.safetensors",
+    # "depth-anything-v2-giant": "depth_anything_v2_vitg.safetensors",
 }
 
 
@@ -189,6 +190,7 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
         "depth-anything-v2-small": "depth_anything_v2_vits.safetensors",
         "depth-anything-v2-base": "depth_anything_v2_vitb.safetensors",
         "depth-anything-v2-large": "depth_anything_v2_vitl.safetensors",
+        # "depth-anything-v2-giant": "depth_anything_v2_vitg.safetensors",
     }
 
     # load original state_dict

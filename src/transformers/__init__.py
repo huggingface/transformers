@@ -383,6 +383,18 @@ _import_structure = {
         "DistilBertConfig",
         "DistilBertTokenizer",
     ],
+    "models.deprecated.van": ["VanConfig"],
+    "models.deprecated.vit_hybrid": ["ViTHybridConfig"],
+    "models.deprecated.xlm_prophetnet": ["XLMProphetNetConfig"],
+    "models.depth_anything_v2": ["DepthAnythingV2Config"],
+    "models.detr": ["DetrConfig"],
+    "models.dialogpt": [],
+    "models.dinat": ["DinatConfig"],
+    "models.dinov2": ["Dinov2Config"],
+    "models.distilbert": [
+        "DistilBertConfig",
+        "DistilBertTokenizer",
+    ],
     "models.dit": [],
     "models.donut": [
         "DonutProcessor",
@@ -1978,6 +1990,12 @@ else:
         [
             "DepthAnythingForDepthEstimation",
             "DepthAnythingPreTrainedModel",
+        ]
+    )
+    _import_structure["models.depth_anything_v2"].extend(
+        [
+            "DepthAnythingV2ForDepthEstimation",
+            "DepthAnythingV2PreTrainedModel",
         ]
     )
     _import_structure["models.detr"].extend(
@@ -5019,6 +5037,14 @@ if TYPE_CHECKING:
         DistilBertConfig,
         DistilBertTokenizer,
     )
+    from .models.depth_anything_v2 import DepthAnythingV2Config
+    from .models.detr import DetrConfig
+    from .models.dinat import DinatConfig
+    from .models.dinov2 import Dinov2Config
+    from .models.distilbert import (
+        DistilBertConfig,
+        DistilBertTokenizer,
+    )
     from .models.donut import (
         DonutProcessor,
         DonutSwinConfig,
@@ -6535,6 +6561,10 @@ if TYPE_CHECKING:
         from .models.depth_anything import (
             DepthAnythingForDepthEstimation,
             DepthAnythingPreTrainedModel,
+        )
+        from .models.depth_anything_v2 import (
+            DepthAnythingV2ForDepthEstimation,
+            DepthAnythingV2PreTrainedModel,
         )
         from .models.detr import (
             DetrForObjectDetection,

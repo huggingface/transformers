@@ -20,22 +20,25 @@ https://github.com/MackinationsAi/Upgraded-Depth-Anything-V2"""
 
 """Testing suite for the PyTorch Depth Anything V2 model."""
 
+from asyncio.log import logger
+import os
+import tempfile
 import unittest
 
 from transformers import DepthAnythingV2Config, Dinov2Config
 from transformers.file_utils import is_torch_available, is_vision_available
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import require_accelerate, require_torch, require_torch_gpu, require_vision, slow, torch_device
+
+from accelerate import init_empty_weights, infer_auto_device_map, dispatch_model
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, compute_module_sizes, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
 
     from transformers import DepthAnythingV2ForDepthEstimation
-
 
 if is_vision_available():
     from PIL import Image
@@ -229,6 +232,82 @@ class DepthAnythingV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
         config.backbone_kwargs = {"out_indices": [-2, -1]}
         _validate_backbone_init()
 
+    @require_accelerate
+    @require_torch_gpu
+    def test_cpu_offload(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            if model_class._no_split_modules is None:
+                continue
+
+            inputs_dict_class = self._prepare_for_class(inputs_dict, model_class)
+            model = model_class(config).eval()
+
+            # Use accelerate for CPU offloading
+            device_map = infer_auto_device_map(model, max_memory={0: "6GiB", "cpu": "48GiB"})
+            model = dispatch_model(model, device_map=device_map, offload_buffers=True)
+
+            torch.manual_seed(0)
+            base_output = model(**inputs_dict_class)
+
+            model_size = compute_module_sizes(model)[""]
+            max_gpu_sizes = [int(p * model_size) for p in self.model_split_percents[1:]]
+
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                model.save_pretrained(tmp_dir)
+                model = model_class.from_pretrained(tmp_dir).eval()
+                model = dispatch_model(model, device_map=device_map, offload_buffers=True)
+
+                for max_gpu_size in max_gpu_sizes:
+                    torch.manual_seed(0)
+                    offloaded_output = model(**inputs_dict_class)
+                    self.assertTrue(torch.allclose(base_output.predicted_depth, offloaded_output.predicted_depth, atol=1e-5))
+
+                # Explicitly delete temp files
+                try:
+                    os.remove(os.path.join(tmp_dir, 'model.safetensors'))
+                except OSError as e:
+                    logger.warning(f"Error removing temporary file: {e}")
+
+    @require_accelerate
+    @require_torch_gpu
+    def test_disk_offload_safetensors(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            if model_class._no_split_modules is None:
+                continue
+
+            inputs_dict_class = self._prepare_for_class(inputs_dict, model_class)
+            model = model_class(config).eval()
+            
+            # Use accelerate for disk offloading
+            device_map = infer_auto_device_map(model, max_memory={0: "6GiB", "cpu": "48GiB"})
+            model = dispatch_model(model, device_map=device_map, offload_buffers=True)
+            
+            torch.manual_seed(0)
+            base_output = model(**inputs_dict_class)
+
+            model_size = compute_module_sizes(model)[""]
+            max_gpu_sizes = [int(p * model_size) for p in self.model_split_percents[1:]]
+
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                model.save_pretrained(tmp_dir)
+                model = model_class.from_pretrained(tmp_dir).eval()
+                model = dispatch_model(model, device_map=device_map, offload_buffers=True)
+
+                for max_gpu_size in max_gpu_sizes:
+                    torch.manual_seed(0)
+                    offloaded_output = model(**inputs_dict_class)
+                    self.assertTrue(torch.allclose(base_output.predicted_depth, offloaded_output.predicted_depth, atol=1e-5))
+
+                # Explicitly delete temp files
+                try:
+                    os.remove(os.path.join(tmp_dir, 'model.safetensors'))
+                except OSError as e:
+                    logger.warning(f"Error removing temporary file: {e}")
+
 
 def prepare_img():
     image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
@@ -240,8 +319,8 @@ def prepare_img():
 @slow
 class DepthAnythingV2ModelIntegrationTest(unittest.TestCase):
     def test_inference(self):
-        image_processor = DPTImageProcessor.from_pretrained("MackinationsAi/Depth-Anything-V2_Safetensors/depth_anything_v2_vits.safetensors")
-        model = DepthAnythingV2ForDepthEstimation.from_pretrained("MackinationsAi/Depth-Anything-V2_Safetensors/depth_anything_v2_vits.safetensors").to(torch_device)
+        image_processor = DPTImageProcessor.from_pretrained("MackinationsAi/depth-anything-v2-small-hf")
+        model = DepthAnythingV2ForDepthEstimation.from_pretrained(MackinationsAi/depth-anything-v2-small-hf").to(torch_device)
 
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
