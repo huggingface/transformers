@@ -30,6 +30,7 @@ from transformers.utils import logging
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
+
 def get_dpt_config(model_name):
     if "small" in model_name:
         backbone_config = Dinov2Config.from_pretrained(
@@ -62,6 +63,7 @@ def get_dpt_config(model_name):
 
     return config
 
+
 def create_rename_keys(config):
     rename_keys = []
 
@@ -93,7 +95,7 @@ def create_rename_keys(config):
     rename_keys.append(("pretrained.norm.bias", "backbone.layernorm.bias"))
 
     # activation postprocessing (readout projections + resize blocks)
-    # Depth Anything does not use CLS token => readout_projects not required
+    # Depth Anything V2 does not use CLS token => readout_projects not required
 
     for i in range(4):
         rename_keys.append((f"depth_head.projects.{i}.weight", f"neck.reassemble_stage.layers.{i}.projection.weight"))
