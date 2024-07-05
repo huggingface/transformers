@@ -80,7 +80,7 @@ class DepthAnythingV2ReassembleLayer(nn.Module):
             # so should downsample
             self.resize = nn.Conv2d(channels, channels, kernel_size=3, stride=int(1 / factor), padding=1)
 
-    # Copied from transformers.models.dpt.modeling_dpt.DPTReassembleLayer.forwar
+    # Copied from transformers.models.dpt.modeling_dpt.DPTReassembleLayer.forward
     def forward(self, hidden_state):
         hidden_state = self.projection(hidden_state)
         hidden_state = self.resize(hidden_state)
