@@ -166,7 +166,7 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
     return parsed_parameters
 
 
-def reverse_hf_permute(weights: np.ndarray, n_head: int, n_head_kv: int) -> np.ndarray:
+def reverse_hf_permute(weights: np.ndarray, n_head: int, num_kv_heads: Optional[int] = None) -> np.ndarray:
     if n_head_kv is not None and n_head != n_head_kv:
         n_head = n_head_kv
 
