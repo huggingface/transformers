@@ -53,6 +53,7 @@ from .utils import (
     is_torch_tf32_available,
     is_torch_xla_available,
     is_torch_xpu_available,
+    is_torch_mps_available,
     logging,
     requires_backends,
 )
@@ -2176,11 +2177,10 @@ class TrainingArguments:
                         "Either you do not have an MPS-enabled device on this machine or MacOS version is not 12.3+ "
                         "or current PyTorch install was not built with MPS enabled."
                     )
-            if device.type == "mps":
-                # Already set _n_gpu
-                pass
-            elif self.use_cpu:
+            if self.use_cpu:
                 device = torch.device("cpu")
+            elif is_torch_mps_available():
+                device = torch.device("mps:0")
             elif is_torch_xpu_available():
                 if not is_ipex_available() and not is_accelerate_available("0.32.0.dev"):
                     raise ImportError("Using the XPU PyTorch backend requires `accelerate>=0.32.0.dev`")
