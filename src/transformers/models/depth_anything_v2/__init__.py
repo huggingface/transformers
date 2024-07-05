@@ -11,8 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# Depth-Anything-V2-Small model is under the Apache-2.0 license.
-# Depth-Anything-V2-Base/Large/Giant models are under the CC-BY-NC-4.0 license.
 from typing import TYPE_CHECKING
 
 from ...file_utils import _LazyModule, is_torch_available
@@ -35,7 +33,6 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_depth_anything_v2 import DepthAnythingV2Config
-    from .modeling_depth_anything_v2 import DepthAnythingV2
 
     try:
         if not is_torch_available():
