@@ -20,15 +20,15 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from transformers.file_utils import (
+from ...file_utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from transformers.modeling_outputs import DepthEstimatorOutput
-from transformers.modeling_utils import PreTrainedModel
-from transformers.utils import logging
-from transformers.utils.backbone_utils import load_backbone
+from ...modeling_outputs import DepthEstimatorOutput
+from ...modeling_utils import PreTrainedModel
+from ...utils import logging
+from ...utils.backbone_utils import load_backbone
 from .configuration_depth_anything_v2 import DepthAnythingV2Config
 
 
