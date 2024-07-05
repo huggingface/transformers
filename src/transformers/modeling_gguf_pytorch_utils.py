@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Optional
+
 import numpy as np
 from tqdm import tqdm
 
@@ -151,7 +153,7 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
                 if ".attn_q." in name:
                     weights = reverse_hf_permute(weights, num_heads, num_heads)
                 elif ".attn_k." in name:
-                    weights = reverse_hf_permute(weights, num_heads, n_head_kv)
+                    weights = reverse_hf_permute(weights, num_heads, num_kv_heads)
 
             for tensor_name in tensor_key_mapping:
                 if tensor_name in name:
@@ -167,8 +169,8 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
 
 
 def reverse_hf_permute(weights: np.ndarray, n_head: int, num_kv_heads: Optional[int] = None) -> np.ndarray:
-    if n_head_kv is not None and n_head != n_head_kv:
-        n_head = n_head_kv
+    if num_kv_heads is not None and n_head != num_kv_heads:
+        n_head = num_kv_heads
 
     dim = weights.shape[0] // n_head // 2
     w = weights.reshape(n_head, dim, 2, *weights.shape[1:])
