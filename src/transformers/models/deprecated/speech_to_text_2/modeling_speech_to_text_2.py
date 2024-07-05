@@ -36,7 +36,6 @@ _CONFIG_FOR_DOC = "Speech2Text2Config"
 _CHECKPOINT_FOR_DOC = "facebook/s2t-wav2vec2-large-en-de"
 
 
-# Copied from transformers.models.speech_to_text.modeling_speech_to_text.Speech2TextSinusoidalPositionalEmbedding with Speech2Text->Speech2Text2
 class Speech2Text2SinusoidalPositionalEmbedding(nn.Module):
     """This module produces sinusoidal positional embeddings of any length."""
 
@@ -107,7 +106,6 @@ class Speech2Text2SinusoidalPositionalEmbedding(nn.Module):
         return incremental_indices.long() + padding_idx
 
 
-# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->Speech2Text2
 class Speech2Text2Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -833,7 +831,7 @@ class Speech2Text2ForCausalLM(Speech2Text2PreTrainedModel):
         >>> model.config.decoder_start_token_id = tokenizer.bos_token_id
         >>> # pre-process inputs and labels
 
-        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True)
         >>> inputs = feature_extractor(
         ...     ds[0]["audio"]["array"], sampling_rate=ds[0]["audio"]["sampling_rate"], return_tensors="pt"
         ... )

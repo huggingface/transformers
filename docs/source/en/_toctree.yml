@@ -382,6 +382,8 @@
         title: Fuyu
       - local: model_doc/gemma
         title: Gemma
+      - local: model_doc/gemma2
+        title: Gemma2
       - local: model_doc/openai-gpt
         title: GPT
       - local: model_doc/gpt_neo
@@ -627,6 +629,8 @@
         title: RegNet
       - local: model_doc/resnet
         title: ResNet
+      - local: model_doc/rt_detr
+        title: RT-DETR
       - local: model_doc/segformer
         title: SegFormer
       - local: model_doc/seggpt
@@ -774,6 +778,8 @@
         title: Idefics2
       - local: model_doc/instructblip
         title: InstructBLIP
+      - local: model_doc/instructblipvideo
+        title: InstructBlipVideo
       - local: model_doc/kosmos-2
         title: KOSMOS-2
       - local: model_doc/layoutlm
@@ -790,6 +796,8 @@
         title: Llava
       - local: model_doc/llava_next
         title: LLaVA-NeXT
+      - local: model_doc/llava-next-video
+        title: LLaVa-NeXT-Video
       - local: model_doc/lxmert
         title: LXMERT
       - local: model_doc/matcha

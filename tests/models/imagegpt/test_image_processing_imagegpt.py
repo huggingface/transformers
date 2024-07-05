@@ -22,7 +22,8 @@ import unittest
 import numpy as np
 from datasets import load_dataset
 
-from transformers.testing_utils import require_torch, require_vision, slow
+from transformers import AutoImageProcessor
+from transformers.testing_utils import check_json_file_has_correct_format, require_torch, require_vision, slow
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
@@ -96,6 +97,7 @@ class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = ImageGPTImageProcessor if is_vision_available() else None
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = ImageGPTImageProcessingTester(self)
 
     @property
@@ -141,20 +143,40 @@ class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 self.assertEqual(image_processor_first[key], value)
 
     def test_image_processor_from_and_save_pretrained(self):
-        image_processor_first = self.image_processing_class(**self.image_processor_dict)
+        for image_processing_class in self.image_processor_list:
+            image_processor_first = self.image_processing_class(**self.image_processor_dict)
 
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            image_processor_first.save_pretrained(tmpdirname)
-            image_processor_second = self.image_processing_class.from_pretrained(tmpdirname).to_dict()
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                image_processor_first.save_pretrained(tmpdirname)
+                image_processor_second = self.image_processing_class.from_pretrained(tmpdirname).to_dict()
 
-        image_processor_first = image_processor_first.to_dict()
-        for key, value in image_processor_first.items():
-            if key == "clusters":
-                self.assertTrue(np.array_equal(value, image_processor_second[key]))
-            else:
-                self.assertEqual(image_processor_first[key], value)
+            image_processor_first = image_processor_first.to_dict()
+            for key, value in image_processor_first.items():
+                if key == "clusters":
+                    self.assertTrue(np.array_equal(value, image_processor_second[key]))
+                else:
+                    self.assertEqual(image_processor_first[key], value)
 
-    @unittest.skip("ImageGPT requires clusters at initialization")
+    def test_image_processor_save_load_with_autoimageprocessor(self):
+        for image_processing_class in self.image_processor_list:
+            image_processor_first = image_processing_class(**self.image_processor_dict)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                saved_file = image_processor_first.save_pretrained(tmpdirname)[0]
+                check_json_file_has_correct_format(saved_file)
+
+                image_processor_second = AutoImageProcessor.from_pretrained(tmpdirname)
+
+            image_processor_first = image_processor_first.to_dict()
+            image_processor_second = image_processor_second.to_dict()
+
+            for key, value in image_processor_first.items():
+                if key == "clusters":
+                    self.assertTrue(np.array_equal(value, image_processor_second[key]))
+                else:
+                    self.assertEqual(image_processor_first[key], value)
+
+    @unittest.skip(reason="ImageGPT requires clusters at initialization")
     def test_init_without_params(self):
         pass
 
@@ -198,7 +220,7 @@ class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)
         )
 
-    @unittest.skip("ImageGPT assumes clusters for 3 channels")
+    @unittest.skip(reason="ImageGPT assumes clusters for 3 channels")
     def test_call_numpy_4_channels(self):
         pass
 

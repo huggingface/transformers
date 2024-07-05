@@ -49,7 +49,7 @@ class ZeroShotImageClassificationPipelineTests(unittest.TestCase):
     #     if tokenizer is None:
     #         # Side effect of no Fast Tokenizer class for these model, so skipping
     #         # But the slow tokenizer test should still run as they're quite small
-    #         self.skipTest("No tokenizer available")
+    #         self.skipTest(reason="No tokenizer available")
     #         return
     #         # return None, None
 

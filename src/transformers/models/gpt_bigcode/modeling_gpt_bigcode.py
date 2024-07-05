@@ -706,6 +706,7 @@ class GPTBigCodeBlock(nn.Module):
         encoder_attention_mask: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
+        **kwargs,
     ) -> Union[
         Tuple[torch.Tensor], Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
     ]:
@@ -1397,7 +1398,7 @@ class GPTBigCodeForSequenceClassification(GPTBigCodePreTrainedModel):
                 sequence_lengths = sequence_lengths.to(logits.device)
             else:
                 sequence_lengths = -1
-                logger.warning(
+                logger.warning_once(
                     f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
                     "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
                 )
