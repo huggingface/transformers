@@ -236,10 +236,10 @@ From here, just continue training like you would with a standard language modell
 
 <Tip>
 When tokenizing text that has been formatted with `apply_chat_template(tokenize=False)`, you should set the argument
-`add_special_tokens=False`. This will be done for you automatically if you apply the chat template and tokenize it
-at the same time, using `apply_chat_template(tokenize=True)`.
+`add_special_tokens=False`. If you use `apply_chat_template(tokenize=True)`, you don't need to worry about this!
 
-Chat templates should always include all of the special tokens they need, and so adding extra special tokens with
+By default, some tokenizers add special tokens like `<bos>` and `<eos>` to text they tokenize. Chat templates should 
+always include all of the special tokens they need, and so adding extra special tokens with
 the default `add_special_tokens=True` can result in incorrect or duplicated special tokens.
 </Tip>
 
