@@ -20,9 +20,6 @@ https://github.com/MackinationsAi/Upgraded-Depth-Anything-V2"""
 
 """Testing suite for the PyTorch Depth Anything V2 model."""
 
-from asyncio.log import logger
-import os
-import tempfile
 import unittest
 
 from transformers import DepthAnythingV2Config, Dinov2Config
@@ -39,6 +36,7 @@ if is_torch_available():
     import torch
 
     from transformers import DepthAnythingV2ForDepthEstimation
+
 
 if is_vision_available():
     from PIL import Image
@@ -122,7 +120,7 @@ class DepthAnythingV2ModelTester:
 
     def create_and_check_for_depth_estimation(self, config, pixel_values, labels):
         config.num_labels = self.num_labels
-        model = DepthAnythingV2ForDepthEstimation(config)
+        model = DepthAnythingForDepthEstimation(config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
@@ -142,8 +140,8 @@ class DepthAnythingV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
     attention_mask and seq_length.
     """
 
-    all_model_classes = (DepthAnythingV2ForDepthEstimation,) if is_torch_available() else ()
-    pipeline_model_mapping = {"depth-estimation": DepthAnythingV2ForDepthEstimation} if is_torch_available() else {}
+    all_model_classes = (DepthAnythingForDepthEstimation,) if is_torch_available() else ()
+    pipeline_model_mapping = {"depth-estimation": DepthAnythingForDepthEstimation} if is_torch_available() else {}
 
     test_pruning = False
     test_resize_embeddings = False
@@ -205,7 +203,7 @@ class DepthAnythingV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
     @slow
     def test_model_from_pretrained(self):
         model_name = "MackinationsAi/Depth-Anything-V2_Safetensors/depth_anything_v2_vits.safetensors"
-        model = DepthAnythingV2ForDepthEstimation.from_pretrained(model_name)
+        model = DepthAnythingForDepthEstimation.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
     def test_backbone_selection(self):
@@ -319,8 +317,8 @@ def prepare_img():
 @slow
 class DepthAnythingV2ModelIntegrationTest(unittest.TestCase):
     def test_inference(self):
-        image_processor = DPTImageProcessor.from_pretrained("MackinationsAi/depth-anything-v2-small-hf")
-        model = DepthAnythingV2ForDepthEstimation.from_pretrained(MackinationsAi/depth-anything-v2-small-hf").to(torch_device)
+        image_processor = DPTImageProcessor.from_pretrained("MackinationsAi/Depth-Anything-V2_Safetensors/depth_anything_v2_vits.safetensors")
+        model = DepthAnythingV2ForDepthEstimation.from_pretrained("MackinationsAi/Depth-Anything-V2_Safetensors/depth_anything_v2_vits.safetensors").to(torch_device)
 
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
