@@ -256,6 +256,11 @@ class Gemma2Attention(nn.Module):
 
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * self.scaling
 
+        if self.config.attn_logit_softcapping is not None:
+            attn_weights = attn_weights / self.config.attn_logit_softcapping
+            attn_weights = torch.tanh(attn_weights)
+            attn_weights = attn_weights * self.config.attn_logit_softcapping
+
         if attention_mask is not None:  # no matter the length, we just slice it
             causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
             attn_weights = attn_weights + causal_mask
@@ -602,6 +607,7 @@ GEMMA2_ATTENTION_CLASSES = {
 class Gemma2DecoderLayer(nn.Module):
     def __init__(self, config: Gemma2Config, layer_idx: int):
         super().__init__()
+        self.config = config
         self.hidden_size = config.hidden_size
 
         self.self_attn = GEMMA2_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
@@ -625,12 +631,16 @@ class Gemma2DecoderLayer(nn.Module):
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        if self.is_sliding and attention_mask is not None:  # efficient SDPA and no padding
-            attention_mask = attention_mask * torch.tril(
-                torch.ones_like(attention_mask), diagonal=-self.sliding_window
+        if (
+            self.config._attn_implementation != "flash_attention_2" and self.is_sliding and attention_mask is not None
+        ):  # efficient SDPA and no padding
+            min_dtype = torch.finfo(hidden_states.dtype).min
+            sliding_window_mask = torch.tril(
+                torch.ones_like(attention_mask, dtype=torch.bool), diagonal=-self.sliding_window
             )
-            if attention_mask.shape[1] <= 1:  # when decoding
-                attention_mask = attention_mask[:, -self.sliding_window :]
+            attention_mask = torch.where(sliding_window_mask, min_dtype, attention_mask)
+            if attention_mask.shape[-1] <= 1:  # when decoding
+                attention_mask = attention_mask[:, :, :, -self.sliding_window :]
 
         residual = hidden_states
 

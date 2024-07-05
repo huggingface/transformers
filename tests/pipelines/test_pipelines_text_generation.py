@@ -398,7 +398,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
             self.assertEqual(outputs, [{"generated_text": ANY(str)}])
         else:
             with self.assertRaises((ValueError, AssertionError)):
-                outputs = text_generator("")
+                outputs = text_generator("", add_special_tokens=False)
 
         if text_generator.framework == "tf":
             # TF generation does not support max_new_tokens, and it's impossible
