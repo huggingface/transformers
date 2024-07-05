@@ -375,17 +375,6 @@ _import_structure = {
     "models.deprecated.vit_hybrid": ["ViTHybridConfig"],
     "models.deprecated.xlm_prophetnet": ["XLMProphetNetConfig"],
     "models.depth_anything": ["DepthAnythingConfig"],
-    "models.detr": ["DetrConfig"],
-    "models.dialogpt": [],
-    "models.dinat": ["DinatConfig"],
-    "models.dinov2": ["Dinov2Config"],
-    "models.distilbert": [
-        "DistilBertConfig",
-        "DistilBertTokenizer",
-    ],
-    "models.deprecated.van": ["VanConfig"],
-    "models.deprecated.vit_hybrid": ["ViTHybridConfig"],
-    "models.deprecated.xlm_prophetnet": ["XLMProphetNetConfig"],
     "models.depth_anything_v2": ["DepthAnythingV2Config"],
     "models.detr": ["DetrConfig"],
     "models.dialogpt": [],
@@ -5031,13 +5020,6 @@ if TYPE_CHECKING:
         XLMProphetNetConfig,
     )
     from .models.depth_anything import DepthAnythingConfig
-    from .models.detr import DetrConfig
-    from .models.dinat import DinatConfig
-    from .models.dinov2 import Dinov2Config
-    from .models.distilbert import (
-        DistilBertConfig,
-        DistilBertTokenizer,
-    )
     from .models.depth_anything_v2 import DepthAnythingV2Config
     from .models.detr import DetrConfig
     from .models.dinat import DinatConfig
