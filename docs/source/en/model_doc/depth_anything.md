@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Depth Anything and Depth Anything V2
+# Depth Anything
 
 ## Overview
 
@@ -29,10 +29,8 @@ alt="drawing" width="600"/>
 
 <small> Depth Anything overview. Taken from the <a href="https://arxiv.org/abs/2401.10891">original paper</a>.</small>
 
-Depth Anything V2 was introduced in [the paper of the same name](https://arxiv.org/abs/2406.09414) by Lihe Yang et al. It uses the same architecture as the original Depth Anything release, but uses synthetic data and a larger capacity teacher model to achieve much finer and robust depth predictions.
-
-This models were contributed by [nielsr](https://huggingface.co/nielsr).
-The original code can be found [here (V1)](https://github.com/LiheYoung/Depth-Anything) and [here (V2)](https://github.com/DepthAnything/Depth-Anything-V2).
+This model was contributed by [nielsr](https://huggingface.co/nielsr).
+The original code can be found [here](https://github.com/LiheYoung/Depth-Anything).
 
 ## Usage example
 
@@ -102,8 +100,6 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 - [Monocular depth estimation task guide](../tasks/depth_estimation)
 - A notebook showcasing inference with [`DepthAnythingForDepthEstimation`] can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/Depth%20Anything/Predicting_depth_in_an_image_with_Depth_Anything.ipynb). 🌎
-- [Depth Anything V2 demo](https://huggingface.co/spaces/depth-anything/Depth-Anything-V2).
-- [Core ML conversion of the `small` variant for use on Apple Silicon](https://huggingface.co/apple/coreml-depth-anything-v2-small).
 
 If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
 
