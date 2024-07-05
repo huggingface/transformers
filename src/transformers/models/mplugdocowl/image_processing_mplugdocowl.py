@@ -129,7 +129,6 @@ GRID_DICT = {
     ],
 }
 
-
 def box_area(boxes):
     r"""
     Compute the area of each bounding box in a given set of bounding boxes.
@@ -394,7 +393,7 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
             Whether to convert the image to RGB.
         do_shape_adaptive_cropping (`bool`, *optional*, defaults to `True`): Whether to do a shape adaptive cropping of the input image. Should be only called if the do_anchor_resize is called.
         do_anchor_resize (`bool`, *optional*, defaults to `True`): Whether to resize the image based on the specified anchor. Should be called before do_shape_adaptive_cropping.
-        do_add_global_image (`bool`, *optional*, defaults to `True`): Whether to add the global image to the image input. 
+        do_add_global_image (`bool`, *optional*, defaults to `True`): Whether to add the global image to the image input.
     """
 
     model_input_names = ["pixel_values"]
@@ -649,7 +648,7 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
         if input_data_format is None:
             # We assume that all images have the same channel dimension format.
             input_data_format = infer_channel_dimension_format(images[0])
-        
+
         if is_scaled_image(images[0]) and do_rescale:
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
@@ -680,6 +679,7 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
             images = self.add_global_image(images, patch_images)
         else:
             images = [patch for sublist in patch_images for patch in sublist]
+            patch_positions = [pos[1:] for pos in patch_positions]
 
         if do_rescale:
             images = [

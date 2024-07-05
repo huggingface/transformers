@@ -29,7 +29,7 @@ from transformers.models.mplugdocowl.image_processing_mplugdocowl import MPLUGDo
 
 
 EPILOG_TXT = """Example:
-    python transformers/src/transformers/models/mplugdocowl/convert_mplugdocowl_weights_to_hf.py --text_model_id lmsys/vicuna-7b-v1.5 --vision_model_id openai/clip-vit-large-patch14-336 --output_hub_path org/mplugdocowl-v1.5-7b-conv --old_state_dict_id liuhaotian/mplugdocowl-v1.5-7b
+    python transformers/src/transformers/models/mplugdocowl/convert_mplugdocowl_weights_to_hf.py --text_model_id meta-llama/Llama-2-7b-hf --vision_model_id openai/clip-vit-large-patch14-336 --output_hub_path danaaubakirova/mplugdocowl1.5-Chat-hf --old_state_dict_id mPLUG/DocOwl1.5-Chat
 
 Example for creating the old state dict file with Python:
 
@@ -38,13 +38,13 @@ Example for creating the old state dict file with Python:
 
     # load model
     kwargs = {"device_map": "auto", "torch_dtype": torch.float16}
-    model = MPLUGDocOwlLlamaForCausalLM.from_pretrained("liuhaotian/mplugdocowl-v1.5-7b", low_cpu_mem_usage=True, **kwargs)
+    model = MPLUGDocOwlLlamaForCausalLM.from_pretrained("danaaubakirova/mplugdocowl1.5-Chat-hf", low_cpu_mem_usage=True, **kwargs)
 
     # load vision tower
     model.get_vision_tower().load_model()
 
     # Save state dict
-    torch.save(model.state_dict(), "tmp/hf_models/mplugdocowl-v1.5-7b/model_state_dict.bin")
+    torch.save(model.state_dict(), "tmp/hf_models/mplugdocowl1.5-Chat-hf/model_state_dict.bin")
 """
 
 KEYS_TO_MODIFY_MAPPING = {
@@ -83,13 +83,13 @@ def convert_state_dict_to_hf(state_dict):
 
 
 def convert_mplugdocowl_llama_to_hf(
-    text_model_id, output_hub_path, vision_model_id, old_state_dict_id, pretrained=True
+    text_model_id, vision_model_id, output_hub_path, old_state_dict_id, pretrained=True
 ):
     if not pretrained:
         torch.set_default_dtype(torch.float16)
         text_config = AutoConfig.from_pretrained(text_model_id)
 
-        tokenizer = AutoTokenizer.from_pretrained(text_model_id)
+        tokenizer = AutoTokenizer.from_pretrained(text_model_id,padding_side = 'left', use_fast=False)
         tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False), special_tokens=True)
         tokenizer.add_special_tokens({"pad_token": "<pad>"})
 
@@ -138,23 +138,27 @@ def convert_mplugdocowl_llama_to_hf(
             dim=0,
         )
         model.to(torch.float16)
-        model.save_pretrained("/raid/dana/mplug_model_hf_chat/")
-        processor.save_pretrained("/raid/dana/mplug_model_hf_chat/")
+        model.save_pretrained("/raid/dana/mplug_model_hf_omni/")
+        processor.save_pretrained("/raid/dana/mplug_model_hf_omni/")
     else:
-        model = MPLUGDocOwlForConditionalGeneration.from_pretrained("/raid/dana/mplug_model_hf_chat/")
+        model = MPLUGDocOwlForConditionalGeneration.from_pretrained("/raid/dana/mplug_model_hf_omni/")
         model.to(torch.float16)
-        processor = MPLUGDocOwlProcessor.from_pretrained("/raid/dana/mplug_model_hf_chat/")
+        processor = MPLUGDocOwlProcessor.from_pretrained("/raid/dana/mplug_model_hf_omni/")
     breakpoint()
     from PIL import Image
 
-    image = Image.open("/raid/dana/test_image.png")
-    image = Image.open("/raid/dana/examples_Rebecca_(1939_poster)_Small.jpeg")
+    #image = Image.open("/raid/dana/test_image.png")
+    image1 = Image.open("/raid/dana/examples_Rebecca_(1939_poster)_Small.jpeg")
+    image2 = Image.open("/raid/dana/extreme_ironing.jpg")
     # image = Image.open('/raid/dana/fflw0023_1.png')
     # query = "<image>Recognize text in the image."
     # query = "<image>What's the value of the Very well bar in the 65+ age group? Answer the question with detailed explanation."
     # query = "<image>Parse texts in the image."
-    query = "<image>What is the name of the movie in the poster? Provide detailed explanation."
-    output = processor(images=image, text=query)
+    #query = "<image>What is the name of the movie in the poster? Provide detailed explanation."
+    query = "<image>What is unusual about this image? Provide detailed explanation."
+    prompts = ["<image>What is the name of the movie in the poster? Provide detailed explanation.", "<image>What is unusual about this image? Provide detailed explanation."]
+    images = [image1,image2]
+    output = processor(images=images[0], text=prompts[0], do_add_global_image = True)
 
     device = torch.device("cuda:0")
     output.to(device)
@@ -162,7 +166,7 @@ def convert_mplugdocowl_llama_to_hf(
     torch.set_default_dtype(torch.float16)
     # with torch.inference_mode():
     # outputs = model(input_ids=output['input_ids'], pixel_values = output['pixel_values'],attention_mask=output['attention_mask'], patch_positions=output['patch_positions'])
-    tokens = model.generate(output["input_ids"], pixel_values=output["pixel_values"], max_new_tokens=512)
+    tokens = model.generate(**output, max_new_tokens=512, top_p = 0.7, do_sample = True)
     processor.decode(tokens[0])
     breakpoint()
     model.push_to_hub(output_hub_path)
