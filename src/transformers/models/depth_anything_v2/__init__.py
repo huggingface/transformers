@@ -14,10 +14,6 @@
 # limitations under the License.
 # Depth-Anything-V2-Small model is under the Apache-2.0 license.
 # Depth-Anything-V2-Base/Large/Giant models are under the CC-BY-NC-4.0 license.
-
-"""Convert Depth Anything V2 checkpoints from the original repository. URL:
-https://github.com/MackinationsAi/Upgraded-Depth-Anything-V2"""
-
 from typing import TYPE_CHECKING
 
 from ...file_utils import _LazyModule, is_torch_available
