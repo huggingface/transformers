@@ -1,0 +1,14 @@
+{
+    "fsdp_transformer_layer_cls_to_wrap": [
+        "Qwen2DecoderLayer"
+    ],
+    "xla": true,
+    "xla_fsdp_settings": {
+        "compute_dtype": "bfloat16",
+        "buffer_dtype": "bfloat16",
+        "opt_flatten_overlap": true,
+        "pin_layout_in_collective_ops": false,
+        "flatten_parameters": true
+    },
+    "xla_fsdp_grad_ckpt": false
+}

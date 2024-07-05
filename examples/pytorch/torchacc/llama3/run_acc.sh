@@ -39,7 +39,7 @@ torchrun --nproc_per_node $NPROC_PER_NODE \
     --tokenizer_name ./Meta-Llama-3-8B/ \
     --trust_remote_code true \
     --low_cpu_mem_usage true \
-    --cache_dir ./cache \
+    --cache_dir ../cache \
     --block_size $SEQLEN \
     --optim adamw_torch \
     --save_strategy no \

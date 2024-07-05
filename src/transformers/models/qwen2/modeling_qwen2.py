@@ -365,7 +365,7 @@ class Qwen2FlashAttention2(Qwen2Attention):
             kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
 
         # Because the input can be padded, the absolute sequence length depends on the max position id.
-        rotary_seq_len = max(kv_seq_len, position_ids[:, -1].max().item()) + 1
+        rotary_seq_len = kv_seq_len + 1 # max(kv_seq_len, position_ids[:, -1].max().item()) + 1
         cos, sin = self.rotary_emb(value_states, seq_len=rotary_seq_len)
 
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
@@ -1072,8 +1072,8 @@ class Qwen2Model(Qwen2PreTrainedModel):
         # `fullgraph=True`. See more context in https://github.com/huggingface/transformers/pull/29114
 
         if self.config._attn_implementation == "flash_attention_2":
-            if attention_mask is not None and 0.0 in attention_mask:
-                return attention_mask
+            #if attention_mask is not None and 0.0 in attention_mask:
+            #    return attention_mask
             return None
 
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
