@@ -1380,6 +1380,7 @@ class LayerWiseDummyScheduler(LRScheduler):
     """
 
     def __init__(self, *args, **kwargs):
+        self.default_lr = kwargs["lr"]
         optimizer = LayerWiseDummyOptimizer(**kwargs)
         last_epoch = -1
         verbose = False
@@ -1387,7 +1388,7 @@ class LayerWiseDummyScheduler(LRScheduler):
 
     def get_lr(self):
         # default value
-        lrs = [1e-3]
+        lrs = [self.default_lr]
 
         # we take each lr in the parameters if they exist, assumes the optimizer to be the `LayerWiseDummyOptimizer`
         if self.optimizer is not None:
