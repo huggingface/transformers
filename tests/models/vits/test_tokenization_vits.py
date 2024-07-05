@@ -62,15 +62,15 @@ class VitsTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         ids = tokenizer.encode(txt, add_special_tokens=False)
         return txt, ids
 
-    @unittest.skip("Adding multicharacter tokens does not work with the VITS tokenizer")
+    @unittest.skip(reason="Adding multicharacter tokens does not work with the VITS tokenizer")
     def test_add_tokens_tokenizer(self):
         pass
 
-    @unittest.skip("Adding multicharacter tokens does not work with the VITS tokenizer")
+    @unittest.skip(reason="Adding multicharacter tokens does not work with the VITS tokenizer")
     def test_encode_decode_with_spaces(self):
         pass
 
-    @unittest.skip("The VITS tokenizer does not support `is_split_into_words`")
+    @unittest.skip(reason="The VITS tokenizer does not support `is_split_into_words`")
     def test_pretokenized_inputs(self):
         pass
 
@@ -101,7 +101,7 @@ class VitsTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
                 shutil.rmtree(tmpdirname)
 
-    @unittest.skip("Adding multicharacter tokens does not work the VITS tokenizer")
+    @unittest.skip(reason="Adding multicharacter tokens does not work the VITS tokenizer")
     def test_special_tokens_initialization_with_non_empty_additional_special_tokens(self):
         pass
 
