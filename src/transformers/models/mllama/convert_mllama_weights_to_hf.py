@@ -140,6 +140,7 @@ def write_model(
 
     param_count = 0
     index_dict = {"weight_map": {}}
+    print("Converting language model self-attention layers.")
     for layer_i in range(n_layers):
         filename = f"pytorch_language_model-{layer_i + 1}-of-{n_layers + 1}.bin"
         # Sharded
@@ -206,6 +207,7 @@ def write_model(
         for k, v in state_dict.items():
             index_dict["weight_map"][k] = filename
             param_count += v.numel()
+        print(f"Saving {filename} in {tmp_model_path}...")
         torch.save(state_dict, os.path.join(tmp_model_path, filename))
 
     # save embedding layer and norm
@@ -217,16 +219,20 @@ def write_model(
         "model.language_model.embed_tokens.weight": torch.cat(
             [loaded[i].pop("text_model.tok_embeddings.weight") for i in range(num_shards)], dim=concat_dim
         ),
+        "model.language_model.learnable_embeddings.weight": torch.cat(
+            [loaded[i].pop("text_model.learnable_embeddings.weight") for i in range(num_shards)], dim=concat_dim
+        ),
         "lm_head.weight": torch.cat([loaded[i].pop("text_model.output.weight") for i in range(num_shards)], dim=0),
     }
 
     for k, v in state_dict.items():
         index_dict["weight_map"][k] = filename
         param_count += v.numel()
+    print(f"Saving {filename} in {tmp_model_path}...")
     torch.save(state_dict, os.path.join(tmp_model_path, filename))
 
     # Then, cross-attention layers from the language model
-
+    print("Converting cross-attention layers.")
     for xattn_layer_i in range(n_layers_cross_attention):
         cross_attentions_filename = f"pytorch_language_model_xattn-{xattn_layer_i + 1}-of-{n_layers_cross_attention + 1}.bin"
 
@@ -299,14 +305,14 @@ def write_model(
         for i in range(num_shards):
             attn_gate.append(loaded[i].pop(f"text_model.cross_attention_layers.{xattn_layer_i}.gate_attn"))
             if attn_gate[i].dim() == 1:
-                    attn_gate[i] = attn_gate[i, 0].view(1)
+                attn_gate[i] = attn_gate[i][0].view(1)
             if attn_gate[i].dim() == 3:
                 attn_gate[i] = attn_gate[i].view(1)
 
             ffn_gate.append(loaded[i].pop(f"text_model.cross_attention_layers.{xattn_layer_i}.gate_ffwd"))
 
             if ffn_gate[i].dim() == 1:
-                ffn_gate[i] = ffn_gate[i, 0].view(1)
+                ffn_gate[i] = ffn_gate[i][0].view(1)
             if ffn_gate[i].dim() == 3:
                 ffn_gate[i] = ffn_gate[i].view(1)
         state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.attn_gate"] = torch.cat(
@@ -336,9 +342,11 @@ def write_model(
         for k, v in state_dict.items():
             index_dict["weight_map"][k] = cross_attentions_filename
             param_count += v.numel()
+        print(f"Saving {cross_attentions_filename} in {tmp_model_path}...")
         torch.save(state_dict, os.path.join(tmp_model_path, cross_attentions_filename))
 
     # then, converting the vision model double transformer (2 sets of layers, same width
+
 
     # Write configs
     index_dict["metadata"] = {"total_size": param_count * 2}
