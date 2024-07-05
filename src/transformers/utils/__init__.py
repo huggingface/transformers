@@ -200,6 +200,7 @@ from .import_utils import (
     is_torch_fx_proxy,
     is_torch_mlu_available,
     is_torch_mps_available,
+    is_torch_musa_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_sdpa_available,
