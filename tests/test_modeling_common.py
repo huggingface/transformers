@@ -119,7 +119,7 @@ if is_tf_available():
 if is_flax_available():
     import jax.numpy as jnp
 
-    from tests.test_modeling_flax_utils import check_models_equal
+    from tests.utils.test_modeling_flax_utils import check_models_equal
     from transformers.modeling_flax_pytorch_utils import (
         convert_pytorch_state_dict_to_flax,
         load_flax_weights_in_pytorch_model,

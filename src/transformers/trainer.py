@@ -221,6 +221,11 @@ if is_accelerate_available():
         DistributedDataParallelKwargs,
         DistributedType,
         GradientAccumulationPlugin,
+        is_mlu_available,
+        is_mps_available,
+        is_npu_available,
+        is_torch_version,
+        is_xpu_available,
         load_fsdp_model,
         load_fsdp_optimizer,
         save_fsdp_model,
@@ -2422,7 +2427,7 @@ class Trainer:
             for checkpoint in checkpoints_sorted:
                 if not os.path.samefile(checkpoint, self.state.best_model_checkpoint):
                     logger.info(f"Deleting older checkpoint [{checkpoint}] due to args.save_total_limit")
-                    shutil.rmtree(checkpoint)
+                    shutil.rmtree(checkpoint, ignore_errors=True)
 
         self.control = self.callback_handler.on_train_end(args, self.state, self.control)
 
@@ -3307,6 +3312,20 @@ class Trainer:
             loss = self.compute_loss(model, inputs)
 
         del inputs
+        if (
+            self.args.torch_empty_cache_steps is not None
+            and self.state.global_step % self.args.torch_empty_cache_steps == 0
+        ):
+            if is_xpu_available():
+                torch.xpu.empty_cache()
+            elif is_mlu_available():
+                torch.mlu.empty_cache()
+            elif is_npu_available():
+                torch.npu.empty_cache()
+            elif is_torch_version(">=", "2.0") and is_mps_available():
+                torch.mps.empty_cache()
+            else:
+                torch.cuda.empty_cache()
 
         kwargs = {}
 
@@ -3839,6 +3858,9 @@ class Trainer:
                 inputs_decode = self.gather_function((inputs_decode))
                 if not self.args.batch_eval_metrics or description == "Prediction":
                     all_inputs.add(inputs_decode)
+            if labels is not None:
+                # Pad labels here, preparing for preprocess_logits_for_metrics in next logits block.
+                labels = self.accelerator.pad_across_processes(labels, dim=1, pad_index=-100)
             if logits is not None:
                 logits = self.accelerator.pad_across_processes(logits, dim=1, pad_index=-100)
                 if self.preprocess_logits_for_metrics is not None:
@@ -3847,7 +3869,6 @@ class Trainer:
                 if not self.args.batch_eval_metrics or description == "Prediction":
                     all_preds.add(logits)
             if labels is not None:
-                labels = self.accelerator.pad_across_processes(labels, dim=1, pad_index=-100)
                 labels = self.gather_function((labels))
                 if not self.args.batch_eval_metrics or description == "Prediction":
                     all_labels.add(labels)
