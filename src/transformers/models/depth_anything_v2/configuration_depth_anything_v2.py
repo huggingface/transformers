@@ -14,10 +14,6 @@
 # limitations under the License.
 # Depth-Anything-V2-Small model is under the Apache-2.0 license.
 # Depth-Anything-V2-Base/Large/Giant models are under the CC-BY-NC-4.0 license.
-
-"""Convert Depth Anything V2 checkpoints from the original repository. URL:
-https://github.com/MackinationsAi/Upgraded-Depth-Anything-V2"""
-
 """DepthAnythingV2 model configuration"""
 
 import copy
@@ -158,3 +154,4 @@ class DepthAnythingV2Config(PretrainedConfig):
 
         output["model_type"] = self.__class__.model_type
         return output
+        
