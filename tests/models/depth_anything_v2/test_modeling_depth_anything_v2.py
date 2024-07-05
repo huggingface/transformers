@@ -118,7 +118,7 @@ class DepthAnythingV2ModelTester:
     # Copied from tests.models.dpt.test_modeling_dpt_auto_backbone.DPTModelTester.create_and_check_for_depth_estimation with DPT->DepthAnything
     def create_and_check_for_depth_estimation(self, config, pixel_values, labels):
         config.num_labels = self.num_labels
-        model = DepthAnythingV2ForDepthEstimation(config)
+        model = DepthAnythingForDepthEstimation(config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
