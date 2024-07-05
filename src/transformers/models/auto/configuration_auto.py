@@ -356,6 +356,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("deit", "DeiT"),
         ("deplot", "DePlot"),
         ("depth_anything", "Depth Anything"),
+        ("depth_anything_v2", "Depth Anything V2"),
         ("deta", "DETA"),
         ("detr", "DETR"),
         ("dialogpt", "DialoGPT"),
