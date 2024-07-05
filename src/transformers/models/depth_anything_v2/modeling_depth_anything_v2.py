@@ -218,7 +218,7 @@ class DepthAnythingV2FeatureFusionStage(nn.Module):
         super().__init__()
         self.layers = nn.ModuleList()
         for _ in range(len(config.neck_hidden_sizes)):
-            self.layers.append(DepthAnythingFeatureFusionLayer(config))
+            self.layers.append(DepthAnythingV2FeatureFusionLayer(config))
 
     def forward(self, hidden_states, size=None):
         # reversing the hidden_states, we start from the last
