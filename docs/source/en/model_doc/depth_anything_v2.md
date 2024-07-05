@@ -88,9 +88,9 @@ If you want to do the pre- and postprocessing yourself, here's how to do that:
 >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 >>> image = Image.open(requests.get(url, stream=True).raw)
 
->>> image_processor = AutoImageProcessor.from_pretrained("MackinationsAi/depth_anything_v2_small_hf")
+>>> image_processor = AutoImageProcessor.from_pretrained("MackinationsAi/depth-anything-v2-small-hf")
 
->>> model_config = "MackinationsAi/depth_anything_v2_small_hf"
+>>> model_config = "MackinationsAi/depth-anything-v2-small-hf"
 
 >>> state_dict = load_file(f"{model_config}")
 
