@@ -320,7 +320,7 @@ def prepare_img():
 class DepthAnythingV2ModelIntegrationTest(unittest.TestCase):
     def test_inference(self):
         image_processor = DPTImageProcessor.from_pretrained("MackinationsAi/depth-anything-v2-small-hf")
-        model = DepthAnythingV2ForDepthEstimation.from_pretrained(MackinationsAi/depth-anything-v2-small-hf").to(torch_device)
+        model = DepthAnythingV2ForDepthEstimation.from_pretrained("MackinationsAi/depth-anything-v2-small-hf").to(torch_device)
 
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
