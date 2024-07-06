@@ -117,7 +117,6 @@ from .trainer_utils import (
     EvalPrediction,
     HPSearchBackend,
     HubStrategy,
-    IntervalStrategy,
     PredictionOutput,
     RemoveColumnsCollator,
     SaveStrategy,
@@ -3114,10 +3113,7 @@ class Trainer:
             metric_value = metrics["eval_loss"]
             operator = np.less
 
-        if (
-            self.state.best_metric is None
-            or operator(metric_value, self.state.best_metric)
-        ):
+        if self.state.best_metric is None or operator(metric_value, self.state.best_metric):
             run_dir = self._get_output_dir(trial=trial)
             checkpoint_folder = f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}"
             output_dir = os.path.join(run_dir, checkpoint_folder)
