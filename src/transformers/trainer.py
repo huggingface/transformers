@@ -120,6 +120,7 @@ from .trainer_utils import (
     IntervalStrategy,
     PredictionOutput,
     RemoveColumnsCollator,
+    SaveStrategy,
     TrainerMemoryTracker,
     TrainOutput,
     check_target_module_exists,
@@ -2995,6 +2996,13 @@ class Trainer:
         metrics = None
         if self.control.should_evaluate:
             metrics = self._evaluate(trial, ignore_keys_for_eval)
+            new_best_metric = self._determine_best_metric(metrics=metrics, trial=trial)
+
+            if self.args.save_strategy == SaveStrategy.BEST:
+                if new_best_metric:
+                    self.control.should_save = True
+                else:
+                    self.control_should_save = False
 
         if self.control.should_save:
             self._save_checkpoint(model, trial, metrics=metrics)
@@ -3074,7 +3082,54 @@ class Trainer:
                         "\nThis won't yield the same results as if the training had not been interrupted."
                     )
 
-    def _save_checkpoint(self, model, trial, metrics=None):
+    def _determine_best_metric(self, metrics, trial):
+        """
+        Determine if the model should be saved based on the evaluation metrics.
+        If args.metric_for_best_model is not set, the loss is used.
+
+        Returns:
+            bool: True if a new best metric was found, else False
+        """
+        new_best_metric = False
+
+        if self.args.metric_for_best_model is not None:
+            metric_to_check = self.args.metric_for_best_model
+
+            if not metric_to_check.startswith("eval_"):
+                metric_to_check = f"eval_{metric_to_check}"
+
+            try:
+                metric_value = metrics[metric_to_check]
+            except KeyError as exc:
+                raise KeyError(
+                    f"The `metric_for_best_model` training argument is set to '{metric_to_check}', which is not found in the evaluation metrics. "
+                    f"The available evaluation metrics are: {list(metrics.keys())}. Consider changing the `metric_for_best_model` via the TrainingArguments."
+                ) from exc
+
+            if self.args.greater_is_better:
+                operator = np.greater
+            else:
+                operator = np.less
+        else:
+            metric_value = metrics["eval_loss"]
+            operator = np.less
+
+        if (
+            self.state.best_metric is None
+            or operator(metric_value, self.state.best_metric)
+        ):
+            run_dir = self._get_output_dir(trial=trial)
+            checkpoint_folder = f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}"
+            output_dir = os.path.join(run_dir, checkpoint_folder)
+
+            self.state.best_metric = metric_value
+            self.state.best_model_checkpoint = output_dir
+
+            new_best_metric = True
+
+        return new_best_metric
+
+    def _save_checkpoint(self, model, trial):
         # In all cases, including ddp/dp/deepspeed, self.model is always a reference to the model we
         # want to save except FullyShardedDDP.
         # assert unwrap_model(model) is self.model, "internal model should be a reference to self.model"
@@ -3094,31 +3149,6 @@ class Trainer:
             self._save_optimizer_and_scheduler(output_dir)
             # Save RNG state
             self._save_rng_state(output_dir)
-
-        # Determine the new best metric / best model checkpoint
-        if metrics is not None and self.args.metric_for_best_model is not None:
-            metric_to_check = self.args.metric_for_best_model
-            if not metric_to_check.startswith("eval_"):
-                metric_to_check = f"eval_{metric_to_check}"
-            try:
-                metric_value = metrics[metric_to_check]
-            except KeyError as exc:
-                raise KeyError(
-                    f"The `metric_for_best_model` training argument is set to '{metric_to_check}', "
-                    f"which is not found in the evaluation metrics. "
-                    f"The available evaluation metrics are: {list(metrics.keys())}. "
-                    f"Please ensure that the `compute_metrics` function returns a dictionary that includes '{metric_to_check}' or "
-                    f"consider changing the `metric_for_best_model` via the TrainingArguments."
-                ) from exc
-
-            operator = np.greater if self.args.greater_is_better else np.less
-            if (
-                self.state.best_metric is None
-                or self.state.best_model_checkpoint is None
-                or operator(metric_value, self.state.best_metric)
-            ):
-                self.state.best_metric = metric_value
-                self.state.best_model_checkpoint = output_dir
 
         # Save the Trainer state
         if self.args.should_save:
@@ -4540,7 +4570,7 @@ class Trainer:
         # Same for the training arguments
         torch.save(self.args, os.path.join(output_dir, TRAINING_ARGS_NAME))
 
-        if self.args.save_strategy == IntervalStrategy.STEPS:
+        if self.args.save_strategy == SaveStrategy.STEPS:
             commit_message = f"Training in progress, step {self.state.global_step}"
         else:
             commit_message = f"Training in progress, epoch {int(self.state.epoch)}"
