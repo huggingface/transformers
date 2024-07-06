@@ -2180,7 +2180,7 @@ class TrainingArguments:
             if self.use_cpu:
                 device = torch.device("cpu")
             elif is_torch_mps_available():
-                device = torch.device("mps:0")
+                device = torch.device("mps")
             elif is_torch_xpu_available():
                 if not is_ipex_available() and not is_accelerate_available("0.32.0.dev"):
                     raise ImportError("Using the XPU PyTorch backend requires `accelerate>=0.32.0.dev`")
