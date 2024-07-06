@@ -3004,7 +3004,7 @@ class Trainer:
                     self.control_should_save = False
 
         if self.control.should_save:
-            self._save_checkpoint(model, trial, metrics=metrics)
+            self._save_checkpoint(model, trial)
             self.control = self.callback_handler.on_save(self.args, self.state, self.control)
 
     def _load_rng_state(self, checkpoint):
