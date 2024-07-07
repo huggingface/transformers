@@ -68,6 +68,7 @@ class Dinov2WithRegistersModelTester:
         attention_probs_dropout_prob=0.1,
         type_sequence_label_size=10,
         initializer_range=0.02,
+        num_register_tokens=2,
         scope=None,
     ):
         self.parent = parent
@@ -86,11 +87,12 @@ class Dinov2WithRegistersModelTester:
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
+        self.num_register_tokens = num_register_tokens
         self.scope = scope
 
-        # in Dinov2WithRegisters, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
+        # in Dinov2 With Registers, the seq length equals the number of patches + 1 + num_register_tokens (we add 1 for the [CLS] token)
         num_patches = (image_size // patch_size) ** 2
-        self.seq_length = num_patches + 1
+        self.seq_length = num_patches + 1 + self.num_register_tokens
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -117,6 +119,7 @@ class Dinov2WithRegistersModelTester:
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             is_decoder=False,
             initializer_range=self.initializer_range,
+            num_register_tokens=self.num_register_tokens,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -217,6 +220,14 @@ class Dinov2WithRegistersModelTest(ModelTesterMixin, PipelineTesterMixin, unitte
         )
         if is_torch_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "image-feature-extraction": Dinov2WithRegistersModel,
+            "image-classification": Dinov2WithRegistersForImageClassification,
+        }
+        if is_torch_available()
+        else {}
     )
     fx_compatible = False
 
