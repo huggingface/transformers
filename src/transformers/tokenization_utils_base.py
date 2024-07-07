@@ -126,6 +126,8 @@ TextInputPair = Tuple[str, str]
 PreTokenizedInputPair = Tuple[List[str], List[str]]
 EncodedInputPair = Tuple[List[int], List[int]]
 
+# Define type aliases for text-related non-text modalities
+AudioInput = Union["np.ndarray", "torch.Tensor", List["np.ndarray"], List["torch.Tensor"]]
 
 # Slow tokenizers used to be saved in three separated files
 SPECIAL_TOKENS_MAP_FILE = "special_tokens_map.json"
@@ -1779,16 +1781,20 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 chat_template = template_dict[chat_template]
                 if using_default_dict:
                     using_default_template = True
-            elif chat_template is None and "default" in template_dict:
-                chat_template = template_dict["default"]
+            elif chat_template is None:
+                if tools is not None and "tool_use" in template_dict:
+                    chat_template = template_dict["tool_use"]
+                elif "default" in template_dict:
+                    chat_template = template_dict["default"]
+                else:
+                    raise ValueError(
+                        "This model has multiple chat templates with no default specified! Please either pass a chat "
+                        "template or the name of the template you wish to use to the `chat_template` argument. Available "
+                        f"template names are {sorted(template_dict.keys())}."
+                    )
                 if using_default_dict:
                     using_default_template = True
-            elif chat_template is None:
-                raise ValueError(
-                    "This model has multiple chat templates with no default specified! Please either pass a chat "
-                    "template or the name of the template you wish to use to the `chat_template` argument. Available "
-                    f"template names are {sorted(template_dict.keys())}."
-                )
+
         elif chat_template is None:
             # These are the cases when the model has a single template
             # priority: `chat_template` argument > `tokenizer.chat_template` > `tokenizer.default_chat_template
@@ -1884,16 +1890,21 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         except ImportError:
             raise ImportError("apply_chat_template requires jinja2 to be installed.")
 
-        if version.parse(jinja2.__version__) < version.parse("3.0.0"):
+        if version.parse(jinja2.__version__) < version.parse("3.1.0"):
             raise ImportError(
-                "apply_chat_template requires jinja2>=3.0.0 to be installed. Your version is " f"{jinja2.__version__}."
+                "apply_chat_template requires jinja2>=3.1.0 to be installed. Your version is " f"{jinja2.__version__}."
             )
 
         def raise_exception(message):
             raise TemplateError(message)
 
+        def tojson(x, ensure_ascii=False, indent=None, separators=None, sort_keys=False):
+            # We override the built-in tojson filter because Jinja's default filter escapes HTML characters
+            # We also expose some options like custom indents and separators
+            return json.dumps(x, ensure_ascii=ensure_ascii, indent=indent, separators=separators, sort_keys=sort_keys)
+
         jinja_env = ImmutableSandboxedEnvironment(trim_blocks=True, lstrip_blocks=True)
-        jinja_env.policies["json.dumps_kwargs"]["ensure_ascii"] = False
+        jinja_env.filters["tojson"] = tojson
         jinja_env.globals["raise_exception"] = raise_exception
         return jinja_env.from_string(chat_template)
 
@@ -3634,7 +3645,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 and `convert_tokens_to_ids` methods.
             num_tokens_to_remove (`int`, *optional*, defaults to 0):
                 Number of tokens to remove using the truncation strategy.
-            truncation_strategy (`str` or [`~tokenization_utils_base.TruncationStrategy`], *optional*, defaults to `False`):
+            truncation_strategy (`str` or [`~tokenization_utils_base.TruncationStrategy`], *optional*, defaults to `'longest_first'`):
                 The strategy to follow for truncation. Can be:
 
                 - `'longest_first'`: Truncate to a maximum length specified with the argument `max_length` or to the

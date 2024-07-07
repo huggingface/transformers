@@ -254,8 +254,8 @@ class RecurrentGemmaSdpaAttention(nn.Module):
             k_out = k_out[:, :, indices]
             v_out = v_out[:, :, indices]
 
-            k_out[:, :, cache_position] = key_states
-            v_out[:, :, cache_position] = value_states
+            k_out[:, :, cache_position] = key_states.to(k_out.dtype)
+            v_out[:, :, cache_position] = value_states.to(v_out.dtype)
 
         self.key_states, self.value_states = k_out, v_out
         return k_out, v_out

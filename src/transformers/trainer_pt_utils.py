@@ -27,6 +27,7 @@ import warnings
 from collections.abc import Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from itertools import chain
 from logging import StreamHandler
 from typing import Any, Dict, Iterator, List, Optional, Union
 
@@ -131,9 +132,10 @@ def nested_concat(tensors, new_tensors, padding_index=-100):
     Concat the `new_tensors` to `tensors` on the first dim and pad them on the second if needed. Works for tensors or
     nested list/tuples/dict of tensors.
     """
-    assert type(tensors) == type(
-        new_tensors
-    ), f"Expected `tensors` and `new_tensors` to have the same type but found {type(tensors)} and {type(new_tensors)}."
+    if not (isinstance(tensors, torch.Tensor) and isinstance(new_tensors, torch.Tensor)):
+        assert (
+            type(tensors) == type(new_tensors)
+        ), f"Expected `tensors` and `new_tensors` to have the same type but found {type(tensors)} and {type(new_tensors)}."
     if isinstance(tensors, (list, tuple)):
         return type(tensors)(nested_concat(t, n, padding_index=padding_index) for t, n in zip(tensors, new_tensors))
     elif isinstance(tensors, torch.Tensor):
@@ -1378,13 +1380,24 @@ class LayerWiseDummyScheduler(LRScheduler):
     """
 
     def __init__(self, *args, **kwargs):
-        optimizer = LayerWiseDummyOptimizer()
+        self.default_lr = kwargs["lr"]
+        optimizer = LayerWiseDummyOptimizer(**kwargs)
         last_epoch = -1
         verbose = False
         super().__init__(optimizer, last_epoch, verbose)
 
     def get_lr(self):
-        return [group["lr"] for group in self.optimizer.param_groups]
+        # default value
+        lrs = [self.default_lr]
+
+        # we take each lr in the parameters if they exist, assumes the optimizer to be the `LayerWiseDummyOptimizer`
+        if self.optimizer is not None:
+            param_wise_lrs = [
+                [group["lr"] for group in optim.param_groups] for optim in self.optimizer.optimizer_dict.values()
+            ]
+            lrs = list(chain(*param_wise_lrs))
+
+        return lrs
 
     def _get_closed_form_lr(self):
         return self.base_lrs
