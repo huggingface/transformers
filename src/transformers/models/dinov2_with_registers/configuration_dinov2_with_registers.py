@@ -66,11 +66,11 @@ class Dinov2WithRegistersConfig(BackboneConfigMixin, PretrainedConfig):
             Stochastic depth rate per sample (when applied in the main path of residual layers).
         use_swiglu_ffn (`bool`, *optional*, defaults to `False`):
             Whether to use the SwiGLU feedforward neural network.
-        num_register_tokens (`int`, *optional*, defaults to 0):
+        num_register_tokens (`int`, *optional*, defaults to 4):
             Number of register tokens to use.
-        interpolate_antialias (`bool`, *optional*, defaults to `False`):
+        interpolate_antialias (`bool`, *optional*, defaults to `True`):
             Whether to use antialiasing when interpolating the image patches.
-        interpolate_offset (`float`, *optional*, defaults to 0.1):
+        interpolate_offset (`float`, *optional*, defaults to 0.0):
             Offset to use when interpolating the image patches.
         out_features (`List[str]`, *optional*):
             If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
@@ -124,9 +124,9 @@ class Dinov2WithRegistersConfig(BackboneConfigMixin, PretrainedConfig):
         layerscale_value=1.0,
         drop_path_rate=0.0,
         use_swiglu_ffn=False,
-        num_register_tokens=0,
-        interpolate_antialias=False,
-        interpolate_offset=0.1,
+        num_register_tokens=4,
+        interpolate_antialias=True,
+        interpolate_offset=0.0,
         out_features=None,
         out_indices=None,
         apply_layernorm=True,

@@ -100,7 +100,7 @@ class Dinov2WithRegistersEmbeddings(nn.Module):
         width = width // self.config.patch_size
         # we add a small number to avoid floating point error in the interpolation
         # see discussion at https://github.com/facebookresearch/dino/issues/8
-        height, width = height + 0.1, width + 0.1
+        height, width = height + self.config.interpolate_offset, width + self.config.interpolate_offset
         patch_pos_embed = patch_pos_embed.reshape(1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim)
         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
         target_dtype = patch_pos_embed.dtype
@@ -109,6 +109,7 @@ class Dinov2WithRegistersEmbeddings(nn.Module):
             scale_factor=(float(height / math.sqrt(num_positions)), float(width / math.sqrt(num_positions))),
             mode="bicubic",
             align_corners=False,
+            antialias=self.config.interpolate_antialias,
         ).to(dtype=target_dtype)
         if int(height) != patch_pos_embed.shape[-2] or int(width) != patch_pos_embed.shape[-1]:
             raise ValueError("Width or height does not match with the interpolated position embeddings")

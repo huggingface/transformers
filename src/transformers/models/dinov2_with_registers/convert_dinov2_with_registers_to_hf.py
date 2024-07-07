@@ -81,6 +81,7 @@ def create_rename_keys(config):
     rename_keys.append(("cls_token", "embeddings.cls_token"))
     rename_keys.append(("mask_token", "embeddings.mask_token"))
     rename_keys.append(("pos_embed", "embeddings.position_embeddings"))
+    rename_keys.append(("register_tokens", "embeddings.register_tokens"))
     rename_keys.append(("patch_embed.proj.weight", "embeddings.patch_embeddings.projection.weight"))
     rename_keys.append(("patch_embed.proj.bias", "embeddings.patch_embeddings.projection.bias"))
 
@@ -158,7 +159,7 @@ def convert_dinov2_with_registers_checkpoint(model_name, pytorch_dump_folder_pat
     config = get_dinov2_with_registers_config(model_name, image_classifier=image_classifier)
 
     # load original model from torch hub
-    original_model = torch.hub.load("facebookresearch/dinov2_with_registers", model_name.replace("_1layer", ""))
+    original_model = torch.hub.load("facebookresearch/dinov2", model_name.replace("_1layer", ""))
     original_model.eval()
 
     # load state_dict of original model, remove and rename some keys
@@ -180,12 +181,8 @@ def convert_dinov2_with_registers_checkpoint(model_name, pytorch_dump_folder_pat
     if image_classifier:
         model = Dinov2WithRegistersForImageClassification(config).eval()
         model.dinov2_with_registers.load_state_dict(state_dict)
-        model_name_to_classifier_dict_url = {
-            "dinov2_with_registers_vits14_1layer": "https://dl.fbaipublicfiles.com/dinov2_with_registers/dinov2_with_registers_vits14/dinov2_with_registers_vits14_linear_head.pth",
-            "dinov2_with_registers_vitb14_1layer": "https://dl.fbaipublicfiles.com/dinov2_with_registers/dinov2_with_registers_vitb14/dinov2_with_registers_vitb14_linear_head.pth",
-            "dinov2_with_registers_vitl14_1layer": "https://dl.fbaipublicfiles.com/dinov2_with_registers/dinov2_with_registers_vitl14/dinov2_with_registers_vitl14_linear_head.pth",
-            "dinov2_with_registers_vitg14_1layer": "https://dl.fbaipublicfiles.com/dinov2_with_registers/dinov2_with_registers_vitg14/dinov2_with_registers_vitg14_linear_head.pth",
-        }
+        raise NotImplementedError("To do")
+        model_name_to_classifier_dict_url = {}
         url = model_name_to_classifier_dict_url[model_name]
         classifier_state_dict = torch.hub.load_state_dict_from_url(url, map_location="cpu")
         model.classifier.weight = nn.Parameter(classifier_state_dict["weight"])
@@ -245,14 +242,11 @@ def convert_dinov2_with_registers_checkpoint(model_name, pytorch_dump_folder_pat
 
     if push_to_hub:
         model_name_to_hf_name = {
-            "dinov2_with_registers_vits14": "dinov2_with_registers-small",
-            "dinov2_with_registers_vitb14": "dinov2_with_registers-base",
-            "dinov2_with_registers_vitl14": "dinov2_with_registers-large",
-            "dinov2_with_registers_vitg14": "dinov2_with_registers-giant",
-            "dinov2_with_registers_vits14_1layer": "dinov2_with_registers-small-imagenet1k-1-layer",
-            "dinov2_with_registers_vitb14_1layer": "dinov2_with_registers-base-imagenet1k-1-layer",
-            "dinov2_with_registers_vitl14_1layer": "dinov2_with_registers-large-imagenet1k-1-layer",
-            "dinov2_with_registers_vitg14_1layer": "dinov2_with_registers-giant-imagenet1k-1-layer",
+            "dinov2_vits14_reg": "dinov2-with-registers-small",
+            "dinov2_vitb14_reg": "dinov2-with-registers-base",
+            "dinov2_vitl14_reg": "dinov2-with-registers-large",
+            "dinov2_vitg14_reg": "dinov2-with-registers-giant",
+            # TODO 1-layer image classifiers
         }
 
         name = model_name_to_hf_name[model_name]
@@ -265,17 +259,13 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--model_name",
-        default="dinov2_with_registers_vitb14",
+        default="dinov2_vits14_reg",
         type=str,
         choices=[
-            "dinov2_with_registers_vits14",
-            "dinov2_with_registers_vitb14",
-            "dinov2_with_registers_vitl14",
-            "dinov2_with_registers_vitg14",
-            "dinov2_with_registers_vits14_1layer",
-            "dinov2_with_registers_vitb14_1layer",
-            "dinov2_with_registers_vitl14_1layer",
-            "dinov2_with_registers_vitg14_1layer",
+            "dinov2_vits14_reg",
+            "dinov2_vitb14_reg",
+            "dinov2_vitl14_reg",
+            "dinov2_vitg14_reg",
         ],
         help="Name of the model you'd like to convert.",
     )
