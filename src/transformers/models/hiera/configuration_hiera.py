@@ -27,7 +27,7 @@ class HieraConfig(BackboneConfigMixin, PretrainedConfig):
     This is the configuration class to store the configuration of a [`HieraModel`]. It is used to instantiate a Hiera
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the Hiera
-    [EduardoPacheco/hiera-base-224](https://huggingface.co/EduardoPacheco/hiera-base-224) architecture.
+    [facebook/hiera-base-224](https://huggingface.co/facebook/hiera-base-224) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

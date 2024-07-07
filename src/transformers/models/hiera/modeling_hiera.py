@@ -49,11 +49,11 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "HieraConfig"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "EduardoPacheco/hiera-tiny-224"
+_CHECKPOINT_FOR_DOC = "facebook/hiera-tiny-224-hf"
 _EXPECTED_OUTPUT_SHAPE = [1, 49, 768]
 
 # Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "EduardoPacheco/hiera-tiny-224-in1k"
+_IMAGE_CLASS_CHECKPOINT = "facebook/hiera-tiny-224-in1k-hf"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
@@ -1287,8 +1287,8 @@ class HieraForPreTraining(HieraPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("EduardoPacheco/hiera-tiny-224-mae")
-        >>> model = HieraForPreTraining.from_pretrained("EduardoPacheco/hiera-tiny-224-mae")
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/hiera-tiny-224-mae-hf")
+        >>> model = HieraForPreTraining.from_pretrained("facebook/hiera-tiny-224-mae-hf")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
 
@@ -1513,9 +1513,9 @@ class HieraBackbone(HieraPreTrainedModel, BackboneMixin):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> processor = AutoImageProcessor.from_pretrained("EduardoPacheco/hiera-tiny-224")
+        >>> processor = AutoImageProcessor.from_pretrained("facebook/hiera-tiny-224-hf")
         >>> model = AutoBackbone.from_pretrained(
-        ...     "EduardoPacheco/hiera-tiny-224", out_features=["stage1", "stage2", "stage3", "stage4"]
+        ...     "facebook/hiera-tiny-224-hf", out_features=["stage1", "stage2", "stage3", "stage4"]
         ... )
 
         >>> inputs = processor(image, return_tensors="pt")

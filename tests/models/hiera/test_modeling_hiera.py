@@ -514,7 +514,7 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in ["EduardoPacheco/hiera-tiny-224"]:
+        for model_name in ["facebook/hiera-tiny-224-hf"]:
             model = HieraModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
@@ -530,13 +530,11 @@ def prepare_img():
 class HieraModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return (
-            AutoImageProcessor.from_pretrained("EduardoPacheco/hiera-tiny-224-in1k") if is_vision_available() else None
-        )
+        return AutoImageProcessor.from_pretrained("facebook/hiera-tiny-224-in1k-hf") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
-        model = HieraForImageClassification.from_pretrained("EduardoPacheco/hiera-tiny-224-in1k").to(torch_device)
+        model = HieraForImageClassification.from_pretrained("facebook/hiera-tiny-224-in1k-hf").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -565,10 +563,10 @@ class HieraModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs.logits[0, :5], expected_slice, atol=1e-4))
 
     def test_inference_interpolate_pos_encoding(self):
-        model = HieraModel.from_pretrained("EduardoPacheco/hiera-tiny-224").to(torch_device)
+        model = HieraModel.from_pretrained("facebook/hiera-tiny-224-hf").to(torch_device)
 
         image_processor = AutoImageProcessor.from_pretrained(
-            "EduardoPacheco/hiera-tiny-224", size={"shortest_edge": 448}, crop_size={"height": 448, "width": 448}
+            "facebook/hiera-tiny-224-hf", size={"shortest_edge": 448}, crop_size={"height": 448, "width": 448}
         )
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt")
@@ -593,7 +591,7 @@ class HieraModelIntegrationTest(unittest.TestCase):
         # make random mask reproducible
         torch.manual_seed(2)
 
-        model = HieraForPreTraining.from_pretrained("EduardoPacheco/hiera-tiny-224-mae").to(torch_device)
+        model = HieraForPreTraining.from_pretrained("facebook/hiera-tiny-224-mae-hf").to(torch_device)
         image_processor = self.default_image_processor
 
         image = prepare_img()
@@ -634,9 +632,7 @@ class HieraModelIntegrationTest(unittest.TestCase):
         r"""
         A small test to make sure that inference work in half precision without any problem.
         """
-        model = HieraModel.from_pretrained(
-            "EduardoPacheco/hiera-tiny-224", torch_dtype=torch.float16, device_map="auto"
-        )
+        model = HieraModel.from_pretrained("facebook/hiera-tiny-224-hf", torch_dtype=torch.float16, device_map="auto")
         image_processor = self.default_image_processor
 
         image = prepare_img()
