@@ -31,7 +31,7 @@ from ...modeling_attn_mask_utils import (
 from ...modeling_outputs import (
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
-    SequenceClassifierOutputWithPast,
+    MoESequenceClassifierOutputWithPast,
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -1259,14 +1259,15 @@ class JetMoeModel(JetMoePreTrainedModel):
 class JetMoeForCausalLM(JetMoePreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
-    def __init__(self, config):
+    def __init__(self, config:JetMoeConfig):
         super().__init__(config)
         self.model = JetMoeModel(config)
         self.vocab_size = config.vocab_size
         self.aux_loss_coef = config.aux_loss_coef
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.tie_word_embeddings = config.tie_word_embeddings
-
+        self.num_experts = config.num_local_experts
+        self.num_experts_per_tok = config.num_experts_per_tok
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1339,6 +1340,7 @@ class JetMoeForCausalLM(JetMoePreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
+            output_router_logits=output_router_logits
         )
 
         hidden_states = outputs[0]
@@ -1499,12 +1501,15 @@ class JetMoeForCausalLM(JetMoePreTrainedModel):
 )
 # Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with Llama->JetMoe, LLAMA->JETMOE
 class JetMoeForSequenceClassification(JetMoePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config:JetMoeConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = JetMoeModel(config)
         self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
-
+        # Save arguments to member variables
+        self.aux_loss_coef = config.aux_loss_coef
+        self.num_experts = config.num_local_experts
+        self.num_experts_per_tok = config.num_experts_per_tok
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1526,8 +1531,9 @@ class JetMoeForSequenceClassification(JetMoePreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        output_router_logits: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SequenceClassifierOutputWithPast]:
+    ) -> Union[Tuple, MoESequenceClassifierOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1546,6 +1552,7 @@ class JetMoeForSequenceClassification(JetMoePreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            output_router_logits=output_router_logits
         )
         hidden_states = transformer_outputs[0]
         logits = self.score(hidden_states)
@@ -1593,12 +1600,27 @@ class JetMoeForSequenceClassification(JetMoePreTrainedModel):
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(pooled_logits, labels)
+        # calculate aux_loss
+        aux_loss = None
+        if output_router_logits:
+            aux_loss = load_balancing_loss_func(
+                transformer_outputs.router_logits if return_dict else transformer_outputs[-1],
+                self.num_experts,
+                self.num_experts_per_tok,
+                attention_mask,
+            )
+            if labels is not None:
+                loss += self.aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
+                
         if not return_dict:
             output = (pooled_logits,) + transformer_outputs[1:]
+            if output_router_logits:
+                output = (aux_loss,) + output
             return ((loss,) + output) if loss is not None else output
 
-        return SequenceClassifierOutputWithPast(
+        return MoESequenceClassifierOutputWithPast(
             loss=loss,
+            aux_loss=aux_loss,
             logits=pooled_logits,
             past_key_values=transformer_outputs.past_key_values,
             hidden_states=transformer_outputs.hidden_states,
