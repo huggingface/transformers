@@ -12,9 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert Dinov2WithRegisters checkpoints from the original repository.
+"""Convert Dinov2 With Registers checkpoints from the original repository.
 
-URL: https://github.com/facebookresearch/dinov2_with_registers/tree/main
+URL: https://github.com/facebookresearch/dinov2/tree/main
 """
 
 import argparse
@@ -181,8 +181,12 @@ def convert_dinov2_with_registers_checkpoint(model_name, pytorch_dump_folder_pat
     if image_classifier:
         model = Dinov2WithRegistersForImageClassification(config).eval()
         model.dinov2_with_registers.load_state_dict(state_dict)
-        raise NotImplementedError("To do")
-        model_name_to_classifier_dict_url = {}
+        model_name_to_classifier_dict_url = {
+            "dinov2_vits14_reg_1layer": "https://dl.fbaipublicfiles.com/dinov2/dinov2_vits14/dinov2_vits14_reg4_linear_head.pth",
+            "dinov2_vitb14_reg_1layer": "https://dl.fbaipublicfiles.com/dinov2/dinov2_vitb14/dinov2_vitb14_reg4_linear_head.pth",
+            "dinov2_vitl14_reg_1layer": "https://dl.fbaipublicfiles.com/dinov2/dinov2_vitl14/dinov2_vitl14_reg4_linear_head.pth",
+            "dinov2_vitg14_reg_1layer": "https://dl.fbaipublicfiles.com/dinov2/dinov2_vitg14/dinov2_vitg14_reg4_linear_head.pth",
+        }
         url = model_name_to_classifier_dict_url[model_name]
         classifier_state_dict = torch.hub.load_state_dict_from_url(url, map_location="cpu")
         model.classifier.weight = nn.Parameter(classifier_state_dict["weight"])
@@ -246,7 +250,10 @@ def convert_dinov2_with_registers_checkpoint(model_name, pytorch_dump_folder_pat
             "dinov2_vitb14_reg": "dinov2-with-registers-base",
             "dinov2_vitl14_reg": "dinov2-with-registers-large",
             "dinov2_vitg14_reg": "dinov2-with-registers-giant",
-            # TODO 1-layer image classifiers
+            "dinov2_vits14_reg_1layer": "dinov2-with-registers-small-imagenet1k-1-layer",
+            "dinov2_vitb14_reg_1layer": "dinov2-with-registers-base-imagenet1k-1-layer",
+            "dinov2_vitl14_reg_1layer": "dinov2-with-registers-large-imagenet1k-1-layer",
+            "dinov2_vitg14_reg_1layer": "dinov2-with-registers-giant-imagenet1k-1-layer",
         }
 
         name = model_name_to_hf_name[model_name]
@@ -266,6 +273,10 @@ if __name__ == "__main__":
             "dinov2_vitb14_reg",
             "dinov2_vitl14_reg",
             "dinov2_vitg14_reg",
+            "dinov2_vits14_reg_1layer",
+            "dinov2_vitb14_reg_1layer",
+            "dinov2_vitl14_reg_1layer",
+            "dinov2_vitg14_reg_1layer",
         ],
         help="Name of the model you'd like to convert.",
     )

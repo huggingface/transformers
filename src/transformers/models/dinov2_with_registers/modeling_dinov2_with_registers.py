@@ -49,21 +49,19 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "Dinov2WithRegistersConfig"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "facebook/dinov2_with_registers"
+_CHECKPOINT_FOR_DOC = "facebook/dinov2-with-registers-base"
 _EXPECTED_OUTPUT_SHAPE = [1, 257, 768]
 
 # Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "facebook/dinov2_with_registers-small-imagenet1k-1-layer"
+_IMAGE_CLASS_CHECKPOINT = "facebook/dinov2-with-registers-small-imagenet1k-1-layer"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
-# Copied from transformers.models.dinov2.modeling_dinov2.Dinov2Embeddings with Dinov2->Dinov2WithRegisters
 class Dinov2WithRegistersEmbeddings(nn.Module):
     """
-    Construct the CLS token, mask token, position and patch embeddings.
+    Construct the CLS token, mask token, register tokens, position and patch embeddings.
     """
 
-    # Ignore copy
     def __init__(self, config: Dinov2WithRegistersConfig) -> None:
         super().__init__()
 
@@ -116,7 +114,6 @@ class Dinov2WithRegistersEmbeddings(nn.Module):
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
         return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
 
-    # Ignore copy
     def forward(self, pixel_values: torch.Tensor, bool_masked_pos: Optional[torch.Tensor] = None) -> torch.Tensor:
         batch_size, _, height, width = pixel_values.shape
         target_dtype = self.patch_embeddings.projection.weight.dtype
@@ -791,12 +788,12 @@ class Dinov2WithRegistersForImageClassification(Dinov2WithRegistersPreTrainedMod
     """,
     DINOV2_WITH_REGISTERS_START_DOCSTRING,
 )
-# Copied from transformers.models.dinov2.modeling_dinov2.Dinov2Backbone with DINOV2->DINOV2_WITH_REGISTERS,Dinov2->Dinov2WithRegisters,facebook/dinov2-base->facebook/dinov2_with_registers
 class Dinov2WithRegistersBackbone(Dinov2WithRegistersPreTrainedModel, BackboneMixin):
     def __init__(self, config):
         super().__init__(config)
         super()._init_backbone(config)
 
+        self.num_register_tokens = config.num_register_tokens
         self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
         self.embeddings = Dinov2WithRegistersEmbeddings(config)
         self.encoder = Dinov2WithRegistersEncoder(config)
@@ -864,7 +861,7 @@ class Dinov2WithRegistersBackbone(Dinov2WithRegistersPreTrainedModel, BackboneMi
                 if self.config.apply_layernorm:
                     hidden_state = self.layernorm(hidden_state)
                 if self.config.reshape_hidden_states:
-                    hidden_state = hidden_state[:, 1:]
+                    hidden_state = hidden_state[:, self.num_register_tokens + 1 :]
                     # this was actually a bug in the original implementation that we copied here,
                     # cause normally the order is height, width
                     batch_size, _, height, width = pixel_values.shape
