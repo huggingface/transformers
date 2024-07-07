@@ -20,7 +20,7 @@ from ...utils import (
 )
 
 
-_import_structure = {"configuration_hiera": ["HIERA_PRETRAINED_CONFIG_ARCHIVE_MAP", "HieraConfig", "HieraOnnxConfig"]}
+_import_structure = {"configuration_hiera": ["HieraConfig"]}
 
 try:
     if not is_torch_available():
@@ -37,7 +37,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_hiera import HIERA_PRETRAINED_CONFIG_ARCHIVE_MAP, HieraConfig, HieraOnnxConfig
+    from .configuration_hiera import HieraConfig
 
     try:
         if not is_torch_available():
