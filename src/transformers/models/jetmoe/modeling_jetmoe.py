@@ -1499,7 +1499,7 @@ class JetMoeForCausalLM(JetMoePreTrainedModel):
     """,
     JETMOE_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with Llama->JetMoe, LLAMA->JETMOE
+
 class JetMoeForSequenceClassification(JetMoePreTrainedModel):
     def __init__(self, config:JetMoeConfig):
         super().__init__(config)
@@ -1611,7 +1611,7 @@ class JetMoeForSequenceClassification(JetMoePreTrainedModel):
             )
             if labels is not None:
                 loss += self.aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
-                
+
         if not return_dict:
             output = (pooled_logits,) + transformer_outputs[1:]
             if output_router_logits:
