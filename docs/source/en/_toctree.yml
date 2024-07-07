@@ -643,6 +643,8 @@
         title: DiNAT
       - local: model_doc/dinov2
         title: DINOV2
+      - local: model_doc/dinov2-with-registers
+        title: Dinov2WithRegisters
       - local: model_doc/dit
         title: DiT
       - local: model_doc/dpt
