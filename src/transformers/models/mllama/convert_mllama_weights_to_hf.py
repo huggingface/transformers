@@ -36,17 +36,7 @@ except ImportError as e:
 
 
 NUM_SHARDS = {
-    "7B": 1,
-    "8B": 1,
-    "8Bf": 1,
-    "7Bf": 1,
-    "13B": 2,
-    "13Bf": 2,
-    "34B": 4,
-    "30B": 4,
-    "65B": 8,
-    "70B": 8,
-    "70Bf": 8,
+    "90B": 8,
 }
 
 
@@ -62,6 +52,34 @@ def read_json(path):
 def write_json(text, path):
     with open(path, "w") as f:
         json.dump(text, f)
+
+
+def get_mllama_config():
+    text_config = {
+        "vocab_size": 257152,
+        "num_hidden_layers": 18,
+        "num_key_value_heads": 1,
+        "head_dim": 256,
+        "hidden_size": 2048,
+        "hidden_activation": "gelu_pytorch_tanh",
+        "num_attention_heads": 8,
+        "intermediate_size": 16384,
+        "is_encoder_decoder": False,
+    }
+    vision_config = {
+        "torch_dtype": precision,
+        "image_size": image_size,
+        "patch_size": patch_size,
+        "num_image_tokens": num_image_tokens,
+        "hidden_size": 1152,
+        "intermediate_size": 4304,
+        "num_hidden_layers": 27,
+        "num_attention_heads": 16,
+        "projector_hidden_act": "gelu_fast",
+        "vision_use_head": False,
+    }
+    final_config = MllamaConfig(text_config=text_config, vision_config=vision_config, **config)
+    return final_config
 
 
 def write_model(
@@ -83,7 +101,7 @@ def write_model(
     params = read_json(os.path.join(input_base_path, "params.json"))
     num_shards = NUM_SHARDS[model_size]
     params = params.get("model", params)
-    
+
     # language parameters
     n_layers = params["n_layers"] # language model self-attention layers
     n_layers_cross_attention = 20 # language model cross-attention layers
@@ -101,6 +119,10 @@ def write_model(
     n_layers_vision_transformer = 32 # vision model 1st transformer layers
     n_layers_global_transformer = 8 # global transformer vision layers
     n_heads_vision = 16 
+    n_vision_heads_per_shard = n_heads_vision // num_shards
+    vision_hidden_dim = 1280 # width of vision transformers
+    vision_dims_per_head = vision_hidden_dim // n_heads_vision
+    mlp_ratio = 4 # vision_hidden_dim * mlp_ratio is mlp dim
 
     if base > 10000.0 and llama_version != 3:
         max_position_embeddings = 16384
@@ -375,136 +397,100 @@ def write_model(
     print(f"Saving {projection_filename} in {tmp_model_path}...")
     torch.save(state_dict, os.path.join(tmp_model_path, projection_filename))
 
-
-    # vision encoder embedding parameters
-
-    encoder_embeddings_params_filename = "pytorch_embedding_params.bin"
-    state_dict = {
-        'model.vision_model.vision_encoder.class_embedding': torch.cat(
-            [loaded[i].pop('vision_model.vision_encoder.class_embedding') for i in range(num_shards)], dim=concat_dim
-        ),
-        "model.vision_model.vision_encoder.positional_embedding": torch.cat(
-            [loaded[i].pop('vision_model.vision_encoder.positional_embedding') for i in range(num_shards)], dim=concat_dim
-        ),
-        'model.vision_model.vision_encoder.gated_positional_embedding': torch.cat(
-            [loaded[i].pop('vision_model.vision_encoder.gated_positional_embedding') for i in range(num_shards)], dim=concat_dim
-        ),         
-        'model.vision_model.vision_encoder.gated_positional_embedding_gate': torch.cat(
-            [loaded[i].pop('vision_model.vision_encoder.gated_positional_embedding_gate') for i in range(num_shards)], dim=concat_dim
-        ),       
-        'model.vision_model.vision_encoder.conv1._linear.weight': torch.cat(
-            [loaded[i].pop('vision_model.vision_encoder.conv1._linear.weight') for i in range(num_shards)], dim=concat_dim
-        ), # TODO maybe choose a better name here
-        'model.vision_model.vision_encoder.ln_post.weight': torch.cat(
-            [loaded[i].pop('vision_model.vision_encoder.ln_post.weight') for i in range(num_shards)], dim=concat_dim
-        ),         
-        'model.vision_model.vision_encoder.ln_post.bias': torch.cat(
-            [loaded[i].pop('vision_model.vision_encoder.ln_post.bias') for i in range(num_shards)], dim=concat_dim
-        ),                                                        
-        'model.vision_model.vision_encoder.ln_pre.weight': torch.cat(
-            [loaded[i].pop('vision_model.vision_encoder.ln_pre.weight') for i in range(num_shards)], dim=concat_dim
-        ),
-        'model.vision_model.vision_encoder.ln_pre.bias': torch.cat(
-            [loaded[i].pop('vision_model.vision_encoder.ln_pre.bias') for i in range(num_shards)], dim=concat_dim
-        ),               
-        'model.vision_model.vision_encoder.pre_tile_pos_embed.embedding': torch.cat(
-            [loaded[i].pop('vision_model.vision_encoder.pre_tile_pos_embed.embedding') for i in range(num_shards)], dim=concat_dim
-        ),
-        'model.vision_model.vision_encoder.pre_tile_pos_embed.gate': torch.cat(
-            [loaded[i].pop('vision_model.vision_encoder.pre_tile_pos_embed.gate') for i in range(num_shards)], dim=concat_dim
-        ),
-        'model.vision_model.vision_encoder.post_tile_pos_embed.embedding': torch.cat(
-            [loaded[i].pop('vision_model.vision_encoder.post_tile_pos_embed.embedding') for i in range(num_shards)], dim=concat_dim
-        ),
-        'model.vision_model.vision_encoder.post_tile_pos_embed.gate': torch.cat(
-            [loaded[i].pop('vision_model.vision_encoder.post_tile_pos_embed.gate') for i in range(num_shards)], dim=concat_dim
-        )
-    }
-    for k, v in state_dict.items():
-        index_dict["weight_map"][k] = encoder_embeddings_params_filename
-        param_count += v.numel()
-    print(f"Saving {encoder_embeddings_params_filename} in {tmp_model_path}...")
-    torch.save(state_dict, os.path.join(tmp_model_path, encoder_embeddings_params_filename))
-    
-
-    # global vision layers
-    """
-    'vision_model.vision_encoder.global_transformer.resblocks.7.gate_attn',
-    'vision_model.vision_encoder.global_transformer.resblocks.7.gate_ffn',
-    'vision_model.vision_encoder.global_transformer.resblocks.7.attn.wq.weight',
-    'vision_model.vision_encoder.global_transformer.resblocks.7.attn.wq.bias',
-    'vision_model.vision_encoder.global_transformer.resblocks.7.attn.wk.weight',
-    'vision_model.vision_encoder.global_transformer.resblocks.7.attn.wk.bias',
-    'vision_model.vision_encoder.global_transformer.resblocks.7.attn.wv.weight',
-    'vision_model.vision_encoder.global_transformer.resblocks.7.attn.wv.bias',
-    'vision_model.vision_encoder.global_transformer.resblocks.7.attn.wo.weight',
-    'vision_model.vision_encoder.global_transformer.resblocks.7.attn.wo.bias',
-    'vision_model.vision_encoder.global_transformer.resblocks.7.ln_1.weight',
-    'vision_model.vision_encoder.global_transformer.resblocks.7.ln_1.bias',
-    'vision_model.vision_encoder.global_transformer.resblocks.7.mlp.c_fc.weight',
-    'vision_model.vision_encoder.global_transformer.resblocks.7.mlp.c_fc.bias',
-    'vision_model.vision_encoder.global_transformer.resblocks.7.mlp.c_proj.weight',
-    'vision_model.vision_encoder.global_transformer.resblocks.7.mlp.c_proj.bias',
-    'vision_model.vision_encoder.global_transformer.resblocks.7.ln_2.weight',
-    'vision_model.vision_encoder.global_transformer.resblocks.7.ln_2.bias']
-    """
+    # global vision layers - identical to a CLIPVisionModel except:
+    # - there are 2 gating parameters
+    # - there are no class embedding/patch embedding layers
     for global_vision_layer_i in range(n_layers_global_transformer):
         state_dict = {}
-        global_vision_filename = f"pytorch_global_vision_transformer-{global_vision_layer_i + 1}-of-{n_layers_global_transformer + 1}.bin"
-        state_dict[f'model.vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.gate_attn'] = torch.cat(
-            [loaded[i].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.gate_attn') for i in range(num_shards)], dim=concat_dim
+        global_vision_filename = f"pytorch_global_vision_transformer-{global_vision_layer_i}-of-{n_layers_global_transformer + 1}.bin"
+
+        # the extra gating params gate_attn and gate_ffn are not sharded
+
+        state_dict[f'model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.gate_attn'] = loaded[0].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.gate_attn')
+        state_dict[f'model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.gate_ffn'] = loaded[0].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.gate_ffn')
+
+
+        # attention weights and biases are sharded
+        state_dict[f"model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.self_attn.q_proj.weight"] = permute(
+            torch.cat(
+                [
+                    loaded[i].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wq.weight').view(n_vision_heads_per_shard, vision_dims_per_head, vision_hidden_dim)
+                    for i in range(num_shards)
+                ],
+                dim=0,
+            ).reshape(vision_hidden_dim, vision_hidden_dim),
+            n_heads=n_heads_vision,
+            dim1=vision_hidden_dim,
+            dim2=vision_hidden_dim
         )
-        state_dict[f'model.vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.gate_ffn'] = torch.cat(
-            [loaded[i].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.gate_ffn') for i in range(num_shards)], dim=concat_dim
+
+        # for vision n_kv_heads = n_heads and local_kv heads = n_vision_heads per shard!
+        #  same for normal and global image transformer
+
+        state_dict[f"model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.self_attn.k_proj.weight"] = permute(
+            torch.cat(
+                [
+                    loaded[i].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wk.weight').view(
+                        n_vision_heads_per_shard, vision_dims_per_head, vision_hidden_dim
+                    )
+                    for i in range(num_shards)
+                ],
+                dim=0,
+            ).reshape(vision_hidden_dim, vision_hidden_dim),
+            n_heads=n_heads_vision,
+            dim1=vision_hidden_dim,
+            dim2=vision_hidden_dim,
         )
-        state_dict[f'model.vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wq.weight'] = torch.cat(
-            [loaded[i].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wq.weight') for i in range(num_shards)], dim=concat_dim
-        )
-        state_dict[f'model.vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wq.bias'] = torch.cat(
-            [loaded[i].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wq.bias') for i in range(num_shards)], dim=concat_dim
-        )
-        state_dict[f'model.vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wk.weight'] = torch.cat(
-            [loaded[i].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wk.weight') for i in range(num_shards)], dim=concat_dim
-        )
-        state_dict[f'model.vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wk.bias'] = torch.cat(
-            [loaded[i].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wk.bias') for i in range(num_shards)], dim=concat_dim
-        )
-        state_dict[f'model.vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wv.weight'] = torch.cat(
-            [loaded[i].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wv.weight') for i in range(num_shards)], dim=concat_dim
-        )
-        state_dict[f'model.vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wv.bias'] = torch.cat(
-            [loaded[i].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wv.bias') for i in range(num_shards)], dim=concat_dim
-        )
-        state_dict[f'model.vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wo.weight'] = torch.cat(
+
+        state_dict[f"model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.self_attn.v_proj.weight"] = torch.cat(
+            [
+                loaded[i].pop(f"vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wv.weight").view(
+                    n_vision_heads_per_shard, vision_dims_per_head, vision_hidden_dim
+                )
+                for i in range(num_shards)
+            ],
+            dim=0,
+        ).reshape(vision_hidden_dim, vision_hidden_dim)
+
+
+        # simple concatenation for sharded o_proj
+        state_dict[f'model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.self_attn.o_proj.weight'] = torch.cat(
             [loaded[i].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wo.weight') for i in range(num_shards)], dim=concat_dim
         )
-        state_dict[f'model.vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wo.bias'] = torch.cat(
+
+        # simple concatenation for sharded biases
+        state_dict[f'model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.self_attn.q_proj.bias'] = torch.cat(
+            [loaded[i].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wq.bias') for i in range(num_shards)], dim=concat_dim
+        )
+        state_dict[f'model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.self_attn.k_proj.bias'] = torch.cat(
+            [loaded[i].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wk.bias') for i in range(num_shards)], dim=concat_dim
+        )
+        state_dict[f'model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.self_attn.v_proj.bias'] = torch.cat(
+            [loaded[i].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wv.bias') for i in range(num_shards)], dim=concat_dim
+        )
+        state_dict[f'model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.self_attn.o_proj.bias'] = torch.cat(
             [loaded[i].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wo.bias') for i in range(num_shards)], dim=concat_dim
         )
-        state_dict[f'model.vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.ln_1.weight'] = torch.cat(
-            [loaded[i].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.ln_1.weight') for i in range(num_shards)], dim=concat_dim
-        )
-        state_dict[f'model.vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.ln_1.bias'] = torch.cat(
-            [loaded[i].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.ln_1.bias') for i in range(num_shards)], dim=concat_dim
-        )
-        state_dict[f'model.vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.mlp.c_fc.weight'] = torch.cat(
+
+        # mlp layers
+
+        state_dict[f'model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.mlp.fc1.weight'] = torch.cat(
             [loaded[i].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.mlp.c_fc.weight') for i in range(num_shards)], dim=concat_dim
         )
-        state_dict[f'model.vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.mlp.c_fc.bias'] = torch.cat(
+        state_dict[f'model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.mlp.fc1.bias'] = torch.cat(
             [loaded[i].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.mlp.c_fc.bias') for i in range(num_shards)], dim=concat_dim
         )
-        state_dict[f'model.vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.mlp.c_proj.weight'] = torch.cat(
+        state_dict[f'model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.mlp.fc2.weight'] = torch.cat(
             [loaded[i].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.mlp.c_proj.weight') for i in range(num_shards)], dim=concat_dim
         )
-        state_dict[f'model.vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.mlp.c_proj.bias'] = torch.cat(
+        state_dict[f'model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.mlp.fc2.bias'] = torch.cat(
             [loaded[i].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.mlp.c_proj.bias') for i in range(num_shards)], dim=concat_dim
         )
-        state_dict[f'model.vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.ln_2.weight'] = torch.cat(
-            [loaded[i].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.ln_2.weight') for i in range(num_shards)], dim=concat_dim
-        )
-        state_dict[f'model.vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.ln_2.bias'] = torch.cat(
-            [loaded[i].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.ln_2.bias') for i in range(num_shards)], dim=concat_dim
-        )
+
+        state_dict[f'model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.layer_norm1.weight'] = loaded[0].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.ln_1.weight').clone()
+        state_dict[f'model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.layer_norm1.bias'] = loaded[0].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.ln_1.bias').clone()
+        state_dict[f'model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.layer_norm2.weight'] = loaded[0].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.ln_2.weight').clone()
+        state_dict[f'model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.layer_norm2.bias'] = loaded[0].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.ln_2.bias').clone()
 
         for k, v in state_dict.items():
             index_dict["weight_map"][k] = global_vision_filename
@@ -514,8 +500,134 @@ def write_model(
         torch.save(state_dict, os.path.join(tmp_model_path, global_vision_filename))
         
 
+
+    # the normal transformer - 32 layers for 90B, a CLIP model except with additional tile position embeddings
+    # vision encoder embedding parameters
+
+    encoder_embeddings_params_filename = "pytorch_embedding_params.bin"
+    state_dict = {
+        # embeddings are not sharded
+        'model.vision_model.vision_encoder.class_embedding': loaded[0].pop('vision_model.vision_encoder.class_embedding'),
+        "model.vision_model.vision_encoder.positional_embedding": loaded[0].pop('vision_model.vision_encoder.positional_embedding'),
+        'model.vision_model.vision_encoder.gated_positional_embedding': loaded[0].pop('vision_model.vision_encoder.gated_positional_embedding'),
+        'model.vision_model.vision_encoder.gated_positional_embedding_gate': loaded[0].pop('vision_model.vision_encoder.gated_positional_embedding_gate'),
+        # patch embedding conv weights are sharded 
+        'model.vision_model.vision_encoder.patch_embedding.weight': torch.cat(
+            [loaded[i].pop('vision_model.vision_encoder.conv1._linear.weight') for i in range(num_shards)], dim=concat_dim
+        ), 
+        # TODO maybe choose a better name here
+        # layer norms are not sharded
+        'model.vision_model.vision_encoder.ln_post.weight': loaded[0].pop('vision_model.vision_encoder.ln_post.weight'),   
+        'model.vision_model.vision_encoder.ln_post.bias': loaded[0].pop('vision_model.vision_encoder.ln_post.bias'),     
+        'model.vision_model.vision_encoder.ln_pre.weight': loaded[0].pop('vision_model.vision_encoder.ln_pre.weight'),
+        'model.vision_model.vision_encoder.ln_pre.bias': loaded[0].pop('vision_model.vision_encoder.ln_pre.bias'),
+        # tile pos embeddings (specific to mllama) are not sharded
+        'model.vision_model.vision_encoder.pre_tile_pos_embed.embedding': loaded[0].pop('vision_model.vision_encoder.pre_tile_pos_embed.embedding'),
+        'model.vision_model.vision_encoder.pre_tile_pos_embed.gate': loaded[0].pop('vision_model.vision_encoder.pre_tile_pos_embed.gate'),
+        'model.vision_model.vision_encoder.post_tile_pos_embed.embedding': loaded[0].pop('vision_model.vision_encoder.post_tile_pos_embed.embedding'),
+        'model.vision_model.vision_encoder.post_tile_pos_embed.gate': loaded[0].pop('vision_model.vision_encoder.post_tile_pos_embed.gate'),
+    }
+    for k, v in state_dict.items():
+        index_dict["weight_map"][k] = encoder_embeddings_params_filename
+        param_count += v.numel()
+    print(f"Saving {encoder_embeddings_params_filename} in {tmp_model_path}...")
+    torch.save(state_dict, os.path.join(tmp_model_path, encoder_embeddings_params_filename))
+
+    # vision transformer layer parameters
+
+    
     for vision_layer_i in range(n_layers_vision_transformer):
-        pass # TODO
+        state_dict = {}
+        encoder_layer_parameters_filename = f"pytorch_vision_transformer-{vision_layer_i}-of-{n_layers_vision_transformer + 1}.bin"
+
+        # attention weights and biases are sharded
+        state_dict[f"model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.self_attn.q_proj.weight"] = permute(
+            torch.cat(
+                [
+                    loaded[i].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.attn.wq.weight').view(n_vision_heads_per_shard, vision_dims_per_head, vision_hidden_dim)
+                    for i in range(num_shards)
+                ],
+                dim=0,
+            ).reshape(vision_hidden_dim, vision_hidden_dim),
+            n_heads=n_heads_vision,
+            dim1=vision_hidden_dim,
+            dim2=vision_hidden_dim
+        )
+
+        # for vision n_kv_heads = n_heads and local_kv heads = n_vision_heads per shard!
+        #  same for normal and global image transformer
+
+        state_dict[f"model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.self_attn.k_proj.weight"] = permute(
+            torch.cat(
+                [
+                    loaded[i].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.attn.wk.weight').view(
+                        n_vision_heads_per_shard, vision_dims_per_head, vision_hidden_dim
+                    )
+                    for i in range(num_shards)
+                ],
+                dim=0,
+            ).reshape(vision_hidden_dim, vision_hidden_dim),
+            n_heads=n_heads_vision,
+            dim1=vision_hidden_dim,
+            dim2=vision_hidden_dim,
+        )
+
+        state_dict[f"model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.self_attn.v_proj.weight"] = torch.cat(
+            [
+                loaded[i].pop(f"vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.attn.wv.weight").view(
+                    n_vision_heads_per_shard, vision_dims_per_head, vision_hidden_dim
+                )
+                for i in range(num_shards)
+            ],
+            dim=0,
+        ).reshape(vision_hidden_dim, vision_hidden_dim)
+
+
+        # simple concatenation for sharded o_proj
+        state_dict[f'model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.self_attn.o_proj.weight'] = torch.cat(
+            [loaded[i].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.attn.wo.weight') for i in range(num_shards)], dim=concat_dim
+        )
+
+        # simple concatenation for sharded biases
+        state_dict[f'model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.self_attn.q_proj.bias'] = torch.cat(
+            [loaded[i].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.attn.wq.bias') for i in range(num_shards)], dim=concat_dim
+        )
+        state_dict[f'model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.self_attn.k_proj.bias'] = torch.cat(
+            [loaded[i].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.attn.wk.bias') for i in range(num_shards)], dim=concat_dim
+        )
+        state_dict[f'model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.self_attn.v_proj.bias'] = torch.cat(
+            [loaded[i].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.attn.wv.bias') for i in range(num_shards)], dim=concat_dim
+        )
+        state_dict[f'model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.self_attn.o_proj.bias'] = torch.cat(
+            [loaded[i].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.attn.wo.bias') for i in range(num_shards)], dim=concat_dim
+        )
+
+        # mlp layers
+        state_dict[f'model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.mlp.fc1.weight'] = torch.cat(
+            [loaded[i].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.mlp.c_fc.weight') for i in range(num_shards)], dim=concat_dim
+        )
+        state_dict[f'model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.mlp.fc1.bias'] = torch.cat(
+            [loaded[i].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.mlp.c_fc.bias') for i in range(num_shards)], dim=concat_dim
+        )
+        state_dict[f'model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.mlp.fc2.weight'] = torch.cat(
+            [loaded[i].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.mlp.c_proj.weight') for i in range(num_shards)], dim=concat_dim
+        )
+        state_dict[f'model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.mlp.fc2.bias'] = torch.cat(
+            [loaded[i].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.mlp.c_proj.bias') for i in range(num_shards)], dim=concat_dim
+        )
+
+        state_dict[f'model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.layer_norm1.weight'] = loaded[0].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.ln_1.weight').clone()
+        state_dict[f'model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.layer_norm1.bias'] = loaded[0].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.ln_1.bias').clone()
+        state_dict[f'model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.layer_norm2.weight'] = loaded[0].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.ln_2.weight').clone()
+        state_dict[f'model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.layer_norm2.bias'] = loaded[0].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.ln_2.bias').clone()
+
+        for k, v in state_dict.items():
+            index_dict["weight_map"][k] = encoder_layer_parameters_filename
+            param_count += v.numel()
+
+        print(f"Saving {encoder_layer_parameters_filename} in {tmp_model_path}...")
+        torch.save(state_dict, os.path.join(tmp_model_path, encoder_layer_parameters_filename))
+           
 
 
 
@@ -635,7 +747,7 @@ write_model(
     model_path="/home/pablo/mllama_hf/test",
     input_base_path="/home/pablo/weights/Meta-Llama-3.1-87B-Vision-Dummy-20240624190000",
     safe_serialization=True,
-    model_size="70B",
+    model_size="90B",
     llama_version=3,
     vocab_size=128256,
 )
