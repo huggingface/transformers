@@ -314,6 +314,7 @@ def stack_images(
     # of shape (num_patches, channels, patch_height, patch_width), while the whole batch is
     # of shape (batch_size, num_images, num_patches, channels, patch_height, patch_width)
 
+    # TODO: in original code there is also max_images = max(max_images, 1)
     max_num_images = max([len(images) for images in batch_images])
 
     # collect shapes
@@ -341,6 +342,31 @@ def stack_images(
         out_num_patches.append(num_patches_i)
 
     return np.stack(out_images), out_num_patches
+
+
+def stack_aspect_ratios(aspect_ratios: List[List[Tuple[int, int]]], pad_value: int = 1) -> np.ndarray:
+    """
+    Stack a list of aspect ratios into a numpy array.
+
+    Args:
+        aspect_ratios (`List[List[Tuple[int, int]]]`):
+            A list of aspect ratios.
+        pad_value (`int`, *optional*, defaults to 1):
+            The value to pad the aspect ratios with.
+
+    Returns:
+        `np.ndarray`: The aspect ratios stacked into a numpy array with shape (batch_size, max_num_images, 2).
+    """
+    batch_size = len(aspect_ratios)
+
+    # TODO: in original code there is also max_images = max(max_images, 1)
+    max_num_images = max([len(row) for row in aspect_ratios])
+
+    aspect_ratios_stacked = np.full((batch_size, max_num_images, 2), pad_value, dtype=np.int64)
+    for i, row in enumerate(aspect_ratios):
+        if len(row) > 0:
+            aspect_ratios_stacked[i, : len(row)] = np.array(row)
+    return aspect_ratios_stacked
 
 
 # Copied from IDEFICS2
@@ -528,30 +554,17 @@ class MllamaImageProcessor(BaseImageProcessor):
             ]
 
         images, num_patches = stack_images(images_list, max_image_splits)
+        aspect_ratios = stack_aspect_ratios(aspect_ratio_list, pad_value=1)
 
         # images: (batch_size, num_images, MAX_num_patches, channels, patch_height, patch_width) - padded to max num patches
-        # aspect_ratios: (batch_size, num_images, 2) - aspect ratios for each image
+        # aspect_ratios: (batch_size, num_images, 2) - aspect ratios for each image, padded to max num images
         # num_patches: (batch_size, num_images)  - real num patches for each image
 
-        encoded_inputs = BatchFeature(data=dict(pixel_values=images), tensor_type=return_tensors)
+        encoded_inputs = BatchFeature(
+            data=dict(pixel_values=images, aspect_ratios=aspect_ratios),
+            tensor_type=return_tensors,
+        )
         encoded_inputs["num_patches"] = num_patches
-
-        # TODO: aspect_ratios cannot be stacked to one tensor in case of different shapes
-        # waiting for clarification on how to handle this
-        try:
-            aspect_ratios = np.array(aspect_ratio_list)
-            encoded_inputs["aspect_ratios"] = BatchFeature(
-                data=dict(aspect_ratio=aspect_ratios), tensor_type=return_tensors
-            ).aspect_ratio
-        except ValueError:
-            print(
-                "Aspect ratios cannot be converted to numpy array, because of the following shapes:"
-                f"{[len(aspect_ratio) for aspect_ratio in aspect_ratio_list]}"
-            )
-            encoded_inputs["aspect_ratios"] = [
-                BatchFeature(data=dict(aspect_ratio=aspect_ratio), tensor_type=return_tensors).aspect_ratio
-                for aspect_ratio in aspect_ratio_list
-            ]
 
         return encoded_inputs
 
@@ -562,9 +575,10 @@ class MllamaImageProcessor(BaseImageProcessor):
         aspect_ratio: Tuple[int, int],
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    ):
+    ) -> np.ndarray:
         """
-        Pad an image to the size.
+        Pad an image to the `size` x `aspect_ratio`. For example, if size is {height: 224, width: 224} and aspect ratio is
+        (1, 2), the image will be padded to 224x448.
 
         Args:
             image (`np.ndarray`):
@@ -577,6 +591,9 @@ class MllamaImageProcessor(BaseImageProcessor):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
             input_data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format of the input image. If not provided, it will be inferred.
+
+        Returns:
+            `np.ndarray`: The padded image.
         """
 
         validate_size(size)
