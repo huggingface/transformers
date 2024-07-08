@@ -642,7 +642,7 @@ class Swin2BartModelTest(EncoderDecoderMixin, unittest.TestCase):
             (decoder_config.num_attention_heads, cross_attention_input_seq_len, encoder_seq_len),
         )
 
-    # there are no published pretrained BART-causal checkpoints for now
+    @unittest.skip(reason="There are no published pretrained BART-causal checkpoints for now")
     def test_real_model_save_load_from_pretrained(self):
         pass
 
@@ -677,7 +677,7 @@ class ViT2TrOCR(EncoderDecoderMixin, unittest.TestCase):
             "labels": decoder_input_ids,
         }
 
-    # there are no published pretrained TrOCR checkpoints for now
+    @unittest.skip(reason="There are no published pretrained TrOCR checkpoints for now")
     def test_real_model_save_load_from_pretrained(self):
         pass
 
@@ -799,7 +799,7 @@ class LayoutLMv32TrOCR(EncoderDecoderMixin, unittest.TestCase):
         )
         self.assertEqual(generated_output.shape, (pixel_values.shape[0],) + (decoder_config.max_length,))
 
-    @unittest.skip("There are no published pretrained TrOCR checkpoints for now")
+    @unittest.skip(reason="There are no published pretrained TrOCR checkpoints for now")
     def test_real_model_save_load_from_pretrained(self):
         pass
 
@@ -815,7 +815,7 @@ class TrOCRModelIntegrationTest(unittest.TestCase):
     def test_inference_handwritten(self):
         model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base-handwritten").to(torch_device)
 
-        dataset = load_dataset("hf-internal-testing/fixtures_ocr", split="test")
+        dataset = load_dataset("hf-internal-testing/fixtures_ocr", split="test", trust_remote_code=True)
         image = Image.open(dataset[0]["file"]).convert("RGB")
 
         processor = self.default_processor
@@ -840,7 +840,7 @@ class TrOCRModelIntegrationTest(unittest.TestCase):
     def test_inference_printed(self):
         model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base-printed").to(torch_device)
 
-        dataset = load_dataset("hf-internal-testing/fixtures_ocr", split="test")
+        dataset = load_dataset("hf-internal-testing/fixtures_ocr", split="test", trust_remote_code=True)
         image = Image.open(dataset[1]["file"]).convert("RGB")
 
         processor = self.default_processor

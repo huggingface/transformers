@@ -27,8 +27,9 @@ The abstract from the paper is the following:
 ## Usage tips
 
 - Usage of SigLIP is similar to [CLIP](clip). The main difference is the training loss, which does not require a global view of all the pairwise similarities of images and texts within a batch. One needs to apply the sigmoid activation function to the logits, rather than the softmax.
-- Training is not yet supported. If you want to fine-tune SigLIP or train from scratch, refer to the loss function from [OpenCLIP](https://github.com/mlfoundations/open_clip/blob/73ad04ae7fb93ede1c02dc9040a828634cb1edf1/src/open_clip/loss.py#L307), which leverages various `torch.distributed` utilities.
+- Training is supported but does not use `torch.distributed` utilities which may limit the scalability of batch size. However, DDP and FDSP works on single-node multi-gpu setup.
 - When using the standalone [`SiglipTokenizer`] or [`SiglipProcessor`], make sure to pass `padding="max_length"` as that's how the model was trained.
+- To get the same results as the pipeline, a prompt template of "This is a photo of {label}." should be used.
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/siglip_table.jpeg"
 alt="drawing" width="600"/>
@@ -59,7 +60,8 @@ The pipeline allows to use the model in a few lines of code:
 >>> image = Image.open(requests.get(url, stream=True).raw)
 
 >>> # inference
->>> outputs = image_classifier(image, candidate_labels=["2 cats", "a plane", "a remote"])
+>>> candidate_labels = ["2 cats", "a plane", "a remote"]
+>>> outputs = image_classifier(image, candidate_labels=candidate_labels)
 >>> outputs = [{"score": round(output["score"], 4), "label": output["label"] } for output in outputs]
 >>> print(outputs)
 [{'score': 0.1979, 'label': '2 cats'}, {'score': 0.0, 'label': 'a remote'}, {'score': 0.0, 'label': 'a plane'}]
@@ -81,7 +83,9 @@ If you want to do the pre- and postprocessing yourself, here's how to do that:
 >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 >>> image = Image.open(requests.get(url, stream=True).raw)
 
->>> texts = ["a photo of 2 cats", "a photo of 2 dogs"]
+>>> candidate_labels = ["2 cats", "2 dogs"]
+# follows the pipeline prompt template to get same results
+>>> candidate_labels = [f'This is a photo of {label}.' for label in candidate_labels]
 >>> # important: we pass `padding=max_length` since the model was trained with this
 >>> inputs = processor(text=texts, images=image, padding="max_length", return_tensors="pt")
 

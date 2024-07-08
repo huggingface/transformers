@@ -267,6 +267,15 @@ class TrainingArguments:
         eval_delay (`float`, *optional*):
             Number of epochs or steps to wait for before the first evaluation can be performed, depending on the
             eval_strategy.
+        torch_empty_cache_steps (`int`, *optional*):
+            Number of steps to wait before calling `torch.<device>.empty_cache()`. If left unset or set to None, cache will not be emptied.
+
+            <Tip>
+
+            This can help avoid CUDA out-of-memory errors by lowering peak VRAM usage at a cost of about [10% slower performance](https://github.com/huggingface/transformers/issues/31372).
+
+            </Tip>
+
         learning_rate (`float`, *optional*, defaults to 5e-5):
             The initial learning rate for [`AdamW`] optimizer.
         weight_decay (`float`, *optional*, defaults to 0):
@@ -427,8 +436,9 @@ class TrainingArguments:
             use the corresponding output (usually index 2) as the past state and feed it to the model at the next
             training step under the keyword argument `mems`.
         run_name (`str`, *optional*, defaults to `output_dir`):
-            A descriptor for the run. Typically used for [wandb](https://www.wandb.com/) and
-            [mlflow](https://www.mlflow.org/) logging. If not specified, will be the same as `output_dir`.
+            A descriptor for the run. Typically used for [wandb](https://www.wandb.com/),
+            [mlflow](https://www.mlflow.org/) and [comet](https://www.comet.com/site) logging. If not specified, will
+            be the same as `output_dir`.
         disable_tqdm (`bool`, *optional*):
             Whether or not to disable the tqdm progress bars and table of metrics produced by
             [`~notebook.NotebookTrainingTracker`] in Jupyter Notebooks. Will default to `True` if the logging level is
@@ -773,8 +783,11 @@ class TrainingArguments:
             that takes a boolean argument `compute_result`, which when passed `True`, will trigger the final global
             summary statistics from the batch-level summary statistics you've accumulated over the evaluation set.
 
-        eval_on_start(`bool`, *optional*, defaults to `False`):
+        eval_on_start (`bool`, *optional*, defaults to `False`):
             Whether to perform a evaluation step (sanity check) before the training to ensure the validation steps works correctly.
+
+        eval_use_gather_object (`bool`, *optional*, defaults to `False`):
+            Whether to run recursively gather object in a nested list/tuple/dictionary of objects from all devices.
     """
 
     framework = "pt"
@@ -845,6 +858,15 @@ class TrainingArguments:
                 "Number of epochs or steps to wait for before the first evaluation can be performed, depending on the"
                 " eval_strategy."
             )
+        },
+    )
+
+    torch_empty_cache_steps: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "Number of steps to wait before calling `torch.<device>.empty_cache()`."
+            "This can help avoid CUDA out-of-memory errors by lowering peak VRAM usage at a cost of about [10% slower performance](https://github.com/huggingface/transformers/issues/31372)."
+            "If left unset or set to None, cache will not be emptied."
         },
     )
 
@@ -1128,7 +1150,8 @@ class TrainingArguments:
     )
 
     run_name: Optional[str] = field(
-        default=None, metadata={"help": "An optional descriptor for the run. Notably used for wandb logging."}
+        default=None,
+        metadata={"help": "An optional descriptor for the run. Notably used for wandb, mlflow and comet logging."},
     )
     disable_tqdm: Optional[bool] = field(
         default=None, metadata={"help": "Whether or not to disable the tqdm progress bars."}
@@ -1465,6 +1488,13 @@ class TrainingArguments:
         },
     )
 
+    eval_use_gather_object: Optional[bool] = field(
+        default=False,
+        metadata={
+            "help": "Whether to run recursively gather object in a nested list/tuple/dictionary of objects from all devices."
+        },
+    )
+
     def __post_init__(self):
         # Parse in args that could be `dict` sent in from the CLI as a string
         for field in _VALID_DICT_FIELDS:
@@ -1521,6 +1551,12 @@ class TrainingArguments:
         self.lr_scheduler_type = SchedulerType(self.lr_scheduler_type)
         if self.do_eval is False and self.eval_strategy != IntervalStrategy.NO:
             self.do_eval = True
+
+        if self.torch_empty_cache_steps is not None:
+            if not (isinstance(self.torch_empty_cache_steps, int) or self.torch_empty_cache_steps > 0):
+                raise ValueError(
+                    f"`torch_empty_cache_steps` must be an integer bigger than 0, got {self.torch_empty_cache_steps}."
+                )
 
         # eval_steps has to be defined and non-zero, fallbacks to logging_steps if the latter is non-zero
         if self.eval_strategy == IntervalStrategy.STEPS and (self.eval_steps is None or self.eval_steps == 0):
@@ -1992,6 +2028,12 @@ class TrainingArguments:
                 FutureWarning,
             )
 
+        if self.eval_use_gather_object and not is_accelerate_available("0.30.0"):
+            raise ValueError(
+                "--eval_use_gather_object requires Accelerate to be version of `accelerate` < 0.30.0."
+                "This is not supported and we recommend you to update your version."
+            )
+
     def __str__(self):
         self_as_dict = asdict(self)
 
@@ -2154,7 +2196,9 @@ class TrainingArguments:
                 # trigger an error that a device index is missing. Index 0 takes into account the
                 # GPUs available in the environment, so `CUDA_VISIBLE_DEVICES=1,2` with `cuda:0`
                 # will use the first GPU in that env, i.e. GPU#1
-                device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+                device = torch.device(
+                    "cuda:0" if torch.cuda.is_available() else os.environ.get("ACCELERATE_TORCH_DEVICE", "cpu")
+                )
                 # Sometimes the line in the postinit has not been run before we end up here, so just checking we're not at
                 # the default value.
                 self._n_gpu = torch.cuda.device_count()
@@ -2742,7 +2786,7 @@ class TrainingArguments:
 
         Calling this method will set `self.push_to_hub` to `True`, which means the `output_dir` will begin a git
         directory synced with the repo (determined by `model_id`) and the content will be pushed each time a save is
-        triggered (depending on`self.save_strategy`). Calling [`~Trainer.save_model`] will also trigger a push.
+        triggered (depending on your `self.save_strategy`). Calling [`~Trainer.save_model`] will also trigger a push.
 
         </Tip>
 

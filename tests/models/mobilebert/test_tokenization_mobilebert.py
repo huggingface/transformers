@@ -87,7 +87,7 @@ class MobileBERTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     # Copied from tests.models.bert.test_tokenization_bert.BertTokenizationTest.test_rust_and_python_full_tokenizers
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
-            return
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         tokenizer = self.get_tokenizer()
         rust_tokenizer = self.get_rust_tokenizer()

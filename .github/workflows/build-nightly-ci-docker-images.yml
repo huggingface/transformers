@@ -15,16 +15,6 @@ jobs:
     name: "Nightly PyTorch + Stable TensorFlow"
     runs-on: [intel-cpu, 8-cpu, ci]
     steps:
-      - name: Cleanup disk
-        run: |
-          sudo ls -l /usr/local/lib/
-          sudo ls -l /usr/share/
-          sudo du -sh /usr/local/lib/
-          sudo du -sh /usr/share/
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /usr/share/dotnet
-          sudo du -sh /usr/local/lib/
-          sudo du -sh /usr/share/
       -
         name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
@@ -52,16 +42,6 @@ jobs:
     name: "Nightly PyTorch + DeepSpeed"
     runs-on: [intel-cpu, 8-cpu, ci]
     steps:
-      - name: Cleanup disk
-        run: |
-          sudo ls -l /usr/local/lib/
-          sudo ls -l /usr/share/
-          sudo du -sh /usr/local/lib/
-          sudo du -sh /usr/share/
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /usr/share/dotnet
-          sudo du -sh /usr/local/lib/
-          sudo du -sh /usr/share/
       -
         name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
