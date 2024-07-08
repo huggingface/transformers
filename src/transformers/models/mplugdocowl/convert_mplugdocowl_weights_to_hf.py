@@ -144,31 +144,7 @@ def convert_mplugdocowl_llama_to_hf(
         model = MPLUGDocOwlForConditionalGeneration.from_pretrained("/raid/dana/mplug_model_hf_omni/")
         model.to(torch.float16)
         processor = MPLUGDocOwlProcessor.from_pretrained("/raid/dana/mplug_model_hf_omni/")
-    breakpoint()
-    from PIL import Image
 
-    #image = Image.open("/raid/dana/test_image.png")
-    image1 = Image.open("/raid/dana/examples_Rebecca_(1939_poster)_Small.jpeg")
-    image2 = Image.open("/raid/dana/extreme_ironing.jpg")
-    # image = Image.open('/raid/dana/fflw0023_1.png')
-    # query = "<image>Recognize text in the image."
-    # query = "<image>What's the value of the Very well bar in the 65+ age group? Answer the question with detailed explanation."
-    # query = "<image>Parse texts in the image."
-    #query = "<image>What is the name of the movie in the poster? Provide detailed explanation."
-    query = "<image>What is unusual about this image? Provide detailed explanation."
-    prompts = ["<image>What is the name of the movie in the poster? Provide detailed explanation.", "<image>What is unusual about this image? Provide detailed explanation."]
-    images = [image1,image2]
-    output = processor(images=images[0], text=prompts[0], do_add_global_image = True)
-
-    device = torch.device("cuda:0")
-    output.to(device)
-    model.to(device)
-    torch.set_default_dtype(torch.float16)
-    # with torch.inference_mode():
-    # outputs = model(input_ids=output['input_ids'], pixel_values = output['pixel_values'],attention_mask=output['attention_mask'], patch_positions=output['patch_positions'])
-    tokens = model.generate(**output, max_new_tokens=512, top_p = 0.7, do_sample = True)
-    processor.decode(tokens[0])
-    breakpoint()
     model.push_to_hub(output_hub_path)
     processor.push_to_hub(output_hub_path)
 

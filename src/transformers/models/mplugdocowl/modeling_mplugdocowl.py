@@ -437,7 +437,7 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         patch_positions: Optional[torch.LongTensor] = None,
-        modality_indicators: Optional[torch.LongTensor] = None,
+        #modality_indicators: Optional[torch.LongTensor] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, MPLUGDocOwlCausalLMOutputWithPast]:
         r"""
@@ -499,7 +499,7 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
                 ) = self._merge_input_ids_with_image_features(
                     image_features, inputs_embeds, input_ids, attention_mask, labels
                 )
-
+                #breakpoint()
             # In case input_ids.shape[1] == 1 & pixel_values==None & past_key_values != None, we are in the case of
             # generation with cache
             if past_key_values is not None and pixel_values is not None and input_ids.shape[1] == 1:
@@ -532,7 +532,11 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
 
                 attention_mask = torch.cat((extended_attention_mask, attention_mask[:, -target_length:]), dim=1)
                 position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
-                modality_indicators = torch.zeros_like(input_ids).long().to(self.device)
+                #extended_modality_indicators = torch.ones_like((attention_mask.shape[0], past_length), dtype=torch.long, device = attention_mask.device)
+                #breakpoint()
+                #modality_indicators = torch.cat((extended_modality_indicators, torch.zeros_like(input_ids)), dim=1).to(self.device)
+                #FIXME HOW TO UPDATE MODALITY INDICATORS?
+                modality_indicators = torch.ones_like(input_ids).long().to(self.device)
 
         outputs = self.language_model(
             attention_mask=attention_mask,
@@ -583,7 +587,7 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
         pixel_values=None,
         inputs_embeds=None,
         attention_mask=None,
-        modality_indicators=None,
+        #modality_indicators=None,
         **kwargs,
     ):
         if past_key_values is not None:
@@ -638,7 +642,7 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
                 "pixel_values": pixel_values,
                 "patch_positions": kwargs.get("patch_positions", None),
                 "inputs_embeds": inputs_embeds,
-                "modality_indicators": modality_indicators,
+                #"modality_indicators": modality_indicators,
             }
         )
         return model_inputs
