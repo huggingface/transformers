@@ -384,11 +384,11 @@ class LongformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_multiple_choice(*config_and_inputs)
 
+    @unittest.skip(reason="Longformer cannot keep gradients in attention or hidden states")
     def test_retain_grad_hidden_states_attentions(self):
-        # longformer cannot keep gradients in attentions or hidden states
         return
 
-    @unittest.skip("LongFormer calculates global attn only when attn_mask has non-zero elements")
+    @unittest.skip(reason="LongFormer calculates global attn only when attn_mask has non-zero elements")
     def test_batching_equivalence(self):
         return
 
