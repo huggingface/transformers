@@ -468,9 +468,9 @@ def write_model(
         state_dict[f'model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.self_attn.v_proj.bias'] = torch.cat(
             [loaded[i].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wv.bias') for i in range(num_shards)], dim=concat_dim
         )
-        state_dict[f'model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.self_attn.o_proj.bias'] = torch.cat(
-            [loaded[i].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wo.bias') for i in range(num_shards)], dim=concat_dim
-        )
+
+        # o_proj bias is not sharded (RowParallelLinear does not shard bias across devices)
+        state_dict[f'model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.self_attn.o_proj.bias'] = loaded[0].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wo.bias') 
 
         # mlp layers
 
@@ -481,11 +481,9 @@ def write_model(
             [loaded[i].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.mlp.c_fc.bias') for i in range(num_shards)], dim=concat_dim
         )
         state_dict[f'model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.mlp.fc2.weight'] = torch.cat(
-            [loaded[i].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.mlp.c_proj.weight') for i in range(num_shards)], dim=concat_dim
+            [loaded[i].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.mlp.c_proj.weight') for i in range(num_shards)], dim=1
         )
-        state_dict[f'model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.mlp.fc2.bias'] = torch.cat(
-            [loaded[i].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.mlp.c_proj.bias') for i in range(num_shards)], dim=concat_dim
-        )
+        state_dict[f'model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.mlp.fc2.bias'] = loaded[0].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.mlp.c_proj.bias')
 
         state_dict[f'model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.layer_norm1.weight'] = loaded[0].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.ln_1.weight').clone()
         state_dict[f'model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.layer_norm1.bias'] = loaded[0].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.ln_1.bias').clone()
@@ -598,9 +596,7 @@ def write_model(
         state_dict[f'model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.self_attn.v_proj.bias'] = torch.cat(
             [loaded[i].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.attn.wv.bias') for i in range(num_shards)], dim=concat_dim
         )
-        state_dict[f'model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.self_attn.o_proj.bias'] = torch.cat(
-            [loaded[i].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.attn.wo.bias') for i in range(num_shards)], dim=1
-        )
+        state_dict[f'model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.self_attn.o_proj.bias'] = loaded[0].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.attn.wo.bias')
 
         # mlp layers
         state_dict[f'model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.mlp.fc1.weight'] = torch.cat(
@@ -612,9 +608,7 @@ def write_model(
         state_dict[f'model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.mlp.fc2.weight'] = torch.cat(
             [loaded[i].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.mlp.c_proj.weight') for i in range(num_shards)], dim=1
         )
-        state_dict[f'model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.mlp.fc2.bias'] = torch.cat(
-            [loaded[i].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.mlp.c_proj.bias') for i in range(num_shards)], dim=concat_dim
-        )
+        state_dict[f'model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.mlp.fc2.bias'] = loaded[0].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.mlp.c_proj.bias')
 
         state_dict[f'model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.layer_norm1.weight'] = loaded[0].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.ln_1.weight').clone()
         state_dict[f'model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.layer_norm1.bias'] = loaded[0].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.ln_1.bias').clone()
@@ -634,22 +628,7 @@ def write_model(
     # Write configs
     index_dict["metadata"] = {"total_size": param_count * 2}
     write_json(index_dict, os.path.join(tmp_model_path, "pytorch_model.bin.index.json"))
-    
-    ffn_dim_multiplier = params["ffn_dim_multiplier"] if "ffn_dim_multiplier" in params else 1
-    multiple_of = params["multiple_of"] if "multiple_of" in params else 256
-    config = LlamaConfig(
-        hidden_size=dim,
-        intermediate_size=compute_intermediate_size(dim, ffn_dim_multiplier, multiple_of),
-        num_attention_heads=params["n_heads"],
-        num_hidden_layers=params["n_layers"],
-        rms_norm_eps=params["norm_eps"],
-        num_key_value_heads=num_key_value_heads,
-        vocab_size=vocab_size,
-        rope_theta=base,
-        max_position_embeddings=max_position_embeddings,
-        bos_token_id=128000 if llama_version == 3 else 1,
-        eos_token_id=128001 if llama_version == 3 else 2,
-    )
+    config = MllamaConfig()
     config.save_pretrained(tmp_model_path)
 
     # Make space so we can load the model properly now.
