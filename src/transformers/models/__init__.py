@@ -107,6 +107,7 @@ from . import (
     gptj,
     granite,
     grounding_dino,
+    omdet_turbo,
     groupvit,
     herbert,
     hiera,

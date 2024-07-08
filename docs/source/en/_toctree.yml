@@ -852,6 +852,8 @@
         title: MGP-STR
       - local: model_doc/nougat
         title: Nougat
+      - local: model_doc/omdet-turbo
+        title: OmDet-Turbo
       - local: model_doc/oneformer
         title: OneFormer
       - local: model_doc/owlvit
