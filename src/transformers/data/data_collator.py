@@ -966,8 +966,6 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
         if "next_sentence_label" in examples[0]:
             batch["token_type_ids"] =  examples[0]["token_type_ids"]
             batch["next_sentence_label"] = examples[0]["next_sentence_label"]
-        else:
-            batch
         return batch
 
     def tf_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
@@ -1003,8 +1001,6 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
         if "next_sentence_label" in examples[0]:
             batch["token_type_ids"] =  examples[0]["token_type_ids"]
             batch["next_sentence_label"] = examples[0]["next_sentence_label"]
-        else:
-            batch
         return batch
 
     def numpy_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
@@ -1038,8 +1034,6 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
         if "next_sentence_label" in examples[0]:
             batch["token_type_ids"] =  examples[0]["token_type_ids"]
             batch["next_sentence_label"] = examples[0]["next_sentence_label"]
-        else:
-            batch
         return batch
 
     def _whole_word_mask(self, input_tokens: List[str], max_predictions=512):
