@@ -21,7 +21,7 @@ import warnings
 
 import torch
 
-from transformers import LlamaConfig, LlamaForCausalLM, MllamaConfig, CLIPVisionConfig, LlamaTokenizer, PreTrainedTokenizerFast
+from transformers import MllamaConfig, PreTrainedTokenizerFast, MllamaForConditionalGeneration
 from transformers.convert_slow_tokenizer import TikTokenConverter
 from transformers import MllamaImageProcessor
 
@@ -40,8 +40,6 @@ NUM_SHARDS = {
 }
 
 
-def compute_intermediate_size(n, ffn_dim_multiplier=1, multiple_of=256):
-    return multiple_of * ((int(ffn_dim_multiplier * int(8 * n / 3)) + multiple_of - 1) // multiple_of)
 
 
 def read_json(path):
@@ -333,27 +331,21 @@ def write_model(
         )
 
         # gate attn (to mimic the loading hook from the authors)
-        ffn_gate = []
-        attn_gate = []
-        for i in range(num_shards):
-            attn_gate.append(loaded[i].pop(f"text_model.cross_attention_layers.{xattn_layer_i}.gate_attn"))
-            if attn_gate[i].dim() == 1:
-                attn_gate[i] = attn_gate[i][0].view(1)
-            if attn_gate[i].dim() == 3:
-                attn_gate[i] = attn_gate[i].view(1)
+        attn_gate = loaded[0].pop(f"text_model.cross_attention_layers.{xattn_layer_i}.gate_attn")
+        if attn_gate.dim() == 1:
+            attn_gate = attn_gate[0].view(1)
+        if attn_gate.dim() == 3:
+            attn_gate = attn_gate.view(1)
 
-            ffn_gate.append(loaded[i].pop(f"text_model.cross_attention_layers.{xattn_layer_i}.gate_ffwd"))
+        ffn_gate = loaded[0].pop(f"text_model.cross_attention_layers.{xattn_layer_i}.gate_ffwd")
 
-            if ffn_gate[i].dim() == 1:
-                ffn_gate[i] = ffn_gate[i][0].view(1)
-            if ffn_gate[i].dim() == 3:
-                ffn_gate[i] = ffn_gate[i].view(1)
-        state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.attn_gate"] = torch.cat(
-            [attn_gate[i] for i in range(num_shards)], dim=0
-        )
-        state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.ffn_gate"] = torch.cat(
-            [ffn_gate[i] for i in range(num_shards)], dim=0
-        )
+        if ffn_gate.dim() == 1:
+            ffn_gate = ffn_gate[0].view(1)
+        if ffn_gate.dim() == 3:
+            ffn_gate = ffn_gate.view(1)
+        state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.attn_gate"] = attn_gate
+
+        state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.ffn_gate"] = ffn_gate        
 
         # q and k normalization weights (for cross-attention stability in training)
 
@@ -637,7 +629,7 @@ def write_model(
     gc.collect()
 
     print("Loading the checkpoint in a Llama model.")
-    language_model = LlamaForCausalLM.from_pretrained(tmp_model_path, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True)
+    language_model = MllamaForConditionalGeneration.from_pretrained(tmp_model_path, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True)
     # Avoid saving this as part of the config.
     del language_model.config._name_or_path
     language_model.config.torch_dtype = torch.float16  # not sure about this.
