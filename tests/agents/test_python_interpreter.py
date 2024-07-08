@@ -418,11 +418,11 @@ if char.isalpha():
         code = "import numpy as np"
         evaluate_python_code(code, authorized_imports=["numpy"], state={})
 
-        code = "import matplotlib.pyplot as plt"
-        evaluate_python_code(code, authorized_imports=["matplotlib.pyplot"], state={})
-        evaluate_python_code(code, authorized_imports=["matplotlib"], state={})
+        code = "import numpy.random as rd"
+        evaluate_python_code(code, authorized_imports=["numpy.random"], state={})
+        evaluate_python_code(code, authorized_imports=["numpy"], state={})
         with pytest.raises(InterpreterError):
-            evaluate_python_code(code, authorized_imports=["pyplot"], state={})
+            evaluate_python_code(code, authorized_imports=["random"], state={})
 
     def test_multiple_comparators(self):
         code = "0 <= -1 < 4 and 0 <= -5 < 4"
@@ -455,7 +455,7 @@ def function():
     print("2")
 function()"""
         state = {}
-        evaluate_python_code(code, {"print": print}, state)
+        evaluate_python_code(code, {"print": print}, state=state)
         assert state["print_outputs"] == "1\n2\n"
 
     def test_tuple_target_in_iterator(self):

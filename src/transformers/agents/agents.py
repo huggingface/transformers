@@ -229,7 +229,7 @@ class Toolbox:
                 The tool to add to the toolbox.
         """
         if tool.name in self._tools:
-            raise KeyError(f"Error: tool {tool.name} already exists in the toolbox.")
+            raise KeyError(f"Error: tool '{tool.name}' already exists in the toolbox.")
         self._tools[tool.name] = tool
 
     def remove_tool(self, tool_name: str):
@@ -621,6 +621,7 @@ class CodeAgent(Agent):
             output = self.python_evaluator(
                 code_action,
                 available_tools,
+                custom_tools={},
                 state=self.state,
                 authorized_imports=self.authorized_imports,
             )
@@ -976,11 +977,9 @@ class ReactCodeAgent(ReactAgent):
         self.python_evaluator = evaluate_python_code
         self.additional_authorized_imports = additional_authorized_imports if additional_authorized_imports else []
         self.authorized_imports = list(set(LIST_SAFE_MODULES) | set(self.additional_authorized_imports))
+        print(self.authorized_imports)
         self.system_prompt = self.system_prompt.replace("<<authorized_imports>>", str(self.authorized_imports))
-        self.available_tools = {
-            **BASE_PYTHON_TOOLS.copy(),
-            **self.toolbox.tools,
-        }  # This list can be augmented by the code agent creating some new functions
+        self.custom_tools = {}
 
     def step(self):
         """
@@ -1032,7 +1031,11 @@ class ReactCodeAgent(ReactAgent):
         try:
             result = self.python_evaluator(
                 code_action,
-                tools=self.available_tools,
+                tools={
+                    **BASE_PYTHON_TOOLS.copy(),
+                    **self.toolbox.tools,
+                },
+                custom_tools=self.custom_tools,
                 state=self.state,
                 authorized_imports=self.authorized_imports,
             )
