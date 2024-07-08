@@ -335,27 +335,19 @@ class SiglipTextModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip
-    # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.test_training
+    @unittest.skip(reason="SiglipTextModel does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip
-    # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.test_training_gradient_checkpointing
+    @unittest.skip(reason="SiglipTextModel does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.test_training_gradient_checkpointing_use_reentrant
+    @unittest.skip(reason="SiglipTextModel does not support standalone training")
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
-    @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.test_training_gradient_checkpointing_use_reentrant_false
+    @unittest.skip(reason="SiglipTextModel does not support standalone training")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
@@ -479,22 +471,6 @@ class SiglipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @unittest.skip(reason="SiglipModel does not have input/output embeddings")
     # Copied from tests.models.clip.test_modeling_clip.CLIPModelTest.test_model_get_set_embeddings
     def test_model_get_set_embeddings(self):
-        pass
-
-    @unittest.skip(reason="SiglipModel does not support training")
-    def test_training(self):
-        pass
-
-    @unittest.skip(reason="SiglipModel does not support training")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(reason="SiglipModel does not support training")
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(reason="SiglipModel does not support training")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     @unittest.skip(reason="Siglip uses the same initialization scheme as the Flax original implementation")

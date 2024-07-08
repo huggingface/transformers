@@ -320,8 +320,8 @@ class TextGenerationPipelineTests(unittest.TestCase):
             ],
         )
 
-    def get_test_pipeline(self, model, tokenizer, processor):
-        text_generator = TextGenerationPipeline(model=model, tokenizer=tokenizer)
+    def get_test_pipeline(self, model, tokenizer, processor, torch_dtype="float32"):
+        text_generator = TextGenerationPipeline(model=model, tokenizer=tokenizer, torch_dtype=torch_dtype)
         return text_generator, ["This is a test", "Another test"]
 
     def test_stop_sequence_stopping_criteria(self):
@@ -398,7 +398,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
             self.assertEqual(outputs, [{"generated_text": ANY(str)}])
         else:
             with self.assertRaises((ValueError, AssertionError)):
-                outputs = text_generator("")
+                outputs = text_generator("", add_special_tokens=False)
 
         if text_generator.framework == "tf":
             # TF generation does not support max_new_tokens, and it's impossible
