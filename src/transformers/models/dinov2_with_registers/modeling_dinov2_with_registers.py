@@ -490,7 +490,7 @@ class Dinov2WithRegistersEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.dinov2.modeling_dinov2.Dinov2PreTrainedModel with Dinov2->Dinov2WithRegisters,dinov2->dinov2_with_registers
+# Copied from transformers.models.dinov2.modeling_dinov2.Dinov2PreTrainedModel with Dinov2->Dinov2WithRegisters
 class Dinov2WithRegistersPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -498,7 +498,7 @@ class Dinov2WithRegistersPreTrainedModel(PreTrainedModel):
     """
 
     config_class = Dinov2WithRegistersConfig
-    base_model_prefix = "dinov2_with_registers"
+    base_model_prefix = "dinov2"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Dinov2WithRegistersSwiGLUFFN"]
@@ -688,13 +688,13 @@ class Dinov2WithRegistersModel(Dinov2WithRegistersPreTrainedModel):
     """,
     DINOV2_WITH_REGISTERS_START_DOCSTRING,
 )
-# Copied from transformers.models.dinov2.modeling_dinov2.Dinov2ForImageClassification with DINOV2->DINOV2_WITH_REGISTERS,Dinov2->Dinov2WithRegisters,dinov2->dinov2_with_registers
+# Copied from transformers.models.dinov2.modeling_dinov2.Dinov2ForImageClassification with DINOV2->DINOV2_WITH_REGISTERS,Dinov2->Dinov2WithRegisters
 class Dinov2WithRegistersForImageClassification(Dinov2WithRegistersPreTrainedModel):
     def __init__(self, config: Dinov2WithRegistersConfig) -> None:
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        self.dinov2_with_registers = Dinov2WithRegistersModel(config)
+        self.dinov2 = Dinov2WithRegistersModel(config)
 
         # Classifier head
         self.classifier = (
@@ -728,7 +728,7 @@ class Dinov2WithRegistersForImageClassification(Dinov2WithRegistersPreTrainedMod
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.dinov2_with_registers(
+        outputs = self.dinov2(
             pixel_values,
             head_mask=head_mask,
             output_attentions=output_attentions,
