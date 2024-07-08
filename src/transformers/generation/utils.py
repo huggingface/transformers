@@ -1436,11 +1436,11 @@ class GenerationMixin:
 
         need_new_cache = (
             not hasattr(self, "_cache")
-            or (not isinstance(self._cache, cache_cls))
-            or self._cache.max_batch_size != max_batch_size
+            or (not isinstance(cache_to_check, cache_cls))
+            or cache_to_check.max_batch_size != max_batch_size
         )
         if cache_implementation != "mamba":
-            need_new_cache = need_new_cache or self._cache.max_cache_len < max_cache_len
+            need_new_cache = need_new_cache or cache_to_check.max_cache_len < max_cache_len
 
         if requires_cross_attention_cache and hasattr(self, "_cache"):
             need_new_cache = (
