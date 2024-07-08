@@ -89,12 +89,15 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
             ["I", "Ġwas", "Ġborn", "Ġin", "Ġ9", "2000", ",", "Ġand", "Ġthis", "Ġis", "Ġfals", "Ã©", "."],  # fmt: skip
         )
 
+    @unittest.skip
     def test_tokenizer_slow_store_full_signature(self):
         pass
 
+    @unittest.skip
     def test_tokenizer_fast_store_full_signature(self):
         pass
 
+    @unittest.skip
     def test_special_tokens_initialization(self):
         # Whisper relies on specific additional special tokens, so we skip this
         # general test. In particular, this test loads fast tokenizer from slow

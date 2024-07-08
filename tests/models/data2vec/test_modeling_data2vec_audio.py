@@ -426,23 +426,20 @@ class Data2VecAudioModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
 
-    # Data2VecAudio has no inputs_embeds
+    @unittest.skip(reason="Data2VecAudio has no inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    # `input_ids` is renamed to `input_values`
+    @unittest.skip(reason="`input_ids` is renamed to `input_values`")
     def test_forward_signature(self):
         pass
 
-    # Data2VecAudio cannot resize token embeddings
-    # since it has no tokens embeddings
+    @unittest.skip(reason="Data2VecAudio has no tokens embeddings")
     def test_resize_tokens_embeddings(self):
         pass
 
-    # Data2VecAudio has no inputs_embeds
-    # and thus the `get_input_embeddings` fn
-    # is not implemented
-    def test_model_common_attributes(self):
+    @unittest.skip(reason="Data2VecAudio has no inputs_embeds")
+    def test_model_get_set_embeddings(self):
         pass
 
     @is_pt_flax_cross_test
@@ -697,7 +694,9 @@ class Data2VecAudioUtilsTest(unittest.TestCase):
 @slow
 class Data2VecAudioModelIntegrationTest(unittest.TestCase):
     def _load_datasamples(self, num_samples):
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        ds = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
+        )
         # automatic decoding with librispeech
         speech_samples = ds.sort("id").filter(
             lambda x: x["id"] in [f"1272-141231-000{i}" for i in range(num_samples)]
@@ -706,7 +705,7 @@ class Data2VecAudioModelIntegrationTest(unittest.TestCase):
         return [x["array"] for x in speech_samples]
 
     def _load_superb(self, task, num_samples):
-        ds = load_dataset("anton-l/superb_dummy", task, split="test")
+        ds = load_dataset("anton-l/superb_dummy", task, split="test", trust_remote_code=True)
 
         return ds[:num_samples]
 

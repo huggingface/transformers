@@ -265,7 +265,7 @@ class TableTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
         pass
 
     @unittest.skip(reason="Table Transformer does not have a get_input_embeddings method")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip(reason="Table Transformer is not a generative model")
@@ -277,8 +277,8 @@ class TableTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
         pass
 
     @slow
+    @unittest.skip(reason="TODO Niels: fix me!")
     def test_model_outputs_equivalence(self):
-        # TODO Niels: fix me!
         pass
 
     def test_attention_outputs(self):

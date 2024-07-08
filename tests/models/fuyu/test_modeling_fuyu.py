@@ -295,17 +295,17 @@ class FuyuModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pass
 
     # TODO: Fix me (once this model gets more usage)
-    @unittest.skip("Does not work on the tiny model.")
+    @unittest.skip(reason="Does not work on the tiny model.")
     def test_disk_offload_bin(self):
         super().test_disk_offload()
 
     # TODO: Fix me (once this model gets more usage)
-    @unittest.skip("Does not work on the tiny model.")
+    @unittest.skip(reason="Does not work on the tiny model.")
     def test_disk_offload_safetensors(self):
         super().test_disk_offload()
 
     # TODO: Fix me (once this model gets more usage)
-    @unittest.skip("Does not work on the tiny model.")
+    @unittest.skip(reason="Does not work on the tiny model.")
     def test_model_parallelism(self):
         super().test_model_parallelism()
 

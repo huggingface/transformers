@@ -248,7 +248,6 @@ class TFT5ModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_generative_model_classes = (TFT5ForConditionalGeneration,) if is_tf_available() else ()
     pipeline_model_mapping = (
         {
-            "conversational": TFT5ForConditionalGeneration,
             "feature-extraction": TFT5Model,
             "summarization": TFT5ForConditionalGeneration,
             "text2text-generation": TFT5ForConditionalGeneration,
@@ -312,10 +311,6 @@ class TFT5ModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     # This test is run in `TFT5EncoderOnlyModelTest`, where the main layer has the same inputs as the model
     @unittest.skip(reason="The inputs of the Main Layer are different.")
     def test_keras_save_load(self):
-        pass
-
-    @unittest.skip("Does not support conversations.")
-    def test_pipeline_conversational(self):
         pass
 
 
@@ -610,10 +605,6 @@ class TFT5GenerationIntegrationTests(unittest.TestCase):
 
         expected_output_string = ["Ich liebe es so sehr!", "die Transformatoren sind wirklich erstaunlich"]
         self.assertListEqual(expected_output_string, output_strings)
-
-    @unittest.skip("Does not support conversations.")
-    def test_pipeline_conversational(self):
-        pass
 
 
 @require_tf
