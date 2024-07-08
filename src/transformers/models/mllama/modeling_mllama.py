@@ -652,7 +652,7 @@ class VisionEncoder(nn.Module):
         )
         self.gated_positional_embedding_gate = nn.Parameter(torch.zeros(1))
 
-        self._register_load_state_dict_pre_hook(self.load_hook)
+        #self._register_load_state_dict_pre_hook(self.load_hook)
 
     def load_hook(
         self,
@@ -1016,7 +1016,7 @@ class TransformerBlock(nn.Module):
         self.layer_id = layer_id
         self.attention_norm = RMSNorm(config.dim, eps=config.norm_eps)
         self.ffn_norm = RMSNorm(config.dim, eps=config.norm_eps)
-        self._register_load_state_dict_pre_hook(self.load_hook)
+        #self._register_load_state_dict_pre_hook(self.load_hook)
 
     def load_hook(
         self,
@@ -1085,7 +1085,7 @@ class TilePositionEmbedding(nn.Module):
         if gated:
             self.gate = nn.Parameter(torch.zeros(1))
 
-        self._register_load_state_dict_pre_hook(self.load_hook)
+        #self._register_load_state_dict_pre_hook(self.load_hook)
 
     def load_hook(
         self,
@@ -1656,7 +1656,10 @@ class MllamaCrossAttentionTextModel(PreTrainedModel):
 class MllamaPreTrainedModel(PreTrainedModel):
     config_class = MllamaConfig
     _tied_weights_keys = ["lm_head.weight"]
-
+    def __init__(self, config):
+        super().__init__(config)
+        self.vision_model = MllamaCrossAttentionVisionModel(config.vision_config)
+        self.language_model = MllamaCrossAttentionTextModel(config.text_config)
 
 MLLAMA_START_DOCSTRING = "" # TODO add docstring to MLLAMA start and other classes
 
@@ -1668,8 +1671,8 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
-        self.vision_model = MllamaCrossAttentionVisionModel(config.vision_config)
-        self.language_model = MllamaCrossAttentionTextModel(config.text_config)
+        self.model = MllamaPreTrainedModel(config)
+
         self.lm_head = nn.Linear(config.text_config.dim, config.text_config.vocab_size)
         
         self.vision_max_num_chunks = config.vision_config.vision_max_num_chunks
