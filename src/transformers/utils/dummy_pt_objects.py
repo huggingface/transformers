@@ -9660,6 +9660,20 @@ class YosoPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class ZoeDepthForDepthEstimation(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ZoeDepthPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class Adafactor(metaclass=DummyObject):
     _backends = ["torch"]
 

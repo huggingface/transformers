@@ -291,6 +291,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("xmod", "XmodConfig"),
         ("yolos", "YolosConfig"),
         ("yoso", "YosoConfig"),
+        ("zoedepth", "ZoeDepthConfig"),
     ]
 )
 
@@ -589,6 +590,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("xmod", "X-MOD"),
         ("yolos", "YOLOS"),
         ("yoso", "YOSO"),
+        ("zoedepth", "ZoeDepth"),
     ]
 )
 
