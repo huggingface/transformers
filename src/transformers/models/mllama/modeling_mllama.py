@@ -36,6 +36,7 @@ from .configuration_mllama import MllamaConfig, MllamaCrossAttentionTextConfig, 
 import collections
 from functools import partial
 import torch.nn.functional as F
+from ...configuration_utils import PretrainedConfig
 
 logger = logging.get_logger(__name__)
 
@@ -402,12 +403,12 @@ class ImageFeedForward(torch.nn.Module):
     ):
         super().__init__()
         # layers
-        self.c_fc = nn.Linear(
+        self.fc1 = nn.Linear(
             dim,
             hidden_dim,
             bias=True,
         )
-        self.c_proj = nn.Linear(
+        self.fc2 = nn.Linear(
             hidden_dim,
             dim,
             bias=True,
@@ -416,10 +417,10 @@ class ImageFeedForward(torch.nn.Module):
         self.dropout = dropout
 
     def forward(self, x):
-        hidden = F.linear(x, self.c_fc.weight, self.c_fc.bias)
+        hidden = F.linear(x, self.fc1.weight, self.fc1.bias)
         hidden = self.non_linearity(hidden)
-        hidden = F.linear(hidden, self.c_proj.weight)
-        hidden += self.c_proj.bias
+        hidden = F.linear(hidden, self.fc2.weight)
+        hidden += self.fc2.bias
         return hidden
 
 
@@ -440,22 +441,22 @@ class ImageAttention(nn.Module):
         self.n_rep = self.n_local_heads // self.n_local_kv_heads
         self.head_dim = dim // n_heads
 
-        self.wq = nn.Linear(
+        self.q_proj = nn.Linear(
             dim,
             n_heads * self.head_dim,
             bias=True,
         )
-        self.wk = nn.Linear(
+        self.k_proj = nn.Linear(
             dim,
             self.n_kv_heads * self.head_dim,
             bias=True,
         )
-        self.wv = nn.Linear(
+        self.v_proj = nn.Linear(
             dim,
             self.n_kv_heads * self.head_dim,
             bias=True,
         )
-        self.wo = nn.Linear(
+        self.o_proj = nn.Linear(
             n_heads * self.head_dim,
             dim,
             bias=True,
@@ -471,9 +472,9 @@ class ImageAttention(nn.Module):
         xq, xk, xv = [
             F.linear(x, w, b)
             for (w, b) in [
-                (self.wq.weight, self.wq.bias),
-                (self.wk.weight, self.wk.bias),
-                (self.wv.weight, self.wv.bias),
+                (self.q_proj.weight, self.q_proj.bias),
+                (self.k_proj.weight, self.k_proj.bias),
+                (self.v_proj.weight, self.v_proj.bias),
             ]
         ]
 
@@ -494,9 +495,9 @@ class ImageAttention(nn.Module):
 
         attn_output = attn_output.transpose(1, 2).contiguous().reshape(bs, slen, -1)
 
-        out = F.linear(attn_output, self.wo.weight)
+        out = F.linear(attn_output, self.o_proj.weight)
         out = out / self.qkvo_replication
-        out += self.wo.bias
+        out += self.o_proj.bias
         return out
 
 
@@ -513,19 +514,19 @@ class ImageTransformerBlock(nn.Module):
         assert d_model % n_head == 0
         self.n_heads = n_head
         self.head_dim = d_model // self.n_heads
-        self.attn = ImageAttention(
+        self.self_attn = ImageAttention(
             dim=d_model,
             head_dim=self.head_dim,
             n_heads=self.n_heads,
         )
-        self.ln_1 = LayerNorm(d_model)
+        self.layer_norm1 = LayerNorm(d_model)
         self.mlp = ImageFeedForward(
             dim=d_model, # 1280
             hidden_dim=int(mlp_ratio * d_model), # 4 x 1280 = 5120
             dropout=0.0,
             act_layer=act_layer,
         )
-        self.ln_2 = LayerNorm(d_model)
+        self.layer_norm2 = LayerNorm(d_model)
         self.gated = gated
         if gated:
             self.gate_attn = nn.Parameter(torch.zeros(1))
@@ -538,7 +539,7 @@ class ImageTransformerBlock(nn.Module):
     ):
         _gate_attn = 1 if not self.gated else self.gate_attn.tanh()
         _gate_ffn = 1 if not self.gated else self.gate_ffn.tanh()
-        x = x + _gate_attn * self.attn(self.ln_1(x), mask=mask)
+        x = x + _gate_attn * self.self_attn(self.ln_1(x), mask=mask)
         x = x + _gate_ffn * self.mlp(self.ln_2(x))
         return x
 
@@ -547,7 +548,7 @@ class ImageTransformer(nn.Module):
     def __init__(
         self,
         width: int,
-        layers: int,
+        num_layers: int,
         heads: int,
         mlp_ratio: float = 4.0,
         act_layer: Callable = nn.GELU,
@@ -555,8 +556,8 @@ class ImageTransformer(nn.Module):
     ):
         super().__init__()
         self.width = width
-        self.layers = layers
-        self.resblocks = nn.ModuleList(
+        self.num_layers = num_layers
+        self.layers = nn.ModuleList(
             [
                 ImageTransformerBlock(
                     d_model=width,
@@ -565,13 +566,13 @@ class ImageTransformer(nn.Module):
                     act_layer=act_layer,
                     gated=gated,
                 )
-                for _ in range(self.layers)
+                for _ in range(self.num_layers)
             ]
         )
 
     def forward(self, x: torch.Tensor, return_intermediate=None, mask=None):
         out = []
-        for idx, r in enumerate(self.resblocks):
+        for idx, r in enumerate(self.layers):
             if return_intermediate is not None and idx in return_intermediate:
                 out.append(x)
             x = r(x, mask=mask)
@@ -588,7 +589,7 @@ class VisionEncoder(nn.Module):
         image_size: int = 224,
         patch_size: int = 14,
         width: int = 1280,
-        layers: int = 32,
+        num_layers: int = 32,
         heads: int = 16,
         mlp_ratio: float = 4.0,
         act_layer: Callable = nn.GELU,
@@ -608,7 +609,7 @@ class VisionEncoder(nn.Module):
             self.image_size[0] // self.patch_size[0],
             self.image_size[1] // self.patch_size[1],
         )
-        self.conv1 = nn.Conv2d(
+        self.patch_embedding = nn.Conv2d(
             in_channels=in_channels,
             out_channels=width,
             kernel_size=patch_size,
@@ -623,7 +624,7 @@ class VisionEncoder(nn.Module):
         self.ln_post = LayerNorm(width)
         self.ln_pre = LayerNorm(width)
         self.transformer = ImageTransformer(
-            width, layers, heads, mlp_ratio, act_layer=act_layer
+            width, num_layers, heads, mlp_ratio, act_layer=act_layer
         )
         # pre and post tile position embedding
         self.global_transformer = ImageTransformer(
@@ -798,22 +799,22 @@ class Attention(nn.Module):
         self.head_dim = config.dim // config.n_heads
         self.max_seq_len = config.max_seq_len
 
-        self.wq = nn.Linear(
+        self.q_proj = nn.Linear(
             config.dim,
             config.n_heads * self.head_dim,
             bias=False,
         )
-        self.wk = nn.Linear(
+        self.k_proj = nn.Linear(
             config.dim,
             self.n_kv_heads * self.head_dim,
             bias=False,
         )
-        self.wv = nn.Linear(
+        self.v_proj = nn.Linear(
             config.dim,
             self.n_kv_heads * self.head_dim,
             bias=False,
         )
-        self.wo = nn.Linear(
+        self.o_proj = nn.Linear(
             config.n_heads * self.head_dim,
             config.dim,
             bias=False,
@@ -886,7 +887,7 @@ class Attention(nn.Module):
     ):
 
         xq, xk, xv = [
-            F.linear(x, w) for w in [self.wq.weight, self.wk.weight, self.wv.weight]
+            F.linear(x, w) for w in [self.q_proj.weight, self.k_proj.weight, self.v_proj.weight]
         ]
 
         bs, slen, _ = xq.shape
@@ -915,8 +916,7 @@ class Attention(nn.Module):
 
         attn_output = attn_output.transpose(1, 2).contiguous().reshape(bs, slen, -1)
 
-        out = F.linear(attn_output, self.wo.weight)
-        out = reduce_from_tensor_model_parallel_region(out)
+        out = F.linear(attn_output, self.o_proj.weight)
         return out
 
 
@@ -947,23 +947,22 @@ class FeedForward(nn.Module):
             hidden_dim = int(ffn_dim_multiplier * hidden_dim)
         hidden_dim = multiple_of * ((hidden_dim + multiple_of - 1) // multiple_of)
 
-        self.w1 = ColumnParallelLinear(
-            dim, hidden_dim, bias=False, gather_output=False, init_method=lambda x: x
+        self.gate_proj = nn.Linear(
+            dim, hidden_dim
         )
-        self.w2 = RowParallelLinear(
-            hidden_dim, dim, bias=False, input_is_parallel=True, init_method=lambda x: x
+        self.down_proj = nn.Linear(
+            hidden_dim, dim
         )
-        self.w3 = ColumnParallelLinear(
-            dim, hidden_dim, bias=False, gather_output=False, init_method=lambda x: x
+        self.up_proj = nn.Linear(
+            dim, hidden_dim
         )
-        self._register_load_state_dict_pre_hook(self.load_hook)
+        # self._register_load_state_dict_pre_hook(self.load_hook)
 
     def forward(self, x):
         x1, x3 = [F.linear(x, w) for w in [self.w1.weight, self.w3.weight]]
         x1 = F.silu(x1)
         x_in = x1 * x3
         out = F.linear(x_in, self.w2.weight)
-        out = reduce_from_tensor_model_parallel_region(out)
         return out
 
     def load_hook(
@@ -987,12 +986,12 @@ class FeedForward(nn.Module):
 
 
 class TransformerBlock(nn.Module):
-    def __init__(self, layer_id: int, args: ModelArgs):
+    def __init__(self, config: PretrainedConfig, layer_id: int):
         """
         Initialize a TransformerBlock.
         Args:
+            config (PretrainedConfig): configuration object for the layer.
             layer_id (int): Identifier for the layer.
-            args (ModelArgs): Model configuration parameters.
         Attributes:
             n_heads (int): Number of attention heads.
             dim (int): Dimension size of the model.
@@ -1004,19 +1003,19 @@ class TransformerBlock(nn.Module):
             ffn_norm (RMSNorm): Layer normalization for feedforward output.
         """
         super().__init__()
-        self.n_heads = args.n_heads
-        self.dim = args.dim
-        self.head_dim = args.dim // args.n_heads
-        self.attention = Attention(args)
+        self.n_heads = config.n_heads
+        self.dim = config.dim
+        self.head_dim = config.dim // config.n_heads
+        self.attention = Attention(config)
         self.feed_forward = FeedForward(
-            dim=args.dim,
-            hidden_dim=4 * args.dim,
-            multiple_of=args.multiple_of,
-            ffn_dim_multiplier=args.ffn_dim_multiplier,
+            dim=self.dim,
+            hidden_dim=4 * self.dim,
+            multiple_of=config.multiple_of,
+            ffn_dim_multiplier=config.ffn_dim_multiplier,
         )
         self.layer_id = layer_id
-        self.attention_norm = RMSNorm(args.dim, eps=args.norm_eps)
-        self.ffn_norm = RMSNorm(args.dim, eps=args.norm_eps)
+        self.attention_norm = RMSNorm(config.dim, eps=config.norm_eps)
+        self.ffn_norm = RMSNorm(config.dim, eps=config.norm_eps)
         self._register_load_state_dict_pre_hook(self.load_hook)
 
     def load_hook(
@@ -1160,23 +1159,23 @@ class CrossAttention(torch.nn.Module):
     ):
         super().__init__()
 
-        self.wq = nn.Linear(
+        self.q_proj = nn.Linear(
             dim,
             n_heads * head_dim,
             bias=False,
         )
 
-        self.wk = nn.Linear(
+        self.k_proj = nn.Linear(
             dim,
             n_kv_heads * head_dim,
             bias=False,
         )
-        self.wv = nn.Linear(
+        self.v_proj = nn.Linear(
             dim,
             n_kv_heads * head_dim,
             bias=False,
         )
-        self.wo = nn.Linear(
+        self.o_proj = nn.Linear(
             n_heads * head_dim,
             dim,
             bias=False,
@@ -1200,14 +1199,11 @@ class CrossAttention(torch.nn.Module):
         # combination to ensure parity with the corresponding
         # trunk LLM (i.e., group query attention) -- @dubeya
         # local heads
-        assert self.n_heads % self.n_kv_heads == 0
-        assert self.n_heads % self.model_parallel_size == 0
-        assert self.n_kv_heads % self.model_parallel_size == 0
-        self.n_local_heads = self.n_heads // self.model_parallel_size
-        self.n_local_kv_heads = self.n_kv_heads // self.model_parallel_size
+        self.n_local_heads = self.n_heads
+        self.n_local_kv_heads = self.n_kv_heads
         self.n_rep = self.n_local_heads // self.n_local_kv_heads
-        self._register_load_state_dict_pre_hook(self.load_hook)
-
+        #self._register_load_state_dict_pre_hook(self.load_hook)
+    """
     def load_hook(
         self,
         state_dict: Dict[str, Any],
@@ -1228,11 +1224,12 @@ class CrossAttention(torch.nn.Module):
             wk, wv = state_dict.pop(prefix + "wkv.weight").chunk(2)
             state_dict[prefix + "wk.weight"] = wk
             state_dict[prefix + "wv.weight"] = wv
+    """
 
     def _compute_xattn_kv_cache(self, xattn_tokens: torch.Tensor) -> torch.Tensor:
         bsz = xattn_tokens.shape[0]
-        xk = self.wk(xattn_tokens)
-        xv = self.wv(xattn_tokens)
+        xk = self.k_proj(xattn_tokens)
+        xv = self.v_proj(xattn_tokens)
 
         _, seqlen_y, _ = xk.shape
 
@@ -1259,7 +1256,7 @@ class CrossAttention(torch.nn.Module):
         full_text_row_masked_out_mask: torch.Tensor,
         xattn_cache: torch.Tensor,
     ) -> torch.Tensor:
-        xq = F.linear(x, self.wq.weight)
+        xq = F.linear(x, self.q_proj.weight)
         bsz, seqlen, _ = x.shape
 
         xq = xq.view(bsz, seqlen, self.n_local_heads, self.head_dim)
@@ -1274,7 +1271,7 @@ class CrossAttention(torch.nn.Module):
         output = output * full_text_row_masked_out_mask
         output = output.transpose(1, 2).contiguous().reshape(bsz, seqlen, -1)
 
-        out = F.linear(output, self.wo.weight)
+        out = F.linear(output, self.o_proj.weight)
         return out
 
 
@@ -1283,44 +1280,49 @@ class CrossAttentionTransformerBlock(torch.nn.Module):
 
     def __init__(
         self,
-        config: MllamaCrossAttentionVisionConfig,
+        config: MllamaCrossAttentionTextConfig,
         layer_id: int,
+        no_ffn: bool = False,
     ) -> None:
         super().__init__()
         self.layer_id = layer_id
         self.n_heads = config.n_heads
         self.n_kv_heads = config.n_heads if config.n_kv_heads is None else config.n_kv_heads
-        self.dim = config.vision_input_dim
-        self.head_dim = config.vision_input_dim // config.n_heads
+        self.dim = config.dim
+        self.head_dim = config.dim // config.n_heads
+        self.norm_eps = config.norm_eps
+        self.ffn_dim_multiplier = config.ffn_dim_multiplier
+        self.multiple_of = config.multiple_of
+
         self.attention = CrossAttention(
-            dim=config.vision_input_dim,
+            dim=self.dim,
             head_dim=self.head_dim,
             n_heads=self.n_heads,
             n_kv_heads=self.n_kv_heads,
-            norm_eps=config.norm_eps,
+            norm_eps=self.norm_eps,
         )
 
-        self.attention_norm = RMSNorm(
-            args.dim,
-            eps=args.norm_eps,
+        self.input_layernorm = RMSNorm(
+            self.dim,
+            eps=self.norm_eps,
         )
         self.gate_attn = torch.nn.Parameter(torch.zeros(1))
 
-        self.feed_forward = FeedForward(
-            dim=args.dim,
-            hidden_dim=4 * args.dim,
-            ffn_dim_multiplier=args.ffn_dim_multiplier,
-            multiple_of=args.multiple_of,
+        self.mlp = FeedForward(
+            dim=self.dim,
+            hidden_dim=4 * self.dim,
+            ffn_dim_multiplier=self.ffn_dim_multiplier,
+            multiple_of=self.multiple_of,
         )
-        self.ffn_norm = RMSNorm(
-            args.dim,
-            eps=args.norm_eps,
+        self.post_attention_layernorm = RMSNorm(
+            self.dim,
+            eps=self.norm_eps,
         )
-        self.gate_ffwd = torch.nn.Parameter(torch.zeros(1))
+        self.ffn_gate = torch.nn.Parameter(torch.zeros(1))
 
-        self._register_load_state_dict_pre_hook(self.load_hook)
+        #self._register_load_state_dict_pre_hook(self.load_hook)
         self.no_ffn = no_ffn
-
+    """
     def load_hook(
         self,
         state_dict: Dict[str, Any],
@@ -1353,6 +1355,7 @@ class CrossAttentionTransformerBlock(torch.nn.Module):
             state_dict[prefix + "attention_norm.weight"] = state_dict.pop(
                 prefix + "attention.wq.layer_norm_weight"
             )
+    """
 
     def compute_xattn_kv_cache(self, xattn_tokens: torch.Tensor) -> torch.Tensor:
         return self.attention.compute_xattn_kv_cache(xattn_tokens)
@@ -1373,7 +1376,7 @@ class CrossAttentionTransformerBlock(torch.nn.Module):
         h = x + self.gate_attn.tanh() * _attn_out
         _ffn = self.feed_forward(self.ffn_norm(h))
         _ffn = full_text_row_masked_out_mask[:, 0] * _ffn  # type: ignore
-        h = h + self.gate_ffwd.tanh() * _ffn * float(not self.no_ffn)
+        h = h + self.ffn_gate.tanh() * _ffn * float(not self.no_ffn)
         return h
 
 
@@ -1447,37 +1450,41 @@ class MllamaCrossAttentionTextModel(PreTrainedModel):
     INFERENCE_IMAGE_TOKEN_ID = 128010
 
     def __init__(self, config: MllamaCrossAttentionTextConfig):
-        super().__init__()
+        super().__init__(config)
         self.vocab_size = config.vocab_size
         self.n_layers = config.n_layers
         self.dim = config.dim
+        self.n_heads = config.n_heads
         self.head_dim = config.dim // config.n_heads
         self.n_kv_heads = config.n_heads if config.n_kv_heads is None else config.n_kv_heads
-        self.n_local_kv_heads = self.n_kv_heads // self.model_parallel_size
+        self.n_local_kv_heads = self.n_kv_heads
+        self.rope_theta = config.rope_theta
+        self.use_scaled_rope=config.use_scaled_rope
         self.tok_embeddings = nn.Embedding(
             config.vocab_size, config.dim
         )
+        self.max_seq_len = config.max_seq_len
+        self.vision_num_cross_attention_layers = config.vision_num_cross_attention_layers
         self.pos_embeddings = None
         # final norm layer (not necessary for post-norm)
         self.norm = RMSNorm(config.dim, eps=config.norm_eps)
 
         # output layer
-        self.output = ColumnParallelLinear(
-            args.dim, args.vocab_size, bias=False, init_method=lambda x: x
+        self.output = nn.Embedding(
+            self.dim, self.vocab_size
         )
 
-        self.n_llama_layers = args.n_layers
-        self.model_dim = args.dim
+        self.n_llama_layers = self.n_layers
+        self.model_dim = self.dim
 
         # BLOCKS
 
         self.fusion_schedule = self._init_fusion_schedule(
-            args.vision_num_cross_attention_layers
+            self.vision_num_cross_attention_layers
         )
-        self.learnable_embedding = VocabParallelEmbedding(
-            max(fs_init.get_model_parallel_world_size(), 8),
-            args.dim,
-            init_method=lambda x: x,
+        self.learnable_embedding = nn.Embedding(
+            8,
+            self.dim,
         )
         self.num_frozen_embeddings = self.tok_embeddings.num_embeddings
         self._thresh = self.num_frozen_embeddings - 1
@@ -1485,14 +1492,14 @@ class MllamaCrossAttentionTextModel(PreTrainedModel):
         # transformer blocks
         self.layers = torch.nn.ModuleList()
         self.cross_attention_layers = torch.nn.ModuleList()
-        for i in range(args.n_layers):
+        for i in range(self.n_layers):
             layer_id = i
-            block = TransformerBlock(args=args, layer_id=layer_id)
+            block = TransformerBlock(config=config, layer_id=layer_id)
             self.layers.append(block)
             if layer_id in self.fusion_schedule:
-                xa_layer_id = self.fusion_schedule.index(layer_id) + args.n_layers
+                xa_layer_id = self.fusion_schedule.index(layer_id) + self.n_layers
                 block = CrossAttentionTransformerBlock(
-                    args,
+                    config,
                     layer_id=xa_layer_id,
                 )
                 self.cross_attention_layers.append(block)
@@ -1516,17 +1523,14 @@ class MllamaCrossAttentionTextModel(PreTrainedModel):
                 )
             )
         self.freqs_cis = precompute_freqs_cis(
-            args.dim // args.n_heads,
-            args.max_seq_len * 2,
-            args.rope_theta,
-            args.use_scaled_rope,
+            self.dim // self.n_heads,
+            self.max_seq_len * 2,
+            self.rope_theta,
+            self.use_scaled_rope,
         )
 
-        self._register_load_state_dict_pre_hook(self.load_hook)
-
-        self.args = args
         self.cache_is_setup = False
-        self.max_seq_len = args.max_seq_len
+        self.max_seq_len = self.max_seq_len
 
     def _init_fusion_schedule(
         self,
@@ -1554,18 +1558,6 @@ class MllamaCrossAttentionTextModel(PreTrainedModel):
         x_new = self.learnable_embedding(x_new).type_as(x_orig)
         return x_orig * mask_orig.type_as(x_orig) + x_new * mask_new.type_as(x_new)
 
-    def load_hook(
-        self,
-        state_dict: Dict[str, Any],
-        prefix: str,
-        local_metadata: Dict[str, Any],
-        strict: bool,
-        missing_keys: List[str],
-        unexpected_keys: List[str],
-        error_msgs: List[str],
-    ) -> None:
-        if "rope.freqs" in state_dict:
-            del state_dict["rope.freqs"]
 
     def forward(
         self,
@@ -1600,7 +1592,6 @@ class MllamaCrossAttentionTextModel(PreTrainedModel):
         h = self.norm(h)
 
         output = F.linear(h, self.output.weight)
-        output = gather_from_tensor_model_parallel_region(output)
         return output.float()
 
     def setup_cache(self, max_batch_size: int, dtype=torch.bfloat16):
@@ -1662,19 +1653,27 @@ class MllamaCrossAttentionTextModel(PreTrainedModel):
         )
 
 
+class MllamaPreTrainedModel(PreTrainedModel):
+    config_class = MllamaConfig
+    _tied_weights_keys = ["lm_head.weight"]
+
+
+MLLAMA_START_DOCSTRING = "" # TODO add docstring to MLLAMA start and other classes
+
 @add_start_docstrings(
     """The MLLAMA model which consists of a vision backbone and a language model.""",
     MLLAMA_START_DOCSTRING,
 )
-class MllamaForConditionalGeneration(MllamaPretrainedModel):
-    _tied_weights_keys = ["lm_head.weight"]
+class MllamaForConditionalGeneration(MllamaPreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
         self.vision_model = MllamaCrossAttentionVisionModel(config.vision_config)
-        self.text_model = MllamaCrossAttentionTextModel(config.text_config)
+        self.language_model = MllamaCrossAttentionTextModel(config.text_config)
         self.lm_head = nn.Linear(config.text_config.dim, config.text_config.vocab_size)
         
+        self.vision_max_num_chunks = config.vision_config.vision_max_num_chunks
+        self.vision_chunk_size = config.vision_config.vision_chunk_size 
         # TODO - decide if we want to derive from config params.max_seq_len in the processor...
         """
         self.image_transform = partial(
@@ -1684,7 +1683,7 @@ class MllamaForConditionalGeneration(MllamaPretrainedModel):
         """
 
     def setup_cache(self, max_batch_size: int, dtype: torch.dtype):
-        self.text_model.setup_cache(max_batch_size, dtype)
+        self.language_model.setup_cache(max_batch_size, dtype)
 
     def compute_vision_tokens_masks(
         self,
@@ -1711,8 +1710,8 @@ class MllamaForConditionalGeneration(MllamaPretrainedModel):
             ]
             images, num_chunks = _stack_images(
                 transformed_images,
-                max_num_chunks=self.params.vision_max_num_chunks,
-                image_res=self.params.vision_chunk_size,
+                max_num_chunks=self.vision_max_num_chunks,
+                image_res=self.vision_chunk_size,
             )
             aspect_ratios = torch.stack([torch.stack(x) for x in aspect_ratios])
 
@@ -1741,7 +1740,7 @@ class MllamaForConditionalGeneration(MllamaPretrainedModel):
                 layer.compute_xattn_kv_cache(
                     vision_tokens.view(bsz, -1, image_token_dim)
                 )
-                for layer in self.text_model.cross_attention_layers
+                for layer in self.language_model.cross_attention_layers
             ]
         )
         padded_masks = _pad_masks(
@@ -1752,10 +1751,10 @@ class MllamaForConditionalGeneration(MllamaPretrainedModel):
         )
 
         cross_attention_masks, full_text_row_masked_out_mask = (
-            self.text_model._get_xattn_mask(
+            self.language_model._get_xattn_mask(
                 num_tokens=total_len,
                 text_device="cuda",
-                text_dtype=next(self.text_model.parameters()).dtype,
+                text_dtype=next(self.language_model.parameters()).dtype,
                 vision_tokens=vision_tokens,
                 cross_attention_masks=padded_masks,
             )
@@ -1771,8 +1770,8 @@ class MllamaForConditionalGeneration(MllamaPretrainedModel):
         full_text_row_masked_out_mask: torch.Tensor,
         xattn_caches: torch.Tensor,
     ) -> torch.Tensor:
-        h = self.text_model.get_partially_trainable_embedding(tokens[:, position_ids])
-        logits = self.text_model.forward(
+        h = self.language_model.get_partially_trainable_embedding(tokens[:, position_ids])
+        logits = self.language_model.forward(
             position_ids=position_ids,
             h=h,
             xattn_mask=cross_attention_masks[:, :, position_ids],
@@ -1891,9 +1890,10 @@ class MllamaForConditionalGeneration(MllamaPretrainedModel):
             final_labels = None
 
         return final_embedding, final_attention_mask, final_labels, position_ids
-
-    @add_start_docstrings_to_model_forward(MLLAMA_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=MllamaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    # TODO add return docstrings
+    # TODO add return type (MllamaCausalLMOutputWithPast)
+    #@add_start_docstrings_to_model_forward(MLLAMA_INPUTS_DOCSTRING)
+    #@replace_return_docstrings(output_type=MllamaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def llava_forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1909,7 +1909,7 @@ class MllamaForConditionalGeneration(MllamaPretrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, MllamaCausalLMOutputWithPast]:
+    ):
         r"""
         Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
