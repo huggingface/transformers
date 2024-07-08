@@ -85,8 +85,12 @@ class MllamaCrossAttentionVisionConfig(PretrainedConfig):
         return_intermediate="3,7,15,23,30",
         global_vision_layers=8,
         max_num_tiles=4, # same as vision max num chunks?
+        norm_eps= 1.0e-5,
+        ffn_dim_multiplier=1.3,
+        multiple_of=256,
         **kwargs,
     ):
+        super().__init__(**kwargs)
         self.n_heads=n_heads
         self.vision_chunk_size = vision_chunk_size
         self.vision_max_num_chunks = vision_max_num_chunks
@@ -96,9 +100,12 @@ class MllamaCrossAttentionVisionConfig(PretrainedConfig):
         self.return_intermediate = return_intermediate
         self.global_vision_layers = global_vision_layers
         self.max_num_tiles = max_num_tiles
-        super().__init__(**kwargs)
+        self.norm_eps = norm_eps
+        self.ffn_dim_multiplier = ffn_dim_multiplier
+        self.multiple_of = multiple_of
+        
 
-
+    
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
         cls._set_token_in_kwargs(kwargs)
@@ -115,6 +122,7 @@ class MllamaCrossAttentionVisionConfig(PretrainedConfig):
             )
 
         return cls.from_dict(config_dict, **kwargs)
+    
 
 
 
@@ -179,7 +187,10 @@ class MllamaCrossAttentionTextConfig(PretrainedConfig):
         ffn_dim_multiplier= 1.3,
         norm_eps= 1.0e-5,
         rope_theta= 500000,
-        use_scaled_rope=True, # TODO finish up text config
+        use_scaled_rope=True,
+        vision_num_cross_attention_layers=20, # TODO comon
+        multiple_of=256, # TODO common
+        vision_input_dim=1280, # TODO common
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -188,9 +199,17 @@ class MllamaCrossAttentionTextConfig(PretrainedConfig):
         self.n_heads = n_heads
         self.n_kv_heads = n_kv_heads
         self.max_seq_len = max_seq_len
+        self.vision_num_cross_attention_layers = vision_num_cross_attention_layers
+        self.rope_theta = rope_theta
+        self.use_scaled_rope = use_scaled_rope
+        self.norm_eps = norm_eps
+        self.multiple_of = multiple_of
+        self.ffn_dim_multiplier= ffn_dim_multiplier
+        self.vision_input_dim = vision_input_dim
         super().__init__(**kwargs)
 
 
+    
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
         cls._set_token_in_kwargs(kwargs)
@@ -207,6 +226,8 @@ class MllamaCrossAttentionTextConfig(PretrainedConfig):
             )
 
         return cls.from_dict(config_dict, **kwargs)
+
+
 class MllamaConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MllamaForConditionalGeneration`]. It is used to instantiate an
@@ -257,7 +278,7 @@ class MllamaConfig(PretrainedConfig):
     ```"""
 
     model_type = "mllama"
-    is_composition = False
+    is_composition = True
 
     def __init__(
         self,
@@ -266,36 +287,24 @@ class MllamaConfig(PretrainedConfig):
         **kwargs,
     ):
 
-        if isinstance(vision_config, dict):
-            vision_config["model_type"] = (
-                vision_config["model_type"] if "model_type" in vision_config else "clip_vision_model"
-            )
-            vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
-        elif vision_config is None:
-            vision_config = CONFIG_MAPPING["clip_vision_model"](
-                intermediate_size=4096,
-                hidden_size=1024,
-                patch_size=14,
-                image_size=448,
-                num_hidden_layers=32,
-                num_attention_heads=16,
-                vision_chunk_size= 560,
-                vision_max_num_chunks= 4,
-            )
+        if vision_config is None:
+            self.vision_config = MllamaCrossAttentionVisionConfig()
+            logger.info("vision_config is None, using default mllama vision config")
+        elif isinstance(vision_config, dict):
+            self.vision_config = MllamaCrossAttentionVisionConfig(**vision_config)
+        elif isinstance(vision_config, MllamaCrossAttentionVisionConfig):
+            self.vision_config = vision_config
 
-        self.vision_config = vision_config
 
-        if isinstance(text_config, dict):
-            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "llama"
-            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
-        elif text_config is None:
-            text_config = CONFIG_MAPPING["llama"](
-                vision_num_cross_attention_layers=20, # Should be maybe in vision config?
-            )
+        if text_config is None:
+            self.text_config = MllamaCrossAttentionTextConfig()
+            logger.info("text_config is None, using default mllama text config")
+        elif isinstance(text_config, dict):
+            self.text_config = MllamaCrossAttentionTextConfig(**text_config)
+        elif isinstance(text_config, MllamaCrossAttentionTextConfig):
+            self.text_config = text_config
 
-        self.text_config = text_config
         self._vocab_size = self.text_config.vocab_size
-
         super().__init__(**kwargs)
 
         @property
