@@ -455,7 +455,7 @@ def write_model(
 
         # simple concatenation for sharded o_proj
         state_dict[f'model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.self_attn.o_proj.weight'] = torch.cat(
-            [loaded[i].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wo.weight') for i in range(num_shards)], dim=concat_dim
+            [loaded[i].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wo.weight') for i in range(num_shards)], dim=1
         )
 
         # simple concatenation for sharded biases
@@ -585,7 +585,7 @@ def write_model(
 
         # simple concatenation for sharded o_proj
         state_dict[f'model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.self_attn.o_proj.weight'] = torch.cat(
-            [loaded[i].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.attn.wo.weight') for i in range(num_shards)], dim=concat_dim
+            [loaded[i].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.attn.wo.weight') for i in range(num_shards)], dim=1
         )
 
         # simple concatenation for sharded biases
@@ -599,7 +599,7 @@ def write_model(
             [loaded[i].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.attn.wv.bias') for i in range(num_shards)], dim=concat_dim
         )
         state_dict[f'model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.self_attn.o_proj.bias'] = torch.cat(
-            [loaded[i].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.attn.wo.bias') for i in range(num_shards)], dim=concat_dim
+            [loaded[i].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.attn.wo.bias') for i in range(num_shards)], dim=1
         )
 
         # mlp layers
@@ -610,7 +610,7 @@ def write_model(
             [loaded[i].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.mlp.c_fc.bias') for i in range(num_shards)], dim=concat_dim
         )
         state_dict[f'model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.mlp.fc2.weight'] = torch.cat(
-            [loaded[i].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.mlp.c_proj.weight') for i in range(num_shards)], dim=concat_dim
+            [loaded[i].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.mlp.c_proj.weight') for i in range(num_shards)], dim=1
         )
         state_dict[f'model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.mlp.fc2.bias'] = torch.cat(
             [loaded[i].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.mlp.c_proj.bias') for i in range(num_shards)], dim=concat_dim
@@ -634,6 +634,7 @@ def write_model(
     # Write configs
     index_dict["metadata"] = {"total_size": param_count * 2}
     write_json(index_dict, os.path.join(tmp_model_path, "pytorch_model.bin.index.json"))
+    
     ffn_dim_multiplier = params["ffn_dim_multiplier"] if "ffn_dim_multiplier" in params else 1
     multiple_of = params["multiple_of"] if "multiple_of" in params else 256
     config = LlamaConfig(
