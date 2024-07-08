@@ -263,4 +263,5 @@ from . import (
     xmod,
     yolos,
     yoso,
+    zoedepth,
 )
