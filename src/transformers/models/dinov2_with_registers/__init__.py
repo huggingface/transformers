@@ -20,9 +20,7 @@ from ...utils import (
 )
 
 
-_import_structure = {
-    "configuration_dinov2_with_registers": ["Dinov2WithRegistersConfig", "Dinov2WithRegistersOnnxConfig"]
-}
+_import_structure = {"configuration_dinov2_with_registers": ["Dinov2WithRegistersConfig"]}
 
 try:
     if not is_torch_available():
@@ -38,7 +36,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_dinov2_with_registers import Dinov2WithRegistersConfig, Dinov2WithRegistersOnnxConfig
+    from .configuration_dinov2_with_registers import Dinov2WithRegistersConfig
 
     try:
         if not is_torch_available():
