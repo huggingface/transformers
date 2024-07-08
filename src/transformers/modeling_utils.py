@@ -2189,7 +2189,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         self.base_model._prune_heads(heads_to_prune)
 
-    def gradient_checkpointing_enable(self, gradient_checkpointing_kwargs=None):
+    def gradient_checkpointing_enable(self, checkpointing_method='torch', gradient_checkpointing_kwargs=None):
         """
         Activates gradient checkpointing for the current model.
 
@@ -2209,14 +2209,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if gradient_checkpointing_kwargs is None:
             gradient_checkpointing_kwargs = {"use_reentrant": True}
 
-        if (
-            gradient_checkpointing_kwargs is not None 
-            and "use_deepspeed_grad_ckpt" in gradient_checkpointing_kwargs.keys()
-            and gradient_checkpointing_kwargs["use_deepspeed_grad_ckpt"]
-        ):
-            assert torch.distributed.is_initialized(), print("deepspeed ckpt need dist.initialization because it call dist.rank() for printing ...")
-            num_checkpoints = gradient_checkpointing_kwargs["num_checkpoints"] if "num_checkpoints" in gradient_checkpointing_kwargs.keys() else 1
-            checkpoint_in_cpu = gradient_checkpointing_kwargs["checkpoint_in_cpu"] if "checkpoint_in_cpu" in gradient_checkpointing_kwargs.keys() else False
+        if checkpointing_method == 'deepspeed':
+            assert torch.distributed.is_initialized(), "deepspeed ckpt need dist.initialization because it call dist.rank() for printing ..."
+            num_checkpoints = gradient_checkpointing_kwargs.get("num_checkpoints", 1)
+            checkpoint_in_cpu = gradient_checkpointing_kwargs.get("checkpoint_in_cpu", False)
             
             from deepspeed.runtime.activation_checkpointing import checkpointing
             checkpointing.configure(
@@ -2229,9 +2225,19 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 synchronize=False,
                 profile=False,
             )
-            gradient_checkpointing_func = checkpointing.checkpoint
-        else:
+            def checkpoint(function, *args):
+                """
+                modified deepspeed checkpoint because original deepspeed checkpoint return item when length of outputs == 1 but tuple when length > 2
+                https://github.com/microsoft/DeepSpeed/blob/AutoPR/0.14.0/deepspeed/runtime/activation_checkpointing/checkpointing.py#L989-L998
+                """
+                all_outputs = []
+                checkpointing.CheckpointFunction.apply(function, all_outputs, *args)
+                return tuple(all_outputs)
+            gradient_checkpointing_func = checkpoint
+        elif checkpointing_method == 'torch':
             gradient_checkpointing_func = functools.partial(checkpoint, **gradient_checkpointing_kwargs)
+        else:
+            raise NotImplementedError
 
         # For old GC format (transformers < 4.35.0) for models that live on the Hub
         # we will fall back to the overwritten `_set_gradient_checkpointing` method

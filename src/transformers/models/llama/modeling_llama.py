@@ -1030,7 +1030,7 @@ class LlamaModel(LlamaPreTrainedModel):
                         output.append(x_)
                     return output
                 return custom_forward
-
+        
             l = 0
             total_num_layers = len(self.layers)
             chunk_length = self.gradient_checkpointing_kwargs['num_checkpoints'] ## how many checkpoint do you want?
@@ -1054,7 +1054,7 @@ class LlamaModel(LlamaPreTrainedModel):
             if output_hidden_states:
                 # input + layerwise outputs (execpt last hidden) should be the number of layers
                 all_hidden_states = all_hidden_states[:-1]
-                assert len(all_hidden_states) == len(self.layers), print(f"len(all_hidden_states) ({len(all_hidden_states)}) != len(self.layers) ({len(self.layers)})")
+                assert len(all_hidden_states) == len(self.layers), f"len(all_hidden_states) ({len(all_hidden_states)}) != len(self.layers) ({len(self.layers)})"
                 
         else:
             for decoder_layer in self.layers:
