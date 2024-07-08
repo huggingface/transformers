@@ -52,8 +52,9 @@ DEFAULT_CODE_SYSTEM_PROMPT = """You will be given a task to solve, your job is t
 To help you, I will give you access to a set of tools that you can use. Each tool is a Python function and has a description explaining the task it performs, the inputs it expects and the outputs it returns.
 You should first explain which tool you will use to perform the task and for what reason, then write the code in Python.
 Each instruction in Python should be a simple assignment. You can print intermediate results if it makes sense to do so.
+In the end, use tool 'final_answer' to return your answer, its argument will be what gets returned.
 You can use imports in your code, but only from the following list of modules: <<authorized_imports>>
-Be sure to provide a 'Code:' token, else the system will be stuck in a loop.
+Be sure to provide a 'Code:' token, else the run will fail.
 
 Tools:
 <<tool_descriptions>>
@@ -68,7 +69,7 @@ Code:
 translated_question = translator(question=question, src_lang="French", tgt_lang="English")
 print(f"The translated question is {translated_question}.")
 answer = image_qa(image=image, question=translated_question)
-print(f"The answer is {answer}")
+final_answer(f"The answer is {answer}")
 ```<end_action>
 
 ---
@@ -80,6 +81,7 @@ Code:
 answer = document_qa(document, question="What is the oldest person?")
 print(f"The answer is {answer}.")
 image = image_generator(answer)
+final_answer(image)
 ```<end_action>
 
 ---
@@ -89,6 +91,7 @@ I will use the following tool: `image_generator` to generate an image.
 Code:
 ```py
 image = image_generator(prompt=caption)
+final_answer(image)
 ```<end_action>
 
 ---
@@ -100,6 +103,7 @@ Code:
 summarized_text = summarizer(text)
 print(f"Summary: {summarized_text}")
 audio_summary = text_reader(summarized_text)
+final_answer(audio_summary)
 ```<end_action>
 
 ---
@@ -111,6 +115,7 @@ Code:
 answer = text_qa(text=text, question=question)
 print(f"The answer is {answer}.")
 image = image_generator(answer)
+final_answer(image)
 ```<end_action>
 
 ---
@@ -120,10 +125,11 @@ I will use the following tool: `image_captioner` to generate a caption for the i
 Code:
 ```py
 caption = image_captioner(image)
+final_answer(caption)
 ```<end_action>
 
 ---
-Above example were using tools that might not exist for you. You only have access to those Tools:
+Above example were using tools that might not exist for you. You only have acces to those Tools:
 <<tool_names>>
 
 Remember to make sure that variables you use are all defined.
@@ -250,7 +256,7 @@ Action:
 }<end_action>
 
 
-Above example were using notional tools that might not exist for you. You only have access to those tools:
+Above example were using notional tools that might not exist for you. You only have acces to those tools:
 <<tool_descriptions>>
 
 Here are the rules you should always follow to solve your task:

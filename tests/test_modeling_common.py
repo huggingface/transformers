@@ -119,7 +119,7 @@ if is_tf_available():
 if is_flax_available():
     import jax.numpy as jnp
 
-    from tests.test_modeling_flax_utils import check_models_equal
+    from tests.utils.test_modeling_flax_utils import check_models_equal
     from transformers.modeling_flax_pytorch_utils import (
         convert_pytorch_state_dict_to_flax,
         load_flax_weights_in_pytorch_model,
@@ -1158,6 +1158,7 @@ class ModelTesterMixin:
                     "input_features",
                     "input_ids",
                     "input_values",
+                    "inputs_embeds",
                     "pixel_values",
                     "token_type_ids",
                     "visual_feats",
@@ -1214,16 +1215,27 @@ class ModelTesterMixin:
                             (past_mask, inputs_to_test[1]["attention_mask"]), dim=1
                         )
 
+            if "inputs_embeds" in inspect.signature(model.forward).parameters:
+                inputs_to_test.append(
+                    {
+                        "inputs_embeds": torch.rand(
+                            2, 2, model.config.hidden_size, dtype=torch.float, device=torch_device
+                        )
+                    }
+                )
+
             for inps in inputs_to_test:
                 filtered_inputs = {k: v for (k, v) in inps.items() if k in input_names}
-                input_names = list(filtered_inputs.keys())
+                input_names_to_trace = list(filtered_inputs.keys())
 
                 if model.__class__.__name__ in set(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES.values()) and (
                     not hasattr(model.config, "problem_type") or model.config.problem_type is None
                 ):
                     model.config.problem_type = "single_label_classification"
 
-                traced_model = symbolic_trace(model, input_names)
+                model.config.use_cache = "past_key_values" in input_names_to_trace
+
+                traced_model = symbolic_trace(model, input_names_to_trace)
 
                 with torch.no_grad():
                     traced_output = traced_model(**filtered_inputs)

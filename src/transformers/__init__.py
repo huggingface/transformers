@@ -807,6 +807,7 @@ _import_structure = {
     "models.xmod": ["XmodConfig"],
     "models.yolos": ["YolosConfig"],
     "models.yoso": ["YosoConfig"],
+    "models.zoedepth": ["ZoeDepthConfig"],
     "onnx": [],
     "pipelines": [
         "AudioClassificationPipeline",
@@ -1182,6 +1183,7 @@ else:
     _import_structure["models.vitmatte"].append("VitMatteImageProcessor")
     _import_structure["models.vivit"].append("VivitImageProcessor")
     _import_structure["models.yolos"].extend(["YolosFeatureExtractor", "YolosImageProcessor"])
+    _import_structure["models.zoedepth"].append("ZoeDepthImageProcessor")
 
 try:
     if not is_torchvision_available():
@@ -1212,6 +1214,7 @@ else:
         "Cache",
         "CacheConfig",
         "DynamicCache",
+        "EncoderDecoderCache",
         "HQQQuantizedCache",
         "QuantizedCache",
         "QuantizedCacheConfig",
@@ -3585,6 +3588,12 @@ else:
             "YosoPreTrainedModel",
         ]
     )
+    _import_structure["models.zoedepth"].extend(
+        [
+            "ZoeDepthForDepthEstimation",
+            "ZoeDepthPreTrainedModel",
+        ]
+    )
     _import_structure["optimization"] = [
         "Adafactor",
         "AdamW",
@@ -5496,6 +5505,7 @@ if TYPE_CHECKING:
     from .models.xmod import XmodConfig
     from .models.yolos import YolosConfig
     from .models.yoso import YosoConfig
+    from .models.zoedepth import ZoeDepthConfig
 
     # Pipelines
     from .pipelines import (
@@ -5871,6 +5881,7 @@ if TYPE_CHECKING:
         from .models.vitmatte import VitMatteImageProcessor
         from .models.vivit import VivitImageProcessor
         from .models.yolos import YolosFeatureExtractor, YolosImageProcessor
+        from .models.zoedepth import ZoeDepthImageProcessor
 
     try:
         if not is_torchvision_available():
@@ -5895,6 +5906,7 @@ if TYPE_CHECKING:
             Cache,
             CacheConfig,
             DynamicCache,
+            EncoderDecoderCache,
             HQQQuantizedCache,
             QuantizedCache,
             QuantizedCacheConfig,
@@ -7795,6 +7807,10 @@ if TYPE_CHECKING:
             YosoLayer,
             YosoModel,
             YosoPreTrainedModel,
+        )
+        from .models.zoedepth import (
+            ZoeDepthForDepthEstimation,
+            ZoeDepthPreTrainedModel,
         )
 
         # Optimization

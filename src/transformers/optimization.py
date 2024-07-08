@@ -519,7 +519,7 @@ def get_scheduler(
             if param.requires_grad:
                 param.register_post_accumulate_grad_hook(scheduler_hook)
 
-        return LayerWiseDummyScheduler()
+        return LayerWiseDummyScheduler(optimizer_dict=optimizer_dict, lr=optimizer.defaults["lr"])
 
     if name == SchedulerType.CONSTANT:
         return schedule_func(optimizer)
