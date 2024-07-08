@@ -23,6 +23,9 @@ from typing import Union
 
 logger = logging.get_logger(__name__)
 
+def compute_intermediate_size(n, ffn_dim_multiplier=1, multiple_of=256):
+    return multiple_of * ((int(ffn_dim_multiplier * int(8 * n / 3)) + multiple_of - 1) // multiple_of)
+
 
 class MllamaCrossAttentionVisionConfig(PretrainedConfig):
     # TODO fix config docstring
@@ -205,6 +208,7 @@ class MllamaCrossAttentionTextConfig(PretrainedConfig):
         self.norm_eps = norm_eps
         self.multiple_of = multiple_of
         self.ffn_dim_multiplier= ffn_dim_multiplier
+        self.intermediate_size = compute_intermediate_size(dim, ffn_dim_multiplier, multiple_of)
         self.vision_input_dim = vision_input_dim
         super().__init__(**kwargs)
 
