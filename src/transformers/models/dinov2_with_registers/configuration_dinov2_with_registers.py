@@ -104,7 +104,7 @@ class Dinov2WithRegistersConfig(BackboneConfigMixin, PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "dinov2-with-registers"
+    model_type = "dinov2_with_registers"
 
     def __init__(
         self,
