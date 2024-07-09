@@ -125,7 +125,6 @@ from .utils import (
     is_torch_tf32_available,
     is_torch_xla_available,
     is_torch_xpu_available,
-    is_torchao_available,
     is_torchaudio_available,
     is_torchdynamo_available,
     is_torchvision_available,
