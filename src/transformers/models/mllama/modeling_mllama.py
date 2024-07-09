@@ -652,55 +652,6 @@ class VisionEncoder(nn.Module):
         )
         self.gated_positional_embedding_gate = nn.Parameter(torch.zeros(1))
 
-        #self._register_load_state_dict_pre_hook(self.load_hook)
-
-    def load_hook(
-        self,
-        state_dict: Dict[str, Any],
-        prefix: str,
-        local_metadata: Dict[str, Any],
-        strict: bool = True,
-        missing_keys: List[str] = None,
-        unexpected_keys: List[str] = None,
-        error_msgs: List[str] = None,
-        return_state_dict: bool = False,
-    ) -> None:
-        orig_pos_embed = state_dict.get(prefix + "positional_embedding")
-        if orig_pos_embed is not None:
-            new_pos_embed = resize_local_position_embedding(
-                orig_pos_embed, self.grid_size
-            )
-            state_dict[prefix + "positional_embedding"] = new_pos_embed
-        if hasattr(self, "gated_positional_embedding"):
-            if prefix + "gated_positional_embedding" not in state_dict:
-                # resize positional_embedding to fit the new grid size
-                global_pos_embed = initialize_global_position_embedding_from_local(
-                    new_pos_embed,
-                    self.grid_size,
-                    self.max_num_tiles,
-                    self.max_num_tiles,
-                )
-                state_dict[prefix + "gated_positional_embedding"] = global_pos_embed
-                state_dict[prefix + "gated_positional_embedding_gate"] = torch.zeros(
-                    1, dtype=global_pos_embed.dtype
-                )
-                logger.info(
-                    f"Initialized global positional embedding with size {global_pos_embed.size()}"
-                )
-            else:
-                global_pos_embed = resize_global_position_embedding(
-                    state_dict[prefix + "gated_positional_embedding"],
-                    self.grid_size,
-                    self.max_num_tiles,
-                    self.max_num_tiles,
-                )
-                logger.info(
-                    f"Resized global positional embedding from {state_dict[prefix + 'gated_positional_embedding'].size()} to {global_pos_embed.size()}"
-                )
-                state_dict[prefix + "gated_positional_embedding"] = global_pos_embed
-        if return_state_dict:
-            return state_dict
-
     def apply_positional_embedding(self, x, ar):
         out = []
         # apply regular position embedding
@@ -743,9 +694,10 @@ class VisionEncoder(nn.Module):
 
         # patch embedding
         x = images.reshape(bsz * num_concurrent_media * num_chunks, nch, w, h)
-        x = self.conv1(x)  # shape = [*, width, grid ** 2]
+        x = self.patch_embedding(x)  # shape = [*, width, grid ** 2]
         _, ntok, dim = x.shape
-        x = x.reshape(bsz * num_concurrent_media, num_chunks, ntok, dim)
+        # equivalent to column parallel conv2d op
+        x = x.permute(0, 2, 3, 1).reshape(bsz * num_concurrent_media, num_chunks, -1, dim)
 
         # tile embeddings
         x = self.pre_tile_pos_embed(x, ar)
@@ -822,35 +774,6 @@ class Attention(nn.Module):
         )
         self.n_heads = config.n_heads
         
-        # not needed
-        #self._register_load_state_dict_pre_hook(self.load_hook)
-
-    def load_hook(
-        self,
-        state_dict: Dict[str, Any],
-        prefix: str,
-        local_metadata: Dict[str, Any],
-        strict: bool,
-        missing_keys: List[str],
-        unexpected_keys: List[str],
-        error_msgs: List[str],
-    ) -> None:
-        if prefix + "wqkv.weight" in state_dict:
-            total_n_heads = self.n_heads + self.n_kv_heads * 2
-            wqkv = state_dict.pop(prefix + "wqkv.weight")
-            head_dim = wqkv.shape[0] // total_n_heads
-            dim1 = head_dim * self.n_heads
-            dim2 = dim1 + head_dim * self.n_kv_heads
-            dim3 = dim1 + head_dim * self.n_kv_heads * 2
-
-            wq = wqkv[:dim1]
-            wk = wqkv[dim1:dim2]
-            wv = wqkv[dim2:dim3]
-
-            state_dict[prefix + "wq.weight"] = wq
-            state_dict[prefix + "wk.weight"] = wk
-            state_dict[prefix + "wv.weight"] = wv
-
     def setup_cache(self, max_batch_size: int, dtype: torch.dtype):
         cache_shape = (
             max_batch_size,
@@ -956,7 +879,6 @@ class FeedForward(nn.Module):
         self.up_proj = nn.Linear(
             dim, hidden_dim
         )
-        # self._register_load_state_dict_pre_hook(self.load_hook)
 
     def forward(self, x):
         x1, x3 = [F.linear(x, w) for w in [self.w1.weight, self.w3.weight]]
@@ -964,25 +886,6 @@ class FeedForward(nn.Module):
         x_in = x1 * x3
         out = F.linear(x_in, self.w2.weight)
         return out
-
-    def load_hook(
-        self,
-        state_dict,
-        prefix,
-        local_metadata,
-        strict,
-        missing_keys,
-        unexpected_keys,
-        error_msgs,
-    ):
-        if prefix + "mlp.fc1_weight" in state_dict:
-            fc1_weight, fc3_weight = state_dict.pop(prefix + "mlp.fc1_weight").chunk(2)
-            state_dict[prefix + "w1.weight"] = fc1_weight
-            state_dict[prefix + "w3.weight"] = fc3_weight
-
-        if prefix + "mlp.fc2_weight" in state_dict:
-            fc2_weight = state_dict.pop(prefix + "mlp.fc2_weight")
-            state_dict[prefix + "w2.weight"] = fc2_weight
 
 
 class TransformerBlock(nn.Module):
@@ -1016,26 +919,6 @@ class TransformerBlock(nn.Module):
         self.layer_id = layer_id
         self.attention_norm = RMSNorm(config.dim, eps=config.norm_eps)
         self.ffn_norm = RMSNorm(config.dim, eps=config.norm_eps)
-        #self._register_load_state_dict_pre_hook(self.load_hook)
-
-    def load_hook(
-        self,
-        state_dict: Dict[str, Any],
-        prefix: str,
-        local_metadata: Dict[str, Any],
-        strict: bool,
-        missing_keys: List[str],
-        unexpected_keys: List[str],
-        error_msgs: List[str],
-    ) -> None:
-        if prefix + "feed_forward.mlp.layer_norm_weight" in state_dict:
-            state_dict[prefix + "ffn_norm.weight"] = state_dict.pop(
-                prefix + "feed_forward.mlp.layer_norm_weight"
-            )
-        if prefix + "attention.wqkv.layer_norm_weight" in state_dict:
-            state_dict[prefix + "attention_norm.weight"] = state_dict.pop(
-                prefix + "attention.wqkv.layer_norm_weight"
-            )
 
     def setup_cache(self, max_batch_size: int, dtype: torch.dtype):
         self.attention.setup_cache(max_batch_size, dtype)
@@ -1085,29 +968,6 @@ class TilePositionEmbedding(nn.Module):
         if gated:
             self.gate = nn.Parameter(torch.zeros(1))
 
-        #self._register_load_state_dict_pre_hook(self.load_hook)
-
-    def load_hook(
-        self,
-        state_dict,
-        prefix,
-        local_metadata,
-        strict,
-        missing_keys,
-        unexpected_keys,
-        error_msgs,
-    ):
-        # load the weights from the checkpoint
-        embed = state_dict.get(prefix + "embedding")
-        if embed is not None:
-            # reshape the weights to the correct shape
-            nt_old, nt_old, _, w = embed.shape
-            logging.info(
-                f"Resizing tile embedding from {nt_old}x{nt_old} to {self.num_tiles}x{self.num_tiles}"
-            )
-            embed_new = TilePositionEmbedding._dynamic_resize(embed, self.num_tiles)
-            # assign the weights to the module
-            state_dict[prefix + "embedding"] = embed_new
 
     @staticmethod
     def _dynamic_resize(embed: torch.Tensor, num_tiles: int):
@@ -1147,7 +1007,7 @@ def _noinit(x):
 
 
 class CrossAttention(torch.nn.Module):
-    """Cross attention layer with model-parallel attention layers."""
+    """Cross attention layer."""
 
     def __init__(
         self,
@@ -1194,37 +1054,10 @@ class CrossAttention(torch.nn.Module):
             eps=norm_eps,
         )
 
-        # cross-attention heads are model parallel similar to
-        # self-attention, and we also use the identical KV head
-        # combination to ensure parity with the corresponding
-        # trunk LLM (i.e., group query attention) -- @dubeya
         # local heads
         self.n_local_heads = self.n_heads
         self.n_local_kv_heads = self.n_kv_heads
         self.n_rep = self.n_local_heads // self.n_local_kv_heads
-        #self._register_load_state_dict_pre_hook(self.load_hook)
-    """
-    def load_hook(
-        self,
-        state_dict: Dict[str, Any],
-        prefix: str,
-        local_metadata: Dict[str, Any],
-        strict: bool,
-        missing_keys: List[str],
-        unexpected_keys: List[str],
-        error_msgs: List[str],
-    ) -> None:
-        if prefix + "inner_attention.q_norm.weight" in state_dict:
-            q_weight = state_dict.pop(prefix + "inner_attention.q_norm.weight")
-            state_dict[prefix + "q_norm.weight"] = q_weight
-        if prefix + "inner_attention.k_norm.weight" in state_dict:
-            k_weight = state_dict.pop(prefix + "inner_attention.k_norm.weight")
-            state_dict[prefix + "k_norm.weight"] = k_weight
-        if prefix + "wkv.weight" in state_dict:
-            wk, wv = state_dict.pop(prefix + "wkv.weight").chunk(2)
-            state_dict[prefix + "wk.weight"] = wk
-            state_dict[prefix + "wv.weight"] = wv
-    """
 
     def _compute_xattn_kv_cache(self, xattn_tokens: torch.Tensor) -> torch.Tensor:
         bsz = xattn_tokens.shape[0]
@@ -1320,42 +1153,8 @@ class CrossAttentionTransformerBlock(torch.nn.Module):
         )
         self.ffn_gate = torch.nn.Parameter(torch.zeros(1))
 
-        #self._register_load_state_dict_pre_hook(self.load_hook)
         self.no_ffn = no_ffn
-    """
-    def load_hook(
-        self,
-        state_dict: Dict[str, Any],
-        prefix: str,
-        local_metadata: Dict[str, Any],
-        strict: bool,
-        missing_keys: List[str],
-        unexpected_keys: List[str],
-        error_msgs: List[str],
-    ) -> None:
-        if prefix + "gate_attn" in state_dict:
-            attn_gate = state_dict.pop(prefix + "gate_attn")
-            if attn_gate.dim() == 1:
-                attn_gate = attn_gate[0].view(1)
-            if attn_gate.dim() == 3:
-                attn_gate = attn_gate.view(1)
-            state_dict[prefix + "gate_attn"] = attn_gate
-        if prefix + "gate_ffwd" in state_dict:
-            ffn_gate = state_dict.pop(prefix + "gate_ffwd")
-            if ffn_gate.dim() == 1:
-                ffn_gate = ffn_gate[0].view(1)
-            if ffn_gate.dim() == 3:
-                ffn_gate = ffn_gate.view(1)
-            state_dict[prefix + "gate_ffwd"] = ffn_gate
-        if prefix + "feed_forward.mlp.layer_norm_weight" in state_dict:
-            state_dict[prefix + "ffn_norm.weight"] = state_dict.pop(
-                prefix + "feed_forward.mlp.layer_norm_weight"
-            )
-        if prefix + "attention.wq.layer_norm_weight" in state_dict:
-            state_dict[prefix + "attention_norm.weight"] = state_dict.pop(
-                prefix + "attention.wq.layer_norm_weight"
-            )
-    """
+
 
     def compute_xattn_kv_cache(self, xattn_tokens: torch.Tensor) -> torch.Tensor:
         return self.attention.compute_xattn_kv_cache(xattn_tokens)

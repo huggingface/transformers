@@ -107,7 +107,8 @@ def write_model(
     n_heads_per_shard = n_heads // num_shards
     dim = params["dim"]
     dims_per_head = dim // n_heads
-
+    patch_size = 14
+    num_channels = 3
 
     
     base = params.get("rope_theta", 10000.0)
@@ -292,18 +293,14 @@ def write_model(
 
         # attention weights
 
-        state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.self_attn.q_proj.weight"] = permute(
-            torch.cat(
+        state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.self_attn.q_proj.weight"] = torch.cat(
                 [
                     loaded[i].pop(f"text_model.cross_attention_layers.{xattn_layer_i}.attention.wq.weight").view(n_heads_per_shard, dims_per_head, dim)
                     for i in range(num_shards)
                 ],
                 dim=0,
-            ).reshape(dim, dim),
-            n_heads=n_heads,
-        )
-        state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.self_attn.k_proj.weight"] = permute(
-            torch.cat(
+            ).reshape(dim, dim)
+        state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.self_attn.k_proj.weight"] = torch.cat(
                 [
                     loaded[i].pop(f"text_model.cross_attention_layers.{xattn_layer_i}.attention.wk.weight").view(
                         num_local_key_value_heads, dims_per_head, dim
@@ -311,11 +308,7 @@ def write_model(
                     for i in range(num_shards)
                 ],
                 dim=0,
-            ).reshape(key_value_dim, dim),
-            num_key_value_heads,
-            key_value_dim,
-            dim,
-        )
+            ).reshape(key_value_dim, dim)
         state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.self_attn.v_proj.weight"] = torch.cat(
             [
                 loaded[i].pop(f"text_model.cross_attention_layers.{xattn_layer_i}.attention.wv.weight").view(
@@ -347,20 +340,12 @@ def write_model(
 
         state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.ffn_gate"] = ffn_gate        
 
-        # q and k normalization weights (for cross-attention stability in training)
+        # q and k normalization weights (for cross-attention stability in training) are not sharded
 
-        q_weight = []
-        k_weight = []
-        for i in range(num_shards):
-            q_weight.append(loaded[i].pop(f"text_model.cross_attention_layers.{xattn_layer_i}.attention.inner_attention.q_norm.weight"))
-            k_weight.append(loaded[i].pop(f"text_model.cross_attention_layers.{xattn_layer_i}.attention.inner_attention.k_norm.weight"))
-        state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.attention.q_norm.weight"] = torch.cat(
-            [q_weight[i] for i in range(num_shards)], dim=0
-        )
-        state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.attention.k_norm.weight"] = torch.cat(
-            [k_weight[i] for i in range(num_shards)], dim=0
-        )
-
+        q_weight = loaded[0].pop(f"text_model.cross_attention_layers.{xattn_layer_i}.attention.inner_attention.q_norm.weight")
+        k_weight = loaded[0].pop(f"text_model.cross_attention_layers.{xattn_layer_i}.attention.inner_attention.k_norm.weight")
+        state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.attention.q_norm.weight"] = q_weight
+        state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.attention.k_norm.weight"] = k_weight
 
         # save state dict of this layer
 
@@ -495,17 +480,25 @@ def write_model(
     # vision encoder embedding parameters
 
     encoder_embeddings_params_filename = "pytorch_embedding_params.bin"
+
+    # patch embedding conv weights are sharded and based on _unfold so 
+    # they require to be reshaped properly
+
+    linear_patch_weights = torch.cat(
+        [loaded[i].pop('vision_model.vision_encoder.conv1._linear.weight') for i in range(num_shards)], dim=concat_dim
+    )
+    out_channels = linear_patch_weights.shape[0]
+    linear_patch_weights = linear_patch_weights.view(out_channels, num_channels, patch_size, patch_size)
+
+
+
     state_dict = {
         # embeddings are not sharded
         'model.vision_model.vision_encoder.class_embedding': loaded[0].pop('vision_model.vision_encoder.class_embedding'),
         "model.vision_model.vision_encoder.positional_embedding": loaded[0].pop('vision_model.vision_encoder.positional_embedding'),
         'model.vision_model.vision_encoder.gated_positional_embedding': loaded[0].pop('vision_model.vision_encoder.gated_positional_embedding'),
         'model.vision_model.vision_encoder.gated_positional_embedding_gate': loaded[0].pop('vision_model.vision_encoder.gated_positional_embedding_gate'),
-        # patch embedding conv weights are sharded 
-        'model.vision_model.vision_encoder.patch_embedding.weight': torch.cat(
-            [loaded[i].pop('vision_model.vision_encoder.conv1._linear.weight') for i in range(num_shards)], dim=concat_dim
-        ), 
-        # TODO maybe choose a better name here
+        'model.vision_model.vision_encoder.patch_embedding.weight': linear_patch_weights,
         # layer norms are not sharded
         'model.vision_model.vision_encoder.ln_post.weight': loaded[0].pop('vision_model.vision_encoder.ln_post.weight'),   
         'model.vision_model.vision_encoder.ln_post.bias': loaded[0].pop('vision_model.vision_encoder.ln_post.bias'),     

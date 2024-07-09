@@ -23,7 +23,7 @@ from typing import Union
 
 logger = logging.get_logger(__name__)
 
-def compute_intermediate_size(n, ffn_dim_multiplier=1, multiple_of=256):
+def compute_intermediate_size(n, ffn_dim_multiplier=1.3, multiple_of=4096):
     return multiple_of * ((int(ffn_dim_multiplier * int(8 * n / 3)) + multiple_of - 1) // multiple_of)
 
 
@@ -90,7 +90,7 @@ class MllamaCrossAttentionVisionConfig(PretrainedConfig):
         max_num_tiles=4, # same as vision max num chunks?
         norm_eps= 1.0e-5,
         ffn_dim_multiplier=1.3,
-        multiple_of=256,
+        multiple_of=4096,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -192,7 +192,7 @@ class MllamaCrossAttentionTextConfig(PretrainedConfig):
         rope_theta= 500000,
         use_scaled_rope=True,
         vision_num_cross_attention_layers=20, # TODO comon
-        multiple_of=256, # TODO common
+        multiple_of=4096, # TODO common
         vision_input_dim=1280, # TODO common
         **kwargs,
     ):
