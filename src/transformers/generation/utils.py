@@ -789,7 +789,10 @@ class GenerationMixin:
         return warpers
 
     def _get_generation_mode(
-        self, generation_config: GenerationConfig, assistant_model: Optional["PreTrainedModel"], dola_layers: Optional[List[int]] = None
+        self,
+        generation_config: GenerationConfig,
+        assistant_model: Optional["PreTrainedModel"],
+        dola_layers: Optional[List[int]] = None,
     ) -> GenerationMode:
         """
         Returns the generation mode triggered by a [`GenerationConfig`] instance.
@@ -2278,11 +2281,16 @@ class GenerationMixin:
         )
         return self._contrastive_search(*args, **kwargs)
 
-
-    def relative_top_filter(self, scores: torch.FloatTensor, relative_top: float = 0.1, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1) -> torch.FloatTensor:
+    def relative_top_filter(
+        self,
+        scores: torch.FloatTensor,
+        relative_top: float = 0.1,
+        filter_value: float = -float("Inf"),
+        min_tokens_to_keep: int = 1,
+    ) -> torch.FloatTensor:
         scores_normalized = scores.log_softmax(dim=-1)
         sorted_logits, sorted_indices = torch.sort(scores_normalized, descending=True)
-        min_thresh = sorted_logits[..., min_tokens_to_keep-1]
+        min_thresh = sorted_logits[..., min_tokens_to_keep - 1]
         probs_max = torch.max(scores_normalized, dim=-1).values
         probs_thresh = probs_max + np.log(relative_top)
         probs_thresh = torch.min(min_thresh, probs_thresh)
@@ -2390,9 +2398,10 @@ class GenerationMixin:
 
         # keep track of which sequences are already finished
         batch_size = input_ids.shape[0]
-        this_peer_finished = False
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
-        model_kwargs["cache_position"] = torch.arange(cur_len, device=input_ids.device)
+        model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
+
+        this_peer_finished = False
 
         # prepare layers for DoLa decoding
         final_layer = self.config.num_hidden_layers
@@ -2491,9 +2500,7 @@ class GenerationMixin:
                 next_tokens = torch.argmax(next_token_scores, dim=-1)
 
             # finished sentences should have their next token be a padding token
-            if eos_token_id is not None:
-                if pad_token_id is None:
-                    raise ValueError("If `eos_token_id` is defined, make sure that `pad_token_id` is defined.")
+            if has_eos_stopping_criteria:
                 next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
 
             # update generated ids, model inputs, and length for next step
@@ -2506,12 +2513,7 @@ class GenerationMixin:
                 is_encoder_decoder=self.config.is_encoder_decoder,
             )
 
-            # if eos_token was found in one sentence, set sentence to finished
-            if eos_token_id_tensor is not None:
-                unfinished_sequences = unfinished_sequences.mul(
-                    next_tokens.tile(eos_token_id_tensor.shape[0], 1).ne(eos_token_id_tensor.unsqueeze(1)).prod(dim=0)
-                )
-
+            # stop when each sentence is finished
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
             this_peer_finished = unfinished_sequences.max() == 0
 
