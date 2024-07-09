@@ -39,7 +39,7 @@ Check the [Depth Estimation](https://huggingface.co/tasks/depth-estimation) task
 
 </Tip>
 
-Before we begin, we need to install latest version of transformers:
+Before we begin, we need to install the latest version of Transformers:
 
 ```bash
 pip install -q -U transformers
