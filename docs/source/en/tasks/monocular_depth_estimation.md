@@ -150,7 +150,7 @@ We need to pad and then resize the outputs so that predicted depth map has the s
      predicted_depth = predicted_depth[:, :, :, pad_w:-pad_w]
 ```
 
-We can now visualize the results. Below function is taken from [here](https://github.com/GaussianObject/GaussianObject/blob/ad6629efadb57902d5f8bc0fa562258029a4bdf1/pred_monodepth.py#L11).
+We can now visualize the results (the function below is taken from the [GaussianObject](https://github.com/GaussianObject/GaussianObject/blob/ad6629efadb57902d5f8bc0fa562258029a4bdf1/pred_monodepth.py#L11) framework).
 
 ```py
 import matplotlib
