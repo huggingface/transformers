@@ -3191,7 +3191,7 @@ class ModelTesterMixin:
                 "wav2vec2\.feature_extractor\.conv_layers\..+\.conv\.weight",
                 "wav2vec2\.feature_projection\.projection\.weight",
                 "wav2vec2\.feature_projection\.projection\.bias",
-                "wav2vec2\.encoder\.pos_conv_embed\.conv\.parametrizations\.weight\.original0",
+                "wav2vec2\.encoder\.pos_conv_embed\.conv\.parametrizations\.weight\.original.",
                 "classifier\.weight",
                 "regnet\.embedder\.embedder\.convolution\.weight",
                 "regnet\.encoder\.stages\..+\.layers\..+\.shortcut\.convolution\.weight",
