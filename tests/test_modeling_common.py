@@ -3190,6 +3190,7 @@ class ModelTesterMixin:
                 "wav2vec2.masked_spec_embed",
                 "wav2vec2.feature_extractor.conv_layers.*.conv.weight",
                 "wav2vec2.feature_projection.projection.weight",
+                "wav2vec2.feature_projection.projection.bias",
                 "classifier.weight",
                 "regnet.embedder.embedder.convolution.weight",
                 "resnet.embedder.embedder.convolution.weight",
