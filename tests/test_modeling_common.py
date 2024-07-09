@@ -3188,6 +3188,7 @@ class ModelTesterMixin:
             ]
             special_param_names = [
                 "wav2vec2.masked_spec_embed",
+                "wav2vec2.feature_extractor.conv_layers.*.conv.weight",
                 "classifier.weight",
                 "regnet.embedder.embedder.convolution.weight",
                 "resnet.embedder.embedder.convolution.weight",
@@ -3211,7 +3212,10 @@ class ModelTesterMixin:
                     for name, param in new_model.named_parameters():
                         if param.requires_grad:
                             param_mean = ((param.data.mean() * 1e9).round() / 1e9).item()
-                            if not (is_special_classes and name in special_param_names):
+                            if not (
+                                is_special_classes
+                                and any(len(re.findall(target, name)) > 0 for target in special_param_names)
+                            ):
                                 self.assertIn(
                                     param_mean,
                                     [0.0, 1.0],
