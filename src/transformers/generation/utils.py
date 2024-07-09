@@ -1412,18 +1412,17 @@ class GenerationMixin:
         past_length = 0
         if model_kwargs.get("past_key_values") is not None:
             cache = model_kwargs["past_key_values"]
+            past_length = 0
             if not isinstance(cache, Cache):
                 past_length = cache[0][0].shape[2]
             elif hasattr(cache, "get_seq_length") and cache.get_seq_length() is not None:
                 past_length = cache.get_seq_length()
 
-        # `torch.compile`-friendly `torch.arange` from a shape -- the lines below are equivalent to `torch.arange` from
-        # `past_length` to `past_length + input_length`
-        if "inputs_embeds" in model_kwargs:
-            cache_position = torch.ones_like(model_kwargs["inputs_embeds"][0, :, 0], dtype=torch.int64).cumsum(0)
-        else:
-            cache_position = torch.ones_like(input_ids[0, :], dtype=torch.int64).cumsum(0)
-        model_kwargs["cache_position"] = cache_position + past_length - 1
+            # TODO(joao): this is not torch.compile-friendly, find a work-around
+            if not is_torchdynamo_compiling():
+                cache_position = cache_position[past_length:]
+
+        model_kwargs["cache_position"] = cache_position
         return model_kwargs
 
     def _get_cache(self, cache_implementation: str, max_batch_size: int, max_cache_len: int, model_kwargs) -> Cache:
@@ -1539,27 +1538,24 @@ class GenerationMixin:
             pad_token_tensor = eos_token_tensor[0]
             logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{pad_token_tensor} for open-end generation.")
 
-        # we can't infer attn mask if pad token is set to be eos token in model's generation config
-        if eos_token_tensor is not None and pad_token_tensor in eos_token_tensor:
-            if kwargs_has_attention_mask is not None and not kwargs_has_attention_mask:
-                logger.warning_once(
-                    "The attention mask is not set and cannot be inferred from input because pad token is same as eos token."
-                    "As a consequence, you may observe unexpected behavior. Please pass your input's `attention_mask` "
-                    "to obtain reliable results."
-                )
-
         # Sanity checks/warnings
         if self.config.is_encoder_decoder and decoder_start_token_tensor is None:
             raise ValueError(
                 "`decoder_start_token_id` or `bos_token_id` has to be defined for encoder-decoder generation."
             )
-        if eos_token_tensor is not None and (
-            torch.is_floating_point(eos_token_tensor) or (eos_token_tensor < 0).any()
-        ):
-            logger.warning(
-                f"`eos_token_id` should consist of positive integers, but is {eos_token_tensor}. Your generation will not "
-                "stop until the maximum length is reached. Depending on other flags, it may even crash."
-            )
+        if not is_torchdynamo_compiling():  # Checks that depend on tensor-dependent control flow
+            if eos_token_tensor is not None and torch.isin(elements=eos_token_tensor, test_elements=pad_token_tensor).any():
+                if kwargs_has_attention_mask is not None and not kwargs_has_attention_mask:
+                    logger.warning_once(
+                        "The attention mask is not set and cannot be inferred from input because pad token is same as "
+                        "eos token. As a consequence, you may observe unexpected behavior. Please pass your input's "
+                        "`attention_mask` to obtain reliable results."
+                    )
+            if eos_token_tensor is not None and (torch.is_floating_point(eos_token_tensor) or (eos_token_tensor < 0).any()):
+                logger.warning(
+                    f"`eos_token_id` should consist of positive integers, but is {eos_token_tensor}. Your generation "
+                    "will not stop until the maximum length is reached. Depending on other flags, it may even crash."
+                )
 
         # Update generation config with the updated special tokens tensors
         # NOTE: this must be written into a different attribute name than the one holding the original special tokens

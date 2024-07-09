@@ -398,7 +398,6 @@ class DynamicCache(Cache):
     def crop(self, max_length: int):
         """Crop the past key values up to a new `max_length` in terms of tokens. `max_length` can also be
         negative to remove `max_length` tokens. This is used in assisted decoding and contrastive search."""
-
         # In case it is negative
         if max_length < 0:
             max_length = self.get_seq_length() - abs(max_length)
