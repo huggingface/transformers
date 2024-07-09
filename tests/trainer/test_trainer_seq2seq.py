@@ -21,8 +21,9 @@ from transformers import (
     Seq2SeqTrainer,
     Seq2SeqTrainingArguments,
     T5Tokenizer,
+    logging,
 )
-from transformers.testing_utils import TestCasePlus, require_sentencepiece, require_torch, slow
+from transformers.testing_utils import LoggingLevel, TestCasePlus, require_sentencepiece, require_torch, slow
 from transformers.utils import is_datasets_available
 
 
@@ -195,12 +196,13 @@ class Seq2seqTrainerTester(TestCasePlus):
         training_args = Seq2SeqTrainingArguments(
             ".", predict_with_generate=True, generation_config=gen_config, report_to="none"
         )
-        with self.assertRaises(ValueError) as exc:
-            _ = Seq2SeqTrainer(
-                model=model,
-                args=training_args,
-                tokenizer=tokenizer,
-                data_collator=data_collator,
-                compute_metrics=lambda x: {"samples": x[0].shape[0]},
-            )
-        self.assertIn("The loaded generation config instance is invalid", str(exc.exception))
+        with LoggingLevel(logging.WARNING):
+            with self.assertRaises(ValueError) as exc:
+                _ = Seq2SeqTrainer(
+                    model=model,
+                    args=training_args,
+                    tokenizer=tokenizer,
+                    data_collator=data_collator,
+                    compute_metrics=lambda x: {"samples": x[0].shape[0]},
+                )
+            self.assertIn("The loaded generation config instance is invalid", str(exc.exception))
