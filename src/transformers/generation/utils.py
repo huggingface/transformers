@@ -1911,6 +1911,11 @@ class GenerationMixin:
                 **model_kwargs,
             )
         elif generation_mode == GenerationMode.DOLA_GENERATION:
+            if self._is_stateful:
+                # DoLa decoding was not designed for stateful models, and would require some changes
+                raise ValueError(
+                    f"dola decoding is not supported with stateful models, such as {self.__class__.__name__}"
+                )
             prepared_logits_warper = (
                 self._get_logits_warper(generation_config, device=input_ids.device)
                 if generation_config.do_sample

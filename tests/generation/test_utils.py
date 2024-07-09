@@ -1267,14 +1267,14 @@ class GenerationTesterMixin:
     def test_dola_decoding_sample(self):
         # TODO (joao): investigate skips, try to reduce incompatibilities
         for model_class in self.all_generative_model_classes:
+            if model_class._is_stateful:
+                self.skipTest(reason="Stateful models don't support DoLa decoding")
+
             if any(model_name in model_class.__name__.lower() for model_name in ["reformer"]):
                 self.skipTest("Skip Reformer as the lm_head input size is 2 * hidden size, adopted from Rev Nets.")
 
             if any(model_name in model_class.__name__.lower() for model_name in ["marian", "mbart", "pegasus"]):
                 self.skipTest("DoLa is not supported for models that don't return layerwise hidden states")
-
-            if any(model_name in model_class.__name__.lower() for model_name in ["rwkv"]):
-                self.skipTest("Won't fix: model with non-standard dictionary output shapes")
 
             # enable cache if the model is not openai-gpt, xlnet, cpm, or xlm
             config, input_ids, attention_mask = self._get_input_ids_and_config()
