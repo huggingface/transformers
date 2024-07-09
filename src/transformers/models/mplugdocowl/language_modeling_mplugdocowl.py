@@ -501,6 +501,7 @@ class MPLUGDocOwlDecoderLayer(nn.Module):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
                 (see `past_key_values`).
             past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
+            modality_indicators (torch.Tensor): A tensor of 1s and 0s indicating which module to apply to each part of hidden_states. 1 - image, 0 - text embeddings.
         """
 
         residual = hidden_states

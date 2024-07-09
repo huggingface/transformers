@@ -499,45 +499,50 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
                 ) = self._merge_input_ids_with_image_features(
                     image_features, inputs_embeds, input_ids, attention_mask, labels
                 )
-                #breakpoint()
-            # In case input_ids.shape[1] == 1 & pixel_values==None & past_key_values != None, we are in the case of
-            # generation with cache
-            if past_key_values is not None and pixel_values is not None and input_ids.shape[1] == 1:
-                # Retrieve the first layer to inspect the logits and mask out the hidden states
-                # that are set to 0
-                first_layer_past_key_value = past_key_values[0][0][:, :, :, 0]
+                    
+                # In case input_ids.shape[1] == 1 & pixel_values==None & past_key_values != None, we are in the case of
+                # generation with cache
+                if past_key_values is not None and pixel_values is not None and input_ids.shape[1] == 1:
+                    # Retrieve the first layer to inspect the logits and mask out the hidden states
+                    # that are set to 0
+                    first_layer_past_key_value = past_key_values[0][0][:, :, :, 0]
 
-                # Sum all dimensions of head_dim (-2) to avoid random errors such as: https://github.com/huggingface/transformers/pull/28032#issuecomment-1863691941
-                batch_index, non_attended_tokens = torch.where(first_layer_past_key_value.float().sum(-2) == 0)
+                    # Sum all dimensions of head_dim (-2) to avoid random errors such as: https://github.com/huggingface/transformers/pull/28032#issuecomment-1863691941
+                    batch_index, non_attended_tokens = torch.where(first_layer_past_key_value.float().sum(-2) == 0)
 
-                # Get the target length
-                target_length = input_ids.shape[1]
-                past_length = first_layer_past_key_value.shape[-1]
+                    # Get the target length
+                    target_length = input_ids.shape[1]
+                    past_length = first_layer_past_key_value.shape[-1]
 
-                extended_attention_mask = torch.ones(
-                    (attention_mask.shape[0], past_length),
-                    dtype=attention_mask.dtype,
-                    device=attention_mask.device,
-                )
+                    extended_attention_mask = torch.ones(
+                        (attention_mask.shape[0], past_length),
+                        dtype=attention_mask.dtype,
+                        device=attention_mask.device,
+                    )
 
-                # Filter out only the tokens that can be un-attended, this can happen
-                # if one uses MPLUGDocOwl + Fused modules where the cache on the
-                # first iteration is already big enough, or if one passes custom cache
-                valid_indices = non_attended_tokens < extended_attention_mask.size(-1)
-                new_batch_index = batch_index[valid_indices]
-                new_non_attended_tokens = non_attended_tokens[valid_indices]
+                    # Filter out only the tokens that can be un-attended, this can happen
+                    # if one uses MPLUGDocOwl + Fused modules where the cache on the
+                    # first iteration is already big enough, or if one passes custom cache
+                    valid_indices = non_attended_tokens < extended_attention_mask.size(-1)
+                    new_batch_index = batch_index[valid_indices]
+                    new_non_attended_tokens = non_attended_tokens[valid_indices]
 
-                # Zero-out the places where we don't need to attend
-                extended_attention_mask[new_batch_index, new_non_attended_tokens] = 0
+                    # Zero-out the places where we don't need to attend
+                    extended_attention_mask[new_batch_index, new_non_attended_tokens] = 0
 
-                attention_mask = torch.cat((extended_attention_mask, attention_mask[:, -target_length:]), dim=1)
-                position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
-                #extended_modality_indicators = torch.ones_like((attention_mask.shape[0], past_length), dtype=torch.long, device = attention_mask.device)
-                #breakpoint()
-                #modality_indicators = torch.cat((extended_modality_indicators, torch.zeros_like(input_ids)), dim=1).to(self.device)
-                #FIXME HOW TO UPDATE MODALITY INDICATORS?
-                modality_indicators = torch.ones_like(input_ids).long().to(self.device)
-
+                    attention_mask = torch.cat((extended_attention_mask, attention_mask[:, -target_length:]), dim=1)
+                    position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
+                    modality_indicators = torch.zeros_like(input_ids).long().to(self.device)
+                    breakpoint()
+                    #extended_modality_indicators = torch.ones_like((attention_mask.shape[0], past_length), dtype=torch.long, device = attention_mask.device)
+                    #breakpoint()
+                    #modality_indicators = torch.cat((extended_modality_indicators, torch.zeros_like(input_ids)), dim=1).to(self.device)
+                    #FIXME HOW TO UPDATE MODALITY INDICATORS?
+                    
+                                    
+                    #extended_modality_indicators = torch.ones((attention_mask.shape[0], past_length), dtype=torch.long, device=attention_mask.device)
+                # modality_indicators = torch.cat((extended_modality_indicators, torch.zeros((attention_mask.shape[0], input_ids.shape[1]), dtype=torch.long, device=attention_mask.device)), dim=1)
+            
         outputs = self.language_model(
             attention_mask=attention_mask,
             modality_indicators=modality_indicators,
@@ -616,7 +621,7 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
                 attention_mask = attention_mask[:, -(cache_length + input_ids.shape[1]) :]
 
         position_ids = kwargs.get("position_ids", None)
-        # modality_indicators =kwargs.get("modality_indicators", None)
+        # modality_indicators = kwargs.get("modality_indicators", None)
         # if modality_indicators is None:
         # modality_indicators = torch.zeros_like(input_ids).long().to(self.device)
 

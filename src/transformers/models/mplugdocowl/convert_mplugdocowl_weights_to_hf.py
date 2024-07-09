@@ -89,7 +89,7 @@ def convert_mplugdocowl_llama_to_hf(
         torch.set_default_dtype(torch.float16)
         text_config = AutoConfig.from_pretrained(text_model_id)
 
-        tokenizer = AutoTokenizer.from_pretrained(text_model_id,padding_side = 'left', use_fast=False)
+        tokenizer = AutoTokenizer.from_pretrained(text_model_id, use_fast=False)
         tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False), special_tokens=True)
         tokenizer.add_special_tokens({"pad_token": "<pad>"})
 
