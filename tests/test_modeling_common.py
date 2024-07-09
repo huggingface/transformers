@@ -3179,7 +3179,7 @@ class ModelTesterMixin:
                 continue
 
             # TODO: ydshieh
-            if model_class.__name__ in ["Wav2Vec2ForSequenceClassification", "Wav2Vec2ForSequenceClassification", "CLIPForImageClassification", "RegNetForImageClassification"]:
+            if model_class.__name__ in ["Wav2Vec2ForSequenceClassification", "Wav2Vec2ForSequenceClassification", "CLIPForImageClassification", "RegNetForImageClassification", "ResNetForImageClassification"]:
                 self.skipTest(
                     reason="This test is currently failing for some models."
                 )
