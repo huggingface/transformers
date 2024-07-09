@@ -977,7 +977,6 @@ class ReactCodeAgent(ReactAgent):
         self.python_evaluator = evaluate_python_code
         self.additional_authorized_imports = additional_authorized_imports if additional_authorized_imports else []
         self.authorized_imports = list(set(LIST_SAFE_MODULES) | set(self.additional_authorized_imports))
-        print(self.authorized_imports)
         self.system_prompt = self.system_prompt.replace("<<authorized_imports>>", str(self.authorized_imports))
         self.custom_tools = {}
 

@@ -18,6 +18,7 @@ import ast
 import builtins
 import difflib
 from collections.abc import Mapping
+from importlib import import_module
 from typing import Any, Callable, Dict, List, Optional
 
 import numpy as np
@@ -448,6 +449,8 @@ def evaluate_subscript(subscript, state, tools, custom_tools):
         return parent_object.loc[index]
     if isinstance(value, (pd.DataFrame, pd.Series, np.ndarray)):
         return value[index]
+    elif isinstance(value, pd.core.groupby.generic.DataFrameGroupBy):
+        return value[index]
     elif isinstance(index, slice):
         return value[index]
     elif isinstance(value, (list, tuple)):
@@ -666,7 +669,7 @@ def import_modules(expression, state, authorized_imports):
     if isinstance(expression, ast.Import):
         for alias in expression.names:
             if check_module_authorized(alias.name):
-                module = __import__(alias.name)
+                module = import_module(alias.name)
                 state[alias.asname or alias.name] = module
             else:
                 raise InterpreterError(

@@ -414,6 +414,13 @@ if char.isalpha():
         result = evaluate_python_code(code, BASE_PYTHON_TOOLS, state={})
         assert result == "LATIN CAPITAL LETTER A"
 
+        # Test submodules are handled properly, thus not raising error
+        code = "import numpy.random as rd\nrng = rd.default_rng(12345)\nrng.random()"
+        result = evaluate_python_code(code, BASE_PYTHON_TOOLS, state={}, authorized_imports=["numpy"])
+
+        code = "from numpy.random import default_rng as d_rng\nrng = d_rng(12345)\nrng.random()"
+        result = evaluate_python_code(code, BASE_PYTHON_TOOLS, state={}, authorized_imports=["numpy"])
+
     def test_additional_imports(self):
         code = "import numpy as np"
         evaluate_python_code(code, authorized_imports=["numpy"], state={})
@@ -770,6 +777,17 @@ filtered_df = df.loc[df['AtomicNumber'].isin([104])]
 """
         result = evaluate_python_code(code, {"print": print}, state={}, authorized_imports=["pandas"])
         assert np.array_equal(result.values[0], [104, 1])
+
+        code = """import pandas as pd
+data = pd.DataFrame.from_dict([
+    {"Pclass": 1, "Survived": 1},
+    {"Pclass": 2, "Survived": 0},
+    {"Pclass": 2, "Survived": 1}
+])
+survival_rate_by_class = data.groupby('Pclass')['Survived'].mean()
+"""
+        result = evaluate_python_code(code, {}, state={}, authorized_imports=["pandas"])
+        assert result.values[1] == 0.5
 
     def test_starred(self):
         code = """
