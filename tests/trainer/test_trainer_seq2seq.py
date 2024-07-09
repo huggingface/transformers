@@ -205,4 +205,4 @@ class Seq2seqTrainerTester(TestCasePlus):
                     data_collator=data_collator,
                     compute_metrics=lambda x: {"samples": x[0].shape[0]},
                 )
-            self.assertIn("The loaded generation config instance is invalid", str(exc.exception))
+        self.assertIn("The loaded generation config instance is invalid", str(exc.exception))
