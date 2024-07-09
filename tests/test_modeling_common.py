@@ -3179,10 +3179,14 @@ class ModelTesterMixin:
                 continue
 
             # TODO: ydshieh
-            if model_class.__name__ in ["Wav2Vec2ForSequenceClassification", "Wav2Vec2ForSequenceClassification", "CLIPForImageClassification", "RegNetForImageClassification", "ResNetForImageClassification"]:
-                self.skipTest(
-                    reason="This test is currently failing for some models."
-                )
+            if model_class.__name__ in [
+                "Wav2Vec2ForSequenceClassification",
+                "Wav2Vec2ForSequenceClassification",
+                "CLIPForImageClassification",
+                "RegNetForImageClassification",
+                "ResNetForImageClassification",
+            ]:
+                self.skipTest(reason="This test is currently failing for some models.")
 
             with self.subTest(msg=f"Testing {model_class}"):
                 with tempfile.TemporaryDirectory() as tmp_dir:
