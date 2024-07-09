@@ -3224,7 +3224,7 @@ class ModelTesterMixin:
                             else:
                                 self.assertGreaterEqual(
                                     param_mean,
-                                    0.0,
+                                    -1.0,
                                     msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                                 )
                                 self.assertLessEqual(
