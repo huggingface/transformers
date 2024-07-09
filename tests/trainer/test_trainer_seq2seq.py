@@ -23,7 +23,7 @@ from transformers import (
     T5Tokenizer,
     logging,
 )
-from transformers.testing_utils import LoggingLevel, TestCasePlus, require_sentencepiece, require_torch, slow
+from transformers.testing_utils import LoggingLevel, TestCasePlus, is_flaky, require_sentencepiece, require_torch, slow
 from transformers.utils import is_datasets_available
 
 
