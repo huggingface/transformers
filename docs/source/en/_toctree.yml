@@ -708,6 +708,8 @@
         title: MCTCT
       - local: model_doc/mms
         title: MMS
+      - local: model_doc/msclap
+        title: MSClap
       - local: model_doc/musicgen
         title: MusicGen
       - local: model_doc/musicgen_melody

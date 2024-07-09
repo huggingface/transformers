@@ -1,27 +1,34 @@
-
-# Ke Chen
-# knutchen@ucsd.edu
-# HTS-AT: A HIERARCHICAL TOKEN-SEMANTIC AUDIO TRANSFORMER FOR SOUND CLASSIFICATION AND DETECTION
-# Model Core
-# below codes are based and referred from https://github.com/microsoft/Swin-Transformer
-# Swin Transformer for Computer Vision: https://arxiv.org/pdf/2103.14030.pdf
-
-
+import numpy as np
+import torch
+import torch.nn.functional as F
+from torch import nn
+from transformers import AutoModel
 import math
 import random
 import torch
 import torch.nn as nn
 import torch.utils.checkpoint as checkpoint
+from transformers import PreTrainedModel
+from .configuration_msclap import MSClapConfig
 
 
 from itertools import repeat
 
-import config
 
 import collections.abc
 import warnings
 
 from torch.nn.init import _calculate_fan_in_and_fan_out
+
+
+config = {
+    "loss_type" : "clip_bce", # 
+    "enable_repeat_mode" : False,  # repeat the spectrogram / reshape the spectrogram
+    "enable_tscam" : True,   # enbale the token-semantic layer
+    "mel_bins" : 64, 
+    "htsat_attn_heatmap" : False, 
+}
+
 
 
 def do_mixup(x, mixup_lambda):
@@ -649,11 +656,11 @@ class HTSAT_Swin_Transformer(nn.Module):
         self.use_checkpoint = use_checkpoint
 
         #  process mel-spec ; used only once
-        self.freq_ratio = self.spec_size // self.config.mel_bins
+        self.freq_ratio = self.spec_size // self.config["mel_bins"]
        
         self.interpolate_ratio = 32     # Downsampled ratio
 
-        self.bn0 = nn.BatchNorm2d(self.config.mel_bins)
+        self.bn0 = nn.BatchNorm2d(self.config["mel_bins"])
 
 
         # split spctrogram into non-overlapping patches
@@ -698,7 +705,7 @@ class HTSAT_Swin_Transformer(nn.Module):
         self.avgpool = nn.AdaptiveAvgPool1d(1)
         self.maxpool = nn.AdaptiveMaxPool1d(1)
 
-        if self.config.enable_tscam:
+        if self.config["enable_tscam"]:
             SF = self.spec_size // (2 ** (len(self.depths) - 1)) // self.patch_stride[0] // self.freq_ratio
             self.tscam_conv = nn.Conv2d(
                 in_channels = self.num_features,
@@ -738,7 +745,7 @@ class HTSAT_Swin_Transformer(nn.Module):
         for i, layer in enumerate(self.layers):
             x, attn = layer(x)
 
-        if self.config.enable_tscam:
+        if self.config["enable_tscam"]:
             # for x
             x = self.norm(x)
             B, N, C = x.shape
@@ -756,7 +763,7 @@ class HTSAT_Swin_Transformer(nn.Module):
             latent_output = torch.flatten(latent_output, 1)
 
             # display the attention map, if needed
-            if self.config.htsat_attn_heatmap:
+            if self.config["htsat_attn_heatmap"]:
                 # for attn
                 attn = torch.mean(attn, dim = 1)
                 attn = torch.mean(attn, dim = 1)
@@ -773,7 +780,7 @@ class HTSAT_Swin_Transformer(nn.Module):
             x = self.tscam_conv(x)
             x = torch.flatten(x, 2) # B, C, T
 
-            if self.config.htsat_attn_heatmap:
+            if self.config["htsat_attn_heatmap"]:
                 fpx = interpolate(torch.sigmoid(x).permute(0,2,1).contiguous() * attn, 8 * self.patch_stride[1]) 
             else: 
                 fpx = interpolate(torch.sigmoid(x).permute(0,2,1).contiguous(), 8 * self.patch_stride[1]) 
@@ -781,7 +788,7 @@ class HTSAT_Swin_Transformer(nn.Module):
             x = self.avgpool(x)
             x = torch.flatten(x, 1)
 
-            if self.config.loss_type == "clip_ce":
+            if self.config["loss_type"] == "clip_ce":
                 output_dict = {
                     'framewise_output': fpx, # already sigmoided
                     'clipwise_output': x,
@@ -877,7 +884,7 @@ class HTSAT_Swin_Transformer(nn.Module):
             x = x.repeat(repeats=(1,1,repeat_ratio,1))
             x = self.reshape_wav2img(x)
             output_dict = self.forward_features(x)
-        elif self.config.enable_repeat_mode:
+        elif self.config["enable_repeat_mode"]:
             if self.training:
                 cur_pos = random.randint(0, (self.freq_ratio - 1) * self.spec_size - 1)
                 x = self.repeat_wat2img(x, cur_pos)
@@ -957,3 +964,135 @@ def get_audio_encoder(name: str):
 
     return HTSATWrapper
     
+
+class Projection(nn.Module):
+    def __init__(self, d_in: int, d_out: int, p: float=0.5) -> None:
+        super().__init__()
+        self.linear1 = nn.Linear(d_in, d_out, bias=False)
+        self.linear2 = nn.Linear(d_out, d_out, bias=False)
+        self.layer_norm = nn.LayerNorm(d_out)
+        self.drop = nn.Dropout(p)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        embed1 = self.linear1(x)
+        embed2 = self.drop(self.linear2(F.gelu(embed1)))
+        embeds = self.layer_norm(embed1 + embed2)
+        return embeds
+
+class AudioEncoder(nn.Module):
+    def __init__(self, audioenc_name:str, d_in: int, d_out: int, sample_rate: int, window_size: int,
+            hop_size: int, mel_bins: int, fmin: int, fmax: int, classes_num: int) -> None:
+        super().__init__()
+        audio_encoder = get_audio_encoder(audioenc_name)
+
+        self.base = audio_encoder(
+            sample_rate, window_size,
+            hop_size, mel_bins, fmin, fmax,
+            classes_num, d_in)
+
+        self.projection = Projection(d_in, d_out)
+
+    def forward(self, x):
+        out_dict = self.base(x)
+        audio_features, audio_classification_output = out_dict['embedding'], out_dict['clipwise_output']
+        projected_vec = self.projection(audio_features)
+        return projected_vec, audio_classification_output
+
+class TextEncoder(nn.Module):
+    def __init__(self, d_out: int, text_model: str, transformer_embed_dim: int) -> None:
+        super().__init__()
+        self.text_model = text_model
+        self.base = AutoModel.from_pretrained(text_model)
+
+        if 'clip' in text_model:
+            self.clip_text_projection = self.base.text_projection
+            self.base = self.base.text_model
+            if 'base' in text_model:
+                transformer_embed_dim = 512
+        
+        self.projection = Projection(transformer_embed_dim, d_out)
+
+    def forward(self, x):
+        if 'clip' in self.text_model:
+            pooled_output = self.base(**x)[1] # get pooled output
+            out = self.clip_text_projection(pooled_output)  # get CLS token output
+        elif 'gpt' in self.text_model:
+            batch_size = x['input_ids'].shape[0]
+            hidden_states = self.base(**x)[0] # (batch_size=4, seq_len, 768)
+
+            sequence_lengths = torch.ne(x['input_ids'], 0).sum(-1) - 1 # tensor([13, 14, 18, 17])
+            out = hidden_states[torch.arange(batch_size, device=hidden_states.device), sequence_lengths] # [batch_size, 768] = [4, 768]
+        else:
+            out = self.base(**x)[0]
+            out = out[:, 0, :]  # get CLS token output
+        
+        projected_vec = self.projection(out)
+
+        return projected_vec
+
+
+class MSClapPreTrainedModel(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    config_class = MSClapConfig
+    base_model_prefix = "msclap"
+    supports_gradient_checkpointing = False
+
+    def _init_weights(self, module):
+        
+        # if isinstance(module, ClapTextEmbeddings):
+        #     module.position_embeddings.weight.data.normal_(mean=0.0, std=factor * 0.02)
+        #     module.token_type_embeddings.weight.data.normal_(mean=0.0, std=factor * 0.02)
+        # elif isinstance(module, ClapModel):
+        #     nn.init.normal_(module.logit_scale_a, std=factor * 0.02)
+        #     nn.init.normal_(module.logit_scale_t, std=factor * 0.02)
+        # elif isinstace(module, nn.Embedding):
+        #     module.weight.data.normal_(mean=0.0, std=factor * 0.02)
+
+        if isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+        elif isinstance(module, (nn.Conv2d, nn.Linear)):
+            in_proj_std = (self.config.hidden_size**-0.5) * ((2 * self.config.num_hidden_layers) ** -0.5) * self.config.initializer_factor
+            nn.init.normal_(module.weight, std=in_proj_std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+
+
+
+class MSClapModel(PreTrainedModel):
+
+    config_class = MSClapConfig
+
+    def __init__(self, config: MSClapConfig):
+        super().__init__(config)
+
+        self.audio_encoder = AudioEncoder(
+            config.audioenc_name, 
+            config.out_emb, 
+            config.d_proj,
+            config.sample_rate, 
+            config.window_size, 
+            config.hop_size, 
+            config.mel_bins, 
+            config.fmin, 
+            config.fmax, 
+            config.num_classes
+        )
+
+        self.caption_encoder = TextEncoder(
+            config.d_proj, config.text_model, config.transformer_embed_dim
+        )
+
+        self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
+
+    def forward(self, audio, text):
+        audio_embed, _ = self.audio_encoder(audio)
+        caption_embed = self.caption_encoder(text)
+
+        return caption_embed, audio_embed, self.logit_scale.exp()
+    
+

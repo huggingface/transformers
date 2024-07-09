@@ -45,6 +45,7 @@ from . import (
     chameleon,
     chinese_clip,
     clap,
+    msclap,
     clip,
     clipseg,
     clvp,

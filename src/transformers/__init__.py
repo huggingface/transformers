@@ -268,6 +268,12 @@ _import_structure = {
         "ClapProcessor",
         "ClapTextConfig",
     ],
+    "models.msclap": [
+        # "MSClapAudioConfig",
+        "MSClapConfig",
+        # "MSClapProcessor",
+        # "MSClapTextConfig",
+    ],
     "models.clip": [
         "CLIPConfig",
         "CLIPProcessor",
@@ -1659,6 +1665,17 @@ else:
             "ClapPreTrainedModel",
             "ClapTextModel",
             "ClapTextModelWithProjection",
+        ]
+    )
+    _import_structure["models.msclap"].extend(
+        [
+            # "MSClapAudioModel",
+            # "MSClapAudioModelWithProjection",
+            # "MSClapFeatureExtractor",
+            "MSClapModel",
+            "MSClapPreTrainedModel",
+            # "MSClapTextModel",
+            # "MSClapTextModelWithProjection",
         ]
     )
     _import_structure["models.clip"].extend(
@@ -4987,6 +5004,12 @@ if TYPE_CHECKING:
         ClapProcessor,
         ClapTextConfig,
     )
+    from .models.msclap import (
+        # MSClapAudioConfig,
+        MSClapConfig,
+        # MSClapProcessor,
+        # MSClapTextConfig,
+    )
     from .models.clip import (
         CLIPConfig,
         CLIPProcessor,
@@ -6381,6 +6404,15 @@ if TYPE_CHECKING:
             ClapPreTrainedModel,
             ClapTextModel,
             ClapTextModelWithProjection,
+        )
+        from .models.msclap import (
+            # MSClapAudioModel,
+            # MSClapAudioModelWithProjection,
+            # MSClapFeatureExtractor,
+            MSClapModel,
+            MSClapPreTrainedModel,
+            # MSClapTextModel,
+            # MSClapTextModelWithProjection,
         )
         from .models.clip import (
             CLIPForImageClassification,

@@ -43,6 +43,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("beit", "BeitFeatureExtractor"),
         ("chinese_clip", "ChineseCLIPFeatureExtractor"),
         ("clap", "ClapFeatureExtractor"),
+        ("msclap", "MSClapFeatureExtractor"),
         ("clip", "CLIPFeatureExtractor"),
         ("clipseg", "ViTFeatureExtractor"),
         ("clvp", "ClvpFeatureExtractor"),
