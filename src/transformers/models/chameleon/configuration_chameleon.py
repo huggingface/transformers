@@ -156,8 +156,9 @@ class ChameleonConfig(PretrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        qk_layernorm (`bool`, *optional*, defaults to `True`):
-            Whether to use query-key normalization.
+        model_parallel_size (`int`, *optional*, defaults to 1):
+            Number of shards used when training the model. This will be used in qk layernorm because the original Chameleon inference
+            doesn't do reduction in those layers and each rank has its own biases.
         swin_norm (`bool`, *optional*, defaults to `False`):
             Use Swin Transformer normalization.
         vq_config (`dict`, *optional*):
@@ -205,7 +206,7 @@ class ChameleonConfig(PretrainedConfig):
         rope_scaling=None,
         attention_bias=False,
         attention_dropout=0.0,
-        qk_layernorm=True,
+        model_parallel_size=1,
         swin_norm=False,
         vq_config=None,
         vocabulary_map=None,
@@ -234,7 +235,7 @@ class ChameleonConfig(PretrainedConfig):
         self._rope_scaling_validation()
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        self.qk_layernorm = qk_layernorm
+        self.model_parallel_size = model_parallel_size
         self.swin_norm = swin_norm
 
         if vq_config is None:

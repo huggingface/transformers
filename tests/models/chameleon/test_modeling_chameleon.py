@@ -26,7 +26,6 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_gpu,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -388,12 +387,12 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         Overwritting the common test as the test is flaky on tiny models
         """
         model = ChameleonForCausalLM.from_pretrained(
-            "meta-chameleon/meta-chameleon/chameleon-hf",
+            "facebook/chameleon-7b",
             load_in_4bit=True,
             device_map={"": 0},
         )
 
-        processor = ChameleonProcessor.from_pretrained("meta-chameleon/meta-chameleon/chameleon-hf")
+        processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
         texts = ["hi", "Hello this is a very long sentence"]
 
         processor.tokenizer.padding_side = "right"
@@ -404,7 +403,7 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         output_native = processor.tokenizer.batch_decode(output_native)
 
         model = ChameleonForCausalLM.from_pretrained(
-            "meta-chameleon/meta-chameleon/chameleon-hf",
+            "facebook/chameleon-7b",
             load_in_4bit=True,
             attn_implementation="flash_attention_2",
         )
@@ -413,66 +412,6 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         output_fa_2 = processor.tokenizer.batch_decode(output_fa_2)
 
         self.assertListEqual(output_native, output_fa_2)
-
-    @require_torch_sdpa
-    @slow
-    def test_eager_matches_sdpa_generate(self):
-        """
-        Overwritting the common test as the test is flaky on tiny models
-        """
-        max_new_tokens = 30
-
-        processor = ChameleonProcessor.from_pretrained("saibo/chameleon-1B")
-        model_sdpa = ChameleonForCausalLM.from_pretrained(
-            "saibo/chameleon-1B",
-            torch_dtype=torch.float16,
-            low_cpu_mem_usage=True,
-        ).to(torch_device)
-
-        self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
-
-        model_eager = ChameleonForCausalLM.from_pretrained(
-            "saibo/chameleon-1B",
-            torch_dtype=torch.float16,
-            low_cpu_mem_usage=True,
-            attn_implementation="eager",
-        ).to(torch_device)
-
-        self.assertTrue(model_eager.config._attn_implementation == "eager")
-
-        for name, submodule in model_eager.named_modules():
-            if "SdpaAttention" in submodule.__class__.__name__:
-                raise ValueError("The eager model should not have SDPA attention layers")
-
-        has_sdpa = False
-        for name, submodule in model_sdpa.named_modules():
-            if "SdpaAttention" in submodule.__class__.__name__:
-                has_sdpa = True
-                break
-        if not has_sdpa:
-            raise ValueError("The SDPA model should have SDPA attention layers")
-
-        texts = [
-            "hi here's a longer context, getting longer and",
-            "Hello this is a very long sentence my friend, very long for real",
-            "Today I am in Paris and",
-        ]
-
-        for padding_side in ["left", "right"]:
-            processor.tokenizer.padding_side = padding_side
-            processor.tokenizer.pad_token = processor.tokenizer.eos_token
-
-            inputs = processor(texts, return_tensors="pt", padding=True).to(torch_device)
-
-            res_eager = model_eager.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
-            res_sdpa = model_sdpa.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
-
-            with self.subTest(f"{padding_side}"):
-                torch.testing.assert_close(
-                    res_eager,
-                    res_sdpa,
-                    msg=f"\n{processor.batch_decode(res_eager)} \nvs\n{processor.batch_decode(res_sdpa)}",
-                )
 
     @unittest.skip("Chameleon forces some token ids to be -inf!")
     def test_batching_equivalence(self):
@@ -484,10 +423,8 @@ class ChameleonIntegrationTest(unittest.TestCase):
     @slow
     @require_bitsandbytes
     def test_model_7b(self):
-        model = ChameleonForCausalLM.from_pretrained(
-            "/raid/raushan/chameleon_rotated_hf", load_in_4bit=True, device_map="auto"
-        )
-        processor = ChameleonProcessor.from_pretrained("/raid/raushan/chameleon_rotated_hf")
+        model = ChameleonForCausalLM.from_pretrained("facebook/chameleon-7b", load_in_4bit=True, device_map="auto")
+        processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
 
         image = Image.open(
             requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
@@ -505,10 +442,8 @@ class ChameleonIntegrationTest(unittest.TestCase):
     @slow
     @require_bitsandbytes
     def test_model_7b_batched(self):
-        model = ChameleonForCausalLM.from_pretrained(
-            "/raid/raushan/chameleon_rotated_hf", load_in_4bit=True, device_map="auto"
-        )
-        processor = ChameleonProcessor.from_pretrained("/raid/raushan/chameleon_rotated_hf")
+        model = ChameleonForCausalLM.from_pretrained("facebook/chameleon-7b", load_in_4bit=True, device_map="auto")
+        processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
 
         image = Image.open(
             requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
@@ -537,10 +472,8 @@ class ChameleonIntegrationTest(unittest.TestCase):
     @slow
     @require_bitsandbytes
     def test_model_7b_multi_image(self):
-        model = ChameleonForCausalLM.from_pretrained(
-            "/raid/raushan/chameleon_rotated_hf", load_in_4bit=True, device_map="auto"
-        )
-        processor = ChameleonProcessor.from_pretrained("/raid/raushan/chameleon_rotated_hf")
+        model = ChameleonForCausalLM.from_pretrained("facebook/chameleon-7b", load_in_4bit=True, device_map="auto")
+        processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
 
         image = Image.open(
             requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw

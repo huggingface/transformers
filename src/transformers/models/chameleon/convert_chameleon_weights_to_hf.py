@@ -91,6 +91,7 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
     if os.path.isfile(consolidate_params_path):
         params = {**params, **read_json(consolidate_params_path)}
     num_shards = NUM_SHARDS[model_size]
+    model_parallel_size = params["model_parallel_size"]
     params = params.get("model", params)
     n_layers = params["n_layers"]
     n_heads = params["n_heads"]
@@ -98,7 +99,6 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
     dim = params["dim"]
     dims_per_head = dim // n_heads
     base = params.get("rope_theta", 10000.0)
-    qk_layernorm = params["qk_normalization"]
     swin_norm = params["swin_norm"]
     if base > 10000.0:
         max_position_embeddings = 16384
@@ -162,19 +162,31 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
                     ],
                 }
             )
-            if qk_layernorm:
-                state_dict[f"model.layers.{layer_i}.self_attn.q_norm.weight"] = loaded[
-                    f"layers.{layer_i}.attention.q_normalization.weight"
-                ]
-                state_dict[f"model.layers.{layer_i}.self_attn.q_norm.bias"] = loaded[
-                    f"layers.{layer_i}.attention.q_normalization.bias"
-                ]
-                state_dict[f"model.layers.{layer_i}.self_attn.k_norm.weight"] = loaded[
-                    f"layers.{layer_i}.attention.k_normalization.weight"
-                ]
-                state_dict[f"model.layers.{layer_i}.self_attn.k_norm.bias"] = loaded[
-                    f"layers.{layer_i}.attention.k_normalization.bias"
-                ]
+            # qk_layernorm (see https://github.com/huggingface/transformers/pull/31534#issuecomment-2207354677)
+            state_dict[f"model.layers.{layer_i}.self_attn.q_norm.weight"] = (
+                loaded[f"layers.{layer_i}.attention.q_normalization.weight"]
+                .unsqueeze(0)
+                .expand(n_heads, -1)
+                .contiguous()
+            )
+            state_dict[f"model.layers.{layer_i}.self_attn.q_norm.bias"] = (
+                loaded[f"layers.{layer_i}.attention.q_normalization.bias"]
+                .unsqueeze(0)
+                .expand(n_heads, -1)
+                .contiguous()
+            )
+            state_dict[f"model.layers.{layer_i}.self_attn.k_norm.weight"] = (
+                loaded[f"layers.{layer_i}.attention.k_normalization.weight"]
+                .unsqueeze(0)
+                .expand(num_key_value_heads, -1)
+                .contiguous()
+            )
+            state_dict[f"model.layers.{layer_i}.self_attn.k_norm.bias"] = (
+                loaded[f"layers.{layer_i}.attention.k_normalization.bias"]
+                .unsqueeze(0)
+                .expand(num_key_value_heads, -1)
+                .contiguous()
+            )
 
         else:
             # Sharded
@@ -206,19 +218,34 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
                 dim=0,
             ).reshape(key_value_dim, dim)
 
-            if qk_layernorm:
-                state_dict[f"model.layers.{layer_i}.self_attn.q_norm.weight"] = torch.stack(
-                    [l[f"layers.{layer_i}.attention.q_normalization.weight"] for l in loaded]
-                ).mean(dim=0)
-                state_dict[f"model.layers.{layer_i}.self_attn.q_norm.bias"] = torch.stack(
-                    [l[f"layers.{layer_i}.attention.q_normalization.bias"] for l in loaded]
-                ).mean(dim=0)
-                state_dict[f"model.layers.{layer_i}.self_attn.k_norm.weight"] = torch.stack(
-                    [l[f"layers.{layer_i}.attention.k_normalization.weight"] for l in loaded]
-                ).mean(dim=0)
-                state_dict[f"model.layers.{layer_i}.self_attn.k_norm.bias"] = torch.stack(
-                    [l[f"layers.{layer_i}.attention.k_normalization.bias"] for l in loaded]
-                ).mean(dim=0)
+            # qk_layernorm (see https://github.com/huggingface/transformers/pull/31534#issuecomment-2207354677)
+            state_dict[f"model.layers.{layer_i}.self_attn.q_norm.weight"] = torch.cat(
+                [
+                    l[f"layers.{layer_i}.attention.q_normalization.weight"].unsqueeze(0).expand(n_heads, -1)
+                    for l in loaded
+                ]
+            )
+            state_dict[f"model.layers.{layer_i}.self_attn.q_norm.bias"] = torch.cat(
+                [
+                    l[f"layers.{layer_i}.attention.q_normalization.bias"].unsqueeze(0).expand(n_heads, -1)
+                    for l in loaded
+                ]
+            )
+            state_dict[f"model.layers.{layer_i}.self_attn.k_norm.weight"] = torch.cat(
+                [
+                    l[f"layers.{layer_i}.attention.k_normalization.weight"]
+                    .unsqueeze(0)
+                    .expand(num_key_value_heads, -1)
+                    for l in loaded
+                ]
+            )
+            state_dict[f"model.layers.{layer_i}.self_attn.k_norm.bias"] = torch.cat(
+                [
+                    l[f"layers.{layer_i}.attention.k_normalization.bias"].unsqueeze(0).expand(num_key_value_heads, -1)
+                    for l in loaded
+                ]
+            )
+
             state_dict[f"model.layers.{layer_i}.self_attn.v_proj.weight"] = torch.cat(
                 [
                     loaded[i][f"layers.{layer_i}.attention.wv.weight"].view(
@@ -314,7 +341,7 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
         vocab_size=VOCAB_SIZE,
         rope_theta=base,
         max_position_embeddings=max_position_embeddings,
-        qk_layernorm=qk_layernorm,
+        model_parallel_size=model_parallel_size,
         swin_norm=swin_norm,
         vq_config=vq_config,
         vocabulary_map=vocabulary_map,

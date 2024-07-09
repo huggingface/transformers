@@ -52,6 +52,8 @@ The original code can be found [here](https://github.com/facebookresearch/chamel
 
 - Note that Chameleon was tuned for safety alignment. If the model is refusing to answer, consider asking a more concrete question, instead of an open question.
 
+- Chameleon generates in chat format which means that the generated text will always be the "assistant's turn". You can enable a text completion generation by passing `return_for_text_completion=True` when calling the processor.
+
 ## Usage example
 
 ### Single image inference
