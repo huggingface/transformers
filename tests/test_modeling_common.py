@@ -3194,6 +3194,7 @@ class ModelTesterMixin:
                 "wav2vec2\.encoder\.pos_conv_embed\.conv\.parametrizations\.weight\.original.",
                 "classifier\.weight",
                 "regnet\.embedder\.embedder\.convolution\.weight",
+                "regnet\.encoder\.stages\..+\.layers\..+\.layer\..+\.convolution\.weight",
                 "regnet\.encoder\.stages\..+\.layers\..+\.shortcut\.convolution\.weight",
                 "resnet\.embedder\.embedder\.convolution\.weight",
             ]
