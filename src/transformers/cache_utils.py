@@ -9,7 +9,7 @@ import torch
 from packaging import version
 
 from .configuration_utils import PretrainedConfig
-from .utils import is_hqq_available, is_quanto_available, logging
+from .utils import is_hqq_available, is_quanto_available, is_torchdynamo_compiling, logging
 
 
 if is_quanto_available():
@@ -820,11 +820,13 @@ class StaticCache(Cache):
         cache_shape = (max_batch_size, self.num_key_value_heads, self.max_cache_len, self.head_dim)
         for _ in range(config.num_hidden_layers):
             # Note: `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
-            # breaks when updating the cache.
+            # breaks when updating the cache. It can't be used if the cache code is being compiled (but in that case
+            # it is not needed anyway)
             new_layer_key_cache = torch.zeros(cache_shape, dtype=self.dtype, device=device)
             new_layer_value_cache = torch.zeros(cache_shape, dtype=self.dtype, device=device)
-            torch._dynamo.mark_static_address(new_layer_key_cache)
-            torch._dynamo.mark_static_address(new_layer_value_cache)
+            if not is_torchdynamo_compiling():
+                torch._dynamo.mark_static_address(new_layer_key_cache)
+                torch._dynamo.mark_static_address(new_layer_value_cache)
             self.key_cache.append(new_layer_key_cache)
             self.value_cache.append(new_layer_value_cache)
 

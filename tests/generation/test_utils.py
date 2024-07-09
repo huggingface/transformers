@@ -1838,7 +1838,9 @@ class GenerationTesterMixin:
                 output_static = model.generate(model_inputs, **generation_kwargs)
                 self.assertListEqual(output_dynamic.tolist(), output_static.tolist())
 
-                # compiled static cache
+                # compiled static cache (removes the cache initialized in the previous check, to confirm we can
+                # initialize the cache in full compiled mode)
+                model._cache = None
                 torch.compiler.reset()
                 generation_config = copy.deepcopy(model.generation_config)
                 generation_config.update(**generation_kwargs)

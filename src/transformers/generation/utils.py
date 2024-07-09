@@ -1461,7 +1461,14 @@ class GenerationMixin:
             if hasattr(self.config, "_pre_quantization_dtype"):
                 cache_dtype = self.config._pre_quantization_dtype
             else:
-                cache_dtype = self.dtype
+                if not is_torchdynamo_compiling():
+                    cache_dtype = self.dtype
+                else:
+                    # NOTE: self.dtype is not compatible with torch.compile, as it calls `self.parameters()`.
+                    # Workaround: trust the lm_head, whose attribute name is somewhat consistent across generative
+                    # models. May cause trobles with non-text modalities.
+                    cache_dtype = self.lm_head.weight.dtype
+
             cache_kwargs = {
                 "config": self.config,
                 "max_batch_size": max_batch_size,
@@ -1764,6 +1771,12 @@ class GenerationMixin:
             cache_name = "cache_params"
         else:
             cache_name = "past_key_values"
+        if (model_kwargs.get(cache_name) is not None) and is_torchdynamo_compiling():
+            raise ValueError(
+                "Passing `past_key_values` is not supported when compiling `model.generate` with torch.compile -- you "
+                "may get incorrect outputs. Please compile `model.forward` only or use the `cache_implementation` "
+                "input argument."
+            )
         if generation_config.cache_implementation is not None and (model_kwargs.get(cache_name) is not None):
             raise ValueError(
                 f"Passing both `cache_implementation` (used to initialize certain caches) and `{cache_name}` (a "
