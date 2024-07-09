@@ -1215,7 +1215,7 @@ class ModelTesterMixin:
                             (past_mask, inputs_to_test[1]["attention_mask"]), dim=1
                         )
 
-            if "inputs_embeds" in inspect.signature(model.forward).parameters:
+            if "inputs_embeds" in inspect.signature(model.forward).parameters and not model.config.is_encoder_decoder:
                 inputs_to_test.append(
                     {
                         "inputs_embeds": torch.rand(
