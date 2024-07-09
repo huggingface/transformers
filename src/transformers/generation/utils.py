@@ -27,7 +27,9 @@ from torch import nn
 from ..cache_utils import (
     Cache,
     DynamicCache,
+    EncoderDecoderCache,
     HQQQuantizedCache,
+    HybridCache,
     QuantizedCacheConfig,
     QuantoQuantizedCache,
     SlidingWindowCache,
@@ -112,7 +114,7 @@ logger = logging.get_logger(__name__)
 if is_accelerate_available():
     from accelerate.hooks import AlignDevicesHook, add_hook_to_module
 
-NEED_SETUP_CACHE_CLASSES_MAPPING = {"static": StaticCache, "sliding_window": SlidingWindowCache}
+NEED_SETUP_CACHE_CLASSES_MAPPING = {"static": StaticCache, "sliding_window": SlidingWindowCache, "hybrid": HybridCache}
 QUANT_BACKEND_CLASSES_MAPPING = {"quanto": QuantoQuantizedCache, "HQQ": HQQQuantizedCache}
 
 
@@ -1394,11 +1396,13 @@ class GenerationMixin:
             return model_kwargs
 
         past_length = 0
-        if "past_key_values" in model_kwargs:
-            if isinstance(model_kwargs["past_key_values"], Cache):
-                past_length = model_kwargs["past_key_values"].get_seq_length()
-            else:
-                past_length = model_kwargs["past_key_values"][0][0].shape[2]
+        if model_kwargs.get("past_key_values") is not None:
+            cache = model_kwargs["past_key_values"]
+            if not isinstance(cache, Cache):
+                past_length = cache[0][0].shape[2]
+            elif hasattr(cache, "get_seq_length") and cache.get_seq_length() is not None:
+                past_length = cache.get_seq_length()
+
         if "inputs_embeds" in model_kwargs:
             cur_len = model_kwargs["inputs_embeds"].shape[1]
         else:
@@ -1406,7 +1410,7 @@ class GenerationMixin:
         model_kwargs["cache_position"] = torch.arange(past_length, cur_len, device=input_ids.device)
         return model_kwargs
 
-    def _get_cache(self, cache_implementation: str, max_batch_size: int, max_cache_len: int) -> Cache:
+    def _get_cache(self, cache_implementation: str, max_batch_size: int, max_cache_len: int, model_kwargs) -> Cache:
         """
         Sets a cache for `generate`, that will persist across calls. A new cache will only be initialized a
         new `generate` call requires a larger cache.
@@ -1414,28 +1418,46 @@ class GenerationMixin:
         Returns the resulting cache object.
         """
         cache_cls: Cache = NEED_SETUP_CACHE_CLASSES_MAPPING[cache_implementation]
+        requires_cross_attention_cache = (
+            self.config.is_encoder_decoder or model_kwargs.get("encoder_outputs") is not None
+        )
+
+        if hasattr(self, "_cache"):
+            cache_to_check = self._cache.self_attention_cache if requires_cross_attention_cache else self._cache
+
         if cache_implementation == "sliding_window":
             max_cache_len = min(self.config.sliding_window, max_cache_len)
 
         need_new_cache = (
             not hasattr(self, "_cache")
-            or (not isinstance(self._cache, cache_cls))
-            or self._cache.max_batch_size != max_batch_size
-            or self._cache.max_cache_len < max_cache_len
+            or (not isinstance(cache_to_check, cache_cls))
+            or cache_to_check.max_batch_size != max_batch_size
+            or cache_to_check.max_cache_len < max_cache_len
         )
+
+        if requires_cross_attention_cache and hasattr(self, "_cache"):
+            need_new_cache = (
+                need_new_cache
+                or self._cache.cross_attention_cache.max_cache_len != model_kwargs["encoder_outputs"][0].shape[1]
+            )
 
         if need_new_cache:
             if hasattr(self.config, "_pre_quantization_dtype"):
                 cache_dtype = self.config._pre_quantization_dtype
             else:
                 cache_dtype = self.dtype
-            self._cache = cache_cls(
-                config=self.config,
-                max_batch_size=max_batch_size,
-                max_cache_len=max_cache_len,
-                device=self.device,
-                dtype=cache_dtype,
-            )
+            cache_kwargs = {
+                "config": self.config,
+                "max_batch_size": max_batch_size,
+                "max_cache_len": max_cache_len,
+                "device": self.device,
+                "dtype": cache_dtype,
+            }
+            self._cache = cache_cls(**cache_kwargs)
+            if requires_cross_attention_cache:
+                encoder_kwargs = cache_kwargs.copy()
+                encoder_kwargs["max_cache_len"] = model_kwargs["encoder_outputs"][0].shape[1]
+                self._cache = EncoderDecoderCache(self._cache, cache_cls(**encoder_kwargs))
         else:
             self._cache.reset()
         return self._cache
@@ -1471,8 +1493,11 @@ class GenerationMixin:
                 device = self.device
 
             token = token_kwargs if token_kwargs is not None else token_self
-            if token is None or isinstance(token, torch.Tensor):
+            if token is None:
                 return token
+            elif isinstance(token, torch.Tensor):
+                return token.to(device)
+
             return torch.tensor(token, device=device, dtype=torch.long)
 
         bos_token_id = _tensor_or_none(
@@ -1739,7 +1764,10 @@ class GenerationMixin:
                         "issue: https://github.com/huggingface/transformers/issues/28981"
                     )
                 model_kwargs["past_key_values"] = self._get_cache(
-                    generation_config.cache_implementation, batch_size, generation_config.max_length
+                    generation_config.cache_implementation,
+                    getattr(generation_config, "num_beams", 1) * batch_size,
+                    generation_config.max_length,
+                    model_kwargs,
                 )
             elif generation_config.cache_implementation == "quantized":
                 if not self._supports_quantized_cache:
@@ -1771,11 +1799,22 @@ class GenerationMixin:
         # keeps copying the cache thus using much more memory
         elif generation_config.cache_implementation is None and self._supports_default_dynamic_cache():
             past = model_kwargs.get("past_key_values", None)
+            requires_cross_attention_cache = (
+                self.config.is_encoder_decoder or model_kwargs.get("encoder_outputs") is not None
+            )
             if past is None:
-                model_kwargs["past_key_values"] = DynamicCache()
+                model_kwargs["past_key_values"] = (
+                    DynamicCache()
+                    if not requires_cross_attention_cache
+                    else EncoderDecoderCache(DynamicCache(), DynamicCache())
+                )
                 use_dynamic_cache_by_default = True
             elif isinstance(past, tuple):
-                model_kwargs["past_key_values"] = DynamicCache.from_legacy_cache(past)
+                model_kwargs["past_key_values"] = (
+                    DynamicCache.from_legacy_cache(past)
+                    if not requires_cross_attention_cache
+                    else EncoderDecoderCache.from_legacy_cache(past)
+                )
                 use_dynamic_cache_by_default = True
 
         self._validate_generated_length(generation_config, input_ids_length, has_default_max_length)
@@ -2059,7 +2098,7 @@ class GenerationMixin:
         # Convert to legacy cache if needed
         if use_dynamic_cache_by_default and generation_config.return_legacy_cache:
             if isinstance(result, ModelOutput) and hasattr(result, "past_key_values"):
-                if isinstance(result.past_key_values, DynamicCache):
+                if isinstance(result.past_key_values, (DynamicCache, EncoderDecoderCache)):
                     result.past_key_values = result.past_key_values.to_legacy_cache()
         return result
 
@@ -2229,7 +2268,7 @@ class GenerationMixin:
             # if the first step in the loop, encode all the prefix and obtain: (1) past_key_values;
             # (2) last_hidden_states; (3) logit_for_next_step; (4) update model kwargs for the next step
             if model_kwargs.get("past_key_values") is None or (
-                isinstance(model_kwargs["past_key_values"], Cache)
+                isinstance(model_kwargs["past_key_values"], (Cache, EncoderDecoderCache))
                 and model_kwargs["past_key_values"].get_seq_length() == 0
             ):
                 # prepare inputs
@@ -2318,7 +2357,9 @@ class GenerationMixin:
                 # Replicates the new past_key_values to match the `top_k` candidates
                 past = model_kwargs["past_key_values"]
                 # If it is a static cache, modify it in-place layer after layer to save memory
-                if isinstance(past, DynamicCache):
+                if isinstance(past, DynamicCache) or (
+                    isinstance(past, EncoderDecoderCache) and isinstance(past.self_attention_cache, DynamicCache)
+                ):
                     past.batch_repeat_interleave(top_k)
                 else:
                     new_key_values = []
@@ -2345,7 +2386,10 @@ class GenerationMixin:
                         output_hidden_states=True,
                         output_attentions=output_attentions,
                     )
-                    if isinstance(outputs["past_key_values"], DynamicCache):
+                    if isinstance(outputs["past_key_values"], DynamicCache) or (
+                        isinstance(outputs["past_key_values"], EncoderDecoderCache)
+                        and isinstance(outputs["past_key_values"].self_attention_cache, DynamicCache)
+                    ):
                         # Remove past K-V from output since we don't need to stack later
                         outputs["past_key_values"] = None
                         # Remove last token from past K-V since we don't want to append it at this point
@@ -2420,7 +2464,10 @@ class GenerationMixin:
             else:
                 _, next_past_key_values = self._extract_past_from_model_output(outputs, standardize_cache_format=True)
                 # Do it in-place layer per layer to save memory
-                if isinstance(next_past_key_values, DynamicCache):
+                if isinstance(next_past_key_values, DynamicCache) or (
+                    isinstance(next_past_key_values, EncoderDecoderCache)
+                    and isinstance(next_past_key_values.self_attention_cache, DynamicCache)
+                ):
                     next_past_key_values.batch_select_indices(augmented_idx)
                 else:
                     new_key_values = []
@@ -2493,7 +2540,10 @@ class GenerationMixin:
             # Contrastive search works by forward looking at the next token, so we need to exclude it from
             # `past_key_values` to be consistent with the other decoding methods
             if model_kwargs.get("past_key_values") is not None:
-                if isinstance(model_kwargs["past_key_values"], DynamicCache):
+                if isinstance(model_kwargs["past_key_values"], DynamicCache) or (
+                    isinstance(model_kwargs["past_key_values"], EncoderDecoderCache)
+                    and isinstance(model_kwargs["past_key_values"].self_attention_cache, DynamicCache)
+                ):
                     model_kwargs["past_key_values"].crop(-1)
                 else:
                     past_key_values = []
@@ -2642,13 +2692,12 @@ class GenerationMixin:
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
+            # prepare variable output controls (note: some models won't accept all output controls)
+            model_inputs.update({"output_attentions": output_attentions} if output_attentions else {})
+            model_inputs.update({"output_hidden_states": output_hidden_states} if output_hidden_states else {})
+
             # forward pass to get next token
-            outputs = self(
-                **model_inputs,
-                return_dict=True,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-            )
+            outputs = self(**model_inputs, return_dict=True)
 
             if synced_gpus and this_peer_finished:
                 continue  # don't waste resources running the code we don't need
@@ -2752,7 +2801,7 @@ class GenerationMixin:
         # Exception 2: models with different cache formats. These are limited to `DynamicCache` until their
         # cache format is standardized, to avoid adding complexity to the codebase.
         elif "bloom" in model_class or "gptbigcode" in model_class:
-            if not isinstance(past_key_values, DynamicCache):
+            if not isinstance(past_key_values, (DynamicCache, EncoderDecoderCache)):
                 raise ValueError(
                     f"Using an unsupported cache format with {model_class}. Currently, it only supports the "
                     "legacy tuple format or `DynamicCache`"
@@ -2869,6 +2918,10 @@ class GenerationMixin:
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
+            # prepare variable output controls (note: some models won't accept all output controls)
+            model_inputs.update({"output_attentions": output_attentions} if output_attentions else {})
+            model_inputs.update({"output_hidden_states": output_hidden_states} if output_hidden_states else {})
+
             # if sequential is True, split the input to batches of batch_size and run sequentially
             if sequential:
                 if any(
@@ -2894,24 +2947,13 @@ class GenerationMixin:
                     model_inputs, split_size=batch_size, full_batch_size=batch_beam_size
                 )
                 outputs_per_sub_batch = [
-                    self(
-                        **inputs_per_sub_batch,
-                        return_dict=True,
-                        output_attentions=output_attentions,
-                        output_hidden_states=output_hidden_states,
-                    )
-                    for inputs_per_sub_batch in inputs_per_sub_batches
+                    self(**inputs_per_sub_batch, return_dict=True) for inputs_per_sub_batch in inputs_per_sub_batches
                 ]
 
                 outputs = stack_model_outputs(outputs_per_sub_batch)
 
             else:  # Unchanged original behavior
-                outputs = self(
-                    **model_inputs,
-                    return_dict=True,
-                    output_attentions=output_attentions,
-                    output_hidden_states=output_hidden_states,
-                )
+                outputs = self(**model_inputs, return_dict=True)
 
             if synced_gpus and this_peer_finished:
                 cur_len = cur_len + 1
@@ -3191,12 +3233,12 @@ class GenerationMixin:
 
             # do one decoder step on all beams of all sentences in batch
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
-            outputs = self(
-                **model_inputs,
-                return_dict=True,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-            )
+
+            # prepare variable output controls (note: some models won't accept all output controls)
+            model_inputs.update({"output_attentions": output_attentions} if output_attentions else {})
+            model_inputs.update({"output_hidden_states": output_hidden_states} if output_hidden_states else {})
+
+            outputs = self(**model_inputs, return_dict=True)
 
             if synced_gpus and this_peer_finished:
                 cur_len = cur_len + 1
@@ -3472,12 +3514,11 @@ class GenerationMixin:
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
-            outputs = self(
-                **model_inputs,
-                return_dict=True,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-            )
+            # prepare variable output controls (note: some models won't accept all output controls)
+            model_inputs.update({"output_attentions": output_attentions} if output_attentions else {})
+            model_inputs.update({"output_hidden_states": output_hidden_states} if output_hidden_states else {})
+
+            outputs = self(**model_inputs, return_dict=True)
 
             if synced_gpus and this_peer_finished:
                 cur_len = cur_len + 1
@@ -3697,11 +3738,14 @@ class GenerationMixin:
         model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
 
         # This is needed if return_dict_in_generate is True
-        if isinstance(model_kwargs.get("past_key_values", None), DynamicCache):
-            if len(model_kwargs["past_key_values"]) == 0:
+        start_from_empty_dynamic_cache = False
+        past_key_values = model_kwargs.get("past_key_values", None)
+        if isinstance(past_key_values, DynamicCache) or (
+            isinstance(past_key_values, EncoderDecoderCache)
+            and isinstance(past_key_values.self_attention_cache, DynamicCache)
+        ):
+            if len(past_key_values) == 0:
                 start_from_empty_dynamic_cache = True
-        else:
-            start_from_empty_dynamic_cache = False
 
         this_peer_finished = False
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
@@ -3740,11 +3784,11 @@ class GenerationMixin:
                 model_inputs["num_logits_to_keep"] = candidate_length + 1
 
             # 2.2. Run a forward pass on the candidate sequence
-            outputs = self(
-                **model_inputs,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-            )
+            # prepare variable output controls (note: some models won't accept all output controls)
+            model_inputs.update({"output_attentions": output_attentions} if output_attentions else {})
+            model_inputs.update({"output_hidden_states": output_hidden_states} if output_hidden_states else {})
+
+            outputs = self(**model_inputs)
 
             # 2.3. Process the new logits
             new_logits = outputs.logits[:, -candidate_length - 1 :]  # excludes the input prompt if present
@@ -4018,7 +4062,9 @@ def _split(data, full_batch_size: int, split_size: int = None):
     if isinstance(data, torch.Tensor):
         return [data[i : i + split_size] for i in range(0, full_batch_size, split_size)]
     # New cache format
-    elif isinstance(data, DynamicCache):
+    elif isinstance(data, DynamicCache) or (
+        isinstance(data, EncoderDecoderCache) and isinstance(data.self_attention_cache, DynamicCache)
+    ):
         return data.batch_split(full_batch_size, split_size)
     elif isinstance(data, tuple):
         # If the elements of the tuple are also tuples (e.g., past_key_values in our earlier example)
@@ -4126,6 +4172,8 @@ def stack_model_outputs(model_outputs: List[ModelOutput]) -> ModelOutput:
         # New cache format
         elif isinstance(data[0], DynamicCache):
             return DynamicCache.from_batch_splits(data)
+        elif isinstance(data[0], EncoderDecoderCache):
+            return EncoderDecoderCache.from_batch_splits(data)
         elif isinstance(data[0], tuple):
             # If the elements of the tuple are also tuples (e.g., past_key_values in our earlier example)
             if isinstance(data[0][0], tuple):
