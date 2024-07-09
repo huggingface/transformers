@@ -35,7 +35,7 @@ In this guide, we will see how to infer with [Depth Anything V2](https://hugging
 
 <Tip>
 
-To see all architectures and checkpoints compatible with this task, we recommend checking the [task page](https://huggingface.co/tasks/depth-anything). 
+Check the [Depth Estimation](https://huggingface.co/tasks/depth-estimation) task page to view all compatible architectures and checkpoints.
 
 </Tip>
 
