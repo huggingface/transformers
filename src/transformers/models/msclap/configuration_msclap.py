@@ -23,17 +23,49 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
+class MSClapAudioConfig(PretrainedConfig): 
+
+    model_type = "msclap"
+
+    def __init__(self, 
+        out_emb = 768, 
+        d_proj = 1024, 
+        **kwargs,
+
+    ):  
+        super().__init__(**kwargs)
+
+        self.d_in = out_emb 
+        self.d_out = d_proj        
+
+class MSClapTextConfig(PretrainedConfig): 
+
+    model_type = "msclap"
+
+    def __init__(self, 
+        transformer_embed_dim = 768, 
+        d_proj = 1024, 
+        text_model = 'gpt2', 
+        **kwargs,
+
+    ):  
+        super().__init__(**kwargs)
+
+        self.d_in = transformer_embed_dim 
+        self.d_out = d_proj   
+        self.text_model = text_model
+
+
 class MSClapConfig(PretrainedConfig): 
 
     model_type = "msclap"
 
     def __init__(self, 
-        text_model = 'gpt2', 
+        audio_config = MSClapAudioConfig(), 
+        text_config = MSClapTextConfig(), 
         text_len = 77, 
-        transformer_embed_dim = 768, 
         freeze_text_encoder_weights = True, 
         audioenc_name = 'HTSAT', 
-        out_emb = 768,
         sample_rate = 44100, 
         duration = 7, 
         fmin = 50, 
@@ -42,22 +74,24 @@ class MSClapConfig(PretrainedConfig):
         hop_size = 320, 
         mel_bins = 64, 
         window_size = 1024, 
-        d_proj = 1024, 
         temperature = 0.003, 
         num_classes = 527, 
         batch_size = 1024, 
         demo = False, 
+        **kwargs,
         ): 
+
+        super().__init__(**kwargs)
+
+        self.audio_config = audio_config
+        self.text_config = text_config
         
         # TEXT ENCODER CONFIG
-        self.text_model = text_model
         self.text_len = text_len
-        self.transformer_embed_dim = transformer_embed_dim
         self.freeze_text_encoder_weights = freeze_text_encoder_weights
 
         # AUDIO ENCODER CONFIG
         self.audioenc_name = audioenc_name
-        self.out_emb = out_emb
         self.sample_rate = sample_rate
         self.duration = duration
         self.fmin = fmin
@@ -68,7 +102,6 @@ class MSClapConfig(PretrainedConfig):
         self.window_size = window_size
 
         # PROJECTION SPACE CONFIG 
-        self.d_proj = d_proj
         self.temperature = temperature
 
         # TRAINING AND EVALUATION CONFIG

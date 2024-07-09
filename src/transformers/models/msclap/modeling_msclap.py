@@ -9,7 +9,7 @@ import torch
 import torch.nn as nn
 import torch.utils.checkpoint as checkpoint
 from transformers import PreTrainedModel
-from .configuration_msclap import MSClapConfig
+from .configuration_msclap import MSClapConfig, MSClapAudioConfig, MSClapTextConfig
 
 
 from itertools import repeat
@@ -21,13 +21,7 @@ import warnings
 from torch.nn.init import _calculate_fan_in_and_fan_out
 
 
-config = {
-    "loss_type" : "clip_bce", # 
-    "enable_repeat_mode" : False,  # repeat the spectrogram / reshape the spectrogram
-    "enable_tscam" : True,   # enbale the token-semantic layer
-    "mel_bins" : 64, 
-    "htsat_attn_heatmap" : False, 
-}
+
 
 
 
@@ -75,35 +69,33 @@ to_4tuple = _ntuple(4)
 to_ntuple = _ntuple
 
 
-def drop_path(x, drop_prob: float = 0., training: bool = False):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-    This is the same as the DropConnect impl I created for EfficientNet, etc networks, however,
-    the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for
-    changing the layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use
-    'survival rate' as the argument.
-    """
-    if drop_prob == 0. or not training:
-        return x
-    keep_prob = 1 - drop_prob
-    shape = (x.shape[0],) + (1,) * (x.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=x.dtype, device=x.device)
-    random_tensor.floor_()  # binarize
-    output = x.div(keep_prob) * random_tensor
-    return output
 
-
-class DropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample  (when applied in main path of residual blocks).
+# Copied from transformers.models.clap.modeling_clap.ClapDropPath with Clap->MSClap
+class MSClapDropPath(nn.Module):
     """
+    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks). This is a slightly
+    refactored version of the `SwinDropPath` implementation.
+    """
+
     def __init__(self, drop_prob=None):
-        super(DropPath, self).__init__()
+        super().__init__()
         self.drop_prob = drop_prob
 
-    def forward(self, x):
-        return drop_path(x, self.drop_prob, self.training)
+    def forward(self, hidden_states):
+        if self.drop_prob == 0.0 or not self.training:
+            return hidden_states
 
-class PatchEmbed(nn.Module):
+        keep_prob = 1 - self.drop_prob
+        # work with diff dim tensors, not just 2D ConvNets
+        shape = (hidden_states.shape[0],) + (1,) * (hidden_states.ndim - 1)
+
+        random_tensor = keep_prob + torch.rand(shape, dtype=hidden_states.dtype, device=hidden_states.device)
+        random_tensor.floor_()  # binarize
+        output = hidden_states.div(keep_prob) * random_tensor
+        return output
+    
+
+class MSClapAudioPatchEmbed(nn.Module):
     """ 2D Image to Patch Embedding
     """
     def __init__(self, img_size=224, patch_size=16, in_chans=3, embed_dim=768, norm_layer=None, flatten=True, patch_stride = 16):
@@ -397,7 +389,7 @@ class SwinTransformerBlock(nn.Module):
             dim, window_size=to_2tuple(self.window_size), num_heads=num_heads,
             qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop, proj_drop=drop)
 
-        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
+        self.drop_path = MSClapDropPath(drop_path) if drop_path > 0. else nn.Identity()
         if self.norm_before_mlp == 'ln':
             self.norm2 = nn.LayerNorm(dim)
         elif self.norm_before_mlp == 'bn':
@@ -592,7 +584,7 @@ class BasicLayer(nn.Module):
 
 
 # The Core of HTSAT
-class HTSAT_Swin_Transformer(nn.Module):
+class MSClapAudioEncoder(nn.Module):
     r"""HTSAT based on the Swin Transformer
     Args:
         spec_size (int | tuple(int)): Input Spectrogram size. Default 256
@@ -625,7 +617,7 @@ class HTSAT_Swin_Transformer(nn.Module):
                  norm_layer=nn.LayerNorm, 
                  ape=False, patch_norm=True,
                  use_checkpoint=False, norm_before_mlp='ln', config = None, **kwargs):
-        super(HTSAT_Swin_Transformer, self).__init__()
+        super(MSClapAudioEncoder, self).__init__()
 
         self.config = config
         self.spec_size = spec_size 
@@ -664,7 +656,7 @@ class HTSAT_Swin_Transformer(nn.Module):
 
 
         # split spctrogram into non-overlapping patches
-        self.patch_embed = PatchEmbed(
+        self.patch_embed = MSClapAudioPatchEmbed(
             img_size=self.spec_size, patch_size=self.patch_size, in_chans=self.in_chans, 
             embed_dim=self.embed_dim, norm_layer=self.norm_layer, patch_stride = patch_stride)
 
@@ -943,31 +935,13 @@ class HTSAT_Swin_Transformer(nn.Module):
         # x = self.head(x)
         return output_dict
 
-class HTSATWrapper(nn.Module):
-    def __init__(self, sample_rate, window_size, hop_size, mel_bins, fmin, 
-        fmax, classes_num, out_emb):
+
+class MSClapProjectionLayer(nn.Module):
+    def __init__(self, config,  p: float=0.5) -> None:
         super().__init__()
-
-        # print("parameters are being overidden when using HTSAT")
-        # print("HTSAT only support loading a pretrained model on AudioSet")
-        # @TODO later look at what parameters are same and can be merged
-
-        self.htsat = HTSAT_Swin_Transformer(config=config)
-
-    def forward(self, x):
-        out_dict = self.htsat(x)
-        out_dict['embedding'] = out_dict['latent_output']
-        return out_dict
-
-
-def get_audio_encoder(name: str):
-
-    return HTSATWrapper
-    
-
-class Projection(nn.Module):
-    def __init__(self, d_in: int, d_out: int, p: float=0.5) -> None:
-        super().__init__()
+        
+        d_in = config.d_in
+        d_out = config.d_out
         self.linear1 = nn.Linear(d_in, d_out, bias=False)
         self.linear2 = nn.Linear(d_out, d_out, bias=False)
         self.layer_norm = nn.LayerNorm(d_out)
@@ -978,39 +952,15 @@ class Projection(nn.Module):
         embed2 = self.drop(self.linear2(F.gelu(embed1)))
         embeds = self.layer_norm(embed1 + embed2)
         return embeds
-
-class AudioEncoder(nn.Module):
-    def __init__(self, audioenc_name:str, d_in: int, d_out: int, sample_rate: int, window_size: int,
-            hop_size: int, mel_bins: int, fmin: int, fmax: int, classes_num: int) -> None:
-        super().__init__()
-        audio_encoder = get_audio_encoder(audioenc_name)
-
-        self.base = audio_encoder(
-            sample_rate, window_size,
-            hop_size, mel_bins, fmin, fmax,
-            classes_num, d_in)
-
-        self.projection = Projection(d_in, d_out)
-
-    def forward(self, x):
-        out_dict = self.base(x)
-        audio_features, audio_classification_output = out_dict['embedding'], out_dict['clipwise_output']
-        projected_vec = self.projection(audio_features)
-        return projected_vec, audio_classification_output
+    
 
 class TextEncoder(nn.Module):
-    def __init__(self, d_out: int, text_model: str, transformer_embed_dim: int) -> None:
+    def __init__(self, config: MSClapTextConfig) -> None:
         super().__init__()
-        self.text_model = text_model
-        self.base = AutoModel.from_pretrained(text_model)
-
-        if 'clip' in text_model:
-            self.clip_text_projection = self.base.text_projection
-            self.base = self.base.text_model
-            if 'base' in text_model:
-                transformer_embed_dim = 512
+        self.text_model = config.text_model
+        self.base = AutoModel.from_pretrained(config.text_model)
         
-        self.projection = Projection(transformer_embed_dim, d_out)
+        self.projection = MSClapProjectionLayer(config)
 
     def forward(self, x):
         if 'clip' in self.text_model:
@@ -1052,15 +1002,49 @@ class MSClapPreTrainedModel(PreTrainedModel):
         # elif isinstace(module, nn.Embedding):
         #     module.weight.data.normal_(mean=0.0, std=factor * 0.02)
 
-        if isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, (nn.Conv2d, nn.Linear)):
-            in_proj_std = (self.config.hidden_size**-0.5) * ((2 * self.config.num_hidden_layers) ** -0.5) * self.config.initializer_factor
-            nn.init.normal_(module.weight, std=in_proj_std)
-            if module.bias is not None:
-                module.bias.data.zero_()
+        # if isinstance(module, nn.LayerNorm):
+        #     module.bias.data.zero_()
+        #     module.weight.data.fill_(1.0)
+        # elif isinstance(module, (nn.Conv2d, nn.Linear)):
+        #     in_proj_std = (self.config.hidden_size**-0.5) * ((2 * self.config.num_hidden_layers) ** -0.5) * self.config.initializer_factor
+        #     nn.init.normal_(module.weight, std=in_proj_std)
+        #     if module.bias is not None:
+        #         module.bias.data.zero_()
 
+        if isinstance(module, nn.Linear):
+            trunc_normal_(module.weight, std=.02)
+            if isinstance(module, nn.Linear) and module.bias is not None:
+                nn.init.constant_(module.bias, 0)
+        elif isinstance(module, nn.LayerNorm):
+            nn.init.constant_(module.bias, 0)
+            nn.init.constant_(module.weight, 1.0)
+
+
+class MSClapAudioModel(MSClapPreTrainedModel):
+    config_class = MSClapAudioConfig
+    main_input_name = "input_features"
+
+    def __init__(self, config: MSClapAudioConfig):
+        super().__init__(config)
+
+        config = {
+                    "loss_type" : "clip_bce", # 
+                    "enable_repeat_mode" : False,  # repeat the spectrogram / reshape the spectrogram
+                    "enable_tscam" : True,   # enbale the token-semantic layer
+                    "mel_bins" : 64, 
+                    "htsat_attn_heatmap" : False, 
+                }
+
+        self.audio_encoder = MSClapAudioEncoder(config = config)
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self) -> nn.Module:
+        return self.audio_encoder.patch_embed.proj
+
+    def forward(self,input_features):
+
+        return self.audio_encoder(input_features)
 
 
 class MSClapModel(PreTrainedModel):
@@ -1070,28 +1054,30 @@ class MSClapModel(PreTrainedModel):
     def __init__(self, config: MSClapConfig):
         super().__init__(config)
 
-        self.audio_encoder = AudioEncoder(
-            config.audioenc_name, 
-            config.out_emb, 
-            config.d_proj,
-            config.sample_rate, 
-            config.window_size, 
-            config.hop_size, 
-            config.mel_bins, 
-            config.fmin, 
-            config.fmax, 
-            config.num_classes
+
+        self.audio_encoder = MSClapAudioModel(
+            config.audio_config
         )
+        self.audio_projection = MSClapProjectionLayer(config.audio_config)
+
 
         self.caption_encoder = TextEncoder(
-            config.d_proj, config.text_model, config.transformer_embed_dim
+            config.text_config
         )
 
         self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
 
     def forward(self, audio, text):
-        audio_embed, _ = self.audio_encoder(audio)
-        caption_embed = self.caption_encoder(text)
+
+        with torch.no_grad():
+
+            out_dict = self.audio_encoder(audio)
+
+            out_dict['embedding'] = out_dict['latent_output']
+            audio_features, _ = out_dict['embedding'], out_dict['clipwise_output']
+            audio_embed = self.audio_projection(audio_features)
+
+            caption_embed = self.caption_encoder(text)
 
         return caption_embed, audio_embed, self.logit_scale.exp()
     
