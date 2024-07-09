@@ -114,13 +114,8 @@ class Seq2SeqTrainer(Trainer):
         try:
             with warnings.catch_warnings(record=True) as caught_warnings:
                 gen_config.validate()
-            if len(caught_warnings) > 0:
-                raise ValueError(str([w.message for w in caught_warnings]))
-        except ValueError as exc:
-            raise ValueError(
-                "The loaded generation config instance is invalid -- `GenerationConfig.validate()` throws warnings "
-                "and/or exceptions. Fix these issues to train your model.\n\nThrown during validation:\n" + str(exc)
-            )
+            if len(caught_warnings) == 0:
+                raise ValueError("Hello")
         return gen_config
 
     def evaluate(
