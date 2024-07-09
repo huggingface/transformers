@@ -302,7 +302,7 @@ class LlavaNextVideoPreTrainedModel(PreTrainedModel):
         SDPA or not.
         """
         return self.language_model._supports_sdpa
-    
+
     @property
     def _supports_cache_class(self):
         """
