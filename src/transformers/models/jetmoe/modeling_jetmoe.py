@@ -1259,7 +1259,7 @@ class JetMoeModel(JetMoePreTrainedModel):
 class JetMoeForCausalLM(JetMoePreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
-    def __init__(self, config:JetMoeConfig):
+    def __init__(self, config: JetMoeConfig):
         super().__init__(config)
         self.model = JetMoeModel(config)
         self.vocab_size = config.vocab_size
@@ -1340,7 +1340,7 @@ class JetMoeForCausalLM(JetMoePreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
-            output_router_logits=output_router_logits
+            output_router_logits=output_router_logits,
         )
 
         hidden_states = outputs[0]
@@ -1499,9 +1499,8 @@ class JetMoeForCausalLM(JetMoePreTrainedModel):
     """,
     JETMOE_START_DOCSTRING,
 )
-
 class JetMoeForSequenceClassification(JetMoePreTrainedModel):
-    def __init__(self, config:JetMoeConfig):
+    def __init__(self, config: JetMoeConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = JetMoeModel(config)
@@ -1552,7 +1551,7 @@ class JetMoeForSequenceClassification(JetMoePreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            output_router_logits=output_router_logits
+            output_router_logits=output_router_logits,
         )
         hidden_states = transformer_outputs[0]
         logits = self.score(hidden_states)
