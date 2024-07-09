@@ -3179,14 +3179,19 @@ class ModelTesterMixin:
                 continue
 
             # TODO: ydshieh
-            if model_class.__name__ in [
-                "Wav2Vec2ForSequenceClassification",
+            is_special_classes = model_class.__name__ in [
+                "wav2vec2.masked_spec_embed",
                 "Wav2Vec2ForSequenceClassification",
                 "CLIPForImageClassification",
                 "RegNetForImageClassification",
                 "ResNetForImageClassification",
-            ]:
-                self.skipTest(reason="This test is currently failing for some models.")
+            ]
+            special_param_names = [
+                "wav2vec2.masked_spec_embed",
+                "classifier.weight",
+                "regnet.embedder.embedder.convolution.weight",
+                "resnet.embedder.embedder.convolution.weight",
+            ]
 
             with self.subTest(msg=f"Testing {model_class}"):
                 with tempfile.TemporaryDirectory() as tmp_dir:
@@ -3205,11 +3210,24 @@ class ModelTesterMixin:
 
                     for name, param in new_model.named_parameters():
                         if param.requires_grad:
-                            self.assertIn(
-                                ((param.data.mean() * 1e9).round() / 1e9).item(),
-                                [0.0, 1.0],
-                                msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                            )
+                            param_mean = ((param.data.mean() * 1e9).round() / 1e9).item()
+                            if not (is_special_classes and param in special_param_names):
+                                self.assertIn(
+                                    param_mean,
+                                    [0.0, 1.0],
+                                    msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                                )
+                            else:
+                                self.assertGreaterEqual(
+                                    param_mean,
+                                    0.0,
+                                    msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                                )
+                                self.assertLessEqual(
+                                    param_mean,
+                                    1.0,
+                                    msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                                )
 
     def test_matched_shapes_have_loaded_weights_when_some_mismatched_shapes_exist(self):
         # 1. Create a dummy class. Should have buffers as well? To make sure we test __init__
