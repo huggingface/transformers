@@ -276,7 +276,7 @@ class GPTNeoXAttention(nn.Module):
                 "cache_position": cache_position,
             }
             key, value = layer_past.update(key, value, self.layer_idx, cache_kwargs)
- 
+
         return query, key, value, layer_past
 
     def _attn(self, query, key, value, attention_mask=None, head_mask=None):
@@ -359,7 +359,11 @@ class GPTNeoXFlashAttention2(GPTNeoXAttention):
     ):
         # Apply attention-specific projections and rope
         query, key, value, present = self._attn_projections_and_rope(
-            hidden_states=hidden_states, position_ids=position_ids, layer_past=layer_past, use_cache=use_cache, cache_position=cache_position
+            hidden_states=hidden_states,
+            position_ids=position_ids,
+            layer_past=layer_past,
+            use_cache=use_cache,
+            cache_position=cache_position,
         )
 
         query_length = query.shape[-2]
@@ -567,7 +571,11 @@ class GPTNeoXSdpaAttention(GPTNeoXAttention):
 
         # Apply attention-specific projections and rope
         query, key, value, present = self._attn_projections_and_rope(
-            hidden_states=hidden_states, position_ids=position_ids, layer_past=layer_past, use_cache=use_cache, cache_position=cache_position
+            hidden_states=hidden_states,
+            position_ids=position_ids,
+            layer_past=layer_past,
+            use_cache=use_cache,
+            cache_position=cache_position,
         )
 
         # GPT-neo-X casts query and key in fp32 to apply rotary embedding in full precision
