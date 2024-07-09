@@ -3187,18 +3187,19 @@ class ModelTesterMixin:
                 "ResNetForImageClassification",
             ]
             special_param_names = [
-                "wav2vec2\.masked_spec_embed",
-                "wav2vec2\.feature_extractor\.conv_layers\..+\.conv\.weight",
-                "wav2vec2\.feature_projection\.projection\.weight",
-                "wav2vec2\.feature_projection\.projection\.bias",
-                "wav2vec2\.encoder\.pos_conv_embed\.conv\.parametrizations\.weight\.original.",
-                "classifier\.weight",
-                "regnet\.embedder\.embedder\.convolution\.weight",
-                "regnet\.encoder\.stages\..+\.layers\..+\.layer\..+\.convolution\.weight",
-                "regnet\.encoder\.stages\..+\.layers\..+\.shortcut\.convolution\.weight",
-                "regnet\.encoder\.stages\..+\.layers\..+\.layer\..+\.attention\..+\.weight",
-                "regnet\.encoder\.stages\..+\.layers\..+\.layer\..+\.attention\..+\.bias",
-                "resnet\.embedder\.embedder\.convolution\.weight",
+                r"wav2vec2\.masked_spec_embed",
+                r"wav2vec2\.feature_extractor\.conv_layers\..+\.conv\.weight",
+                r"wav2vec2\.feature_projection\.projection\.weight",
+                r"wav2vec2\.feature_projection\.projection\.bias",
+                r"wav2vec2\.encoder\.pos_conv_embed\.conv\.parametrizations\.weight\.original.",
+                r"classifier\.weight",
+                r"regnet\.embedder\.embedder\.convolution\.weight",
+                r"regnet\.encoder\.stages\..+\.layers\..+\.layer\..+\.convolution\.weight",
+                r"regnet\.encoder\.stages\..+\.layers\..+\.shortcut\.convolution\.weight",
+                r"regnet\.encoder\.stages\..+\.layers\..+\.layer\..+\.attention\..+\.weight",
+                r"regnet\.encoder\.stages\..+\.layers\..+\.layer\..+\.attention\..+\.bias",
+                r"classifier\..+\.weight",
+                r"resnet\.embedder\.embedder\.convolution\.weight",
             ]
 
             with self.subTest(msg=f"Testing {model_class}"):
