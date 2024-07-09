@@ -1527,9 +1527,7 @@ class LlamaTikTokenConverter(TikTokenConverter):
                              "<|end_header_id|>",
                              "<|reserved_special_token_4|>",
                              "<|eot_id|>",
-                             "<|python_tag|>",
-                             "<|image|>",
-                             "<|video|>"  # end of turn
+                             "<|python_tag|>" # end of turn
                          ] + [f"<|reserved_special_token_{i}|>" for i in range(5, num_reserved_special_tokens - 5)]
         tokenizer.add_special_tokens(special_tokens)
         return tokenizer
