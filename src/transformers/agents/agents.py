@@ -837,7 +837,6 @@ Now begin!""",
             self.logs.append({"plan": final_plan_redaction, "facts": final_facts_redaction})
             self.logger.debug("===== Updated plan: =====")
             self.logger.debug(final_plan_redaction)
-            print("UPDATED PLAN:", final_plan_redaction)
 
 
 class ReactJsonAgent(ReactAgent):
