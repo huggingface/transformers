@@ -31,7 +31,7 @@ There are two main depth estimation categories:
 
 - **Relative depth estimation**: Relative depth estimation aims to predict the depth order of objects or points in a scene without providing the precise measurements. These models output a depth map that indicates which parts of the scene are closer or farther relative to each other without the actual distances to A and B.
 
-In this guide, we will see how to infer with [Depth Anything V2](https://huggingface.co/depth-anything/Depth-Anything-V2-Large), state-of-the-art zero-shot relative depth estimation model and [ZoeDepth](https://huggingface.co/docs/transformers/main/en/model_doc/zoedepth) an absolute depth estimation model.
+In this guide, we will see how to infer with [Depth Anything V2](https://huggingface.co/depth-anything/Depth-Anything-V2-Large), a state-of-the-art zero-shot relative depth estimation model, and [ZoeDepth](https://huggingface.co/docs/transformers/main/en/model_doc/zoedepth), an absolute depth estimation model.
 
 <Tip>
 
