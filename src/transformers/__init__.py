@@ -558,6 +558,7 @@ _import_structure = {
         "MgpstrTokenizer",
     ],
     "models.mistral": ["MistralConfig"],
+    "models.solo": ["SoloConfig"],
     "models.mixtral": ["MixtralConfig"],
     "models.mluke": [],
     "models.mobilebert": [
@@ -2578,6 +2579,12 @@ else:
             "MistralForTokenClassification",
             "MistralModel",
             "MistralPreTrainedModel",
+        ]
+    ),
+    _import_structure["models.solo"].extend(
+        [
+            "SoloForCausalLM",
+            "SoloModel",
         ]
     )
     _import_structure["models.mixtral"].extend(
@@ -5211,6 +5218,7 @@ if TYPE_CHECKING:
         MgpstrTokenizer,
     )
     from .models.mistral import MistralConfig
+    from .models.solo import SoloConfig
     from .models.mixtral import MixtralConfig
     from .models.mobilebert import (
         MobileBertConfig,
@@ -7021,6 +7029,10 @@ if TYPE_CHECKING:
             MistralForTokenClassification,
             MistralModel,
             MistralPreTrainedModel,
+        )
+        from .models.solo import (
+            SoloForCausalLM,
+            SoloModel
         )
         from .models.mixtral import (
             MixtralForCausalLM,
