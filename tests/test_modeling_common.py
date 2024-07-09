@@ -3201,6 +3201,11 @@ class ModelTesterMixin:
                 r"classifier\..+\.weight",
                 r"classifier\..+\.bias",
                 r"resnet\.embedder\.embedder\.convolution\.weight",
+                r"resnet\.encoder\.stages\..+\.layers\..+\.shortcut\.convolution\.weight",
+                r"resnet\.encoder\.stages\..+\.layers\..+\.layer\..+\.convolution\.weight",
+                r"resnet\.encoder\.stages\..+\.layers\..+\.shortcut\.convolution\.weight",
+                r"resnet\.encoder\.stages\..+\.layers\..+\.layer\..+\.attention\..+\.weight",
+                r"resnet\.encoder\.stages\..+\.layers\..+\.layer\..+\.attention\..+\.bias",
             ]
 
             with self.subTest(msg=f"Testing {model_class}"):
