@@ -134,7 +134,7 @@ class MBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_save_pretrained(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         self.tokenizers_list[0] = (self.rust_tokenizer_class, "hf-internal-testing/tiny-random-mbart", {})
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
@@ -202,7 +202,7 @@ class MBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 shutil.rmtree(tmpdirname2)
 
-    @unittest.skip("Need to fix this after #26538")
+    @unittest.skip(reason="Need to fix this after #26538")
     def test_training_new_tokenizer(self):
         pass
 

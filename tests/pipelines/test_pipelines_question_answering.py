@@ -50,12 +50,12 @@ class QAPipelineTests(unittest.TestCase):
             config: model for config, model in tf_model_mapping.items() if config.__name__ not in _TO_SKIP
         }
 
-    def get_test_pipeline(self, model, tokenizer, processor):
+    def get_test_pipeline(self, model, tokenizer, processor, torch_dtype="float32"):
         if isinstance(model.config, LxmertConfig):
             # This is an bimodal model, we need to find a more consistent way
             # to switch on those models.
             return None, None
-        question_answerer = QuestionAnsweringPipeline(model, tokenizer)
+        question_answerer = QuestionAnsweringPipeline(model, tokenizer, torch_dtype=torch_dtype)
 
         examples = [
             {"question": "Where was HuggingFace founded ?", "context": "HuggingFace was founded in Paris."},
