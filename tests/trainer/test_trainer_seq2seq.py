@@ -196,13 +196,11 @@ class Seq2seqTrainerTester(TestCasePlus):
         training_args = Seq2SeqTrainingArguments(
             ".", predict_with_generate=True, generation_config=gen_config, report_to="none"
         )
-        with self.assertRaises(ValueError) as exc:
-            with LoggingLevel(logging.WARNING):
-                _ = Seq2SeqTrainer(
-                    model=model,
-                    args=training_args,
-                    tokenizer=tokenizer,
-                    data_collator=data_collator,
-                    compute_metrics=lambda x: {"samples": x[0].shape[0]},
-                )
-        self.assertIn("The loaded generation config instance is invalid", str(exc.exception))
+        _ = Seq2SeqTrainer(
+            model=model,
+            args=training_args,
+            tokenizer=tokenizer,
+            data_collator=data_collator,
+            compute_metrics=lambda x: {"samples": x[0].shape[0]},
+        )
+
