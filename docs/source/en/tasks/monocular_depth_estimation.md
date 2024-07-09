@@ -25,7 +25,7 @@ and robotics. It is a challenging task as it requires the model to understand th
 in the scene and the corresponding depth information, which can be affected by factors such as lighting conditions,
 occlusion, and texture. 
 
-There are two main categories for depth estimation:
+There are two main depth estimation categories:
 
 - **Absolute depth estimation**: This task variant aims to provide exact depth measurements from the camera. The term is used interchangeably with metric depth estimation, where depth is provided in precise measurements in meters or feet. Absolute depth estimation models output depth maps with numerical values that represent real-world distances.
 
