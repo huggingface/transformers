@@ -3187,14 +3187,15 @@ class ModelTesterMixin:
                 "ResNetForImageClassification",
             ]
             special_param_names = [
-                "wav2vec2.masked_spec_embed",
-                "wav2vec2.feature_extractor.conv_layers.*.conv.weight",
-                "wav2vec2.feature_projection.projection.weight",
-                "wav2vec2.feature_projection.projection.bias",
-                "wav2vec2.encoder.pos_conv_embed.conv.parametrizations.weight.original*",
-                "classifier.weight",
-                "regnet.embedder.embedder.convolution.weight",
-                "resnet.embedder.embedder.convolution.weight",
+                "wav2vec2\.masked_spec_embed",
+                "wav2vec2\.feature_extractor\.conv_layers\..+\.conv\.weight",
+                "wav2vec2\.feature_projection\.projection\.weight",
+                "wav2vec2\.feature_projection\.projection\.bias",
+                "wav2vec2\.encoder\.pos_conv_embed\.conv\.parametrizations\.weight\.original0",
+                "classifier\.weight",
+                "regnet\.embedder\.embedder\.convolution\.weight",
+                "regnet\.encoder\.stages\..+\.layers\..+\.shortcut\.convolution\.weight",
+                "resnet\.embedder\.embedder\.convolution\.weight",
             ]
 
             with self.subTest(msg=f"Testing {model_class}"):
