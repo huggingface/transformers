@@ -111,11 +111,11 @@ class Seq2SeqTrainer(Trainer):
 
         # Strict validation to fail early. `GenerationConfig.save_pretrained()`, run at the end of training, throws
         # an exception if there are warnings at validation time.
-        try:
-            with warnings.catch_warnings(record=True) as caught_warnings:
-                gen_config.validate()
-            if len(caught_warnings) == 0:
-                raise ValueError("Hello")
+
+        with warnings.catch_warnings(record=True) as caught_warnings:
+            gen_config.validate()
+        if len(caught_warnings) == 0:
+            raise ValueError("Hello")
         return gen_config
 
     def evaluate(
