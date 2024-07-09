@@ -14,6 +14,7 @@
 # limitations under the License.
 """PyTorch ResNet model."""
 
+import math
 from typing import Optional
 
 import torch
@@ -274,8 +275,8 @@ class ResNetPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         if isinstance(module, nn.Conv2d):
             nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
+        # copied from the `reset_parameters` method of `class Linear(Module)` in `torch`.
         elif isinstance(module, nn.Linear):
-            import math
             nn.init.kaiming_uniform_(module.weight, a=math.sqrt(5))
             if module.bias is not None:
                 fan_in, _ = nn.init._calculate_fan_in_and_fan_out(module.weight)
