@@ -176,7 +176,7 @@ class TFPhi3YarnScaledRotaryEmbedding(tf.keras.layers.Layer):
 
         inv_freq_expanded = tf.expand_dims(inv_freq, axis=0)
         inv_freq_expanded = tf.expand_dims(inv_freq_expanded, axis=2)
-        inv_freq_expanded = tf.tile(inv_freq_expanded, [tf.shape(position_ids)[0], 1, 1])
+        inv_freq_expanded = tf.tile(inv_freq_expanded, [shape_list(position_ids)[0], 1, 1])
 
         position_ids_expanded = tf.cast(tf.expand_dims(position_ids, axis=1), tf.float32)
         position_ids_expanded = tf.transpose(position_ids_expanded, perm=[0, 2, 1])
@@ -271,7 +271,8 @@ def repeat_kv(hidden_states: tf.Tensor, n_rep: int) -> tf.Tensor:
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
     num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
     """
-    batch, num_key_value_heads, slen, head_dim = tf.shape(hidden_states)
+    batch, num_key_value_heads, slen, head_dim = shape_list(hidden_states)
+
     if n_rep == 1:
         return hidden_states
     hidden_states = tf.expand_dims(hidden_states, axis=2)  # Shape: (batch, num_key_value_heads, 1, seqlen, head_dim)
@@ -379,18 +380,20 @@ class TFPhi3Attention(tf.keras.layers.Layer):
 
         attn_weights = tf.matmul(query_states, key_states, transpose_b=True) / tf.math.sqrt(float(self.head_dim))
 
-        if shape_list(attn_weights) != [bsz, self.num_heads, q_len, kv_seq_len]:
-            raise ValueError(
-                f"Attention weights should be of size {[bsz, self.num_heads, q_len, kv_seq_len]}, but is"
-                f" {shape_list(attn_weights)}"
-            )
+        tf.debugging.assert_equal(
+            shape_list(attn_weights),
+            [bsz, self.num_heads, q_len, kv_seq_len],
+            message=f"Attention weights should be of size {[bsz, self.num_heads, q_len, kv_seq_len]}, but is {shape_list(attn_weights)}"
+        )
 
         if attention_mask is not None:
-            if shape_list(attention_mask) != [bsz, 1, q_len, kv_seq_len]:
-                raise ValueError(
-                    f"Attention mask should be of size {[bsz, 1, q_len, kv_seq_len]}, but is {shape_list(attention_mask)}"
+            tf.debugging.assert_equal(
+                shape_list(attention_mask),
+                [bsz, 1, q_len, kv_seq_len],
+                message=f"Attention mask should be of size {[bsz, 1, q_len, kv_seq_len]}, but is {shape_list(attention_mask)}"
                 )
             attn_weights = attn_weights + attention_mask
+
 
         # upcast attention to fp32
         attn_weights = tf.nn.softmax(attn_weights, axis=-1)
@@ -399,11 +402,11 @@ class TFPhi3Attention(tf.keras.layers.Layer):
 
         attn_output = tf.matmul(attn_weights, value_states)
 
-        if shape_list(attn_output) != [bsz, self.num_heads, q_len, self.head_dim]:
-            raise ValueError(
-                f"`attn_output` should be of size {[bsz, self.num_heads, q_len, self.head_dim]}, but is"
-                f" {shape_list(attn_output)}"
-            )
+        tf.debugging.assert_equal(
+            shape_list(attn_output),
+            [bsz, self.num_heads, q_len, self.head_dim],
+            message=f"`attn_output` should be of size {[bsz, self.num_heads, q_len, self.head_dim]}, but is {shape_list(attn_output)}"
+        )
 
         attn_output = tf.transpose(attn_output, perm=[0, 2, 1, 3])
         attn_output = tf.reshape(attn_output, [bsz, q_len, self.hidden_size])
@@ -443,8 +446,8 @@ class TFPhi3DecoderLayer(tf.keras.layers.Layer):
         self.mlp = TFPhi3MLP(config, name="mlp")
         self.input_layernorm = TFPhi3RMSNorm(config.hidden_size, eps=config.rms_norm_eps, name="input_layernorm")
         self.post_attention_layernorm = TFPhi3RMSNorm(config.hidden_size, eps=config.rms_norm_eps, name="post_attention_layernorm")
-        self.resid_attn_dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
-        self.resid_mlp_dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.resid_attn_dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob, name="resid_attn_dropout")
+        self.resid_mlp_dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob, name="resid_mlp_dropout")
 
     def call(
         self,
@@ -466,7 +469,7 @@ class TFPhi3DecoderLayer(tf.keras.layers.Layer):
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             position_ids (`tf.Tensor` of shape `({0})`, *optional*):
                 Indices of positions of each input sequence tokens in the position embeddings. Selected in the range
-                `[0, config.n_positions - 1]`. 
+                `[0, config.n_positions - 1]`.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers.
             use_cache (`bool`, *optional*):
@@ -754,9 +757,9 @@ class TFPhi3MainLayer(keras.layers.Layer):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
-            input_shape = tf.shape(input_ids)
+            input_shape = shape_list(input_ids)
         elif inputs_embeds is not None:
-            input_shape = tf.shape(inputs_embeds)[:-1]
+            input_shape = shape_list(inputs_embeds)[:-1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
@@ -828,8 +831,8 @@ class TFPhi3MainLayer(keras.layers.Layer):
         )
     @tf.function
     def _update_causal_mask(self, attention_mask, input_tensor):
-        batch_size = tf.shape(input_tensor)[0]
-        seq_length = tf.shape(input_tensor)[1]
+        batch_size = shape_list(input_tensor)[0]
+        seq_length = shape_list(input_tensor)[1]
         dtype = input_tensor.dtype
 
         # support going beyond cached `max_position_embedding`
@@ -846,7 +849,7 @@ class TFPhi3MainLayer(keras.layers.Layer):
         causal_mask = tf.repeat(causal_mask, batch_size, axis=0)
 
         if attention_mask is not None and tf.rank(attention_mask) == 2:
-            mask_length = tf.shape(attention_mask)[-1]
+            mask_length = shape_list(attention_mask)[-1]
             padding_mask = tf.equal(causal_mask[..., :mask_length], 0) & tf.equal(
                 tf.expand_dims(tf.expand_dims(attention_mask, 1), 1), 0
             )
@@ -1024,10 +1027,10 @@ class TFPhi3ForSequenceClassification(TFPhi3PreTrainedModel):
         logits = self.score(hidden_states)
 
         if input_ids is not None:
-            batch_size = tf.shape(input_ids)[0]
+            batch_size = shape_list(input_ids)[0]
             sequence_lengths = tf.reduce_max(tf.cast(tf.not_equal(input_ids, self.config.pad_token_id), tf.int32), axis=-1) - 1
         else:
-            batch_size = tf.shape(inputs_embeds)[0]
+            batch_size = shape_list(inputs_embeds)[0]
             sequence_lengths = tf.reduce_max(tf.cast(tf.not_equal(inputs_embeds, self.config.pad_token_id), tf.int32), axis=-1) - 1
 
         if self.config.pad_token_id is None:
