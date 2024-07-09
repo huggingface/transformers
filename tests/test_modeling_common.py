@@ -3167,7 +3167,11 @@ class ModelTesterMixin:
         configs_no_init = _config_zero_init(config)
 
         for model_class in self.all_model_classes:
-            if model_class.__name__ not in get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES):
+
+            mappings = [MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES, MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES, MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES, MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES]
+            is_classication_model = any(model_class.__name__ in get_values(mapping) for mapping in mappings)
+
+            if not is_classication_model:
                 continue
 
             with self.subTest(msg=f"Testing {model_class}"):
@@ -3177,12 +3181,12 @@ class ModelTesterMixin:
 
                     # Fails when we don't set ignore_mismatched_sizes=True
                     with self.assertRaises(RuntimeError):
-                        new_model = AutoModelForSequenceClassification.from_pretrained(tmp_dir, num_labels=42)
+                        new_model = model_class.from_pretrained(tmp_dir, num_labels=42)
 
                     logger = logging.get_logger("transformers.modeling_utils")
 
                     with CaptureLogger(logger) as cl:
-                        new_model = AutoModelForSequenceClassification.from_pretrained(
+                        new_model = model_class.from_pretrained(
                             tmp_dir, num_labels=42, ignore_mismatched_sizes=True
                         )
                     self.assertIn("the shapes did not match", cl.out)
