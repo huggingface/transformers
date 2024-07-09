@@ -36,11 +36,13 @@ There are three flavors of static kv-cache usage, depending on the complexity of
 2. Advanced usage: handle a cache object for multi-turn generation or a custom generation loop;
 3. Advanced usage: compile the entire `generate` function into a single graph, if having a single graph is relevant for you.
 
+Select the correct tab below for further instructions on each of these flavors.
+
 > [!TIP]
 > Regardless of the strategy used with `torch.compile`, you can avoid shape-related recompilations if you left-pad your LLM inputs to a limited set of values. The [`pad_to_multiple_of` tokenizer flag](https://huggingface.co/docs/transformers/main_classes/tokenizer#transformers.PreTrainedTokenizer.__call__.pad_to_multiple_of) is your friend!
 
 <hfoptions id="static-kv">
-<hfoption id="Basic usage -- generation_config">
+<hfoption id="basic usage: generation_config">
 
 For this example, let's use the [Gemma](https://hf.co/google/gemma-2b) model. All we need to do is to:
 1. Access the model's `generation_config` attribute and set the `cache_implementation` to "static";
@@ -76,7 +78,7 @@ Under the hood, `generate` will attempt to reuse the same cache object, removing
 > For a more advanced usage of the static cache, such as multi-turn conversations, we recommend instantiating and manipulating the cache object outside [`~GenerationMixin.generate`]. See the advanced usage tab.
 
 </hfoption>
-<hfoption id="Advanced usage -- control Static Cache">
+<hfoption id="advanced usage: control Static Cache">
 
 A [`StaticCache`] object can be passed to the model's [`~GenerationMixin.generate`] under the `past_key_values` argument. The object will retain the cache contents, so you can pass it to a new [`~GenerationMixin.generate`] call to continue generation, like you would do with a dynamic cache.
 
@@ -188,7 +190,7 @@ text
 ```
 
 </hfoption>
-<hfoption id="Advanced usage -- end-to-end generate compilation">
+<hfoption id="advanced usage: end-to-end generate compilation">
 
 Compiling the entire `generate` function, in terms of code, is as simple as in the basic usage:
 1. Access the model's `generation_config` attribute and set the `cache_implementation` to "static";
