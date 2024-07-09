@@ -3197,6 +3197,7 @@ class ModelTesterMixin:
                 "regnet\.encoder\.stages\..+\.layers\..+\.layer\..+\.convolution\.weight",
                 "regnet\.encoder\.stages\..+\.layers\..+\.shortcut\.convolution\.weight",
                 "regnet\.encoder\.stages\..+\.layers\..+\.layer\..+\.attention\..+\.weight",
+                "regnet\.encoder\.stages\..+\.layers\..+\.layer\..+\.attention\..+\.bias",
                 "resnet\.embedder\.embedder\.convolution\.weight",
             ]
 
