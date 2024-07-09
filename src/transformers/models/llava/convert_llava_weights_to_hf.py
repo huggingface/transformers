@@ -166,12 +166,6 @@ def convert_llava_llama_to_hf(text_model_id, vision_model_id, output_hub_path, o
         dim=0,
     )
 
-    pytorch_dump_folder_path = "/raid/raushan/interleave_llava_v2"
-    if pytorch_dump_folder_path is not None:
-        Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-        model.save_pretrained(pytorch_dump_folder_path)
-        processor.save_pretrained(pytorch_dump_folder_path)
-
     model.push_to_hub(output_hub_path)
     processor.push_to_hub(output_hub_path)
 
