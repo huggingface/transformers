@@ -196,8 +196,8 @@ class Seq2seqTrainerTester(TestCasePlus):
         training_args = Seq2SeqTrainingArguments(
             ".", predict_with_generate=True, generation_config=gen_config, report_to="none"
         )
-        with LoggingLevel(logging.WARNING):
-            with self.assertRaises(ValueError) as exc:
+        with self.assertRaises(ValueError) as exc:
+            with LoggingLevel(logging.WARNING):
                 _ = Seq2SeqTrainer(
                     model=model,
                     args=training_args,
