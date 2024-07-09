@@ -183,7 +183,7 @@ class ImageClassificationPipeline(Pipeline):
 
         outputs = model_outputs["logits"][0]
         if self.framework == "pt" and outputs.dtype == torch.bfloat16:
-            # To enable using fp16 and bf16
+            # To enable using bf16
             outputs = outputs.float().numpy()
         else:
             outputs = outputs.numpy()
