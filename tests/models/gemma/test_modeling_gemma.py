@@ -839,7 +839,6 @@ class GemmaIntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
-
         self.assertEqual(output_text, EXPECTED_TEXTS[self.cuda_compute_capability_major_version])
 
     @slow
@@ -898,3 +897,24 @@ class GemmaIntegrationTest(unittest.TestCase):
         )
         static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION[self.cuda_compute_capability_major_version], static_compiled_text)
+
+    def test_model_2b_bf16_dola(self):
+        model_id = "google/gemma-2b"
+        # ground truth text generated with dola_layers="low", repetition_penalty=1.2
+        EXPECTED_TEXTS = [
+            "Hello I am doing an experiment and need to get the mass of a block. The problem is, it has no scale",
+            "Hi today we have the review for a <strong>2016/2017</strong> season of",
+        ]
+
+        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16).to(
+            torch_device
+        )
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+
+        output = model.generate(
+            **inputs, max_new_tokens=20, do_sample=False, dola_layers="low", repetition_penalty=1.2
+        )
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+        self.assertEqual(output_text, EXPECTED_TEXTS)
