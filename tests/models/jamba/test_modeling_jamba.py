@@ -390,7 +390,7 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         Overriding the test_mismatched_shapes_have_properly_initialized_weights test because A_log and D params of the
         Mamba block are initialized differently and we tested that in test_initialization
         """
-        self.skipTest("Cumbersome and redundant for Jamba")
+        self.skipTest(reason="Cumbersome and redundant for Jamba")
 
     def test_attention_outputs(self):
         r"""
@@ -502,10 +502,6 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
             # They should result in very similar logits
             self.assertTrue(torch.allclose(next_logits_wo_padding, next_logits_with_padding, atol=3e-3))
-
-    @unittest.skip("Jamba has its own special cache type")  # FIXME: @gante
-    def test_assisted_decoding_matches_greedy_search_0_random(self):
-        pass
 
     @require_flash_attn
     @require_torch_gpu
@@ -642,9 +638,9 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         Overriding the test_flash_attn_2_inference_padding_right test as the Jamba model, like Mixtral, doesn't support
         right padding + use cache with FA2
         """
-        self.skipTest("Jamba flash attention does not support right padding")
+        self.skipTest(reason="Jamba flash attention does not support right padding")
 
-    @unittest.skip("Jamba has its own special cache type")
+    @unittest.skip(reason="Jamba has its own special cache type")
     @parameterized.expand([(1, False), (1, True), (4, False)])
     def test_new_cache_format(self, num_beams, do_sample):
         pass

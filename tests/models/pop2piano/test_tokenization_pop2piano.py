@@ -372,7 +372,7 @@ class Pop2PianoTokenizerTest(unittest.TestCase):
         notes = self.get_input_notes()
 
         if self.tokenizer.pad_token is None:
-            self.skipTest("No padding token.")
+            self.skipTest(reason="No padding token.")
         else:
             normal_tokens = self.tokenizer(notes[0], padding=True, pad_to_multiple_of=8)
             for key, value in normal_tokens.items():
@@ -400,9 +400,9 @@ class Pop2PianoTokenizerTest(unittest.TestCase):
 
     def test_padding_with_attention_mask(self):
         if self.tokenizer.pad_token is None:
-            self.skipTest("No padding token.")
+            self.skipTest(reason="No padding token.")
         if "attention_mask" not in self.tokenizer.model_input_names:
-            self.skipTest("This model does not use attention mask.")
+            self.skipTest(reason="This model does not use attention mask.")
 
         features = [
             {"token_ids": [1, 2, 3, 4, 5, 6], "attention_mask": [1, 1, 1, 1, 1, 0]},

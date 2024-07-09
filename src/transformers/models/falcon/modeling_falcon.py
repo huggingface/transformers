@@ -795,6 +795,7 @@ class FalconDecoderLayer(nn.Module):
         use_cache: bool = False,
         output_attentions: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
     ):
         residual = hidden_states
 

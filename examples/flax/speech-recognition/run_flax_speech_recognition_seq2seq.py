@@ -60,7 +60,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risk.
-check_min_version("4.42.0.dev0")
+check_min_version("4.43.0.dev0")
 
 require_version("datasets>=2.14.0", "To fix: pip install -r examples/flax/speech-recognition/requirements.txt")
 
@@ -135,6 +135,16 @@ class DataTrainingArguments:
     )
     dataset_config_name: Optional[str] = field(
         default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
+    )
+    trust_remote_code: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Whether to trust the execution of code from datasets/models defined on the Hub."
+                " This option should only be set to `True` for repositories you trust and in which you have read the"
+                " code, as it will execute code present on the Hub on your local machine."
+            )
+        },
     )
     text_column: Optional[str] = field(
         default=None,
@@ -442,6 +452,7 @@ def main():
             cache_dir=data_args.dataset_cache_dir,
             num_proc=data_args.preprocessing_num_workers,
             token=True if model_args.use_auth_token else None,
+            trust_remote_code=data_args.trust_remote_code,
         )
 
     if training_args.do_eval:
@@ -452,6 +463,7 @@ def main():
             cache_dir=data_args.dataset_cache_dir,
             num_proc=data_args.preprocessing_num_workers,
             token=True if model_args.use_auth_token else None,
+            trust_remote_code=data_args.trust_remote_code,
         )
 
     if not training_args.do_train and not training_args.do_eval:
