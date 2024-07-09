@@ -3167,46 +3167,8 @@ class ModelTesterMixin:
         configs_no_init = _config_zero_init(config)
 
         for model_class in self.all_model_classes:
-            mappings = [
-                MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES,
-                MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
-                MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
-                MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES,
-            ]
-            is_classication_model = any(model_class.__name__ in get_values(mapping) for mapping in mappings)
-
-            if not is_classication_model:
+            if model_class.__name__ not in get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES):
                 continue
-
-            # TODO: ydshieh
-            is_special_classes = model_class.__name__ in [
-                "wav2vec2.masked_spec_embed",
-                "Wav2Vec2ForSequenceClassification",
-                "CLIPForImageClassification",
-                "RegNetForImageClassification",
-                "ResNetForImageClassification",
-            ]
-            special_param_names = [
-                r"wav2vec2\.masked_spec_embed",
-                r"wav2vec2\.feature_extractor\.conv_layers\..+\.conv\.weight",
-                r"wav2vec2\.feature_projection\.projection\.weight",
-                r"wav2vec2\.feature_projection\.projection\.bias",
-                r"wav2vec2\.encoder\.pos_conv_embed\.conv\.parametrizations\.weight\.original.",
-                r"classifier\.weight",
-                r"regnet\.embedder\.embedder\.convolution\.weight",
-                r"regnet\.encoder\.stages\..+\.layers\..+\.layer\..+\.convolution\.weight",
-                r"regnet\.encoder\.stages\..+\.layers\..+\.shortcut\.convolution\.weight",
-                r"regnet\.encoder\.stages\..+\.layers\..+\.layer\..+\.attention\..+\.weight",
-                r"regnet\.encoder\.stages\..+\.layers\..+\.layer\..+\.attention\..+\.bias",
-                r"classifier\..+\.weight",
-                r"classifier\..+\.bias",
-                r"resnet\.embedder\.embedder\.convolution\.weight",
-                r"resnet\.encoder\.stages\..+\.layers\..+\.shortcut\.convolution\.weight",
-                r"resnet\.encoder\.stages\..+\.layers\..+\.layer\..+\.convolution\.weight",
-                r"resnet\.encoder\.stages\..+\.layers\..+\.shortcut\.convolution\.weight",
-                r"resnet\.encoder\.stages\..+\.layers\..+\.layer\..+\.attention\..+\.weight",
-                r"resnet\.encoder\.stages\..+\.layers\..+\.layer\..+\.attention\..+\.bias",
-            ]
 
             with self.subTest(msg=f"Testing {model_class}"):
                 with tempfile.TemporaryDirectory() as tmp_dir:
@@ -3215,37 +3177,23 @@ class ModelTesterMixin:
 
                     # Fails when we don't set ignore_mismatched_sizes=True
                     with self.assertRaises(RuntimeError):
-                        new_model = model_class.from_pretrained(tmp_dir, num_labels=42)
+                        new_model = AutoModelForSequenceClassification.from_pretrained(tmp_dir, num_labels=42)
 
                     logger = logging.get_logger("transformers.modeling_utils")
 
                     with CaptureLogger(logger) as cl:
-                        new_model = model_class.from_pretrained(tmp_dir, num_labels=42, ignore_mismatched_sizes=True)
+                        new_model = AutoModelForSequenceClassification.from_pretrained(
+                            tmp_dir, num_labels=42, ignore_mismatched_sizes=True
+                        )
                     self.assertIn("the shapes did not match", cl.out)
 
                     for name, param in new_model.named_parameters():
                         if param.requires_grad:
-                            param_mean = ((param.data.mean() * 1e9).round() / 1e9).item()
-                            if not (
-                                is_special_classes
-                                and any(len(re.findall(target, name)) > 0 for target in special_param_names)
-                            ):
-                                self.assertIn(
-                                    param_mean,
-                                    [0.0, 1.0],
-                                    msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                                )
-                            else:
-                                self.assertGreaterEqual(
-                                    param_mean,
-                                    -1.0,
-                                    msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                                )
-                                self.assertLessEqual(
-                                    param_mean,
-                                    1.0,
-                                    msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                                )
+                            self.assertIn(
+                                ((param.data.mean() * 1e9).round() / 1e9).item(),
+                                [0.0, 1.0],
+                                msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                            )
 
     def test_matched_shapes_have_loaded_weights_when_some_mismatched_shapes_exist(self):
         # 1. Create a dummy class. Should have buffers as well? To make sure we test __init__
