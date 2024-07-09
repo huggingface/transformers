@@ -3211,7 +3211,7 @@ class ModelTesterMixin:
                     for name, param in new_model.named_parameters():
                         if param.requires_grad:
                             param_mean = ((param.data.mean() * 1e9).round() / 1e9).item()
-                            if not (is_special_classes and param in special_param_names):
+                            if not (is_special_classes and name in special_param_names):
                                 self.assertIn(
                                     param_mean,
                                     [0.0, 1.0],
