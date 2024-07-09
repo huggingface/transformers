@@ -302,7 +302,7 @@ class TokenClassificationPipeline(ChunkPipeline):
         all_entities = []
         for model_outputs in all_outputs:
             if self.framework == "pt" and model_outputs["logits"][0].dtype == torch.bfloat16:
-                # To enable using fp16 and bf16
+                # To enable using bf16
                 logits = model_outputs["logits"][0].float().numpy()
             else:
                 logits = model_outputs["logits"][0].numpy()
