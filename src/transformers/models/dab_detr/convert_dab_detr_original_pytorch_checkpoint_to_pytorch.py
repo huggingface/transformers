@@ -308,6 +308,7 @@ def convert_dab_detr_checkpoint(model_name, pytorch_dump_folder_path):
     # finally, create HuggingFace model and load state dict
     model = DABDETRForSegmentation(config) if is_panoptic else DABDETRForObjectDetection(config)
     model.load_state_dict(state_dict)
+    model.push_to_hub(repo_id=model_name, organization="davidhajdu", commit_message="Add model")
     model.eval()
     # verify our conversion
     outputs = model(**encoding)
