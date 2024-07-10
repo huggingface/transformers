@@ -1330,7 +1330,9 @@ class GenerationTesterMixin:
 
         input_ids = torch.randint(1, 50, (1, 10), device=torch_device)  # generate inputs in range from 1-50
         input_ids[:, 4] = 0  # inject arbitrarily eos-token-id in input ids so that PLD can copy it
-        input_ids[:, -1] = input_ids[:, 3]  # put pre-eos token in the end for match to happen
+        pre_eos_token = 51
+        input_ids[:, 3] = pre_eos_token  # set pre-eos to arbitrary id which is for sure not present in inputs
+        input_ids[:, -1] = pre_eos_token  # put pre-eos token in the end for the necessary match to happen
         eos_token_id = torch.tensor([0], device=torch_device)
 
         # init cand geenerator with max_matching_ngram_size=1 to match per-token
