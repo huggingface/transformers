@@ -142,6 +142,8 @@ class CircleCIJob:
             tests = "tests/benchmark tests/models/blip/test_modeling_blip.py tests/models/data2vec/test_modeling_data2vec_vision.py tests/models/esm/test_modeling_esmfold.py tests/models/idefics/test_modeling_idefics.py tests/models/mamba/test_modeling_mamba.py tests/models/nllb_moe/test_modeling_nllb_moe.py tests/models/qwen2/test_modeling_qwen2.py tests/models/speech_to_text/test_modeling_speech_to_text.py tests/models/univnet/test_modeling_univnet.py tests/models/xlm_roberta/test_modeling_xlm_roberta.py tests/trainer"
             # tests = "tests/benchmark tests/models/speech_to_text/test_modeling_speech_to_text.py tests/models/univnet/test_modeling_univnet.py tests/models/xlm_roberta/test_modeling_xlm_roberta.py tests/trainer"
             tests = "tests/benchmark tests/models/speech_to_text/test_modeling_speech_to_text.py tests/models/univnet/test_modeling_univnet.py tests/models/xlm_roberta/test_modeling_xlm_roberta.py tests/trainer"
+            tests = "tests/benchmark tests/models/speech_to_text/test_modeling_speech_to_text.py tests/trainer"
+
             tests = tests.split()
 
             # tests = self.tests_to_run
