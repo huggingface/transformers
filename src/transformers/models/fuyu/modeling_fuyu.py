@@ -179,6 +179,9 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
 
     def get_decoder(self):
         return self.language_model.get_decoder()
+    
+    def tie_weights(self):
+        return self.language_model.tie_weights()
 
     def resize_token_embeddings(self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None) -> nn.Embedding:
         # TODO: config.vocab_size is deprecated and will be removed in v4.43.
