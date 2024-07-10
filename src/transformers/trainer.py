@@ -916,7 +916,10 @@ class Trainer:
         if self.args.use_legacy_prediction_loop:
             if is_torch_xla_available():
                 return SequentialDistributedSampler(
-                    eval_dataset, num_replicas=xm.xrt_world_size(), rank=xm.get_ordinal(), generator=torch.Generator(device=self.args.device)
+                    eval_dataset,
+                    num_replicas=xm.xrt_world_size(),
+                    rank=xm.get_ordinal(),
+                    generator=torch.Generator(device=self.args.device)
                 )
             elif is_sagemaker_mp_enabled():
                 return SequentialDistributedSampler(
@@ -977,7 +980,7 @@ class Trainer:
             "num_workers": self.args.dataloader_num_workers,
             "pin_memory": self.args.dataloader_pin_memory,
             "persistent_workers": self.args.dataloader_persistent_workers,
-            "generator": torch.Generator(device=self.args.device)
+            "generator": torch.Generator(device=self.args.device),
         }
 
         if not isinstance(eval_dataset, torch.utils.data.IterableDataset):
