@@ -51,35 +51,6 @@ def write_json(text, path):
     with open(path, "w") as f:
         json.dump(text, f)
 
-
-def get_mllama_config():
-    text_config = {
-        "vocab_size": 257152,
-        "num_hidden_layers": 18,
-        "num_key_value_heads": 1,
-        "head_dim": 256,
-        "hidden_size": 2048,
-        "hidden_activation": "gelu_pytorch_tanh",
-        "num_attention_heads": 8,
-        "intermediate_size": 16384,
-        "is_encoder_decoder": False,
-    }
-    vision_config = {
-        "torch_dtype": precision,
-        "image_size": image_size,
-        "patch_size": patch_size,
-        "num_image_tokens": num_image_tokens,
-        "hidden_size": 1152,
-        "intermediate_size": 4304,
-        "num_hidden_layers": 27,
-        "num_attention_heads": 16,
-        "projector_hidden_act": "gelu_fast",
-        "vision_use_head": False,
-    }
-    final_config = MllamaConfig(text_config=text_config, vision_config=vision_config, **config)
-    return final_config
-
-
 def write_model(
     model_path,
     input_base_path,
@@ -336,7 +307,8 @@ def write_model(
             ffn_gate = ffn_gate[0].view(1)
         if ffn_gate.dim() == 3:
             ffn_gate = ffn_gate.view(1)
-        state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.attn_gate"] = attn_gate
+        # model.language_model.cross_attention_layers.0.gate_attn
+        state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.gate_attn"] = attn_gate
 
         state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.ffn_gate"] = ffn_gate        
 
@@ -361,10 +333,10 @@ def write_model(
 
     projection_filename = "pytorch_vision_projection.bin"
     state_dict = {
-            'vision_model.vision_projection.weight': torch.cat(
+            'model.vision_model.vision_projection.weight': torch.cat(
             [loaded[i].pop("vision_model.vision_projection.weight") for i in range(num_shards)], dim=concat_dim
         ),
-            'vision_model.vision_projection.bias': torch.cat(
+            'model.vision_model.vision_projection.bias': torch.cat(
             [loaded[i].pop("vision_model.vision_projection.bias") for i in range(num_shards)], dim=concat_dim
         ),
     }
