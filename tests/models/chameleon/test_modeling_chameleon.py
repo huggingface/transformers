@@ -24,6 +24,7 @@ from transformers import ChameleonConfig, is_torch_available, is_vision_availabl
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
+    require_read_token,
     require_torch,
     require_torch_gpu,
     slow,
@@ -422,6 +423,7 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 class ChameleonIntegrationTest(unittest.TestCase):
     @slow
     @require_bitsandbytes
+    @require_read_token
     def test_model_7b(self):
         model = ChameleonForCausalLM.from_pretrained("facebook/chameleon-7b", load_in_4bit=True, device_map="auto")
         processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
@@ -441,6 +443,7 @@ class ChameleonIntegrationTest(unittest.TestCase):
 
     @slow
     @require_bitsandbytes
+    @require_read_token
     def test_model_7b_batched(self):
         model = ChameleonForCausalLM.from_pretrained("facebook/chameleon-7b", load_in_4bit=True, device_map="auto")
         processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
@@ -471,6 +474,7 @@ class ChameleonIntegrationTest(unittest.TestCase):
 
     @slow
     @require_bitsandbytes
+    @require_read_token
     def test_model_7b_multi_image(self):
         model = ChameleonForCausalLM.from_pretrained("facebook/chameleon-7b", load_in_4bit=True, device_map="auto")
         processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
