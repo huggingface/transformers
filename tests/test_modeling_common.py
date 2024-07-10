@@ -3217,6 +3217,7 @@ class ModelTesterMixin:
                 r"sew_d\.",
                 r"swiftformer\.",
                 r"swinv2\.",
+                r"transformers\.models\.swiftformer\.",
                 r"unispeech\.",
                 r"unispeech_sat\.",
                 r"vision_model\.",
