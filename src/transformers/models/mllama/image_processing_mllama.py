@@ -368,9 +368,11 @@ def stack_aspect_ratios(aspect_ratios: List[List[Tuple[int, int]]], pad_value: i
             aspect_ratios_stacked[i, : len(row)] = np.array(row)
     return aspect_ratios_stacked
 
+def is_valid_list_of_images(images: List):
+    return images and all([is_valid_image(image) for image in images])
 
-# Copied from IDEFICS2
-def make_list_of_images(images: ImageInput) -> List[List[np.ndarray]]:
+# Inspired by IDEFICS2
+def make_list_of_images(images: ImageInput) -> List[List[Optional[np.ndarray]]]:
     """
     Convert a single image or a list of images to a list of numpy arrays.
 
@@ -383,23 +385,25 @@ def make_list_of_images(images: ImageInput) -> List[List[np.ndarray]]:
     """
     # If it's a single image, convert it to a list of lists
     if is_valid_image(images):
-        images = [[images]]
+        output_images = [[images]]
     # If it's a list of images, it's a single batch, so convert it to a list of lists
-    elif isinstance(images, (list, tuple)) and len(images) > 0 and is_valid_image(images[0]):
-        images = [images]
+    elif (
+        isinstance(images, (list, tuple))
+        and is_valid_list_of_images(images)
+    ):
+        output_images = [images]
     # If it's a list of batches, it's already in the right format
     elif (
         isinstance(images, (list, tuple))
-        and len(images) > 0
-        and isinstance(images[0], (list, tuple))
-        and is_valid_image(images[0][0])
+        and all(isinstance(images_i, (list, tuple)) for images_i in images)
+        and any([is_valid_list_of_images(images_i) for images_i in images])
     ):
-        pass
+        output_images = images
     else:
         raise ValueError(
             "Invalid input type. Must be a single image, a list of images, or a list of batches of images."
         )
-    return images
+    return output_images
 
 
 class MllamaImageProcessor(BaseImageProcessor):
