@@ -135,6 +135,7 @@ class Phi3SuScaledRotaryEmbedding(Phi3RotaryEmbedding):
         self.short_factor = config.rope_scaling["short_factor"]
         self.long_factor = config.rope_scaling["long_factor"]
         self.original_max_position_embeddings = config.original_max_position_embeddings
+
     @torch.no_grad()
     def forward(self, x, position_ids, seq_len=None):
         seq_len = torch.max(position_ids) + 1
