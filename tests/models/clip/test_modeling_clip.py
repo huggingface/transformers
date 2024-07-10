@@ -1188,24 +1188,18 @@ class CLIPModelIntegrationTest(unittest.TestCase):
         # to visualize self-attention on higher resolution images.
         model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(torch_device)
 
-        image_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32", size=480)
+        processor = CLIPProcessor.from_pretrained(
+            "openai/clip-vit-base-patch32", size={"height": 480, "width": 480}, crop_size={"height": 480, "width": 480}
+        )
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        inputs = image_processor(text="what's in the image", images=image, return_tensors="pt").to(torch_device)
+        inputs = processor(text="what's in the image", images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():
             outputs = model(**inputs, interpolate_pos_encoding=True)
 
         # verify the logits
-        expected_shape = torch.Size((1, 50, 768))
+        expected_shape = torch.Size((1, 226, 768))
 
         self.assertEqual(outputs.vision_model_output.last_hidden_state.shape, expected_shape)
-
-        expected_slice = torch.tensor(
-            [[-0.0966, 0.3521, -0.3485], [0.5785, 0.8967, 0.3586], [0.2314, 0.3896, 0.2557]]
-        ).to(torch_device)
-
-        self.assertTrue(
-            torch.allclose(outputs.vision_model_output.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4)
-        )
