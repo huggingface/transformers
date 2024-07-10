@@ -2352,7 +2352,7 @@ else:
             "InstructBlipVideoVisionModel",
         ]
     )
-     _import_structure["models.iris"].extend(
+    _import_structure["models.iris"].extend(
         [
             "IrisModel",
             "IrisPreTrainedModel",
