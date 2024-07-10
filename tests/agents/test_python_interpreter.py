@@ -674,7 +674,7 @@ assert lock.locked == False
     """
         state = {}
         tools = {}
-        evaluate_python_code(code, tools, state)
+        evaluate_python_code(code, tools, state=state)
 
     def test_default_arg_in_function(self):
         code = """

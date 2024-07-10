@@ -380,12 +380,8 @@ class Agent:
         """Get the toolbox currently available to the agent"""
         return self._toolbox
 
-    def initialize_for_run(self, task: str, **kwargs):
+    def initialize_for_run(self):
         self.token_count = 0
-        self.task = task
-        if len(kwargs) > 0:
-            self.task += f"\nYou have been provided with these initial arguments: {str(kwargs)}."
-        self.state = kwargs.copy()
         self.system_prompt = format_prompt_with_tools(
             self._toolbox,
             self.system_prompt_template,
@@ -434,6 +430,13 @@ class Agent:
                 tool_call_message = {
                     "role": MessageRole.ASSISTANT,
                     "content": f"[STEP {i} TOOL CALL]: " + str(step_log["tool_call"]).strip(),
+                }
+                memory.append(tool_call_message)
+
+            if "task" in step_log:
+                tool_call_message = {
+                    "role": MessageRole.USER,
+                    "content": "New task:\n" + step_log["task"],
                 }
                 memory.append(tool_call_message)
 
@@ -581,7 +584,11 @@ class CodeAgent(Agent):
         agent.run("What is the result of 2 power 3.7384?")
         ```
         """
-        self.initialize_for_run(task, **kwargs)
+        self.task = task
+        if len(kwargs) > 0:
+            self.task += f"\nYou have been provided with these initial arguments: {str(kwargs)}."
+        self.state = kwargs.copy()
+        self.initialize_for_run()
 
         # Run LLM
         prompt_message = {"role": MessageRole.SYSTEM, "content": self.system_prompt}
@@ -620,7 +627,7 @@ class CodeAgent(Agent):
             available_tools = {**BASE_PYTHON_TOOLS.copy(), **self.toolbox.tools}
             output = self.python_evaluator(
                 code_action,
-                available_tools,
+                static_tools=available_tools,
                 custom_tools={},
                 state=self.state,
                 authorized_imports=self.authorized_imports,
@@ -680,7 +687,7 @@ class ReactAgent(Agent):
         except Exception as e:
             return f"Error in generating final llm output: {e}."
 
-    def run(self, task: str, stream: bool = False, **kwargs):
+    def run(self, task: str, stream: bool = False, reset: bool = True, **kwargs):
         """
         Runs the agent for the given task.
         Args:
@@ -692,14 +699,20 @@ class ReactAgent(Agent):
         agent.run("What is the result of 2 power 3.7384?")
         ```
         """
-        if stream:
-            return self.stream_run(task, **kwargs)
+        self.task = task
+        if len(kwargs) > 0:
+            self.task += f"\nYou have been provided with these initial arguments: {str(kwargs)}."
+        self.state = kwargs.copy()
+        if reset:
+            self.initialize_for_run()
         else:
-            return self.direct_run(task, **kwargs)
+            self.logs.append({"task": task})
+        if stream:
+            return self.stream_run(task)
+        else:
+            return self.direct_run(task)
 
-    def stream_run(self, task: str, **kwargs):
-        self.initialize_for_run(task, **kwargs)
-
+    def stream_run(self, task: str):
         final_answer = None
         iteration = 0
         while final_answer is None and iteration < self.max_iterations:
@@ -725,9 +738,7 @@ class ReactAgent(Agent):
 
         yield final_answer
 
-    def direct_run(self, task: str, **kwargs):
-        self.initialize_for_run(task, **kwargs)
-
+    def direct_run(self, task: str):
         final_answer = None
         iteration = 0
         while final_answer is None and iteration < self.max_iterations:
@@ -1029,7 +1040,7 @@ class ReactCodeAgent(ReactAgent):
         try:
             result = self.python_evaluator(
                 code_action,
-                tools={
+                static_tools={
                     **BASE_PYTHON_TOOLS.copy(),
                     **self.toolbox.tools,
                 },
