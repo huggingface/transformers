@@ -127,23 +127,27 @@ class CircleCIJob:
         # junit familiy xunit1 is necessary to support splitting on test name or class name with circleci split
         test_command += f"python3 -m pytest -rsfE -p no:warnings -o junit_family=xunit1 --tb=short --junitxml=test-results/junit.xml -n {self.pytest_num_workers} " + " ".join(pytest_flags)
 
-        tests = "tests/benchmark tests/generation tests/models/autoformer/test_modeling_autoformer.py tests/models/big_bird/test_modeling_big_bird.py tests/models/blip/test_modeling_blip.py tests/models/camembert/test_modeling_camembert.py tests/models/clvp/test_modeling_clvp.py tests/models/convnextv2/test_modeling_convnextv2.py tests/models/data2vec/test_modeling_data2vec_vision.py tests/models/deit/test_modeling_deit.py tests/models/dit/test_modeling_dit.py tests/models/efficientnet/test_modeling_efficientnet.py tests/models/esm/test_modeling_esmfold.py tests/models/focalnet/test_modeling_focalnet.py tests/models/git/test_modeling_git.py tests/models/gpt_neox_japanese/test_modeling_gpt_neox_japanese.py tests/models/idefics/test_modeling_idefics.py tests/models/jamba/test_modeling_jamba.py tests/models/led/test_modeling_led.py tests/models/llava_next_video/test_modeling_llava_next_video.py tests/models/mamba/test_modeling_mamba.py tests/models/mbart/test_modeling_mbart.py tests/models/mobilebert/test_modeling_mobilebert.py tests/models/mpt/test_modeling_mpt.py tests/models/nllb_moe/test_modeling_nllb_moe.py tests/models/owlv2/test_modeling_owlv2.py tests/models/pegasus_x/test_modeling_pegasus_x.py tests/models/plbart/test_modeling_plbart.py tests/models/qwen2/test_modeling_qwen2.py tests/models/rembert/test_modeling_rembert.py tests/models/rt_detr/test_modeling_rt_detr.py tests/models/segformer/test_modeling_segformer.py tests/models/speech_to_text/test_modeling_speech_to_text.py tests/models/superpoint/test_modeling_superpoint.py tests/models/t5/test_modeling_t5.py tests/models/trocr/test_modeling_trocr.py tests/models/univnet/test_modeling_univnet.py tests/models/vision_encoder_decoder/test_modeling_vision_encoder_decoder.py tests/models/vitdet/test_modeling_vitdet.py tests/models/wav2vec2_conformer/test_modeling_wav2vec2_conformer.py tests/models/xlm_roberta/test_modeling_xlm_roberta.py tests/models/zoedepth/test_modeling_zoedepth.py tests/test_configuration_common.py tests/test_modeling_tf_common.py tests/trainer"
-        tests = tests.split()
+        # tests = "tests/benchmark tests/generation tests/models/autoformer/test_modeling_autoformer.py tests/models/big_bird/test_modeling_big_bird.py tests/models/blip/test_modeling_blip.py tests/models/camembert/test_modeling_camembert.py tests/models/clvp/test_modeling_clvp.py tests/models/convnextv2/test_modeling_convnextv2.py tests/models/data2vec/test_modeling_data2vec_vision.py tests/models/deit/test_modeling_deit.py tests/models/dit/test_modeling_dit.py tests/models/efficientnet/test_modeling_efficientnet.py tests/models/esm/test_modeling_esmfold.py tests/models/focalnet/test_modeling_focalnet.py tests/models/git/test_modeling_git.py tests/models/gpt_neox_japanese/test_modeling_gpt_neox_japanese.py tests/models/idefics/test_modeling_idefics.py tests/models/jamba/test_modeling_jamba.py tests/models/led/test_modeling_led.py tests/models/llava_next_video/test_modeling_llava_next_video.py tests/models/mamba/test_modeling_mamba.py tests/models/mbart/test_modeling_mbart.py tests/models/mobilebert/test_modeling_mobilebert.py tests/models/mpt/test_modeling_mpt.py tests/models/nllb_moe/test_modeling_nllb_moe.py tests/models/owlv2/test_modeling_owlv2.py tests/models/pegasus_x/test_modeling_pegasus_x.py tests/models/plbart/test_modeling_plbart.py tests/models/qwen2/test_modeling_qwen2.py tests/models/rembert/test_modeling_rembert.py tests/models/rt_detr/test_modeling_rt_detr.py tests/models/segformer/test_modeling_segformer.py tests/models/speech_to_text/test_modeling_speech_to_text.py tests/models/superpoint/test_modeling_superpoint.py tests/models/t5/test_modeling_t5.py tests/models/trocr/test_modeling_trocr.py tests/models/univnet/test_modeling_univnet.py tests/models/vision_encoder_decoder/test_modeling_vision_encoder_decoder.py tests/models/vitdet/test_modeling_vitdet.py tests/models/wav2vec2_conformer/test_modeling_wav2vec2_conformer.py tests/models/xlm_roberta/test_modeling_xlm_roberta.py tests/models/zoedepth/test_modeling_zoedepth.py tests/test_configuration_common.py tests/test_modeling_tf_common.py tests/trainer"
+        # tests = tests.split()
 
-        # if self.parallelism == 1:
-        #     if self.tests_to_run is None:
-        #         test_command += " << pipeline.parameters.tests_to_run >>"
-        #     else:
-        #         test_command += " " + " ".join(self.tests_to_run)
-        # else:
-        #     # We need explicit list instead of `pipeline.parameters.tests_to_run` (only available at job runtime)
-        #     tests = self.tests_to_run
-        #     if tests is None:
-        #         folder = os.environ["test_preparation_dir"]
-        #         test_file = os.path.join(folder, "filtered_test_list.txt")
-        #         if os.path.exists(test_file): # We take this job's tests from the filtered test_list.txt
-        #             with open(test_file) as f:
-        #                 tests = f.read().split(" ")
+        if self.parallelism == 1:
+            if self.tests_to_run is None:
+                test_command += " << pipeline.parameters.tests_to_run >>"
+            else:
+                test_command += " " + " ".join(self.tests_to_run)
+        else:
+            # We need explicit list instead of `pipeline.parameters.tests_to_run` (only available at job runtime)
+
+            tests = "tests/benchmark tests/generation tests/models/autoformer/test_modeling_autoformer.py tests/models/big_bird/test_modeling_big_bird.py tests/models/blip/test_modeling_blip.py tests/models/camembert/test_modeling_camembert.py tests/models/clvp/test_modeling_clvp.py tests/models/convnextv2/test_modeling_convnextv2.py tests/models/data2vec/test_modeling_data2vec_vision.py tests/models/deit/test_modeling_deit.py tests/models/dit/test_modeling_dit.py tests/models/efficientnet/test_modeling_efficientnet.py tests/models/esm/test_modeling_esmfold.py tests/models/focalnet/test_modeling_focalnet.py tests/models/git/test_modeling_git.py tests/models/gpt_neox_japanese/test_modeling_gpt_neox_japanese.py tests/models/idefics/test_modeling_idefics.py tests/models/jamba/test_modeling_jamba.py tests/models/led/test_modeling_led.py tests/models/llava_next_video/test_modeling_llava_next_video.py tests/models/mamba/test_modeling_mamba.py tests/models/mbart/test_modeling_mbart.py tests/models/mobilebert/test_modeling_mobilebert.py tests/models/mpt/test_modeling_mpt.py tests/models/nllb_moe/test_modeling_nllb_moe.py tests/models/owlv2/test_modeling_owlv2.py tests/models/pegasus_x/test_modeling_pegasus_x.py tests/models/plbart/test_modeling_plbart.py tests/models/qwen2/test_modeling_qwen2.py tests/models/rembert/test_modeling_rembert.py tests/models/rt_detr/test_modeling_rt_detr.py tests/models/segformer/test_modeling_segformer.py tests/models/speech_to_text/test_modeling_speech_to_text.py tests/models/superpoint/test_modeling_superpoint.py tests/models/t5/test_modeling_t5.py tests/models/trocr/test_modeling_trocr.py tests/models/univnet/test_modeling_univnet.py tests/models/vision_encoder_decoder/test_modeling_vision_encoder_decoder.py tests/models/vitdet/test_modeling_vitdet.py tests/models/wav2vec2_conformer/test_modeling_wav2vec2_conformer.py tests/models/xlm_roberta/test_modeling_xlm_roberta.py tests/models/zoedepth/test_modeling_zoedepth.py tests/test_configuration_common.py tests/test_modeling_tf_common.py tests/trainer"
+            tests = tests.split()
+
+            # tests = self.tests_to_run
+            if tests is None:
+                folder = os.environ["test_preparation_dir"]
+                test_file = os.path.join(folder, "filtered_test_list.txt")
+                if os.path.exists(test_file): # We take this job's tests from the filtered test_list.txt
+                    with open(test_file) as f:
+                        tests = f.read().split(" ")
 
             # expand the test list
             if tests == ["tests"]:
