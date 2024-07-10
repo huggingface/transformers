@@ -228,7 +228,10 @@ def convert_checkpoint(
 
     original_checkpoint = model_dict["state_dict"]
 
+    model.apply_weight_norm()
     recursively_load_weights(original_checkpoint, model, model_name)
+    model.remove_weight_norm()
+
     model.save_pretrained(pytorch_dump_folder_path)
 
     if repo_id:

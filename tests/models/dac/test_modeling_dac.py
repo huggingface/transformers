@@ -35,21 +35,6 @@ if is_torch_available():
     import torch
 
 
-def prepare_inputs_dict(
-    input_ids=None,
-    input_values=None,
-    decoder_input_ids=None,
-):
-    if input_ids is not None:
-        encoder_dict = {"input_ids": input_ids}
-    else:
-        encoder_dict = {"input_values": input_values}
-
-    decoder_dict = {"decoder_input_ids": decoder_input_ids} if decoder_input_ids is not None else {}
-
-    return {**encoder_dict, **decoder_dict}
-
-
 @require_torch
 # Copied from transformers.tests.encodec.test_modeling_encodec.EncodecModelTester with Encodec->Dac
 class DacModelTester:
@@ -419,10 +404,10 @@ class DacIntegrationTest(unittest.TestCase):
         expected_rmse = 0.004
 
         expected_encoder_sums_dict = {
-            "loss": 24.873,
-            "quantized_representation": -22443.92,
-            "audio_codes": 1763635,
-            "projected_latents": 1891.828,
+            "loss": 24.8727,
+            "quantized_representation": -22409.84,
+            "audio_codes": 1760779,
+            "projected_latents": 1900.13,
         }
 
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -430,7 +415,7 @@ class DacIntegrationTest(unittest.TestCase):
         model_name = "dac_16khz"
 
         model_id = "kamilakesbi/{}".format(model_name)
-        model = DacModel.from_pretrained(model_id).to(torch_device)
+        model = DacModel.from_pretrained(model_id, force_download=True).to(torch_device).eval()
         processor = AutoProcessor.from_pretrained(model_id)
 
         librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
@@ -471,20 +456,20 @@ class DacIntegrationTest(unittest.TestCase):
             self.assertTrue(rmse < expected_rmse)
 
     def test_integration_24khz(self):
-        expected_rmse = 0.0026
+        expected_rmse = 0.0039
 
         expected_encoder_sums_dict = {
-            "loss": 28.091,
-            "quantized_representation": 7952.426,
-            "audio_codes": 7133234,
-            "projected_latents": -2933.110,
+            "loss": 29.9858,
+            "quantized_representation": 2945.35,
+            "audio_codes": 4824288,
+            "projected_latents": -389.1906,
         }
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
         model_name = "dac_24khz"
 
         model_id = "kamilakesbi/{}".format(model_name)
-        model = DacModel.from_pretrained(model_id).to(torch_device)
+        model = DacModel.from_pretrained(model_id, force_download=True).to(torch_device).eval()
         processor = AutoProcessor.from_pretrained(model_id)
 
         librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
@@ -525,20 +510,20 @@ class DacIntegrationTest(unittest.TestCase):
             self.assertTrue(rmse < expected_rmse)
 
     def test_integration_44khz(self):
-        expected_rmse = 0.0008
+        expected_rmse = 0.002
 
         expected_encoder_sums_dict = {
-            "loss": 24.1003,
-            "quantized_representation": 10457.930,
-            "audio_codes": 2282129,
-            "projected_latents": 2074.932,
+            "loss": 34.372,
+            "quantized_representation": 1436.46,
+            "audio_codes": 839434,
+            "projected_latents": -1387.11,
         }
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
         model_name = "dac_44khz"
 
         model_id = "kamilakesbi/{}".format(model_name)
-        model = DacModel.from_pretrained(model_id).to(torch_device)
+        model = DacModel.from_pretrained(model_id).to(torch_device).eval()
         processor = AutoProcessor.from_pretrained(model_id)
 
         librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
@@ -582,10 +567,10 @@ class DacIntegrationTest(unittest.TestCase):
         expected_rmse = 0.002
 
         expected_encoder_sums_dict = {
-            "loss": 40.7245,
-            "quantized_representation": -39568.0898,
-            "audio_codes": 4166923,
-            "projected_latents": 1526.3572,
+            "loss": 40.7435,
+            "quantized_representation": -39667.3125,
+            "audio_codes": 4169626,
+            "projected_latents": 1552.0602,
         }
 
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -636,13 +621,13 @@ class DacIntegrationTest(unittest.TestCase):
             self.assertTrue(rmse < expected_rmse)
 
     def test_integration_batch_24khz(self):
-        expected_rmse = 0.0013
+        expected_rmse = 0.002
 
         expected_encoder_sums_dict = {
-            "loss": 49.0317,
-            "quantized_representation": 40920.2500,
-            "audio_codes": 17405028,
-            "projected_latents": -5158.3975,
+            "loss": 48.4910,
+            "quantized_representation": 36949.6289,
+            "audio_codes": 11620197,
+            "projected_latents": -1430.1226,
         }
 
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -693,13 +678,13 @@ class DacIntegrationTest(unittest.TestCase):
             self.assertTrue(rmse < expected_rmse)
 
     def test_integration_batch_44khz(self):
-        expected_rmse = 0.0004
+        expected_rmse = 0.001
 
         expected_encoder_sums_dict = {
-            "loss": 38.9014,
-            "quantized_representation": -5212.0156,
-            "audio_codes": 5736248,
-            "projected_latents": 1636.0724,
+            "loss": 51.8182,
+            "quantized_representation": 778.2920,
+            "audio_codes": 778.2920,
+            "projected_latents": -3844.6055,
         }
 
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")

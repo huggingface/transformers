@@ -27,9 +27,20 @@ The abstract from the paper is the following:
 This model was contributed by [Kamil Akesbi](https://huggingface.co/kamilakesbi).
 The original code can be found [here](https://github.com/descriptinc/descript-audio-codec/tree/main?tab=readme-ov-file).
 
+
+## Model structure
+
+The Descript Audio Codec (DAC) model is structured into three distinct stages:
+
+1. Encoder Model: This stage compresses the input audio, reducing its size while retaining essential information.
+2. Residual Vector Quantizer (RVQ) Model: Working in tandem with the encoder, this model quantizes the latent codes of the audio, refining the compression and ensuring high-quality reconstruction.
+3. Decoder Model: This final stage reconstructs the audio from its compressed form, restoring it to a state that closely resembles the original input.
+
 ## Usage example 
 
-Here is a quick example of how to encode and decode an audio using this model:
+The Descript Audio Codec (DAC) model is a powerful tool for compressing audio data, making it highly efficient for storage and transmission. By compressing 44.1 KHz audio into tokens at just 8kbps bandwidth, the DAC model enables high-quality audio processing while significantly reducing the data footprint. This is particularly useful in scenarios where bandwidth is limited or storage space is at a premium, such as in streaming applications, remote conferencing, and archiving large audio datasets.
+
+Here is a quick example of how to encode and decode an audio using this model: 
 
 ```python 
 >>> from datasets import load_dataset, Audio

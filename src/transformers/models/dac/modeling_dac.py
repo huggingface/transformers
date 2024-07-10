@@ -22,7 +22,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn.utils import weight_norm
 
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -125,8 +124,8 @@ class DacVectorQuantize(nn.Module):
     def __init__(self, config: DacConfig):
         super().__init__()
 
-        self.in_proj = weight_norm(nn.Conv1d(config.hidden_size, config.codebook_dim, kernel_size=1))
-        self.out_proj = weight_norm(nn.Conv1d(config.codebook_dim, config.hidden_size, kernel_size=1))
+        self.in_proj = nn.Conv1d(config.hidden_size, config.codebook_dim, kernel_size=1)
+        self.out_proj = nn.Conv1d(config.codebook_dim, config.hidden_size, kernel_size=1)
         self.codebook = nn.Embedding(config.codebook_size, config.codebook_dim)
 
     def forward(self, hidden_state):
@@ -155,9 +154,8 @@ class DacVectorQuantize(nn.Module):
 
         commitment_loss = F.mse_loss(projected_latents, quantized_representation.detach(), reduction="mean")
         codebook_loss = F.mse_loss(quantized_representation, projected_latents.detach(), reduction="mean")
-        quantized_representation = (
-            projected_latents + (quantized_representation - projected_latents).detach()
-        )  # noop in forward pass, straight-through gradient estimator in backward pass
+        # noop in forward pass, straight-through gradient estimator in backward pass
+        quantized_representation = projected_latents + (quantized_representation - projected_latents).detach()
         quantized_representation = self.out_proj(quantized_representation)
 
         return quantized_representation, commitment_loss, codebook_loss, audio_codes, projected_latents
@@ -191,9 +189,9 @@ class DacResidualUnit(nn.Module):
         pad = ((7 - 1) * dilation) // 2
 
         self.snake1 = Snake1d(dimension)
-        self.conv1 = weight_norm(nn.Conv1d(dimension, dimension, kernel_size=7, dilation=dilation, padding=pad))
+        self.conv1 = nn.Conv1d(dimension, dimension, kernel_size=7, dilation=dilation, padding=pad)
         self.snake2 = Snake1d(dimension)
-        self.conv2 = weight_norm(nn.Conv1d(dimension, dimension, kernel_size=1))
+        self.conv2 = nn.Conv1d(dimension, dimension, kernel_size=1)
 
     def forward(self, hidden_state):
         """
@@ -229,8 +227,8 @@ class DacEncoderBlock(nn.Module):
         self.res_unit2 = DacResidualUnit(dimension // 2, dilation=3)
         self.res_unit3 = DacResidualUnit(dimension // 2, dilation=9)
         self.snake1 = Snake1d(dimension // 2)
-        self.conv1 = weight_norm(
-            nn.Conv1d(dimension // 2, dimension, kernel_size=2 * stride, stride=stride, padding=math.ceil(stride / 2))
+        self.conv1 = nn.Conv1d(
+            dimension // 2, dimension, kernel_size=2 * stride, stride=stride, padding=math.ceil(stride / 2)
         )
 
     def forward(self, hidden_state):
@@ -251,15 +249,14 @@ class DacDecoderBlock(nn.Module):
         input_dim = config.decoder_hidden_size // 2**stride_index
         output_dim = config.decoder_hidden_size // 2 ** (stride_index + 1)
         self.snake1 = Snake1d(input_dim)
-        self.conv_t1 = weight_norm(
-            nn.ConvTranspose1d(
-                input_dim,
-                output_dim,
-                kernel_size=2 * stride,
-                stride=stride,
-                padding=math.ceil(stride / 2),
-            )
+        self.conv_t1 = nn.ConvTranspose1d(
+            input_dim,
+            output_dim,
+            kernel_size=2 * stride,
+            stride=stride,
+            padding=math.ceil(stride / 2),
         )
+
         self.res_unit1 = DacResidualUnit(output_dim, dilation=1)
         self.res_unit2 = DacResidualUnit(output_dim, dilation=3)
         self.res_unit3 = DacResidualUnit(output_dim, dilation=9)
@@ -296,7 +293,7 @@ class DacResidualVectorQuantize(nn.Module):
         Args:
             hidden_state (`torch.Tensor` of shape `(batch_size, dimension, time_steps)`):
                 Input tensor to be quantized.
-            n_quantizers (`int`, optional):
+            n_quantizers (`int`, *optional*):
                 Number of quantizers to use. If specified and `self.quantizer_dropout` is True,
                 this argument is ignored during training, and a random number of quantizers is used.
 
@@ -423,7 +420,7 @@ class DacDecoder(nn.Module):
         strides = config.upsampling_ratios
 
         # Add first conv layer
-        self.conv1 = weight_norm(nn.Conv1d(input_channel, channels, kernel_size=7, padding=3))
+        self.conv1 = nn.Conv1d(input_channel, channels, kernel_size=7, padding=3)
 
         # Add upsampling + MRF blocks
         block = []
@@ -433,7 +430,7 @@ class DacDecoder(nn.Module):
         self.block = nn.ModuleList(block)
         output_dim = config.decoder_hidden_size // 2 ** (stride_index + 1)
         self.snake1 = Snake1d(output_dim)
-        self.conv2 = weight_norm(nn.Conv1d(output_dim, 1, kernel_size=7, padding=3))
+        self.conv2 = nn.Conv1d(output_dim, 1, kernel_size=7, padding=3)
         self.tanh = nn.Tanh()
 
     def forward(self, hidden_state):
@@ -457,7 +454,7 @@ class DacEncoder(nn.Module):
 
         strides = config.downsampling_ratios
         # Create first convolution
-        self.conv1 = weight_norm(nn.Conv1d(1, config.encoder_hidden_size, kernel_size=7, padding=3))
+        self.conv1 = nn.Conv1d(1, config.encoder_hidden_size, kernel_size=7, padding=3)
 
         self.block = []
         # Create EncoderBlocks that double channels as they downsample by `stride`
@@ -468,7 +465,7 @@ class DacEncoder(nn.Module):
         self.block = nn.ModuleList(self.block)
         d_model = config.encoder_hidden_size * 2**stride_index
         self.snake1 = Snake1d(d_model)
-        self.conv2 = weight_norm(nn.Conv1d(d_model, config.hidden_size, kernel_size=3, padding=1))
+        self.conv2 = nn.Conv1d(d_model, config.hidden_size, kernel_size=3, padding=1)
 
     def forward(self, hidden_state):
         hidden_state = self.conv1(hidden_state)
@@ -495,6 +492,64 @@ class DacPreTrainedModel(PreTrainedModel):
         if isinstance(module, nn.Conv1d):
             nn.init.trunc_normal_(module.weight, std=0.02)
             nn.init.constant_(module.bias, 0)
+
+    def apply_weight_norm(self):
+        for layer in self.quantizer.quantizers:
+            nn.utils.weight_norm(layer.in_proj)
+            nn.utils.weight_norm(layer.out_proj)
+
+        nn.utils.weight_norm(self.encoder.conv1)
+        nn.utils.weight_norm(self.encoder.conv2)
+
+        for layer in self.encoder.block:
+            nn.utils.weight_norm(layer.conv1)
+            nn.utils.weight_norm(layer.res_unit1.conv1)
+            nn.utils.weight_norm(layer.res_unit1.conv2)
+            nn.utils.weight_norm(layer.res_unit2.conv1)
+            nn.utils.weight_norm(layer.res_unit2.conv2)
+            nn.utils.weight_norm(layer.res_unit3.conv1)
+            nn.utils.weight_norm(layer.res_unit3.conv2)
+
+        nn.utils.weight_norm(self.decoder.conv1)
+        nn.utils.weight_norm(self.decoder.conv2)
+
+        for layer in self.decoder.block:
+            nn.utils.weight_norm(layer.conv_t1)
+            nn.utils.weight_norm(layer.res_unit1.conv1)
+            nn.utils.weight_norm(layer.res_unit1.conv2)
+            nn.utils.weight_norm(layer.res_unit2.conv1)
+            nn.utils.weight_norm(layer.res_unit2.conv2)
+            nn.utils.weight_norm(layer.res_unit3.conv1)
+            nn.utils.weight_norm(layer.res_unit3.conv2)
+
+    def remove_weight_norm(self):
+        for layer in self.quantizer.quantizers:
+            nn.utils.remove_weight_norm(layer.in_proj)
+            nn.utils.remove_weight_norm(layer.out_proj)
+
+        nn.utils.remove_weight_norm(self.encoder.conv1)
+        nn.utils.remove_weight_norm(self.encoder.conv2)
+
+        for layer in self.encoder.block:
+            nn.utils.remove_weight_norm(layer.conv1)
+            nn.utils.remove_weight_norm(layer.res_unit1.conv1)
+            nn.utils.remove_weight_norm(layer.res_unit1.conv2)
+            nn.utils.remove_weight_norm(layer.res_unit2.conv1)
+            nn.utils.remove_weight_norm(layer.res_unit2.conv2)
+            nn.utils.remove_weight_norm(layer.res_unit3.conv1)
+            nn.utils.remove_weight_norm(layer.res_unit3.conv2)
+
+        nn.utils.remove_weight_norm(self.decoder.conv1)
+        nn.utils.remove_weight_norm(self.decoder.conv2)
+
+        for layer in self.decoder.block:
+            nn.utils.remove_weight_norm(layer.conv_t1)
+            nn.utils.remove_weight_norm(layer.res_unit1.conv1)
+            nn.utils.remove_weight_norm(layer.res_unit1.conv2)
+            nn.utils.remove_weight_norm(layer.res_unit2.conv1)
+            nn.utils.remove_weight_norm(layer.res_unit2.conv2)
+            nn.utils.remove_weight_norm(layer.res_unit3.conv1)
+            nn.utils.remove_weight_norm(layer.res_unit3.conv2)
 
 
 DAC_START_DOCSTRING = r"""
@@ -525,7 +580,7 @@ DAC_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The EnCodec neural audio codec model.",
+    "The DAC (Descript Audio Codec) model.",
     DAC_START_DOCSTRING,
 )
 class DacModel(DacPreTrainedModel):
@@ -545,6 +600,7 @@ class DacModel(DacPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @replace_return_docstrings(output_type=DacEncoderOutput, config_class=_CONFIG_FOR_DOC)
     def encode(
         self,
         input_values: torch.Tensor,
@@ -562,14 +618,7 @@ class DacModel(DacPreTrainedModel):
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         Returns:
-            loss (`torch.Tensor` of shape `(batch_size, 1, time_steps)`):
-                Loss from the encoder model, comprising the weighted combination of the commitment and codebook losses.
-            quantized_representation (`torch.Tensor` of shape `(batch_size, dimension, time_steps)`):
-                Quantized continuous representation of input.
-            audio_codes (`torch.Tensor` of shape `(batch_size, num_codebooks, time_steps)`):
-                Codebook indices for each codebook (quantized discrete representation of input).
-            projected_latents (`torch.Tensor` of shape `(batch_size, num_codebooks * dimension, time_steps)`):
-                Projected latents (continuous representation of input before quantization).
+
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
@@ -585,6 +634,7 @@ class DacModel(DacPreTrainedModel):
 
         return DacEncoderOutput(loss, quantized_representation, audio_codes, projected_latents)
 
+    @replace_return_docstrings(output_type=DacDecoderOutput, config_class=_CONFIG_FOR_DOC)
     def decode(
         self,
         quantized_representation: Optional[torch.Tensor],
@@ -602,9 +652,9 @@ class DacModel(DacPreTrainedModel):
                 to decode directly from the audio codes (it will overwrite quantized_representation).
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+
         Returns:
-            audio_values (`torch.Tensor` of shape `(batch_size, input_length)`):
-                Decoded audio data.
+
         """
 
         if quantized_representation is None and audio_codes is None:
@@ -632,17 +682,6 @@ class DacModel(DacPreTrainedModel):
     ):
         """
         Returns:
-            loss (`torch.Tensor` of shape `(batch_size, 1)`):
-                Loss from the encoder model, comprising the weighted combination of the commitment and codebook losses.
-            audio_values (`torch.Tensor` of shape `(batch_size, input_length)`):
-                Decoded audio data.
-            quantized_representation (`torch.Tensor` of shape `(batch_size, dimension, time_steps)`):
-                Quantized continuous representation of input.
-            audio_codes: (`torch.Tensor` of shape `(batch_size, num_codebooks, time_steps)`):
-                Codebook indices for each codebook (quantized discrete representation of input).
-            projected_latents (torch.Tensor` of shape `(batch_size, num_codebooks * dimension, time_steps)`):
-                Projected latents (continuous representation of input before quantization),
-                shape .
         Examples:
 
         ```python
@@ -671,11 +710,6 @@ class DacModel(DacPreTrainedModel):
             input_values, n_quantizers, return_dict=False
         )
         audio_values = self.decode(quantized_representation, return_dict=False)[0][..., :length]
-
-        # if isinstance(audio_values, tuple):
-        #     audio_values = audio_values[0][..., :length]
-        # else:
-        #     audio_values = audio_values[..., :length]
 
         if not return_dict:
             return (loss, audio_values, quantized_representation, audio_codes, projected_latents)
