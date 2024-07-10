@@ -516,12 +516,14 @@ class XLMRobertaXLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
         self.assertEqual(position_ids.shape, expected_positions.shape)
         self.assertTrue(torch.all(torch.eq(position_ids, expected_positions)))
 
-    # This test was copied from the common test_eager_matches_sdpa_generate(), but without low_cpu_mem_usage=True.
     # TODO: Remove this and use the parent method (in common tests) once XLM RoBERTa XL supports low_cpu_mem_usage=True.
     @require_torch_sdpa
     @slow
+    # Copied from tests.test_modeling_common.ModelTesterMixin.test_eager_matches_sdpa_generate
     def test_eager_matches_sdpa_generate(self):
-        set_seed(0)
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
         max_new_tokens = 30
 
         if len(self.all_generative_model_classes) == 0:
@@ -548,18 +550,20 @@ class XLMRobertaXLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
 
                 dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
 
+                # Ignore copy
                 model_sdpa = model_class.from_pretrained(
                     tmpdirname,
                     torch_dtype=torch.float16,
-                    # low_cpu_mem_usage=True,
+                    low_cpu_mem_usage=False,
                 ).to(torch_device)
 
                 self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
 
+                # Ignore copy
                 model_eager = model_class.from_pretrained(
                     tmpdirname,
                     torch_dtype=torch.float16,
-                    # low_cpu_mem_usage=True,
+                    low_cpu_mem_usage=False,
                     attn_implementation="eager",
                 ).to(torch_device)
 
@@ -589,7 +593,6 @@ class XLMRobertaXLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
                 )
 
                 self.assertTrue(torch.allclose(res_eager, res_sdpa))
-
 
 @require_torch
 class XLMRobertaModelXLIntegrationTest(unittest.TestCase):
