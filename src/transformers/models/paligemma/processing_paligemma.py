@@ -88,6 +88,7 @@ class PaliGemmaProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
+    valid_kwargs = ["chat_template"]
     image_processor_class = "SiglipImageProcessor"
     tokenizer_class = ("GemmaTokenizer", "GemmaTokenizerFast")
 
@@ -95,6 +96,8 @@ class PaliGemmaProcessor(ProcessorMixin):
         self,
         image_processor=None,
         tokenizer=None,
+        chat_template=None,
+        **kwargs,
     ):
         if image_processor is None:
             raise ValueError("You need to specify an `image_processor`.")
@@ -113,7 +116,7 @@ class PaliGemmaProcessor(ProcessorMixin):
         tokenizer.add_bos_token = False
         tokenizer.add_eos_token = False
 
-        super().__init__(image_processor, tokenizer)
+        super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
         self,

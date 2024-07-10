@@ -40,11 +40,12 @@ class VideoLlavaProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
+    valid_kwargs = ["chat_template"]
     image_processor_class = "VideoLlavaImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
-    def __init__(self, image_processor=None, tokenizer=None):
-        super().__init__(image_processor, tokenizer)
+    def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
+        super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
         self,

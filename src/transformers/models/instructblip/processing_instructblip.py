@@ -45,10 +45,11 @@ class InstructBlipProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
+    valid_kwargs = []
     image_processor_class = "BlipImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
-    def __init__(self, image_processor, tokenizer, qformer_tokenizer):
+    def __init__(self, image_processor, tokenizer, qformer_tokenizer, **kwargs):
         super().__init__(image_processor, tokenizer)
 
         # add QFormer tokenizer
@@ -169,5 +170,7 @@ class InstructBlipProcessor(ProcessorMixin):
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
         qformer_tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path, subfolder="qformer_tokenizer")
         args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, **kwargs)
+        processor_dict, kwargs = cls.get_processor_dict(pretrained_model_name_or_path, **kwargs)
         args.append(qformer_tokenizer)
-        return cls(*args)
+        cls.validate_init_kwargs(processor_dict.keys(), cls.valid_kwargs)
+        return cls(*args, **processor_dict)
