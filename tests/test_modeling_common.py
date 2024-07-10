@@ -3208,6 +3208,7 @@ class ModelTesterMixin:
                 r"^classifier\..+\.weight",
                 r"^classifier\..+\.bias",
                 r"^data2vec_audio\.",
+                r"^dist_head\.",
                 r"^head\.",
                 r"^hubert\.",
                 r"^pvt\.",
