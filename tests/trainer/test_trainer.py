@@ -132,6 +132,7 @@ if is_torch_available():
 
 # for version specific tests in TrainerIntegrationTest
 require_accelerate_version_min_0_28 = partial(require_accelerate, min_version="0.28")
+require_accelerate_version_min_0_30 = partial(require_accelerate, min_version="0.30")
 GRAD_ACCUM_KWARGS_VERSION_AVAILABLE = is_accelerate_available("0.28")
 if is_accelerate_available():
     from accelerate import Accelerator
@@ -1651,6 +1652,84 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         galore_peak_memory = tracemalloc.peaked + bytes2megabytes(tracemalloc.begin)
         self.assertTrue(galore_peak_memory < upper_bound_pm)
         self.assertTrue(lower_bound_pm < galore_peak_memory)
+
+    @require_galore_torch
+    @require_torch_gpu
+    def test_galore_lr_display_without_scheduler(self):
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            learning_rate = 1e-9
+            num_steps = 10
+
+            # Trainer without inf/nan filter
+            args = TrainingArguments(
+                tmpdir,
+                learning_rate=learning_rate,
+                logging_steps=5,
+                optim="galore_adamw",
+                optim_target_modules=[r".*attn.*", r".*mlp.*"],
+            )
+            trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
+            trainer.create_optimizer_and_scheduler(num_training_steps=num_steps)
+
+            # reflects displayed lr in trainer
+            self.assertEqual(trainer.get_learning_rates(), [learning_rate, learning_rate])
+
+    @require_galore_torch
+    @require_torch_gpu
+    def test_galore_lr_display_with_scheduler(self):
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            learning_rate = 2e-4
+            num_train_epochs = 2
+            num_warmup_steps = 5
+
+            # Trainer without inf/nan filter
+            args = TrainingArguments(
+                tmpdir,
+                num_train_epochs=num_train_epochs,
+                learning_rate=learning_rate,
+                warmup_steps=num_warmup_steps,
+                lr_scheduler_type="cosine",
+                logging_steps=1,
+                optim="galore_adamw",
+                optim_target_modules=[r".*attn.*", r".*mlp.*"],
+            )
+            trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
+
+            # creating log history of trainer, results don't matter
+            trainer.train()
+            logs = trainer.state.log_history[1:][:-1]
+
+            # reach given learning rate peak and end with 0 lr
+            self.assertTrue(logs[num_warmup_steps - 2]["learning_rate"] == learning_rate)
+            self.assertTrue(logs[-1]["learning_rate"] == 0)
+
+            # increasing and decreasing pattern of lrs
+            increasing_lrs = [
+                logs[i]["learning_rate"] < logs[i + 1]["learning_rate"]
+                for i in range(len(logs))
+                if i < num_warmup_steps - 2
+            ]
+            decreasing_lrs = [
+                logs[i]["learning_rate"] > logs[i + 1]["learning_rate"]
+                for i in range(len(logs) - 1)
+                if i >= num_warmup_steps - 2
+            ]
+
+            self.assertTrue(all(increasing_lrs))
+            self.assertTrue(all(decreasing_lrs))
+
+            # warm up steps << total steps
+            self.assertTrue(len(decreasing_lrs) > len(increasing_lrs))
 
     @require_torch_multi_accelerator
     def test_data_is_not_parallelized_when_model_is_parallel(self):
@@ -3564,6 +3643,17 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 args_dict = args.to_dict()
                 self.assertIn("torch_dtype", args_dict)
                 self.assertEqual(args_dict["torch_dtype"], dtype)
+
+    @require_accelerate_version_min_0_30
+    def test_eval_use_gather_object(self):
+        train_dataset = RegressionDataset()
+        eval_dataset = RegressionDataset()
+        model = RegressionDictModel()
+        args = TrainingArguments("./regression", report_to="none", eval_use_gather_object=True)
+        trainer = Trainer(model, args, train_dataset=train_dataset, eval_dataset=eval_dataset)
+        trainer.train()
+        _ = trainer.evaluate()
+        _ = trainer.predict(eval_dataset)
 
 
 @require_torch

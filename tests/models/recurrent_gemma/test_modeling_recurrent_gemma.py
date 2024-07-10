@@ -298,7 +298,6 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     test_model_parallel = False
     test_pruning = False
     test_head_masking = False  # RecurrentGemma does not have attention heads
-    test_model_parallel = False
 
     # Need to remove 0.9 in `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer
