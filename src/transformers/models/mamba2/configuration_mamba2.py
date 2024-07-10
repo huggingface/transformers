@@ -186,9 +186,7 @@ class Mamba2Config(PretrainedConfig):
         self.conv_kernel = conv_kernel
         self.intermediate_size = int(expand * self.hidden_size)
         self.mlp_shape_padding_size = mlp_shape_padding_size
-        self.mlp_intermediate_size = (
-            (mlp_intermediate_size + mlp_shape_padding_size - 1) // mlp_shape_padding_size * mlp_shape_padding_size
-        )
+        self.mlp_intermediate_size = mlp_intermediate_size
         self.mamba2_head_dim = mamba2_head_dim
         self.mamba2_num_heads = self.intermediate_size // self.mamba2_head_dim
         self.attention_head_dim = attention_head_dim
@@ -196,6 +194,7 @@ class Mamba2Config(PretrainedConfig):
         self.attention_num_key_value_heads = attention_num_key_value_heads
         self.num_hidden_layers = num_hidden_layers
         self.attention_layers_idx = attention_layers_idx
+        self._attention_layer_idx_validation()
         self.layer_norm_epsilon = layer_norm_epsilon
         self.use_conv_bias = use_conv_bias
         self.use_mlp_bias = use_mlp_bias
@@ -249,3 +248,20 @@ class Mamba2Config(PretrainedConfig):
             )
         if rope_scaling_factor is None or not isinstance(rope_scaling_factor, float) or rope_scaling_factor <= 1.0:
             raise ValueError(f"`rope_scaling`'s factor field must be a float > 1, got {rope_scaling_factor}")
+
+    def _attention_layer_idx_validation(self):
+        """
+        Validate the `attention_layers_idx` configuration.
+        """
+        if isinstance(self.attention_layers_idx, list) and len(self.attention_layers_idx) == 0:
+            return
+
+        if not isinstance(self.attention_layers_idx, List[int]):
+            raise ValueError(
+                "`attention_layers_idx` must be a list with integers indicating the attention layers, " f"got {self.attention_layers_idx}"
+            )
+
+        if min(self.attention_layers_idx) < 0 or max(self.attention_layers_idx) >= self.num_hidden_layers:
+            raise ValueError(
+                "`attention_layers_idx` has out-of-range indices, " f"got {self.attention_layers_idx}, but expected indices in {list(range(self.num_hidden_layers))}"
+            )
