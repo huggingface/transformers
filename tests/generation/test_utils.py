@@ -77,6 +77,7 @@ if is_torch_available():
         MaxLengthCriteria,
         MinLengthLogitsProcessor,
         PhrasalConstraint,
+        PromptLookupCandidateGenerator,
         SampleDecoderOnlyOutput,
         SampleEncoderDecoderOutput,
         StoppingCriteria,
@@ -1322,6 +1323,24 @@ class GenerationTesterMixin:
             output_assisted = model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
 
             self._check_outputs(output_assisted, input_ids, model.config, use_cache=True)
+
+    def test_prompt_lookup_decoding_stops_at_eos(self):
+        # This test ensures that the prompt lookup generation stops at eos token and does not suggest more tokens
+        # (see https://github.com/huggingface/transformers/pull/31301)
+
+        input_ids = torch.randint(1, 50, (1, 10), device=torch_device)  # generate inputs in range from 1-50
+        input_ids[:, 4] = 0  # inject arbitrarily eos-token-id in input ids so that PLD can copy it
+        input_ids[:, -1] = input_ids[:, 3]  # put pre-eos token in the end for match to happen
+        eos_token_id = torch.tensor([0], device=torch_device)
+
+        # init cand geenerator with max_matching_ngram_size=1 to match per-token
+        cand_generator = PromptLookupCandidateGenerator(
+            eos_token_id=eos_token_id, num_output_tokens=4, max_matching_ngram_size=1
+        )
+        output_prompt_lookup = cand_generator.get_candidates(input_ids)[0]
+        self.assertTrue(
+            output_prompt_lookup.shape[-1] == 10
+        )  # PLD shouldn't propose any new tokens based on eos-match
 
     def test_generate_with_head_masking(self):
         """Test designed for encoder-decoder models to ensure the attention head masking is used."""
