@@ -53,7 +53,6 @@ if is_torch_available():
     )
     from transformers.models.llama.modeling_llama import (
         LlamaDynamicNTKScalingRotaryEmbedding,
-        LlamaDynamicYarnScalingRotaryEmbedding,
         LlamaLinearScalingRotaryEmbedding,
         LlamaRotaryEmbedding,
         LlamaYarnScalingRotaryEmbedding,
@@ -399,7 +398,7 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @parameterized.expand([("linear",), ("dynamic",), ("yarn",), ("dynamic-yarn",)])
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     def test_model_rope_scaling_from_config(self, scaling_type):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         short_input = ids_tensor([1, 10], config.vocab_size)
@@ -512,24 +511,6 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             torch.testing.assert_close(yarn_cos_long, original_cos_long)
         with self.assertRaises(AssertionError):
             torch.testing.assert_close(yarn_sin_long, original_sin_long)
-
-        # Sanity check Dynamic Yarn RoPE scaling
-        dynamic_yarn_scaling_rope = LlamaDynamicYarnScalingRotaryEmbedding(
-            head_dim,
-            max_position_embeddings=config.max_position_embeddings,
-            base=config.rope_theta,
-            scaling_factor=scaling_factor,
-        ).to(torch_device)
-        dynamic_yarn_cos_short, dynamic_yarn_sin_short = dynamic_yarn_scaling_rope(x, position_ids_short)
-        dynamic_yarn_cos_long, dynamic_yarn_sin_long = dynamic_yarn_scaling_rope(x, position_ids_long)
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(dynamic_yarn_cos_short, original_cos_short)
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(dynamic_yarn_sin_short, original_sin_short)
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(dynamic_yarn_cos_long, original_cos_long)
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(dynamic_yarn_sin_long, original_sin_long)
 
     @require_flash_attn
     @require_torch_gpu

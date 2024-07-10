@@ -170,23 +170,11 @@ class LlamaYarnScalingRotaryEmbedding(LlamaRotaryEmbedding):
         self.beta_slow = beta_slow
 
         if self.attention_factor is None:
+            # Recommended attention factor for LLaMA models.
+            # For more details please refer to https://arxiv.org/pdf/2309.00071, Eq. 22.
             self.attention_factor = 0.1 * math.log(scaling_factor) + 1.0
 
         self.compute_yarn_scaling(device)
-
-        # Build here to make `torch.jit.trace` work.
-        self.max_seq_len_cached = max_position_embeddings
-        emb = self.get_pos_embeddings(device)
-
-        self._cos_cached = (emb.cos() * self.mscale)[None, :, :].to(torch.get_default_dtype())
-        self._sin_cached = (emb.sin() * self.mscale)[None, :, :].to(torch.get_default_dtype())
-
-    # Get positional embeddings based on the current max sequence length
-    def get_pos_embeddings(self, device):
-        t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
-        freqs = torch.einsum("i,j->ij", t, self.inv_freq)
-        emb = torch.cat((freqs, freqs), dim=-1)
-        return emb
 
     # Inverse dimension formula to find the dimension based on the number of rotations
     def find_correction_dim(self, num_rotations, dim, base=10000, max_position_embeddings=2048):
@@ -230,57 +218,6 @@ class LlamaYarnScalingRotaryEmbedding(LlamaRotaryEmbedding):
         self.register_buffer("inv_freq", inv_freq)
         # Get n-dimensional magnitude scaling corrected for interpolation
         self.mscale = self.attention_factor
-
-
-class LlamaDynamicYarnScalingRotaryEmbedding(LlamaYarnScalingRotaryEmbedding):
-    def __init__(
-        self,
-        dim,
-        max_position_embeddings=2048,
-        base=10000,
-        scaling_factor=1,
-        original_max_position_embeddings=2048,
-        attention_factor=None,
-        beta_fast=32,
-        beta_slow=1,
-        device=None,
-    ):
-        super().__init__(
-            dim,
-            max_position_embeddings,
-            base,
-            scaling_factor,
-            original_max_position_embeddings,
-            attention_factor,
-            beta_fast,
-            beta_slow,
-            device,
-        )
-
-        if self.max_position_embeddings != self.original_max_position_embeddings:
-            self.scaling_factor = self.max_position_embeddings / self.original_max_position_embeddings
-            self.compute_yarn_scaling(device)
-        else:
-            inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float().to(device) / dim))
-            self.register_buffer("inv_freq", inv_freq)
-            self.mscale = 1
-
-        # Build here to make `torch.jit.trace` work.
-        self.max_seq_len_cached = max_position_embeddings
-        emb = self.get_pos_embeddings(device)
-
-        self._cos_cached = (emb.cos() * self.mscale)[None, :, :].to(torch.get_default_dtype())
-        self._sin_cached = (emb.sin() * self.mscale)[None, :, :].to(torch.get_default_dtype())
-
-    def forward(self, x, position_ids=None):
-        # Difference to the standard YaRN: the scaling factor is updated when the max sequence length is exceeded
-        # x: [bs, num_attention_heads, seq_len, head_size]
-        seq_len = torch.max(position_ids) + 1
-        self.scaling_factor = seq_len / self.original_max_position_embeddings
-        self.compute_yarn_scaling(x.device)
-
-        cos, sin = super().forward(x, position_ids)
-        return cos, sin
 
 
 def rotate_half(x):
@@ -434,14 +371,6 @@ class LlamaAttention(nn.Module):
                 )
             elif scaling_type == "yarn":
                 self.rotary_emb = LlamaYarnScalingRotaryEmbedding(
-                    self.head_dim,
-                    max_position_embeddings=self.max_position_embeddings,
-                    scaling_factor=scaling_factor,
-                    base=self.rope_theta,
-                    **kwargs,
-                )
-            elif scaling_type == "dynamic-yarn":
-                self.rotary_emb = LlamaDynamicYarnScalingRotaryEmbedding(
                     self.head_dim,
                     max_position_embeddings=self.max_position_embeddings,
                     scaling_factor=scaling_factor,

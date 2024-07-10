@@ -84,14 +84,14 @@ class LlamaConfig(PretrainedConfig):
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. Currently supports four scaling
-            strategies: linear, dynamic, yarn and dynamic-yarn. Their scaling factor must be a float greater than 1. The expected format is
+            Dictionary containing the scaling configuration for the RoPE embeddings. Currently supports three scaling
+            strategies: linear, dynamic and yarn. Their scaling factor must be a float greater than 1. The expected format is
             `{"type": strategy name, "factor": scaling factor}`. When using this flag, don't update
             `max_position_embeddings` to the expected new maximum. See the following thread for more information on how
             these scaling strategies behave:
             https://www.reddit.com/r/LocalLLaMA/comments/14mrgpr/dynamically_scaled_rope_further_increases/. This is an
             experimental feature, subject to breaking API changes in future versions.
-            For `yarn` and `dynamic-yarn` strategies, the dictionary may also contain the following fields:
+            For the `yarn` strategy, the dictionary may also contain the following fields:
                 `original_max_position_embeddings` (`int`, *optional*):
                     The original maximum sequence length. This is used to scale the RoPE embeddings.
                 `attention_factor` (`float`, *optional*):
@@ -194,14 +194,14 @@ class LlamaConfig(PretrainedConfig):
             )
         rope_scaling_type = self.rope_scaling.get("type", None)
         rope_scaling_factor = self.rope_scaling.get("factor", None)
-        if rope_scaling_type is None or rope_scaling_type not in ["linear", "dynamic", "yarn", "dynamic-yarn"]:
+        if rope_scaling_type is None or rope_scaling_type not in ["linear", "dynamic", "yarn"]:
             raise ValueError(
-                f"`rope_scaling`'s type field must be one of ['linear', 'dynamic', 'yarn', 'dynamic-yarn'], got {rope_scaling_type}"
+                f"`rope_scaling`'s type field must be one of ['linear', 'dynamic', 'yarn'], got {rope_scaling_type}"
             )
         if rope_scaling_factor is None or not isinstance(rope_scaling_factor, float) or rope_scaling_factor <= 1.0:
             raise ValueError(f"`rope_scaling`'s factor field must be a float > 1, got {rope_scaling_factor}")
 
-        if rope_scaling_type not in ["yarn", "dynamic-yarn"]:
+        if rope_scaling_type != "yarn":
             return
 
         if not isinstance(self.rope_scaling, dict) or len(self.rope_scaling) > 6:
