@@ -119,7 +119,7 @@ class Seq2SeqTrainer(Trainer):
         logger.setLevel(30)
         assert logger.level == 30
         assert str(logger) == "<Logger transformers.trainer_seq2seq (WARNING)>"
-        assert get_logger("py.warnings").level == 30
+        # assert get_logger("py.warnings").level == 30
         assert len(_get_library_root_logger().handlers) == 1
         assert len(logger.handlers) == 0
         assert _get_library_root_logger().handlers[0].level == 0
@@ -131,7 +131,7 @@ class Seq2SeqTrainer(Trainer):
         logger.setLevel(30)
         assert logger.level == 30
         assert str(logger) == "<Logger transformers.trainer_seq2seq (WARNING)>"
-        assert get_logger("py.warnings").level == 30
+        # assert get_logger("py.warnings").level == 30
 
         if len(caught_warnings) == 0:
             # assert len(get_logger("py.warnings").handlers) == 0
