@@ -38,6 +38,9 @@ from ...tokenization_utils_base import (
     TextInput,
 )
 
+# TODO: Can we do it that way or its better include as "Copied from ..."
+from .image_processing_mllama import make_list_of_images
+
 
 class MllamaImagesKwargs(ImagesKwargs, total=False):
     do_image_splitting: Optional[bool]
@@ -158,6 +161,14 @@ class MllamaProcessor(ProcessorMixin):
         not_tensor_data = {}
 
         if text is not None:
+
+            if isinstance(text, str):
+                text = [text]
+            elif not (isinstance(text, (list, tuple)) and all(isinstance(t, str) for t in text)):
+                raise ValueError(
+                    "Invalid input text. Please provide a string, or a list of strings"
+                )
+            n_images_in_text = [t.count(self.vision_token) for t in text]
             encoding = self.tokenizer(text, **text_kwargs)
             data.update(encoding)
 
@@ -166,6 +177,15 @@ class MllamaProcessor(ProcessorMixin):
             not_tensor_data["vision_mask"] = vision_mask
 
         if images is not None:
+
+            images = make_list_of_images(images)
+            n_images_in_images = [len(sample) for sample in images]
+
+            if text is not None and not n_images_in_images == n_images_in_text:
+                raise ValueError(
+                    f"The number of images in the text {n_images_in_text} and images  {n_images_in_images} should be the same."
+                )
+
             image_features = self.image_processor(images, **images_kwargs)
             not_tensor_data["num_patches"] = image_features.pop("num_patches")
             data.update(image_features)
