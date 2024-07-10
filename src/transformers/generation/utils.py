@@ -696,7 +696,7 @@ class GenerationMixin:
                 model_kwargs["cache_position"][-1],
                 model_kwargs["cache_position"][-1] + num_new_tokens,
                 device=model_kwargs["cache_position"].device,
-                dtype=model_kwargs["cache_position"].dtype
+                dtype=model_kwargs["cache_position"].dtype,
             )
             model_kwargs["cache_position"] = torch.cat((model_kwargs["cache_position"], new_positions))
         return model_kwargs
