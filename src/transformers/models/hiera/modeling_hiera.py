@@ -273,7 +273,7 @@ class HieraPatchEmbeddings(nn.Module):
         # Sort noise for each sample
         ids_shuffle = torch.argsort(noise, dim=1)
         # ascend: small is keep, large is remove
-        ids_restore = torch.argsort(ids_shuffle, dim=1)
+        ids_restore = torch.argsort(ids_shuffle, dim=1).to(pixel_values.device)
 
         # Generate the binary bool_masked_pos: 1 is *keep*, 0 is *remove*
         # Note this is opposite to original MAE
