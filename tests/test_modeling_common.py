@@ -3276,6 +3276,14 @@ class ModelTesterMixin:
                 r"data2vec_audio\.feature_projection\.projection\.bias",
                 r"unispeech\.feature_projection\.projection\.bias",
                 r"pvt\.encoder\.block\..+\..+\.attention\.self\.sequence_reduction.bias",
+                r"unispeech_sat\.encoder\.pos_conv_embed\.conv\.parametrizations\.weight\.original.+",
+                r"wav2vec2_bert\.encoder\.layers\..+\.self_attn\.pos_bias_v",
+                r"wav2vec2_conformer\.encoder\.pos_conv_embed\.conv\.parametrizations\.weight\.original.+",
+                r"wavlm\.encoder\.pos_conv_embed\.conv\.parametrizations\.weight\.original.+",
+                r"swiftformer\.encoder\.network\..+\.blocks\..+\.attn\.w_g",
+                r"vision_model\.encoder\.layers\..+\.self_attn\.q_proj\.weight",
+                r"data2vec_audio\.encoder\.pos_conv_embed\.layers\..+\.conv\.weight",
+                r"unispeech\.encoder\.pos_conv_embed\.conv\.parametrizations\.weight\.original.+",
             ]
 
             with self.subTest(msg=f"Testing {model_class}"):
