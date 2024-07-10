@@ -24,22 +24,19 @@ python benchmark/benchmark.py --config-dir benchmark/config --config-name genera
 import argparse
 import glob
 import json
-import os.path
+import os
 import re
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
 
 from git import Repo
-
 from huggingface_hub import HfApi
 
 from optimum_benchmark import Benchmark
 from optimum_benchmark_wrapper import main
 
-
 PATH_TO_REPO = Path(__file__).parent.parent.resolve()
-
 
 @contextmanager
 def checkout_commit(repo: Repo, commit_id: str):
@@ -58,12 +55,10 @@ def checkout_commit(repo: Repo, commit_id: str):
     finally:
         repo.git.checkout(current_head)
 
-
 def summarize(run_dir, metrics, expand_metrics=False):
     """Produce a summary for each optimum-benchmark launched job's output directory found in `run_dir`.
 
     Each summary's format is as follows (for `expand_metrics=False`):
-    ```
     {
         "model": "google/gemma-2b",
         "commit": "3cd6ed22e4d49219f300f5055e71e3929aba20d7",
@@ -74,7 +69,6 @@ def summarize(run_dir, metrics, expand_metrics=False):
             "per_token.throughput.value": 77.85864553330948
         }
     }
-    ```
     """
     reports = glob.glob(os.path.join(run_dir, "**/benchmark_report.json"), recursive=True)
     report_dirs = [str(Path(report).parent) for report in reports]
@@ -90,22 +84,19 @@ def summarize(run_dir, metrics, expand_metrics=False):
 
         model = benchmark.config.backend["model"]
 
-        # Ths looks like `benchmark.input_shapes.batch_size=1,benchmark.input_shapes.sequence_length=5`.
-        # (we rely on the usage of hydra's `${hydra.job.override_dirname}`.)
+        # Extract benchmark_name
         benchmark_name = re.sub(f"backend.model={model},*", "", report_dir)
         benchmark_name = str(Path(benchmark_name).parts[-1])
         if benchmark_name.startswith("commit="):
             benchmark_name = benchmark.config.name
 
         metrics_values = {}
-        # post-processing of report: show a few selected/important metric
+        # post-processing of report: show selected metrics
         for metric in metrics:
             keys = metric.split(".")
             value = report
             current = metrics_values
             for key in keys:
-                # Avoid KeyError when a user's specified metric has typo.
-                # TODO: Give warnings.
                 if key not in value:
                     continue
                 value = value[key]
@@ -114,14 +105,14 @@ def summarize(run_dir, metrics, expand_metrics=False):
                     if isinstance(value, dict):
                         if key not in current:
                             current[key] = {}
-                            current = current[key]
+                        current = current[key]
                     else:
                         current[key] = value
 
             if not expand_metrics:
                 metrics_values[metric] = value
 
-        # show some config information
+        # Print summary
         print(f"model: {model}")
         print(f"commit: {commit}")
         print(f"config: {benchmark_name}")
@@ -142,87 +133,31 @@ def summarize(run_dir, metrics, expand_metrics=False):
         }
         summaries.append(summary)
 
+        # Write summary to file
         with open(os.path.join(report_dir, "summary.json"), "w") as fp:
             json.dump(summary, fp, indent=4)
 
     return summaries
 
-
-def combine_summaries(summaries):
-    """Combine a list of summary obtained from the function `summarize`.
-
-    The combined summary's format is as follows:
-    ```
-    "google/gemma-2b": {
-        "benchmark.input_shapes.batch_size=1,benchmark.input_shapes.sequence_length=5": {
-            "3cd6ed22e4d49219f300f5055e71e3929aba20d7": {
-                "metrics": {"decode.latency.mean": 1.624666809082031}
-            },
-            "c97ee28b117c0abe8e08891f402065e4df6d72aa": {
-                "metrics": {"decode.latency.mean": 1.6278163452148438}
-            }
-        },
-        "benchmark.input_shapes.batch_size=2,benchmark.input_shapes.sequence_length=5": {
-            "3cd6ed22e4d49219f300f5055e71e3929aba20d7": {
-                "metrics": {"decode.latency.mean": 1.6947791748046876}
-            },
-            "c97ee28b117c0abe8e08891f402065e4df6d72aa": {
-                "metrics": {
-                    "decode.latency.mean": 1.6980519409179688}
-            }
-        }
-    }
-    ```
-    """
+def combine_summaries(summaries, exp_run_dir):
+    """Combine a list of summaries obtained from `summarize` function."""
     combined = {}
     for summary in summaries:
         model = summary["model"]
         config = summary["config"]
         commit = summary["commit"]
 
-        if model not in combined:
-            combined[model] = {}
+        combined.setdefault(model, {}).setdefault(config, {})[commit] = {"metrics": summary["metrics"]}
 
-        if config not in combined[model]:
-            combined[model][config] = {}
-
-        if commit not in combined[model][config]:
-            combined[model][config][commit] = {"metrics": summary["metrics"]}
-
-    with open(os.path.join(exp_run_dir, "summary.json"), "w") as fp:
-        json.dump(combined, fp, indent=4)
+    with open(os.path.join(exp_run_dir, "summaries.json"), "w") as fp:
+        json.dump(summaries, fp, indent=4)
 
     print(json.dumps(combined, indent=4))
 
     return combined
 
-
-if __name__ == "__main__":
-
-    def list_str(values):
-        return values.split(",")
-
-    parser = argparse.ArgumentParser()
-
-    parser.add_argument("--config-dir", type=str, required=True, help="The path to the config directory.")
-    parser.add_argument("--config-name", type=str, required=True, help="The config name.")
-
-    # arguments specific to this wrapper for our own customization
-    parser.add_argument("--ensure_empty", type=bool, default=True, help="If to create a temporary directory.")
-    parser.add_argument(
-        "--commit",
-        type=list_str,
-        default="",
-        help="Comma-separated list of branch names and/or commit sha values on which the benchmark will run. If `diff` is specified, it will run on both the current head and the `main` branch.",
-    )
-    parser.add_argument("--metrics", type=str, help="The metrics to be included in the summary.")
-
-    parser.add_argument("--repo_id", type=str, default=None, help="The repository to which the file will be uploaded.")
-    parser.add_argument("--path_in_repo", type=str, default=None, help="Relative filepath in the repo.")
-    parser.add_argument("--token", type=str, default=None, help="A valid user access token (string).")
-
-    args, optimum_benchmark_args = parser.parse_known_args()
-
+def main(args):
+    """Main function to orchestrate the benchmarking process."""
     repo = Repo(PATH_TO_REPO)
 
     metrics = [
@@ -233,44 +168,41 @@ if __name__ == "__main__":
         "per_token.latency.mean",
         "per_token.throughput.value",
     ]
-    if args.metrics is not None:
+    if args.metrics:
         metrics = args.metrics.split(",")
 
-    # Get `backend.model` in a hacky way: We want to control the experiment flow manually.
-    models = [""]
-    for idx, arg in enumerate(optimum_benchmark_args):
+    # Extract models
+    models = []
+    for idx, arg in enumerate(args.optimum_benchmark_args):
         if arg.startswith("backend.model="):
-            models = arg[len("backend.model=") :]
-            models = models.split(",")
+            models = arg[len("backend.model="):].split(",")
             break
-    optimum_benchmark_args = [arg for arg in optimum_benchmark_args if not arg.startswith("backend.model=")]
+    args.optimum_benchmark_args = [arg for arg in args.optimum_benchmark_args if not arg.startswith("backend.model=")]
 
-    # Get the commit(s)
+    # Extract commits
     current_head = str(repo.head.commit) if repo.head.is_detached else str(repo.head.ref)
     commits = [x for x in args.commit if x != ""]
-    if len(commits) == 0:
+    if not commits:
         commits = [current_head]
     elif len(commits) == 1 and commits[0] == "diff":
-        # compare to `main`
         commits = ["main", current_head]
 
-    # Get the specified run directory
+    # Determine run directory
     run_dir_arg_idx, run_dir = -1, None
     sweep_dir_arg_idx, sweep_dir = -1, None
-    for idx, arg in enumerate(optimum_benchmark_args):
+    for idx, arg in enumerate(args.optimum_benchmark_args):
         if arg.startswith("hydra.run.dir="):
-            run_dir = arg[len("hydra.run.dir=") :]
+            run_dir = arg[len("hydra.run.dir="):]
             run_dir_arg_idx = idx
         elif arg.startswith("hydra.sweep.dir="):
-            sweep_dir = arg[len("hydra.sweep.dir=") :]
+            sweep_dir = arg[len("hydra.sweep.dir="):]
             sweep_dir_arg_idx = idx
-    exp_run_dir, arg_dix, arg_name = (
+    exp_run_dir, arg_idx, arg_name = (
         (sweep_dir, sweep_dir_arg_idx, "hydra.sweep.dir")
-        if "--multirun" in optimum_benchmark_args
+        if "--multirun" in args.optimum_benchmark_args
         else (run_dir, run_dir_arg_idx, "hydra.run.dir")
     )
 
-    # TODO: not hardcoded
     if exp_run_dir is None and args.ensure_empty:
         exp_run_dir = "_benchmark"
 
@@ -293,28 +225,23 @@ if __name__ == "__main__":
                 model_arg = [f"backend.model={model}"] if model != "" else []
                 dir_args = []
                 if commit_run_dir is not None:
-                    if arg_dix > -1:
-                        optimum_benchmark_args[arg_dix] = f"{arg_name}={commit_run_dir}"
+                    if arg_idx > -1:
+                        args.optimum_benchmark_args[arg_idx] = f"{arg_name}={commit_run_dir}"
                     else:
                         dir_args = [
                             f"hydra.sweep.dir={commit_run_dir}",
                             f"hydra.run.dir={commit_run_dir}/" + "${hydra.job.override_dirname}",
                         ]
-                main(args.config_dir, args.config_name, model_arg + dir_args + optimum_benchmark_args)
+                main(args.config_dir, args.config_name, model_arg + dir_args + args.optimum_benchmark_args)
 
             if commit_run_dir is not None:
-                # Need to remove the `\` character
                 summaries = summarize(commit_run_dir.replace("\\", ""), metrics)
                 run_summaries.extend(summaries)
 
-    # aggregate the information across the commits
     if exp_run_dir is not None:
-        with open(os.path.join(exp_run_dir, "summaries.json"), "w") as fp:
-            json.dump(run_summaries, fp, indent=4)
+        combined_summary = combine_summaries(run_summaries, exp_run_dir)
 
-        combined_summary = combine_summaries(run_summaries)
-
-        if args.repo_id is not None and args.path_in_repo is not None:
+        if args.repo_id and args.path_in_repo:
             # Upload to Hub
             api = HfApi()
             api.upload_folder(
@@ -324,3 +251,23 @@ if __name__ == "__main__":
                 repo_type="dataset",
                 token=args.token,
             )
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("--config-dir", type=str, required=True, help="The path to the config directory.")
+    parser.add_argument("--config-name", type=str, required=True, help="The config name.")
+    parser.add_argument("--ensure_empty", action="store_true", help="Create a temporary directory if True.")
+    parser.add_argument("--commit", type=str, nargs="+", default=[], help="List of commits or 'diff'.")
+    parser.add_argument("--metrics", type=str, help="Comma-separated list of metrics to include.")
+
+    parser.add_argument("--optimum_benchmark_args", nargs="*", help="Additional arguments for optimum_benchmark_wrapper.")
+
+    parser.add_argument("--repo_id", type=str, default=None, help="Repository ID for upload to Hugging Face Hub.")
+    parser.add_argument("--path_in_repo", type=str, default=None, help="Relative filepath in the repo.")
+    parser.add_argument("--token", type=str, default=None, help="Hugging Face Hub API token.")
+
+    args = parser.parse_args()
+
+    main(args)
+
