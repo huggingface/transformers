@@ -107,6 +107,9 @@ class AssistedCandidateGenerator(CandidateGenerator):
         # Prepare the assistant and the starting number of candidate tokens
         self.assistant_model = assistant_model
         self.num_assistant_tokens = assistant_model.generation_config.num_assistant_tokens
+        
+        # Set eos in assistant same as in target model 
+        self.assistant_model.generation_config.eos_token_id = generation_config.eos_token_id
 
         # Prepare the kwargs for the assistant model
         assistant_kwargs = {}
