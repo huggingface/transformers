@@ -1445,7 +1445,7 @@ class Trainer:
                 )
             if not version.parse(importlib.metadata.version("torch")) < version.parse("2.3"):
                 raise ImportError(
-                    "You need to have `torch>2.3` in order to use torch 4-bit optimizers. "
+                    "You need to have `torch>=2.3` in order to use torch 4-bit optimizers. "
                     "Install it with `pip install --upgrade torch`"
                 )
             from torchao.prototype.low_bit_optim import AdamW4bit
