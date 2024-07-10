@@ -414,7 +414,7 @@ class DacIntegrationTest(unittest.TestCase):
 
         model_name = "dac_16khz"
 
-        model_id = "kamilakesbi/{}".format(model_name)
+        model_id = "descript/{}".format(model_name)
         model = DacModel.from_pretrained(model_id, force_download=True).to(torch_device).eval()
         processor = AutoProcessor.from_pretrained(model_id)
 
@@ -468,7 +468,7 @@ class DacIntegrationTest(unittest.TestCase):
 
         model_name = "dac_24khz"
 
-        model_id = "kamilakesbi/{}".format(model_name)
+        model_id = "descript/{}".format(model_name)
         model = DacModel.from_pretrained(model_id, force_download=True).to(torch_device).eval()
         processor = AutoProcessor.from_pretrained(model_id)
 
@@ -522,7 +522,7 @@ class DacIntegrationTest(unittest.TestCase):
 
         model_name = "dac_44khz"
 
-        model_id = "kamilakesbi/{}".format(model_name)
+        model_id = "descript/{}".format(model_name)
         model = DacModel.from_pretrained(model_id).to(torch_device).eval()
         processor = AutoProcessor.from_pretrained(model_id)
 
@@ -577,7 +577,7 @@ class DacIntegrationTest(unittest.TestCase):
 
         model_name = "dac_16khz"
 
-        model_id = "kamilakesbi/{}".format(model_name)
+        model_id = "descript/{}".format(model_name)
         model = DacModel.from_pretrained(model_id).to(torch_device)
         processor = AutoProcessor.from_pretrained(model_id)
 
@@ -634,7 +634,7 @@ class DacIntegrationTest(unittest.TestCase):
 
         model_name = "dac_24khz"
 
-        model_id = "kamilakesbi/{}".format(model_name)
+        model_id = "descript/{}".format(model_name)
         model = DacModel.from_pretrained(model_id).to(torch_device)
         processor = AutoProcessor.from_pretrained(model_id)
 
@@ -691,7 +691,7 @@ class DacIntegrationTest(unittest.TestCase):
 
         model_name = "dac_44khz"
 
-        model_id = "kamilakesbi/{}".format(model_name)
+        model_id = "descript/{}".format(model_name)
         model = DacModel.from_pretrained(model_id).to(torch_device)
         processor = AutoProcessor.from_pretrained(model_id)
 
