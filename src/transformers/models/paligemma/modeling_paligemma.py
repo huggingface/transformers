@@ -233,7 +233,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config=config.vision_config)
         self.multi_modal_projector = PaliGemmaMultiModalProjector(config)
-        self.vocab_size = config.vocab_size
+        self.vocab_size = config.text_config.vocab_size
         self._attn_implementation = config._attn_implementation
 
         language_model = AutoModelForCausalLM.from_config(
@@ -276,8 +276,9 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
         return self.language_model.tie_weights()
 
     def resize_token_embeddings(self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None) -> nn.Embedding:
+        # TODO: config.vocab_size is deprecated and will be removed in v4.43.
+        # `resize_token_embeddings` should work from `modeling_utils.py``
         model_embeds = self.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
-        # update vocab size
         self.config.text_config.vocab_size = model_embeds.num_embeddings
         self.config.vocab_size = model_embeds.num_embeddings
         self.vocab_size = model_embeds.num_embeddings
@@ -348,8 +349,11 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
             final_labels = torch.where(input_ids != self.pad_token_id, labels, final_labels)
         else:
             causal_mask = attention_mask.unsqueeze(1).unsqueeze(2) * attention_mask.unsqueeze(1).unsqueeze(-1)
+            # invert causal mask
+            causal_mask = torch.where(causal_mask == 0, min_dtype, 0)
             causal_mask = causal_mask.to(dtype).expand(-1, self.config.text_config.num_key_value_heads, -1, -1)
             final_labels = None
+
         return final_embedding, causal_mask, final_labels, position_ids
 
     @add_start_docstrings_to_model_forward(PALIGEMMA_INPUTS_DOCSTRING)
@@ -445,13 +449,11 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
 
                     # Get the target length
                     target_seqlen = cache_position[-1] + 1
-
                     extended_attention_mask = torch.ones(
-                        (attention_mask.shape[0], target_seqlen - attention_mask.shape[1]),
+                        (attention_mask.shape[0], target_seqlen - attention_mask.shape[1] + 1),
                         dtype=attention_mask.dtype,
                         device=attention_mask.device,
                     )
-
                     # Filter out only the tokens that can be un-attended, this can happen
                     # if one uses PaliGemma+ Fused modules where the cache on the
                     # first iteration is already big enough, or if one passes custom cache
@@ -464,6 +466,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
 
                     attention_mask = torch.cat((attention_mask, extended_attention_mask), dim=1)
                     position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
+
         attention_mask = attention_mask.to(inputs_embeds.dtype)
         outputs = self.language_model(
             attention_mask=attention_mask,

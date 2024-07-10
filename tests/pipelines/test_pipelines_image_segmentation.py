@@ -87,8 +87,8 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
         + (MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING.items() if MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING else [])
     )
 
-    def get_test_pipeline(self, model, tokenizer, processor):
-        image_segmenter = ImageSegmentationPipeline(model=model, image_processor=processor)
+    def get_test_pipeline(self, model, tokenizer, processor, torch_dtype="float32"):
+        image_segmenter = ImageSegmentationPipeline(model=model, image_processor=processor, torch_dtype=torch_dtype)
         return image_segmenter, [
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
@@ -169,7 +169,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
         )
 
     @require_tf
-    @unittest.skip("Image segmentation not implemented in TF")
+    @unittest.skip(reason="Image segmentation not implemented in TF")
     def test_small_model_tf(self):
         pass
 
@@ -567,7 +567,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
 
         image_segmenter = pipeline("image-segmentation", model=model, image_processor=image_processor)
 
-        image = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+        image = load_dataset("hf-internal-testing/fixtures_ade20k", split="test", trust_remote_code=True)
         file = image[0]["file"]
         outputs = image_segmenter(file, threshold=threshold)
 
@@ -621,7 +621,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
     def test_oneformer(self):
         image_segmenter = pipeline(model="shi-labs/oneformer_ade20k_swin_tiny")
 
-        image = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+        image = load_dataset("hf-internal-testing/fixtures_ade20k", split="test", trust_remote_code=True)
         file = image[0]["file"]
         outputs = image_segmenter(file, threshold=0.99)
         # Shortening by hashing

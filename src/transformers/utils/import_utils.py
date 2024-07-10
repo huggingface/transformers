@@ -747,11 +747,19 @@ def is_ipex_available():
 
 @lru_cache
 def is_torch_xpu_available(check_device=False):
-    "Checks if `intel_extension_for_pytorch` is installed and potentially if a XPU is in the environment"
-    if not is_ipex_available():
+    """
+    Checks if XPU acceleration is available either via `intel_extension_for_pytorch` or
+    via stock PyTorch (>=2.4) and potentially if a XPU is in the environment
+    """
+    if not is_torch_available():
         return False
 
-    import intel_extension_for_pytorch  # noqa: F401
+    torch_version = version.parse(_torch_version)
+    if is_ipex_available():
+        import intel_extension_for_pytorch  # noqa: F401
+    elif torch_version.major < 2 or (torch_version.major == 2 and torch_version.minor < 4):
+        return False
+
     import torch
 
     if check_device:

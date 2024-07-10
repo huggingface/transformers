@@ -34,6 +34,7 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 from zipfile import is_zipfile
 
 import torch
+from huggingface_hub import split_torch_state_dict_into_shards
 from packaging import version
 from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss, Identity
@@ -362,6 +363,10 @@ def shard_checkpoint(
         weights_name (`str`, *optional*, defaults to `"pytorch_model.bin"`):
             The name of the model save file.
     """
+    logger.warning(
+        "Note that `shard_checkpoint` is deprecated and will be removed in v4.44. We recommend you using "
+        "split_torch_state_dict_into_shards from huggingface_hub library"
+    )
     max_shard_size = convert_file_size_to_int(max_shard_size)
 
     sharded_state_dicts = [{}]
@@ -1276,6 +1281,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     is_parallelizable = False
     supports_gradient_checkpointing = False
+    _is_stateful = False
 
     # Flash Attention 2 support
     _supports_flash_attn_2 = False
@@ -1936,8 +1942,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Update base model and current model config
         if hasattr(self.config, "text_config"):
             self.config.text_config.vocab_size = model_embeds.weight.shape[0]
-        # TODO: to be removed after v4.42, config.vocab_size is deprecated for models that have a config.text_config
-        self.config.vocab_size = model_embeds.weight.shape[0]
+        else:
+            self.config.vocab_size = model_embeds.weight.shape[0]
         self.vocab_size = model_embeds.weight.shape[0]
 
         # Tie weights again if needed
@@ -2512,9 +2518,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Save the model
         if state_dict is None:
-            # if any model parameters are offloaded to the disk, make module map
-            if hasattr(self, "hf_device_map") and (
-                "cpu" in self.hf_device_map.values() or "disk" in self.hf_device_map.values()
+            # if any model parameters are offloaded, make module map
+            if (
+                hasattr(self, "hf_device_map")
+                and len(set(self.hf_device_map.values())) > 1
+                and ("cpu" in self.hf_device_map.values() or "disk" in self.hf_device_map.values())
             ):
                 warnings.warn(
                     "Attempting to save a model with offloaded modules. Ensure that unallocated cpu memory exceeds the `shard_size` (5GB default)"
@@ -2526,7 +2534,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
                     for key in module_state_dict:
                         module_map[name + f".{key}"] = module
-
             state_dict = model_to_save.state_dict()
 
         # Translate state_dict from smp to hf if saving with smp >= 1.10
@@ -2618,7 +2625,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             weights_name = ADAPTER_SAFE_WEIGHTS_NAME if safe_serialization else ADAPTER_WEIGHTS_NAME
 
-        shards, index = shard_checkpoint(state_dict, max_shard_size=max_shard_size, weights_name=weights_name)
+        filename_pattern = weights_name.replace(".bin", "{suffix}.bin").replace(".safetensors", "{suffix}.safetensors")
+        state_dict_split = split_torch_state_dict_into_shards(
+            state_dict, filename_pattern=filename_pattern, max_shard_size=max_shard_size
+        )
+        # Save index if sharded
+        index = None
+        if state_dict_split.is_sharded:
+            index = {
+                "metadata": state_dict_split.metadata,
+                "weight_map": state_dict_split.tensor_to_filename,
+            }
 
         # Clean the folder from a previous save
         for filename in os.listdir(save_directory):
@@ -2634,14 +2651,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if (
                 filename.startswith(weights_no_suffix)
                 and os.path.isfile(full_filename)
-                and filename not in shards.keys()
+                and filename not in state_dict_split.filename_to_tensors.keys()
                 and is_main_process
                 and reg.fullmatch(filename_no_suffix) is not None
             ):
                 os.remove(full_filename)
-
         # Save the model
-        for shard_file, shard in shards.items():
+        filename_to_tensors = state_dict_split.filename_to_tensors.items()
+        if module_map:
+            filename_to_tensors = logging.tqdm(filename_to_tensors, desc="Saving checkpoint shards")
+        for shard_file, tensors in filename_to_tensors:
+            shard = {tensor: state_dict[tensor] for tensor in tensors}
             # remake shard with onloaded parameters if necessary
             if module_map:
                 if accelerate_version < version.parse("0.31"):
@@ -2650,15 +2670,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         f"Please upgrade accelerate with `pip install -U accelerate`"
                     )
                 # init state_dict for this shard
-                state_dict = {name: "" for name in shard}
+                shard_state_dict = {name: "" for name in shard}
                 for module_name in shard:
                     module = module_map[module_name]
                     # update state dict with onloaded parameters
-                    state_dict = get_state_dict_from_offload(module, module_name, state_dict)
+                    shard_state_dict = get_state_dict_from_offload(module, module_name, shard_state_dict)
 
                 # assign shard to be the completed state dict
-                shard = state_dict
-                del state_dict
+                shard = shard_state_dict
+                del shard_state_dict
                 gc.collect()
 
             if safe_serialization:
@@ -2680,7 +2700,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 f.write(content)
             logger.info(
                 f"The model is bigger than the maximum size per checkpoint ({max_shard_size}) and is going to be "
-                f"split in {len(shards)} checkpoint shards. You can find where each parameters has been saved in the "
+                f"split in {len(state_dict_split.filename_to_tensors)} checkpoint shards. You can find where each parameters has been saved in the "
                 f"index located at {save_index_file}."
             )
 
@@ -2812,7 +2832,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         revision: str = "main",
         use_safetensors: bool = None,
         **kwargs,
-    ):
+    ) -> "PreTrainedModel":
         r"""
         Instantiate a pretrained pytorch model from a pre-trained model configuration.
 
@@ -2940,6 +2960,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                   the checkpoint that's of a floating point type and use that as `dtype`. This will load the model
                   using the `dtype` it was saved in at the end of the training. It can't be used as an indicator of how
                   the model was trained. Since it could be trained in one of half precision dtypes, but saved in fp32.
+
+                3. A string that is a valid `torch.dtype`. E.g. "float32" loads the model in `torch.float32`, "float16" loads in `torch.float16` etc.
 
                 <Tip>
 
@@ -3570,7 +3592,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # We'll need to download and cache each checkpoint shard if the checkpoint is sharded.
         if is_sharded:
-            # rsolved_archive_file becomes a list of files that point to the different checkpoint shards in this case.
+            # resolved_archive_file becomes a list of files that point to the different checkpoint shards in this case.
             resolved_archive_file, sharded_metadata = get_checkpoint_shard_files(
                 pretrained_model_name_or_path,
                 resolved_archive_file,
@@ -3644,9 +3666,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                                 "Since the `torch_dtype` attribute can't be found in model's config object, "
                                 "will use torch_dtype={torch_dtype} as derived from model's weights"
                             )
+                    elif hasattr(torch, torch_dtype):
+                        torch_dtype = getattr(torch, torch_dtype)
                     else:
                         raise ValueError(
-                            f'`torch_dtype` can be either `torch.dtype` or `"auto"`, but received {torch_dtype}'
+                            f'`torch_dtype` can be one of: `torch.dtype`, `"auto"` or a string of a valid `torch.dtype`, but received {torch_dtype}'
                         )
                 dtype_orig = cls._set_default_torch_dtype(torch_dtype)
 

@@ -136,7 +136,9 @@ class Pop2PianoFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
         self.assertTrue(input_features.extrapolated_beatstep.ndim == 2)
 
     def test_integration(self):
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        ds = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
+        )
         speech_samples = ds.sort("id").select([0])["audio"]
         input_speech = [x["array"] for x in speech_samples][0]
         sampling_rate = [x["sampling_rate"] for x in speech_samples][0]
@@ -278,14 +280,14 @@ class Pop2PianoFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
     def test_padding_from_array(self):
         pass
 
-    @unittest.skip("Pop2PianoFeatureExtractor does not support truncation")
+    @unittest.skip(reason="Pop2PianoFeatureExtractor does not support truncation")
     def test_attention_mask_with_truncation(self):
         pass
 
-    @unittest.skip("Pop2PianoFeatureExtractor does not supports truncation")
+    @unittest.skip(reason="Pop2PianoFeatureExtractor does not supports truncation")
     def test_truncation_from_array(self):
         pass
 
-    @unittest.skip("Pop2PianoFeatureExtractor does not supports truncation")
+    @unittest.skip(reason="Pop2PianoFeatureExtractor does not supports truncation")
     def test_truncation_from_list(self):
         pass
