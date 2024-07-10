@@ -41,8 +41,8 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
+    is_flash_attn_greater_or_equal,
     is_flash_attn_greater_or_equal_2_10,
-    is_flash_attn_greater_than,
     logging,
     replace_return_docstrings,
 )
@@ -435,7 +435,7 @@ class Gemma2FlashAttention2(Gemma2Attention):
         use_sliding_windows = (
             _flash_supports_window_size and self.sliding_window is not None and cache_position > self.sliding_window
         )
-        flash_kwargs = {"softcap"} if is_flash_attn_greater_than("2.5.0") else {}
+        flash_kwargs = {"softcap"} if is_flash_attn_greater_or_equal("2.6.0") else {}
         if use_sliding_windows:
             flash_kwargs.update({"window_size": (self.sliding_window, self.sliding_window)})
         # Contains at least one padding token in the sequence
