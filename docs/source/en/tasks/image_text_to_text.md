@@ -182,10 +182,12 @@ def model_inference(
 Now let's call the `model_inference` function we created and stream the values. 
 
 ```python
-generator = model_inference(user_prompt = "And what is in this image?",
-    chat_history = messages,
-    max_new_tokens = 100,
-    images = images)
+generator = model_inference(
+    user_prompt="And what is in this image?",
+    chat_history=messages,
+    max_new_tokens=100,
+    images=images
+)
 
 for value in generator:
   print(value)
