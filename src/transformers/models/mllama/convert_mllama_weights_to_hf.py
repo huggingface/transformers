@@ -308,16 +308,16 @@ def write_model(
         if ffn_gate.dim() == 3:
             ffn_gate = ffn_gate.view(1)
         # model.language_model.cross_attention_layers.0.gate_attn
-        state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.gate_attn"] = attn_gate
+        state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.gate_attn"] = attn_gate.clone()
 
-        state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.ffn_gate"] = ffn_gate        
+        state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.ffn_gate"] = ffn_gate.clone()
 
         # q and k normalization weights (for cross-attention stability in training) are not sharded
 
         q_weight = loaded[0].pop(f"text_model.cross_attention_layers.{xattn_layer_i}.attention.inner_attention.q_norm.weight")
         k_weight = loaded[0].pop(f"text_model.cross_attention_layers.{xattn_layer_i}.attention.inner_attention.k_norm.weight")
-        state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.attention.q_norm.weight"] = q_weight
-        state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.attention.k_norm.weight"] = k_weight
+        state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.self_attn.q_norm.weight"] = q_weight.contiguous()
+        state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.self_attn.k_norm.weight"] = k_weight.contiguous()
 
         # save state dict of this layer
 
@@ -594,12 +594,12 @@ def write_model(
     gc.collect()
 
     print("Loading the checkpoint in a Llama model.")
-    language_model = MllamaForConditionalGeneration.from_pretrained(tmp_model_path, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True)
+    mllama_model = MllamaForConditionalGeneration.from_pretrained(tmp_model_path, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True)
     # Avoid saving this as part of the config.
-    del language_model.config._name_or_path
-    language_model.config.torch_dtype = torch.float16  # not sure about this.
+    del mllama_model.config._name_or_path
+    mllama_model.config.torch_dtype = torch.float16  # not sure about this.
     print("Saving in the Transformers format.")
-    language_model.save_pretrained(model_path, safe_serialization=safe_serialization)
+    mllama_model.save_pretrained(model_path, safe_serialization=safe_serialization)
     shutil.rmtree(tmp_model_path)
 
 # TODO: update to new provided code: python + video tokens

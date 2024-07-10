@@ -881,11 +881,36 @@ class FeedForward(nn.Module):
         )
 
     def forward(self, x):
-        x1, x3 = [F.linear(x, w) for w in [self.w1.weight, self.w3.weight]]
+        """
+        if self.config.pretraining_tp > 1:
+            slice = self.intermediate_size // self.config.pretraining_tp
+            gate_proj_slices = self.gate_proj.weight.split(slice, dim=0)
+            up_proj_slices = self.up_proj.weight.split(slice, dim=0)
+            down_proj_slices = self.down_proj.weight.split(slice, dim=1)
+
+            gate_proj = torch.cat(
+                [F.linear(x, gate_proj_slices[i]) for i in range(self.config.pretraining_tp)], dim=-1
+            )
+            up_proj = torch.cat([F.linear(x, up_proj_slices[i]) for i in range(self.config.pretraining_tp)], dim=-1)
+
+            intermediate_states = (self.act_fn(gate_proj) * up_proj).split(slice, dim=2)
+            down_proj = [
+                F.linear(intermediate_states[i], down_proj_slices[i]) for i in range(self.config.pretraining_tp)
+            ]
+            down_proj = sum(down_proj)
+        else:
+        """
+        # FIXME here, there was a shape issue before - this fixes it
+        down_proj = self.down_proj(F.silu(self.gate_proj(x)) * self.up_proj(x))
+
+        return down_proj
+    """
+    def forward(self, x):
+        x1, x3 = [F.linear(x, w) for w in [self.gate_proj.weight, self.up_proj.weight]]
         x1 = F.silu(x1)
         x_in = x1 * x3
-        out = F.linear(x_in, self.w2.weight)
-        return out
+        out = F.linear(x_in, self.down_proj.weight)
+        return out"""
 
 
 class TransformerBlock(nn.Module):
@@ -1097,13 +1122,12 @@ class CrossAttention(torch.nn.Module):
         xq = xq.transpose(1, 2)
 
         xk, xv = xattn_cache
-
+        # FIXME shape issue here
         output = F.scaled_dot_product_attention(
             xq, xk, xv, attn_mask=xattn_mask, dropout_p=0.0
         )
         output = output * full_text_row_masked_out_mask
         output = output.transpose(1, 2).contiguous().reshape(bsz, seqlen, -1)
-
         out = F.linear(output, self.o_proj.weight)
         return out
 
@@ -1449,6 +1473,7 @@ class MllamaCrossAttentionTextModel(PreTrainedModel):
 class MllamaPreTrainedModel(PreTrainedModel):
     config_class = MllamaConfig
     base_model_prefix = "model"
+    _no_split_modules = [""]
 
 
 class MllamaModel(MllamaPreTrainedModel):
