@@ -126,11 +126,11 @@ def convert_llava_llama_to_hf(text_model_id, vision_model_id, output_hub_path, o
         vision_config=vision_config,
         vision_feature_select_strategy=vision_feature_select_strategy,
     )
-    if "Qwen" not in text_model_id:
+    if "Qwen" in text_model_id:
+        config.image_token_index = 151646
+    else:
         config.pad_token_id = 32001
         config.image_token_index = 32000
-    else:
-        config.image_token_index = 151646
 
     with torch.device("meta"):
         model = LlavaForConditionalGeneration(config)
