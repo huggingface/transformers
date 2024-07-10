@@ -816,7 +816,7 @@ def is_flash_attn_greater_than(version):
     if not _is_package_available("flash_attn"):
         return False
 
-    return version.parse(importlib.metadata.version("flash_attn")) >= version.parse(version)
+    return version.parse(importlib.metadata.version("flash_attn")) > version.parse(version)
 
 
 def is_torchdistx_available():
