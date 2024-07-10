@@ -1518,9 +1518,13 @@ class ModelUtilsTest(TestCasePlus):
             model.save_pretrained(tmp_dir)
             with LoggingLevel(logging.WARNING):
                 with CaptureLogger(logger) as cl1:
-                    TestModelGamma.from_pretrained(tmp_dir, config=config)
+                    _, loading_info = TestModelGamma.from_pretrained(tmp_dir, config=config, output_loading_info=True)
 
+        missing_keys = loading_info["missing_keys"]
+        unexpected_keys = loading_info["unexpected_keys"]
         self.assertIn(warning_msg_gamma, cl1.out)
+        self.assertIn("gamma_param", missing_keys)
+        self.assertIn("weight_param", unexpected_keys)
 
         class TestModelBeta(PreTrainedModel):
             def __init__(self, config):
@@ -1538,9 +1542,13 @@ class ModelUtilsTest(TestCasePlus):
             model.save_pretrained(tmp_dir)
             with LoggingLevel(logging.WARNING):
                 with CaptureLogger(logger) as cl2:
-                    TestModelBeta.from_pretrained(tmp_dir, config=config)
+                    _, loading_info = TestModelBeta.from_pretrained(tmp_dir, config=config, output_loading_info=True)
 
+        missing_keys = loading_info["missing_keys"]
+        unexpected_keys = loading_info["unexpected_keys"]
         self.assertIn(warning_msg_beta, cl2.out)
+        self.assertIn("beta_param", missing_keys)
+        self.assertIn("bias_param", unexpected_keys)
 
 
 @slow
