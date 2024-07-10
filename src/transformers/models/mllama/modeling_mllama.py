@@ -859,9 +859,9 @@ class FeedForward(nn.Module):
             multiple_of (int): Value to ensure hidden dimension is a multiple of this value.
             ffn_dim_multiplier (float, optional): Custom multiplier for hidden dimension. Defaults to None.
         Attributes:
-            w1 (ColumnParallelLinear): Linear transformation for the first layer.
-            w2 (RowParallelLinear): Linear transformation for the second layer.
-            w3 (ColumnParallelLinear): Linear transformation for the third layer.
+            gate_proj (Linear): Linear transformation for the first layer.
+            down_proj (Linear): Linear transformation for the second layer.
+            up_proj (Linear): Linear transformation for the third layer.
         """
         super().__init__()
         hidden_dim = int(2 * hidden_dim / 3)
@@ -871,13 +871,13 @@ class FeedForward(nn.Module):
         hidden_dim = multiple_of * ((hidden_dim + multiple_of - 1) // multiple_of)
 
         self.gate_proj = nn.Linear(
-            dim, hidden_dim
+            dim, hidden_dim, bias=False
         )
         self.down_proj = nn.Linear(
-            hidden_dim, dim
+            hidden_dim, dim, bias=False
         )
         self.up_proj = nn.Linear(
-            dim, hidden_dim
+            dim, hidden_dim, bias=False
         )
 
     def forward(self, x):
@@ -900,28 +900,28 @@ class TransformerBlock(nn.Module):
             dim (int): Dimension size of the model.
             head_dim (int): Dimension size of each attention head.
             attention (Attention): Attention module.
-            feed_forward (FeedForward): FeedForward module.
+            mlp (FeedForward): FeedForward module.
             layer_id (int): Identifier for the layer.
-            attention_norm (RMSNorm): Layer normalization for attention output.
-            ffn_norm (RMSNorm): Layer normalization for feedforward output.
+            input_layernorm (RMSNorm): Layer normalization for attention output.
+            post_attention_layernorm (RMSNorm): Layer normalization for feedforward output.
         """
         super().__init__()
         self.n_heads = config.n_heads
         self.dim = config.dim
         self.head_dim = config.dim // config.n_heads
-        self.attention = Attention(config)
-        self.feed_forward = FeedForward(
+        self.self_attn = Attention(config)
+        self.mlp = FeedForward(
             dim=self.dim,
             hidden_dim=4 * self.dim,
             multiple_of=config.multiple_of,
             ffn_dim_multiplier=config.ffn_dim_multiplier,
         )
         self.layer_id = layer_id
-        self.attention_norm = RMSNorm(config.dim, eps=config.norm_eps)
-        self.ffn_norm = RMSNorm(config.dim, eps=config.norm_eps)
+        self.input_layernorm = RMSNorm(config.dim, eps=config.norm_eps)
+        self.post_attention_layernorm = RMSNorm(config.dim, eps=config.norm_eps)
 
     def setup_cache(self, max_batch_size: int, dtype: torch.dtype):
-        self.attention.setup_cache(max_batch_size, dtype)
+        self.self_attn.setup_cache(max_batch_size, dtype)
 
     def forward(
         self,
@@ -940,14 +940,14 @@ class TransformerBlock(nn.Module):
         Returns:
             torch.Tensor: Output tensor after applying attention and feedforward layers.
         """
-        h = self.attention.forward(
-            x=self.attention_norm(x),
+        h = self.self_attn.forward(
+            x=self.input_layernorm(x),
             freqs_cis=freqs_cis,
             mask=mask,
             position_ids=position_ids,
         )
         h = h + x
-        out = h + self.feed_forward.forward(self.ffn_norm(h))
+        out = h + self.mlp.forward(self.post_attention_layernorm(h))
         return out
 
 
@@ -1127,7 +1127,7 @@ class CrossAttentionTransformerBlock(torch.nn.Module):
         self.ffn_dim_multiplier = config.ffn_dim_multiplier
         self.multiple_of = config.multiple_of
 
-        self.attention = CrossAttention(
+        self.self_attn = CrossAttention(
             dim=self.dim,
             head_dim=self.head_dim,
             n_heads=self.n_heads,
@@ -1157,7 +1157,7 @@ class CrossAttentionTransformerBlock(torch.nn.Module):
 
 
     def compute_xattn_kv_cache(self, xattn_tokens: torch.Tensor) -> torch.Tensor:
-        return self.attention.compute_xattn_kv_cache(xattn_tokens)
+        return self.self_attn.compute_xattn_kv_cache(xattn_tokens)
 
     def forward(
         self,
@@ -1166,14 +1166,14 @@ class CrossAttentionTransformerBlock(torch.nn.Module):
         full_text_row_masked_out_mask: Tuple[torch.Tensor, torch.Tensor],
         xattn_cache: torch.Tensor,
     ) -> torch.Tensor:
-        _attn_out = self.attention(
-            x=self.attention_norm(x),
+        _attn_out = self.self_attn(
+            x=self.input_layernorm(x),
             xattn_mask=xattn_mask,
             xattn_cache=xattn_cache,
             full_text_row_masked_out_mask=full_text_row_masked_out_mask,
         )
         h = x + self.gate_attn.tanh() * _attn_out
-        _ffn = self.feed_forward(self.ffn_norm(h))
+        _ffn = self.mlp(self.ffn_norm(h))
         _ffn = full_text_row_masked_out_mask[:, 0] * _ffn  # type: ignore
         h = h + self.ffn_gate.tanh() * _ffn * float(not self.no_ffn)
         return h
@@ -1259,7 +1259,7 @@ class MllamaCrossAttentionTextModel(PreTrainedModel):
         self.n_local_kv_heads = self.n_kv_heads
         self.rope_theta = config.rope_theta
         self.use_scaled_rope=config.use_scaled_rope
-        self.tok_embeddings = nn.Embedding(
+        self.embed_tokens = nn.Embedding(
             config.vocab_size, config.dim
         )
         self.max_seq_len = config.max_seq_len
@@ -1267,11 +1267,6 @@ class MllamaCrossAttentionTextModel(PreTrainedModel):
         self.pos_embeddings = None
         # final norm layer (not necessary for post-norm)
         self.norm = RMSNorm(config.dim, eps=config.norm_eps)
-
-        # output layer
-        self.output = nn.Embedding(
-            self.dim, self.vocab_size
-        )
 
         self.n_llama_layers = self.n_layers
         self.model_dim = self.dim
@@ -1285,7 +1280,7 @@ class MllamaCrossAttentionTextModel(PreTrainedModel):
             8,
             self.dim,
         )
-        self.num_frozen_embeddings = self.tok_embeddings.num_embeddings
+        self.num_frozen_embeddings = self.embed_tokens.num_embeddings
         self._thresh = self.num_frozen_embeddings - 1
 
         # transformer blocks
@@ -1353,7 +1348,7 @@ class MllamaCrossAttentionTextModel(PreTrainedModel):
         mask_orig = torch.where(x >= self.num_frozen_embeddings, xz, oz).unsqueeze(-1)
         mask_new = torch.where(x < self.num_frozen_embeddings, xz, oz).unsqueeze(-1)
 
-        x_orig = self.tok_embeddings(x_orig)
+        x_orig = self.embed_tokens(x_orig)
         x_new = self.learnable_embedding(x_new).type_as(x_orig)
         return x_orig * mask_orig.type_as(x_orig) + x_new * mask_new.type_as(x_new)
 
@@ -1390,8 +1385,7 @@ class MllamaCrossAttentionTextModel(PreTrainedModel):
 
         h = self.norm(h)
 
-        output = F.linear(h, self.output.weight)
-        return output.float()
+        return h
 
     def setup_cache(self, max_batch_size: int, dtype=torch.bfloat16):
         # Set up the text kv caches
@@ -1454,11 +1448,15 @@ class MllamaCrossAttentionTextModel(PreTrainedModel):
 
 class MllamaPreTrainedModel(PreTrainedModel):
     config_class = MllamaConfig
-    _tied_weights_keys = ["lm_head.weight"]
-    def __init__(self, config):
+    base_model_prefix = "model"
+
+
+class MllamaModel(MllamaPreTrainedModel):
+    def __init__(self, config: MllamaConfig):
         super().__init__(config)
         self.vision_model = MllamaCrossAttentionVisionModel(config.vision_config)
         self.language_model = MllamaCrossAttentionTextModel(config.text_config)
+        self.post_init()
 
 MLLAMA_START_DOCSTRING = "" # TODO add docstring to MLLAMA start and other classes
 
@@ -1467,15 +1465,19 @@ MLLAMA_START_DOCSTRING = "" # TODO add docstring to MLLAMA start and other class
     MLLAMA_START_DOCSTRING,
 )
 class MllamaForConditionalGeneration(MllamaPreTrainedModel):
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
-        self.model = MllamaPreTrainedModel(config)
+        self.model = MllamaModel(config)
 
-        self.lm_head = nn.Linear(config.text_config.dim, config.text_config.vocab_size)
-        
+        self.lm_head = nn.Linear(
+            config.text_config.dim, config.text_config.vocab_size, bias=False
+        )
         self.vision_max_num_chunks = config.vision_config.vision_max_num_chunks
         self.vision_chunk_size = config.vision_config.vision_chunk_size 
+
+        self.post_init()
         # TODO - decide if we want to derive from config params.max_seq_len in the processor...
         """
         self.image_transform = partial(
@@ -1485,7 +1487,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
         """
 
     def setup_cache(self, max_batch_size: int, dtype: torch.dtype):
-        self.language_model.setup_cache(max_batch_size, dtype)
+        self.model.language_model.setup_cache(max_batch_size, dtype)
 
     def compute_vision_tokens_masks(
         self,
@@ -1542,7 +1544,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
                 layer.compute_xattn_kv_cache(
                     vision_tokens.view(bsz, -1, image_token_dim)
                 )
-                for layer in self.language_model.cross_attention_layers
+                for layer in self.model.language_model.cross_attention_layers
             ]
         )
         padded_masks = _pad_masks(
@@ -1553,10 +1555,10 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
         )
 
         cross_attention_masks, full_text_row_masked_out_mask = (
-            self.language_model._get_xattn_mask(
+            self.model.language_model._get_xattn_mask(
                 num_tokens=total_len,
                 text_device="cuda",
-                text_dtype=next(self.language_model.parameters()).dtype,
+                text_dtype=next(self.model.language_model.parameters()).dtype,
                 vision_tokens=vision_tokens,
                 cross_attention_masks=padded_masks,
             )
@@ -1572,8 +1574,8 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
         full_text_row_masked_out_mask: torch.Tensor,
         xattn_caches: torch.Tensor,
     ) -> torch.Tensor:
-        h = self.language_model.get_partially_trainable_embedding(tokens[:, position_ids])
-        logits = self.language_model.forward(
+        h = self.model.language_model.get_partially_trainable_embedding(tokens[:, position_ids])
+        logits = self.model.language_model.forward(
             position_ids=position_ids,
             h=h,
             xattn_mask=cross_attention_masks[:, :, position_ids],
@@ -1582,32 +1584,35 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
             ],
             xattn_caches=xattn_caches,
         )
+
+        output = F.linear(h, self.lm_head.weight)
+        logits = output.float()
         return logits
 
 
     def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
+        return self.model.language_model.get_input_embeddings()
 
     def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
+        self.model.language_model.set_input_embeddings(value)
 
     def get_output_embeddings(self):
-        return self.language_model.get_output_embeddings()
+        return self.model.language_model.get_output_embeddings()
 
     def set_output_embeddings(self, new_embeddings):
-        self.language_model.set_output_embeddings(new_embeddings)
+        self.model.language_model.set_output_embeddings(new_embeddings)
 
     def set_decoder(self, decoder):
-        self.language_model.set_decoder(decoder)
+        self.model.language_model.set_decoder(decoder)
 
     def get_decoder(self):
-        return self.language_model.get_decoder()
+        return self.model.language_model.get_decoder()
 
     def tie_weights(self):
-        return self.language_model.tie_weights()
+        return self.model.language_model.tie_weights()
 
     def resize_token_embeddings(self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None) -> nn.Embedding:
-        model_embeds = self.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
+        model_embeds = self.model.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
         # update vocab size
         self.config.text_config.vocab_size = model_embeds.num_embeddings
         self.vocab_size = model_embeds.num_embeddings
@@ -1815,7 +1820,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
                 attention_mask = torch.cat((extended_attention_mask, attention_mask[:, -target_length:]), dim=1)
                 position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
 
-        outputs = self.language_model(
+        outputs = self.model.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -1910,4 +1915,4 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
         return model_inputs
 
     def _reorder_cache(self, *args, **kwargs):
-        return self.language_model._reorder_cache(*args, **kwargs)
+        return self.model.language_model._reorder_cache(*args, **kwargs)
