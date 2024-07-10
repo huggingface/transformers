@@ -14,6 +14,8 @@
 # limitations under the License.
 """MAMBA2 configuration"""
 
+from typing import List
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -194,7 +196,7 @@ class Mamba2Config(PretrainedConfig):
         self.attention_num_key_value_heads = attention_num_key_value_heads
         self.num_hidden_layers = num_hidden_layers
         self.attention_layers_idx = attention_layers_idx
-        self._attention_layer_idx_validation()
+        self._attention_layers_idx_validation()
         self.layer_norm_epsilon = layer_norm_epsilon
         self.use_conv_bias = use_conv_bias
         self.use_mlp_bias = use_mlp_bias
@@ -249,7 +251,7 @@ class Mamba2Config(PretrainedConfig):
         if rope_scaling_factor is None or not isinstance(rope_scaling_factor, float) or rope_scaling_factor <= 1.0:
             raise ValueError(f"`rope_scaling`'s factor field must be a float > 1, got {rope_scaling_factor}")
 
-    def _attention_layer_idx_validation(self):
+    def _attention_layers_idx_validation(self):
         """
         Validate the `attention_layers_idx` configuration.
         """
@@ -258,10 +260,12 @@ class Mamba2Config(PretrainedConfig):
 
         if not isinstance(self.attention_layers_idx, List[int]):
             raise ValueError(
-                "`attention_layers_idx` must be a list of integers indicating the attention layers, " f"got {self.attention_layers_idx}"
+                "`attention_layers_idx` must be a list of integers indicating the attention layers, "
+                f"got {self.attention_layers_idx}"
             )
 
         if min(self.attention_layers_idx) < 0 or max(self.attention_layers_idx) >= self.num_hidden_layers:
             raise ValueError(
-                "`attention_layers_idx` has out-of-range indices, " f"got {self.attention_layers_idx}, but expected indices in {list(range(self.num_hidden_layers))}"
+                "`attention_layers_idx` has out-of-range indices, "
+                f"got {self.attention_layers_idx}, but expected indices in {list(range(self.num_hidden_layers))}"
             )
