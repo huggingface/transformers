@@ -657,7 +657,7 @@ def _find_identical(tensors: List[Set[str]], state_dict: Dict[str, torch.Tensor]
     return shared_tensors, identical
 
 
-def _load_state_dict_into_model(model_to_load, state_dict, start_prefix):
+def _load_state_dict_into_model(model_to_load, state_dict, start_prefix, keep_in_fp32_modules, dtype):
     # Convert old format to new format if needed from a PyTorch state_dict
     old_keys = []
     new_keys = []
@@ -719,6 +719,22 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix):
             key[len(start_prefix) :] if key.startswith(start_prefix) else key: value
             for key, value in state_dict.items()
         }
+        # Finally we need to check if the params are the right dtype in the state dict
+        old_param = model_to_load
+        for param_name, param in state_dict.items():
+            splits = param_name.split(".")
+            old_param = model_to_load
+            for split in splits:
+                old_param = getattr(old_param, split)
+                if old_param is None:
+                    break
+            if old_param is not None:
+                if old_param.dtype != param.dtype:
+                    param = param.to(old_param.dtype)
+                if old_param.is_contiguous() and not param.is_contiguous():
+                    param = param.contiguous()
+                state_dict[param_name] = param
+
         # By passing in `assign=True`, we can be memory efficient by mapping the tensors directly, using only 1x
         # the memory of the original state_dict instead of 2.
         model_to_load.load_state_dict(state_dict, assign=True, strict=False)
@@ -4261,7 +4277,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
             else:
                 # Sharded checkpoint or whole but low_cpu_mem_usage==True
-                error_msgs = _load_state_dict_into_model(model_to_load, state_dict, start_prefix)
+                error_msgs = _load_state_dict_into_model(
+                    model_to_load, state_dict, start_prefix, keep_in_fp32_modules, dtype=dtype
+                )
 
         else:
             # This should always be a list but, just to be sure.
@@ -4332,7 +4350,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         )
                         error_msgs += new_error_msgs
                 else:
-                    error_msgs += _load_state_dict_into_model(model_to_load, state_dict, start_prefix)
+                    error_msgs += _load_state_dict_into_model(
+                        model_to_load, state_dict, start_prefix, keep_in_fp32_modules, dtype=dtype
+                    )
 
                 # force memory release
                 del state_dict
