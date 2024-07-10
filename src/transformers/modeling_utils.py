@@ -723,6 +723,8 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix, keep_in
         # Finally we need to check if the params are the right dtype in the state dict
         model_state_dict = model_to_load.state_dict()
         for key, value in state_dict.items():
+            if key not in model_state_dict:
+                continue
             if value.dtype != model_state_dict[key].dtype:
                 state_dict[key] = value.to(model_state_dict[key].dtype)
 
