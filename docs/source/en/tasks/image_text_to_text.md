@@ -106,8 +106,7 @@ We will now call the processors' [`~ProcessorMixin.apply_chat_template`] method 
 
 ```python
 prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
-inputs = processor(text=prompt, images=[images[0], images[1]], return_tensors="pt")
-inputs = {k: v.to(device) for k, v in inputs.items()}
+inputs = processor(text=prompt, images=[images[0], images[1]], return_tensors="pt").to(device)
 ```
 
 We can now pass the preprocessed inputs to the model.
