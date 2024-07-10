@@ -80,7 +80,8 @@ def load_original_state_dict(model_id):
     return original_state_dict
 
 
-# Qwen/Qwen1.5-0.5B-Chat google/siglip-so400m-patch14-384 lmms-lab/llava-next-interleave-qwen-0.5b
+# used only for llava-interlave
+# for ex: Qwen/Qwen1.5-0.5B-Chat google/siglip-so400m-patch14-384 lmms-lab/llava-next-interleave-qwen-0.5b
 def convert_state_dict_to_hf(state_dict):
     new_state_dict = {}
     for key, value in state_dict.items():
@@ -116,18 +117,19 @@ def convert_llava_llama_to_hf(text_model_id, vision_model_id, output_hub_path, o
             patch_size=14,
             vision_use_head=False,
         ).to_dict()
-        vision_feature_select_strategy = "full"
     else:
         vision_config = None
-        vision_feature_select_strategy = "default"
 
     config = LlavaConfig(
         text_config=text_config,
         vision_config=vision_config,
-        vision_feature_select_strategy=vision_feature_select_strategy,
     )
+
+    # llms-lab interleeave models do not use any selection startegy except for last hidden state
     if "Qwen" in text_model_id:
         config.image_token_index = 151646
+        config.vision_feature_select_strategy = "full"
+        config.vision_feature_layer = -1
     else:
         config.pad_token_id = 32001
         config.image_token_index = 32000
