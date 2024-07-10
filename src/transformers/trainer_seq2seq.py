@@ -114,8 +114,14 @@ class Seq2SeqTrainer(Trainer):
 
         with warnings.catch_warnings(record=True) as caught_warnings:
             gen_config.validate()
-        if len(caught_warnings) == 0:
-            raise ValueError("not captured")
+
+        from transformers.utils.logging import _get_library_root_logger, get_logger
+        assert _get_library_root_logger().level == 30
+        assert str(logger) == "<Logger transformers.trainer_seq2seq (WARNING)>"
+        assert get_logger("py.warnings").level == 0
+
+        # if len(caught_warnings) == 0:
+        #     raise ValueError("not captured")
         return gen_config
 
     def evaluate(
