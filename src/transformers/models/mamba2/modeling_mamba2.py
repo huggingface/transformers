@@ -813,8 +813,8 @@ class Mamba2SdpaAttention(Mamba2Attention):
     to adapt to the SDPA API.
     """
 
-    def __init__(self, config):
-        super().__init__(config)
+    def __init__(self, config, layer_idx):
+        super().__init__(config, layer_idx)
 
         # SDPA with memory-efficient backend is broken in torch==2.1.2 when using non-contiguous inputs and a custom
         # attn_mask, so we need to call `.contiguous()`. This was fixed in torch==2.2.0.
