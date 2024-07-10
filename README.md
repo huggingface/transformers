@@ -154,6 +154,33 @@ Many tasks have a pre-trained `pipeline` ready to go, in NLP but also in compute
 >>> from PIL import Image
 >>> from transformers import pipeline
 
+## Verifying Installation
+
+After installing the `transformers` library, you can verify the installation by following these steps:
+
+1. Open a terminal.
+
+2. Start the Python interpreter by typing:
+    ```bash
+    python
+    ```
+
+3. Import the `transformers` library and print its version:
+    ```python
+    import transformers
+    print(transformers.__version__)
+    ```
+
+If the installation was successful, this will print the version number of the `transformers` library you have installed.
+
+### Example Output
+```python
+>>> import transformers
+>>> print(transformers.__version__)
+4.10.0
+
+
+
 # Download an image with cute cats
 >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png"
 >>> image_data = requests.get(url, stream=True).raw
