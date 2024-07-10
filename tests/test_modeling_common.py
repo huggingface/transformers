@@ -3257,6 +3257,10 @@ class ModelTesterMixin:
                                     msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                                 )
                             else:
+                                # Here we allow the parameters' mean to be in the range [-5.0, 5.0] instead of being
+                                # either `0.0` or `1.0`, because their initializations are not using
+                                # `config.initializer_factor` (or something similar). The purpose of this test is simply
+                                # to make sure they are properly initialized (to avoid very large value or even `nan`).
                                 self.assertGreaterEqual(
                                     param_mean,
                                     -5.0,
