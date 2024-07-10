@@ -52,7 +52,7 @@ if is_torch_available():
     )
 
 
-# Copied from transformers.tests.models.StableLm.test_modeling_StableLm.StableLmModelTester with StableLm -> StableLm
+# Copied from transformers.tests.models.persimmon.test_modeling_persimmon.PersimmonModelTester with Persimmon -> StableLm
 class StableLmModelTester:
     # Ignore copy
     def __init__(
