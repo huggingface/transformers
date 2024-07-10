@@ -162,6 +162,8 @@ class HybridMamba2AttentionDynamicCache(DynamicCache):
 
 class Mamba2MLP(nn.Module):
     def __init__(self, config: Mamba2Config):
+        super().__init__()
+
         self.hidden_size = config.hidden_size
         self.original_intermediate_size = config.mlp_intermediate_size
         self.intermediate_padding_multiple = config.mlp_shape_padding_size
@@ -363,6 +365,11 @@ class Mamba2Attention(nn.Module):
             self.bias = self.bias.to(device)
 
     def _init_rope(self):
+        # RoPE is optional
+        if self.rotary_emb_dim:
+            self.rotary_emb = None
+            return
+
         if self.config.rope_scaling is None:
             self.rotary_emb = Mamba2RotaryEmbedding(
                 self.rotary_emb_dim, self.config.max_position_embeddings, base=self.config.rope_theta
@@ -482,6 +489,34 @@ class Mamba2Attention(nn.Module):
 
         return qkv
 
+    def _apply_rope(
+            self,
+            query: torch.FloatTensor,
+            key: torch.FloatTensor,
+            value: torch.FloatTensor,
+            position_ids: torch.LongTensor,
+            cache: Optional[HybridMamba2AttentionDynamicCache] = None,
+            use_cache: Optional[bool] = False,
+    ):
+        has_layer_past = cache is not None
+
+        # Compute rotary embeddings on rotary_emb_dim
+        query_rot = query[..., : self.rotary_emb_dim]
+        query_pass = query[..., self.rotary_emb_dim :]
+        key_rot = key[..., : self.rotary_emb_dim]
+        key_pass = key[..., self.rotary_emb_dim :]
+
+        # Compute token offset for rotary embeddings (when decoding)
+        seq_len = key.shape[-2]
+        if has_layer_past:
+            seq_len += cache.key_cache[self.layer_idx].shape[-2]
+        cos, sin = self.rotary_emb(value, seq_len=seq_len)
+        query, key = apply_rotary_pos_emb(query_rot, key_rot, cos, sin, position_ids)
+        query = torch.cat((query, query_pass), dim=-1)
+        key = torch.cat((key, key_pass), dim=-1)
+
+        return query, key
+
     def _attn_conv1d_projections_and_rope(
             self,
             hidden_states: torch.FloatTensor,
@@ -515,20 +550,8 @@ class Mamba2Attention(nn.Module):
         key = self._split_heads(k, num_attention_heads=self.num_heads_kv, attn_head_size=self.head_dim)
         value = self._split_heads(v, num_attention_heads=self.num_heads_kv, attn_head_size=self.head_dim)
 
-        # Compute rotary embeddings on rotary_emb_dim
-        query_rot = query[..., : self.rotary_emb_dim]
-        query_pass = query[..., self.rotary_emb_dim :]
-        key_rot = key[..., : self.rotary_emb_dim]
-        key_pass = key[..., self.rotary_emb_dim :]
-
-        # Compute token offset for rotary embeddings (when decoding)
-        seq_len = key.shape[-2]
-        if has_layer_past:
-            seq_len += cache.key_cache[self.layer_idx].shape[-2]
-        cos, sin = self.rotary_emb(value, seq_len=seq_len)
-        query, key = apply_rotary_pos_emb(query_rot, key_rot, cos, sin, position_ids)
-        query = torch.cat((query, query_pass), dim=-1)
-        key = torch.cat((key, key_pass), dim=-1)
+        if self.rotary_emb_dim > 0:
+            query, key = self._apply_rope(query, key, value, position_ids, cache, use_cache)
 
         # Cache KV values
         if has_layer_past:
