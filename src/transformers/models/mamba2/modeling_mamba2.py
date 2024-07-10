@@ -47,9 +47,9 @@ if is_flash_attn_2_available():
 
 if is_mamba_ssm_greater_or_equal_2_0_4():
     from mamba_ssm.ops.triton.selective_state_update import selective_state_update
-    from mamba_ssm.ops.triton.ssd_combined import mamba_chunk_scan_combined
+    from mamba_ssm.ops.triton.ssd_combined import mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined
 else:
-    selective_state_update, mamba_chunk_scan_combined = None, None
+    selective_state_update, mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined = None, None, None
 
 if is_causal_conv1d_available():
     from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
@@ -57,7 +57,7 @@ else:
     causal_conv1d_update, causal_conv1d_fn = None, None
 
 is_fast_path_available = all(
-    (selective_state_update, mamba_chunk_scan_combined, causal_conv1d_fn, causal_conv1d_update)
+    (selective_state_update, mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined, causal_conv1d_fn, causal_conv1d_update)
 )
 
 
@@ -941,7 +941,8 @@ class Mamba2Mixer(nn.Module):
 
         if not is_fast_path_available:
             logger.warning_once(
-                "The fast path is not available because on of `(selective_state_update, mamba_chunk_scan_combined, causal_conv1d_fn, causal_conv1d_update)`"
+                "The fast path is not available because on of "
+                "`(selective_state_update, mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined, causal_conv1d_fn, causal_conv1d_update)`"
                 " is None. Falling back to the naive implementation. To install follow https://github.com/state-spaces/mamba/#installation and"
                 " https://github.com/Dao-AILab/causal-conv1d"
             )
@@ -978,7 +979,7 @@ class Mamba2Mixer(nn.Module):
                 ngroups=1,
                 norm_before_gate=False,
                 dt_limit=(self.dt_min, self.dt_max),
-                initial_states=initial_state,
+                initial_states=None,
                 return_final_states=False,
             )
             return y
@@ -1138,7 +1139,7 @@ class Mamba2Mixer(nn.Module):
         dt = nn.functional.softplus(dt + self.dt_bias)
         dt = torch.clamp(dt, dt_min, dt_max)
 
-        D_residual = D.expand(1, 1, -1, 1) * pad_by_size(x, pad_size)
+        D_residual = self.D.expand(1, 1, -1, 1) * pad_by_size(x, pad_size)
 
         # Discretize x and A
         x = x * dt.unsqueeze(-1)
@@ -1283,7 +1284,7 @@ class Mamba2Mixer(nn.Module):
             y = torch.einsum("bhpn,bn->bhp", cache.ssm_states[self.layer_idx], C)
 
             # D skip connection
-            y = y + D.unsqueeze(-1) * x
+            y = y + self.D.unsqueeze(-1) * x
 
             y = y.unsqueeze(1).view(y.shape[0], 1, -1)
 
