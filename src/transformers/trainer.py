@@ -1441,9 +1441,9 @@ class Trainer:
             ):
                 raise ImportError(
                     "You need to have `torchao>0.3.1` in order to use torch 4-bit optimizers. "
-                    "Install it with `pip install https://github.com/pytorch/ao.git`"
+                    "Install it with `pip install torchao` or follow the instructions here: https://github.com/pytorch/ao"
                 )
-            if not version.parse(importlib.metadata.version("torch")) < version.parse("2.3"):
+            if version.parse(importlib.metadata.version("torch")) < version.parse("2.3"):
                 raise ImportError(
                     "You need to have `torch>=2.3` in order to use torch 4-bit optimizers. "
                     "Install it with `pip install --upgrade torch`"
