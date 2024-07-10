@@ -43,6 +43,7 @@ FlashAttention-2 is currently supported for the following architectures:
 * [Dbrx](https://huggingface.co/docs/transformers/model_doc/dbrx#transformers.DbrxModel)
 * [DistilBert](https://huggingface.co/docs/transformers/model_doc/distilbert#transformers.DistilBertModel)
 * [Gemma](https://huggingface.co/docs/transformers/model_doc/gemma#transformers.GemmaModel)
+* [Gemma2](https://huggingface.co/docs/transformers/model_doc/gemma2#transformers.Gemma2Model)
 * [GPT2](https://huggingface.co/docs/transformers/model_doc/gpt2)
 * [GPTBigCode](https://huggingface.co/docs/transformers/model_doc/gpt_bigcode#transformers.GPTBigCodeModel)
 * [GPTNeo](https://huggingface.co/docs/transformers/model_doc/gpt_neo#transformers.GPTNeoModel)
@@ -55,6 +56,7 @@ FlashAttention-2 is currently supported for the following architectures:
 * [Llama](https://huggingface.co/docs/transformers/model_doc/llama#transformers.LlamaModel)
 * [Llava](https://huggingface.co/docs/transformers/model_doc/llava)
 * [Llava-NeXT](https://huggingface.co/docs/transformers/model_doc/llava_next)
+* [Llava-NeXT-Video](https://huggingface.co/docs/transformers/model_doc/llava_next_video)
 * [VipLlava](https://huggingface.co/docs/transformers/model_doc/vipllava)
 * [VideoLlava](https://huggingface.co/docs/transformers/model_doc/video_llava)
 * [M2M100](https://huggingface.co/docs/transformers/model_doc/m2m_100)
@@ -96,7 +98,7 @@ We strongly suggest referring to the detailed [installation instructions](https:
 </hfoption>
 <hfoption id="AMD">
 
-FlashAttention-2 is also supported on AMD GPUs and current support is limited to **Instinct MI210** and **Instinct MI250**. We strongly suggest using this [Dockerfile](https://github.com/huggingface/optimum-amd/tree/main/docker/transformers-pytorch-amd-gpu-flash/Dockerfile) to use FlashAttention-2 on AMD GPUs.
+FlashAttention-2 is also supported on AMD GPUs and current support is limited to **Instinct MI210**, **Instinct MI250** and **Instinct MI300**. We strongly suggest using this [Dockerfile](https://github.com/huggingface/optimum-amd/tree/main/docker/transformers-pytorch-amd-gpu-flash/Dockerfile) to use FlashAttention-2 on AMD GPUs.
 
 </hfoption>
 </hfoptions>
@@ -203,6 +205,7 @@ For now, Transformers supports SDPA inference and training for the following arc
 * [Dpr](https://huggingface.co/docs/transformers/model_doc/dpr#transformers.DprReader)
 * [Falcon](https://huggingface.co/docs/transformers/model_doc/falcon#transformers.FalconModel)
 * [Gemma](https://huggingface.co/docs/transformers/model_doc/gemma#transformers.GemmaModel)
+* [Gemma2](https://huggingface.co/docs/transformers/model_doc/gemma2#transformers.Gemma2Model)
 * [GPT2](https://huggingface.co/docs/transformers/model_doc/gpt2)
 * [GPTBigCode](https://huggingface.co/docs/transformers/model_doc/gpt_bigcode#transformers.GPTBigCodeModel)
 * [Hubert](https://huggingface.co/docs/transformers/model_doc/hubert#transformers.HubertModel)
@@ -221,6 +224,7 @@ For now, Transformers supports SDPA inference and training for the following arc
 * [Qwen2MoE](https://huggingface.co/docs/transformers/model_doc/qwen2_moe#transformers.Qwen2MoeModel)
 * [RoBERTa](https://huggingface.co/docs/transformers/model_doc/roberta#transformers.RobertaModel)
 * [Sew](https://huggingface.co/docs/transformers/main/en/model_doc/sew#transformers.SEWModel)
+* [SigLIP](https://huggingface.co/docs/transformers/model_doc/siglip)
 * [StableLm](https://huggingface.co/docs/transformers/model_doc/stablelm#transformers.StableLmModel)
 * [Starcoder2](https://huggingface.co/docs/transformers/model_doc/starcoder2#transformers.Starcoder2Model)
 * [UniSpeech](https://huggingface.co/docs/transformers/v4.39.3/en/model_doc/unispeech#transformers.UniSpeechModel)
@@ -235,6 +239,7 @@ For now, Transformers supports SDPA inference and training for the following arc
 * [XLM-RoBERTa](https://huggingface.co/docs/transformers/model_doc/xlm-roberta#transformers.XLMRobertaModel)
 * [XLM-RoBERTa-XL](https://huggingface.co/docs/transformers/model_doc/xlm-roberta-xl#transformers.XLMRobertaXLModel)
 * [YOLOS](https://huggingface.co/docs/transformers/model_doc/yolos#transformers.YolosModel)
+
 
 <Tip>
 
@@ -358,20 +363,20 @@ If you're curious and interested in learning more about the concepts underlying 
 To load a model in 8-bit for inference, use the `load_in_8bit` parameter. The `device_map` parameter is optional, but we recommend setting it to `"auto"` to allow 🤗 Accelerate to automatically and efficiently allocate the model given the available resources in the environment:
 
 ```py
-from transformers import AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 
 model_name = "bigscience/bloom-2b5"
-model_8bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", load_in_8bit=True)
+model_8bit = AutoModelForCausalLM.from_pretrained(model_name, quantization_config=BitsAndBytesConfig(load_in_8bit=True))
 ```
 
 If you're loading a model in 8-bit for text generation, you should use the [`~transformers.GenerationMixin.generate`] method instead of the [`Pipeline`] function which is not optimized for 8-bit models and will be slower. Some sampling strategies, like nucleus sampling, are also not supported by the [`Pipeline`] for 8-bit models. You should also place all inputs on the same device as the model:
 
 ```py
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 model_name = "bigscience/bloom-2b5"
 tokenizer = AutoTokenizer.from_pretrained(model_name)
-model_8bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", load_in_8bit=True)
+model_8bit = AutoModelForCausalLM.from_pretrained(model_name, quantization_config=BitsAndBytesConfig(load_in_8bit=True))
 
 prompt = "Hello, my llama is cute"
 inputs = tokenizer(prompt, return_tensors="pt").to("cuda")

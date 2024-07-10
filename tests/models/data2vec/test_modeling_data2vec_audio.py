@@ -426,22 +426,19 @@ class Data2VecAudioModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
 
-    # Data2VecAudio has no inputs_embeds
+    @unittest.skip(reason="Data2VecAudio has no inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    # `input_ids` is renamed to `input_values`
+    @unittest.skip(reason="`input_ids` is renamed to `input_values`")
     def test_forward_signature(self):
         pass
 
-    # Data2VecAudio cannot resize token embeddings
-    # since it has no tokens embeddings
+    @unittest.skip(reason="Data2VecAudio has no tokens embeddings")
     def test_resize_tokens_embeddings(self):
         pass
 
-    # Data2VecAudio has no inputs_embeds
-    # and thus the `get_input_embeddings` fn
-    # is not implemented
+    @unittest.skip(reason="Data2VecAudio has no inputs_embeds")
     def test_model_get_set_embeddings(self):
         pass
 

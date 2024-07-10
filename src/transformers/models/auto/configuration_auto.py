@@ -108,6 +108,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("funnel", "FunnelConfig"),
         ("fuyu", "FuyuConfig"),
         ("gemma", "GemmaConfig"),
+        ("gemma2", "Gemma2Config"),
         ("git", "GitConfig"),
         ("glpn", "GLPNConfig"),
         ("gpt-sw3", "GPT2Config"),
@@ -128,6 +129,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("imagegpt", "ImageGPTConfig"),
         ("informer", "InformerConfig"),
         ("instructblip", "InstructBlipConfig"),
+        ("instructblipvideo", "InstructBlipVideoConfig"),
         ("jamba", "JambaConfig"),
         ("jetmoe", "JetMoeConfig"),
         ("jukebox", "JukeboxConfig"),
@@ -140,6 +142,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("lilt", "LiltConfig"),
         ("llama", "LlamaConfig"),
         ("llava", "LlavaConfig"),
+        ("llava-next-video", "LlavaNextVideoConfig"),
         ("llava_next", "LlavaNextConfig"),
         ("longformer", "LongformerConfig"),
         ("longt5", "LongT5Config"),
@@ -288,6 +291,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("xmod", "XmodConfig"),
         ("yolos", "YolosConfig"),
         ("yoso", "YosoConfig"),
+        ("zoedepth", "ZoeDepthConfig"),
     ]
 )
 
@@ -353,6 +357,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("deit", "DeiT"),
         ("deplot", "DePlot"),
         ("depth_anything", "Depth Anything"),
+        ("depth_anything_v2", "Depth Anything V2"),
         ("deta", "DETA"),
         ("detr", "DETR"),
         ("dialogpt", "DialoGPT"),
@@ -383,6 +388,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("funnel", "Funnel Transformer"),
         ("fuyu", "Fuyu"),
         ("gemma", "Gemma"),
+        ("gemma2", "Gemma2"),
         ("git", "GIT"),
         ("glpn", "GLPN"),
         ("gpt-sw3", "GPT-Sw3"),
@@ -404,6 +410,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("imagegpt", "ImageGPT"),
         ("informer", "Informer"),
         ("instructblip", "InstructBLIP"),
+        ("instructblipvideo", "InstructBlipVideo"),
         ("jamba", "Jamba"),
         ("jetmoe", "JetMoe"),
         ("jukebox", "Jukebox"),
@@ -419,6 +426,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("llama2", "Llama2"),
         ("llama3", "Llama3"),
         ("llava", "LLaVa"),
+        ("llava-next-video", "LLaVa-NeXT-Video"),
         ("llava_next", "LLaVA-NeXT"),
         ("longformer", "Longformer"),
         ("longt5", "LongT5"),
@@ -582,6 +590,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("xmod", "X-MOD"),
         ("yolos", "YOLOS"),
         ("yoso", "YOSO"),
+        ("zoedepth", "ZoeDepth"),
     ]
 )
 
