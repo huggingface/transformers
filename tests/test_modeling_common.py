@@ -3251,6 +3251,23 @@ class ModelTesterMixin:
                 r"data2vec_audio\.feature_extractor\.conv_layers\..+\.conv\.weigh",
                 r"unispeech\.feature_extractor\.conv_layers\..+\.conv\.weight",
                 r"pvt\.encoder\.patch_embeddings\..+\.projection\.bias",
+                r"unispeech_sat\.feature_projection\.projection\.weight",
+                r"wav2vec2_bert\.feature_projection\.projection\.bias",
+                r"pvt_v2\.encoder\.layers\..+\.blocks\..+\.mlp\.dwconv\.dwconv\.weight",
+                r"wav2vec2_conformer\.feature_projection\.projection\.weight",
+                r"wavlm\.feature_projection\.projection\.weight",
+                r"swiftformer\.encoder\.network\..+\.blocks\..+\.local_representation\.point_wise_conv1\.weight",
+                r"sew\.encoder\.pos_conv_embed\.conv\.weight_g",
+                r"bit\.encoder\.stages\..+\.layers\..+\.conv1\.weight",
+                r"sew_d\.encoder\.pos_conv_embed\.conv\.weight_g",
+                r"vision_model\.encoder\.layers\..+\.self_attn\.k_proj\.weight",
+                r"hubert\.encoder\.pos_conv_embed\.conv\.parametrizations\.weight\.original.+",
+                r"swinv2\.encoder\.layers\..+\.blocks\..+\.attention\.self\.logit_scale",
+                r"data2vec_audio\.feature_projection\.projection\.weight",
+                r"unispeech\.feature_projection\.projection\.weight",
+                r"pvt\.encoder\.block\..+\..+\.attention\.self\.sequence_reduction\.weight",
+                "",
+                "",
             ]
 
             with self.subTest(msg=f"Testing {model_class}"):
