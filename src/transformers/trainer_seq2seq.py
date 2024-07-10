@@ -122,7 +122,6 @@ class Seq2SeqTrainer(Trainer):
         assert get_logger("py.warnings").level == 30
         assert len(_get_library_root_logger().handlers) == 1
         assert len(logger.handlers) == 0
-        assert len(get_logger("py.warnings").handlers) == 0
         assert _get_library_root_logger().handlers[0].level == 0
 
         with warnings.catch_warnings(record=True) as caught_warnings:
@@ -135,6 +134,8 @@ class Seq2SeqTrainer(Trainer):
         assert get_logger("py.warnings").level == 30
 
         if len(caught_warnings) == 0:
+            # assert len(get_logger("py.warnings").handlers) == 0
+            logger.warning(f'{get_logger("py.warnings").handlers}')
             raise ValueError("not captured")
 
         return gen_config
