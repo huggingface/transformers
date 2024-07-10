@@ -267,6 +267,7 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
 
     def __init__(
         self,
+        eos_token_id: torch.Tensor = None,
         num_output_tokens: int = 10,
         max_matching_ngram_size: int = None,
         max_length: int = 20,
@@ -274,6 +275,7 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
         self.num_output_tokens = num_output_tokens
         self.max_matching_ngram_size = max_matching_ngram_size if max_matching_ngram_size else 2
         self.max_length = max_length
+        self.eos_token_id = eos_token_id
 
         if self.max_matching_ngram_size <= 0 or self.num_output_tokens <= 0:
             raise ValueError("Invalid max_matching_ngram_size or num_output_tokens")
@@ -319,6 +321,15 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
                 if start_idx < end_idx:
                     chosen_ids = input_ids[0, start_idx:end_idx]
                     match_found = True
+
+                    # remove remaining candidate ids if an "eos" token is found, otherwise the target model may
+                    # accept eos and the rest as valid, thus not stopping generation after "eos"
+                    # NOTE: below code is written based on the fact that assisted decoding supports only bs=1
+                    mask = torch.isin(chosen_ids, self.eos_token_id)
+                    match_indices_eos = torch.nonzero(mask)
+                    if match_indices_eos.numel() > 0:
+                        first_eos_index = match_indices_eos[0].item()
+                        chosen_ids = chosen_ids[:first_eos_index]
                     break
             if match_found:
                 break
