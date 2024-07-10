@@ -111,7 +111,7 @@ class DABDETRConfig(PretrainedConfig):
             Relative weight of the Focal loss in the panoptic segmentation loss.
         dice_loss_coefficient (`int`, *optional*, defaults to 1):
             Relative weight of the DICE/F-1 loss in the panoptic segmentation loss.
-        cls_loss_coefficient (`int`, *optional*, defaults to 2): 
+        cls_loss_coefficient (`int`, *optional*, defaults to 2):
             Relative weight of the classification loss in the object detection loss function.
         bbox_loss_coefficient (`int`, *optional*, defaults to 5):
             Relative weight of the L1 bounding box loss in the object detection loss.
