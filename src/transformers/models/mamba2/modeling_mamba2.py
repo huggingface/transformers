@@ -366,7 +366,7 @@ class Mamba2Attention(nn.Module):
 
     def _init_rope(self):
         # RoPE is optional
-        if self.rotary_emb_dim:
+        if self.rotary_emb_dim <= 0:
             self.rotary_emb = None
             return
 
