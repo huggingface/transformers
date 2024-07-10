@@ -320,6 +320,7 @@ class ProcessorMixin(PushToHubMixin):
     feature_extractor_class = None
     tokenizer_class = None
     _auto_class = None
+    valid_kwargs: List[str] = []
 
     # args have to match the attributes class attribute
     def __init__(self, *args, **kwargs):

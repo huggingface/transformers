@@ -40,7 +40,7 @@ class InstructBlipVideoProcessor(ProcessorMixin):
             An instance of [`InstructBlipVideoImageProcessor`]. The image processor is a required input.
         tokenizer (`AutoTokenizer`):
             An instance of ['PreTrainedTokenizer`]. The tokenizer is a required input.
-        qformer_tokenizer (`AutoTokenizer`):
+        qformer_tokenizer (`AutoTokenizer`, *optional*):
             An instance of ['PreTrainedTokenizer`]. The Q-Former tokenizer is a required input.
     """
 
