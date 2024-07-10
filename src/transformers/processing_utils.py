@@ -656,7 +656,7 @@ class ProcessorMixin(PushToHubMixin):
         if "auto_map" in processor_dict:
             del processor_dict["auto_map"]
 
-        cls.validate_init_kwargs(kwargs_from_config=processor_dict.keys(), valid_kwargs=cls.valid_kwargs)
+        unused_kwargs = cls.validate_init_kwargs(processor_config=processor_dict, valid_kwargs=cls.valid_kwargs)
         processor = cls(*args, **processor_dict)
 
         # Update processor with kwargs if needed
@@ -664,6 +664,7 @@ class ProcessorMixin(PushToHubMixin):
             if hasattr(processor, key):
                 setattr(processor, key, kwargs.pop(key))
 
+        unused_kwargs.update(kwargs)
         logger.info(f"Processor {processor}")
         if return_unused_kwargs:
             return processor, kwargs
@@ -889,13 +890,17 @@ class ProcessorMixin(PushToHubMixin):
         return getattr(first_attribute, "model_input_names", None)
 
     @staticmethod
-    def validate_init_kwargs(kwargs_from_config, valid_kwargs):
-        unused_kwargs = set(kwargs_from_config) - set(valid_kwargs)
-        if unused_kwargs:
-            unused_key_str = ", ".join(unused_kwargs)
+    def validate_init_kwargs(processor_config, valid_kwargs):
+        kwargs_from_config = processor_config.keys()
+        unused_kwargs = {}
+        unused_keys = set(kwargs_from_config) - set(valid_kwargs)
+        if unused_keys:
+            unused_key_str = ", ".join(unused_keys)
             logger.warning(
                 f"Some kwargs in processor config are unused and will not have any effect: {unused_key_str}. "
             )
+            unused_kwargs = {k: processor_config[k] for k in unused_keys}
+        return unused_kwargs
 
     def apply_chat_template(
         self,
