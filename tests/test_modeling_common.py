@@ -3293,6 +3293,10 @@ class ModelTesterMixin:
                 r"wav2vec2_conformer\.encoder\.layers\..+\.self_attn\.pos_bias_v",
                 r"swiftformer\.encoder\.network\..+\.blocks\..+\.attn\.to_key\.weight",
                 r"vision_model\.encoder\.layers\..+\.mlp\.fc1\.weight",
+                r"vision_model\.encoder\.layers\..+\.mlp\.fc1\.bias",
+                r"swiftformer\.encoder\.network\..+\.blocks\..+\.attn\.proj\.weight",
+                r"wav2vec2_bert\.encoder\.layers\..+\.conv_module\.pointwise_conv2\.weight",
+                r"wav2vec2_conformer\.encoder\.layers\..+\.conv_module\.pointwise_conv1\.weight",
             ]
 
             with self.subTest(msg=f"Testing {model_class}"):
