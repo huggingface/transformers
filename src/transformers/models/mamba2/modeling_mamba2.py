@@ -33,7 +33,7 @@ from ...utils.import_utils import (
     is_causal_conv1d_available,
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
-    is_mamba_ssm_available,
+    is_mamba_ssm_greater_or_equal_2_0_4,
     logging,
 )
 from .configuration_mamba2 import Mamba2Config
@@ -45,7 +45,7 @@ if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
 
-if is_mamba_ssm_available():
+if is_mamba_ssm_greater_or_equal_2_0_4():
     from mamba_ssm.ops.triton.selective_state_update import selective_state_update
     from mamba_ssm.ops.triton.ssd_combined import mamba_chunk_scan_combined
 else:

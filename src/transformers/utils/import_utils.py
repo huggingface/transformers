@@ -381,6 +381,13 @@ def is_mamba_ssm_available():
     return False
 
 
+def is_mamba_ssm_greater_or_equal_2_0_4():
+    if not _is_package_available("mamba_ssm"):
+        return False
+
+    return version.parse(importlib.metadata.version("mamba_ssm")) >= version.parse("2.0.4")
+
+
 def is_causal_conv1d_available():
     if is_torch_available():
         import torch
