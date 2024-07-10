@@ -113,7 +113,7 @@ class Seq2SeqTrainer(Trainer):
         # an exception if there are warnings at validation time.
 
         from transformers.utils.logging import _get_library_root_logger, get_logger, captureWarnings
-        captureWarnings(True)
+        captureWarnings(False)
 
         assert _get_library_root_logger().level == 30
         assert str(logger) == "<Logger transformers.trainer_seq2seq (WARNING)>"
