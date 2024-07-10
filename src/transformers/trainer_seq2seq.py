@@ -124,7 +124,7 @@ class Seq2SeqTrainer(Trainer):
 
         assert _get_library_root_logger().level == 30
         assert str(logger) == "<Logger transformers.trainer_seq2seq (WARNING)>"
-        assert get_logger("py.warnings").level == 0
+        assert get_logger("py.warnings").level == 30
 
         if len(caught_warnings) == 0:
             raise ValueError("not captured")
