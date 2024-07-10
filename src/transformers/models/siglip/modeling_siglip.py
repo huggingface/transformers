@@ -502,7 +502,14 @@ class SiglipFlashAttention2(SiglipAttention):
             value_states = value_states.to(target_dtype)
 
         attn_output = _flash_attention_forward(
-            query_states, key_states, value_states, attention_mask, q_len, dropout=dropout_rate
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            q_len,
+            dropout=dropout_rate,
+            is_causal=self.is_causal,
+            use_top_left_mask=self._flash_attn_uses_top_left_mask,
         )
 
         attn_output = attn_output.reshape(batch_size, q_len, self.embed_dim).contiguous()
