@@ -30,13 +30,37 @@ class MSClapAudioConfig(PretrainedConfig):
     def __init__(self, 
         out_emb = 768, 
         d_proj = 1024, 
+        spec_size = 256, 
+        patch_size=4, 
+        patch_stride=(4,4), 
+        patch_embed_input_channels=1, 
+        patch_embeds_hidden_size=96,
+        enable_patch_layer_norm = True, 
+        num_mel_bins = 64, 
+        depths=[2, 2, 6, 2], 
+        qk_scale = None, 
+        qkv_bias = True, 
+        attention_probs_dropout_prob = 0, 
         **kwargs,
 
     ):  
         super().__init__(**kwargs)
 
         self.d_in = out_emb 
+
         self.d_out = d_proj        
+        self.spec_size = spec_size
+        self.patch_size = patch_size
+        self.patch_stride = patch_stride
+        self.flatten_patch_embeds = True
+        self.patch_embeds_hidden_size = patch_embeds_hidden_size
+        self.patch_embed_input_channels = patch_embed_input_channels
+        self.enable_patch_layer_norm = enable_patch_layer_norm
+        self.num_mel_bins = num_mel_bins
+        self.depths = depths
+        self.qk_scale = qk_scale
+        self.qkv_bias = qkv_bias
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
 
 class MSClapTextConfig(PretrainedConfig): 
 

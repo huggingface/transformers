@@ -539,7 +539,7 @@ class ClapAudioAttention(nn.Module):
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
         self_outputs = self.self(hidden_states, attention_mask, head_mask, output_attentions)
-        attention_output = self.output(self_outputs[0], hidden_states)
+        attention_output = self.output(self_outputs[0], )
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
 

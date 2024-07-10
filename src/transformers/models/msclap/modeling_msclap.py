@@ -10,18 +10,24 @@ import torch.nn as nn
 import torch.utils.checkpoint as checkpoint
 from transformers import PreTrainedModel
 from .configuration_msclap import MSClapConfig, MSClapAudioConfig, MSClapTextConfig
+from typing import Optional, Tuple, Any
+from dataclasses import dataclass
 
 
 from itertools import repeat
-
+from ...modeling_outputs import (
+    BaseModelOutputWithPastAndCrossAttentions,
+    BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndCrossAttentions,
+)
+from ...utils import (
+    ModelOutput,
+)
 
 import collections.abc
 import warnings
 
 from torch.nn.init import _calculate_fan_in_and_fan_out
-
-
-
 
 
 
@@ -54,6 +60,45 @@ def interpolate(x, ratio):
     upsampled = upsampled.reshape(batch_size, time_steps * ratio, classes_num)
     return upsampled
 
+# Adapted from https://github.com/LAION-AI/CLAP/blob/6ad05a971ba0622f6acee8c41993e0d02bbed639/src/open_clip/htsat.py#L249
+def window_partition(hidden_states, window_size):
+    """
+    Returns the resized hidden states. The output shape should be `(batch_size * num_windows, window_size, window_size,
+    num_channels)`
+
+    Args:
+        hidden_states (`torch.FloatTensor` of shape `(batch_size, height, width, num_channels)`):
+            Input hidden states
+        window_size (`int`):
+            Window size
+    """
+    batch_size, height, width, num_channels = hidden_states.shape
+
+    hidden_states = hidden_states.view(
+        batch_size, height // window_size, window_size, width // window_size, window_size, num_channels
+    )
+    windows = hidden_states.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, num_channels)
+    return windows
+
+
+# Adapted from https://github.com/LAION-AI/CLAP/blob/6ad05a971ba0622f6acee8c41993e0d02bbed639/src/open_clip/htsat.py#L263
+def window_reverse(windows, window_size, height, width):
+    """
+    Merges windows to produce higher resolution features.
+    Args:
+        windows (`torch.FloatTensor` of shape `(num_windows * batch_size, window_size, window_size, num_channels)`):
+            Input windows
+        window_size (`int`):
+            Window size
+        height (`int`):
+            Height of the resized audio
+        width (`int`):
+            Width of the resized audio
+    """
+    num_channels = windows.shape[-1]
+    windows = windows.view(-1, height // window_size, width // window_size, window_size, window_size, num_channels)
+    windows = windows.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, height, width, num_channels)
+    return windows
 
 def _ntuple(n):
     def parse(x):
@@ -68,6 +113,71 @@ to_3tuple = _ntuple(3)
 to_4tuple = _ntuple(4)
 to_ntuple = _ntuple
 
+
+@dataclass
+class ClapAudioModelOutput(ModelOutput):
+    """
+    ClapAudio model output to mimic the output of the original implementation.
+
+    Args:
+        audio_embeds (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+            The Audio embeddings obtained by applying the projection layer to the pooler_output.
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+    """
+
+    audio_embeds: Optional[torch.FloatTensor] = None
+    last_hidden_state: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+
+@dataclass
+# Copied from transformers.models.clip.modeling_clip.CLIPOutput with CLIP->Clap, vision->audio, Vision->Audio, image->audio
+class ClapOutput(ModelOutput):
+    """
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
+            Contrastive loss for audio-text similarity.
+        logits_per_audio:(`torch.FloatTensor` of shape `(audio_batch_size, text_batch_size)`):
+            The scaled dot product scores between `audio_embeds` and `text_embeds`. This represents the audio-text
+            similarity scores.
+        logits_per_text:(`torch.FloatTensor` of shape `(text_batch_size, audio_batch_size)`):
+            The scaled dot product scores between `text_embeds` and `audio_embeds`. This represents the text-audio
+            similarity scores.
+        text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
+            The text embeddings obtained by applying the projection layer to the pooled output of [`ClapTextModel`].
+        audio_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
+            The audio embeddings obtained by applying the projection layer to the pooled output of [`ClapAudioModel`].
+        text_model_output(`BaseModelOutputWithPooling`):
+            The output of the [`ClapTextModel`].
+        audio_model_output(`BaseModelOutputWithPooling`):
+            The output of the [`ClapAudioModel`].
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    logits_per_audio: torch.FloatTensor = None
+    logits_per_text: torch.FloatTensor = None
+    text_embeds: torch.FloatTensor = None
+    audio_embeds: torch.FloatTensor = None
+    text_model_output: BaseModelOutputWithPooling = None
+    audio_model_output: BaseModelOutputWithPooling = None
+
+    def to_tuple(self) -> Tuple[Any]:
+        return tuple(
+            self[k] if k not in ["text_model_output", "audio_model_output"] else getattr(self, k).to_tuple()
+            for k in self.keys()
+        )
 
 
 # Copied from transformers.models.clap.modeling_clap.ClapDropPath with Clap->MSClap
@@ -98,34 +208,44 @@ class MSClapDropPath(nn.Module):
 class MSClapAudioPatchEmbed(nn.Module):
     """ 2D Image to Patch Embedding
     """
-    def __init__(self, img_size=224, patch_size=16, in_chans=3, embed_dim=768, norm_layer=None, flatten=True, patch_stride = 16):
+    def __init__(self, config: MSClapAudioConfig):
         super().__init__()
-        img_size = to_2tuple(img_size)
-        patch_size = to_2tuple(patch_size)
-        patch_stride = to_2tuple(patch_stride)
+
+        img_size = (config.spec_size, config.spec_size) if isinstance(config.spec_size, int) else config.spec_size
+        
+        patch_size = (
+            (config.patch_size, config.patch_size) if isinstance(config.patch_size, int) else config.patch_size
+        )
+        patch_stride = (
+            (config.patch_stride, config.patch_stride) if isinstance(config.patch_stride, int) else config.patch_stride
+        )
+
         self.img_size = img_size
-        self.patch_size = patch_size
         self.patch_stride = patch_stride
         self.grid_size = (img_size[0] // patch_stride[0], img_size[1] // patch_stride[1])
         self.num_patches = self.grid_size[0] * self.grid_size[1]
-        self.flatten = flatten
-        self.in_chans = in_chans
-        self.embed_dim = embed_dim
+        self.flatten = config.flatten_patch_embeds
+        self.embed_dim = config.patch_embeds_hidden_size
         
         padding = ((patch_size[0] - patch_stride[0]) // 2, (patch_size[1] - patch_stride[1]) // 2)
 
-        self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=patch_stride, padding=padding)
-        self.norm = norm_layer(embed_dim) if norm_layer else nn.Identity()
+        self.proj = nn.Conv2d(config.patch_embed_input_channels, config.patch_embeds_hidden_size, kernel_size=patch_size, stride=patch_stride, padding=padding)
+        self.norm = nn.LayerNorm(config.patch_embeds_hidden_size) if config.enable_patch_layer_norm else nn.Identity()
 
-    def forward(self, x):
-        B, C, H, W = x.shape
-        assert H == self.img_size[0] and W == self.img_size[1], \
-            f"Input image size ({H}*{W}) doesn't match model ({self.img_size[0]}*{self.img_size[1]})."
-        x = self.proj(x)
+    def forward(self, hidden_states):
+        _, _, height, width = hidden_states.shape
+        if height != self.img_size[0] or width != self.img_size[1]:
+            raise ValueError(
+                f"Input audio size ({height}*{width}) doesn't match model ({self.img_size[0]}*{self.img_size[1]})."
+            )
+        hidden_states = self.proj(hidden_states)
+
         if self.flatten:
-            x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
-        x = self.norm(x)
-        return x
+            hidden_states = hidden_states.flatten(2).transpose(1, 2)
+        hidden_states = self.norm(hidden_states)
+        return hidden_states
+
+    
 
 class Mlp(nn.Module):
     """ MLP as used in Vision Transformer, MLP-Mixer and related networks
@@ -231,40 +351,8 @@ def lecun_normal_(tensor):
     variance_scaling_(tensor, mode='fan_in', distribution='truncated_normal')
 
 
-# below codes are based and referred from https://github.com/microsoft/Swin-Transformer
-# Swin Transformer for Computer Vision: https://arxiv.org/pdf/2103.14030.pdf
 
-def window_partition(x, window_size):
-    """
-    Args:
-        x: (B, H, W, C)
-        window_size (int): window size
-    Returns:
-        windows: (num_windows*B, window_size, window_size, C)
-    """
-    B, H, W, C = x.shape
-    x = x.view(B, H // window_size, window_size, W // window_size, window_size, C)
-    windows = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, C)
-    return windows
-
-
-def window_reverse(windows, window_size, H, W):
-    """
-    Args:
-        windows: (num_windows*B, window_size, window_size, C)
-        window_size (int): Window size
-        H (int): Height of image
-        W (int): Width of image
-    Returns:
-        x: (B, H, W, C)
-    """
-    B = int(windows.shape[0] / (H * W / window_size / window_size))
-    x = windows.view(B, H // window_size, W // window_size, window_size, window_size, -1)
-    x = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(B, H, W, -1)
-    return x
-
-
-class WindowAttention(nn.Module):
+class MSClapAudioSelfAttention(nn.Module):
     r""" Window based multi-head self attention (W-MSA) module with relative position bias.
     It supports both of shifted and non-shifted window.
     Args:
@@ -277,14 +365,16 @@ class WindowAttention(nn.Module):
         proj_drop (float, optional): Dropout ratio of output. Default: 0.0
     """
 
-    def __init__(self, dim, window_size, num_heads, qkv_bias=True, qk_scale=None, attn_drop=0., proj_drop=0.):
+    def __init__(self, config, dim, num_heads, window_size):
 
         super().__init__()
         self.dim = dim
-        self.window_size = window_size  # Wh, Ww
-        self.num_heads = num_heads
-        head_dim = dim // num_heads
-        self.scale = qk_scale or head_dim ** -0.5
+        self.window_size = window_size  
+        self.num_attention_heads = num_heads
+        self.attention_head_size = int(dim // num_heads)
+        self.all_head_size = self.num_attention_heads * self.attention_head_size
+        
+        self.scale = config.qk_scale or self.attention_head_size ** -0.5
 
         # define a parameter table of relative position bias
         self.relative_position_bias_table = nn.Parameter(
@@ -303,49 +393,88 @@ class WindowAttention(nn.Module):
         relative_position_index = relative_coords.sum(-1)  # Wh*Ww, Wh*Ww
         self.register_buffer("relative_position_index", relative_position_index)
 
-        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
-        self.attn_drop = nn.Dropout(attn_drop)
-        self.proj = nn.Linear(dim, dim)
-        self.proj_drop = nn.Dropout(proj_drop)
+        self.query = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
+        self.key = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
+        self.value = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
+
+        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
         trunc_normal_(self.relative_position_bias_table, std=.02)
         self.softmax = nn.Softmax(dim=-1)
 
-    def forward(self, x, mask=None):
-        """
-        Args:
-            x: input features with shape of (num_windows*B, N, C)
-            mask: (0/-inf) mask with shape of (num_windows, Wh*Ww, Wh*Ww) or None
-        """
-        B_, N, C = x.shape
-        qkv = self.qkv(x).reshape(B_, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
-        q, k, v = qkv[0], qkv[1], qkv[2]  # make torchscript happy (cannot use tensor as tuple)
+    def transpose_for_scores(self, x):
+        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        x = x.view(new_x_shape)
+        return x.permute(0, 2, 1, 3)
 
-        q = q * self.scale
-        attn = (q @ k.transpose(-2, -1))
+    def forward(
+            self, 
+            hidden_states, 
+            attention_mask=None, 
+            head_mask: Optional[torch.FloatTensor] = None,
+            output_attentions: Optional[bool] = False,
+        ):
+        batch_size, dim, num_channels = hidden_states.shape
+        mixed_query_layer = self.query(hidden_states)
 
-        relative_position_bias = self.relative_position_bias_table[self.relative_position_index.view(-1)].view(
-            self.window_size[0] * self.window_size[1], self.window_size[0] * self.window_size[1], -1)  # Wh*Ww,Wh*Ww,nH
-        relative_position_bias = relative_position_bias.permute(2, 0, 1).contiguous()  # nH, Wh*Ww, Wh*Ww
-        attn = attn + relative_position_bias.unsqueeze(0)
+        key_layer = self.transpose_for_scores(self.key(hidden_states))
+        value_layer = self.transpose_for_scores(self.value(hidden_states))
+        query_layer = self.transpose_for_scores(mixed_query_layer)
 
-        if mask is not None:
-            nW = mask.shape[0]
-            attn = attn.view(B_ // nW, nW, self.num_heads, N, N) + mask.unsqueeze(1).unsqueeze(0)
-            attn = attn.view(-1, self.num_heads, N, N)
-            attn = self.softmax(attn)
-        else:
-            attn = self.softmax(attn)
+        # Take the dot product between "query" and "key" to get the raw attention scores.
+        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
 
-        attn = self.attn_drop(attn)
+        relative_position_bias = self.relative_position_bias_table[self.relative_position_index.view(-1)]
+        relative_position_bias = relative_position_bias.view(
+            self.window_size[0] * self.window_size[1], self.window_size[0] * self.window_size[1], -1
+        )
 
-        x = (attn @ v).transpose(1, 2).reshape(B_, N, C)
-        x = self.proj(x)
-        x = self.proj_drop(x)
-        return x, attn
+        relative_position_bias = relative_position_bias.permute(2, 0, 1).contiguous()
+        attention_scores = attention_scores + relative_position_bias.unsqueeze(0)
 
-    def extra_repr(self):
-        return f'dim={self.dim}, window_size={self.window_size}, num_heads={self.num_heads}'
+        if attention_mask is not None:
+            # Apply the attention mask is (precomputed for all layers in ClapAudioModel forward() function)
+            mask_shape = attention_mask.shape[0]
+            attention_scores = attention_scores.view(
+                batch_size // mask_shape, mask_shape, self.num_attention_heads, dim, dim
+            )
+            attention_scores = attention_scores + attention_mask.unsqueeze(1).unsqueeze(0)
+            attention_scores = attention_scores.view(-1, self.num_attention_heads, dim, dim)
+
+        # Normalize the attention scores to probabilities.
+        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
+
+        # This is actually dropping out entire tokens to attend to, which might
+        # seem a bit unusual, but is taken from the original Transformer paper.
+        attention_probs = self.dropout(attention_probs)
+
+        # Mask heads if we want to
+        if head_mask is not None:
+            attention_probs = attention_probs * head_mask
+
+        context_layer = torch.matmul(attention_probs, value_layer)
+        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
+        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
+        context_layer = context_layer.view(new_context_layer_shape)
+
+        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+
+        return outputs
+    
+# Copied from transformers.models.swin.modeling_swin.SwinSelfOutput with Swin->ClapAudio
+class MSClapAudioSelfOutput(nn.Module):
+    def __init__(self, config, dim):
+        super().__init__()
+        self.dense = nn.Linear(dim, dim)
+        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+
+        return hidden_states
+
 
 
 # We use the model based on Swintransformer Block, therefore we can use the swin-transformer pretrained model
@@ -367,27 +496,27 @@ class SwinTransformerBlock(nn.Module):
         norm_layer (nn.Module, optional): Normalization layer.  Default: nn.LayerNorm
     """
 
-    def __init__(self, dim, input_resolution, num_heads, window_size=7, shift_size=0,
-                 mlp_ratio=4., qkv_bias=True, qk_scale=None, drop=0., attn_drop=0., drop_path=0.,
+    def __init__(self, config, dim, input_resolution, num_heads, window_size=7, shift_size=0,
+                 mlp_ratio=4., drop=0., drop_path=0.,
                  act_layer=nn.GELU, norm_layer=nn.LayerNorm, norm_before_mlp='ln'):
         super().__init__()
         self.dim = dim
         self.input_resolution = input_resolution
         self.num_heads = num_heads
-        self.window_size = window_size
         self.shift_size = shift_size
         self.mlp_ratio = mlp_ratio
         self.norm_before_mlp = norm_before_mlp
-        if min(self.input_resolution) <= self.window_size:
+        if min(self.input_resolution) <= window_size:
             # if window size is larger than input resolution, we don't partition windows
             self.shift_size = 0
             self.window_size = min(self.input_resolution)
-        assert 0 <= self.shift_size < self.window_size, "shift_size must in 0-window_size"
+        assert 0 <= self.shift_size < window_size, "shift_size must in 0-window_size"
+
+        self.window_size = window_size
 
         self.norm1 = norm_layer(dim)
-        self.attn = WindowAttention(
-            dim, window_size=to_2tuple(self.window_size), num_heads=num_heads,
-            qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop, proj_drop=drop)
+        self.attn = MSClapAudioSelfAttention(config, dim, num_heads, to_2tuple(window_size))
+        self.output = MSClapAudioSelfOutput(config, dim)
 
         self.drop_path = MSClapDropPath(drop_path) if drop_path > 0. else nn.Identity()
         if self.norm_before_mlp == 'ln':
@@ -448,7 +577,8 @@ class SwinTransformerBlock(nn.Module):
         x_windows = x_windows.view(-1, self.window_size * self.window_size, C)  # nW*B, window_size*window_size, C
 
         # W-MSA/SW-MSA
-        attn_windows, attn = self.attn(x_windows, mask=self.attn_mask)  # nW*B, window_size*window_size, C
+        attn_windows, attn = self.attn(x_windows, attention_mask=self.attn_mask, output_attentions=True)  # nW*B, window_size*window_size, C
+        attn_windows = self.output(attn_windows)
 
         # merge windows
         attn_windows = attn_windows.view(-1, self.window_size, self.window_size, C)
@@ -472,47 +602,58 @@ class SwinTransformerBlock(nn.Module):
                f"window_size={self.window_size}, shift_size={self.shift_size}, mlp_ratio={self.mlp_ratio}"
 
 
+class MSClapAudioPatchMerging(nn.Module):
+    """
+    Patch Merging Layer.
 
-class PatchMerging(nn.Module):
-    r""" Patch Merging Layer.
     Args:
-        input_resolution (tuple[int]): Resolution of input feature.
-        dim (int): Number of input channels.
-        norm_layer (nn.Module, optional): Normalization layer.  Default: nn.LayerNorm
+        input_resolution (`Tuple[int]`):
+            Resolution of input feature.
+        dim (`int`):
+            Number of input channels.
+        norm_layer (`nn.Module`, *optional*, defaults to `nn.LayerNorm`):
+            Normalization layer class.
     """
 
-    def __init__(self, input_resolution, dim, norm_layer=nn.LayerNorm):
+    def __init__(self, input_resolution: Tuple[int], dim: int, norm_layer: nn.Module = nn.LayerNorm) -> None:
         super().__init__()
         self.input_resolution = input_resolution
         self.dim = dim
         self.reduction = nn.Linear(4 * dim, 2 * dim, bias=False)
         self.norm = norm_layer(4 * dim)
 
-    def forward(self, x):
-        """
-        x: B, H*W, C
-        """
-        H, W = self.input_resolution
-        B, L, C = x.shape
-        assert L == H * W, "input feature has wrong size"
-        assert H % 2 == 0 and W % 2 == 0, f"x size ({H}*{W}) are not even."
+    def maybe_pad(self, input_feature, height, width):
+        should_pad = (height % 2 == 1) or (width % 2 == 1)
+        if should_pad:
+            pad_values = (0, 0, 0, width % 2, 0, height % 2)
+            input_feature = nn.functional.pad(input_feature, pad_values)
 
-        x = x.view(B, H, W, C)
+        return input_feature
 
-        x0 = x[:, 0::2, 0::2, :]  # B H/2 W/2 C
-        x1 = x[:, 1::2, 0::2, :]  # B H/2 W/2 C
-        x2 = x[:, 0::2, 1::2, :]  # B H/2 W/2 C
-        x3 = x[:, 1::2, 1::2, :]  # B H/2 W/2 C
-        x = torch.cat([x0, x1, x2, x3], -1)  # B H/2 W/2 4*C
-        x = x.view(B, -1, 4 * C)  # B H/2*W/2 4*C
+    def forward(self, input_feature: torch.Tensor) -> torch.Tensor:
+        height, width = self.input_resolution
+        # `dim` is height * width
+        batch_size, dim, num_channels = input_feature.shape
 
-        x = self.norm(x)
-        x = self.reduction(x)
+        input_feature = input_feature.view(batch_size, height, width, num_channels)
+        # pad input to be disible by width and height, if needed
+        input_feature = self.maybe_pad(input_feature, height, width)
+        # [batch_size, height/2, width/2, num_channels]
+        input_feature_0 = input_feature[:, 0::2, 0::2, :]
+        # [batch_size, height/2, width/2, num_channels]
+        input_feature_1 = input_feature[:, 1::2, 0::2, :]
+        # [batch_size, height/2, width/2, num_channels]
+        input_feature_2 = input_feature[:, 0::2, 1::2, :]
+        # [batch_size, height/2, width/2, num_channels]
+        input_feature_3 = input_feature[:, 1::2, 1::2, :]
+        # batch_size height/2 width/2 4*num_channels
+        input_feature = torch.cat([input_feature_0, input_feature_1, input_feature_2, input_feature_3], -1)
+        input_feature = input_feature.view(batch_size, -1, 4 * num_channels)  # batch_size height/2*width/2 4*C
 
-        return x
+        input_feature = self.norm(input_feature)
+        input_feature = self.reduction(input_feature)
 
-    def extra_repr(self):
-        return f"input_resolution={self.input_resolution}, dim={self.dim}"
+        return input_feature
 
 
 class BasicLayer(nn.Module):
@@ -534,7 +675,7 @@ class BasicLayer(nn.Module):
         use_checkpoint (bool): Whether to use checkpointing to save memory. Default: False.
     """
 
-    def __init__(self, dim, input_resolution, depth, num_heads, window_size,
+    def __init__(self, config, dim, input_resolution, depth, num_heads, window_size,
                  mlp_ratio=4., qkv_bias=True, qk_scale=None, drop=0., attn_drop=0.,
                  drop_path=0., norm_layer=nn.LayerNorm, downsample=None, use_checkpoint=False,
                  norm_before_mlp='ln'):
@@ -547,12 +688,11 @@ class BasicLayer(nn.Module):
 
         # build blocks
         self.blocks = nn.ModuleList([
-            SwinTransformerBlock(dim=dim, input_resolution=input_resolution,
+            SwinTransformerBlock(config=config, dim=dim, input_resolution=input_resolution,
                                  num_heads=num_heads, window_size=window_size,
                                  shift_size=0 if (i % 2 == 0) else window_size // 2,
                                  mlp_ratio=mlp_ratio,
-                                 qkv_bias=qkv_bias, qk_scale=qk_scale,
-                                 drop=drop, attn_drop=attn_drop,
+                                 drop=drop,
                                  drop_path=drop_path[i] if isinstance(drop_path, list) else drop_path,
                                  norm_layer=norm_layer, norm_before_mlp=norm_before_mlp)
             for i in range(depth)])
@@ -593,7 +733,7 @@ class MSClapAudioEncoder(nn.Module):
         in_chans (int): Number of input image channels. Default: 1 (mono)
         num_classes (int): Number of classes for classification head. Default: 527
         embed_dim (int): Patch embedding dimension. Default: 96
-        depths (tuple(int)): Depth of each HTSAT-Swin Transformer layer.
+        config.depths (tuple(int)): Depth of each HTSAT-Swin Transformer layer.
         num_heads (tuple(int)): Number of attention heads in different layers.
         window_size (int): Window size. Default: 8
         mlp_ratio (float): Ratio of mlp hidden dim to embedding dim. Default: 4
@@ -609,29 +749,34 @@ class MSClapAudioEncoder(nn.Module):
         config (module): The configuration Module from config.py
     """
 
-    def __init__(self, spec_size=256, patch_size=4, patch_stride=(4,4), 
-                in_chans=1, num_classes=527,
-                 embed_dim=96, depths=[2, 2, 6, 2], num_heads=[4, 8, 16, 32],
+    def __init__(self, config,  num_classes=527, num_heads=[4, 8, 16, 32],
                  window_size=8, mlp_ratio=4., qkv_bias=True, qk_scale=None,
                  drop_rate=0., attn_drop_rate=0., drop_path_rate=0.1,
-                 norm_layer=nn.LayerNorm, 
                  ape=False, patch_norm=True,
-                 use_checkpoint=False, norm_before_mlp='ln', config = None, **kwargs):
+                 use_checkpoint=False, norm_before_mlp='ln', config2 = None, **kwargs):
         super(MSClapAudioEncoder, self).__init__()
+        self.num_layers = len(config.depths)
 
         self.config = config
-        self.spec_size = spec_size 
-        self.patch_stride = patch_stride
-        self.patch_size = patch_size
+
+        # split spctrogram into non-overlapping patches
+        self.patch_embed = MSClapAudioPatchEmbed(config)
+        self.patch_stride = self.patch_embed.patch_stride
+        self.spec_size = config.spec_size
+        self.freq_ratio = config.spec_size // config.num_mel_bins
+
+        self.num_features = int(config.patch_embeds_hidden_size * 2 ** (self.num_layers - 1))
+
+
+        self.config2 = config2
+
+        self.patch_size = config.patch_size
         self.window_size = window_size
-        self.embed_dim = embed_dim
-        self.depths = depths
+        self.embed_dim = config.patch_embeds_hidden_size
         self.ape = ape
-        self.in_chans = in_chans
+        self.in_chans = config.patch_embed_input_channels
         self.num_classes = num_classes
         self.num_heads = num_heads
-        self.num_layers = len(self.depths)
-        self.num_features = int(self.embed_dim * 2 ** (self.num_layers - 1))
         
         self.drop_rate = drop_rate
         self.attn_drop_rate = attn_drop_rate
@@ -641,24 +786,17 @@ class MSClapAudioEncoder(nn.Module):
         self.qk_scale = None
 
         self.patch_norm = patch_norm
-        self.norm_layer = norm_layer if self.patch_norm else None
+        self.norm_layer = nn.LayerNorm if self.patch_norm else None
         self.norm_before_mlp = norm_before_mlp
         self.mlp_ratio = mlp_ratio
 
         self.use_checkpoint = use_checkpoint
 
         #  process mel-spec ; used only once
-        self.freq_ratio = self.spec_size // self.config["mel_bins"]
        
         self.interpolate_ratio = 32     # Downsampled ratio
 
-        self.bn0 = nn.BatchNorm2d(self.config["mel_bins"])
-
-
-        # split spctrogram into non-overlapping patches
-        self.patch_embed = MSClapAudioPatchEmbed(
-            img_size=self.spec_size, patch_size=self.patch_size, in_chans=self.in_chans, 
-            embed_dim=self.embed_dim, norm_layer=self.norm_layer, patch_stride = patch_stride)
+        self.batch_norm = nn.BatchNorm2d(config.num_mel_bins)
 
         num_patches = self.patch_embed.num_patches
         patches_resolution = self.patch_embed.grid_size
@@ -666,29 +804,29 @@ class MSClapAudioEncoder(nn.Module):
 
         # absolute position embedding
         if self.ape:
-            self.absolute_pos_embed = nn.Parameter(torch.zeros(1, num_patches, self.embed_dim))
+            self.absolute_pos_embed = nn.Parameter(torch.zeros(1, num_patches, config.patch_embeds_hidden_size))
             trunc_normal_(self.absolute_pos_embed, std=.02)
 
         self.pos_drop = nn.Dropout(p=self.drop_rate)
 
         # stochastic depth
-        dpr = [x.item() for x in torch.linspace(0, self.drop_path_rate, sum(self.depths))]  # stochastic depth decay rule
+        dpr = [x.item() for x in torch.linspace(0, self.drop_path_rate, sum(config.depths))]  # stochastic depth decay rule
 
         # build layers
         self.layers = nn.ModuleList()
         for i_layer in range(self.num_layers):
-            layer = BasicLayer(dim=int(self.embed_dim * 2 ** i_layer),
+            layer = BasicLayer(config=config, dim=int(config.patch_embeds_hidden_size * 2 ** i_layer),
                 input_resolution=(patches_resolution[0] // (2 ** i_layer),
                                     patches_resolution[1] // (2 ** i_layer)),
-                depth=self.depths[i_layer],
+                depth=self.config.depths[i_layer],
                 num_heads=self.num_heads[i_layer],
                 window_size=self.window_size,
                 mlp_ratio=self.mlp_ratio,
                 qkv_bias=self.qkv_bias, qk_scale=self.qk_scale,
                 drop=self.drop_rate, attn_drop=self.attn_drop_rate,
-                drop_path=dpr[sum(self.depths[:i_layer]):sum(self.depths[:i_layer + 1])],
+                drop_path=dpr[sum(self.config.depths[:i_layer]):sum(self.config.depths[:i_layer + 1])],
                 norm_layer=self.norm_layer,
-                downsample=PatchMerging if (i_layer < self.num_layers - 1) else None,
+                downsample=MSClapAudioPatchMerging if (i_layer < self.num_layers - 1) else None,
                 use_checkpoint=use_checkpoint,
                 norm_before_mlp=self.norm_before_mlp)
             self.layers.append(layer)
@@ -697,8 +835,8 @@ class MSClapAudioEncoder(nn.Module):
         self.avgpool = nn.AdaptiveAvgPool1d(1)
         self.maxpool = nn.AdaptiveMaxPool1d(1)
 
-        if self.config["enable_tscam"]:
-            SF = self.spec_size // (2 ** (len(self.depths) - 1)) // self.patch_stride[0] // self.freq_ratio
+        if self.config2["enable_tscam"]:
+            SF = self.spec_size // (2 ** (len(self.config.depths) - 1)) // self.patch_stride[0] // self.freq_ratio
             self.tscam_conv = nn.Conv2d(
                 in_channels = self.num_features,
                 out_channels = self.num_classes,
@@ -708,17 +846,6 @@ class MSClapAudioEncoder(nn.Module):
             self.head = nn.Linear(num_classes, num_classes)
         else:
             self.head = nn.Linear(self.num_features, num_classes) if num_classes > 0 else nn.Identity()
-
-        self.apply(self._init_weights)
-
-    def _init_weights(self, m):
-        if isinstance(m, nn.Linear):
-            trunc_normal_(m.weight, std=.02)
-            if isinstance(m, nn.Linear) and m.bias is not None:
-                nn.init.constant_(m.bias, 0)
-        elif isinstance(m, nn.LayerNorm):
-            nn.init.constant_(m.bias, 0)
-            nn.init.constant_(m.weight, 1.0)
 
     @torch.jit.ignore
     def no_weight_decay(self):
@@ -737,12 +864,12 @@ class MSClapAudioEncoder(nn.Module):
         for i, layer in enumerate(self.layers):
             x, attn = layer(x)
 
-        if self.config["enable_tscam"]:
+        if self.config2["enable_tscam"]:
             # for x
             x = self.norm(x)
             B, N, C = x.shape
-            SF = frames_num // (2 ** (len(self.depths) - 1)) // self.patch_stride[0]
-            ST = frames_num // (2 ** (len(self.depths) - 1)) // self.patch_stride[1]
+            SF = frames_num // (2 ** (len(self.config.depths) - 1)) // self.patch_stride[0]
+            ST = frames_num // (2 ** (len(self.config.depths) - 1)) // self.patch_stride[1]
             x = x.permute(0,2,1).contiguous().reshape(B, C, SF, ST)
             B, C, F, T = x.shape
             # group 2D CNN
@@ -755,7 +882,7 @@ class MSClapAudioEncoder(nn.Module):
             latent_output = torch.flatten(latent_output, 1)
 
             # display the attention map, if needed
-            if self.config["htsat_attn_heatmap"]:
+            if self.config2["htsat_attn_heatmap"]:
                 # for attn
                 attn = torch.mean(attn, dim = 1)
                 attn = torch.mean(attn, dim = 1)
@@ -772,7 +899,7 @@ class MSClapAudioEncoder(nn.Module):
             x = self.tscam_conv(x)
             x = torch.flatten(x, 2) # B, C, T
 
-            if self.config["htsat_attn_heatmap"]:
+            if self.config2["htsat_attn_heatmap"]:
                 fpx = interpolate(torch.sigmoid(x).permute(0,2,1).contiguous() * attn, 8 * self.patch_stride[1]) 
             else: 
                 fpx = interpolate(torch.sigmoid(x).permute(0,2,1).contiguous(), 8 * self.patch_stride[1]) 
@@ -780,7 +907,7 @@ class MSClapAudioEncoder(nn.Module):
             x = self.avgpool(x)
             x = torch.flatten(x, 1)
 
-            if self.config["loss_type"] == "clip_ce":
+            if self.config2["loss_type"] == "clip_ce":
                 output_dict = {
                     'framewise_output': fpx, # already sigmoided
                     'clipwise_output': x,
@@ -797,7 +924,7 @@ class MSClapAudioEncoder(nn.Module):
             x = self.norm(x)  # B N C
             B, N, C = x.shape
             
-            fpx = x.permute(0,2,1).contiguous().reshape(B, C, frames_num // (2 ** (len(self.depths) + 1)), frames_num // (2 ** (len(self.depths) + 1)) )
+            fpx = x.permute(0,2,1).contiguous().reshape(B, C, frames_num // (2 ** (len(self.config.depths) + 1)), frames_num // (2 ** (len(self.config.depths) + 1)) )
             B, C, F, T = fpx.shape
             c_freq_bin = F // self.freq_ratio
             fpx = fpx.reshape(B, C, F // c_freq_bin, c_freq_bin, T)
@@ -861,7 +988,7 @@ class MSClapAudioEncoder(nn.Module):
     def forward(self, x: torch.Tensor, mixup_lambda = None, infer_mode = False):# out_feat_keys: List[str] = None):
         
         x = x.transpose(1, 3)
-        x = self.bn0(x)
+        x = self.batch_norm(x)
         x = x.transpose(1, 3)
         if self.training:
             x = self.spec_augmenter(x)
@@ -876,7 +1003,7 @@ class MSClapAudioEncoder(nn.Module):
             x = x.repeat(repeats=(1,1,repeat_ratio,1))
             x = self.reshape_wav2img(x)
             output_dict = self.forward_features(x)
-        elif self.config["enable_repeat_mode"]:
+        elif self.config2["enable_repeat_mode"]:
             if self.training:
                 cur_pos = random.randint(0, (self.freq_ratio - 1) * self.spec_size - 1)
                 x = self.repeat_wat2img(x, cur_pos)
@@ -1027,15 +1154,16 @@ class MSClapAudioModel(MSClapPreTrainedModel):
     def __init__(self, config: MSClapAudioConfig):
         super().__init__(config)
 
-        config = {
+        config2 = {
                     "loss_type" : "clip_bce", # 
                     "enable_repeat_mode" : False,  # repeat the spectrogram / reshape the spectrogram
                     "enable_tscam" : True,   # enbale the token-semantic layer
-                    "mel_bins" : 64, 
+                    # "mel_bins" : 64, 
                     "htsat_attn_heatmap" : False, 
                 }
+        
 
-        self.audio_encoder = MSClapAudioEncoder(config = config)
+        self.audio_encoder = MSClapAudioEncoder(config, config2=config2)
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1054,24 +1182,42 @@ class MSClapModel(PreTrainedModel):
     def __init__(self, config: MSClapConfig):
         super().__init__(config)
 
+        if not isinstance(config.text_config, MSClapTextConfig):
+            raise ValueError(
+                "config.text_config is expected to be of type ClapTextConfig but is of type"
+                f" {type(config.text_config)}."
+            )
 
-        self.audio_encoder = MSClapAudioModel(
-            config.audio_config
-        )
-        self.audio_projection = MSClapProjectionLayer(config.audio_config)
+        if not isinstance(config.audio_config, MSClapAudioConfig):
+            raise ValueError(
+                "config.audio_config is expected to be of type ClapAudioConfig but is of type"
+                f" {type(config.audio_config)}."
+            )
+
+        text_config = config.text_config
+        audio_config = config.audio_config
+
+
+        self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
 
 
         self.caption_encoder = TextEncoder(
             config.text_config
         )
 
-        self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
+        self.audio_model = MSClapAudioModel(
+            audio_config
+        )
+        self.audio_projection = MSClapProjectionLayer(audio_config)
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def forward(self, audio, text):
 
         with torch.no_grad():
 
-            out_dict = self.audio_encoder(audio)
+            out_dict = self.audio_model(audio)
 
             out_dict['embedding'] = out_dict['latent_output']
             audio_features, _ = out_dict['embedding'], out_dict['clipwise_output']

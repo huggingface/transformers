@@ -16,14 +16,15 @@
 import argparse
 import re
 
-from ..msclap_original.clap_wrapper import CLAPWrapper
 
 from transformers import AutoFeatureExtractor, ClapConfig, ClapModel
 
 
+from msclap import CLAP
+
 KEYS_TO_MODIFY_MAPPING = {
-    "text_branch": "text_model",
-    "audio_branch": "audio_model.audio_encoder",
+    "caption_encoder": "text_model",
+    "audio_encoder.base.htsat": "audio_model.audio_encoder",
     "attn": "attention.self",
     "self.proj": "output.dense",
     "attention.self_mask": "attn_mask",
@@ -37,19 +38,17 @@ KEYS_TO_MODIFY_MAPPING = {
 processor = AutoFeatureExtractor.from_pretrained("laion/clap-htsat-unfused", truncation="rand_trunc")
 
 
-def init_clap(checkpoint_path, model_type, enable_fusion=False):
-    model = CLAP_Module(
-        amodel=model_type,
-        enable_fusion=enable_fusion,
-    )
-    model.load_ckpt(checkpoint_path)
-    return model
+def init_msclap(version):
+
+    clap_model = CLAP(version = version, use_cuda=False)
+
+    return clap_model
 
 
 def get_config_from_original(clap_model):
     audio_config = {
-        "patch_embeds_hidden_size": clap_model.model.audio_branch.embed_dim,
-        "depths": clap_model.model.audio_branch.depths,
+        "patch_embeds_hidden_size": clap_model.clap.audio_encoder.base.htsat.embed_dim,
+        "depths": clap_model.clap.audio_encoder.base.htsat.depths,
         "hidden_size": clap_model.model.audio_projection[0].in_features,
     }
 
@@ -63,6 +62,13 @@ def rename_state_dict(state_dict):
 
     sequential_layers_pattern = r".*sequential.(\d+).*"
     text_projection_pattern = r".*_projection.(\d+).*"
+
+    # Get list of audio layers: 
+    layer_list = state_dict.keys()
+    # Define the pattern you want to match
+    pattern = r"audio_encoder"
+    # Use list comprehension to filter layers that match the pattern
+    audio_matching_layers = [layer for layer in layer_list if re.search(pattern, layer)]
 
     for key, value in state_dict.items():
         # check if any key needs to be modified
@@ -101,11 +107,12 @@ def rename_state_dict(state_dict):
     return model_state_dict
 
 
-def convert_clap_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path, model_type, enable_fusion=False):
-    clap_model = init_clap(checkpoint_path, model_type, enable_fusion=enable_fusion)
+def convert_clap_checkpoint(version, pytorch_dump_folder_path, enable_fusion=False):
+    clap_model = init_msclap(version)
 
-    clap_model.eval()
-    state_dict = clap_model.model.state_dict()
+    clap_model.clap.eval()
+
+    state_dict = clap_model.clap.state_dict()
     state_dict = rename_state_dict(state_dict)
 
     transformers_config = get_config_from_original(clap_model)
@@ -121,13 +128,12 @@ def convert_clap_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_pa
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
-    parser.add_argument("--checkpoint_path", default=None, type=str, help="Path to fairseq checkpoint")
-    parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
-    parser.add_argument("--enable_fusion", action="store_true", help="Whether to enable fusion or not")
-    parser.add_argument("--model_type", default="HTSAT-tiny", type=str, help="Whether to enable fusion or not")
-    args = parser.parse_args()
+    # parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
+    # parser.add_argument("--checkpoint_path", default=None, type=str, help="Path to fairseq checkpoint")
+    # parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
+    # args = parser.parse_args()
 
+    pytorch_dump_folder_path = "/home/jamil/cache/msclap/"
     convert_clap_checkpoint(
-        args.checkpoint_path, args.pytorch_dump_folder_path, args.config_path, args.model_type, args.enable_fusion
+        '2023', pytorch_dump_folder_path
     )
