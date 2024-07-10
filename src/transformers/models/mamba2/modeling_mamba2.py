@@ -895,21 +895,20 @@ class Mamba2Mixer(nn.Module):
         self.ssm_state_size = config.state_size
         self.conv_kernel_size = config.conv_kernel
         self.intermediate_size = config.intermediate_size
-        self.head_dim = config.head_dim
-        self.num_heads = config.num_heads
+        self.head_dim = config.mamba2_head_dim
+        self.num_heads = config.mamba2_num_heads
         self.chunk_size = config.chunk_size
         self.dt_min = config.time_step_limit[0]
         self.dt_max = config.time_step_limit[1]
         self.layer_idx = layer_idx
-        self.use_bias = config.use_bias
+        self.use_bias = config.use_mamba2_bias
         self.use_conv_bias = config.use_conv_bias
-        self.use_triton_kernels = config.use_triton_kernels
 
         # Parallel projection of the input hidden states
         self.in_proj = nn.Linear(
             in_features=self.hidden_size,
-            out_features=2 * (self.intermediate_size + self.ssm_state_size) + config.num_heads,
-            bias=config.use_bias,
+            out_features=2 * (self.intermediate_size + self.ssm_state_size) + self.num_heads,
+            bias=self.use_bias,
         )
 
         conv1d_dim = self.intermediate_size + 2 * self.ssm_state_size
@@ -926,7 +925,7 @@ class Mamba2Mixer(nn.Module):
         self.act = ACT2FN[config.hidden_act]
 
         # We only use a bias as parameter
-        self.dt_bias = nn.Parameter(torch.rand(size=(config.num_heads,)))
+        self.dt_bias = nn.Parameter(torch.rand(size=(self.num_heads,)))
 
         # Scalar initialization of A, i.e. 1-Semi-Separable Matrix of A (== 1-SS(a))
         A = torch.empty(self.num_heads, dtype=torch.float32).uniform_(*config.A_initializer_range)
@@ -938,48 +937,147 @@ class Mamba2Mixer(nn.Module):
         # Residual normalization introduced for instability, see section 7 of the paper
         self.norm = Mamba2RMSNorm(self.intermediate_size, eps=1e-5, normalize=True)
 
-        self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
+        self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=self.use_bias)
 
-    def _conv1d(self, xBC, seq_len, use_triton_kernels, cache, cached_start, cached_forward):
-        # Init cache with first "real" values
-        if cached_start:
-            xBC_t = rearrange(xBC, "b l d -> b d l")
-            cache.conv_states[self.layer_idx].copy_(
-                nn.functional.pad(xBC_t, (self.conv_kernel_size - xBC_t.shape[-1], 0))
+        if not is_fast_path_available:
+            logger.warning_once(
+                "The fast path is not available because on of `(selective_state_update, mamba_chunk_scan_combined, causal_conv1d_fn, causal_conv1d_update)`"
+                " is None. Falling back to the naive implementation. To install follow https://github.com/state-spaces/mamba/#installation and"
+                " https://github.com/Dao-AILab/causal-conv1d"
             )
 
-        if is_fast_path_available and use_triton_kernels:
-            if cached_forward:
-                xBC = causal_conv1d_update(
-                    xBC,
-                    cache.conv_states[self.layer_idx],
-                    rearrange(self.conv1d.weight, "d 1 w -> d w"),
-                    self.conv1d.bias,
-                    self.activation,
-                )
-            else:
-                xBC = causal_conv1d_fn(
-                    xBC.transpose(1, 2),
-                    rearrange(self.conv1d.weight, "d 1 w -> d w"),
-                    bias=self.conv1d.bias,
-                    activation=self.activation,
-                ).transpose(1, 2)
+    def triton_kernels_forward(self, hidden_states, cache):
+        # Managing cache state
+        if cache is not None:
+            cached_start = not cache.has_previous_state
+            cached_forward = not cached_start
         else:
-            if cached_forward:
-                cache.conv_states[self.layer_idx].copy_(
-                    torch.roll(cache.conv_states[self.layer_idx], shifts=-1, dims=-1)
-                )
-                cache.conv_states[self.layer_idx][:, :, -1] = xBC
-                xBC = torch.sum(
-                    cache.conv_states[self.layer_idx] * rearrange(self.conv1d.weight, "d 1 w -> d w"), dim=-1
-                )
-                if self.conv1d.bias is not None:
-                    xBC = xBC + self.conv1d.bias
-                xBC = self.act(xBC)
-            else:
-                xBC = self.act(self.conv1d(xBC.transpose(1, 2))[..., :seq_len].transpose(1, 2))
+            cached_start = False
+            cached_forward = False
 
-        return xBC
+        # 1. Parallel projection for the input
+        zxbcdt = self.in_proj(hidden_states)
+
+        # 2-5. Training combined into one triton kernel
+        if self.training and cache is None:
+            y = mamba_split_conv1d_scan_combined(
+                zxbcdt=zxbcdt,
+                conv1d_weight=self.conv1d.weight.squeeze(1),
+                conv1d_bias=self.conv1d.bias,
+                dt_bias=self.dt_bias,
+                A=-torch.exp(self.A_log),
+                D=self.D,
+                chunk_size=self.chunk_size,
+                seq_idx=None,
+                activation=self.activation,
+                rmsnorm_weight=self.norm.weight,
+                rmsnorm_eps=self.norm.eps,
+                outproj_weight=self.out_proj.weight,
+                outproj_bias=self.out_proj.bias,
+                headdim=self.head_dim,
+                ngroups=1,
+                norm_before_gate=False,
+                dt_limit=(self.dt_min, self.dt_max),
+                initial_states=initial_state,
+                return_final_states=False,
+            )
+            return y
+
+        # Reconstructing the necessary vars
+        d_mlp = (zxbcdt.shape[-1] - 2 * self.intermediate_size - 2 * self.ssm_state_size - self.num_heads) // 2
+        z0, x0, z, xBC, dt = torch.split(
+            zxbcdt,
+            [d_mlp, d_mlp, self.intermediate_size, self.intermediate_size + 2 * self.ssm_state_size, self.num_heads],
+            dim=-1,
+        )
+
+        # 2. Causal convolution for partial set of variables ("input" (x), B, C)
+        # Init cache with first "real" values
+        if cached_start:
+            xBC_t = xBC.transpose(1, 2)
+            cache.conv_states[self.layer_idx].copy_(
+                F.pad(xBC_t, (self.conv_kernel_size - xBC_t.shape[-1], 0))
+            )
+
+        if cached_forward:
+            xBC = causal_conv1d_update(
+                xBC,
+                cache.conv_states[self.layer_idx],
+                self.conv1d.weight.squeeze(1),
+                self.conv1d.bias,
+                self.activation,
+            )
+        else:
+            xBC = causal_conv1d_fn(
+                xBC.transpose(1, 2),
+                self.conv1d.weight.squeeze(1),
+                bias=self.conv1d.bias,
+                activation=self.activation,
+            ).transpose(1, 2)
+
+        # Reconstruct causal convolution vars
+        x, B, C = torch.split(xBC, [self.intermediate_size, self.ssm_state_size, self.ssm_state_size], dim=-1)
+
+        # 3. State Space Duality (SSD)
+        # Discretize 1-SS(a)
+        A = -torch.exp(self.A_log.float())  # .float() to avoid infs/nans
+
+        if not cached_forward:
+            y = mamba_chunk_scan_combined(
+                x=x.view(x.shape[0], x.shape[1], -1, self.head_dim),
+                dt=dt,
+                A=A,
+                B=B.unsqueeze(-2),
+                C=C.unsqueeze(-2),
+                chunk_size=self.chunk_size,
+                D=self.D,
+                z=None,
+                initial_states=None,
+                dt_bias=self.dt_bias,
+                dt_softplus=True,
+                seq_idx=None,
+                dt_limit=(self.dt_min, self.dt_max),
+                return_final_states=cached_start,
+            )
+
+            if cached_start:
+                y, last_state = y
+                if cached_start:
+                    cache.ssm_states[self.layer_idx].copy_(last_state)
+
+            y = y.view(y.shape[0]. y.shape[1], -1)
+        else:
+            # Preparing values for single step
+            A = A.repeat(1, self.head_dim, self.ssm_state_size).to(dtype=torch.float32)
+            dt = dt.repeat(1, self.head_dim, 1)
+            dt_bias = self.dt_bias.repeat(1, self.head_dim)
+            D = self.D.repeat(1, self.head_dim)
+            x_reshaped = x.view(x.shape[0], -1, self.head_dim)
+
+            # Triton kernel for updating states in-place and returning the hidden state
+            y = selective_state_update(
+                state=cache.ssm_states[self.layer_idx],
+                x=x_reshaped,
+                dt=dt,
+                A=A,
+                B=B,
+                C=C,
+                D=D,
+                z=None,
+                dt_bias=dt_bias,
+                dt_softplus=True,
+            )
+            y = y.unsqueeze(1).view(y.shape[0], 1, -1)
+
+        # 4. Gate normalization introduced for instability, see section 7 of the paper
+        y = self.norm(y, residual=z)
+        if d_mlp > 0:
+            y = torch.cat([self.act(z0) * x0, y], dim=-1)
+
+        # 5. Out projecting
+        y = self.out_proj(y)
+
+        return y
 
     def _ssd_naive(self, x, dt, A, B, C, chunk_size, dt_min, dt_max, initial_states=None, return_final_states=False):
         """
@@ -1003,14 +1101,28 @@ class Mamba2Mixer(nn.Module):
 
             pad_shape = (0, 0, 0, 0, 0, pad_size, 0, 0) if len(x.shape) == 4 else (0, 0, 0, pad_size, 0, 0)
 
-            return nn.functional.pad(x, pad_shape, mode="constant", value=0)
+            return F.pad(x, pad_shape, mode="constant", value=0)
+
+        def reshape_into_chunks(x, pad_size, chunk_size):
+            """
+            Padding x tensor with `pad_size` on the seq_len dim (dim=1) and
+            simultaneously splitting it into chunk sequences.
+
+            Assumes that we only have tensors of either size 4 or 3
+            """
+            x = pad_by_size(x, pad_size)
+            if len(x.shape) == 3:
+                return x.view(x.shape[0], -1, self.chunk_size)
+            else:
+                remaining_len = min(x.shape[1] // chunk_size, 1)
+                return x.view(x.shape[0], remaining_len, self.chunk_size, -1)
 
         def segsum(x):
             """
             More stable segment sum calculation
             """
             T = x.size(-1)
-            x = repeat(x, "... d -> ... d e", e=T)
+            x = x.repeat(1, 1, 1, 1, T)
             mask = torch.tril(torch.ones(T, T, device=x.device, dtype=torch.bool), diagonal=-1)
             x = x.masked_fill(~mask, 0)
             x_segsum = torch.cumsum(x, dim=-2)
@@ -1026,7 +1138,7 @@ class Mamba2Mixer(nn.Module):
         dt = nn.functional.softplus(dt + self.dt_bias)
         dt = torch.clamp(dt, dt_min, dt_max)
 
-        D_residual = rearrange(self.D, "h -> 1 1 h 1") * pad_by_size(x, pad_size)
+        D_residual = D.expand(1, 1, -1, 1) * pad_by_size(x, pad_size)
 
         # Discretize x and A
         x = x * dt.unsqueeze(-1)
@@ -1034,10 +1146,10 @@ class Mamba2Mixer(nn.Module):
 
         # Rearrange into blocks/chunks
         x, A, B, C = [
-            rearrange(pad_by_size(t, pad_size), "b (c l) ... -> b c l ...", l=chunk_size) for t in (x, A, B, C)
+            reshape_into_chunks(t, pad_size, chunk_size) for t in (x, A, B, C)
         ]
 
-        A = rearrange(A, "b c l h -> b h c l")
+        A = A.permute(0, 3, 1, 2)
         A_cumsum = torch.cumsum(A, dim=-1)
 
         # 1. Compute the output for each intra-chunk (diagonal blocks)
@@ -1064,7 +1176,8 @@ class Mamba2Mixer(nn.Module):
         Y_off = torch.einsum("bclhn,bchpn,bhcl->bclhp", C, states, state_decay_out)
 
         # Add output of intra-chunk and inter-chunk terms (diagonal and off-diagonal blocks)
-        y = rearrange(Y_diag + Y_off, "b c l h p -> b (c l) h p")
+        y = Y_diag + Y_off
+        y = y.view(y.shape[0], -1, y.shape[-2], y.shape[-1])
 
         # Add D residual to final output
         y = y + D_residual
@@ -1078,155 +1191,19 @@ class Mamba2Mixer(nn.Module):
         else:
             return y, final_state
 
-    def _ssd(
-        self, x, B, C, dt, initial_state, return_final_state, use_triton_kernels, cache, cached_start, cached_forward
-    ):
-        # Discretize 1-SS(a)
-        A = -torch.exp(self.A_log.float())  # .float() to avoid infs/nans
+    def slow_forward(self, hidden_states, cache):
+        seq_len = hidden_states.shape[1]
 
-        last_state = None
-        if not cached_forward:
-            if use_triton_kernels:
-                y = mamba_chunk_scan_combined(
-                    x=rearrange(x, pattern="b l (h p) -> b l h p", p=self.head_dim),
-                    dt=dt,
-                    A=A,
-                    B=rearrange(B, pattern="b l n -> b l 1 n"),
-                    C=rearrange(C, pattern="b l n -> b l 1 n"),
-                    chunk_size=self.chunk_size,
-                    D=self.D,
-                    z=None,
-                    initial_states=initial_state,
-                    dt_bias=self.dt_bias,
-                    dt_softplus=True,
-                    seq_idx=None,
-                    dt_limit=(self.dt_min, self.dt_max),
-                    return_final_states=cached_start or return_final_state,
-                )
-            else:
-                initial_state = rearrange(initial_state, "b n h p -> b 1 n h p") if initial_state is not None else None
-                y = self._ssd_naive(
-                    x=rearrange(x, pattern="b l (h p) -> b l h p", p=self.head_dim),
-                    dt=dt,
-                    A=A,
-                    B=rearrange(B, pattern="b l n -> b l 1 n"),
-                    C=rearrange(C, pattern="b l n -> b l 1 n"),
-                    chunk_size=self.chunk_size,
-                    initial_states=initial_state,
-                    dt_min=self.dt_min,
-                    dt_max=self.dt_max,
-                    return_final_states=cached_start or return_final_state,
-                )
-            if cached_start or return_final_state:
-                y, last_state = y
-                if cached_start:
-                    cache.ssm_states[self.layer_idx].copy_(last_state)
-
-            y = rearrange(y, "b l h p -> b l (h p)")
-        else:
-            if use_triton_kernels:
-                # Preparing values for single step
-                A = repeat(A, "h -> h p n", p=self.head_dim, n=self.ssm_state_size).to(dtype=torch.float32)
-                dt = repeat(dt, "b 1 h -> b h p", p=self.head_dim)
-                dt_bias = repeat(self.dt_bias, "h -> h p", p=self.head_dim)
-                D = repeat(self.D, "h -> h p", p=self.head_dim)
-                x_reshaped = rearrange(x, "b (h p) -> b h p", p=self.head_dim)
-
-                # Triton kernel for updating states in-place and returning the hidden state
-                y = selective_state_update(
-                    state=cache.ssm_states[self.layer_idx],
-                    x=x_reshaped,
-                    dt=dt,
-                    A=A,
-                    B=B,
-                    C=C,
-                    D=D,
-                    z=None,
-                    dt_bias=dt_bias,
-                    dt_softplus=True,
-                )
-            else:
-                # Get time step with softplus and bias
-                dt = nn.functional.softplus(dt + self.dt_bias.to(dtype=dt.dtype))
-                dt = rearrange(dt, "b 1 h -> b h")
-
-                # Discretize A
-                dA = torch.exp(dt * A)
-
-                # Discretize B and x
-                x = rearrange(x, "b (h p) -> b h p", p=self.head_dim)
-                dBx = torch.einsum("bh,bn,bhp->bhpn", dt, B, x)
-
-                # State calculation
-                cache.ssm_states[self.layer_idx].copy_(
-                    cache.ssm_states[self.layer_idx] * rearrange(dA, "b h -> b h 1 1") + dBx
-                )
-
-                # Subsequent output
-                y = torch.einsum("bhpn,bn->bhp", cache.ssm_states[self.layer_idx], C)
-
-                # D skip connection
-                y = y + rearrange(self.D, "h -> h 1") * x
-
-            # Reshaping to have seq_len == 1
-            y = rearrange(y, "b h p -> b 1 (h p)")
-
-            # Optional output of last state
-            if return_final_state:
-                last_state = cache.ssm_states[self.layer_idx].clone()
-
-        return y, last_state
-
-    def _forward(
-        self,
-        hidden_states,
-        use_triton_kernels,
-        initial_state=None,
-        return_final_state=False,
-        cache: Optional[Mamba2Cache] = None,
-    ):
         # Managing cache state
         if cache is not None:
-            cached_start = cache.seq_offset == 0
+            cached_start = not cache.has_previous_state
             cached_forward = not cached_start
         else:
             cached_start = False
             cached_forward = False
 
-        # Supporting cached values as well as passing initial states but not both at the same time
-        if initial_state is not None and cached_forward:
-            raise ValueError("Subsequent caching and passing initial states is not possible at the same time!")
-
         # 1. Parallel projection for the input
         zxbcdt = self.in_proj(hidden_states)
-
-        # 2-5. Training combined into one triton kernel
-        if self.training and cache is None and is_fast_path_available and use_triton_kernels:
-            y = mamba_split_conv1d_scan_combined(
-                zxbcdt=zxbcdt,
-                conv1d_weight=rearrange(self.conv1d.weight, "d 1 w -> d w"),
-                conv1d_bias=self.conv1d.bias,
-                dt_bias=self.dt_bias,
-                A=-torch.exp(self.A_log),
-                D=self.D,
-                chunk_size=self.chunk_size,
-                seq_idx=None,
-                activation=self.activation,
-                rmsnorm_weight=self.norm.weight,
-                rmsnorm_eps=self.norm.eps,
-                outproj_weight=self.out_proj.weight,
-                outproj_bias=self.out_proj.bias,
-                headdim=self.head_dim,
-                ngroups=1,
-                norm_before_gate=False,  # not the same as our variant's normalization var
-                dt_limit=(self.dt_min, self.dt_max),
-                initial_states=initial_state,
-                return_final_states=return_final_state,
-            )
-            last_state = None
-            if return_final_state:
-                y, last_state = y
-            return y, last_state
 
         # Reconstructing the necessary vars
         d_mlp = (zxbcdt.shape[-1] - 2 * self.intermediate_size - 2 * self.ssm_state_size - self.num_heads) // 2
@@ -1236,32 +1213,79 @@ class Mamba2Mixer(nn.Module):
             dim=-1,
         )
 
-        # 2. Causal convolution for partial set of variables ("input", B, C)
-        xBC = self._conv1d(
-            xBC=xBC,
-            seq_len=hidden_states.shape[1],
-            use_triton_kernels=use_triton_kernels,
-            cache=cache,
-            cached_start=cached_start,
-            cached_forward=cached_forward,
-        )
+        # 2. Causal convolution for partial set of variables ("input" (x), B, C)
+        # Init cache with first "real" values
+        if cached_start:
+            xBC_t = xBC.transpose(1, 2)
+            cache.conv_states[self.layer_idx].copy_(
+                F.pad(xBC_t, (self.conv_kernel_size - xBC_t.shape[-1], 0))
+            )
+
+        if cached_forward:
+            cache.conv_states[self.layer_idx].copy_(
+                torch.roll(cache.conv_states[self.layer_idx], shifts=-1, dims=-1)
+            )
+            cache.conv_states[self.layer_idx][:, :, -1] = xBC
+            xBC = torch.sum(
+                cache.conv_states[self.layer_idx] * self.conv1d.weight.squeeze(1), dim=-1
+            )
+            if self.conv1d.bias is not None:
+                xBC = xBC + self.conv1d.bias
+            xBC = self.act(xBC)
+        else:
+            xBC = self.act(self.conv1d(xBC.transpose(1, 2))[..., :seq_len].transpose(1, 2))
 
         # Reconstruct causal convolution vars
         x, B, C = torch.split(xBC, [self.intermediate_size, self.ssm_state_size, self.ssm_state_size], dim=-1)
 
         # 3. State Space Duality (SSD)
-        y, last_state = self._ssd(
-            x=x,
-            B=B,
-            C=C,
-            dt=dt,
-            initial_state=initial_state,
-            return_final_state=return_final_state,
-            use_triton_kernels=use_triton_kernels,
-            cache=cache,
-            cached_start=cached_start,
-            cached_forward=cached_forward,
-        )
+        # Discretize 1-SS(a)
+        A = -torch.exp(self.A_log.float())  # .float() to avoid infs/nans
+
+        if not cached_forward:
+            y = self._ssd_naive(
+                x=x.view(x.shape[0], x.shape[1], -1, self.head_dim),
+                dt=dt,
+                A=A,
+                B=B.unsqueeze(-2),
+                C=C.unsqueeze(-2),
+                chunk_size=self.chunk_size,
+                initial_states=None,
+                dt_min=self.dt_min,
+                dt_max=self.dt_max,
+                return_final_states=cached_start,
+            )
+
+            if cached_start:
+                y, last_state = y
+                if cached_start:
+                    cache.ssm_states[self.layer_idx].copy_(last_state)
+
+            y = y.view(y.shape[0]. y.shape[1], -1)
+        else:
+            # Get time step with softplus and bias
+            dt = F.softplus(dt + self.dt_bias.to(dtype=dt.dtype))
+            dt = dt.squeeze(1)
+
+            # Discretize A
+            dA = torch.exp(dt * A)
+
+            # Discretize B and x
+            x = x.view(x.shape[0], -1, self.head_dim)
+            dBx = torch.einsum("bh,bn,bhp->bhpn", dt, B, x)
+
+            # State calculation
+            cache.ssm_states[self.layer_idx].copy_(
+                cache.ssm_states[self.layer_idx] * dA.unsqueeze(-1).unsqueeze(-1) + dBx
+            )
+
+            # Subsequent output
+            y = torch.einsum("bhpn,bn->bhp", cache.ssm_states[self.layer_idx], C)
+
+            # D skip connection
+            y = y + D.unsqueeze(-1) * x
+
+            y = y.unsqueeze(1).view(y.shape[0], 1, -1)
 
         # 4. Gate normalization introduced for instability, see section 7 of the paper
         y = self.norm(y, residual=z)
@@ -1271,54 +1295,41 @@ class Mamba2Mixer(nn.Module):
         # 5. Out projecting
         y = self.out_proj(y)
 
-        return y, last_state
+        return y
 
     def forward(
-        self, hidden_states, initial_state=None, return_final_state=False, cache: Optional[Mamba2Cache] = None
+        self, hidden_states, cache: Optional[HybridMamba2AttentionDynamicCache] = None
     ):
-        use_triton_kernels = "cuda" in self.in_proj.weight.device.type and self.use_triton_kernels
-
-        # AMD might be available later on with https://github.com/state-spaces/mamba/pull/359
-        if use_triton_kernels:
-            if not is_fast_path_available:
-                logger.warning_once(
-                    "Faster path is not available because `(causal_conv1d_fn, causal_conv1d_update)` is None. "
-                    "Falling back to slower implementation. To install follow https://github.com/Dao-AILab/causal-conv1d"
-                )
-        else:
-            logger.warning_once(
-                "Fast path is not available because the GPU is not properly utilized. "
-                "Falling back to naive implementation."
-            )
-        return self._forward(hidden_states, use_triton_kernels, initial_state, return_final_state, cache)
+        if is_fast_path_available and "cuda" in self.in_proj.weight.device.type:
+            return self.triton_kernels_forward(hidden_states, cache)
+        return self.slow_forward(hidden_states, cache)
 
 
 class Mamba2RMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6, normalize=False):
+    def __init__(self, hidden_size, eps=1e-6):
         """
         Mamba2RMSNorm is equivalent to T5LayerNorm and LlamaRMSNorm but with optional residual normalizing
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.eps = eps
-        self.normalize = normalize
+        self.variance_epsilon = eps
 
     def forward(self, hidden_states, residual=None):
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
 
         # residual normalization introduced for instability, see section 7 of the paper
-        if residual is not None and self.normalize:
-            hidden_states = hidden_states * nn.functional.silu(residual.to(torch.float32))
+        if residual is not None:
+            hidden_states = hidden_states * F.silu(residual.to(torch.float32))
 
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.eps)
-        hidden_states = hidden_states * self.weight
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
 
-        return hidden_states.to(input_dtype)
+        return self.weight * hidden_states.to(input_dtype)
 
 
 class Mamba2Block(nn.Module):
+    #todo attention / mixer / mlp
     def __init__(self, config, layer_idx):
         super().__init__()
         self.config = config
