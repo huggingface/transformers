@@ -112,7 +112,8 @@ inputs = processor(text=prompt, images=[images[0], images[1]], return_tensors="p
 We can now pass the preprocessed inputs to the model.
 
 ```python
-generated_ids = model.generate(**inputs, max_new_tokens=500)
+with torch.no_grad():
+    generated_ids = model.generate(**inputs, max_new_tokens=500)
 generated_texts = processor.batch_decode(generated_ids, skip_special_tokens=True)
 
 print(generated_texts)
