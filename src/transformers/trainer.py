@@ -919,7 +919,6 @@ class Trainer:
                     eval_dataset,
                     num_replicas=xm.xrt_world_size(),
                     rank=xm.get_ordinal(),
-                    generator=torch.Generator(device=self.args.device)
                 )
             elif is_sagemaker_mp_enabled():
                 return SequentialDistributedSampler(
@@ -927,13 +926,12 @@ class Trainer:
                     num_replicas=smp.dp_size(),
                     rank=smp.dp_rank(),
                     batch_size=self.args.per_device_eval_batch_size,
-                    generator=torch.Generator(device=self.args.device),
                 )
             else:
-                return SequentialSampler(eval_dataset, generator=torch.Generator(device=self.args.device))
+                return SequentialSampler(eval_dataset)
 
         if self.args.world_size <= 1:
-            return SequentialSampler(eval_dataset, generator=torch.Generator(device=self.args.device))
+            return SequentialSampler(eval_dataset)
         else:
             return None
 
