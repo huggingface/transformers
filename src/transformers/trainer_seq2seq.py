@@ -117,7 +117,7 @@ class Seq2SeqTrainer(Trainer):
 
         assert _get_library_root_logger().level == 30
         assert str(logger) == "<Logger transformers.trainer_seq2seq (WARNING)>"
-        assert get_logger("py.warnings").level == 0
+        assert get_logger("py.warnings").level == 30
 
         with warnings.catch_warnings(record=True) as caught_warnings:
             gen_config.validate()
