@@ -45,7 +45,8 @@ class MllamaImagesKwargs(ImagesKwargs, total=False):
 
 
 class MllamaProcessorKwargs(ProcessingKwargs, total=False):
-    # see processing_utils.ProcessingKwargs documentation for usage.
+    images_kwargs: MllamaImagesKwargs
+    
     _defaults = {
         "image_kwargs": {
             "do_image_splitting": True,
