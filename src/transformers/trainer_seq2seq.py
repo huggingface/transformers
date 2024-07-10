@@ -112,16 +112,22 @@ class Seq2SeqTrainer(Trainer):
         # Strict validation to fail early. `GenerationConfig.save_pretrained()`, run at the end of training, throws
         # an exception if there are warnings at validation time.
 
-        with warnings.catch_warnings(record=True) as caught_warnings:
-            gen_config.validate()
-
         from transformers.utils.logging import _get_library_root_logger, get_logger
+
         assert _get_library_root_logger().level == 30
         assert str(logger) == "<Logger transformers.trainer_seq2seq (WARNING)>"
         assert get_logger("py.warnings").level == 0
 
-        # if len(caught_warnings) == 0:
-        #     raise ValueError("not captured")
+        with warnings.catch_warnings(record=True) as caught_warnings:
+            gen_config.validate()
+
+        assert _get_library_root_logger().level == 30
+        assert str(logger) == "<Logger transformers.trainer_seq2seq (WARNING)>"
+        assert get_logger("py.warnings").level == 0
+
+        if len(caught_warnings) == 0:
+            raise ValueError("not captured")
+
         return gen_config
 
     def evaluate(
