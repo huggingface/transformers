@@ -161,8 +161,7 @@ def model_inference(
         text=prompt,
         images=images,
         return_tensors="pt",
-    )
-    inputs = {k: v.to(device) for k, v in inputs.items()}
+    ).to(device)
     generation_args.update(inputs)
 
     thread = Thread(
