@@ -379,6 +379,7 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
 
     @require_flash_attn
+    @require_read_token
     @require_torch_gpu
     @require_bitsandbytes
     @pytest.mark.flash_attn_test
