@@ -181,6 +181,8 @@ class MaskGenerationPipeline(ChunkPipeline):
             image, target_size, crops_n_layers, crop_overlap_ratio, points_per_crop, crop_n_points_downscale_factor
         )
         model_inputs = self.image_processor(images=cropped_images, return_tensors="pt")
+        if self.framework == "pt":
+            model_inputs = model_inputs.to(self.torch_dtype)
 
         with self.device_placement():
             if self.framework == "pt":

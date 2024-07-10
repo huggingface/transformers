@@ -92,6 +92,7 @@ from . import (
     funnel,
     fuyu,
     gemma,
+    gemma2,
     git,
     glpn,
     gpt2,
@@ -125,6 +126,7 @@ from . import (
     llama,
     llava,
     llava_next,
+    llava_next_video,
     longformer,
     longt5,
     luke,
@@ -261,4 +263,5 @@ from . import (
     xmod,
     yolos,
     yoso,
+    zoedepth,
 )

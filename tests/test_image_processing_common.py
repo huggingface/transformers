@@ -161,10 +161,10 @@ class ImageProcessingTestMixin:
         )
 
         if not self.test_slow_image_processor or not self.test_fast_image_processor:
-            self.skipTest("Skipping slow/fast equivalence test")
+            self.skipTest(reason="Skipping slow/fast equivalence test")
 
         if self.image_processing_class is None or self.fast_image_processing_class is None:
-            self.skipTest("Skipping slow/fast equivalence test as one of the image processors is not defined")
+            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
 
         image_processor_slow = self.image_processing_class(**self.image_processor_dict)
         image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
@@ -178,10 +178,10 @@ class ImageProcessingTestMixin:
     @require_torch
     def test_fast_is_faster_than_slow(self):
         if not self.test_slow_image_processor or not self.test_fast_image_processor:
-            self.skipTest("Skipping speed test")
+            self.skipTest(reason="Skipping speed test")
 
         if self.image_processing_class is None or self.fast_image_processing_class is None:
-            self.skipTest("Skipping speed test as one of the image processors is not defined")
+            self.skipTest(reason="Skipping speed test as one of the image processors is not defined")
 
         def measure_time(image_processor, image):
             start = time.time()
