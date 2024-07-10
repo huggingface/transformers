@@ -17,7 +17,7 @@
 import tempfile
 import unittest
 
-from transformers import XLMRobertaXLConfig, is_torch_available, set_seed
+from transformers import XLMRobertaXLConfig, is_torch_available
 from transformers.testing_utils import require_torch, require_torch_sdpa, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -593,6 +593,7 @@ class XLMRobertaXLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
                 )
 
                 self.assertTrue(torch.allclose(res_eager, res_sdpa))
+
 
 @require_torch
 class XLMRobertaModelXLIntegrationTest(unittest.TestCase):
