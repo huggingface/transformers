@@ -43,10 +43,10 @@ import torch
 
 device = torch.device("cuda")
 model = Idefics2ForConditionalGeneration.from_pretrained(
-        "HuggingFaceM4/idefics2-8b",
-        torch_dtype=torch.bfloat16,
-        _attn_implementation="flash_attention_2",
-    ).to(device)
+    "HuggingFaceM4/idefics2-8b",
+    torch_dtype=torch.bfloat16,
+    attn_implementation="flash_attention_2",
+).to(device)
 
 processor = AutoProcessor.from_pretrained("HuggingFaceM4/idefics2-8b")
 ```
