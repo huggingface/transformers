@@ -209,7 +209,7 @@ class CircleCIJob:
             test_command = ""
             if self.command_timeout:
                 test_command = f"timeout {self.command_timeout} "
-            test_command += f"python3 -m pytest -k '(TrainerCallbackTest and test_stateful_) or Seq2seqTrainerTester' -rsfE -p no:warnings --tb=short  -o junit_family=xunit1 --junitxml=test-results/junit.xml -n {self.pytest_num_workers} " + " ".join(pytest_flags)
+            test_command += f"python3 -m pytest -k '(TrainerCallbackTest and (test_add_remove_callback or test_init_callback or test_missing_stateful_callback)) or Seq2seqTrainerTester' -rsfE -p no:warnings --tb=short  -o junit_family=xunit1 --junitxml=test-results/junit.xml -n {self.pytest_num_workers} " + " ".join(pytest_flags)
             test_command += " $(cat splitted_tests.txt)"
         if self.marker is not None:
             test_command += f" -m {self.marker}"
