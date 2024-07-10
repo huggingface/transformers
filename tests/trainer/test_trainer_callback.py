@@ -215,10 +215,10 @@ class TrainerCallbackTest(unittest.TestCase):
         self.check_callbacks_equality(trainer.callback_handler.callbacks, expected_callbacks)
 
     def test_0_event_flow(self):
-        import warnings
-
-        # XXX: for now ignore scatter_gather warnings in this test since it's not relevant to what's being tested
-        warnings.simplefilter(action="ignore", category=UserWarning)
+        # import warnings
+        #
+        # # XXX: for now ignore scatter_gather warnings in this test since it's not relevant to what's being tested
+        # warnings.simplefilter(action="ignore", category=UserWarning)
 
         trainer = self.get_trainer(callbacks=[MyTestTrainerCallback])
         trainer.train()
