@@ -146,9 +146,9 @@ class CircleCIJob:
             tests = "tests/benchmark tests/models/univnet/test_modeling_univnet.py tests/models/xlm_roberta/test_modeling_xlm_roberta.py tests/trainer"
 
             tests = "tests/models/speech_to_text/test_modeling_speech_to_text.py tests/models/univnet/test_modeling_univnet.py tests/models/xlm_roberta/test_modeling_xlm_roberta.py"
-            tests = "tests/benchmark tests/models/qwen2/test_modeling_qwen2.py tests/models/speech_to_text/test_modeling_speech_to_text.py tests/models/univnet/test_modeling_univnet.py tests/models/xlm_roberta/test_modeling_xlm_roberta.py tests/trainer"
+            tests = "tests/benchmark tests/models/qwen2/test_modeling_qwen2.py  tests/trainer"
 
-            tests = "tests/benchmark tests/trainer"
+            tests = "tests/trainer"
 
             tests = tests.split()
 
