@@ -1410,7 +1410,7 @@ class Trainer:
             optimizer_kwargs.update({"params": param_groups})
 
             if self.args.optim == OptimizerNames.GALORE_ADAFACTOR:
-                optimizer_kwself.args.update({"scale_parameter": False, "relative_step": False})
+                optimizer_kwargs.update({"scale_parameter": False, "relative_step": False})
         elif self.args.optim in [OptimizerNames.LOMO, OptimizerNames.ADALOMO]:
             if not is_lomo_available():
                 raise ImportError(
