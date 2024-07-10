@@ -16,8 +16,14 @@
 import unittest
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
-from transformers.utils.import_utils import is_torch_sdpa_available
+from transformers.testing_utils import (
+    require_sentencepiece,
+    require_tokenizers,
+    require_torch,
+    require_torch_sdpa,
+    slow,
+    torch_device,
+)
 
 
 if is_torch_available():
@@ -56,10 +62,23 @@ class CamembertModelIntegrationTest(unittest.TestCase):
 
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
 
-        if is_torch_sdpa_available():
-            model = CamembertModel.from_pretrained("almanach/camembert-base", attn_implementation="sdpa").to(
-                torch_device
-            )
-            with torch.no_grad():
-                output_sdpa = model(input_ids)["last_hidden_state"].detach()
-            self.assertTrue(torch.allclose(output, output_sdpa, atol=1e-3))
+    @slow
+    @require_torch_sdpa
+    def test_output_embeds_base_model_sdpa(self):
+        input_ids = torch.tensor(
+            [[5, 121, 11, 660, 16, 730, 25543, 110, 83, 6]],
+            device=torch_device,
+            dtype=torch.long,
+        )  # J'aime le camembert !
+
+        expected_slice = torch.tensor(
+            [[[-0.0254, 0.0235, 0.1027], [0.0606, -0.1811, -0.0418], [-0.1561, -0.1127, 0.2687]]],
+            device=torch_device,
+            dtype=torch.float,
+        )
+
+        model = CamembertModel.from_pretrained("almanach/camembert-base", attn_implementation="sdpa").to(torch_device)
+        with torch.no_grad():
+            output = model(input_ids)["last_hidden_state"].detach()
+
+        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))

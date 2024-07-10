@@ -17,8 +17,13 @@
 import unittest
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow
-from transformers.utils.import_utils import is_torch_sdpa_available
+from transformers.testing_utils import (
+    require_sentencepiece,
+    require_tokenizers,
+    require_torch,
+    require_torch_sdpa,
+    slow,
+)
 
 
 if is_torch_available():
@@ -50,13 +55,22 @@ class XLMRobertaModelIntegrationTest(unittest.TestCase):
         # compare the actual values for a slice of last dim
         self.assertTrue(torch.allclose(output[:, :, -1], expected_output_values_last_dim, atol=1e-3))
 
-        if is_torch_sdpa_available():
-            model = XLMRobertaModel.from_pretrained("FacebookAI/xlm-roberta-base", attn_implementation="sdpa")
-            with torch.no_grad():
-                output_sdpa = model(input_ids)["last_hidden_state"].detach()
-            self.assertEqual(output.shape, expected_output_shape)
-            # compare the actual values for a slice of last dim
-            self.assertTrue(torch.allclose(output, output_sdpa, atol=1e-3))
+    @require_torch_sdpa
+    def test_xlm_roberta_base_sdpa(self):
+        input_ids = torch.tensor([[0, 581, 10269, 83, 99942, 136, 60742, 23, 70, 80583, 18276, 2]])
+        # The dog is cute and lives in the garden house
+
+        expected_output_shape = torch.Size((1, 12, 768))  # batch_size, sequence_length, embedding_vector_dim
+        expected_output_values_last_dim = torch.tensor(
+            [[-0.0101, 0.1218, -0.0803, 0.0801, 0.1327, 0.0776, -0.1215, 0.2383, 0.3338, 0.3106, 0.0300, 0.0252]]
+        )
+
+        model = XLMRobertaModel.from_pretrained("FacebookAI/xlm-roberta-base", attn_implementation="sdpa")
+        with torch.no_grad():
+            output = model(input_ids)["last_hidden_state"].detach()
+        self.assertEqual(output.shape, expected_output_shape)
+        # compare the actual values for a slice of last dim
+        self.assertTrue(torch.allclose(output[:, :, -1], expected_output_values_last_dim, atol=1e-3))
 
     @slow
     def test_xlm_roberta_large(self):
