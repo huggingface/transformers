@@ -167,10 +167,10 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
-    
+
     def get_output_embeddings(self):
         return self.language_model.get_output_embeddings()
-    
+
     def set_output_embeddings(self, new_embeddings):
         self.language_model.set_output_embeddings(new_embeddings)
 
