@@ -1020,7 +1020,7 @@ class Trainer:
             "num_workers": self.args.dataloader_num_workers,
             "pin_memory": self.args.dataloader_pin_memory,
             "persistent_workers": self.args.dataloader_persistent_workers,
-            "generator: torch.Generator(device=self.args.device),
+            "generator": torch.Generator(device=self.args.device),
         }
 
         if not isinstance(test_dataset, torch.utils.data.IterableDataset):
