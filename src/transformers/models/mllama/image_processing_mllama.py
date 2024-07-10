@@ -21,7 +21,6 @@ from typing import Any, Dict, List, Optional, Tuple, Union, Any, Tuple, Set, Dic
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import (
     PaddingMode,
-    to_channel_dimension_format,
     get_image_size,
 )
 from ...image_transforms import pad, resize
@@ -33,13 +32,11 @@ from ...image_utils import (
     PILImageResampling,
     get_image_size,
     infer_channel_dimension_format,
-    is_scaled_image,
     is_valid_image,
     to_numpy_array,
-    valid_images,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, is_vision_available, logging
+from ...utils import TensorType, logging
 
 
 # TODO: update aspect ratio stack for different shapes
@@ -47,11 +44,6 @@ from ...utils import TensorType, is_vision_available, logging
 # TODO: update copied from statements
 
 logger = logging.get_logger(__name__)
-
-
-if is_vision_available():
-    import PIL
-    from PIL import Image
 
 
 def get_all_number_factors(n: int) -> Set[int]:
@@ -64,11 +56,11 @@ def get_all_number_factors(n: int) -> Set[int]:
     return factors
 
 
-def find_supported_aspect_ratios(num_chunks: int) -> Dict[float, List[Tuple[int, int]]]:
+def find_supported_aspect_ratios(num_tiles: int) -> Dict[float, List[Tuple[int, int]]]:
     """
     This function computes all the allowed aspect ratios for a fixed
-    number of input chunks.
-    For example, with `num_chunks=5`, it will return:
+    number of input tiles.
+    For example, with `num_tiles=5`, it will return:
     {
         0.2: [(1, 5)],
         5.0: [(5, 1)],
@@ -82,9 +74,9 @@ def find_supported_aspect_ratios(num_chunks: int) -> Dict[float, List[Tuple[int,
     }
     """
     asp_dict = {}
-    for chunk_size in range(num_chunks, 0, -1):
-        _factors = sorted(get_all_number_factors(chunk_size))
-        _asp_ratios = [(x, chunk_size // x) for x in _factors]
+    for tile_size in range(num_tiles, 0, -1):
+        _factors = sorted(get_all_number_factors(tile_size))
+        _asp_ratios = [(x, tile_size // x) for x in _factors]
         for ratio in _asp_ratios:
             k = ratio[0] / ratio[1]
             if k not in asp_dict:
@@ -94,17 +86,17 @@ def find_supported_aspect_ratios(num_chunks: int) -> Dict[float, List[Tuple[int,
     return asp_dict
 
 
-def find_closest_aspect_ratio(num_chunks: int, img_width: int, img_height: int, patch_size: int) -> Tuple:
+def find_closest_aspect_ratio(num_tiles: int, img_width: int, img_height: int, tile_size: int) -> Tuple:
     """
-    Given an image width, height and target number of chunks
+    Given an image width, height and target number of tiles
     this function will find the closest supported aspect ratio.
 
     Args:
-        patch_size: patch size
+        tile_size: tile size
 
     """
     tgt_ar = img_width / img_height
-    asp_dict = find_supported_aspect_ratios(num_chunks)
+    asp_dict = find_supported_aspect_ratios(num_tiles)
     cl_d, cl_p = 1e23, None
     if tgt_ar >= 1:
         cl_p = min(
@@ -113,7 +105,7 @@ def find_closest_aspect_ratio(num_chunks: int, img_width: int, img_height: int, 
         )
         v = asp_dict[cl_p]
         # select width
-        widths = [(idx, patch_size * vv[0]) for idx, vv in enumerate(v)]
+        widths = [(idx, tile_size * vv[0]) for idx, vv in enumerate(v)]
         tgt_idx = max(widths, key=lambda x: x[1])[0]
     else:
         cl_p = min(
@@ -122,7 +114,7 @@ def find_closest_aspect_ratio(num_chunks: int, img_width: int, img_height: int, 
         )
         v = asp_dict[cl_p]
         # select height
-        heights = [(idx, patch_size * vv[1]) for idx, vv in enumerate(v)]
+        heights = [(idx, tile_size * vv[1]) for idx, vv in enumerate(v)]
         tgt_idx = max(heights, key=lambda x: x[1])[0]
     out = v[tgt_idx]
     return out
@@ -131,17 +123,17 @@ def find_closest_aspect_ratio(num_chunks: int, img_width: int, img_height: int, 
 def get_size_for_image_fitted_to_canvas(
     image_height: int,
     image_width: int,
-    patch_size: int,
+    tile_size: int,
 ):
     scale = image_width / image_height
 
     if scale > 1.0:
         # width > height
-        new_w = max(patch_size, image_width)
+        new_w = max(tile_size, image_width)
         new_h = math.floor(new_w / scale)
     else:
         # height >= width
-        new_h = max(patch_size, image_height)
+        new_h = max(tile_size, image_height)
         new_w = math.floor(new_h * scale)
 
     return new_h, new_w
@@ -170,14 +162,14 @@ def get_size_for_image_not_fitted_to_canvas(
 def get_target_image_size_and_aspect_ratio(
     image_height: int,
     image_width: int,
-    max_image_splits: int,
-    patch_size: int,
+    max_image_tiles: int,
+    tile_size: int,
 ):
     aspect_ratio = fit_image_to_canvas(
-        num_chunks=max_image_splits,
+        num_tiles=max_image_tiles,
         img_width=image_width,
         img_height=image_height,
-        patch_size=patch_size,
+        tile_size=tile_size,
     )
     is_fit_to_canvas = aspect_ratio is not None
 
@@ -185,19 +177,19 @@ def get_target_image_size_and_aspect_ratio(
         size = get_size_for_image_fitted_to_canvas(
             image_height=image_height,
             image_width=image_width,
-            patch_size=patch_size,
+            tile_size=tile_size,
         )
 
     # If we did not find a canvas, we have to find the closest aspect ratio and downsample the image
     else:
         aspect_ratio = find_closest_aspect_ratio(
-            num_chunks=max_image_splits,
+            num_tiles=max_image_tiles,
             img_width=image_width,
             img_height=image_height,
-            patch_size=patch_size,
+            tile_size=tile_size,
         )
-        canvas_width = aspect_ratio[0] * patch_size
-        canvas_height = aspect_ratio[1] * patch_size
+        canvas_width = aspect_ratio[0] * tile_size
+        canvas_height = aspect_ratio[1] * tile_size
         size = get_size_for_image_not_fitted_to_canvas(
             image_height=image_height,
             image_width=image_width,
@@ -255,7 +247,19 @@ def validate_size(size: Dict[str, int]) -> None:
         raise ValueError(f"Argument `size` must have the same height and width, got {size}")
 
 
-def split(image: np.ndarray, ncw: int, nch: int) -> np.ndarray:
+def validate_mllama_preprocess_arguments(do_resize, size, do_pad, max_image_tiles):
+    if not do_pad:
+        raise ValueError("MllamaImageProcessor doesn't support `do_pad=False` mode.")
+    if not do_resize:
+        raise ValueError("MllamaImageProcessor doesn't support `do_resize=False` mode.")
+    if max_image_tiles is None or max_image_tiles <= 0:
+        raise ValueError(
+            f"MllamaImageProcessor `max_image_tiles` must be a positive integer, got {max_image_tiles}."
+        )
+    validate_size(size)
+
+
+def split_to_tiles(image: np.ndarray, ncw: int, nch: int) -> np.ndarray:
     # Split image into number of required tiles (width x height)
     num_channels, height, width = image.shape
     image = image.reshape(num_channels, nch, height // nch, ncw, width // ncw)
@@ -268,9 +272,9 @@ def split(image: np.ndarray, ncw: int, nch: int) -> np.ndarray:
     return image
 
 
-def fit_image_to_canvas(num_chunks: int, img_width: int, img_height: int, patch_size: int) -> Any:
+def fit_image_to_canvas(num_tiles: int, img_width: int, img_height: int, tile_size: int) -> Any:
     """
-    Given an image width, height and target number of chunks this function will see if the image
+    Given an image width, height and target number of tiles this function will see if the image
     can be fit into any of the canvases that can be build from arranging the tiles in a grid.
     If the image can be fit onto several canvases, it will return the canvas where the shorter edge
     of the image will be largest.
@@ -280,13 +284,13 @@ def fit_image_to_canvas(num_chunks: int, img_width: int, img_height: int, patch_
 
     # Gather all potential supported image resolutions and iterate through them to find best match
     potential_arrangements = [
-        item for sublist in find_supported_aspect_ratios(num_chunks).values() for item in sublist
+        item for sublist in find_supported_aspect_ratios(num_tiles).values() for item in sublist
     ]
 
     current_gap = 1e23
     for n_w, n_h in potential_arrangements:
         # Compute the canvas size
-        canvas_width, canvas_height = n_w * patch_size, n_h * patch_size
+        canvas_width, canvas_height = n_w * tile_size, n_h * tile_size
 
         # Check if image can fit into the canvas without downsampling
         if canvas_width >= img_width and canvas_height >= img_height:
@@ -296,7 +300,7 @@ def fit_image_to_canvas(num_chunks: int, img_width: int, img_height: int, patch_
                 optimal_canvas = (n_w, n_h)
             else:
                 # Find closest fit based on gap
-                image_width_height = (n_w * patch_size, n_h * patch_size)
+                image_width_height = (n_w * tile_size, n_h * tile_size)
                 gap = abs(img_width - image_width_height[0]) + abs(img_height - image_width_height[1])
                 if gap < current_gap:
                     # If the gap is smaller than the previous one, we will update our optimal canvas and image width height
@@ -307,41 +311,41 @@ def fit_image_to_canvas(num_chunks: int, img_width: int, img_height: int, patch_
 
 def stack_images(
     batch_images: List[List[np.ndarray]],
-    max_image_splits: int,
+    max_image_tiles: int,
 ) -> Tuple[np.ndarray, List[List[int]]]:
     # for each sample in a batch we have a list of images, and
-    # each image is splitted into num_patches patches. So, the image is represented as array
-    # of shape (num_patches, channels, patch_height, patch_width), while the whole batch is
-    # of shape (batch_size, num_images, num_patches, channels, patch_height, patch_width)
+    # each image is split into num_tiles tiles. So, the image is represented as array
+    # of shape (num_tiles, channels, tile_height, tile_width), while the whole batch is
+    # of shape (batch_size, num_images, num_tiles, channels, tile_height, tile_width)
 
     # TODO: in original code there is also max_images = max(max_images, 1)
     max_num_images = max([len(images) for images in batch_images])
 
     # collect shapes
     shapes = [image.shape for images in batch_images for image in images]
-    _, channels, patch_height, patch_width = np.array(shapes).max(axis=0)
+    _, channels, tile_height, tile_width = np.array(shapes).max(axis=0)
 
-    out_images, out_num_patches = [], []
+    out_images, out_num_tiles = [], []
     for images in batch_images:
         out_images_i = np.zeros(
             shape=(
                 max_num_images,
-                max_image_splits,
+                max_image_tiles,
                 channels,
-                patch_height,
-                patch_width,
+                tile_height,
+                tile_width,
             ),
             dtype=np.float32,
         )
-        num_patches_i = []
+        num_tiles_i = []
         for j, image in enumerate(images):
-            num_patches = image.shape[0]
-            out_images_i[j, :num_patches] = image
-            num_patches_i.append(num_patches)
+            num_tiles = image.shape[0]
+            out_images_i[j, :num_tiles] = image
+            num_tiles_i.append(num_tiles)
         out_images.append(out_images_i)
-        out_num_patches.append(num_patches_i)
+        out_num_tiles.append(num_tiles_i)
 
-    return np.stack(out_images), out_num_patches
+    return np.stack(out_images), out_num_tiles
 
 
 def stack_aspect_ratios(aspect_ratios: List[List[Tuple[int, int]]], pad_value: int = 1) -> np.ndarray:
@@ -407,11 +411,10 @@ def make_list_of_images(images: ImageInput) -> List[List[Optional[np.ndarray]]]:
 
 
 class MllamaImageProcessor(BaseImageProcessor):
-    model_input_names = ["pixel_values", "num_patches", "aspect_ratios"]
+    model_input_names = ["pixel_values", "num_tiles", "aspect_ratios"]
 
     def __init__(
         self,
-        do_convert_rgb: bool = True,
         do_resize: bool = True,
         size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
@@ -421,12 +424,10 @@ class MllamaImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_pad: bool = True,
-        do_image_splitting: bool = False,
-        max_image_splits: int = 4,
+        max_image_tiles: int = 4,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
-        self.do_convert_rgb = do_convert_rgb
         self.do_resize = do_resize
         self.size = size if size is not None else {"height": 224, "width": 224}
         self.resample = resample
@@ -436,13 +437,15 @@ class MllamaImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self.do_pad = do_pad
-        self.do_image_splitting = do_image_splitting
-        self.max_image_splits = max_image_splits
+        self.max_image_tiles = max_image_tiles
+
+        validate_mllama_preprocess_arguments(
+            self.do_resize, self.size, self.do_pad, self.max_image_tiles
+        )
 
     def preprocess(
         self,
         images: ImageInput,
-        do_convert_rgb: Optional[bool] = None,
         do_resize: Optional[bool] = None,
         size: Optional[Dict[str, int]] = None,
         resample: Optional[PILImageResampling] = None,
@@ -452,8 +455,7 @@ class MllamaImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_pad: Optional[bool] = None,
-        do_image_splitting: Optional[bool] = None,
-        max_image_splits: Optional[int] = None,
+        max_image_tiles: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         input_data_format: Optional[ChannelDimension] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
@@ -466,10 +468,8 @@ class MllamaImageProcessor(BaseImageProcessor):
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
-        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
         do_pad = do_pad if do_pad is not None else self.do_pad
-        do_image_splitting = do_image_splitting if do_image_splitting is not None else self.do_image_splitting
-        max_image_splits = max_image_splits if max_image_splits is not None else self.max_image_splits
+        max_image_tiles = max_image_tiles if max_image_tiles is not None else self.max_image_tiles
 
         validate_preprocess_arguments(
             do_rescale=do_rescale,
@@ -482,47 +482,44 @@ class MllamaImageProcessor(BaseImageProcessor):
             resample=resample,
         )
 
-        # extra validation that size is square
-        validate_size(size)
-
-        if max_image_splits is None or max_image_splits <= 0:
-            raise ValueError("`max_image_splits` must be a positive integer.")
+        # extra validation
+        validate_mllama_preprocess_arguments(do_resize, size, do_pad, max_image_tiles)
 
         images_list = make_list_of_images(images)
         images_list = [[to_numpy_array(image) for image in images] for images in images_list]
 
-        if do_resize:
-            resized_images_and_aspect_ratios = [
-                [
-                    self.resize(
-                        image,
-                        size,
-                        resample=resample,
-                        data_format=data_format,
-                        input_data_format=input_data_format,
-                        max_image_splits=max_image_splits,
-                    )
-                    for image in images
-                ]
-                for images in images_list
+        # do_resize=False is not supported, validated
+        resized_images_and_aspect_ratios = [
+            [
+                self.resize(
+                    image,
+                    size,
+                    resample=resample,
+                    data_format=data_format,
+                    input_data_format=input_data_format,
+                    max_image_tiles=max_image_tiles,
+                )
+                for image in images
             ]
-            images_list = [[image for image, ratio in images] for images in resized_images_and_aspect_ratios]
-            aspect_ratio_list = [[ratio for image, ratio in images] for images in resized_images_and_aspect_ratios]
+            for images in images_list
+        ]
+        images_list = [[image for image, ratio in images] for images in resized_images_and_aspect_ratios]
+        aspect_ratio_list = [[ratio for image, ratio in images] for images in resized_images_and_aspect_ratios]
 
-        if do_pad:
-            images_list = [
-                [
-                    self.pad(
-                        image,
-                        size,
-                        aspect_ratio,
-                        data_format=data_format,
-                        input_data_format=input_data_format,
-                    )
-                    for image, aspect_ratio in zip(images, aspect_ratios)
-                ]
-                for images, aspect_ratios in zip(images_list, aspect_ratio_list)
+        # do_pad=False is not supported, validated
+        images_list = [
+            [
+                self.pad(
+                    image,
+                    size,
+                    aspect_ratio,
+                    data_format=data_format,
+                    input_data_format=input_data_format,
+                )
+                for image, aspect_ratio in zip(images, aspect_ratios)
             ]
+            for images, aspect_ratios in zip(images_list, aspect_ratio_list)
+        ]
 
         if do_rescale:
             images_list = [
@@ -542,33 +539,24 @@ class MllamaImageProcessor(BaseImageProcessor):
                 [self.normalize(image, mean=image_mean, std=image_std) for image in images] for images in images_list
             ]
 
-        if data_format is not None:
-            images_list = [
-                [
-                    to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
-                    for image in images
-                ]
-                for images in images_list
-            ]
+        # Split each image to tiles
+        images_list = [
+            [split_to_tiles(image, aspect_ratio[0], aspect_ratio[1]) for image, aspect_ratio in zip(images, aspect_ratios)]
+            for images, aspect_ratios in zip(images_list, aspect_ratio_list)
+        ]
 
-        if do_image_splitting:
-            images_list = [
-                [split(image, aspect_ratio[0], aspect_ratio[1]) for image, aspect_ratio in zip(images, aspect_ratios)]
-                for images, aspect_ratios in zip(images_list, aspect_ratio_list)
-            ]
-
-        images, num_patches = stack_images(images_list, max_image_splits)
+        images, num_tiles = stack_images(images_list, max_image_tiles)
         aspect_ratios = stack_aspect_ratios(aspect_ratio_list, pad_value=1)
 
-        # images: (batch_size, num_images, MAX_num_patches, channels, patch_height, patch_width) - padded to max num patches
+        # images: (batch_size, num_images, MAX_num_tiles, channels, tile_height, tile_width) - padded to max num tiles
         # aspect_ratios: (batch_size, num_images, 2) - aspect ratios for each image, padded to max num images
-        # num_patches: (batch_size, num_images)  - real num patches for each image
+        # num_tiles: (batch_size, num_images)  - real number of tiles for each image
 
         encoded_inputs = BatchFeature(
             data=dict(pixel_values=images, aspect_ratios=aspect_ratios),
             tensor_type=return_tensors,
         )
-        encoded_inputs["num_patches"] = num_patches
+        encoded_inputs["num_tiles"] = num_tiles
 
         return encoded_inputs
 
@@ -622,7 +610,7 @@ class MllamaImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         size: Dict[str, int],
-        max_image_splits: int,
+        max_image_tiles: int,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -651,8 +639,8 @@ class MllamaImageProcessor(BaseImageProcessor):
         (new_height, new_width), aspect_ratio = get_target_image_size_and_aspect_ratio(
             image_height=image_height,
             image_width=image_width,
-            max_image_splits=max_image_splits,
-            patch_size=size["height"],
+            max_image_tiles=max_image_tiles,
+            tile_size=size["height"],
         )
 
         image = resize(

@@ -18,7 +18,7 @@ Processor class for Mllama.
 
 # TODO: update all docs
 
-from typing import List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 # TODO: uncomment
 # try:
@@ -43,8 +43,7 @@ from .image_processing_mllama import make_list_of_images
 
 
 class MllamaImagesKwargs(ImagesKwargs, total=False):
-    do_image_splitting: Optional[bool]
-    max_image_splits: Optional[int]
+    max_image_tiles: Optional[int]
 
 
 class MllamaProcessorKwargs(ProcessingKwargs, total=False):
@@ -52,8 +51,7 @@ class MllamaProcessorKwargs(ProcessingKwargs, total=False):
     
     _defaults = {
         "image_kwargs": {
-            "do_image_splitting": True,
-            "max_image_splits": 4,
+            "max_image_tiles": 4,
         },
     }
 
@@ -95,10 +93,11 @@ class MllamaProcessor(ProcessorMixin):
     tokenizer_class = "PreTrainedTokenizerFast"
 
     def __init__(self, image_processor, tokenizer):
-        self.vision_token = "<|image|>"
-        self.vision_token_id = tokenizer.convert_tokens_to_ids(self.vision_token)
+        self.image_token = "<|image|>"
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         self.python_token = "<|python_tag|>"
         self.python_token_id = tokenizer.convert_tokens_to_ids(self.python_token)
+        self.chat_template = tokenizer.chat_template
         super().__init__(image_processor, tokenizer)
 
     def __call__(
@@ -168,7 +167,7 @@ class MllamaProcessor(ProcessorMixin):
                 raise ValueError(
                     "Invalid input text. Please provide a string, or a list of strings"
                 )
-            n_images_in_text = [t.count(self.vision_token) for t in text]
+            n_images_in_text = [t.count(self.image_token) for t in text]
             encoding = self.tokenizer(text, **text_kwargs)
             data.update(encoding)
 
@@ -187,7 +186,7 @@ class MllamaProcessor(ProcessorMixin):
                 )
 
             image_features = self.image_processor(images, **images_kwargs)
-            not_tensor_data["num_patches"] = image_features.pop("num_patches")
+            not_tensor_data["num_tiles"] = image_features.pop("num_tiles")
             data.update(image_features)
 
         return_tensors = common_kwargs.pop("return_tensors", None)
@@ -227,16 +226,16 @@ class MllamaProcessor(ProcessorMixin):
         if tokens and isinstance(tokens[0], list):
             return [self.create_vision_mask(t) for t in tokens]
 
-        vision_token_locations = [i for i, token in enumerate(tokens) if token == self.vision_token_id]
-        if len(vision_token_locations) == 0:
+        image_token_locations = [i for i, token in enumerate(tokens) if token == self.image_token_id]
+        if len(image_token_locations) == 0:
             return []
 
         last_not_pad_token_id = max([i for i, token in enumerate(tokens) if token != self.tokenizer.pad_token_id])
 
-        vision_masks = [[loc1, loc2] for loc1, loc2 in zip(vision_token_locations[:-1], vision_token_locations[1:])]
+        vision_masks = [[loc1, loc2] for loc1, loc2 in zip(image_token_locations[:-1], image_token_locations[1:])]
 
         # last image will attend to all subsequent text
-        vision_masks.append([vision_token_locations[-1], last_not_pad_token_id + 1])
+        vision_masks.append([image_token_locations[-1], last_not_pad_token_id + 1])
 
         # if there are two or more consecutive vision tokens,
         # they should all attend to all subsequent

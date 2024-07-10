@@ -665,7 +665,7 @@ def write_image_processor(config_path: str, save_dir: str):
     params = read_json(config_path)
 
     patch_size = params["vision_chunk_size"]
-    max_image_splits = params["vision_max_num_chunks"]
+    max_image_tiles = params["vision_max_num_chunks"]
 
     image_processor = MllamaImageProcessor(
         do_resize=True,
@@ -676,8 +676,7 @@ def write_image_processor(config_path: str, save_dir: str):
         image_mean=[0.48145466, 0.4578275, 0.40821073],
         image_std=[0.26862954, 0.26130258, 0.27577711],
         do_pad=True,
-        do_image_splitting=True,
-        max_image_splits=max_image_splits,
+        max_image_tiles=max_image_tiles,
     )
 
     image_processor.save_pretrained(save_dir)
