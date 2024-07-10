@@ -195,7 +195,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         >>> clip = read_video_pyav(container, indices)
 
         >>> prompt = "What is happening in the video?"
-        >>> inputs = processor(text=prompt, images=clip, return_tensors="pt").to(device)
+        >>> inputs = processor(text=prompt, images=clip, return_tensors="pt").to(model.device)
 
         >>> outputs = model.generate(
         ...     **inputs,
