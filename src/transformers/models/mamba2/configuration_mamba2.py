@@ -258,7 +258,7 @@ class Mamba2Config(PretrainedConfig):
 
         if not isinstance(self.attention_layers_idx, List[int]):
             raise ValueError(
-                "`attention_layers_idx` must be a list with integers indicating the attention layers, " f"got {self.attention_layers_idx}"
+                "`attention_layers_idx` must be a list of integers indicating the attention layers, " f"got {self.attention_layers_idx}"
             )
 
         if min(self.attention_layers_idx) < 0 or max(self.attention_layers_idx) >= self.num_hidden_layers:
