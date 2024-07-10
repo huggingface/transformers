@@ -720,20 +720,11 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix, keep_in
             for key, value in state_dict.items()
         }
         # Finally we need to check if the params are the right dtype in the state dict
-        old_param = model_to_load
+        model_precision = next(iter(model_to_load.parameters())).dtype
         for param_name, param in state_dict.items():
-            splits = param_name.split(".")
-            old_param = model_to_load
-            for split in splits:
-                old_param = getattr(old_param, split)
-                if old_param is None:
-                    break
-            if old_param is not None:
-                if old_param.dtype != param.dtype:
-                    param = param.to(old_param.dtype)
-                if old_param.is_contiguous() and not param.is_contiguous():
-                    param = param.contiguous()
-                state_dict[param_name] = param
+            if model_precision != param.dtype:
+                param = param.to(model_precision)
+            state_dict[param_name] = param
 
         # By passing in `assign=True`, we can be memory efficient by mapping the tensors directly, using only 1x
         # the memory of the original state_dict instead of 2.
