@@ -60,6 +60,7 @@ class GenerationMode(ExplicitEnum):
     GREEDY_SEARCH = "greedy_search"
     SAMPLE = "sample"
     ASSISTED_GENERATION = "assisted_generation"
+    DOLA_GENERATION = "dola_generation"
     # Beam methods
     BEAM_SEARCH = "beam_search"
     BEAM_SAMPLE = "beam_sample"
@@ -81,6 +82,7 @@ class GenerationConfig(PushToHubMixin):
         - *diverse beam-search decoding* if `num_beams>1` and `num_beam_groups>1`
         - *constrained beam-search decoding* if `constraints!=None` or `force_words_ids!=None`
         - *assisted decoding* if `assistant_model` or `prompt_lookup_num_tokens` is passed to `.generate()`
+        - *dola decoding* if `dola_layers` is passed to `.generate()`
 
     To learn more about decoding strategies refer to the [text generation strategies guide](../generation_strategies).
 
@@ -305,6 +307,18 @@ class GenerationConfig(PushToHubMixin):
         max_matching_ngram_size (`int`, *optional*, default to `None`):
             The maximum ngram size to be considered for matching in the prompt. Default to 2 if not provided.
 
+        > Generation parameters exclusive to [DoLa decoding](https://arxiv.org/abs/2309.03883)
+
+        dola_layers (`str` or `List[int]`, *optional*):
+            The layers to use for DoLa decoding. If `None`, DoLa decoding is not used. If a string, it must
+            be one of "low" or "high", which means using the lower part or higher part of the model layers, respectively.
+            "low" means the first half of the layers up to the first 20 layers, and "high" means the last half of the
+            layers up to the last 20 layers.
+            If a list of integers, it must contain the indices of the layers to use for candidate premature layers in DoLa.
+            The 0-th layer is the word embedding layer of the model. Set to `'low'` to improve long-answer reasoning tasks,
+            `'high'` to improve short-answer tasks. Check the [documentation](https://github.com/huggingface/transformers/blob/main/docs/source/en/generation_strategies.md)
+            or [the paper](https://arxiv.org/abs/2309.03883) for more details.
+
         > Parameters specific to the caching mechanism:
 
         cache_implementation (`str`, *optional*, default to `None`):
@@ -396,6 +410,9 @@ class GenerationConfig(PushToHubMixin):
         # Assistant generation
         self.num_assistant_tokens = kwargs.pop("num_assistant_tokens", 5)
         self.num_assistant_tokens_schedule = kwargs.pop("num_assistant_tokens_schedule", "heuristic")
+
+        # DoLa generation
+        self.dola_layers = kwargs.pop("dola_layers", None)
 
         # Cache implementation
         self.cache_implementation = kwargs.pop("cache_implementation", None)
@@ -493,6 +510,16 @@ class GenerationConfig(PushToHubMixin):
             else:
                 raise ValueError(
                     "You've set `assistant_model`, which triggers assisted generate. Currently, assisted generate "
+                    "is only supported with Greedy Search and Sample."
+                )
+
+        # DoLa generation may extend some generation modes
+        if self.dola_layers is not None:
+            if generation_mode in ("greedy_search", "sample"):
+                generation_mode = GenerationMode.DOLA_GENERATION
+            else:
+                raise ValueError(
+                    "You've set `dola_layers`, which triggers DoLa generate. Currently, DoLa generate "
                     "is only supported with Greedy Search and Sample."
                 )
         return generation_mode
@@ -699,6 +726,17 @@ class GenerationConfig(PushToHubMixin):
                     f"Argument `{arg}` is not a valid argument of `GenerationConfig`. It should be passed to "
                     "`generate()` (or a pipeline) directly."
                 )
+
+        # 6. if dola_layers is set, check if repetition_penalty is set to >= 1.2
+        if self.dola_layers is not None and (self.repetition_penalty is None or self.repetition_penalty < 1.2):
+            dola_decoding_wrong_parameter_msg = (
+                "`dola_layers` is set to trigger DoLa decoding, but `repetition_penalty` is set to a value of {repetition_penalty}, "
+                "which could induce unwanted repetition. The recommended value for DoLa decoding is `repetition_penalty>=1.2`."
+            )
+            warnings.warn(
+                dola_decoding_wrong_parameter_msg.format(repetition_penalty=self.repetition_penalty),
+                UserWarning,
+            )
 
     def save_pretrained(
         self,
