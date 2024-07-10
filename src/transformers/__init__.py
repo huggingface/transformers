@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.42.0.dev0"
+__version__ = "4.43.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -435,6 +435,7 @@ _import_structure = {
     ],
     "models.fuyu": ["FuyuConfig"],
     "models.gemma": ["GemmaConfig"],
+    "models.gemma2": ["Gemma2Config"],
     "models.git": [
         "GitConfig",
         "GitProcessor",
@@ -473,6 +474,12 @@ _import_structure = {
         "InstructBlipQFormerConfig",
         "InstructBlipVisionConfig",
     ],
+    "models.instructblipvideo": [
+        "InstructBlipVideoConfig",
+        "InstructBlipVideoProcessor",
+        "InstructBlipVideoQFormerConfig",
+        "InstructBlipVideoVisionConfig",
+    ],
     "models.jamba": ["JambaConfig"],
     "models.jetmoe": ["JetMoeConfig"],
     "models.kosmos2": [
@@ -509,6 +516,10 @@ _import_structure = {
     "models.llava_next": [
         "LlavaNextConfig",
         "LlavaNextProcessor",
+    ],
+    "models.llava_next_video": [
+        "LlavaNextVideoConfig",
+        "LlavaNextVideoProcessor",
     ],
     "models.longformer": [
         "LongformerConfig",
@@ -654,6 +665,7 @@ _import_structure = {
         "RoFormerConfig",
         "RoFormerTokenizer",
     ],
+    "models.rt_detr": ["RTDetrConfig", "RTDetrResNetConfig"],
     "models.rwkv": ["RwkvConfig"],
     "models.sam": [
         "SamConfig",
@@ -795,6 +807,7 @@ _import_structure = {
     "models.xmod": ["XmodConfig"],
     "models.yolos": ["YolosConfig"],
     "models.yoso": ["YosoConfig"],
+    "models.zoedepth": ["ZoeDepthConfig"],
     "onnx": [],
     "pipelines": [
         "AudioClassificationPipeline",
@@ -1136,10 +1149,12 @@ else:
     _import_structure["models.idefics"].extend(["IdeficsImageProcessor"])
     _import_structure["models.idefics2"].extend(["Idefics2ImageProcessor"])
     _import_structure["models.imagegpt"].extend(["ImageGPTFeatureExtractor", "ImageGPTImageProcessor"])
+    _import_structure["models.instructblipvideo"].extend(["InstructBlipVideoImageProcessor"])
     _import_structure["models.layoutlmv2"].extend(["LayoutLMv2FeatureExtractor", "LayoutLMv2ImageProcessor"])
     _import_structure["models.layoutlmv3"].extend(["LayoutLMv3FeatureExtractor", "LayoutLMv3ImageProcessor"])
     _import_structure["models.levit"].extend(["LevitFeatureExtractor", "LevitImageProcessor"])
     _import_structure["models.llava_next"].append("LlavaNextImageProcessor")
+    _import_structure["models.llava_next_video"].append("LlavaNextVideoImageProcessor")
     _import_structure["models.mask2former"].append("Mask2FormerImageProcessor")
     _import_structure["models.maskformer"].extend(["MaskFormerFeatureExtractor", "MaskFormerImageProcessor"])
     _import_structure["models.mobilenet_v1"].extend(["MobileNetV1FeatureExtractor", "MobileNetV1ImageProcessor"])
@@ -1153,6 +1168,7 @@ else:
     _import_structure["models.pix2struct"].extend(["Pix2StructImageProcessor"])
     _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
     _import_structure["models.pvt"].extend(["PvtImageProcessor"])
+    _import_structure["models.rt_detr"].extend(["RTDetrImageProcessor"])
     _import_structure["models.sam"].extend(["SamImageProcessor"])
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
     _import_structure["models.seggpt"].extend(["SegGptImageProcessor"])
@@ -1167,6 +1183,7 @@ else:
     _import_structure["models.vitmatte"].append("VitMatteImageProcessor")
     _import_structure["models.vivit"].append("VivitImageProcessor")
     _import_structure["models.yolos"].extend(["YolosFeatureExtractor", "YolosImageProcessor"])
+    _import_structure["models.zoedepth"].append("ZoeDepthImageProcessor")
 
 try:
     if not is_torchvision_available():
@@ -1197,6 +1214,7 @@ else:
         "Cache",
         "CacheConfig",
         "DynamicCache",
+        "EncoderDecoderCache",
         "HQQQuantizedCache",
         "QuantizedCache",
         "QuantizedCacheConfig",
@@ -2167,6 +2185,15 @@ else:
             "GemmaPreTrainedModel",
         ]
     )
+    _import_structure["models.gemma2"].extend(
+        [
+            "Gemma2ForCausalLM",
+            "Gemma2ForSequenceClassification",
+            "Gemma2ForTokenClassification",
+            "Gemma2Model",
+            "Gemma2PreTrainedModel",
+        ]
+    )
     _import_structure["models.git"].extend(
         [
             "GitForCausalLM",
@@ -2316,6 +2343,14 @@ else:
             "InstructBlipVisionModel",
         ]
     )
+    _import_structure["models.instructblipvideo"].extend(
+        [
+            "InstructBlipVideoForConditionalGeneration",
+            "InstructBlipVideoPreTrainedModel",
+            "InstructBlipVideoQFormerModel",
+            "InstructBlipVideoVisionModel",
+        ]
+    )
     _import_structure["models.jamba"].extend(
         [
             "JambaForCausalLM",
@@ -2413,6 +2448,12 @@ else:
         [
             "LlavaNextForConditionalGeneration",
             "LlavaNextPreTrainedModel",
+        ]
+    )
+    _import_structure["models.llava_next_video"].extend(
+        [
+            "LlavaNextVideoForConditionalGeneration",
+            "LlavaNextVideoPreTrainedModel",
         ]
     )
     _import_structure["models.longformer"].extend(
@@ -3004,6 +3045,15 @@ else:
             "load_tf_weights_in_roformer",
         ]
     )
+    _import_structure["models.rt_detr"].extend(
+        [
+            "RTDetrForObjectDetection",
+            "RTDetrModel",
+            "RTDetrPreTrainedModel",
+            "RTDetrResNetBackbone",
+            "RTDetrResNetPreTrainedModel",
+        ]
+    )
     _import_structure["models.rwkv"].extend(
         [
             "RwkvForCausalLM",
@@ -3536,6 +3586,12 @@ else:
             "YosoLayer",
             "YosoModel",
             "YosoPreTrainedModel",
+        ]
+    )
+    _import_structure["models.zoedepth"].extend(
+        [
+            "ZoeDepthForDepthEstimation",
+            "ZoeDepthPreTrainedModel",
         ]
     )
     _import_structure["optimization"] = [
@@ -5025,6 +5081,7 @@ if TYPE_CHECKING:
     )
     from .models.fuyu import FuyuConfig
     from .models.gemma import GemmaConfig
+    from .models.gemma2 import Gemma2Config
     from .models.git import (
         GitConfig,
         GitProcessor,
@@ -5068,6 +5125,12 @@ if TYPE_CHECKING:
         InstructBlipQFormerConfig,
         InstructBlipVisionConfig,
     )
+    from .models.instructblipvideo import (
+        InstructBlipVideoConfig,
+        InstructBlipVideoProcessor,
+        InstructBlipVideoQFormerConfig,
+        InstructBlipVideoVisionConfig,
+    )
     from .models.jamba import JambaConfig
     from .models.jetmoe import JetMoeConfig
     from .models.kosmos2 import (
@@ -5104,6 +5167,10 @@ if TYPE_CHECKING:
     from .models.llava_next import (
         LlavaNextConfig,
         LlavaNextProcessor,
+    )
+    from .models.llava_next_video import (
+        LlavaNextVideoConfig,
+        LlavaNextVideoProcessor,
     )
     from .models.longformer import (
         LongformerConfig,
@@ -5270,6 +5337,10 @@ if TYPE_CHECKING:
         RoFormerConfig,
         RoFormerTokenizer,
     )
+    from .models.rt_detr import (
+        RTDetrConfig,
+        RTDetrResNetConfig,
+    )
     from .models.rwkv import RwkvConfig
     from .models.sam import (
         SamConfig,
@@ -5434,6 +5505,7 @@ if TYPE_CHECKING:
     from .models.xmod import XmodConfig
     from .models.yolos import YolosConfig
     from .models.yoso import YosoConfig
+    from .models.zoedepth import ZoeDepthConfig
 
     # Pipelines
     from .pipelines import (
@@ -5757,6 +5829,7 @@ if TYPE_CHECKING:
         from .models.idefics import IdeficsImageProcessor
         from .models.idefics2 import Idefics2ImageProcessor
         from .models.imagegpt import ImageGPTFeatureExtractor, ImageGPTImageProcessor
+        from .models.instructblipvideo import InstructBlipVideoImageProcessor
         from .models.layoutlmv2 import (
             LayoutLMv2FeatureExtractor,
             LayoutLMv2ImageProcessor,
@@ -5767,6 +5840,7 @@ if TYPE_CHECKING:
         )
         from .models.levit import LevitFeatureExtractor, LevitImageProcessor
         from .models.llava_next import LlavaNextImageProcessor
+        from .models.llava_next_video import LlavaNextVideoImageProcessor
         from .models.mask2former import Mask2FormerImageProcessor
         from .models.maskformer import (
             MaskFormerFeatureExtractor,
@@ -5792,6 +5866,7 @@ if TYPE_CHECKING:
             PoolFormerImageProcessor,
         )
         from .models.pvt import PvtImageProcessor
+        from .models.rt_detr import RTDetrImageProcessor
         from .models.sam import SamImageProcessor
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
         from .models.seggpt import SegGptImageProcessor
@@ -5806,6 +5881,7 @@ if TYPE_CHECKING:
         from .models.vitmatte import VitMatteImageProcessor
         from .models.vivit import VivitImageProcessor
         from .models.yolos import YolosFeatureExtractor, YolosImageProcessor
+        from .models.zoedepth import ZoeDepthImageProcessor
 
     try:
         if not is_torchvision_available():
@@ -5830,6 +5906,7 @@ if TYPE_CHECKING:
             Cache,
             CacheConfig,
             DynamicCache,
+            EncoderDecoderCache,
             HQQQuantizedCache,
             QuantizedCache,
             QuantizedCacheConfig,
@@ -6640,6 +6717,13 @@ if TYPE_CHECKING:
             GemmaModel,
             GemmaPreTrainedModel,
         )
+        from .models.gemma2 import (
+            Gemma2ForCausalLM,
+            Gemma2ForSequenceClassification,
+            Gemma2ForTokenClassification,
+            Gemma2Model,
+            Gemma2PreTrainedModel,
+        )
         from .models.git import (
             GitForCausalLM,
             GitModel,
@@ -6755,6 +6839,12 @@ if TYPE_CHECKING:
             InstructBlipQFormerModel,
             InstructBlipVisionModel,
         )
+        from .models.instructblipvideo import (
+            InstructBlipVideoForConditionalGeneration,
+            InstructBlipVideoPreTrainedModel,
+            InstructBlipVideoQFormerModel,
+            InstructBlipVideoVisionModel,
+        )
         from .models.jamba import (
             JambaForCausalLM,
             JambaForSequenceClassification,
@@ -6829,6 +6919,10 @@ if TYPE_CHECKING:
         from .models.llava_next import (
             LlavaNextForConditionalGeneration,
             LlavaNextPreTrainedModel,
+        )
+        from .models.llava_next_video import (
+            LlavaNextVideoForConditionalGeneration,
+            LlavaNextVideoPreTrainedModel,
         )
         from .models.longformer import (
             LongformerForMaskedLM,
@@ -7295,6 +7389,13 @@ if TYPE_CHECKING:
             RoFormerPreTrainedModel,
             load_tf_weights_in_roformer,
         )
+        from .models.rt_detr import (
+            RTDetrForObjectDetection,
+            RTDetrModel,
+            RTDetrPreTrainedModel,
+            RTDetrResNetBackbone,
+            RTDetrResNetPreTrainedModel,
+        )
         from .models.rwkv import (
             RwkvForCausalLM,
             RwkvModel,
@@ -7706,6 +7807,10 @@ if TYPE_CHECKING:
             YosoLayer,
             YosoModel,
             YosoPreTrainedModel,
+        )
+        from .models.zoedepth import (
+            ZoeDepthForDepthEstimation,
+            ZoeDepthPreTrainedModel,
         )
 
         # Optimization

@@ -65,11 +65,11 @@ class RoFormerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         exp_tokens = [22943, 21332, 34431, 45904, 117, 306, 1231, 1231, 2653, 33994, 1266, 100]
         self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), exp_tokens)
 
-    # can't train new_tokenizer via Tokenizers lib
+    @unittest.skip(reason="Cannot train new tokenizer via Tokenizers lib")
     def test_training_new_tokenizer(self):
         pass
 
-    # can't train new_tokenizer via Tokenizers lib
+    @unittest.skip(reason="Cannot train new tokenizer via Tokenizers lib")
     def test_training_new_tokenizer_with_special_tokens_change(self):
         pass
 
