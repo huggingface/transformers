@@ -214,7 +214,7 @@ class TrainerCallbackTest(unittest.TestCase):
         expected_callbacks.insert(0, DefaultFlowCallback)
         self.check_callbacks_equality(trainer.callback_handler.callbacks, expected_callbacks)
 
-    def test_event_flow(self):
+    def test_0_event_flow(self):
         import warnings
 
         # XXX: for now ignore scatter_gather warnings in this test since it's not relevant to what's being tested
