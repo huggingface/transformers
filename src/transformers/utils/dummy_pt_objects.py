@@ -2301,13 +2301,6 @@ class DABDETRForObjectDetection(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class DABDETRForSegmentation(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class DABDETRModel(metaclass=DummyObject):
     _backends = ["torch"]
 

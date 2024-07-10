@@ -1727,7 +1727,6 @@ else:
     _import_structure["models.dab_detr"].extend(
         [
             "DABDETRForObjectDetection",
-            "DABDETRForSegmentation",
             "DABDETRModel",
             "DABDETRPreTrainedModel",
         ]
@@ -6352,7 +6351,6 @@ if TYPE_CHECKING:
         )
         from .models.dab_detr import (
             DABDETRForObjectDetection,
-            DABDETRForSegmentation,
             DABDETRModel,
             DABDETRPreTrainedModel,
         )

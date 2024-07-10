@@ -27,7 +27,6 @@ from PIL import Image
 from transformers import (
     DABDETRConfig,
     DABDETRForObjectDetection,
-    DABDETRForSegmentation,
     DABDETRImageProcessor,
 )
 from transformers.utils import logging
@@ -306,7 +305,7 @@ def convert_dab_detr_checkpoint(model_name, pytorch_dump_folder_path):
     )
     expected_slice_boxes = torch.tensor([[0.3708, 0.3000, 0.2753], [0.5211, 0.6125, 0.9495], [0.2897, 0.6730, 0.5459]])
     # finally, create HuggingFace model and load state dict
-    model = DABDETRForSegmentation(config) if is_panoptic else DABDETRForObjectDetection(config)
+    model = DABDETRForObjectDetection(config)
     model.load_state_dict(state_dict)
     model.push_to_hub(repo_id=model_name, organization="davidhajdu", commit_message="Add model")
     model.eval()

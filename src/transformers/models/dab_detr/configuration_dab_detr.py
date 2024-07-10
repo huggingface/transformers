@@ -47,26 +47,34 @@ class DABDETRConfig(PretrainedConfig):
             case it will default to `ResNetConfig()`.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
-        num_queries (`int`, *optional*, defaults to 100):
+        num_queries (`int`, *optional*, defaults to 300):
             Number of object queries, i.e. detection slots. This is the maximal number of objects
             [`DABDETRModel`] can detect in a single image. For COCO, we recommend 100 queries.
-        d_model (`int`, *optional*, defaults to 256):
-            Dimension of the layers.
         encoder_layers (`int`, *optional*, defaults to 6):
             Number of encoder layers.
-        decoder_layers (`int`, *optional*, defaults to 6):
-            Number of decoder layers.
-        encoder_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        decoder_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer decoder.
-        decoder_ffn_dim (`int`, *optional*, defaults to 2048):
-            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
         encoder_ffn_dim (`int`, *optional*, defaults to 2048):
             Dimension of the "intermediate" (often named feed-forward) layer in decoder.
-        activation_function (`str` or `function`, *optional*, defaults to `"relu"`):
+        encoder_attention_heads (`int`, *optional*, defaults to 8):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        decoder_layers (`int`, *optional*, defaults to 6):
+            Number of decoder layers.
+        decoder_ffn_dim (`int`, *optional*, defaults to 2048):
+            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
+        decoder_attention_heads (`int`, *optional*, defaults to 8):
+            Number of attention heads for each attention layer in the Transformer decoder.
+        encoder_layerdrop (`float`, *optional*, defaults to 0.0):
+            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            for more details.
+        decoder_layerdrop (`float`, *optional*, defaults to 0.0):
+            The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            for more details.
+        is_encoder_decoder (`bool`, *optional*, defaults to `True`):
+            Indicates whether the transformer model architecture is an encoder-decoder or not.
+        activation_function (`str` or `function`, *optional*, defaults to `"prelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"silu"` and `"gelu_new"` are supported.
+        d_model (`int`, *optional*, defaults to 256):
+            Dimension of the layers.
         dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -75,14 +83,8 @@ class DABDETRConfig(PretrainedConfig):
             The dropout ratio for activations inside the fully connected layer.
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        init_xavier_std (`float`, *optional*, defaults to 1):
+        init_xavier_std (`float`, *optional*, defaults to 1.0):
             The scaling factor used for the Xavier initialization gain in the HM Attention map module.
-        encoder_layerdrop (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
-            for more details.
-        decoder_layerdrop (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
-            for more details.
         auxiliary_loss (`bool`, *optional*, defaults to `False`):
             Whether auxiliary decoding losses (loss at each decoder layer) are to be used.
         position_embedding_type (`str`, *optional*, defaults to `"sine"`):
@@ -99,32 +101,32 @@ class DABDETRConfig(PretrainedConfig):
         dilation (`bool`, *optional*, defaults to `False`):
             Whether to replace stride with dilation in the last convolutional block (DC5). Only supported when
             `use_timm_backbone` = `True`.
-        class_cost (`float`, *optional*, defaults to 1):
+        class_cost (`float`, *optional*, defaults to 2):
             Relative weight of the classification error in the Hungarian matching cost.
         bbox_cost (`float`, *optional*, defaults to 5):
             Relative weight of the L1 error of the bounding box coordinates in the Hungarian matching cost.
         giou_cost (`float`, *optional*, defaults to 2):
             Relative weight of the generalized IoU loss of the bounding box in the Hungarian matching cost.
-        mask_loss_coefficient (`float`, *optional*, defaults to 1):
+        mask_loss_coefficient (`int`, *optional*, defaults to 1):
             Relative weight of the Focal loss in the panoptic segmentation loss.
-        dice_loss_coefficient (`float`, *optional*, defaults to 1):
+        dice_loss_coefficient (`int`, *optional*, defaults to 1):
             Relative weight of the DICE/F-1 loss in the panoptic segmentation loss.
-        bbox_loss_coefficient (`float`, *optional*, defaults to 5):
+        cls_loss_coefficient (`int`, *optional*, defaults to 2): 
+            Relative weight of the classification loss in the object detection loss function.
+        bbox_loss_coefficient (`int`, *optional*, defaults to 5):
             Relative weight of the L1 bounding box loss in the object detection loss.
         giou_loss_coefficient (`float`, *optional*, defaults to 2):
             Relative weight of the generalized IoU loss in the object detection loss.
-        eos_coefficient (`float`, *optional*, defaults to 0.1):
-            Relative classification weight of the 'no-object' class in the object detection loss.
         focal_alpha (`float`, *optional*, defaults to 0.25):
             Alpha parameter in the focal loss.
-        remove_self_attn_decoder (`bool`, *optional*, defaults to `False`):
+        rm_self_attn_decoder (`bool`, *optional*, defaults to `False`):
             Whether to use self-attention module in decoder layers.
-        decoder_modulate_hw_attn  (`bool`, *optional*, defaults to `False`):
+        decoder_modulate_hw_attn (`bool`, *optional*, defaults to `True`):
             Whether to modulate the positional attention map using the box width and height information.
-        temperatureW (`int`, *optional*, defaults to 20):
-            Temperature parameter to tune the flatness of positional attention (WIDTH)
         temperatureH (`int`, *optional*, defaults to 20):
             Temperature parameter to tune the flatness of positional attention (HEIGHT)
+        temperatureW (`int`, *optional*, defaults to 20):
+            Temperature parameter to tune the flatness of positional attention (WIDTH)
         iter_update (`bool`, *optional*, defaults to `True`):
             Whether to use dynamic iterative anchor updates.
         query_dim (`int`, *optional*, defaults to 4):
@@ -139,7 +141,7 @@ class DABDETRConfig(PretrainedConfig):
             Whether to fix the x and y coordinates of the anchor boxes with random initialization.
         keep_query_pos (`bool`, *optional*, defaults to `False`):
             ####
-        query_scale_type (`str`, *optional*, defaults to `cond_elewise` Valid options: ['cond_elewise', 'cond_scalar', 'fix_elewise'])
+        query_scale_type (`str`, *optional*, defaults to `"cond_elewise"`):
             Scale type options:
                 # 'cond_elewise' - Conditional element-wise scaling using content information.
                 # 'cond_scalar' - Conditional scalar scaling using content information.
@@ -177,7 +179,6 @@ class DABDETRConfig(PretrainedConfig):
         use_timm_backbone=True,
         backbone_config=None,
         num_channels=3,
-        num_target_classes=91,
         num_queries=300,
         encoder_layers=6,
         encoder_ffn_dim=2048,
@@ -211,7 +212,7 @@ class DABDETRConfig(PretrainedConfig):
         giou_loss_coefficient=2,
         focal_alpha=0.25,
         ### TODO DAB DETR special parameters
-        remove_self_attn_decoder=False,
+        rm_self_attn_decoder=False,
         decoder_modulate_hw_attn=True,
         temperatureH=20,
         temperatureW=20,
@@ -293,7 +294,7 @@ class DABDETRConfig(PretrainedConfig):
         self.bbox_loss_coefficient = bbox_loss_coefficient
         self.giou_loss_coefficient = giou_loss_coefficient
         self.focal_alpha = focal_alpha
-        self.rm_self_attn_decoder = remove_self_attn_decoder
+        self.rm_self_attn_decoder = rm_self_attn_decoder
         self.query_dim = query_dim
         self.bbox_embed_diff_each_layer = bbox_embed_diff_each_layer
         self.random_refpoints_xy = random_refpoints_xy
@@ -304,7 +305,6 @@ class DABDETRConfig(PretrainedConfig):
         self.decoder_bbox_embed_diff_each_layer = decoder_bbox_embed_diff_each_layer
         self.num_patterns = num_patterns
         self.normalize_before = normalize_before
-        self.num_target_classes = num_target_classes
         self.iter_update = iter_update
         self.temperatureW = temperatureW
         self.temperatureH = temperatureH
