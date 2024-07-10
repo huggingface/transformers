@@ -301,7 +301,7 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def test_training(self):
         if not self.model_tester.is_training:
-            return
+            self.skipTest(reason="model_tester.is_training is set to False")
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
@@ -325,7 +325,7 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.model_tester.is_training:
-            return
+            self.skipTest(reason="model_tester.is_training is set to False")
 
         config.use_cache = False
         config.return_dict = True
@@ -484,7 +484,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
 
         image_processor = BeitImageProcessor(do_resize=True, size=640, do_center_crop=False)
 
-        ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+        ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test", trust_remote_code=True)
         image = Image.open(ds[0]["file"])
         inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
@@ -527,7 +527,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
 
         image_processor = BeitImageProcessor(do_resize=True, size=640, do_center_crop=False)
 
-        ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+        ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test", trust_remote_code=True)
         image = Image.open(ds[0]["file"])
         inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 

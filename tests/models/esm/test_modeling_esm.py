@@ -290,11 +290,11 @@ class EsmModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.assertEqual(position_ids.shape, expected_positions.shape)
         self.assertTrue(torch.all(torch.eq(position_ids, expected_positions)))
 
-    @unittest.skip("Esm does not support embedding resizing")
+    @unittest.skip(reason="Esm does not support embedding resizing")
     def test_resize_embeddings_untied(self):
         pass
 
-    @unittest.skip("Esm does not support embedding resizing")
+    @unittest.skip(reason="Esm does not support embedding resizing")
     def test_resize_tokens_embeddings(self):
         pass
 

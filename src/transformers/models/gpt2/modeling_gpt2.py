@@ -24,10 +24,12 @@ from typing import Optional, Tuple, Union
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
+from packaging import version
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...modeling_attn_mask_utils import _prepare_4d_attention_mask_for_sdpa, _prepare_4d_causal_attention_mask_for_sdpa
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
@@ -42,6 +44,7 @@ from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    get_torch_version,
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
     logging,
@@ -557,6 +560,113 @@ class GPT2FlashAttention2(GPT2Attention):
         )
 
 
+class GPT2SdpaAttention(GPT2Attention):
+    """
+    GPT2 attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
+    `GPT2Attention` as the weights of the module stays untouched. The only changes are on the forward pass
+    to adapt to the SDPA API.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Idea adapted from transformers.models.bert.modeling_bert.BertSdpaSelfAttention.__init__
+        # SDPA with memory-efficient backend is broken in torch==2.1.2 when using non-contiguous inputs and a custom
+        # attn_mask, so we need to call `.contiguous()`. This was fixed in torch==2.2.0.
+        # Reference: https://github.com/pytorch/pytorch/issues/112577
+        self.require_contiguous_qkv = version.parse(get_torch_version()) < version.parse("2.2.0")
+
+    def forward(
+        self,
+        hidden_states: Optional[Tuple[torch.FloatTensor]],
+        layer_past: Optional[Tuple[torch.Tensor]] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = False,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[Union[torch.Tensor, Tuple[torch.Tensor]], ...]:
+        if output_attentions or head_mask is not None:
+            logger.warning_once(
+                "`GPT2SdpaAttention` is used but `torch.nn.functional.scaled_dot_product_attention` does not support "
+                "`output_attentions=True` or `head_mask`. Falling back to the manual attention implementation, but "
+                "specifying the manual implementation will be required from Transformers version v5.0.0 onwards. "
+                'This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+            )
+            return super().forward(
+                hidden_states=hidden_states,
+                layer_past=layer_past,
+                attention_mask=attention_mask,
+                head_mask=head_mask,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_attention_mask,
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+            )
+
+        bsz, q_len, _ = hidden_states.size()
+
+        # Initial attention projections
+        is_cross_attention = encoder_hidden_states is not None
+        if is_cross_attention:
+            if not hasattr(self, "q_attn"):
+                raise ValueError(
+                    "If class is used as cross attention, the weights `q_attn` have to be defined. "
+                    "Please make sure to instantiate class with `GPT2SdpaAttention(..., is_cross_attention=True)`."
+                )
+
+            query = self.q_attn(hidden_states)
+            key, value = self.c_attn(encoder_hidden_states).split(self.split_size, dim=2)
+            attention_mask = encoder_attention_mask
+        else:
+            query, key, value = self.c_attn(hidden_states).split(self.split_size, dim=2)
+
+        query = self._split_heads(query, self.num_heads, self.head_dim)
+        key = self._split_heads(key, self.num_heads, self.head_dim)
+        value = self._split_heads(value, self.num_heads, self.head_dim)
+
+        # Optional kv caching
+        if layer_past is not None:
+            past_key = layer_past[0]
+            past_value = layer_past[1]
+            key = torch.cat((past_key, key), dim=-2)
+            value = torch.cat((past_value, value), dim=-2)
+
+        present = None
+        if use_cache is True:
+            present = (key, value)
+
+        # Avoid torch==2.1.2 specific bug for the memory-efficient backend in SDPA
+        if self.require_contiguous_qkv and query.device.type == "cuda" and attention_mask is not None:
+            query = query.contiguous()
+            key = key.contiguous()
+            value = value.contiguous()
+
+        # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
+        # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
+        is_causal = True if attention_mask is None and q_len > 1 and not is_cross_attention else False
+
+        attn_output = torch.nn.functional.scaled_dot_product_attention(
+            query,
+            key,
+            value,
+            attn_mask=attention_mask,
+            dropout_p=self.attn_dropout.p if self.training else 0.0,
+            is_causal=is_causal,
+        )
+
+        # Reshape outputs
+        attn_output = attn_output.transpose(1, 2).contiguous()
+        attn_output = attn_output.view(bsz, q_len, self.embed_dim)
+
+        # Final projection
+        attn_output = self.c_proj(attn_output)
+        attn_output = self.resid_dropout(attn_output)
+
+        return attn_output, present, None
+
+
 class GPT2MLP(nn.Module):
     def __init__(self, intermediate_size, config):
         super().__init__()
@@ -574,10 +684,7 @@ class GPT2MLP(nn.Module):
         return hidden_states
 
 
-GPT2_ATTENTION_CLASSES = {
-    "eager": GPT2Attention,
-    "flash_attention_2": GPT2FlashAttention2,
-}
+GPT2_ATTENTION_CLASSES = {"eager": GPT2Attention, "flash_attention_2": GPT2FlashAttention2, "sdpa": GPT2SdpaAttention}
 
 
 class GPT2Block(nn.Module):
@@ -673,6 +780,7 @@ class GPT2PreTrainedModel(PreTrainedModel):
     _no_split_modules = ["GPT2Block"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
+    _supports_sdpa = True
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
@@ -1021,11 +1129,24 @@ class GPT2Model(GPT2PreTrainedModel):
             position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)
             position_ids = position_ids.unsqueeze(0)
 
+        if inputs_embeds is None:
+            inputs_embeds = self.wte(input_ids)
+        position_embeds = self.wpe(position_ids)
+        hidden_states = inputs_embeds + position_embeds
+
         # Attention mask.
+        _use_sdpa = self._attn_implementation == "sdpa" and output_attentions is False and head_mask is None
         if attention_mask is not None:
             attention_mask = attention_mask.view(batch_size, -1)
             if self._attn_implementation == "flash_attention_2":
                 attention_mask = attention_mask if 0 in attention_mask else None
+            elif _use_sdpa:
+                attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
+                    attention_mask=attention_mask,
+                    input_shape=(batch_size, input_shape[-1]),
+                    inputs_embeds=inputs_embeds,
+                    past_key_values_length=past_length,
+                )
             else:
                 # We create a 3D attention mask from a 2D tensor mask.
                 # Sizes are [batch_size, 1, 1, to_seq_length]
@@ -1049,7 +1170,11 @@ class GPT2Model(GPT2PreTrainedModel):
             encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
             if encoder_attention_mask is None:
                 encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
-            if self._attn_implementation != "flash_attention_2":
+            if _use_sdpa:
+                encoder_attention_mask = _prepare_4d_attention_mask_for_sdpa(
+                    mask=encoder_attention_mask, dtype=inputs_embeds.dtype, tgt_len=input_shape[-1]
+                )
+            elif not self._attn_implementation == "flash_attention_2":
                 encoder_attention_mask = self.invert_attention_mask(encoder_attention_mask)
         else:
             encoder_attention_mask = None
@@ -1059,11 +1184,6 @@ class GPT2Model(GPT2PreTrainedModel):
         # attention_probs has shape bsz x n_heads x N x N
         # head_mask has shape n_layer x batch x n_heads x N x N
         head_mask = self.get_head_mask(head_mask, self.config.n_layer)
-
-        if inputs_embeds is None:
-            inputs_embeds = self.wte(input_ids)
-        position_embeds = self.wpe(position_ids)
-        hidden_states = inputs_embeds + position_embeds
 
         if token_type_ids is not None:
             token_type_embeds = self.wte(token_type_ids)

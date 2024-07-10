@@ -214,7 +214,7 @@ class QuantizedCacheConfig(CacheConfig):
         compute_dtype (`torch.dtype`, *optional*, defaults to `torch.float16`):
             The defualt dtype used for computations in the model. Keys and Values will be cast to this dtype after dequantization.
         device (`str`, *optional*, defaults to `"cpu"`):
-            Device on which to peform computations, should be same as the model's device.
+            Device on which to perform computations, should be same as the model's device.
     """
 
     def __init__(
@@ -395,21 +395,21 @@ class DynamicCache(Cache):
                 cache.update(key_states, value_states, layer_idx)
         return cache
 
-    def crop(self, maximum_length: int):
-        """Crop the past key values up to a new `maximum_length` in terms of tokens. `maximum_length` can also be
-        negative to remove `maximum_length` tokens. This is used in assisted decoding and contrastive search."""
+    def crop(self, max_length: int):
+        """Crop the past key values up to a new `max_length` in terms of tokens. `max_length` can also be
+        negative to remove `max_length` tokens. This is used in assisted decoding and contrastive search."""
 
         # In case it is negative
-        if maximum_length < 0:
-            maximum_length = self.get_seq_length() - abs(maximum_length)
+        if max_length < 0:
+            max_length = self.get_seq_length() - abs(max_length)
 
-        if self.get_seq_length() <= maximum_length:
+        if self.get_seq_length() <= max_length:
             return
 
-        self._seen_tokens = maximum_length
+        self._seen_tokens = max_length
         for idx in range(len(self.key_cache)):
-            self.key_cache[idx] = self.key_cache[idx][..., :maximum_length, :]
-            self.value_cache[idx] = self.value_cache[idx][..., :maximum_length, :]
+            self.key_cache[idx] = self.key_cache[idx][..., :max_length, :]
+            self.value_cache[idx] = self.value_cache[idx][..., :max_length, :]
 
     def batch_split(self, full_batch_size: int, split_size: int) -> List["DynamicCache"]:
         """Split the current instance into a list of `DynamicCache` by the batch size. This will be used by
@@ -858,8 +858,12 @@ class StaticCache(Cache):
         k_out = self.key_cache[layer_idx]
         v_out = self.value_cache[layer_idx]
 
-        k_out[:, :, cache_position] = key_states
-        v_out[:, :, cache_position] = value_states
+        if cache_position is None:
+            k_out.copy_(key_states)
+            v_out.copy_(value_states)
+        else:
+            k_out[:, :, cache_position] = key_states
+            v_out[:, :, cache_position] = value_states
 
         return k_out, v_out
 
@@ -970,3 +974,277 @@ class SlidingWindowCache(StaticCache):
         # in theory there is no limit because the sliding window size is fixed
         # no matter how long the sentence is
         return None
+
+    def reset(self):
+        self.key_cache.zero_()
+        self.value_cache.zero_()
+
+
+class EncoderDecoderCache(Cache):
+    """
+    Base, abstract class for all encoder-decoder caches. Can be used to hold combinations of self-attention and
+    cross-attention caches.
+    """
+
+    def __init__(self, self_attention_cache: Cache, cross_attention_cache: Cache):
+        self.self_attention_cache = self_attention_cache
+        self.cross_attention_cache = cross_attention_cache
+
+        self.is_updated = {}
+        for layer_idx in range(len(cross_attention_cache.key_cache)):
+            self.is_updated[layer_idx] = bool(cross_attention_cache.get_seq_length(layer_idx) > 0)
+
+    def __getitem__(self, layer_idx: int) -> List[Tuple[torch.Tensor]]:
+        """
+        Support for backwards-compatible `past_key_value` indexing, e.g. `past_key_value[0][0].shape[2]` to get the
+        sequence length.
+        """
+        if layer_idx < len(self):
+            return (
+                self.self_attention_cache.key_cache[layer_idx],
+                self.self_attention_cache.value_cache[layer_idx],
+                self.cross_attention_cache.key_cache[layer_idx],
+                self.cross_attention_cache.key_cache[layer_idx],
+            )
+        else:
+            raise KeyError(f"Cache only has {len(self)} layers, attempted to access layer with index {layer_idx}")
+
+    def __len__(self):
+        """
+        Support for backwards-compatible `past_key_value` length, e.g. `len(past_key_value)`. This value corresponds
+        to the number of layers in the model.
+        """
+        return len(self.self_attention_cache)
+
+    def to_legacy_cache(self) -> Tuple[Tuple[torch.Tensor], Tuple[torch.Tensor]]:
+        """Converts the `EncoderDecoderCache` instance into  its equivalent in the legacy cache format."""
+        legacy_cache = ()
+        if len(self.cross_attention_cache) > 0:
+            for self_attn, cross_attn in zip(
+                self.self_attention_cache.to_legacy_cache(), self.cross_attention_cache.to_legacy_cache()
+            ):
+                legacy_cache += (self_attn + cross_attn,)
+        else:
+            legacy_cache = self.self_attention_cache.to_legacy_cache()
+        return legacy_cache
+
+    @classmethod
+    def from_legacy_cache(
+        cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    ) -> "EncoderDecoderCache":
+        """Converts a cache in the legacy cache format into an equivalent `EncoderDecoderCache`."""
+        cache = cls(self_attention_cache=DynamicCache(), cross_attention_cache=DynamicCache())
+        if past_key_values is not None:
+            for layer_idx in range(len(past_key_values)):
+                key_states, value_states = past_key_values[layer_idx][:2]
+                cache.self_attention_cache.update(key_states, value_states, layer_idx)
+                if len(past_key_values[layer_idx]) > 2:
+                    key_states, value_states = past_key_values[layer_idx][2:]
+                    cache.cross_attention_cache.update(key_states, value_states, layer_idx)
+                    cache.is_updated[layer_idx] = True
+        return cache
+
+    def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
+        """Returns the sequence length of the cached states. A layer index can be optionally passed."""
+        if len(self.self_attention_cache.key_cache) <= layer_idx:
+            return 0
+        return (self.self_attention_cache.key_cache[layer_idx][0, 0].any(dim=-1)).sum()
+
+    def reset(self):
+        if hasattr(self.self_attention_cache, "reset"):
+            self.self_attention_cache.reset()
+        if hasattr(self.cross_attention_cache, "reset"):
+            self.cross_attention_cache.reset()
+        elif not hasattr(self.self_attention_cache, "reset") and not hasattr(self.cross_attention_cache, "reset"):
+            raise ValueError(
+                "Neither self nor cross-attention cache have valid `.reset()` methods. `.reset()` should "
+                "only be called on compatible cache classes, such as `StaticCache` or `SlidingWindowCache`. "
+                f"Got {self.self_attention_cache.__str__()} for the self attention cache and "
+                f"{self.cross_attention_cache.__str__()} for the cross attention cache."
+            )
+        for layer_idx in self.is_updated:
+            self.is_updated[layer_idx] = False
+
+    def reorder_cache(self, beam_idx: torch.LongTensor):
+        """Reorders the cache for beam search, given the selected beam indices."""
+        self.self_attention_cache.reorder_cache(beam_idx)
+        self.cross_attention_cache.reorder_cache(beam_idx)
+
+    def check_dynamic_cache(self, method: str):
+        if not (
+            isinstance(self.self_attention_cache, DynamicCache)
+            and isinstance(self.cross_attention_cache, DynamicCache)
+        ):
+            raise ValueError(
+                f"`{method}` is only defined for dynamic cache, got {self.self_attention_cache.__str__()} for the self "
+                f"attention cache and {self.cross_attention_cache.__str__()} for the cross attention cache."
+            )
+
+    # TODO(gante, sanchit-gandhi): move following functionality into `.generate`
+    def crop(self, maximum_length: int):
+        """Crop the past key values up to a new `maximum_length` in terms of tokens. `maximum_length` can also be
+        negative to remove `maximum_length` tokens. This is used in assisted decoding and contrastive search."""
+        self.check_dynamic_cache(self.crop.__name__)
+        self.self_attention_cache.crop(maximum_length)
+
+    def batch_split(self, full_batch_size: int, split_size: int) -> "List[EncoderDecoderCache]":
+        """Split the current instance into a list of `DynamicCache` by the batch size. This will be used by
+        `_split_model_inputs()` in `generation.utils`"""
+        self.check_dynamic_cache(self.batch_split.__name__)
+        self_attention_cache = self.self_attention_cache.batch_split(full_batch_size, split_size)
+        cross_attention_cache = self.cross_attention_cache.batch_split(full_batch_size, split_size)
+
+        out = []
+        for self_attn, cross_attn in zip(self_attention_cache, cross_attention_cache):
+            out.append(EncoderDecoderCache(self_attn, cross_attn))
+        return out
+
+    @classmethod
+    def from_batch_splits(cls, splits: List["EncoderDecoderCache"]) -> "EncoderDecoderCache":
+        """This is the opposite of the above `batch_split()` method. This will be used by `stack_model_outputs` in
+        `generation.utils`"""
+        self_attention_cache = DynamicCache()
+        cross_attention_cache = DynamicCache()
+        for idx in range(len(splits[0])):
+            layer_keys = torch.cat([current.self_attention_cache.key_cache[idx] for current in splits], dim=0)
+            layer_values = torch.cat([current.self_attention_cache.value_cache[idx] for current in splits], dim=0)
+            self_attention_cache.update(layer_keys, layer_values, idx)
+
+            layer_keys = torch.cat([current.cross_attention_cache.key_cache[idx] for current in splits], dim=0)
+            layer_values = torch.cat([current.cross_attention_cache.value_cache[idx] for current in splits], dim=0)
+            cross_attention_cache.update(layer_keys, layer_values, idx)
+        return cls(self_attention_cache, cross_attention_cache)
+
+    def batch_repeat_interleave(self, repeats: int):
+        """Repeat the cache `repeats` times in the batch dimension. Used in contrastive search."""
+        self.check_dynamic_cache(self.batch_repeat_interleave.__name__)
+        self.self_attention_cache.batch_repeat_interleave(repeats)
+        self.cross_attention_cache.batch_repeat_interleave(repeats)
+
+    def batch_select_indices(self, indices: torch.Tensor):
+        """Only keep the `indices` in the batch dimension of the cache. Used in contrastive search."""
+        self.check_dynamic_cache(self.batch_select_indices.__name__)
+        self.self_attention_cache.batch_select_indices(indices)
+        self.cross_attention_cache.batch_select_indices(indices)
+
+
+class HybridCache(Cache):
+    def __init__(self, config: PretrainedConfig, max_batch_size, max_cache_len, device="cpu", dtype=None) -> None:
+        if not hasattr(config, "sliding_window") or config.sliding_window is None:
+            raise ValueError(
+                "Setting `cache_implementation` to 'sliding_window' requires the model config supporting "
+                "sliding window attention, please check if there is a `sliding_window` field in the model "
+                "config and it's not set to None."
+            )
+        self.max_cache_len = max_cache_len
+        self.max_batch_size = max_batch_size
+        # Some model define a custom `head_dim` != config.hidden_size // config.num_attention_heads
+        self.head_dim = (
+            config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
+        )
+
+        self.dtype = dtype if dtype is not None else torch.float32
+        self.num_key_value_heads = (
+            config.num_attention_heads if config.num_key_value_heads is None else config.num_key_value_heads
+        )
+        self.is_sliding = torch.tensor(
+            [i % 2 for i in range(config.num_hidden_layers)], dtype=torch.bool, device=device
+        )
+        self.key_cache: List[torch.Tensor] = []
+        self.value_cache: List[torch.Tensor] = []
+        global_cache_shape = (max_batch_size, self.num_key_value_heads, max_cache_len, self.head_dim)
+        sliding_cache_shape = (
+            max_batch_size,
+            self.num_key_value_heads,
+            min(config.sliding_window, max_cache_len),
+            self.head_dim,
+        )
+        for i in range(config.num_hidden_layers):
+            # Note: `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
+            # breaks when updating the cache.
+            cache_shape = global_cache_shape if not self.is_sliding[i] else sliding_cache_shape
+            new_layer_key_cache = torch.zeros(cache_shape, dtype=self.dtype, device=device)
+            new_layer_value_cache = torch.zeros(cache_shape, dtype=self.dtype, device=device)
+            torch._dynamo.mark_static_address(new_layer_key_cache)
+            torch._dynamo.mark_static_address(new_layer_value_cache)
+            self.key_cache.append(new_layer_key_cache)
+            self.value_cache.append(new_layer_value_cache)
+
+    def _sliding_update(self, cache_position, layer_idx, key_states, value_states, k_out, v_out, max_cache_len):
+        if cache_position.shape[0] > max_cache_len:
+            k_out = key_states[:, :, -max_cache_len:, :]
+            v_out = value_states[:, :, -max_cache_len:, :]
+            # Assumption: caches are all zeros at this point, `+=` is equivalent to `=` but compile-friendly
+            self.key_cache[layer_idx] += k_out
+            self.value_cache[layer_idx] += v_out
+            # we should return the whole states instead of k_out, v_out to take the whole prompt
+            # into consideration when building kv cache instead of just throwing away tokens outside of the window
+            return key_states, value_states
+
+        slicing = torch.ones(max_cache_len, dtype=torch.long, device=value_states.device).cumsum(0)
+        cache_position = cache_position.clamp(0, max_cache_len - 1)
+        to_shift = cache_position >= max_cache_len - 1
+        indices = (slicing + to_shift[-1].int() - 1) % max_cache_len
+        k_out = k_out[:, :, indices]
+        v_out = v_out[:, :, indices]
+
+        k_out[:, :, cache_position] = key_states
+        v_out[:, :, cache_position] = value_states
+        # `_.zero()` followed by `+=` is equivalent `=`, but compile-friendly (without graph breaks due to assignment)
+        self.key_cache[layer_idx].zero_()
+        self.value_cache[layer_idx].zero_()
+
+        self.key_cache[layer_idx] += k_out
+        self.value_cache[layer_idx] += v_out
+        return k_out, v_out
+
+    def _static_update(self, cache_position, layer_idx, key_states, value_states, k_out, v_out, max_cache_len):
+        k_out[:, :, cache_position] = key_states
+        v_out[:, :, cache_position] = value_states
+
+        self.key_cache[layer_idx] = k_out
+        self.value_cache[layer_idx] = v_out
+        return k_out, v_out
+
+    def update(
+        self,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        layer_idx: int,
+        cache_kwargs: Optional[Dict[str, Any]] = None,
+        sliding_window: Optional[int] = None,
+    ) -> Tuple[torch.Tensor]:
+        cache_position = cache_kwargs.get("cache_position")
+        self.key_cache[layer_idx] = self.key_cache[layer_idx].to(device=key_states.device)
+        self.value_cache[layer_idx] = self.value_cache[layer_idx].to(device=value_states.device)
+        k_out = self.key_cache[layer_idx]
+        v_out = self.value_cache[layer_idx]
+        if sliding_window:
+            update_fn = self._sliding_update
+        else:
+            update_fn = self._static_update
+
+        return update_fn(
+            cache_position,
+            layer_idx,
+            key_states,
+            value_states,
+            k_out,
+            v_out,
+            k_out.shape[2],
+        )
+
+    def get_max_length(self) -> Optional[int]:
+        # in theory there is no limit because the sliding window size is fixed
+        # no matter how long the sentence is
+        return self.max_cache_len
+
+    def get_seq_length(self, layer_idx: Optional[int] = 0):
+        return None
+
+    def reset(self):
+        """Resets the cache values while preserving the objects"""
+        for layer_idx in range(len(self.key_cache)):
+            # In-place ops prevent breaking the static address
+            self.key_cache[layer_idx].zero_()
+            self.value_cache[layer_idx].zero_()

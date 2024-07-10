@@ -394,7 +394,7 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
         )
 
-    @unittest.skip("Llama buffers include complex numbers, which breaks this test")
+    @unittest.skip(reason="Llama buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):
         pass
 
@@ -725,13 +725,36 @@ class LlamaIntegrationTest(unittest.TestCase):
         )
 
     @slow
+    def test_model_7b_dola_generation(self):
+        # ground truth text generated with dola_layers="low", repetition_penalty=1.2
+        EXPECTED_TEXT_COMPLETION = (
+            "Simply put, the theory of relativity states that 1) time and space are relative, and 2) the laws of "
+            "physics are the same for all observers in uniform motion relative to one another.\n\nThe theory of "
+            "relativity was developed by Albert Einstein in the early 20th century, and it revolutionized our "
+            "understanding of space and time."
+        )
+        prompt = "Simply put, the theory of relativity states that "
+        tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
+        model = LlamaForCausalLM.from_pretrained(
+            "meta-llama/Llama-2-7b-chat-hf", device_map="sequential", torch_dtype=torch.float16
+        )
+        model_inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+
+        # greedy generation outputs
+        generated_ids = model.generate(
+            **model_inputs, max_new_tokens=64, top_p=None, temperature=1, do_sample=False, dola_layers="low"
+        )
+        text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
+
+    @slow
     @require_torch_gpu
     @require_read_token
     def test_compile_static_cache(self):
         # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
         # work as intended. See https://github.com/pytorch/pytorch/issues/121943
         if version.parse(torch.__version__) < version.parse("2.3.0"):
-            self.skipTest("This test requires torch >= 2.3 to run.")
+            self.skipTest(reason="This test requires torch >= 2.3 to run.")
 
         NUM_TOKENS_TO_GENERATE = 40
         # Note on `EXPECTED_TEXT_COMPLETION`'s diff: the current value matches the original test if the original test

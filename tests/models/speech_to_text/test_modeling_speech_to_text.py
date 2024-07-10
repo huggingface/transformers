@@ -326,14 +326,15 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.check_encoder_decoder_model_standalone(*config_and_inputs)
 
-    # not implemented currently
+    @unittest.skip(reason="Not implemented currently")
     def test_inputs_embeds(self):
         pass
 
-    # training is not supported yet
+    @unittest.skip(reason="Training is not supported yet")
     def test_training(self):
         pass
 
+    @unittest.skip
     def test_training_gradient_checkpointing(self):
         pass
 
@@ -536,7 +537,7 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
             inputs_dict,
         ) = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.test_resize_embeddings:
-            return
+            self.skipTest(reason="test_resize_embeddings is set to False")
 
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
@@ -584,13 +585,13 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
             inputs_dict,
         ) = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.test_resize_embeddings:
-            return
+            self.skipTest(reason="test_resize_embeddings is set to False")
 
         original_config.tie_word_embeddings = False
 
         # if model cannot untied embeddings -> leave test
         if original_config.tie_word_embeddings:
-            return
+            self.skipTest(reason="Model cannot untie embeddings")
 
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
@@ -627,6 +628,7 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             model(**self._prepare_for_class(inputs_dict, model_class))
 
+    @unittest.skip
     def test_generate_without_input_ids(self):
         pass
 
@@ -695,7 +697,7 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
-            return
+            self.skipTest(reason="test_torchscript is set to False")
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.torchscript = True
@@ -773,7 +775,7 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
         # Allow missing keys since TF doesn't cache the sinusoidal embeddings in an attribute
         super().test_pt_tf_model_equivalence(allow_missing_keys=allow_missing_keys)
 
-    @unittest.skip("Test failing,  @RocketNight is looking into it")
+    @unittest.skip(reason="Test failing,  @RocketNight is looking into it")
     def test_tf_from_pt_safetensors(self):
         pass
 
@@ -791,7 +793,9 @@ class Speech2TextModelIntegrationTests(unittest.TestCase):
     def _load_datasamples(self, num_samples):
         from datasets import load_dataset
 
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        ds = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
+        )
         # automatic decoding with librispeech
         speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
 
