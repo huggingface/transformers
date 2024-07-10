@@ -1942,8 +1942,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Update base model and current model config
         if hasattr(self.config, "text_config"):
             self.config.text_config.vocab_size = model_embeds.weight.shape[0]
-        # TODO: to be removed after v4.42, config.vocab_size is deprecated for models that have a config.text_config
-        self.config.vocab_size = model_embeds.weight.shape[0]
+        else:
+            self.config.vocab_size = model_embeds.weight.shape[0]
         self.vocab_size = model_embeds.weight.shape[0]
 
         # Tie weights again if needed
@@ -2657,7 +2657,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             ):
                 os.remove(full_filename)
         # Save the model
-        for shard_file, tensors in state_dict_split.filename_to_tensors.items():
+        filename_to_tensors = state_dict_split.filename_to_tensors.items()
+        if module_map:
+            filename_to_tensors = logging.tqdm(filename_to_tensors, desc="Saving checkpoint shards")
+        for shard_file, tensors in filename_to_tensors:
             shard = {tensor: state_dict[tensor] for tensor in tensors}
             # remake shard with onloaded parameters if necessary
             if module_map:
@@ -2829,7 +2832,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         revision: str = "main",
         use_safetensors: bool = None,
         **kwargs,
-    ):
+    ) -> "PreTrainedModel":
         r"""
         Instantiate a pretrained pytorch model from a pre-trained model configuration.
 
