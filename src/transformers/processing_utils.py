@@ -554,8 +554,11 @@ class ProcessorMixin(PushToHubMixin):
 
         pretrained_model_name_or_path = str(pretrained_model_name_or_path)
         is_local = os.path.isdir(pretrained_model_name_or_path)
+        chat_template_file = None
         if os.path.isdir(pretrained_model_name_or_path):
             processor_file = os.path.join(pretrained_model_name_or_path, PROCESSOR_NAME)
+            chat_template_file = os.path.join(pretrained_model_name_or_path, "chat_template.json")
+
         if os.path.isfile(pretrained_model_name_or_path):
             resolved_processor_file = pretrained_model_name_or_path
             is_local = True
@@ -564,11 +567,29 @@ class ProcessorMixin(PushToHubMixin):
             resolved_processor_file = download_url(pretrained_model_name_or_path)
         else:
             processor_file = PROCESSOR_NAME
+            chat_template_file = "chat_template.json"
             try:
                 # Load from local folder or from cache or download from model Hub and cache
                 resolved_processor_file = cached_file(
                     pretrained_model_name_or_path,
                     processor_file,
+                    cache_dir=cache_dir,
+                    force_download=force_download,
+                    proxies=proxies,
+                    resume_download=resume_download,
+                    local_files_only=local_files_only,
+                    token=token,
+                    user_agent=user_agent,
+                    revision=revision,
+                    subfolder=subfolder,
+                    _raise_exceptions_for_missing_entries=False,
+                )
+
+                # load chat template from a separate json if exists
+                # TODO @raushan: remove this hack after a few major releases
+                resolved_chat_template_file = cached_file(
+                    pretrained_model_name_or_path,
+                    chat_template_file,
                     cache_dir=cache_dir,
                     force_download=force_download,
                     proxies=proxies,
@@ -592,6 +613,14 @@ class ProcessorMixin(PushToHubMixin):
                     f" same name. Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a"
                     f" directory containing a {PROCESSOR_NAME} file"
                 )
+
+        # add chat template as kwarg before returning below because most models don't have processor config
+        chat_template = None
+        if resolved_chat_template_file is not None:
+            with open(resolved_chat_template_file, "r", encoding="utf-8") as reader:
+                text = reader.read()
+            chat_template = json.loads(text)["chat_template"]
+            kwargs["chat_template"] = chat_template
 
         # Existing processors on the Hub created before #27761 being merged don't have `processor_config.json` (if not
         # updated afterward), and we need to keep `from_pretrained` work. So here it fallbacks to the empty dict.
@@ -647,6 +676,7 @@ class ProcessorMixin(PushToHubMixin):
         """
         processor_dict = processor_dict.copy()
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
+        chat_template = kwargs.pop("chat_template", None)
 
         # Unlike image processors or feature extractors whose `__init__` accept `kwargs`, processor don't have `kwargs`.
         # We have to pop up some unused (but specific) arguments to make it work.
@@ -657,6 +687,8 @@ class ProcessorMixin(PushToHubMixin):
             del processor_dict["auto_map"]
 
         processor = cls(*args, **processor_dict)
+        if chat_template is not None:
+            setattr(processor, "chat_template", chat_template)
 
         # Update processor with kwargs if needed
         for key in set(kwargs.keys()):
