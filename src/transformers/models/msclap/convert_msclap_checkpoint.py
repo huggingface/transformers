@@ -17,14 +17,14 @@ import argparse
 import re
 
 
-from transformers import AutoFeatureExtractor, ClapConfig, ClapModel
-
+from transformers import MSClapConfig, MSClapModel
 
 from msclap import CLAP
 
 KEYS_TO_MODIFY_MAPPING = {
     "caption_encoder": "text_model",
     "audio_encoder.base.htsat": "audio_model.audio_encoder",
+    "audio_encoder.projection": "audio_projection", 
     "attn": "attention.self",
     "self.proj": "output.dense",
     "attention.self_mask": "attn_mask",
@@ -35,8 +35,13 @@ KEYS_TO_MODIFY_MAPPING = {
     "bn0": "batch_norm",
 }
 
-processor = AutoFeatureExtractor.from_pretrained("laion/clap-htsat-unfused", truncation="rand_trunc")
 
+IGNORE_WEIGHTS = [
+    "spectrogram_extractor", 
+    "logmel_extractor", 
+    "attn_mask", 
+    "head", 
+]
 
 def init_msclap(version):
 
@@ -49,12 +54,18 @@ def get_config_from_original(clap_model):
     audio_config = {
         "patch_embeds_hidden_size": clap_model.clap.audio_encoder.base.htsat.embed_dim,
         "depths": clap_model.clap.audio_encoder.base.htsat.depths,
-        "hidden_size": clap_model.model.audio_projection[0].in_features,
+        "hidden_size": clap_model.clap.audio_encoder.projection.linear1.in_features,
+        "projection_dim": clap_model.clap.audio_encoder.projection.linear1.out_features,
     }
 
-    text_config = {"hidden_size": clap_model.model.text_branch.pooler.dense.in_features}
+    text_config = {
+        "hidden_size": clap_model.clap.caption_encoder.projection.linear1.in_features, 
+        "projection_dim": clap_model.clap.audio_encoder.projection.linear1.out_features
+    }
 
-    return ClapConfig(audio_config=audio_config, text_config=text_config)
+    projection_dim = clap_model.clap.audio_encoder.projection.linear1.out_features
+
+    return MSClapConfig(audio_config=audio_config, text_config=text_config, projection_dim=projection_dim)
 
 
 def rename_state_dict(state_dict):
@@ -63,15 +74,10 @@ def rename_state_dict(state_dict):
     sequential_layers_pattern = r".*sequential.(\d+).*"
     text_projection_pattern = r".*_projection.(\d+).*"
 
-    # Get list of audio layers: 
-    layer_list = state_dict.keys()
-    # Define the pattern you want to match
-    pattern = r"audio_encoder"
-    # Use list comprehension to filter layers that match the pattern
-    audio_matching_layers = [layer for layer in layer_list if re.search(pattern, layer)]
-
     for key, value in state_dict.items():
         # check if any key needs to be modified
+        is_used = False
+       
         for key_to_modify, new_key in KEYS_TO_MODIFY_MAPPING.items():
             if key_to_modify in key:
                 key = key.replace(key_to_modify, new_key)
@@ -117,13 +123,40 @@ def convert_clap_checkpoint(version, pytorch_dump_folder_path, enable_fusion=Fal
 
     transformers_config = get_config_from_original(clap_model)
     transformers_config.audio_config.enable_fusion = enable_fusion
-    model = ClapModel(transformers_config)
+    model = MSClapModel(transformers_config)
 
     # ignore the spectrogram embedding layer
     model.load_state_dict(state_dict, strict=False)
 
+    # Check that all audio state dict have been converted: 
+    model.state_dict().keys() == state_dict.keys()
+    audio_model_state_dict = [layer for layer in model.state_dict().keys() if re.search("audio_model", layer)]
+    audio_layers_converted_checkpoints = [layer for layer in  state_dict if re.search('audio_model', layer)]
+
+    unused_audio_weights = set(audio_layers_converted_checkpoints) ^ set(audio_model_state_dict)
+    unused_audio_weights = unused_audio_weights.intersection(set(audio_layers_converted_checkpoints))
+    unused_audio_weights = [
+        element for element in unused_audio_weights 
+        if not any(re.search(pattern, element) for pattern in IGNORE_WEIGHTS)
+    ]
+
+    # Check that all audio state dict have been converted: 
+    model.state_dict().keys() == state_dict.keys()
+    audio_model_state_dict = [layer for layer in model.state_dict().keys() if re.search("audio_projection", layer)]
+    audio_layers_converted_checkpoints = [layer for layer in  state_dict if re.search('audio_projection', layer)]
+
+    unused_audio_weights = set(audio_layers_converted_checkpoints) ^ set(audio_model_state_dict)
+    unused_audio_weights = unused_audio_weights.intersection(set(audio_layers_converted_checkpoints))
+    unused_audio_weights = [
+        element for element in unused_audio_weights 
+        if not any(re.search(pattern, element) for pattern in IGNORE_WEIGHTS)
+    ]
+
     model.save_pretrained(pytorch_dump_folder_path)
     transformers_config.save_pretrained(pytorch_dump_folder_path)
+
+
+# check that both models share the same state dict: 
 
 
 if __name__ == "__main__":
@@ -133,7 +166,7 @@ if __name__ == "__main__":
     # parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
     # args = parser.parse_args()
 
-    pytorch_dump_folder_path = "/home/jamil/cache/msclap/"
+    pytorch_dump_folder_path = "/home/kamil/cache/msclap/"
     convert_clap_checkpoint(
         '2023', pytorch_dump_folder_path
     )
