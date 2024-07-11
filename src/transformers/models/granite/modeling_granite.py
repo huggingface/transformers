@@ -136,6 +136,7 @@ class GraniteDynamicNTKScalingRotaryEmbedding(GraniteRotaryEmbedding):
         return cos, sin
 
 
+# Copied from transformers.models.llama.modeling_llama.rotate_half with Llama->Granite
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
@@ -143,6 +144,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
+# Copied from transformers.models.llama.modeling_llama.apply_rotary_pos_emb with Llama->Granite
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -205,6 +207,7 @@ class GraniteMLP(nn.Module):
         return down_proj
 
 
+# Copied from transformers.models.llama.modeling_llama.repeat_kv with Llama->Granite
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
