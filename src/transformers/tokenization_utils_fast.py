@@ -31,7 +31,6 @@ from tokenizers.trainers import BpeTrainer, UnigramTrainer, WordLevelTrainer, Wo
 
 from .convert_slow_tokenizer import convert_slow_tokenizer
 from .integrations.ggml import convert_gguf_tokenizer
-from .integrations.tiktoken import convert_tiktoken_tokenizer
 from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_utils_base import (
@@ -122,7 +121,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         elif tiktoken_file is not None:
             self.vocab_file = kwargs.get("vocab_file", None)
             fast_tokenizer = convert_slow_tokenizer(self)
-           # fast_tokenizer = convert_tiktoken_tokenizer(kwargs.get("vocab_file"))
         elif gguf_file is not None:
             # We need to convert a slow tokenizer to build the backend
             gguf_param = load_gguf_checkpoint(kwargs.get("vocab_file"))
