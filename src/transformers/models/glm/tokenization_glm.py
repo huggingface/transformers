@@ -23,9 +23,9 @@ from transformers import PreTrainedTokenizer
 from transformers.utils import PaddingStrategy
 from transformers.tokenization_utils_base import EncodedInput, BatchEncoding
 
+VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model"}
 
 class GLMTokenizer(PreTrainedTokenizer):
-    vocab_files_names = {"vocab_file": "tokenizer.model"}
     model_input_names = ["input_ids", "attention_mask", "position_ids"]
 
     def __init__(
@@ -139,21 +139,6 @@ class GLMTokenizer(PreTrainedTokenizer):
             writer.write(proto_str)
 
         return (vocab_file,)
-
-    def get_prefix_tokens(self):
-        prefix_tokens = [self.convert_tokens_to_ids("[gMASK]"), self.convert_tokens_to_ids("<sop>")]
-        return prefix_tokens
-
-    def build_single_message(self, role, metadata, message, tokenize=True):
-        assert role in ["system", "user", "assistant", "observation"], role
-        if tokenize:
-            role_tokens = [self.convert_tokens_to_ids(f"<|{role}|>")] + self.tokenizer.encode(f"{metadata}\n",
-                                                                                              disallowed_special=())
-            message_tokens = self.tokenizer.encode(message, disallowed_special=())
-            tokens = role_tokens + message_tokens
-            return tokens
-        else:
-            return str(f"<|{role}|>{metadata}\n{message}")
 
     def _pad(
             self,

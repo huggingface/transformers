@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 """Tokenization classes for GLM."""
 
 from typing import Optional, Tuple
@@ -26,17 +27,16 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {
     "vocab_file": "tokenizer.model",
-    # "merges_file": "merges.txt",
     "tokenizer_file": "tokenizer_config.json",
 }
 
 
-MAX_MODEL_INPUT_SIZES = {"THUDM/glm-tokenizer": 32768}
+MAX_MODEL_INPUT_SIZES = {"THUDM/glm-tokenizer": 128000}
 
 
 class GLMTokenizerFast(PreTrainedTokenizerFast):
     """
-    Construct a "fast" Qwen2 tokenizer (backed by HuggingFace's *tokenizers* library). Based on byte-level
+    Construct a "fast" GLM tokenizer (backed by HuggingFace's *tokenizers* library). Based on byte-level
     Byte-Pair-Encoding.
 
     Same with GPT2Tokenizer, this tokenizer has been trained to treat spaces like parts of the tokens so a word will
@@ -47,10 +47,10 @@ class GLMTokenizerFast(PreTrainedTokenizerFast):
 
     >>> tokenizer = GLMTokenizerFast.from_pretrained("THUDM/glm-4-9b-chat")
     >>> tokenizer("Hello world")["input_ids"]
-    [9707, 1879]
+    [9703, 1879]
 
     >>> tokenizer(" Hello world")["input_ids"]
-    [21927, 1879]
+    [21873, 1879]
     ```
     This is expected.
 
