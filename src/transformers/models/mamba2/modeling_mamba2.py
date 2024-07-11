@@ -27,6 +27,10 @@ from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...cache_utils import DynamicCache
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    CausalLMOutputWithPast,
+)
 from ...modeling_utils import PreTrainedModel
 from ...utils.import_utils import (
     get_torch_version,
@@ -435,7 +439,7 @@ class Mamba2Attention(nn.Module):
             use_cache: Optional[bool] = False,
     ):
         # Apply attention-conv1d-specific projections and rope
-        query, key, value, cache = self._attn_conv1d_projections_and_rope(
+        query, key, value = self._attn_conv1d_projections_and_rope(
             hidden_states=hidden_states, position_ids=position_ids, cache=cache, use_cache=use_cache
         )
 
@@ -453,7 +457,7 @@ class Mamba2Attention(nn.Module):
         if not output_attentions:
             attn_weights = None
 
-        return attn_output, attn_weights, cache
+        return attn_output, attn_weights
 
     @classmethod
     # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXAttention._split_heads
@@ -591,7 +595,7 @@ class Mamba2Attention(nn.Module):
         if has_layer_past:
             key, value = cache.update(key, value, self.layer_idx)
 
-        return query, key, value, cache
+        return query, key, value
 
     # Adapted from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXAttention._attn
     # No dropout or head mask
@@ -743,7 +747,7 @@ class Mamba2FlashAttention2(Mamba2Attention):
         if not output_attentions:
             attn_weights = None
 
-        return attn_output, attn_weights, cache
+        return attn_output, attn_weights
 
     # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._flash_attention_forward
     def _flash_attention_forward(
@@ -933,7 +937,7 @@ class Mamba2SdpaAttention(Mamba2Attention):
 
         attn_output = self.out_proj(attn_output)
 
-        return attn_output, None, cache
+        return attn_output, None
 
 
 MAMBA2_ATTENTION_CLASSES = {
@@ -1419,8 +1423,10 @@ class Mamba2RMSNorm(nn.Module):
         return self.weight * hidden_states.to(input_dtype)
 
 
+# Adapted from transformers.models.mamba.modeling_mamba.MambaBlock
+# Allows attention instead of mamba2 and an optional MLP layer afterward
 class Mamba2Block(nn.Module):
-    def __init__(self, config: Mamba2Config, layer_idx):
+    def __init__(self, config, layer_idx):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -1429,13 +1435,13 @@ class Mamba2Block(nn.Module):
         self.residual_in_fp32 = config.residual_in_fp32
         self.norm = Mamba2RMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
 
-        # mixer is either attention layer or mamba2 layer
+        # Mixer is either attention layer or mamba2 layer
         if self.attention_layer:
             self.mixer = MAMBA2_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx=layer_idx)
         else:
             self.mixer = Mamba2Mixer(config, layer_idx=layer_idx)
 
-        # following mlp layer is optional
+        # Following mlp layer is optional
         if self.mlp_layer:
             self.norm2 = Mamba2RMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
             self.mlp = Mamba2MLP(config, layer_idx=layer_idx)
@@ -1463,7 +1469,7 @@ class Mamba2Block(nn.Module):
             )
             attn_weights = None
         else:
-            hidden_states, attn_weights, cache = self.mixer(
+            hidden_states, attn_weights = self.mixer(
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
@@ -1482,37 +1488,7 @@ class Mamba2Block(nn.Module):
             hidden_states = self.mlp(hidden_states)
             hidden_states = hidden_states + residual
 
-        return hidden_states, attn_weights, cache
-
-
-@dataclass
-class Mamba2Output(ModelOutput):
-    """
-    Class for the MAMBA2 model outputs.
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        cache_params (`Mamba2Cache`):
-            The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
-            avoid providing the old `input_ids`.
-
-            Includes both the last state returned by the SSD call of the State Space Machine, and the Causal Convolutional states.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        last_ssm_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_last_ssm_states=True` is passed or when `config.output_last_ssm_states=True`):
-            Tuple of `torch.FloatTensor` (one for the last state of the ssd block each) of shape `(batch_size, num_heads, head_dim, ssm_state_size)`.
-
-            Last SSM-states of the model at the final state of an SSD block.
-    """
-
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    cache_params: Optional[Mamba2Cache] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    last_ssm_states: Optional[Tuple[torch.FloatTensor]] = None
+        return hidden_states, attn_weights
 
 
 class Mamba2PreTrainedModel(PreTrainedModel):
@@ -1525,7 +1501,14 @@ class Mamba2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "backbone"
     _no_split_modules = ["Mamba2Block"]
     supports_gradient_checkpointing = True
+    _skip_keys_device_placement = "past_key_values"
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+    _supports_cache_class = True  # Note: only supports HybridMamba2AttentionDynamicCache
+    _is_stateful = True
 
+    # Adapted from transformers.models.mamba.modeling_mamba.MambaPreTrainedModel._init_weights
+    # Only using dt bias and rescale_prenorm_residual is expanded when using the additional MLP layer
     def _init_weights(self, module):
         """Initialize the weights."""
         if isinstance(module, Mamba2Mixer):
@@ -1570,11 +1553,15 @@ class Mamba2PreTrainedModel(PreTrainedModel):
                     # We need to reinit p since this code could be called multiple times
                     # Having just p *= scale would repeatedly scale it down
                     nn.init.kaiming_uniform_(p, a=math.sqrt(5))
+
+                    # mlp layer is considered as an additional overhead
+                    n_residuals = 2 if self.config.mlp_intermediate_size > 0 else 1
                     with torch.no_grad():
-                        p /= math.sqrt(self.config.num_hidden_layers)
+                        p /= math.sqrt(n_residuals * self.config.num_hidden_layers)
 
 
 class Mamba2Model(Mamba2PreTrainedModel):
+    # Copied from transformers.models.mamba.modeling_mamba.MambaModel.__init__ with Mamba->Mamba2
     def __init__(self, config):
         super().__init__(config)
 
@@ -1587,6 +1574,7 @@ class Mamba2Model(Mamba2PreTrainedModel):
         self._register_load_state_dict_pre_hook(self.load_hook)
         self.post_init()
 
+    # Copied from transformers.models.mamba.modeling_mamba.MambaModel.load_hook
     def load_hook(self, state_dict, prefix, *args):
         for k in state_dict:
             if "embedding." in k:
@@ -1599,25 +1587,27 @@ class Mamba2Model(Mamba2PreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.embeddings = new_embeddings
 
+    # Adapted from transformers.models.jamba.modeling_jamba.JambaModel.forward
+    # No MoE logic, inits cache itself like Mamba does
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.LongTensor] = None,
-        cache_params: Optional[Mamba2Cache] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[HybridMamba2AttentionDynamicCache] = None,
         use_cache: Optional[bool] = None,
-        initial_states: Optional[List[torch.FloatTensor]] = None,
+        output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        output_last_ssm_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        **kwargs,  # `attention_mask` is passed by the tokenizer and we don't want it
-    ) -> Union[Tuple, Mamba2Output]:
+        cache_position: Optional[torch.LongTensor] = None,
+    ) -> Union[Tuple, BaseModelOutputWithPast]:
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        output_last_ssm_states = (
-            output_last_ssm_states if output_last_ssm_states is not None else self.config.output_last_ssm_states
-        )
         use_cache = use_cache if use_cache is not None else (self.config.use_cache if not self.training else False)
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if (input_ids is None) ^ (inputs_embeds is not None):  # ^ is python for xor
@@ -1625,97 +1615,86 @@ class Mamba2Model(Mamba2PreTrainedModel):
                 "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
             )
 
-        if inputs_embeds is None:
-            inputs_embeds = self.embeddings(input_ids)
-
         if self.gradient_checkpointing and self.training and use_cache:
+            logger.warning_once(
+                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
+            )
             use_cache = False
 
-        if cache_params is None and use_cache:
-            cache_params = Mamba2Cache(
-                self.config, inputs_embeds.size(0), device=inputs_embeds.device, dtype=inputs_embeds.dtype
-            )
-
-        initial_states = [None] * self.config.num_hidden_layers if initial_states is None else initial_states
-        if len(initial_states) != self.config.num_hidden_layers:
-            raise ValueError(
-                "Initial states have been passed but not for all layers making it ambiguous. "
-                "To ensure correctness, fill layers without an initial state with None."
-            )
+        if inputs_embeds is None:
+            inputs_embeds = self.embeddings(input_ids)
         hidden_states = inputs_embeds
 
+        if past_key_values is None and use_cache:
+            past_key_values = HybridMamba2AttentionDynamicCache(
+                config=self.config, batch_size=inputs_embeds.shape[0], device=inputs_embeds.device, dtype=inputs_embeds.dtype
+            )
+
+        if cache_position is None:
+            cache_position = torch.arange(hidden_states.shape[1], device=hidden_states.device)
+        if position_ids is None:
+            position_ids = cache_position.unsqueeze(0)
+
+        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position)
+
         all_hidden_states = () if output_hidden_states else None
-        all_last_ssm_states = () if output_last_ssm_states else None
-        for mixer_block, initial_state in zip(self.layers, initial_states):
+        all_self_attns = () if output_attentions else None
+
+        for mixer_block in self.layers:
+            if output_hidden_states:
+                all_hidden_states += (hidden_states,)
+
             if self.gradient_checkpointing and self.training:
                 out = self._gradient_checkpointing_func(
-                    mixer_block.__call__, hidden_states, initial_state, output_last_ssm_states, cache_params
+                    mixer_block.__call__,
+                    hidden_states,
+                    causal_mask,
+                    position_ids,
+                    past_key_values,
+                    output_attentions,
+                    use_cache,
                 )
             else:
                 out = mixer_block(
-                    hidden_states,
-                    initial_state=initial_state,
-                    return_final_state=output_last_ssm_states,
-                    cache=cache_params,
+                    hidden_states=hidden_states,
+                    attention_mask=causal_mask,
+                    position_ids=position_ids,
+                    cache=past_key_values,
+                    output_attentions=output_attentions,
+                    use_cache=use_cache,
                 )
 
             hidden_states = out[0]
-            last_state = out[1]
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-            if output_last_ssm_states:
-                all_last_ssm_states = all_last_ssm_states + (last_state,)
 
-        if use_cache:
-            cache_params.seq_offset += inputs_embeds.shape[1]
+            if output_attentions:
+                if out[1] is not None:
+                    # Append attentions only of attention layers. Mamba layers return `None` as the attention weights
+                    all_self_attns += (out[1],)
 
         hidden_states = self.norm_f(hidden_states)
 
+        # Add hidden states from the last decoder layer
         if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
+            all_hidden_states += (hidden_states,)
+
+        if past_key_values and not past_key_values.has_previous_state:
+            past_key_values.has_previous_state = True
+
+        next_cache = None if not use_cache else past_key_values
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, cache_params, all_hidden_states] if v is not None)
+            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
 
-        return Mamba2Output(
+        return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            cache_params=cache_params if use_cache else None,
+            past_key_values=next_cache,
             hidden_states=all_hidden_states,
-            last_ssm_states=all_last_ssm_states,
+            attentions=all_self_attns,
         )
 
-
-@dataclass
-class Mamba2CausalLMOutput(ModelOutput):
-    """
-    Base class for causal language model (or autoregressive) outputs.
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Language modeling loss (for next-token prediction).
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        cache_params (`Mamba2Cache`):
-            The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
-            avoid providing the old `input_ids`.
-
-            Includes both the last state returned by the SSD call of the State Space Machine, and the Causal Convolutional states.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        last_ssm_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_last_ssm_states=True` is passed or when `config.output_last_ssm_states=True`):
-            Tuple of `torch.FloatTensor` (one for the last state of the ssd block each) of shape `(batch_size, num_heads, head_dim, ssm_state_size)`.
-
-            Last SSM-states of the model at the final state of an SSD block.
-    """
-
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    cache_params: Optional[Mamba2Cache] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    last_ssm_states: Optional[Tuple[torch.FloatTensor]] = None
+    def _update_causal_mask(self, attention_mask, input_tensor, cache_position):
+        # todo: implement
+        return attention_mask
 
 
 class Mamba2ForCausalLM(Mamba2PreTrainedModel):
@@ -1730,6 +1709,7 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    # todo: is this necessary?
     def _tie_weights(self):
         # probably overwritten by `_tied_weights_keys` but just to be sure
         if self.config.tie_word_embeddings:
@@ -1747,33 +1727,58 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         return self.backbone.set_input_embeddings(new_embeddings)
 
-    def _update_model_kwargs_for_generation(
-        self, outputs: ModelOutput, model_kwargs: Dict[str, Any], **kwargs
-    ) -> Dict[str, Any]:
-        model_kwargs["cache_params"] = outputs.get("cache_params", None)
-        return model_kwargs
-
+    # Adapted from transformers.models.jamba.modeling_jamba.JambaForCausalLM.prepare_inputs_for_generation
+    # We omit sliding window and MoE logic
     def prepare_inputs_for_generation(
         self,
         input_ids,
+        past_key_values=None,
+        attention_mask=None,
         inputs_embeds=None,
-        use_cache=None,
-        cache_params: Optional[Mamba2Cache] = None,
+        cache_position=None,
         **kwargs,
     ):
-        # only last token for inputs_ids if the state is passed along.
-        if cache_params is not None:
-            input_ids = input_ids[:, -1].unsqueeze(-1)
+        empty_past_kv = past_key_values is None
 
-        if inputs_embeds is not None and cache_params is None:
+        # Omit tokens covered by past_key_values
+        if not empty_past_kv:
+            past_length = cache_position[0] if cache_position is not None else attention_mask.shape[1]
+            # Keep only the unprocessed tokens:
+            # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
+            # some of the inputs are exclusively passed as part of the cache (e.g. when passing input_embeds as
+            # input)
+            if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
+                input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
+            # 2 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
+            # input_ids based on the past_length.
+            elif past_length < input_ids.shape[1]:
+                input_ids = input_ids[:, past_length:]
+        else:
+            past_key_values = HybridMamba2AttentionDynamicCache(
+                self.config, input_ids.shape[0], self.dtype, device=self.device
+            )
+
+        position_ids = kwargs.get("position_ids", None)
+        if attention_mask is not None and position_ids is None:
+            # Create position_ids on the fly for batch generation
+            position_ids = attention_mask.long().cumsum(-1) - 1
+            position_ids.masked_fill_(attention_mask == 0, 1)
+            if not empty_past_kv:
+                position_ids = position_ids[:, -input_ids.shape[1] :]
+
+        # If `inputs_embeds` are passed, we only want to use them in the 1st generation step
+        if inputs_embeds is not None and empty_past_kv:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids}
 
         model_inputs.update(
             {
-                "cache_params": cache_params,
-                "use_cache": use_cache,
+                "position_ids": position_ids,
+                "past_key_values": past_key_values,
+                "use_cache": kwargs.get("use_cache"),
+                "attention_mask": attention_mask,
+                "cache_position": cache_position,
             }
         )
         return model_inputs
@@ -1781,16 +1786,17 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        cache_params: Optional[Mamba2Cache] = None,
-        initial_states: Optional[List[torch.FloatTensor]] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[HybridMamba2AttentionDynamicCache] = None,
         labels: Optional[torch.LongTensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        output_last_ssm_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         use_cache: Optional[bool] = None,
-        **kwargs,  # for now we need this for generation
-    ) -> Union[Tuple, Mamba2CausalLMOutput]:
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+    ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
@@ -1799,18 +1805,20 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        mamba_outputs = self.backbone(
-            input_ids,
+        outputs = self.backbone(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
-            cache_params=cache_params,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
             use_cache=use_cache,
-            initial_states=initial_states,
+            output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            output_last_ssm_states=output_last_ssm_states,
             return_dict=return_dict,
+            cache_position=cache_position,
         )
-        hidden_states = mamba_outputs[0]
 
+        hidden_states = outputs[0]
         logits = self.lm_head(hidden_states.to(self.lm_head.weight.dtype)).float()
 
         loss = None
@@ -1825,13 +1833,13 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel):
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
 
         if not return_dict:
-            output = (logits,) + mamba_outputs[1:]
+            output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
-        return Mamba2CausalLMOutput(
+        return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            cache_params=mamba_outputs.cache_params,
-            hidden_states=mamba_outputs.hidden_states,
-            last_ssm_states=mamba_outputs.last_ssm_states,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
