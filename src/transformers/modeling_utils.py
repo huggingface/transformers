@@ -719,32 +719,21 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix, keep_in
             new_key = key[len(start_prefix) :] if key.startswith(start_prefix) else key
             state_dict.update({new_key: state_dict.pop(key)})
 
-        class PrecisionMaintainingHook:
-            """
-            A hook which will convert the module `dtype` to the
-            proper type on the first pass of an input. This
-            let's us keep utilizing an `mmap` for fast loading,
-            and postpone the upcast or downcast of a layer until
-            it is needed.
-
-            Will then delete itself after it's been called once
-            """
-
-            def __init__(self, precision):
-                if precision is None:
-                    precision = torch.float32
-                self.precision = precision
-
-            def register_hook(self, module):
-                self.hook = module.register_forward_pre_hook(self.forward_pre_hook)
-
-            def forward_pre_hook(self, module, args):
-                if module.dtype != self.precision and module.dtype in (torch.float32, torch.float16, torch.bfloat16):
-                    module.to(self.precision)
-                self.hook.remove()
-
-        # Attach hooks which will convert any layers that should be `float32` from `float16` or `bfloat16`
-        PrecisionMaintainingHook(precision=dtype).register_hook(model_to_load)
+        # Finally we need to check if the params are the right dtype in the state dict
+        old_param = model_to_load
+        for param_name, param in state_dict.items():
+            splits = param_name.split(".")
+            old_param = model_to_load
+            for split in splits:
+                old_param = getattr(old_param, split)
+                if old_param is None:
+                    break
+            if old_param is not None:
+                if old_param.dtype != param.dtype:
+                    param = param.to(old_param.dtype)
+                if old_param.is_contiguous() and not param.is_contiguous():
+                    param = param.contiguous()
+                state_dict[param_name] = param
 
         # By passing in `assign=True`, we can be memory efficient by mapping the tensors directly, using only 1x
         # the memory of the original state_dict instead of 2.
