@@ -45,8 +45,6 @@ if is_torch_available():
 
     from transformers import (
         ChameleonForCausalLM,
-        ChameleonForQuestionAnswering,
-        ChameleonForSequenceClassification,
         ChameleonModel,
         ChameleonProcessor,
     )
@@ -168,7 +166,7 @@ class ChameleonModelTester:
         return {
             "embed_dim": self.vq_embed_dim,
             "num_embeddings": self.vq_num_embeds,
-            "z_channels": self.vq_embed_dim,
+            "latent_channels": self.vq_embed_dim,
             "in_channels": 3,
             "base_channels": 32,  # we have a GroupNorm of 32 groups, so can't do less
             "channel_multiplier": self.vq_channel_multiplier,
@@ -275,19 +273,12 @@ class ChameleonModelTester:
 
 @require_torch
 class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (ChameleonModel, ChameleonForCausalLM, ChameleonForSequenceClassification, ChameleonForQuestionAnswering)
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (ChameleonModel, ChameleonForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (ChameleonForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": ChameleonModel,
-            "text-classification": ChameleonForSequenceClassification,
             "text-generation": ChameleonForCausalLM,
-            "zero-shot": ChameleonForSequenceClassification,
-            "question-answering": ChameleonForQuestionAnswering,
         }
         if is_torch_available()
         else {}
@@ -306,46 +297,6 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_chameleon_sequence_classification_model(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_labels = 3
-        input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(1).to(torch_device)
-        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-        model = ChameleonForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
-
-    def test_chameleon_sequence_classification_model_for_single_label(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_labels = 3
-        config.problem_type = "single_label_classification"
-        input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(1).to(torch_device)
-        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-        model = ChameleonForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
-
-    def test_chameleon_sequence_classification_model_for_multi_label(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_labels = 3
-        config.problem_type = "multi_label_classification"
-        input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(1).to(torch_device)
-        sequence_labels = ids_tensor(
-            [self.model_tester.batch_size, config.num_labels], self.model_tester.type_sequence_label_size
-        ).to(torch.float)
-        model = ChameleonForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
     @parameterized.expand([("linear",), ("dynamic",)])
     def test_model_rope_scaling(self, scaling_type):
@@ -437,7 +388,7 @@ class ChameleonIntegrationTest(unittest.TestCase):
         inputs = processor(prompt, images=image, return_tensors="pt").to(model.device, torch.float16)
 
         # greedy generation outputs
-        EXPECTED_TEXT_COMPLETION = ['Describe what do you see here and tell me about the history behind?The image depicts a star map with a specific constellation highlighted. The constellation is known as the "Southern Cross" and is located in the southern hemisphere. It is a prominent feature of the']  # fmt: skip
+        EXPECTED_TEXT_COMPLETION = ['Describe what do you see here and tell me about the history behind it?The image depicts a star map, with a bright blue dot representing the position of the star Alpha Centauri. Alpha Centauri is the brightest star in the constellation Centaurus and is located']  # fmt: skip
         generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
         text = processor.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
@@ -466,7 +417,7 @@ class ChameleonIntegrationTest(unittest.TestCase):
 
         # greedy generation outputs
         EXPECTED_TEXT_COMPLETION = [
-            'Describe what do you see here and tell me about the history behind it?The image depicts a star map with a specific constellation highlighted. The constellation is known as the "Southern Cross" and is located in the southern hemisphere. It is a prominent feature of the',
+            'Describe what do you see here and tell me about the history behind it?The image depicts a star map, with a bright blue dot representing the position of the star Alpha Centauri. Alpha Centauri is the brightest star in the constellation Centaurus and is located',
             'What constellation is this image showing?The image is showing the constellation of Orion.'
             ]  # fmt: skip
         generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)

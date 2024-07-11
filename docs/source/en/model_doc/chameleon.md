@@ -182,13 +182,3 @@ model = ChameleonForCausalLM.from_pretrained(
 
 [[autodoc]] ChameleonForCausalLM
     - forward
-
-## ChameleonForSequenceClassification
-
-[[autodoc]] ChameleonForSequenceClassification
-    - forward
-
-## ChameleonForQuestionAnswering
-
-[[autodoc]] ChameleonForQuestionAnswering
-    - forward
