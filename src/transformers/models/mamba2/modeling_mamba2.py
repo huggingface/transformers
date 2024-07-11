@@ -1134,7 +1134,7 @@ class Mamba2Mixer(nn.Module):
         else:
             # Preparing values for single step
             # h -> h p n
-            A = A.unsqueeze(-1).unsqueeze(-1).expand(A.shape[0], self.head_dim, self.ssm_state_size)
+            A = A.unsqueeze(-1).unsqueeze(-1).expand(A.shape[0], self.head_dim, self.ssm_state_size).to(dtype=torch.float32)
             # b 1 h -> b h p
             dt = dt.transpose(1, 2).expand(dt.shape[0], dt.shape[-1], self.head_dim)
             # h -> h p
