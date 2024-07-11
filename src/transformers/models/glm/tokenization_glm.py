@@ -19,9 +19,8 @@ import base64
 import os
 import tiktoken
 from typing import List, Optional, Union, Dict
-from transformers import PreTrainedTokenizer
-from transformers.utils import PaddingStrategy
-from transformers.tokenization_utils_base import EncodedInput, BatchEncoding
+from ...tokenization_utils import PaddingStrategy, PreTrainedTokenizer
+from ...tokenization_utils_base import EncodedInput, BatchEncoding
 
 VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model"}
 PRETOKENIZE_REGEX = "(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\\r\\n\\p{L}\\p{N}]?\\p{L}+|\\p{N}{1,3}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+"
@@ -41,7 +40,8 @@ class GLMTokenizer(PreTrainedTokenizer):
 
         self.name = "GLMTokenizer"
         self.vocab_file = vocab_file
-        pattern = PRETOKENIZE_REGEX
+        self.pat_str = PRETOKENIZE_REGEX
+        self.pattern = re.compile(PRETOKENIZE_REGEX)
         mergeable_ranks = {}
 
         with open(vocab_file) as f:
@@ -52,10 +52,9 @@ class GLMTokenizer(PreTrainedTokenizer):
                 mergeable_ranks[token] = rank
 
         self.mergeable_ranks = mergeable_ranks
-
         self.tokenizer = tiktoken.Encoding(
             name="glm_tokenizer",
-            pat_str=pattern,
+            pat_str=self.pat_str,
             mergeable_ranks=mergeable_ranks,
             special_tokens={}
         )
