@@ -19,9 +19,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import inspect
 from typing import List, Optional, Tuple, Union
 
 import torch
+import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
@@ -200,7 +202,7 @@ class Gemma2Attention(nn.Module):
             max_position_embeddings=self.max_position_embeddings,
             base=self.rope_theta,
         )
-        self.sliding_window = config.sliding_window if layer_idx % 2 else None
+        self.sliding_window = config.sliding_window if not bool(layer_idx % 2) else None
 
     def forward(
         self,
@@ -358,8 +360,7 @@ class Gemma2FlashAttention2(Gemma2Attention):
             key_states = key_states.to(target_dtype)
             value_states = value_states.to(target_dtype)
 
-        ########### ONLY DIFFERENCE IS WE USE SLIDING AND PASS THE SOFTMAX SCALING
-        attn_output = _flash_attention_forward(
+        attn_output = self._flash_attention_forward(
             query_states,
             key_states,
             value_states,
@@ -369,6 +370,7 @@ class Gemma2FlashAttention2(Gemma2Attention):
             softmax_scale=self.scaling,
             is_causal=self.is_causal,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
+            softcap=self.config.attn_logit_softcapping,
         )
 
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
@@ -492,7 +494,7 @@ class Gemma2DecoderLayer(nn.Module):
         self.input_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-        self.is_sliding = bool(layer_idx % 2)
+        self.is_sliding = not bool(layer_idx % 2)
         self.pre_feedforward_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.sliding_window = config.sliding_window

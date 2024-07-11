@@ -596,7 +596,7 @@ Keywords: Data-Centric AI, Data Quality, Noisy Labels, Outlier Detection, Active
 
 ## [BentoML](https://github.com/bentoml/BentoML)
 
-[BentoML](https://github.com/bentoml) is the unified framework for for building, shipping, and scaling production-ready AI applications incorporating traditional ML, pre-trained AI models, Generative and Large Language Models. 
+[BentoML](https://github.com/bentoml) is the unified framework for building, shipping, and scaling production-ready AI applications incorporating traditional ML, pre-trained AI models, Generative and Large Language Models. 
 All Hugging Face models and pipelines can be seamlessly integrated into BentoML applications, enabling the running of models on the most suitable hardware and independent scaling based on usage.
 
 Keywords: BentoML, Framework, Deployment, AI Applications
