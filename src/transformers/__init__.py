@@ -252,7 +252,7 @@ _import_structure = {
     "models.chameleon": [
         "ChameleonConfig",
         "ChameleonProcessor",
-        "ChameleonVQConfig",
+        "ChameleonVQVAEConfig",
     ],
     "models.chinese_clip": [
         "ChineseCLIPConfig",
@@ -1615,11 +1615,10 @@ else:
     _import_structure["models.chameleon"].extend(
         [
             "ChameleonForCausalLM",
-            "ChameleonForQuestionAnswering",
-            "ChameleonForSequenceClassification",
             "ChameleonModel",
             "ChameleonPreTrainedModel",
             "ChameleonProcessor",
+            "ChameleonVQVAE",
         ]
     )
     _import_structure["models.chinese_clip"].extend(
@@ -4898,7 +4897,7 @@ if TYPE_CHECKING:
     from .models.chameleon import (
         ChameleonConfig,
         ChameleonProcessor,
-        ChameleonVQConfig,
+        ChameleonVQVAEConfig,
     )
     from .models.chinese_clip import (
         ChineseCLIPConfig,
@@ -6266,11 +6265,10 @@ if TYPE_CHECKING:
         )
         from .models.chameleon import (
             ChameleonForCausalLM,
-            ChameleonForQuestionAnswering,
-            ChameleonForSequenceClassification,
             ChameleonModel,
             ChameleonPreTrainedModel,
             ChameleonProcessor,
+            ChameleonVQVAE,
         )
         from .models.chinese_clip import (
             ChineseCLIPModel,

@@ -54,6 +54,9 @@ The original code can be found [here](https://github.com/facebookresearch/chamel
 
 - Chameleon generates in chat format which means that the generated text will always be the "assistant's turn". You can enable a text completion generation by passing `return_for_text_completion=True` when calling the processor.
 
+> [!NOTE]
+> Chameleon implementation in Transformers uses a special image token to indicate where to merge image embeddings. For special image token we didn't add a new one but used one of the reserved tokens: `<reserved08707>`.
+
 ## Usage example
 
 ### Single image inference

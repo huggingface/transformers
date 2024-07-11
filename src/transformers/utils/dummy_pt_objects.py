@@ -1842,20 +1842,6 @@ class ChameleonForCausalLM(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class ChameleonForQuestionAnswering(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class ChameleonForSequenceClassification(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class ChameleonModel(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -1871,6 +1857,13 @@ class ChameleonPreTrainedModel(metaclass=DummyObject):
 
 
 class ChameleonProcessor(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ChameleonVQVAE(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

@@ -16,22 +16,20 @@
 
 import math
 from functools import cached_property
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...cache_utils import Cache, StaticCache
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
-    QuestionAnsweringModelOutput,
-    SequenceClassifierOutputWithPast,
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
@@ -44,7 +42,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_chameleon import ChameleonConfig
+from .configuration_chameleon import ChameleonConfig, ChameleonVQVAEConfig
 
 
 if is_flash_attn_2_available():
@@ -895,7 +893,7 @@ class ChameleonSwinDecoderLayer(nn.Module):
         return outputs
 
 
-class ChameleonVQModelVectorQuantizer(nn.Module):
+class ChameleonVQVAEVectorQuantizer(nn.Module):
     """
     A module for vector quantization using learned embedding vectors.
 
@@ -943,7 +941,7 @@ class ChameleonVQModelVectorQuantizer(nn.Module):
         return hidden_state_quant, loss, min_encoding_indices
 
 
-class ChameleonVQModelEncoderConvDownsample(nn.Module):
+class ChameleonVQVAEEncoderConvDownsample(nn.Module):
     def __init__(self, in_channels):
         super().__init__()
         self.conv = nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=2, padding=0)
@@ -955,7 +953,7 @@ class ChameleonVQModelEncoderConvDownsample(nn.Module):
         return hidden_states
 
 
-class ChameleonVQModelEncoderResnetBlock(nn.Module):
+class ChameleonVQVAEEncoderResnetBlock(nn.Module):
     def __init__(
         self,
         config,
@@ -999,7 +997,7 @@ class ChameleonVQModelEncoderResnetBlock(nn.Module):
         return residual + hidden_states
 
 
-class ChameleonVQModelEncoderAttnBlock(nn.Module):
+class ChameleonVQVAEEncoderAttnBlock(nn.Module):
     def __init__(self, in_channels):
         super().__init__()
         self.in_channels = in_channels
@@ -1034,7 +1032,7 @@ class ChameleonVQModelEncoderAttnBlock(nn.Module):
         return residual + attn_output
 
 
-class ChameleonVQModelEncoder(nn.Module):
+class ChameleonVQVAEEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
 
@@ -1043,8 +1041,8 @@ class ChameleonVQModelEncoder(nn.Module):
         base_channels = config.base_channels
         resolution = config.resolution
         in_channels = config.in_channels
-        double_z = config.double_z
-        z_channels = config.z_channels
+        double_latent = config.double_latent
+        latent_channels = config.latent_channels
         channel_multiplier = config.channel_multiplier
 
         self.conv_in = torch.nn.Conv2d(in_channels, base_channels, kernel_size=3, stride=1, padding=1)
@@ -1060,7 +1058,7 @@ class ChameleonVQModelEncoder(nn.Module):
             block_out = base_channels * channel_multiplier[i_level]
             for i_block in range(self.num_res_blocks):
                 block.append(
-                    ChameleonVQModelEncoderResnetBlock(
+                    ChameleonVQVAEEncoderResnetBlock(
                         config=config,
                         in_channels=block_in,
                         out_channels=block_out,
@@ -1072,26 +1070,24 @@ class ChameleonVQModelEncoder(nn.Module):
                     and curr_res in config.attn_resolutions
                     and config.attn_type == "vanilla"
                 ):
-                    attn.append(ChameleonVQModelEncoderAttnBlock(block_in))
+                    attn.append(ChameleonVQVAEEncoderAttnBlock(block_in))
 
             down = nn.Module()
             down.block = block
             down.attn = attn
             if i_level != self.num_resolutions - 1:
-                down.downsample = ChameleonVQModelEncoderConvDownsample(block_in)
+                down.downsample = ChameleonVQVAEEncoderConvDownsample(block_in)
                 curr_res = curr_res // 2
             self.down.append(down)
 
         self.mid = nn.Module()
-        self.mid.block_1 = ChameleonVQModelEncoderResnetBlock(
+        self.mid.block_1 = ChameleonVQVAEEncoderResnetBlock(
             config=config,
             in_channels=block_in,
             out_channels=block_in,
         )
-        self.mid.attn_1 = (
-            ChameleonVQModelEncoderAttnBlock(block_in) if config.attn_type == "vanilla" else nn.Identity()
-        )
-        self.mid.block_2 = ChameleonVQModelEncoderResnetBlock(
+        self.mid.attn_1 = ChameleonVQVAEEncoderAttnBlock(block_in) if config.attn_type == "vanilla" else nn.Identity()
+        self.mid.block_2 = ChameleonVQVAEEncoderResnetBlock(
             config=config,
             in_channels=block_in,
             out_channels=block_in,
@@ -1100,7 +1096,7 @@ class ChameleonVQModelEncoder(nn.Module):
         self.norm_out = torch.nn.GroupNorm(num_groups=32, num_channels=block_in, eps=1e-6, affine=True)
         self.conv_out = torch.nn.Conv2d(
             block_in,
-            2 * z_channels if double_z else z_channels,
+            2 * latent_channels if double_latent else latent_channels,
             kernel_size=3,
             stride=1,
             padding=1,
@@ -1133,19 +1129,53 @@ class ChameleonVQModelEncoder(nn.Module):
         return last_hidden_state
 
 
-class ChameleonVQModel(nn.Module):
-    """
-    A Vector Quantizer model for encoding/decoding images into discrete tokens.
-    """
+CHAMELEON_VQ_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
 
-    def __init__(self, config):
-        super().__init__()
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
 
-        self.config = config
-        self.encoder = ChameleonVQModelEncoder(config)
-        self.quantize = ChameleonVQModelVectorQuantizer(config)
-        self.quant_conv = torch.nn.Conv2d(config.z_channels, config.embed_dim, 1)
-        self.post_quant_conv = torch.nn.Conv2d(config.embed_dim, config.z_channels, 1)
+    Parameters:
+        config ([`ChameleonVQVAEConfig`]):
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+
+@add_start_docstrings(
+    """The VQ-VAE model used in Chameleon for encoding/decoding images into discrete tokens.
+    This model follows the "Make-a-scene: Scene-based text-to-image generation with human priors" paper from
+    [ Oran Gafni, Adam Polyak, Oron Ashual, Shelly Sheynin, Devi Parikh, and Yaniv Taigman](https://arxiv.org/abs/2203.13131).
+    """,
+    CHAMELEON_VQ_START_DOCSTRING,
+)
+class ChameleonVQVAE(PreTrainedModel):
+    config_class = ChameleonVQVAEConfig
+    _no_split_modules = ["ChameleonVQVAEVectorQuantizer"]
+
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+        elif isinstance(module, nn.GroupNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+        elif isinstance(module, (nn.Linear, nn.Conv2d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+
+    def __init__(self, config: ChameleonVQVAEConfig):
+        super().__init__(config)
+
+        self.encoder = ChameleonVQVAEEncoder(config)
+        self.quantize = ChameleonVQVAEVectorQuantizer(config)
+        self.quant_conv = torch.nn.Conv2d(config.latent_channels, config.embed_dim, 1)
+        self.post_quant_conv = torch.nn.Conv2d(config.embed_dim, config.latent_channels, 1)
         self.eval()  # Chameleon's VQ model is frozen
 
     def encode(self, pixel_values: torch.LongTensor):
@@ -1227,7 +1257,7 @@ class ChameleonPreTrainedModel(PreTrainedModel):
     config_class = ChameleonConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["ChameleonDecoderLayer", "ChameleonSwinDecoderLayer", "ChameleonVQModelVectorQuantizer"]
+    _no_split_modules = ["ChameleonDecoderLayer", "ChameleonSwinDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values", "causal_mask"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
@@ -1237,7 +1267,9 @@ class ChameleonPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
+        if isinstance(module, ChameleonVQVAE):
+            module.apply(module._init_weights)
+        elif isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -1285,20 +1317,12 @@ CHAMELEON_INPUTS_DOCSTRING = r"""
             config.n_positions - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        past_key_values (`Cache` or `tuple(tuple(torch.FloatTensor))`, *optional*):
+        past_key_values (`Cache`, *optional*):
             Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
             blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
             returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
 
-            Two formats are allowed:
-            - a [`~cache_utils.Cache`] instance;
-            - Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
-            shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`). This is also known as the legacy
-            cache format.
-
-            The model will output the same cache format that is fed as input. If no `past_key_values` are passed, the
-            legacy cache format will be returned.
-
+            Should always be a [`~cache_utils.Cache`] instance and the model will output the same cache instance.
             If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that don't
             have their past key value states given to this model) of shape `(batch_size, 1)` instead of all `input_ids`
             of shape `(batch_size, sequence_length)`.
@@ -1348,7 +1372,7 @@ class ChameleonModel(ChameleonPreTrainedModel):
             [decoder_layer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = ChameleonRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.vqmodel = ChameleonVQModel(config.vq_config)
+        self.vqmodel = ChameleonVQVAE(config.vq_config)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -1389,7 +1413,7 @@ class ChameleonModel(ChameleonPreTrainedModel):
         pixel_values: torch.FloatTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1427,15 +1451,6 @@ class ChameleonModel(ChameleonPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
-
-        use_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache):  # kept for BC (non `Cache` `past_key_values` inputs)
-            use_legacy_cache = True
-            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-            logger.warning_once(
-                "We detected that you are passing `past_key_values` as a tuple and this is deprecated and will be removed in v4.43. "
-                "Please use an appropriate `Cache` class (https://huggingface.co/docs/transformers/v4.41.3/en/internal/generation_utils#transformers.Cache)"
-            )
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if use_cache else 0
@@ -1500,7 +1515,7 @@ class ChameleonModel(ChameleonPreTrainedModel):
 
         next_cache = None
         if use_cache:
-            next_cache = next_decoder_cache.to_legacy_cache() if use_legacy_cache else next_decoder_cache
+            next_cache = next_decoder_cache
 
         if not return_dict:
             return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
@@ -1636,7 +1651,7 @@ class ChameleonForCausalLM(ChameleonPreTrainedModel):
         pixel_values: torch.FloatTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -1817,245 +1832,3 @@ class ChameleonForCausalLM(ChameleonPreTrainedModel):
                 tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
         return reordered_past
-
-
-@add_start_docstrings(
-    """
-    The Chameleon Model transformer with a sequence classification head on top (linear layer).
-
-    [`ChameleonForSequenceClassification`] uses the last token in order to do the classification, as other causal models
-    (e.g. GPT-2) do.
-
-    Since it does classification on the last token, it requires to know the position of the last token. If a
-    `pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each row. If
-    no `pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot guess the
-    padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take the last value in
-    each row of the batch).
-    """,
-    CHAMELEON_START_DOCSTRING,
-)
-# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with Llama->Chameleon, LLAMA->CHAMELEON
-class ChameleonForSequenceClassification(ChameleonPreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-        self.num_labels = config.num_labels
-        self.model = ChameleonModel(config)
-        self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
-
-    @add_start_docstrings_to_model_forward(CHAMELEON_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=SequenceClassifierOutputWithPast,
-        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
-        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
-    )
-    # Ignore copy
-    def forward(
-        self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple, SequenceClassifierOutputWithPast]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        transformer_outputs = self.model(
-            input_ids=input_ids,
-            pixel_values=pixel_values,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            cache_position=cache_position,
-        )
-        hidden_states = transformer_outputs[0]
-        logits = self.score(hidden_states)
-
-        if input_ids is not None:
-            batch_size = input_ids.shape[0]
-        else:
-            batch_size = inputs_embeds.shape[0]
-
-        if self.config.pad_token_id is None and batch_size != 1:
-            raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
-        if self.config.pad_token_id is None:
-            sequence_lengths = -1
-        else:
-            if input_ids is not None:
-                # if no pad token found, use modulo instead of reverse indexing for ONNX compatibility
-                sequence_lengths = torch.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1
-                sequence_lengths = sequence_lengths % input_ids.shape[-1]
-                sequence_lengths = sequence_lengths.to(logits.device)
-            else:
-                sequence_lengths = -1
-
-        pooled_logits = logits[torch.arange(batch_size, device=logits.device), sequence_lengths]
-
-        loss = None
-        if labels is not None:
-            labels = labels.to(logits.device)
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
-
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(pooled_logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(pooled_logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(pooled_logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(pooled_logits, labels)
-        if not return_dict:
-            output = (pooled_logits,) + transformer_outputs[1:]
-            return ((loss,) + output) if loss is not None else output
-
-        return SequenceClassifierOutputWithPast(
-            loss=loss,
-            logits=pooled_logits,
-            past_key_values=transformer_outputs.past_key_values,
-            hidden_states=transformer_outputs.hidden_states,
-            attentions=transformer_outputs.attentions,
-        )
-
-
-@add_start_docstrings(
-    """
-The Chameleon Model transformer with a span classification head on top for extractive question-answering tasks like
-SQuAD (a linear layer on top of the hidden-states output to compute `span start logits` and `span end logits`).
-    """,
-    CHAMELEON_START_DOCSTRING,
-)
-class ChameleonForQuestionAnswering(ChameleonPreTrainedModel):
-    # Copied from transformers.models.llama.modeling_llama.LlamaForQuestionAnswering.__init__ with Llama->Chameleon
-    def __init__(self, config):
-        super().__init__(config)
-        self.transformer = ChameleonModel(config)
-        self.qa_outputs = nn.Linear(config.hidden_size, 2)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self):
-        return self.transformer.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.transformer.embed_tokens = value
-
-    @add_start_docstrings_to_model_forward(CHAMELEON_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=QuestionAnsweringModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
-    # Ignore copy
-    def forward(
-        self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: torch.FloatTensor = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        start_positions: Optional[torch.LongTensor] = None,
-        end_positions: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple, QuestionAnsweringModelOutput]:
-        r"""
-        start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
-            are not taken into account for computing the loss.
-        end_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
-            are not taken into account for computing the loss.
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.transformer(
-            input_ids=input_ids,
-            pixel_values=pixel_values,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            cache_position=cache_position,
-        )
-
-        sequence_output = outputs[0]
-
-        logits = self.qa_outputs(sequence_output)
-        start_logits, end_logits = logits.split(1, dim=-1)
-        start_logits = start_logits.squeeze(-1).contiguous()
-        end_logits = end_logits.squeeze(-1).contiguous()
-
-        total_loss = None
-        if start_positions is not None and end_positions is not None:
-            # If we are on multi-GPU, split add a dimension
-            if len(start_positions.size()) > 1:
-                start_positions = start_positions.squeeze(-1).to(start_logits.device)
-            if len(end_positions.size()) > 1:
-                end_positions = end_positions.squeeze(-1).to(end_logits.device)
-            # sometimes the start/end positions are outside our model inputs, we ignore these terms
-            ignored_index = start_logits.size(1)
-            start_positions = start_positions.clamp(0, ignored_index)
-            end_positions = end_positions.clamp(0, ignored_index)
-
-            loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
-            start_loss = loss_fct(start_logits, start_positions)
-            end_loss = loss_fct(end_logits, end_positions)
-            total_loss = (start_loss + end_loss) / 2
-
-        if not return_dict:
-            output = (start_logits, end_logits) + outputs[2:]
-            return ((total_loss,) + output) if total_loss is not None else output
-
-        return QuestionAnsweringModelOutput(
-            loss=total_loss,
-            start_logits=start_logits,
-            end_logits=end_logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )

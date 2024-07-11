@@ -321,6 +321,8 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
         ("out_ch", "out_channels"),
         ("n_embed", "num_embeddings"),
         ("ch_mult", "channel_multiplier"),
+        ("double_z", "double_latent"),
+        ("z_channels", "latent_channels"),
     ]
     with open(os.path.join(input_base_path, "tokenizer/vqgan.yaml")) as vqgan_cfg_file:
         vq_config = yaml.safe_load(vqgan_cfg_file)["model"]["params"]
@@ -422,6 +424,11 @@ def main():
     parser.add_argument(
         "--output_dir",
         help="Location to write HF model",
+    )
+    parser.add_argument(
+        "--test_inference",
+        action="store_true",
+        help="Whether to load the model for generation to test it's converted correctly.",
     )
     # Different Chameleon versions used different default values for max_position_embeddings, hence the need to be able to specify which version is being used.
     parser.add_argument(

@@ -23,7 +23,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class ChameleonVQConfig(PretrainedConfig):
+class ChameleonVQVAEConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ChameleonVQModel`]. It is used to instantiate a
     `ChameleonVQModel` according to the specified arguments, defining the model architecture.
@@ -37,9 +37,9 @@ class ChameleonVQConfig(PretrainedConfig):
             Dimensionality of each embedding vector.
         num_embeddings (`int`, *optional*, defaults to 8192):
             Number of codebook embeddings.
-        double_z (`bool`, *optional*, defaults to `False`):
+        double_latent (`bool`, *optional*, defaults to `False`):
             Whether to use double z channels.
-        z_channels (`int`, *optional*, defaults to 256):
+        latent_channels (`int`, *optional*, defaults to 256):
             Number of channels for the latent space.
         resolution (`int`, *optional*, defaults to 512):
             Resolution of the input images.
@@ -57,6 +57,8 @@ class ChameleonVQConfig(PretrainedConfig):
             Dropout rate.
         attn_type (`str`, *optional*, defaults to `"vanilla"`):
             Attention type used in VQ-GAN encoder. Can be "vanilla" or None.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
     """
 
     model_type = "chameleon_vqgan"
@@ -65,8 +67,8 @@ class ChameleonVQConfig(PretrainedConfig):
         self,
         embed_dim: int = 256,
         num_embeddings: int = 8192,
-        double_z: bool = False,
-        z_channels: int = 256,
+        double_latent: bool = False,
+        latent_channels: int = 256,
         resolution: int = 512,
         in_channels: int = 3,
         base_channels: int = 128,
@@ -75,13 +77,14 @@ class ChameleonVQConfig(PretrainedConfig):
         attn_resolutions: List[int] = None,
         dropout: float = 0.0,
         attn_type: str = "vanilla",
+        initializer_range=0.02,
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.embed_dim = embed_dim
         self.num_embeddings = num_embeddings
-        self.double_z = double_z
-        self.z_channels = z_channels
+        self.double_latent = double_latent
+        self.latent_channels = latent_channels
         self.resolution = resolution
         self.in_channels = in_channels
         self.base_channels = base_channels
@@ -90,6 +93,7 @@ class ChameleonVQConfig(PretrainedConfig):
         self.attn_resolutions = attn_resolutions
         self.dropout = dropout
         self.attn_type = attn_type
+        self.initializer_range = initializer_range
 
 
 class ChameleonConfig(PretrainedConfig):
@@ -221,10 +225,6 @@ class ChameleonConfig(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.mlp_bias = mlp_bias
 
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
-
         self.num_key_value_heads = num_key_value_heads
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
@@ -242,7 +242,7 @@ class ChameleonConfig(PretrainedConfig):
             vq_config = {}
             logger.info("vq_config is None. initializing the ChameleonVQConfig with default values.")
 
-        self.vq_config = ChameleonVQConfig(**vq_config)
+        self.vq_config = ChameleonVQVAEConfig(**vq_config)
 
         self.vocabulary_map = vocabulary_map
 

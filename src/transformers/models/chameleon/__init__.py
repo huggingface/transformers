@@ -24,7 +24,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_chameleon": ["ChameleonConfig", "ChameleonVQConfig"],
+    "configuration_chameleon": ["ChameleonConfig", "ChameleonVQVAEConfig"],
     "processing_chameleon": ["ChameleonProcessor"],
 }
 
@@ -39,8 +39,7 @@ else:
         "ChameleonForCausalLM",
         "ChameleonModel",
         "ChameleonPreTrainedModel",
-        "ChameleonForSequenceClassification",
-        "ChameleonForQuestionAnswering",
+        "ChameleonVQVAE",
     ]
 
 try:
@@ -53,7 +52,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_chameleon import ChameleonConfig, ChameleonVQConfig
+    from .configuration_chameleon import ChameleonConfig, ChameleonVQVAEConfig
     from .processing_chameleon import ChameleonProcessor
 
     try:
@@ -64,10 +63,9 @@ if TYPE_CHECKING:
     else:
         from .modeling_chameleon import (
             ChameleonForCausalLM,
-            ChameleonForQuestionAnswering,
-            ChameleonForSequenceClassification,
             ChameleonModel,
             ChameleonPreTrainedModel,
+            ChameleonVQVAE,
         )
 
     try:
