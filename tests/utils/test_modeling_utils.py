@@ -73,7 +73,7 @@ from transformers.utils.import_utils import (
 )
 
 
-sys.path.append(str(Path(__file__).parent.parent / "utils"))
+sys.path.append(str(Path(__file__).parent.parent.parent / "utils"))
 
 from test_module.custom_configuration import CustomConfig, NoSuperInitConfig  # noqa E402
 
@@ -1067,6 +1067,23 @@ class ModelUtilsTest(TestCasePlus):
 
     @require_accelerate
     @mark.accelerate_tests
+    def test_save_model_with_device_map_cpu(self):
+        model_id = "hf-internal-testing/tiny-random-gpt2"
+        inputs = torch.tensor([[1, 2, 3]])
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model = AutoModelForCausalLM.from_pretrained(model_id, device_map="cpu")
+            output = model(inputs)[0]
+            model.save_pretrained(
+                tmp_dir, max_shard_size="200KB"
+            )  # model is 1.6MB, max shard size is allocated to cpu by default
+            saved_model = AutoModelForCausalLM.from_pretrained(tmp_dir, device_map="cpu")
+            saved_model_output = saved_model(inputs)[0]
+
+        self.assertTrue(torch.allclose(output, saved_model_output))
+
+    @require_accelerate
+    @mark.accelerate_tests
     @require_torch_accelerator
     def test_save_offloaded_model(self):
         device_map = {
@@ -1083,9 +1100,9 @@ class ModelUtilsTest(TestCasePlus):
 
         # check_models_equal requires onloaded tensors
         model_id = "hf-internal-testing/tiny-random-gpt2"
-        onloaded_model = AutoModelForCausalLM.from_pretrained(model_id, device_map="cpu")
+        onloaded_model = AutoModelForCausalLM.from_pretrained(model_id, device_map="cpu").to(f"{torch_device}:0")
         inputs = torch.tensor([[1, 2, 3]]).to(f"{torch_device}:0")
-        cpu_output = onloaded_model(inputs)[0]
+        output = onloaded_model(inputs)[0]
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             offload_folder = os.path.join(tmp_dir, "offload")
@@ -1099,7 +1116,7 @@ class ModelUtilsTest(TestCasePlus):
             saved_model = AutoModelForCausalLM.from_pretrained(tmp_dir, device_map=device_map)
             postsaved_output = saved_model(inputs)[0]
 
-        self.assertTrue(torch.allclose(cpu_output, presaved_output, atol=1e-4))
+        self.assertTrue(torch.allclose(output, presaved_output, atol=1e-4))
         self.assertTrue(torch.allclose(presaved_output, postsaved_output))
 
     @require_safetensors
@@ -1407,20 +1424,15 @@ class ModelUtilsTest(TestCasePlus):
             self.assertEqual(model.__class__.__name__, model_ref.__class__.__name__)
 
     def test_generation_config_is_loaded_with_model(self):
-        # Note: `joaogante/tiny-random-gpt2-with-generation-config` has a `generation_config.json` containing a dummy
-        # `transformers_version` field set to `foo`. If loading the file fails, this test also fails.
+        # Note: `TinyLlama/TinyLlama-1.1B-Chat-v1.0` has a `generation_config.json` containing `max_length: 2048`
 
         # 1. Load without further parameters
-        model = AutoModelForCausalLM.from_pretrained(
-            "joaogante/tiny-random-gpt2-with-generation-config", use_safetensors=False
-        )
-        self.assertEqual(model.generation_config.transformers_version, "foo")
+        model = AutoModelForCausalLM.from_pretrained("TinyLlama/TinyLlama-1.1B-Chat-v1.0")
+        self.assertEqual(model.generation_config.max_length, 2048)
 
         # 2. Load with `device_map`
-        model = AutoModelForCausalLM.from_pretrained(
-            "joaogante/tiny-random-gpt2-with-generation-config", device_map="auto", use_safetensors=False
-        )
-        self.assertEqual(model.generation_config.transformers_version, "foo")
+        model = AutoModelForCausalLM.from_pretrained("TinyLlama/TinyLlama-1.1B-Chat-v1.0", device_map="auto")
+        self.assertEqual(model.generation_config.max_length, 2048)
 
     @require_safetensors
     def test_safetensors_torch_from_torch(self):
@@ -1498,6 +1510,57 @@ class ModelUtilsTest(TestCasePlus):
             outputs = model(input_ids)
             outputs_from_saved = new_model(input_ids)
             self.assertTrue(torch.allclose(outputs_from_saved["logits"], outputs["logits"]))
+
+    def test_warning_for_beta_gamma_parameters(self):
+        class TestModelGamma(PreTrainedModel):
+            def __init__(self, config):
+                super().__init__(config)
+                self.gamma_param = nn.Parameter(torch.ones(10))
+                self.post_init()
+
+            def forward(self):
+                return self.gamma_param.sum()
+
+        logger = logging.get_logger("transformers.modeling_utils")
+        config = PretrainedConfig()
+        warning_msg_gamma = "A parameter name that contains `gamma` will be renamed internally"
+        model = TestModelGamma(config)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            with LoggingLevel(logging.WARNING):
+                with CaptureLogger(logger) as cl1:
+                    _, loading_info = TestModelGamma.from_pretrained(tmp_dir, config=config, output_loading_info=True)
+
+        missing_keys = loading_info["missing_keys"]
+        unexpected_keys = loading_info["unexpected_keys"]
+        self.assertIn(warning_msg_gamma, cl1.out)
+        self.assertIn("gamma_param", missing_keys)
+        self.assertIn("weight_param", unexpected_keys)
+
+        class TestModelBeta(PreTrainedModel):
+            def __init__(self, config):
+                super().__init__(config)
+                self.beta_param = nn.Parameter(torch.ones(10))
+                self.post_init()
+
+            def forward(self):
+                return self.beta_param.sum()
+
+        warning_msg_beta = "A parameter name that contains `beta` will be renamed internally"
+        model = TestModelBeta(config)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            with LoggingLevel(logging.WARNING):
+                with CaptureLogger(logger) as cl2:
+                    _, loading_info = TestModelBeta.from_pretrained(tmp_dir, config=config, output_loading_info=True)
+
+        missing_keys = loading_info["missing_keys"]
+        unexpected_keys = loading_info["unexpected_keys"]
+        self.assertIn(warning_msg_beta, cl2.out)
+        self.assertIn("beta_param", missing_keys)
+        self.assertIn("bias_param", unexpected_keys)
 
 
 @slow
