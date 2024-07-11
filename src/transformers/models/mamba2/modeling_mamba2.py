@@ -593,8 +593,9 @@ class Mamba2Attention(nn.Module):
 
         return query, key, value, cache
 
-    # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXAttention._attn
-    def _attn(self, query, key, value, attention_mask=None, head_mask=None):
+    # Adapted from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXAttention._attn
+    # No dropout or head mask
+    def _attn(self, query, key, value, attention_mask=None):
         # q, k, v: [bs, num_attention_heads, seq_len, attn_head_size]
         # compute causal mask from causal mask buffer
         batch_size, num_attention_heads, query_length, attn_head_size = query.size()
@@ -635,12 +636,6 @@ class Mamba2Attention(nn.Module):
 
         attn_weights = nn.functional.softmax(attn_scores, dim=-1)
         attn_weights = attn_weights.to(value.dtype)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            attn_weights = attn_weights * head_mask
-
-        attn_weights = self.attention_dropout(attn_weights)
 
         attn_output = torch.matmul(attn_weights, value)
         return attn_output, attn_weights
