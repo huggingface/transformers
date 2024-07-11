@@ -627,14 +627,34 @@ class SpmConverter(Converter):
         # both user and control tokens are AddedTokens
         # Add user defined symbols (type == 4) from sentnecepiece (https://github.com/google/sentencepiece/blob/6225e08edb2577757163b3f5dbba4c0b670ef445/src/sentencepiece_model.proto#L299C29-L299C33)
 
-        all_added_tokens = {
+        tokens_to_add = {
             id: AddedToken(token, normalized=False, special=special)
             for id, token, special in [
                 (id, p.piece, p.type == 3) for id, p in enumerate(self.proto.pieces) if p.type in [3, 4]
             ]
         }
-
-        tokenizer.add_tokens([k for _, k in sorted(all_added_tokens.items(), key=lambda x: x[0])])
+        tokens_to_add = [k for _, k in sorted(tokens_to_add.items(), key=lambda x: x[0])]
+        if len(tokens_to_add) > 0:
+            # super hack: if a token.special is set, tokenizer ignores it for now so FIXME @ArthurZ
+            # Accumulate added tokens into batches of special/non-special tokens, because calling add_tokens() for
+            # individual tokens would repeatedly rebuild a trie, which can be slow.
+            is_last_special = None
+            tokens = []
+            special_tokens = self.all_special_tokens
+            for token in tokens_to_add:
+                is_special = (
+                    (token.special or str(token) in special_tokens)
+                    if isinstance(token, AddedToken)
+                    else str(token) in special_tokens
+                )
+                if is_last_special is None or is_last_special == is_special:
+                    tokens.append(token)
+                else:
+                    self._add_tokens(tokens, special_tokens=is_last_special)
+                    tokens = [token]
+                is_last_special = is_special
+            if tokens:
+                self._add_tokens(tokens, special_tokens=is_last_special)
 
         # Tokenizer assemble
         normalizer = self.normalizer(self.proto)
