@@ -130,16 +130,17 @@ def _upad_input(
 
 
 def _flash_attention_forward(
-    query_states,
-    key_states,
-    value_states,
-    attention_mask,
+    query_states: torch.Tensor,
+    key_states: torch.Tensor,
+    value_states: torch.Tensor,
+    attention_mask: torch.Tensor,
     query_length: int,
     is_causal: bool,
     dropout: float = 0.0,
     softmax_scale: Optional[float] = None,
-    sliding_window=None,
+    sliding_window: Optional[int] = None,
     use_top_left_mask: bool = False,
+    softcap: Optional[float] = None,
 ):
     """
     Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
@@ -159,6 +160,10 @@ def _flash_attention_forward(
             Attention dropout
         softmax_scale (`float`, *optional*):
             The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
+        use_top_left_mask (`bool`, defaults to `False`):
+            flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference.
+        softcap (`float`, *optional*):
+            Softcap for the attention logits, used e.g. in gemma2.
     """
     if not use_top_left_mask:
         causal = is_causal
@@ -171,6 +176,9 @@ def _flash_attention_forward(
         _flash_supports_window_size and sliding_window is not None and key_states.shape[1] > sliding_window
     )
     flash_kwargs = {"window_size": (sliding_window, sliding_window)} if use_sliding_windows else {}
+
+    if softcap is not None:
+        flash_kwargs["softcap"] = softcap
 
     # Contains at least one padding token in the sequence
     if attention_mask is not None:
