@@ -61,7 +61,7 @@ is_fast_path_available = all(
 )
 
 
-# Adapted from transformers.models.jamba.modeling_jamba.HybridMamba2AttentionDynamicCache
+# Adapted from transformers.models.jamba.modeling_jamba.HybridMambaAttentionDynamicCache with Mamba->Mamba2
 class HybridMamba2AttentionDynamicCache(DynamicCache):
     """
     A dynamic cache that can handle both the attention cache (which has a seq_len dimension) and the mamba2 cache
@@ -114,12 +114,13 @@ class HybridMamba2AttentionDynamicCache(DynamicCache):
         self.key_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
         self.value_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
 
+    # Copied from transformers.models.jamba.modeling_jamba.HybridMambaAttentionDynamicCache.update
     def update(
-            self,
-            key_states: torch.Tensor,
-            value_states: torch.Tensor,
-            layer_idx: int,
-            cache_kwargs: Optional[Dict[str, Any]] = None,
+        self,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        layer_idx: int,
+        cache_kwargs: Optional[Dict[str, Any]] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         # Update the cache
         if self.key_cache[layer_idx].shape[-1] == 0:
@@ -131,6 +132,7 @@ class HybridMamba2AttentionDynamicCache(DynamicCache):
 
         return self.key_cache[layer_idx], self.value_cache[layer_idx]
 
+    # Copied from transformers.models.jamba.modeling_jamba.HybridMambaAttentionDynamicCache.reorder_cache
     def reorder_cache(self, beam_idx: torch.LongTensor):
         """Reorders the cache for beam search, given the selected beam indices."""
         for layer_idx in range(len(self.key_cache)):
@@ -144,6 +146,7 @@ class HybridMamba2AttentionDynamicCache(DynamicCache):
             device = self.ssm_states[layer_idx].device
             self.ssm_states[layer_idx] = self.ssm_states[layer_idx].index_select(0, beam_idx.to(device))
 
+    # Copied from transformers.models.jamba.modeling_jamba.HybridMambaAttentionDynamicCache.get_seq_length
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         # take any layer that contains cache and not empty tensor
@@ -152,10 +155,12 @@ class HybridMamba2AttentionDynamicCache(DynamicCache):
             return 0
         return self.key_cache[layer_idx].shape[-2]
 
+    # Copied from transformers.models.jamba.modeling_jamba.HybridMambaAttentionDynamicCache.to_legacy_cache
     def to_legacy_cache(self) -> Tuple[Tuple[torch.Tensor], Tuple[torch.Tensor]]:
         raise NotImplementedError("HybridMambaAttentionDynamicCache does not have a legacy cache equivalent.")
 
     @classmethod
+    # Copied from transformers.models.jamba.modeling_jamba.HybridMambaAttentionDynamicCache.from_legacy_cache
     def from_legacy_cache(cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None) -> "DynamicCache":
         raise NotImplementedError("HybridMambaAttentionDynamicCache does not have a legacy cache equivalent.")
 
@@ -186,8 +191,9 @@ class Mamba2MLP(nn.Module):
         y = self.fc2(y)
         return y
 
-# Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXRotaryEmbedding
+# Adapted from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXRotaryEmbedding with GPTNeoX->Mamba2
 class Mamba2RotaryEmbedding(nn.Module):
+    # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXRotaryEmbedding.__init__
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
 
@@ -202,6 +208,7 @@ class Mamba2RotaryEmbedding(nn.Module):
             seq_len=max_position_embeddings, device=self.inv_freq.device, dtype=torch.get_default_dtype()
         )
 
+    # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXRotaryEmbedding._set_cos_sin_cache
     def _set_cos_sin_cache(self, seq_len, device, dtype):
         self.max_seq_len_cached = seq_len
         t = torch.arange(self.max_seq_len_cached, device=device, dtype=torch.int64).type_as(self.inv_freq)
@@ -212,6 +219,7 @@ class Mamba2RotaryEmbedding(nn.Module):
         self.register_buffer("cos_cached", emb.cos(), persistent=False)
         self.register_buffer("sin_cached", emb.sin(), persistent=False)
 
+    # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXRotaryEmbedding.forward
     def forward(self, x, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
         if seq_len > self.max_seq_len_cached:
@@ -223,15 +231,17 @@ class Mamba2RotaryEmbedding(nn.Module):
         )
 
 
-# TODO @gante bring compatibility back, is that still valid?
-# Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXLinearScalingRotaryEmbedding
+# TODO @gante bring compatibility back
+# Adapted from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXLinearScalingRotaryEmbedding with GPTNeoX->Mamba2
 class Mamba2LinearScalingRotaryEmbedding(Mamba2RotaryEmbedding):
     """Mamba2RotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
 
+    # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXLinearScalingRotaryEmbedding.__init__
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
         self.scaling_factor = scaling_factor
         super().__init__(dim, max_position_embeddings, base, device)
 
+    # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXLinearScalingRotaryEmbedding._set_cos_sin_cache
     def _set_cos_sin_cache(self, seq_len, device, dtype):
         self.max_seq_len_cached = seq_len
         t = torch.arange(self.max_seq_len_cached, device=device, dtype=torch.int64).type_as(self.inv_freq)
@@ -244,21 +254,23 @@ class Mamba2LinearScalingRotaryEmbedding(Mamba2RotaryEmbedding):
         self.register_buffer("sin_cached", emb.sin(), persistent=False)
 
 
-# Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXDynamicNTKScalingRotaryEmbedding
+# Adapted from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXDynamicNTKScalingRotaryEmbedding with GPTNeoX->Mamba2
 class Mamba2DynamicNTKScalingRotaryEmbedding(Mamba2RotaryEmbedding):
     """Mamba2RotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
 
-    # TODO @gante no longer copied from, is that still valid?
+    # TODO @gante no longer copied from
+    # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXDynamicNTKScalingRotaryEmbedding.__init__
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
         self.scaling_factor = scaling_factor
         super().__init__(dim, max_position_embeddings, base, device)
 
+    # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXDynamicNTKScalingRotaryEmbedding._set_cos_sin_cache
     def _set_cos_sin_cache(self, seq_len, device, dtype):
         self.max_seq_len_cached = seq_len
 
         if seq_len > self.max_position_embeddings:
             base = self.base * (
-                    (self.scaling_factor * seq_len / self.max_position_embeddings) - (self.scaling_factor - 1)
+                (self.scaling_factor * seq_len / self.max_position_embeddings) - (self.scaling_factor - 1)
             ) ** (self.dim / (self.dim - 2))
             inv_freq = 1.0 / (base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float().to(device) / self.dim))
             self.register_buffer("inv_freq", inv_freq, persistent=False)
@@ -322,25 +334,33 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-# Adapted from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXAttention
+# Adapted from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXAttention with GPTNeoX->Mamba2
 class Mamba2Attention(nn.Module):
+    """
+    Multi-headed attention from 'Attention Is All You Need' paper. Possible switch to MQA when num_heads_kv < num_heads_q.
+    """
+
     def __init__(self, config: Mamba2Config, layer_idx: int):
         super().__init__()
         self.config = config
 
         self.hidden_size = config.hidden_size
+        # For simplicity mamba2 and the attention blocks use same conv kernel sizes
         self.conv_kernel_size = config.conv_kernel
         self.head_dim = config.attention_head_dim
         self.num_heads = config.attention_num_heads
         self.num_heads_kv = config.attention_num_key_value_heads
         self.num_groups_kv = self.num_heads // self.num_heads_kv
+        # See https://github.com/state-spaces/mamba/issues/457#issuecomment-2221116217
+        # d_model % num_heads == 0 is not necessary due to this custom head projection
         self.qkv_dim = self.head_dim * (self.num_heads + 2 * self.num_heads_kv)
         self.out_dim = self.head_dim * self.num_heads
 
-        # only used for causal mask creation
+        # Only used for causal mask creation
         self._init_bias(config.max_position_embeddings)
         self.register_buffer("masked_bias", torch.tensor(-1e9), persistent=False)
 
+        # Optional rope
         self.rotary_emb_dim = config.rope_emb_dim
         self._init_rope()
 
@@ -353,6 +373,13 @@ class Mamba2Attention(nn.Module):
         self.is_causal = True
         self.layer_idx = layer_idx
 
+        if not is_causal_conv1d_available():
+            logger.warning_once(
+                "Convolution implementation in Mamba2 attention is falling back to naive implementation because `(causal_conv1d_fn, causal_conv1d_update)`"
+                "is None. To install follow https://github.com/Dao-AILab/causal-conv1d."
+            )
+
+    # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXAttention._init_bias
     def _init_bias(self, max_positions, device=None):
         self.register_buffer(
             "bias",
@@ -364,10 +391,11 @@ class Mamba2Attention(nn.Module):
         if device is not None:
             self.bias = self.bias.to(device)
 
+    # Adapted from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXAttention._init_rope
+    # Rope is optional and can be ignored if rope_emb_dim <= 0
     def _init_rope(self):
         # RoPE is optional
         if self.rotary_emb_dim <= 0:
-            self.rotary_emb = None
             return
 
         if self.config.rope_scaling is None:
@@ -394,6 +422,8 @@ class Mamba2Attention(nn.Module):
             else:
                 raise ValueError(f"Unknown RoPE scaling type {scaling_type}")
 
+    # Adapted from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXAttention.forward
+    # Allowing MQA and involves causal-conv-1d
     def forward(
             self,
             hidden_states: torch.FloatTensor,
@@ -426,6 +456,7 @@ class Mamba2Attention(nn.Module):
         return attn_output, attn_weights, cache
 
     @classmethod
+    # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXAttention._split_heads
     def _split_heads(cls, tensor, num_attention_heads, attn_head_size):
         """
         Splits hidden dim into attn_head_size and num_attention_heads
@@ -439,6 +470,7 @@ class Mamba2Attention(nn.Module):
         return tensor
 
     @classmethod
+    # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXAttention._merge_heads
     def _merge_heads(cls, tensor, num_attention_heads, attn_head_size):
         """
         Merges attn_head_size dim and num_attn_heads dim into hidden dim
@@ -489,6 +521,8 @@ class Mamba2Attention(nn.Module):
 
         return qkv
 
+    # Moved to a separate function since it's optional
+    # Originally part of transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXAttention._attn_projections_and_rope
     def _apply_rope(
             self,
             query: torch.FloatTensor,
@@ -559,7 +593,8 @@ class Mamba2Attention(nn.Module):
 
         return query, key, value, cache
 
-    def _attn(self, query, key, value, attention_mask=None):
+    # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXAttention._attn
+    def _attn(self, query, key, value, attention_mask=None, head_mask=None):
         # q, k, v: [bs, num_attention_heads, seq_len, attn_head_size]
         # compute causal mask from causal mask buffer
         batch_size, num_attention_heads, query_length, attn_head_size = query.size()
@@ -578,7 +613,7 @@ class Mamba2Attention(nn.Module):
             key_length,
             dtype=query.dtype,
             device=key.device,
-            )
+        )
         attn_scores = torch.baddbmm(
             attn_scores,
             query,
@@ -601,6 +636,12 @@ class Mamba2Attention(nn.Module):
         attn_weights = nn.functional.softmax(attn_scores, dim=-1)
         attn_weights = attn_weights.to(value.dtype)
 
+        # Mask heads if we want to
+        if head_mask is not None:
+            attn_weights = attn_weights * head_mask
+
+        attn_weights = self.attention_dropout(attn_weights)
+
         attn_output = torch.matmul(attn_weights, value)
         return attn_output, attn_weights
 
@@ -618,6 +659,7 @@ def _get_unpad_data(attention_mask):
     )
 
 
+# Adapted from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXFlashAttention2 with GPTNeoX->Mamba2
 class Mamba2FlashAttention2(Mamba2Attention):
     """
     Mamba2 flash attention module. This module inherits from `Mamba2Attention` as the weights of the module stays
@@ -625,6 +667,7 @@ class Mamba2FlashAttention2(Mamba2Attention):
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
+    # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXFlashAttention2.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -633,6 +676,8 @@ class Mamba2FlashAttention2(Mamba2Attention):
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
 
+    # Adapted from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXFlashAttention2.forward
+    # Allowing MQA and involves causal-conv-1d
     def forward(
             self,
             hidden_states: torch.FloatTensor,
@@ -708,7 +753,7 @@ class Mamba2FlashAttention2(Mamba2Attention):
 
     # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._flash_attention_forward
     def _flash_attention_forward(
-            self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
+        self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
     ):
         """
         Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
@@ -806,6 +851,7 @@ class Mamba2FlashAttention2(Mamba2Attention):
         )
 
 
+# Adapted from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXSdpaAttention with GPTNeoX->Mamba2
 class Mamba2SdpaAttention(Mamba2Attention):
     """
     Mamba2 attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
@@ -813,6 +859,8 @@ class Mamba2SdpaAttention(Mamba2Attention):
     to adapt to the SDPA API.
     """
 
+    # Adapted from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXSdpaAttention.__init__
+    # Added layer idx as arg
     def __init__(self, config, layer_idx):
         super().__init__(config, layer_idx)
 
@@ -821,6 +869,8 @@ class Mamba2SdpaAttention(Mamba2Attention):
         # Reference: https://github.com/pytorch/pytorch/issues/112577
         self.require_contiguous_qkv = version.parse(get_torch_version()) < version.parse("2.2.0")
 
+    # Adapted from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXSdpaAttention.forward
+    # Allowing MQA and involves causal-conv-1d
     def forward(
             self,
             hidden_states: torch.FloatTensor,
@@ -958,7 +1008,7 @@ class Mamba2Mixer(nn.Module):
         self.D = nn.Parameter(torch.ones(self.num_heads))
 
         # Residual normalization introduced for instability, see section 7 of the paper
-        self.norm = Mamba2RMSNorm(self.intermediate_size, eps=1e-5, normalize=True)
+        self.norm = Mamba2RMSNorm(self.intermediate_size, eps=1e-5)
 
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=self.use_bias)
 
@@ -1069,13 +1119,19 @@ class Mamba2Mixer(nn.Module):
                 if cached_start:
                     cache.ssm_states[self.layer_idx].copy_(last_state)
 
+            # b l h p -> b l (h p)
             y = y.view(y.shape[0]. y.shape[1], -1)
         else:
             # Preparing values for single step
+            # h -> h p n
             A = A.repeat(1, self.head_dim, self.ssm_state_size).to(dtype=torch.float32)
-            dt = dt.repeat(1, self.head_dim, 1)
+            # b 1 h -> b h p
+            dt = dt.squeeze(1).repeat(1, 1, self.head_dim)
+            # h -> h p
             dt_bias = self.dt_bias.repeat(1, self.head_dim)
+            # h -> h p
             D = self.D.repeat(1, self.head_dim)
+            # b (h p) -> b h p
             x_reshaped = x.view(x.shape[0], -1, self.head_dim)
 
             # Triton kernel for updating states in-place and returning the hidden state
@@ -1091,7 +1147,9 @@ class Mamba2Mixer(nn.Module):
                 dt_bias=dt_bias,
                 dt_softplus=True,
             )
-            y = y.unsqueeze(1).view(y.shape[0], 1, -1)
+
+            # b h p -> b 1 (h p)
+            y = y.view(y.shape[0], -1).unsqueeze(1)
 
         # 4. Gate normalization introduced for instability, see section 7 of the paper
         y = self.norm(y, residual=z)
@@ -1134,18 +1192,22 @@ class Mamba2Mixer(nn.Module):
 
             Assumes that we only have tensors of either size 4 or 3
             """
+            # b l ... -> b (l multiple of chunk_size) ...
             x = pad_by_size(x, pad_size)
+
             if len(x.shape) == 3:
-                return x.view(x.shape[0], -1, self.chunk_size)
+                # b (l c) h -> b l c h with c=chunk_size
+                return x.view(x.shape[0], -1, chunk_size, x.shape[2])
             else:
-                remaining_len = min(x.shape[1] // chunk_size, 1)
-                return x.view(x.shape[0], remaining_len, self.chunk_size, -1)
+                # b (l c) h p -> b l c h p with c=chunk_size
+                return x.view(x.shape[0], -1, chunk_size, x.shape[2], x.shape[3])
 
         def segsum(x):
             """
             More stable segment sum calculation
             """
             T = x.size(-1)
+            # ... d -> ... d d
             x = x.repeat(1, 1, 1, 1, T)
             mask = torch.tril(torch.ones(T, T, device=x.device, dtype=torch.bool), diagonal=-1)
             x = x.masked_fill(~mask, 0)
@@ -1162,6 +1224,8 @@ class Mamba2Mixer(nn.Module):
         dt = nn.functional.softplus(dt + self.dt_bias)
         dt = torch.clamp(dt, dt_min, dt_max)
 
+        # h -> 1 1 h 1
+        # todo: unsqueeze(-1) should have the same effect
         D_residual = self.D.expand(1, 1, -1, 1) * pad_by_size(x, pad_size)
 
         # Discretize x and A
@@ -1173,6 +1237,7 @@ class Mamba2Mixer(nn.Module):
             reshape_into_chunks(t, pad_size, chunk_size) for t in (x, A, B, C)
         ]
 
+        # b c l h -> b h c l
         A = A.permute(0, 3, 1, 2)
         A_cumsum = torch.cumsum(A, dim=-1)
 
@@ -1201,6 +1266,7 @@ class Mamba2Mixer(nn.Module):
 
         # Add output of intra-chunk and inter-chunk terms (diagonal and off-diagonal blocks)
         y = Y_diag + Y_off
+        # b c l h p -> b (c l) h p
         y = y.view(y.shape[0], -1, y.shape[-2], y.shape[-1])
 
         # Add D residual to final output
@@ -1268,10 +1334,13 @@ class Mamba2Mixer(nn.Module):
 
         if not cached_forward:
             y = self._ssd_naive(
+                # b l (h p) -> b l h p
                 x=x.view(x.shape[0], x.shape[1], -1, self.head_dim),
                 dt=dt,
                 A=A,
+                # b l n -> b l 1 n
                 B=B.unsqueeze(-2),
+                # b l n -> b l 1 n
                 C=C.unsqueeze(-2),
                 chunk_size=self.chunk_size,
                 initial_states=None,
@@ -1285,6 +1354,7 @@ class Mamba2Mixer(nn.Module):
                 if cached_start:
                     cache.ssm_states[self.layer_idx].copy_(last_state)
 
+            # b l h p -> b l (h p)
             y = y.view(y.shape[0]. y.shape[1], -1)
         else:
             # Get time step with softplus and bias
@@ -1295,6 +1365,7 @@ class Mamba2Mixer(nn.Module):
             dA = torch.exp(dt * A)
 
             # Discretize B and x
+            # b (h p) -> b h p
             x = x.view(x.shape[0], -1, self.head_dim)
             dBx = torch.einsum("bh,bn,bhp->bhpn", dt, B, x)
 
@@ -1309,7 +1380,8 @@ class Mamba2Mixer(nn.Module):
             # D skip connection
             y = y + self.D.unsqueeze(-1) * x
 
-            y = y.unsqueeze(1).view(y.shape[0], 1, -1)
+            # b h p -> b 1 (h p)
+            y = y.view(y.shape[0], -1).unsqueeze(1)
 
         # 4. Gate normalization introduced for instability, see section 7 of the paper
         y = self.norm(y, residual=z)
@@ -1324,11 +1396,13 @@ class Mamba2Mixer(nn.Module):
     def forward(
         self, hidden_states, cache: Optional[HybridMamba2AttentionDynamicCache] = None
     ):
+        # todo: check version for AMD support?
         if is_fast_path_available and "cuda" in self.in_proj.weight.device.type:
             return self.triton_kernels_forward(hidden_states, cache)
         return self.slow_forward(hidden_states, cache)
 
 
+# Adapted from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Mamba2
 class Mamba2RMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
@@ -1342,7 +1416,7 @@ class Mamba2RMSNorm(nn.Module):
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
 
-        # residual normalization introduced for instability, see section 7 of the paper
+        # Residual normalization introduced for instability, see section 7 of the paper
         if residual is not None:
             hidden_states = hidden_states * F.silu(residual.to(torch.float32))
 
