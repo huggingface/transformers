@@ -1517,18 +1517,18 @@ class LlamaTikTokenConverter(TikTokenConverter):
             tokenizer.model.ignore_merges = True
         num_reserved_special_tokens = 256
         special_tokens = [
-                             "<|begin_of_text|>",
-                             "<|end_of_text|>",
-                             "<|reserved_special_token_0|>",
-                             "<|reserved_special_token_1|>",
-                             "<|reserved_special_token_2|>",
-                             "<|reserved_special_token_3|>",
-                             "<|start_header_id|>",
-                             "<|end_header_id|>",
-                             "<|reserved_special_token_4|>",
-                             "<|eot_id|>",
-                             "<|python_tag|>" # end of turn
-                         ] + [f"<|reserved_special_token_{i}|>" for i in range(5, num_reserved_special_tokens - 5)]
+            "<|begin_of_text|>",
+            "<|end_of_text|>",
+            "<|reserved_special_token_0|>",
+            "<|reserved_special_token_1|>",
+            "<|reserved_special_token_2|>",
+            "<|reserved_special_token_3|>",
+            "<|start_header_id|>",
+            "<|end_header_id|>",
+            "<|reserved_special_token_4|>",
+            "<|eot_id|>",
+            "<|python_tag|>",  # end of turn
+        ] + [f"<|reserved_special_token_{i}|>" for i in range(5, num_reserved_special_tokens - 5)]
         tokenizer.add_special_tokens(special_tokens)
         return tokenizer
 
@@ -1598,7 +1598,7 @@ SLOW_TO_FAST_CONVERTERS = {
 }
 
 
-def convert_slow_tokenizer(transformer_tokenizer) -> Tokenizer:
+def convert_slow_tokenizer(transformer_tokenizer, convert_from=None) -> Tokenizer:
     """
     Utilities to convert a slow tokenizer instance in a fast tokenizer instance.
 
@@ -1606,6 +1606,8 @@ def convert_slow_tokenizer(transformer_tokenizer) -> Tokenizer:
         transformer_tokenizer ([`~tokenization_utils_base.PreTrainedTokenizer`]):
             Instance of a slow tokenizer to convert in the backend tokenizer for
             [`~tokenization_utils_base.PreTrainedTokenizerFast`].
+        convert_from (str, optional): Type of tokenizer file to convert from, such as a tiktoken model file.
+
 
     Return:
         A instance of [`~tokenizers.Tokenizer`] to be used as the backend tokenizer of a
@@ -1614,7 +1616,7 @@ def convert_slow_tokenizer(transformer_tokenizer) -> Tokenizer:
 
     tokenizer_class_name = transformer_tokenizer.__class__.__name__
 
-    if tokenizer_class_name in TIKTOKEN_CONVERTERS:
+    if tokenizer_class_name in TIKTOKEN_CONVERTERS and convert_from == "tiktoken":
         converter_class = TIKTOKEN_CONVERTERS[tokenizer_class_name]
         return converter_class(transformer_tokenizer.vocab_file).converted()
 

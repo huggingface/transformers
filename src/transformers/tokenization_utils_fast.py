@@ -120,7 +120,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             fast_tokenizer = convert_slow_tokenizer(slow_tokenizer)
         elif tiktoken_file is not None:
             self.vocab_file = kwargs.get("vocab_file", None)
-            fast_tokenizer = convert_slow_tokenizer(self)
+            fast_tokenizer = convert_slow_tokenizer(self, convert_from="tiktoken")
         elif gguf_file is not None:
             # We need to convert a slow tokenizer to build the backend
             gguf_param = load_gguf_checkpoint(kwargs.get("vocab_file"))
