@@ -106,7 +106,7 @@ If there are several sentences you want to preprocess, pass them as a list to th
 
 ### Pad
 
-Sentences aren't always the same length which can be an issue because tensors, the model inputs, need to have a uniform shape. Padding is a strategy for ensuring tensors are rectangular by adding a special *padding token* to shorter sentences.
+Sentences aren't always the same length which can be an issue because tensors represented as the model inputs, need to have a uniform shape. Padding is a strategy for ensuring tensors are rectangular by adding a special *padding token* to shorter sentences.
 
 Set the `padding` parameter to `True` to pad the shorter sequences in the batch to match the longest sequence:
 

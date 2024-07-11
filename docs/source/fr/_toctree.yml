@@ -11,7 +11,7 @@
       title: Pipelines pour l'inférence
     - local: autoclass_tutorial
       title: Chargement d'instances pré-entraînées avec une AutoClass
-    - local: in_translation
+    - local: preparation-des-donnees
       title: Préparation des données
     - local: in_translation
       title: Fine-tune un modèle pré-entraîné
