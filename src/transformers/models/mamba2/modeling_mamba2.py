@@ -1130,17 +1130,17 @@ class Mamba2Mixer(nn.Module):
                     cache.ssm_states[self.layer_idx].copy_(last_state)
 
             # b l h p -> b l (h p)
-            y = y.view(y.shape[0].y.shape[1], -1)
+            y = y.view(y.shape[0], y.shape[1], -1)
         else:
             # Preparing values for single step
             # h -> h p n
-            A = A.repeat(1, self.head_dim, self.ssm_state_size).to(dtype=torch.float32)
+            A = A.unsqueeze(-1).unsqueeze(-1).expand(A.shape[0], self.head_dim, self.ssm_state_size)
             # b 1 h -> b h p
-            dt = dt.squeeze(1).repeat(1, 1, self.head_dim)
+            dt = dt.transpose(1, 2).expand(dt.shape[0], dt.shape[-1], self.head_dim)
             # h -> h p
-            dt_bias = self.dt_bias.repeat(1, self.head_dim)
+            dt_bias = self.dt_bias.unsqueeze(-1).expand(self.dt_bias.shape[0], self.head_dim)
             # h -> h p
-            D = self.D.repeat(1, self.head_dim)
+            D = self.D.unsqueeze(-1).expand(self.D.shape[0], self.head_dim)
             # b (h p) -> b h p
             x_reshaped = x.view(x.shape[0], -1, self.head_dim)
 
@@ -1218,7 +1218,7 @@ class Mamba2Mixer(nn.Module):
             """
             T = x.size(-1)
             # ... d -> ... d d
-            x = x.repeat(1, 1, 1, 1, T)
+            x = x.unsqueeze(-1).expand(x.shape[0], x.shape[1], x.shape[2], x.shape[3], T)
             mask = torch.tril(torch.ones(T, T, device=x.device, dtype=torch.bool), diagonal=-1)
             x = x.masked_fill(~mask, 0)
             x_segsum = torch.cumsum(x, dim=-2)
@@ -1234,9 +1234,7 @@ class Mamba2Mixer(nn.Module):
         dt = nn.functional.softplus(dt + self.dt_bias)
         dt = torch.clamp(dt, dt_min, dt_max)
 
-        # h -> 1 1 h 1
-        # todo: unsqueeze(-1) should have the same effect
-        D_residual = self.D.expand(1, 1, -1, 1) * pad_by_size(x, pad_size)
+        D_residual = self.D.unsqueeze(-1) * pad_by_size(x, pad_size)
 
         # Discretize x and A
         x = x * dt.unsqueeze(-1)
@@ -1357,7 +1355,7 @@ class Mamba2Mixer(nn.Module):
                     cache.ssm_states[self.layer_idx].copy_(last_state)
 
             # b l h p -> b l (h p)
-            y = y.view(y.shape[0].y.shape[1], -1)
+            y = y.view(y.shape[0], y.shape[1], -1)
         else:
             # Get time step with softplus and bias
             dt = F.softplus(dt + self.dt_bias.to(dtype=dt.dtype))
@@ -1847,3 +1845,37 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+# TODO
+"""
+add tests like this for einops -> torch (covers all cases that have exchanged einops for torch)
+
+import torch
+from einops import rearrange, repeat
+
+x = torch.randn(size=(2, 6, 4))
+z = torch.randn(size=(2, 1, 4))
+d = torch.randn(size=(4,))
+y = torch.randn(size=(2, 6, 4, 5))
+w = torch.randn(size=(2, 3, 4, 5, 6))
+v = torch.randn(size=(2, 4))
+
+
+print(x.transpose(1, 2).equal(rearrange(x, "b l d -> b d l")))
+print(z.squeeze(1).equal(rearrange(z, "d 1 w -> d w")))
+print(rearrange(y, "b c l h -> b h c l").equal(y.permute(0, 3, 1, 2)))
+print(y.unsqueeze(-1).expand(y.shape[0], y.shape[1], y.shape[2], y.shape[3], 5).equal(repeat(y, "... d -> ... d e", e=5)))
+print(rearrange(w, "b c l h p -> b (c l) h p").equal(w.view(w.shape[0], -1, w.shape[-2], w.shape[-1])))
+print(rearrange(x, "b (c l) ... -> b c l ...", l=3).equal(x.view(x.shape[0], -1, 3, x.shape[2])))
+print(rearrange(y, "b (c l) ... -> b c l ...", l=3).equal(y.view(y.shape[0], -1, 3, y.shape[2], y.shape[3])))
+print(rearrange(x, pattern="b l n -> b l 1 n").equal(x.unsqueeze(-2)))
+print(rearrange(x, pattern="b l (h p) -> b l h p", p=2).equal(x.view(x.shape[0], x.shape[1], -1, 2)))
+print(rearrange(y, "b l h p -> b l (h p)").equal(y.view(y.shape[0], y.shape[1], -1)))
+print(v.view(v.shape[0], -1, 2).equal(rearrange(v, "b (h p) -> b h p", p=2)))
+print(rearrange(v, "b h -> b h 1 1").equal(v.unsqueeze(-1).unsqueeze(-1)))
+print(rearrange(x, "b h p -> b 1 (h p)").equal(x.view(x.shape[0], -1).unsqueeze(1)))
+print(repeat(d, "h -> h p n", p=2, n=3).equal(d.unsqueeze(-1).unsqueeze(-1).expand(d.shape[0], 2, 3)))
+print(repeat(z, "b 1 h -> b h p", p=2).equal(z.transpose(1, 2).expand(z.shape[0], z.shape[-1], 2)))
+print(d.unsqueeze(-1).expand(d.shape[0], 3).equal(repeat(d, "h -> h p", p=3)))
+"""
