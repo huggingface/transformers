@@ -788,7 +788,7 @@ class TrainingArguments:
             Whether to perform a evaluation step (sanity check) before the training to ensure the validation steps works correctly.
 
         eval_use_gather_object (`bool`, *optional*, defaults to `False`):
-            Whether to run recursively gather object in a nested list/tuple/dictionary of objects from all devices.
+            Whether to run recursively gather object in a nested list/tuple/dictionary of objects from all devices. This should only be enabled if users are not just returning tensors, and this is actively discouraged by PyTorch.
     """
 
     framework = "pt"
@@ -2040,7 +2040,7 @@ class TrainingArguments:
 
         if self.eval_use_gather_object and not is_accelerate_available("0.30.0"):
             raise ValueError(
-                "--eval_use_gather_object requires Accelerate to be version of `accelerate` < 0.30.0."
+                "--eval_use_gather_object requires Accelerate to be version of `accelerate` > 0.30.0."
                 "This is not supported and we recommend you to update your version."
             )
 
