@@ -683,21 +683,16 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix, keep_in
 
     error_msgs = []
 
-    # Check if we can do a 1:1 assign if the `dtype` of the state_dict is the same as the model
-    random_layer = list(state_dict.keys())[0]
-    assign_to_params_buffers = (
-        state_dict[random_layer].dtype == model_to_load.state_dict()[random_layer.removeprefix(start_prefix)].dtype
-    )
-
     # Note: for now this is only for DeepSpeed Zero3
     # PyTorch's `_load_from_state_dict` does not copy parameters in a module's descendants
     # so we need to apply the function recursively.
-    def load(module: nn.Module, state_dict, prefix="", assign_to_params_buffers=False):
+    def load(module: nn.Module, state_dict, prefix=""):
         local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
-        local_metadata["assign_to_params_buffers"] = assign_to_params_buffers
-        # local_metadata["assign_to_params_buffers"] =
-        # raise ValueError(list(state_dict.keys())[0])
-        # local_metadata["assign_to_params_buffers"] = True
+        if len(list(module.state_dict().keys())) > 0:
+            random_layer = list(module.state_dict().keys())[0]
+            if prefix+random_layer in state_dict:
+                local_metadata["assign_to_params_buffers"] = state_dict[prefix+random_layer].dtype == module.state_dict()[random_layer].dtype
+
         args = (state_dict, prefix, local_metadata, True, [], [], error_msgs)
         # Parameters of module and children will start with prefix. We can exit early if there are none in this
         # state_dict
@@ -721,12 +716,13 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix, keep_in
 
         for name, child in module._modules.items():
             if child is not None:
-                load(child, state_dict, prefix + name + ".", assign_to_params_buffers)
-
-    load(model_to_load, state_dict, prefix=start_prefix, assign_to_params_buffers=assign_to_params_buffers)
+                load(child, state_dict, prefix + name + ".")
+    load(model_to_load, state_dict, prefix=start_prefix)
     # Delete `state_dict` so it could be collected by GC earlier. Note that `state_dict` is a copy of the argument, so
     # it's safe to delete it.
     del state_dict
+
+    model_to_load.tie_weights()
 
     return error_msgs
 
@@ -1442,8 +1438,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             with deepspeed.zero.Init(config_dict_or_path=deepspeed_config()):
                 model = cls(config, **kwargs)
         else:
-            with init_empty_weights():
-                model = cls(config, **kwargs)
+            model = cls(config, **kwargs)
 
         # restore default dtype if it was modified
         if dtype_orig is not None:
