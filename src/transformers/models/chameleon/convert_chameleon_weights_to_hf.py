@@ -164,28 +164,20 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
             )
             # qk_layernorm (see https://github.com/huggingface/transformers/pull/31534#issuecomment-2207354677)
             state_dict[f"model.layers.{layer_i}.self_attn.q_norm.weight"] = (
-                loaded[f"layers.{layer_i}.attention.q_normalization.weight"]
-                .unsqueeze(0)
-                .expand(n_heads, -1)
-                .contiguous()
+                loaded[f"layers.{layer_i}.attention.q_normalization.weight"].unsqueeze(0).repeat_interleave(n_heads, 0)
             )
             state_dict[f"model.layers.{layer_i}.self_attn.q_norm.bias"] = (
-                loaded[f"layers.{layer_i}.attention.q_normalization.bias"]
-                .unsqueeze(0)
-                .expand(n_heads, -1)
-                .contiguous()
+                loaded[f"layers.{layer_i}.attention.q_normalization.bias"].unsqueeze(0).repeat_interleave(n_heads, 0)
             )
             state_dict[f"model.layers.{layer_i}.self_attn.k_norm.weight"] = (
                 loaded[f"layers.{layer_i}.attention.k_normalization.weight"]
                 .unsqueeze(0)
-                .expand(num_key_value_heads, -1)
-                .contiguous()
+                .repeat_interleave(num_key_value_heads, 0)
             )
             state_dict[f"model.layers.{layer_i}.self_attn.k_norm.bias"] = (
                 loaded[f"layers.{layer_i}.attention.k_normalization.bias"]
                 .unsqueeze(0)
-                .expand(num_key_value_heads, -1)
-                .contiguous()
+                .repeat_interleave(num_key_value_heads, 0)
             )
 
         else:
@@ -220,31 +212,17 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
 
             # qk_layernorm (see https://github.com/huggingface/transformers/pull/31534#issuecomment-2207354677)
             state_dict[f"model.layers.{layer_i}.self_attn.q_norm.weight"] = torch.cat(
-                [
-                    l[f"layers.{layer_i}.attention.q_normalization.weight"].unsqueeze(0).expand(n_heads, -1)
-                    for l in loaded
-                ]
-            )
+                [l[f"layers.{layer_i}.attention.q_normalization.weight"].unsqueeze(0) for l in loaded]
+            ).repeat_interleave(n_heads // num_shards, 0)
             state_dict[f"model.layers.{layer_i}.self_attn.q_norm.bias"] = torch.cat(
-                [
-                    l[f"layers.{layer_i}.attention.q_normalization.bias"].unsqueeze(0).expand(n_heads, -1)
-                    for l in loaded
-                ]
-            )
+                [l[f"layers.{layer_i}.attention.q_normalization.bias"].unsqueeze(0) for l in loaded]
+            ).repeat_interleave(n_heads // num_shards, 0)
             state_dict[f"model.layers.{layer_i}.self_attn.k_norm.weight"] = torch.cat(
-                [
-                    l[f"layers.{layer_i}.attention.k_normalization.weight"]
-                    .unsqueeze(0)
-                    .expand(num_key_value_heads, -1)
-                    for l in loaded
-                ]
-            )
+                [l[f"layers.{layer_i}.attention.k_normalization.weight"].unsqueeze(0) for l in loaded]
+            ).repeat_interleave(num_key_value_heads // num_shards, 0)
             state_dict[f"model.layers.{layer_i}.self_attn.k_norm.bias"] = torch.cat(
-                [
-                    l[f"layers.{layer_i}.attention.k_normalization.bias"].unsqueeze(0).expand(num_key_value_heads, -1)
-                    for l in loaded
-                ]
-            )
+                [l[f"layers.{layer_i}.attention.k_normalization.bias"].unsqueeze(0) for l in loaded]
+            ).repeat_interleave(num_key_value_heads // num_shards, 0)
 
             state_dict[f"model.layers.{layer_i}.self_attn.v_proj.weight"] = torch.cat(
                 [

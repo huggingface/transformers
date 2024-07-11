@@ -256,8 +256,8 @@ class ChameleonAttention(nn.Module):
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=config.attention_bias)
-        self.q_norm = nn.LayerNorm((self.num_heads * self.model_parallel_size, self.head_dim))
-        self.k_norm = nn.LayerNorm((self.num_key_value_heads * self.model_parallel_size, self.head_dim))
+        self.q_norm = nn.LayerNorm((self.num_heads, self.head_dim))
+        self.k_norm = nn.LayerNorm((self.num_key_value_heads, self.head_dim))
         self._init_rope()
 
     # Copied from transformers.models.llama.modeling_llama.LlamaAttention._init_rope with Llama->Chameleon
@@ -305,6 +305,9 @@ class ChameleonAttention(nn.Module):
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
+        # we need to expand on num_heads because there was not sharding done in 7B model
+        # and we need to calculate mean/var over each head_dim
+        # for sharded model we don't do expansion and simply do norm
         if self.model_parallel_size == 1:
             query_states = query_states.reshape(-1, 1, self.head_dim)
             query_states = query_states.tile((1, self.num_heads, 1))
@@ -315,27 +318,12 @@ class ChameleonAttention(nn.Module):
             key_states = key_states.tile((1, self.num_key_value_heads, 1))
             key_states = self.k_norm(key_states)
             key_states = key_states[:, 0, :]
-
-        elif self.model_parallel_size > 1:
+        else:
             query_states = query_states.reshape(-1, self.num_heads, self.head_dim)
-            query_states = query_states.tile((1, self.model_parallel_size, 1))
-            query_states = query_states.reshape(-1, self.model_parallel_size, self.num_heads, self.head_dim).transpose(
-                1, 2
-            )
-            query_states = query_states.reshape(-1, self.model_parallel_size * self.num_heads, self.head_dim)
             query_states = self.q_norm(query_states)
-            query_states = query_states.reshape(-1, self.model_parallel_size, self.head_dim)
-            query_states = query_states[:, 0, :]
 
             key_states = key_states.reshape(-1, self.num_key_value_heads, self.head_dim)
-            key_states = key_states.tile((1, self.model_parallel_size, 1))
-            key_states = key_states.reshape(
-                -1, self.model_parallel_size, self.num_key_value_heads, self.head_dim
-            ).transpose(1, 2)
-            key_states = key_states.reshape(-1, self.model_parallel_size * self.num_key_value_heads, self.head_dim)
             key_states = self.k_norm(key_states)
-            key_states = key_states.reshape(-1, self.model_parallel_size, self.head_dim)
-            key_states = key_states[:, 0, :]
 
         # permute key/value to use transformers RoPE implementation (see for more: https://github.com/huggingface/transformers/issues/25199)
         # NOTE: permutation is done same way as in llama conversion script
@@ -430,27 +418,13 @@ class ChameleonFlashAttention2(ChameleonAttention):
             key_states = key_states.tile((1, self.num_key_value_heads, 1))
             key_states = self.k_norm(key_states)
             key_states = key_states[:, 0, :]
-
-        elif self.model_parallel_size > 1:
+        else:
             query_states = query_states.reshape(-1, self.num_heads, self.head_dim)
-            query_states = query_states.tile((1, self.model_parallel_size, 1))
-            query_states = query_states.reshape(-1, self.model_parallel_size, self.num_heads, self.head_dim).transpose(
-                1, 2
-            )
-            query_states = query_states.reshape(-1, self.model_parallel_size * self.num_heads, self.head_dim)
             query_states = self.q_norm(query_states)
-            query_states = query_states.reshape(-1, self.model_parallel_size, self.head_dim)
-            query_states = query_states[:, 0, :]
 
             key_states = key_states.reshape(-1, self.num_key_value_heads, self.head_dim)
-            key_states = key_states.tile((1, self.model_parallel_size, 1))
-            key_states = key_states.reshape(
-                -1, self.model_parallel_size, self.num_key_value_heads, self.head_dim
-            ).transpose(1, 2)
-            key_states = key_states.reshape(-1, self.model_parallel_size * self.num_key_value_heads, self.head_dim)
             key_states = self.k_norm(key_states)
-            key_states = key_states.reshape(-1, self.model_parallel_size, self.head_dim)
-            key_states = key_states[:, 0, :]
+
         # permute key/value to use transformers RoPE implementation (see for more: https://github.com/huggingface/transformers/issues/25199)
         # NOTE: permutation is done same way as in llama conversion script
         key_states = key_states.view(-1, self.num_key_value_heads, self.head_dim // 2, 2).transpose(3, 2)
@@ -665,27 +639,13 @@ class ChameleonSdpaAttention(ChameleonAttention):
             key_states = key_states.tile((1, self.num_key_value_heads, 1))
             key_states = self.k_norm(key_states)
             key_states = key_states[:, 0, :]
-
-        elif self.model_parallel_size > 1:
+        else:
             query_states = query_states.reshape(-1, self.num_heads, self.head_dim)
-            query_states = query_states.tile((1, self.model_parallel_size, 1))
-            query_states = query_states.reshape(-1, self.model_parallel_size, self.num_heads, self.head_dim).transpose(
-                1, 2
-            )
-            query_states = query_states.reshape(-1, self.model_parallel_size * self.num_heads, self.head_dim)
             query_states = self.q_norm(query_states)
-            query_states = query_states.reshape(-1, self.model_parallel_size, self.head_dim)
-            query_states = query_states[:, 0, :]
 
             key_states = key_states.reshape(-1, self.num_key_value_heads, self.head_dim)
-            key_states = key_states.tile((1, self.model_parallel_size, 1))
-            key_states = key_states.reshape(
-                -1, self.model_parallel_size, self.num_key_value_heads, self.head_dim
-            ).transpose(1, 2)
-            key_states = key_states.reshape(-1, self.model_parallel_size * self.num_key_value_heads, self.head_dim)
             key_states = self.k_norm(key_states)
-            key_states = key_states.reshape(-1, self.model_parallel_size, self.head_dim)
-            key_states = key_states[:, 0, :]
+
         # permute key/value to use transformers RoPE implementation (see for more: https://github.com/huggingface/transformers/issues/25199)
         # NOTE: permutation is done same way as in llama conversion script
         key_states = key_states.view(-1, self.num_key_value_heads, self.head_dim // 2, 2).transpose(3, 2)
