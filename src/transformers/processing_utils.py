@@ -665,7 +665,7 @@ class ProcessorMixin(PushToHubMixin):
             if hasattr(processor, key):
                 setattr(processor, key, kwargs.pop(key))
 
-        unused_kwargs.update(kwargs)
+        kwargs.update(unused_kwargs)
         logger.info(f"Processor {processor}")
         if return_unused_kwargs:
             return processor, kwargs
