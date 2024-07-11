@@ -634,7 +634,7 @@ class SpmConverter(Converter):
             ]
         }
 
-        tokenizer.add_tokens(sorted(all_added_tokens))
+        tokenizer.add_tokens([k for _, k in sorted(all_added_tokens.items(), key=lambda x: x[0])])
 
         # Tokenizer assemble
         normalizer = self.normalizer(self.proto)
