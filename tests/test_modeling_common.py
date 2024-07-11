@@ -16,6 +16,7 @@ import collections
 import copy
 import gc
 import inspect
+import math
 import os
 import os.path
 import random
@@ -55,6 +56,7 @@ from transformers.models.auto.modeling_auto import (
     MODEL_FOR_MASKED_LM_MAPPING_NAMES,
     MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES,
     MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES,
+    MODEL_FOR_PRETRAINING_MAPPING_NAMES,
     MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES,
     MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES,
     MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES,
@@ -194,6 +196,14 @@ class ModelTesterMixin:
             }
         elif model_class.__name__ in get_values(MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES):
             inputs_dict.pop("attention_mask")
+        elif model_class.__name__ == MODEL_FOR_PRETRAINING_MAPPING_NAMES["hiera"]:
+            config = self.model_tester.get_config()
+            mask_spatial_shape = [
+                i // s // ms for i, s, ms in zip(config.image_size, config.patch_stride, config.masked_unit_size)
+            ]
+            num_windows = math.prod(mask_spatial_shape)
+            torch.manual_seed(0)
+            inputs_dict["noise"] = torch.rand(self.model_tester.batch_size, num_windows)
 
         if return_labels:
             if model_class.__name__ in get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES):
@@ -1163,6 +1173,7 @@ class ModelTesterMixin:
                     "token_type_ids",
                     "visual_feats",
                     "visual_pos",
+                    "noise",
                 ]
 
                 labels = inputs.get("labels", None)
