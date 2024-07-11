@@ -21,7 +21,6 @@ import math
 from typing import List, Optional, Tuple, Union
 
 import torch
-import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
@@ -1186,7 +1185,7 @@ class GraniteForCausalLM(GranitePreTrainedModel):
 
 @add_start_docstrings(
     """
-    The LLaMa Model transformer with a sequence classification head on top (linear layer).
+    The Granite Model transformer with a sequence classification head on top (linear layer).
 
     [`GraniteForSequenceClassification`] uses the last token in order to do the classification, as other causal models
     (e.g. GPT-2) do.
