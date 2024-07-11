@@ -95,6 +95,7 @@ else:
             ("layoutlmv3", ("LayoutLMv3ImageProcessor",)),
             ("levit", ("LevitImageProcessor",)),
             ("llava", ("CLIPImageProcessor",)),
+            ("llava-next-video", ("LlavaNextVideoImageProcessor",)),
             ("llava_next", ("LlavaNextImageProcessor",)),
             ("mask2former", ("Mask2FormerImageProcessor",)),
             ("maskformer", ("MaskFormerImageProcessor",)),
@@ -141,6 +142,7 @@ else:
             ("vitmatte", ("VitMatteImageProcessor",)),
             ("xclip", ("CLIPImageProcessor",)),
             ("yolos", ("YolosImageProcessor",)),
+            ("zoedepth", ("ZoeDepthImageProcessor",)),
         ]
     )
 
