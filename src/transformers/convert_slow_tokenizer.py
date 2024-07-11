@@ -1616,6 +1616,7 @@ def convert_slow_tokenizer(transformer_tokenizer) -> Tokenizer:
 
     if tokenizer_class_name in TIKTOKEN_CONVERTERS:
         converter_class = TIKTOKEN_CONVERTERS[tokenizer_class_name]
+        return converter_class(transformer_tokenizer.vocab_file).converted()
 
     if tokenizer_class_name not in SLOW_TO_FAST_CONVERTERS:
         raise ValueError(
