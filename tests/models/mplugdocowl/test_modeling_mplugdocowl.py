@@ -13,9 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Testing suite for the PyTorch MPLUGDocOwl model."""
+
 import gc
 import unittest
-import requests
 
 from transformers import (
     MPLUGDocOwlConfig,
@@ -24,12 +24,7 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-
-from transformers.testing_utils import (
-    require_torch,
-    torch_device,
-    slow
-)
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -44,6 +39,7 @@ if is_vision_available():
     pass
 
 from PIL import Image
+
 
 class MPLUGDocOwlVisionText2TextModelTester:
     def __init__(
@@ -176,6 +172,7 @@ class MPLUGDocOwlVisionText2TextModelTester:
             )["logits"]
         self.parent.assertFalse(torch.isnan(logits).any().item())
 
+
 @require_torch
 class MPLUGDocOwlForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
     """
@@ -208,6 +205,7 @@ class MPLUGDocOwlForConditionalGenerationModelTest(ModelTesterMixin, unittest.Te
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
+
 @require_torch
 class MPLUGDocOwlForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
@@ -219,7 +217,9 @@ class MPLUGDocOwlForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test(self):
-        model = MPLUGDocOwlForConditionalGeneration.from_pretrained("/raid/dana/mplug_model_hf_chat", load_in_4bit=False)
+        model = MPLUGDocOwlForConditionalGeneration.from_pretrained(
+            "/raid/dana/mplug_model_hf_chat", load_in_4bit=False
+        )
 
         prompt = "<image>What's the value of the Very well bar in the 65+ age group? Answer the question with detailed explanation."
         image_file = "/raid/dana/test_image.png"
@@ -228,17 +228,19 @@ class MPLUGDocOwlForConditionalGenerationIntegrationTest(unittest.TestCase):
         inputs = self.processor(prompt, raw_image, return_tensors="pt")
 
         output = model.generate(**inputs, max_new_tokens=500)
-        EXPECTED_DECODED_TEXT = "68%\nIn the image, which appears to be a chart from a Pew Research Center report, the bar representing the percentage of Republicans and Republican leaners who believe 'very well' describes how fights for what they believe in describe Trump is at 68% for the 65+ age group."
-    
+        EXPECTED_DECODED_TEXT = " 68%\nIn the image, which appears to be a chart from a Pew Research Center report, the bar representing the percentage of Republicans and Republican leaners who believe 'very well' describes how fights for what they believe in describe Trump is at 68% for the 65+ age group."
+
         self.assertEqual(
-            self.processor.decode(output[0,inputs["input_ids"].shape[1]:], skip_special_tokens=True),
+            self.processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
-    
+
     @slow
     def test_small_model_integration_test_single(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model = MPLUGDocOwlForConditionalGeneration.from_pretrained("/raid/dana/mplug_model_hf_chat", load_in_4bit=False)
+        model = MPLUGDocOwlForConditionalGeneration.from_pretrained(
+            "/raid/dana/mplug_model_hf_chat", load_in_4bit=False
+        )
 
         prompt = "<image><image>What is the name of the movie in the poster? Provide detailed explanation."
         image_file = "/raid/dana/examples_Rebecca_(1939_poster)_Small.jpeg"
@@ -247,9 +249,9 @@ class MPLUGDocOwlForConditionalGenerationIntegrationTest(unittest.TestCase):
         inputs = self.processor(prompt, raw_image, return_tensors="pt")
         print(inputs["input_ids"])
         output = model.generate(**inputs, max_new_tokens=500)
-        EXPECTED_DECODED_TEXT = "Rebecca\n The name of the movie in the poster is 'Rebecca,' as indicated by the large title at the top of the poster. The poster also includes the names of the stars, Laurence Olivier and Joan Fontaine, suggesting that they are the lead actors in the film. The poster features a classic Hollywood style with a focus on the two main characters and the title."# fmt: skip
+        EXPECTED_DECODED_TEXT = "Rebecca\n The name of the movie in the poster is 'Rebecca,' as indicated by the large title at the top of the poster. The poster also includes the names of the stars, Laurence Olivier and Joan Fontaine, suggesting that they are the lead actors in the film. The poster features a classic Hollywood style with a focus on the two main characters and the title."  # fmt: skip
         self.assertEqual(
-            self.processor.decode(output[0,inputs["input_ids"].shape[1]:], skip_special_tokens=True),
+            self.processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
 
@@ -258,7 +260,9 @@ class MPLUGDocOwlForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Let' s make sure we test the preprocessing to replace what is used
         model_id = "/raid/dana/mplug_model_hf_chat"
 
-        model = MPLUGDocOwlForConditionalGeneration.from_pretrained("/raid/dana/mplug_model_hf_chat", load_in_4bit=False)
+        model = MPLUGDocOwlForConditionalGeneration.from_pretrained(
+            "/raid/dana/mplug_model_hf_chat", load_in_4bit=False
+        )
         processor = MPLUGDocOwlProcessor.from_pretrained(model_id)
 
         prompt = "<image>Recognize text in the image."
@@ -270,36 +274,45 @@ class MPLUGDocOwlForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         EXPECTED_DECODED_TEXT = "PHILIP MORRIS MANAGEMENT CORP."
         self.assertEqual(
-            processor.decode(output[0,inputs["input_ids"].shape[1]:], skip_special_tokens=True),
+            processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
-    
+
     @slow
-    #@require_bitsandbytes
+    # @require_bitsandbytes
     def test_small_model_integration_test_llama_batched(self):
         # Let' s make sure we test the preprocessing to replace what is used
         model_id = "/raid/dana/mplug_model_hf_chat"
 
-        model = MPLUGDocOwlForConditionalGeneration.from_pretrained("/raid/dana/mplug_model_hf_chat", load_in_4bit=False)
+        model = MPLUGDocOwlForConditionalGeneration.from_pretrained(
+            "/raid/dana/mplug_model_hf_chat", load_in_4bit=False
+        )
         processor = MPLUGDocOwlProcessor.from_pretrained(model_id)
 
-        prompts = ["<image>What is the name of the movie in the poster? Provide detailed explanation.", 
-                   "<image>What is unusual about this image? Provide detailed explanation."]
-        #image1 = Image.open(requests.get("https://mplugdocowl-vl.github.io/static/images/view.jpg", stream=True).raw)
-        #image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        prompts = [
+            "<image>What is the name of the movie in the poster? Provide detailed explanation.",
+            "<image>What is unusual about this image? Provide detailed explanation.",
+        ]
+        # image1 = Image.open(requests.get("https://mplugdocowl-vl.github.io/static/images/view.jpg", stream=True).raw)
+        # image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
         image1 = Image.open("/raid/dana/examples_Rebecca_(1939_poster)_Small.jpeg")
         image2 = Image.open("/raid/dana/extreme_ironing.jpg")
 
-        inputs = processor(prompts, images=[image1, image2], return_tensors="pt", padding=True)
+        inputs = processor(prompts, images=[image1, image2], return_tensors="pt")
 
         output = model.generate(**inputs, max_new_tokens=512)
 
-        EXPECTED_DECODED_TEXT = ['USER: <global_img><crop_img_row0_col0><crop_img_row0_col1><crop_img_row1_col0><crop_img_row1_col1><crop_img_row2_col0><crop_img_row2_col1>What is the name of the movie in the poster? Provide detailed explanation. ASSISTANT: Rebecca\nThe name of the movie in the poster is "Rebecca," as indicated by the large title at the top of the poster. The poster also includes the names of the stars, Laurence Olivier and Joan Fontaine, suggesting that they are the lead actors in the film. The poster features a classic Hollywood style with a focus on the two main characters and the title.', 'USER: <global_img><crop_img_row0_col0><crop_img_row0_col1><crop_img_row0_col2><crop_img_row1_col0><crop_img_row1_col1><crop_img_row1_col2>What is unusual about this image? Provide detailed explanation. ASSISTANT:\nThe unusual aspect of this image is that the man is ironing clothes on the back of a taxi, which is not a common sight. It is not typical to see someone ironing on the back of a vehicle, especially in an urban setting where such activities are generally not practical due to the lack of space and the potential for disruption to traffic. The presence of a taxi with a man ironing on its back adds an element of surprise and novelty to the scene.']
+        EXPECTED_DECODED_TEXT = [
+            'USER: <global_img><crop_img_row0_col0><crop_img_row0_col1><crop_img_row1_col0><crop_img_row1_col1><crop_img_row2_col0><crop_img_row2_col1>What is the name of the movie in the poster? Provide detailed explanation. ASSISTANT: Rebecca\nThe name of the movie in the poster is "Rebecca," as indicated by the large title at the top of the poster. The poster also includes the names of the stars, Laurence Olivier and Joan Fontaine, suggesting that they are the lead actors in the film. The poster features a classic Hollywood style with a focus on the two main characters and the title.',
+            "USER: <global_img><crop_img_row0_col0><crop_img_row0_col1><crop_img_row0_col2><crop_img_row1_col0><crop_img_row1_col1><crop_img_row1_col2>What is unusual about this image? Provide detailed explanation. ASSISTANT:\nThe unusual aspect of this image is that the man is ironing clothes on the back of a taxi, which is not a common sight. It is not typical to see someone ironing on the back of a vehicle, especially in an urban setting where such activities are generally not practical due to the lack of space and the potential for disruption to traffic. The presence of a taxi with a man ironing on its back adds an element of surprise and novelty to the scene.",
+        ]
         self.assertEqual(
             processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
-'''
+
+
+"""
     @slow
     @require_bitsandbytes
     def test_small_model_integration_test_batch(self):
@@ -466,4 +479,4 @@ class MPLUGDocOwlForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.assertEqual(slow_tokenizer.tokenize(prompt), EXPECTED_OUTPUT)
         self.assertEqual(fast_tokenizer.tokenize(prompt), EXPECTED_OUTPUT)
 
-'''
+"""

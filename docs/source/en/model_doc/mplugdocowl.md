@@ -33,7 +33,8 @@ The abstract from the paper is the following:
 
 Tips:
 
-<INSERT TIPS ABOUT MODEL HERE>
+DocOowl-Chat: For more accurate and stable generation, set do_sample=False. Performs better on most of the samples compared to the DocOwl-Omni checkpoint. 
+DocOwl-Omni: For optimal performance, use do_sample=True and top_p=0.7 as recommended in the original code.
 
 This model was contributed by [danaaubakirova](https://huggingface.co/danaaubakirova).
 The original code can be found [here](https://github.com/X-PLUG/mPLUG-DocOwl/tree/main/DocOwl1.5).

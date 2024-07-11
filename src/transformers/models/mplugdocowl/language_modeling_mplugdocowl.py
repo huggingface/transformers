@@ -31,9 +31,6 @@ from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, StaticCache
-from ...modeling_attn_mask_utils import (
-    _prepare_4d_causal_attention_mask,
-)
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -64,7 +61,7 @@ def _get_unpad_data(attention_mask):
         max_seqlen_in_batch,
     )
 
-# Copied from transformers.models.bart.modeling_bart._make_causal_mask
+
 def _make_causal_mask(
     input_ids_shape: torch.Size, dtype: torch.dtype, device: torch.device, past_key_values_length: int = 0
 ):
@@ -81,7 +78,7 @@ def _make_causal_mask(
         mask = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype, device=device), mask], dim=-1)
     return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
 
-# Copied from transformers.models.bart.modeling_bart._expand_mask
+
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
@@ -95,7 +92,7 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
-# Copied from transformers.models.bart.modeling_bart.BartDecoder._prepare_decoder_attention_mask
+
 def _prepare_decoder_attention_mask(attention_mask, input_shape, inputs_embeds, past_key_values_length):
     # create causal mask
     # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
@@ -114,6 +111,7 @@ def _prepare_decoder_attention_mask(attention_mask, input_shape, inputs_embeds, 
 
     return combined_attention_mask
 
+
 # Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->MPLUGDocOwl
 class MPLUGDocOwlRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
@@ -130,6 +128,7 @@ class MPLUGDocOwlRMSNorm(nn.Module):
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
         return self.weight * hidden_states.to(input_dtype)
+
 
 ALL_LAYERNORM_LAYERS.append(MPLUGDocOwlRMSNorm)
 
@@ -707,7 +706,7 @@ class MPLUGDocOwlLanguageModel(MPLUGDocOwlPreTrainedLanguageModel):
 
     def set_input_embeddings(self, value):
         self.embed_tokens = value
-    
+
     @add_start_docstrings_to_model_forward(MPLUGDocOwl_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -763,9 +762,9 @@ class MPLUGDocOwlLanguageModel(MPLUGDocOwlPreTrainedLanguageModel):
                 (batch_size, seq_length_with_past), dtype=torch.bool, device=inputs_embeds.device
             )
 
-        #attention_mask = _prepare_4d_causal_attention_mask(
+        # attention_mask = _prepare_4d_causal_attention_mask(
         #    attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
-        #)
+        # )
 
         attention_mask = _prepare_decoder_attention_mask(
             attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length

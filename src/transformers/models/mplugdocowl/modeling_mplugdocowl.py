@@ -22,7 +22,6 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ... import PreTrainedModel
-from ...cache_utils import Cache
 from ...modeling_outputs import ModelOutput
 from ...utils import (
     add_start_docstrings,
@@ -385,12 +384,12 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
             text_to_overwrite.to(target_device),
         )
         attention_mask = attention_mask.to(target_device)
-        #breakpoint()
+        # breakpoint()
         # 4. Fill the embeddings based on the mask. If we have ["hey" "<image>", "how", "are"]
         # we need to index copy on [0, 577, 578, 579] for the text and [1:576] for the image features
         final_embedding[batch_indices, text_to_overwrite] = inputs_embeds[batch_indices, non_image_indices]
         final_attention_mask[batch_indices, text_to_overwrite] = attention_mask[batch_indices, non_image_indices]
-        #breakpoint()
+        # breakpoint()
         if labels is not None:
             final_labels[batch_indices, text_to_overwrite] = labels[batch_indices, non_image_indices]
 
@@ -408,9 +407,9 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
             )
 
         final_embedding[image_to_overwrite] = image_features.contiguous().reshape(-1, embed_dim).to(target_device)
-        #breakpoint()
+        # breakpoint()
         final_attention_mask |= image_to_overwrite
-        #breakpoint()
+        # breakpoint()
         modality_indicators[image_to_overwrite] = 1
         position_ids = (final_attention_mask.cumsum(-1) - 1).masked_fill_((final_attention_mask == 0), 1)
 
@@ -440,7 +439,7 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         patch_positions: Optional[torch.LongTensor] = None,
-        #modality_indicators: Optional[torch.LongTensor] = None,
+        # modality_indicators: Optional[torch.LongTensor] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, MPLUGDocOwlCausalLMOutputWithPast]:
         r"""
@@ -502,21 +501,23 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
                 ) = self._merge_input_ids_with_image_features(
                     image_features, inputs_embeds, input_ids, attention_mask, labels
                 )
-                    
+
                 # In case input_ids.shape[1] == 1 & pixel_values==None & past_key_values != None, we are in the case of
                 # generation with cache
-            
+
             if past_key_values is not None and pixel_values is not None and input_ids.shape[1] == 1:
                 # Retrieve the first layer to inspect the logits and mask out the hidden states
                 # that are set to 0
 
-                attention_mask = torch.ones((attention_mask.shape[0], past_key_values[-1][-1].shape[-2] + 1), dtype=attention_mask.dtype, device=attention_mask.device)
+                attention_mask = torch.ones(
+                    (attention_mask.shape[0], past_key_values[-1][-1].shape[-2] + 1),
+                    dtype=attention_mask.dtype,
+                    device=attention_mask.device,
+                )
                 position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
 
-                
                 modality_indicators = torch.zeros_like(input_ids).long().to(self.device)
-              
-        
+
         outputs = self.language_model(
             attention_mask=attention_mask,
             modality_indicators=modality_indicators,
@@ -533,7 +534,6 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
 
         loss = None
         if labels is not None:
-
             shift_logits = logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
 
@@ -577,7 +577,7 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
             position_ids.masked_fill_(attention_mask == 0, 1)
             if past_key_values:
                 position_ids = position_ids[:, -input_ids.shape[1] :]
-        
+
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
             model_inputs = {"inputs_embeds": inputs_embeds}

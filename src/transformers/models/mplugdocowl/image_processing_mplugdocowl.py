@@ -129,6 +129,7 @@ GRID_DICT = {
     ],
 }
 
+
 def box_area(boxes):
     r"""
     Compute the area of each bounding box in a given set of bounding boxes.
