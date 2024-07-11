@@ -13,18 +13,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Testing suite for the PyTorch MPLUGDocOwl model."""
-
+import gc
 import unittest
+import requests
 
 from transformers import (
     MPLUGDocOwlConfig,
     MPLUGDocOwlForConditionalGeneration,
+    MPLUGDocOwlProcessor,
     is_torch_available,
     is_vision_available,
 )
+
 from transformers.testing_utils import (
     require_torch,
     torch_device,
+    slow
 )
 
 from ...test_configuration_common import ConfigTester
@@ -39,6 +43,7 @@ else:
 if is_vision_available():
     pass
 
+from PIL import Image
 
 class MPLUGDocOwlVisionText2TextModelTester:
     def __init__(
@@ -171,7 +176,6 @@ class MPLUGDocOwlVisionText2TextModelTester:
             )["logits"]
         self.parent.assertFalse(torch.isnan(logits).any().item())
 
-
 @require_torch
 class MPLUGDocOwlForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
     """
@@ -204,12 +208,10 @@ class MPLUGDocOwlForConditionalGenerationModelTest(ModelTesterMixin, unittest.Te
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-
-"""
 @require_torch
 class MPLUGDocOwlForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained("/raid/dana/mplug_model_hf")
+        self.processor = MPLUGDocOwlProcessor.from_pretrained("/raid/dana/mplug_model_hf_chat")
 
     def tearDown(self):
         gc.collect()
@@ -217,74 +219,47 @@ class MPLUGDocOwlForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test(self):
-        model = MPLUGDocOwlForConditionalGeneration.from_pretrained("/raid/dana/mplug_model_hf", load_in_4bit=False)
+        model = MPLUGDocOwlForConditionalGeneration.from_pretrained("/raid/dana/mplug_model_hf_chat", load_in_4bit=False)
 
         prompt = "<image>What's the value of the Very well bar in the 65+ age group? Answer the question with detailed explanation."
         image_file = "/raid/dana/test_image.png"
         # raw_image = Image.open(requests.get(image_file, stream=True).raw)
         raw_image = Image.open(image_file)
         inputs = self.processor(prompt, raw_image, return_tensors="pt")
-        print(inputs["input_ids"])
-        EXPECTED_INPUT_IDS = torch.tensor([[ 1,  3148,  1001, 29901,   529, 10945, 29918,  2492, 29958,  32000,
-           529, 29883,  1336, 29918,  2492, 29918,   798, 29900, 29918,  1054,
-         29900, 29958,  32000,   529, 29883,  1336, 29918,  2492, 29918,   798,
-         29900, 29918,  1054, 29896, 29958,  32000,   529, 29883,  1336, 29918,
-          2492, 29918,   798, 29896, 29918,  1054, 29900, 29958,  32000,   529,
-         29883,  1336, 29918,  2492, 29918,   798, 29896, 29918,  1054, 29896,
-         29958,  32000,   529, 29883,  1336, 29918,  2492, 29918,   798, 29906,
-         29918,  1054, 29900, 29958,  32000,   529, 29883,  1336, 29918,  2492,
-         29918,   798, 29906, 29918,  1054, 29896, 29958,  32000,  1724, 29915,
-         29879,   278,   995,   310,   278, 18064,  1532,  2594,   297,   278,
-         29871, 29953, 29945, 29974,  5046,  2318, 29973,   673,   278,  1139,
-           411, 13173,  8252, 29889,   319,  1799,  9047, 13566, 29901]])  # fmt: skip
-
-        self.assertTrue(torch.equal(inputs["input_ids"], EXPECTED_INPUT_IDS))
 
         output = model.generate(**inputs, max_new_tokens=500)
-        EXPECTED_DECODED_TEXT = "68%\nIn the image, which appears to be a chart from a Pew Research Center report, the bar representing the percentage of people aged 65 and older who believe that Trump fights for their beliefs 'very well' is at 68%."  # fmt: skip
+        EXPECTED_DECODED_TEXT = "68%\nIn the image, which appears to be a chart from a Pew Research Center report, the bar representing the percentage of Republicans and Republican leaners who believe 'very well' describes how fights for what they believe in describe Trump is at 68% for the 65+ age group."
+    
         self.assertEqual(
             self.processor.decode(output[0,inputs["input_ids"].shape[1]:], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
+    
+    @slow
     def test_small_model_integration_test_single(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model = MPLUGDocOwlForConditionalGeneration.from_pretrained("/raid/dana/mplug_model_hf", load_in_4bit=False)
+        model = MPLUGDocOwlForConditionalGeneration.from_pretrained("/raid/dana/mplug_model_hf_chat", load_in_4bit=False)
 
-        prompt = "<image>Parse texts in the image."
-        image_file = "/raid/dana/fflw0023_1.png"
+        prompt = "<image><image>What is the name of the movie in the poster? Provide detailed explanation."
+        image_file = "/raid/dana/examples_Rebecca_(1939_poster)_Small.jpeg"
         # raw_image = Image.open(requests.get(image_file, stream=True).raw)
         raw_image = Image.open(image_file)
         inputs = self.processor(prompt, raw_image, return_tensors="pt")
         print(inputs["input_ids"])
-        EXPECTED_INPUT_IDS = torch.tensor([[    1,  3148,  1001, 29901,   529, 10945, 29918,  2492, 29958,  32000,
-           529, 29883,  1336, 29918,  2492, 29918,   798, 29900, 29918,  1054,
-         29900, 29958,  32000,   529, 29883,  1336, 29918,  2492, 29918,   798,
-         29900, 29918,  1054, 29896, 29958,  32000,   529, 29883,  1336, 29918,
-          2492, 29918,   798, 29896, 29918,  1054, 29900, 29958,  32000,   529,
-         29883,  1336, 29918,  2492, 29918,   798, 29896, 29918,  1054, 29896,
-         29958,  32000,   529, 29883,  1336, 29918,  2492, 29918,   798, 29906,
-         29918,  1054, 29900, 29958,  32000,   529, 29883,  1336, 29918,  2492,
-         29918,   798, 29906, 29918,  1054, 29896, 29958,  32000, 20969, 26442,
-           297,   278,  1967, 29889,   319,  1799,  9047, 13566, 29901]])
-  # fmt: skip
-
-        self.assertTrue(torch.equal(inputs["input_ids"], EXPECTED_INPUT_IDS))
-
         output = model.generate(**inputs, max_new_tokens=500)
-        EXPECTED_DECODED_TEXT = "<doc>     RESPONSE    CODE    REQUEST    CONFIRMATION \n     To:    Joe Leinster \n     From:  Bonnie Tucker \n     Date:  September 18, 1996 \n     Brand: Eclipse    PPS Program #: 602399 Requested By: \n     Title: Sneak Preview Attendance Roster B - Charlotte Tests \n     Description: REVISED - Record of smokers attending a sneak preview in Charlotte that may or may not be \n     pre-registered. (CHANGED SUPPLIER) \n     Fullfillment Data Entry at: M/A/R/C \n     Circulation Quantity: 300 \n     Estimated Response: 100.00 % \n     Estimated Responders: 300 \n     Distribution Drop Date: 10/03/96    Expiration Date: 11/15/96 \n     Response Code Assigned: _ W24 \n     Address, postal requirements, barcodes, document storage, and \n     batch numbers to be supplied by: \n     M/A/R/C \n     DE Fullfillment Vendor \n     C:  Suzi Hicks, RJR-IR    Vanessa Oakley \n     Karen Giddens    Melissa Andrews - TBM \n     52251 \n     2954 \n     Jackson Roper    Tammi LaManna - M/B \n     Debbie Lockery \n     Source: https://www.industrydocuments.ucsf.edu/docs/fflw0023 </doc></s>"  # fmt: skip
+        EXPECTED_DECODED_TEXT = "Rebecca\n The name of the movie in the poster is 'Rebecca,' as indicated by the large title at the top of the poster. The poster also includes the names of the stars, Laurence Olivier and Joan Fontaine, suggesting that they are the lead actors in the film. The poster features a classic Hollywood style with a focus on the two main characters and the title."# fmt: skip
         self.assertEqual(
             self.processor.decode(output[0,inputs["input_ids"].shape[1]:], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
-"""
-"""
+
     @slow
     def test_small_model_integration_test_mplugdocowl_single(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model_id = "/raid/dana/mplug_model_hf"
+        model_id = "/raid/dana/mplug_model_hf_chat"
 
-        model = MPLUGDocOwlForConditionalGeneration.from_pretrained("/raid/dana/mplug_model_hf", load_in_4bit=False)
-        processor = AutoProcessor.from_pretrained(model_id)
+        model = MPLUGDocOwlForConditionalGeneration.from_pretrained("/raid/dana/mplug_model_hf_chat", load_in_4bit=False)
+        processor = MPLUGDocOwlProcessor.from_pretrained(model_id)
 
         prompt = "<image>Recognize text in the image."
         image_file = "/raid/dana/test_image.tif"
@@ -293,40 +268,38 @@ class MPLUGDocOwlForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=500, do_sample=False)
 
-        EXPECTED_DECODED_TEXT = "USER: <global_img> <crop_img_row0_col0> <crop_img_row0_col1> <crop_img_row1_col0> <crop_img_row1_col1> <crop_img_row2_col0> <crop_img_row2_col1> Recognize text in the image. ASSISTANT: PHILIP MORRIS MANAGEMENT CORP."
+        EXPECTED_DECODED_TEXT = "PHILIP MORRIS MANAGEMENT CORP."
         self.assertEqual(
-            processor.decode(output[0], skip_special_tokens=True),
+            processor.decode(output[0,inputs["input_ids"].shape[1]:], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
-"""
-"""
+    
     @slow
-    @require_bitsandbytes
+    #@require_bitsandbytes
     def test_small_model_integration_test_llama_batched(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model_id = "mplugdocowl-hf/mplugdocowl-1.5-7b-hf"
+        model_id = "/raid/dana/mplug_model_hf_chat"
 
-        model = MPLUGDocOwlForConditionalGeneration.from_pretrained("/raid/dana/mplug_model_hf", load_in_4bit=True)
-        processor = AutoProcessor.from_pretrained(model_id)
+        model = MPLUGDocOwlForConditionalGeneration.from_pretrained("/raid/dana/mplug_model_hf_chat", load_in_4bit=False)
+        processor = MPLUGDocOwlProcessor.from_pretrained(model_id)
 
-        prompts = [
-            "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me? ASSISTANT:",
-            "USER: <image>\nWhat is this? ASSISTANT:",
-        ]
-        image1 = Image.open(requests.get("https://mplugdocowl-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        prompts = ["<image>What is the name of the movie in the poster? Provide detailed explanation.", 
+                   "<image>What is unusual about this image? Provide detailed explanation."]
+        #image1 = Image.open(requests.get("https://mplugdocowl-vl.github.io/static/images/view.jpg", stream=True).raw)
+        #image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        image1 = Image.open("/raid/dana/examples_Rebecca_(1939_poster)_Small.jpeg")
+        image2 = Image.open("/raid/dana/extreme_ironing.jpg")
 
         inputs = processor(prompts, images=[image1, image2], return_tensors="pt", padding=True)
 
-        output = model.generate(**inputs, max_new_tokens=20)
+        output = model.generate(**inputs, max_new_tokens=512)
 
-        EXPECTED_DECODED_TEXT = ['USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, you', 'USER:  \nWhat is this? ASSISTANT: The image features two cats lying down on a pink couch. One cat is located on']  # fmt: skip
-
+        EXPECTED_DECODED_TEXT = ['USER: <global_img><crop_img_row0_col0><crop_img_row0_col1><crop_img_row1_col0><crop_img_row1_col1><crop_img_row2_col0><crop_img_row2_col1>What is the name of the movie in the poster? Provide detailed explanation. ASSISTANT: Rebecca\nThe name of the movie in the poster is "Rebecca," as indicated by the large title at the top of the poster. The poster also includes the names of the stars, Laurence Olivier and Joan Fontaine, suggesting that they are the lead actors in the film. The poster features a classic Hollywood style with a focus on the two main characters and the title.', 'USER: <global_img><crop_img_row0_col0><crop_img_row0_col1><crop_img_row0_col2><crop_img_row1_col0><crop_img_row1_col1><crop_img_row1_col2>What is unusual about this image? Provide detailed explanation. ASSISTANT:\nThe unusual aspect of this image is that the man is ironing clothes on the back of a taxi, which is not a common sight. It is not typical to see someone ironing on the back of a vehicle, especially in an urban setting where such activities are generally not practical due to the lack of space and the potential for disruption to traffic. The presence of a taxi with a man ironing on its back adds an element of surprise and novelty to the scene.']
         self.assertEqual(
             processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
-
+'''
     @slow
     @require_bitsandbytes
     def test_small_model_integration_test_batch(self):
@@ -492,4 +465,5 @@ class MPLUGDocOwlForConditionalGenerationIntegrationTest(unittest.TestCase):
         EXPECTED_OUTPUT = ['<|im_start|>', 'system', '\n', 'Answer', '▁the', '▁questions', '.', '<|im_end|>', '<|im_start|>', 'user', '\n', '<image>', '\n', 'What', '▁is', '▁shown', '▁in', '▁this', '▁image', '?', '<|im_end|>', '<|im_start|>', 'ass', 'istant', '\n']  # fmt: skip
         self.assertEqual(slow_tokenizer.tokenize(prompt), EXPECTED_OUTPUT)
         self.assertEqual(fast_tokenizer.tokenize(prompt), EXPECTED_OUTPUT)
-"""
+
+'''
