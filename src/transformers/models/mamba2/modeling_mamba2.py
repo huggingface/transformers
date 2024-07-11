@@ -1670,12 +1670,12 @@ class Mamba2Model(Mamba2PreTrainedModel):
 
             if output_attentions:
                 if out[1] is not None:
-                    # Append attentions only of attention layers. Mamba layers return `None` as the attention weights
+                    # Append attentions only of attention layers. Mamba2 layers return `None` as the attention weights
                     all_self_attns += (out[1],)
 
         hidden_states = self.norm_f(hidden_states)
 
-        # Add hidden states from the last decoder layer
+        # Add hidden states from the last layer
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
@@ -1825,7 +1825,7 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel):
 
         loss = None
         if labels is not None:
-            # move labels to correct device to enable model parallelism
+            # Move labels to correct device to enable model parallelism
             labels = labels.to(logits.device)
             # Shift so that tokens < n predict n
             shift_logits = logits[..., :-1, :].contiguous()
