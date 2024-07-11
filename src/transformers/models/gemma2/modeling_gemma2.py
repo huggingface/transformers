@@ -41,6 +41,7 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
+    is_flash_attn_greater_or_equal,
     is_flash_attn_greater_or_equal_2_10,
     logging,
     replace_return_docstrings,
@@ -382,6 +383,7 @@ class Gemma2FlashAttention2(Gemma2Attention):
             q_len,
             dropout=dropout_rate,
             softmax_scale=self.scaling,
+            softcap=self.config.attn_logit_softcapping,
         )
 
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
@@ -402,6 +404,7 @@ class Gemma2FlashAttention2(Gemma2Attention):
         dropout=0.0,
         softmax_scale=None,
         cache_position=0,
+        softcap=None,
     ):
         """
         Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
@@ -432,7 +435,9 @@ class Gemma2FlashAttention2(Gemma2Attention):
         use_sliding_windows = (
             _flash_supports_window_size and self.sliding_window is not None and cache_position > self.sliding_window
         )
-        flash_kwargs = {"window_size": (self.sliding_window, self.sliding_window)} if use_sliding_windows else {}
+        flash_kwargs = {"softcap"} if is_flash_attn_greater_or_equal("2.6.0") else {}
+        if use_sliding_windows:
+            flash_kwargs.update({"window_size": (self.sliding_window, self.sliding_window)})
         # Contains at least one padding token in the sequence
         if attention_mask is not None:
             batch_size = query_states.shape[0]
