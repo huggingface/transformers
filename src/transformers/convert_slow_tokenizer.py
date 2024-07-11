@@ -640,22 +640,22 @@ class SpmConverter(Converter):
             # individual tokens would repeatedly rebuild a trie, which can be slow.
             is_last_special = None
             tokens = []
-            special_tokens = self.all_special_tokens
             for token in tokens_to_add:
-                is_special = (
-                    (token.special or str(token) in special_tokens)
-                    if isinstance(token, AddedToken)
-                    else str(token) in special_tokens
-                )
+                is_special = token.special
                 if is_last_special is None or is_last_special == is_special:
                     tokens.append(token)
                 else:
-                    self._add_tokens(tokens, special_tokens=is_last_special)
+                    if is_last_special:
+                        tokenizer.add_special_tokens(tokens)
+                    else:
+                        tokenizer.add_tokens(tokens)
                     tokens = [token]
                 is_last_special = is_special
             if tokens:
-                self._add_tokens(tokens, special_tokens=is_last_special)
-
+                if is_last_special:
+                    tokenizer.add_special_tokens(tokens)
+                else:
+                    tokenizer.add_tokens(tokens)
         # Tokenizer assemble
         normalizer = self.normalizer(self.proto)
         if normalizer is not None:
