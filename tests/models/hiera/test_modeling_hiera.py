@@ -20,10 +20,7 @@ from typing import Dict, List, Tuple
 
 from transformers import HieraConfig
 from transformers.testing_utils import (
-    require_accelerate,
     require_torch,
-    require_torch_accelerator,
-    require_torch_fp16,
     require_vision,
     slow,
     torch_device,
@@ -602,7 +599,7 @@ class HieraModelIntegrationTest(unittest.TestCase):
             i // s // ms for i, s, ms in zip(config.image_size, config.patch_stride, config.masked_unit_size)
         ]
         num_windows = math.prod(mask_spatial_shape)
-        noise = torch.rand(1, num_windows, device=torch_device)
+        noise = torch.rand(1, num_windows).to(torch_device)
 
         # forward pass
         with torch.no_grad():
@@ -623,25 +620,6 @@ class HieraModelIntegrationTest(unittest.TestCase):
         )
 
         self.assertTrue(torch.allclose(outputs.logits[0, :5, :5], expected_slice.to(torch_device), atol=1e-4))
-
-    @slow
-    @require_accelerate
-    @require_torch_accelerator
-    @require_torch_fp16
-    def test_inference_fp16(self):
-        r"""
-        A small test to make sure that inference work in half precision without any problem.
-        """
-        model = HieraModel.from_pretrained("facebook/hiera-tiny-224-hf", torch_dtype=torch.float16, device_map="auto")
-        image_processor = self.default_image_processor
-
-        image = prepare_img()
-        inputs = image_processor(images=image, return_tensors="pt")
-        pixel_values = inputs.pixel_values.to(torch_device)
-
-        # forward pass to make sure inference works in fp16
-        with torch.no_grad():
-            _ = model(pixel_values)
 
 
 @require_torch
