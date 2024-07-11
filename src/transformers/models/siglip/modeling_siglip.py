@@ -1527,7 +1527,7 @@ class SiglipForImageClassification(SiglipPreTrainedModel):
         sequence_output = outputs[0]
 
         # average pool the patch tokens
-        sequence_output = torch.mean(sequence_output[:, 1:, :], dim=1)
+        sequence_output = torch.mean(sequence_output, dim=1)
         # apply classifier
         logits = self.classifier(sequence_output)
 
