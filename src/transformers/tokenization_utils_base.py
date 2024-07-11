@@ -2306,7 +2306,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # If one passes a GGUF file path to `gguf_file` there is no need for this check as the tokenizer will be
         # loaded directly from the GGUF file.
-        if (from_slow or not has_tokenizer_file) and cls.slow_tokenizer_class is not None and not gguf_file and not tiktoken_file:
+        if (
+            (from_slow or not has_tokenizer_file)
+            and cls.slow_tokenizer_class is not None
+            and not gguf_file
+            and not tiktoken_file
+        ):
             slow_tokenizer = (cls.slow_tokenizer_class)._from_pretrained(
                 copy.deepcopy(resolved_vocab_files),
                 pretrained_model_name_or_path,
