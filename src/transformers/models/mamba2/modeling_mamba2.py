@@ -166,8 +166,9 @@ class HybridMamba2AttentionDynamicCache(DynamicCache):
 
 
 class Mamba2MLP(nn.Module):
-    def __init__(self, config: Mamba2Config):
+    def __init__(self, config: Mamba2Config, layer_idx):
         super().__init__()
+        self.layer_idx = layer_idx
 
         self.hidden_size = config.hidden_size
         self.original_intermediate_size = config.mlp_intermediate_size
@@ -432,7 +433,6 @@ class Mamba2Attention(nn.Module):
             cache: Optional[HybridMamba2AttentionDynamicCache] = None,
             output_attentions: Optional[bool] = False,
             use_cache: Optional[bool] = False,
-            cache_position: Optional[torch.LongTensor] = None,
     ):
         # Apply attention-conv1d-specific projections and rope
         query, key, value, cache = self._attn_conv1d_projections_and_rope(
@@ -686,7 +686,6 @@ class Mamba2FlashAttention2(Mamba2Attention):
             cache: Optional[HybridMamba2AttentionDynamicCache] = None,
             output_attentions: Optional[bool] = False,
             use_cache: Optional[bool] = False,
-            cache_position: Optional[torch.LongTensor] = None,
     ):
         # Apply attention-conv1d-specific projections and rope
         query, key, value, cache = self._attn_conv1d_projections_and_rope(
@@ -879,7 +878,6 @@ class Mamba2SdpaAttention(Mamba2Attention):
             cache: Optional[HybridMamba2AttentionDynamicCache] = None,
             output_attentions: Optional[bool] = False,
             use_cache: Optional[bool] = False,
-            cache_position: Optional[torch.LongTensor] = None,
     ):
         if output_attentions:
             logger.warning_once(
@@ -1427,28 +1425,69 @@ class Mamba2RMSNorm(nn.Module):
 
 
 class Mamba2Block(nn.Module):
-    #todo attention / mixer / mlp
-    def __init__(self, config, layer_idx):
+    def __init__(self, config: Mamba2Config, layer_idx):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
+        self.attention_layer = layer_idx in config.attention_layers_idx
+        self.mlp_layer = config.mlp_intermediate_size > 0
         self.residual_in_fp32 = config.residual_in_fp32
         self.norm = Mamba2RMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
-        self.mixer = Mamba2Mixer(config, layer_idx=layer_idx)
+
+        # mixer is either attention layer or mamba2 layer
+        if self.attention_layer:
+            self.mixer = MAMBA2_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx=layer_idx)
+        else:
+            self.mixer = Mamba2Mixer(config, layer_idx=layer_idx)
+
+        # following mlp layer is optional
+        if self.mlp_layer:
+            self.norm2 = Mamba2RMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
+            self.mlp = Mamba2MLP(config, layer_idx=layer_idx)
+        else:
+            self.norm2 = None
+            self.mlp = None
 
     def forward(
-        self, hidden_states, initial_state=None, return_final_state=False, cache: Optional[Mamba2Cache] = None
+            self,
+            hidden_states: torch.FloatTensor,
+            attention_mask: torch.FloatTensor,
+            position_ids: torch.LongTensor,
+            cache: Optional[HybridMamba2AttentionDynamicCache] = None,
+            output_attentions: Optional[bool] = False,
+            use_cache: Optional[bool] = False,
     ):
         residual = hidden_states
         hidden_states = self.norm(hidden_states.to(dtype=self.norm.weight.dtype))
         if self.residual_in_fp32:
             residual = residual.to(torch.float32)
 
-        hidden_states, last_state = self.mixer(
-            hidden_states, initial_state=initial_state, return_final_state=return_final_state, cache=cache
-        )
+        if not self.attention_layer:
+            hidden_states = self.mixer(
+                hidden_states, cache=cache
+            )
+            attn_weights = None
+        else:
+            hidden_states, attn_weights, cache = self.mixer(
+                hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                cache=cache,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+            )
         hidden_states = residual + hidden_states
-        return hidden_states, last_state
+
+        if self.mlp_layer:
+            residual = hidden_states
+            hidden_states = self.norm2(hidden_states.to(dtype=self.norm2.weight.dtype))
+            if self.residual_in_fp32:
+                residual = residual.to(torch.float32)
+
+            hidden_states = self.mlp(hidden_states)
+            hidden_states = hidden_states + residual
+
+        return hidden_states, attn_weights, cache
 
 
 @dataclass
