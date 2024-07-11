@@ -1,59 +1,134 @@
-from transformers import PreTrainedTokenizerFast
-import regex as re
-import json
-import base64
-import os
+# coding=utf-8
+# Copyright 2024 GLM & ZhipuAI team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Tokenization classes for GLM."""
+
+from typing import Optional, Tuple
+
+from ...tokenization_utils import AddedToken
+from ...tokenization_utils_fast import PreTrainedTokenizerFast
+from ...utils import logging
+from .tokenization_glm import GLMTokenizer
+
+
+logger = logging.get_logger(__name__)
+
+VOCAB_FILES_NAMES = {
+    "vocab_file": "tokenizer.model",
+    # "merges_file": "merges.txt",
+    "tokenizer_file": "tokenizer_config.json",
+}
+
+
+MAX_MODEL_INPUT_SIZES = {"THUDM/glm-tokenizer": 32768}
 
 
 class GLMTokenizerFast(PreTrainedTokenizerFast):
-    vocab_files_names = {"vocab_file": "tokenizer.model"}
-    model_input_names = ["input_ids", "attention_mask", "position_ids"]
+    """
+    Construct a "fast" Qwen2 tokenizer (backed by HuggingFace's *tokenizers* library). Based on byte-level
+    Byte-Pair-Encoding.
+
+    Same with GPT2Tokenizer, this tokenizer has been trained to treat spaces like parts of the tokens so a word will
+    be encoded differently whether it is at the beginning of the sentence (without space) or not:
+
+    ```python
+    >>> from transformers import GLMTokenizerFast
+
+    >>> tokenizer = GLMTokenizerFast.from_pretrained("THUDM/glm-4-9b-chat")
+    >>> tokenizer("Hello world")["input_ids"]
+    [9707, 1879]
+
+    >>> tokenizer(" Hello world")["input_ids"]
+    [21927, 1879]
+    ```
+    This is expected.
+
+    This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
+    refer to this superclass for more information regarding those methods.
+
+    Args:
+        vocab_file (`str`, *optional*):
+            Path to the vocabulary file.
+        merges_file (`str`, *optional*):
+            Path to the merges file.
+        tokenizer_file (`str`, *optional*):
+            Path to [tokenizers](https://github.com/huggingface/tokenizers) file (generally has a .json extension) that
+            contains everything needed to load the tokenizer.
+        unk_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+            token instead. Not applicable to this tokenizer.
+        bos_token (`str`, *optional*):
+            The beginning of sequence token. Not applicable for this tokenizer.
+        eos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
+            The end of sequence token.
+        pad_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
+            The token used for padding, for example when batching sequences of different lengths.
+    """
+
+    vocab_files_names = VOCAB_FILES_NAMES
+    model_input_names = ["input_ids", "attention_mask"]
+    slow_tokenizer_class = GLMTokenizer
 
     def __init__(
-            self,
-            vocab_file,
-            merges_file,
-            tokenizer_file=None,
-            **kwargs
+        self,
+        vocab_file=None,
+        merges_file=None,
+        tokenizer_file=None,
+        unk_token="<|endoftext|>",
+        bos_token=None,
+        eos_token="<|endoftext|>",
+        pad_token="<|endoftext|>",
+        **kwargs,
     ):
-        # Ensure the vocab_file and merges_file are passed to the base class constructor
+        # We need to at least pass vocab_file and merges_file to base class
+        # in case a slow tokenizer needs to be initialized; other can be
+        # configured through files.
+        # following GPT2TokenizerFast, also adding unk_token, bos_token, and eos_token
+
+        bos_token = (
+            AddedToken(bos_token, lstrip=False, rstrip=False, special=True, normalized=False)
+            if isinstance(bos_token, str)
+            else bos_token
+        )
+        eos_token = (
+            AddedToken(eos_token, lstrip=False, rstrip=False, special=True, normalized=False)
+            if isinstance(eos_token, str)
+            else eos_token
+        )
+        unk_token = (
+            AddedToken(unk_token, lstrip=False, rstrip=False, special=True, normalized=False)
+            if isinstance(unk_token, str)
+            else unk_token
+        )
+        pad_token = (
+            AddedToken(pad_token, lstrip=False, rstrip=False, special=True, normalized=False)
+            if isinstance(pad_token, str)
+            else pad_token
+        )
+
         super().__init__(
             vocab_file=vocab_file,
             merges_file=merges_file,
             tokenizer_file=tokenizer_file,
-            **kwargs
+            unk_token=unk_token,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            pad_token=pad_token,
+            **kwargs,
         )
-        self.vocab_file = vocab_file
 
-        # Load mergeable ranks from the vocab file
-        self.mergeable_ranks = {}
-        with open(vocab_file, 'rb') as file:
-            data = json.load(file)
-            for key, value in data.items():
-                self.mergeable_ranks[base64.b64decode(key.encode("utf-8")).decode("utf-8")] = value
-
-        self.decoder = {rank: token for token, rank in self.mergeable_ranks.items()}
-        self.n_words = len(self.decoder)
-
-    @property
-    def vocab_size(self):
-        return self.n_words
-
-    def get_vocab(self):
-        """Returns vocab as a dict"""
-        return {self._convert_id_to_token(i): i for i in range(self.vocab_size)}
-
-    def save_vocabulary(self, save_directory, filename_prefix=None):
-        if not os.path.isdir(save_directory):
-            os.makedirs(save_directory, exist_ok=True)
-        vocab_file_path = os.path.join(save_directory,
-                                       (filename_prefix + "-" if filename_prefix else "") + "vocab.json")
-        merges_file_path = os.path.join(save_directory,
-                                        (filename_prefix + "-" if filename_prefix else "") + "merges.txt")
-        with open(vocab_file_path, 'w', encoding='utf-8') as f:
-            json.dump({base64.b64encode(token.encode("utf-8")).decode("utf-8"): rank for token, rank in
-                       self.mergeable_ranks.items()}, f, ensure_ascii=False)
-        with open(merges_file_path, 'w', encoding='utf-8') as f:
-            f.write("some merges data")
-
-        return (vocab_file_path, merges_file_path)
+    # Copied from transformers.models.gpt2.tokenization_gpt2_fast.GPT2TokenizerFast.save_vocabulary
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+        files = self._tokenizer.model.save(save_directory, name=filename_prefix)
+        return tuple(files)
