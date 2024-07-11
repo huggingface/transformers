@@ -715,18 +715,34 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix, keep_in
         load(model_to_load, state_dict, prefix=start_prefix)
     else:
         # Adjust and remove our `start_prefix` as we don't need it anymore
-        state_dict = {
-            key[len(start_prefix) :] if key.startswith(start_prefix) else key: value
-            for key, value in state_dict.items()
-        }
+        for key in list(state_dict.keys()):
+            new_key = key[len(start_prefix) :] if key.startswith(start_prefix) else key
+            state_dict.update({new_key: state_dict.pop(key)})
 
-        # Finally we need to check if the params are the right dtype in the state dict
-        model_state_dict = model_to_load.state_dict()
-        for key, value in state_dict.items():
-            if key not in model_state_dict:
-                continue
-            if value.dtype != model_state_dict[key].dtype:
-                state_dict[key] = value.to(model_state_dict[key].dtype)
+        class PrecisionMaintainingHook:
+            """
+            A hook which will convert the module `dtype` to the
+            proper type on the first pass of an input. This
+            let's us keep utilizing an `mmap` for fast loading,
+            and postpone the upcast or downcast of a layer until
+            it is needed.
+
+            Will then delete itself after it's been called once
+            """
+
+            def __init__(self, precision):
+                self.precision = precision
+
+            def register_hook(self, module):
+                self.hook = module.register_forward_pre_hook(self.forward_pre_hook)
+
+            def forward_pre_hook(self, module, args):
+                if module.dtype in (torch.float16, torch.bfloat16):
+                    module.to(self.precision)
+                self.hook.remove()
+
+        # Attach hooks which will convert any layers that should be `float32` from `float16` or `bfloat16`
+        PrecisionMaintainingHook(precision=torch.float32).register_hook(model_to_load)
 
         # By passing in `assign=True`, we can be memory efficient by mapping the tensors directly, using only 1x
         # the memory of the original state_dict instead of 2.
