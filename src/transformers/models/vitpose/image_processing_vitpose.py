@@ -32,16 +32,14 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
 )
-from ...utils import TensorType, is_cv2_available, is_vision_available, logging
+from ...utils import TensorType, is_scipy_available, is_vision_available, logging
 
 
 if is_vision_available():
     import PIL
 
-if is_cv2_available():
-    # TODO get rid of cv2?
-    import cv2
-
+if is_scipy_available():
+    from scipt.ndimage import gaussian_filter
 
 logger = logging.get_logger(__name__)
 
@@ -127,9 +125,10 @@ def post_dark_udp(coords, batch_heatmaps, kernel=3):
     num_coords = coords.shape[0]
     if not (batch_size == 1 or batch_size == num_coords):
         raise ValueError("The batch size of heatmaps should be 1 or equal to the batch size of coordinates.")
+    radius = int((kernel - 1) // 2)
     for heatmaps in batch_heatmaps:
         for heatmap in heatmaps:
-            cv2.GaussianBlur(heatmap, (kernel, kernel), 0, heatmap)
+            gaussian_filter(heatmap, sigma=0.8, output=heatmap, radius=(radius, radius), axes=(0, 1))
     np.clip(batch_heatmaps, 0.001, 50, batch_heatmaps)
     np.log(batch_heatmaps, batch_heatmaps)
 
@@ -247,6 +246,26 @@ def get_warp_matrix(theta: float, size_input: np.ndarray, size_dst: np.ndarray, 
     return matrix
 
 
+def warp_affine(src, M, borderValue=0):
+    new_src = np.full_like(src, borderValue, dtype=src.dtype)
+    h, w = src.shape[:2]
+    y, x = np.indices((h, w))
+    x = x.flatten()
+    y = y.flatten()
+    ones = np.ones((h * w, 1))
+    coords = np.vstack([x, y, ones.T])
+    coords_transformed = M.dot(coords)
+    coords_transformed = np.round(coords_transformed).astype(int)
+    mask = (
+        (coords_transformed[0, :] >= 0)
+        & (coords_transformed[0, :] < w)
+        & (coords_transformed[1, :] >= 0)
+        & (coords_transformed[1, :] < h)
+    )
+    new_src[coords_transformed[1, mask], coords_transformed[0, mask]] = src[y[mask], x[mask]]
+    return new_src
+
+
 class ViTPoseImageProcessor(BaseImageProcessor):
     r"""
     Constructs a ViTPose image processor.
@@ -330,12 +349,12 @@ class ViTPoseImageProcessor(BaseImageProcessor):
         transformation = get_warp_matrix(rotation, center * 2.0, np.array(size) - 1.0, scale * 200.0)
 
         # cv2 requires channels last format
-        cv2_image = (
+        image = (
             image
             if input_data_format == ChannelDimension.LAST
             else to_channel_dimension_format(image, ChannelDimension.LAST, input_data_format)
         )
-        image = cv2.warpAffine(cv2_image, transformation, size, flags=cv2.INTER_LINEAR)
+        image = warp_affine(src=image, M=transformation)
 
         image = to_channel_dimension_format(image, data_format, ChannelDimension.LAST)
 
