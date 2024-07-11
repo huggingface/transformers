@@ -325,11 +325,6 @@ class ChameleonAttention(nn.Module):
             key_states = key_states.reshape(-1, self.num_key_value_heads, self.head_dim)
             key_states = self.k_norm(key_states)
 
-        # permute key/value to use transformers RoPE implementation (see for more: https://github.com/huggingface/transformers/issues/25199)
-        # NOTE: permutation is done same way as in llama conversion script
-        key_states = key_states.view(-1, self.num_key_value_heads, self.head_dim // 2, 2).transpose(3, 2)
-        query_states = query_states.view(-1, self.num_heads, self.head_dim // 2, 2).transpose(3, 2)
-
         query_states = query_states.reshape(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         key_states = key_states.reshape(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
@@ -424,11 +419,6 @@ class ChameleonFlashAttention2(ChameleonAttention):
 
             key_states = key_states.reshape(-1, self.num_key_value_heads, self.head_dim)
             key_states = self.k_norm(key_states)
-
-        # permute key/value to use transformers RoPE implementation (see for more: https://github.com/huggingface/transformers/issues/25199)
-        # NOTE: permutation is done same way as in llama conversion script
-        key_states = key_states.view(-1, self.num_key_value_heads, self.head_dim // 2, 2).transpose(3, 2)
-        query_states = query_states.view(-1, self.num_heads, self.head_dim // 2, 2).transpose(3, 2)
 
         # Flash attention requires the input to have the shape
         # batch_size x seq_length x head_dim x hidden_dim
@@ -645,11 +635,6 @@ class ChameleonSdpaAttention(ChameleonAttention):
 
             key_states = key_states.reshape(-1, self.num_key_value_heads, self.head_dim)
             key_states = self.k_norm(key_states)
-
-        # permute key/value to use transformers RoPE implementation (see for more: https://github.com/huggingface/transformers/issues/25199)
-        # NOTE: permutation is done same way as in llama conversion script
-        key_states = key_states.view(-1, self.num_key_value_heads, self.head_dim // 2, 2).transpose(3, 2)
-        query_states = query_states.view(-1, self.num_heads, self.head_dim // 2, 2).transpose(3, 2)
 
         query_states = query_states.reshape(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         key_states = key_states.reshape(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
