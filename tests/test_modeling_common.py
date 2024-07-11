@@ -1215,14 +1215,33 @@ class ModelTesterMixin:
                             (past_mask, inputs_to_test[1]["attention_mask"]), dim=1
                         )
 
-            if "inputs_embeds" in inspect.signature(model.forward).parameters and not model.config.is_encoder_decoder:
-                inputs_to_test.append(
-                    {
-                        "inputs_embeds": torch.rand(
-                            2, 2, model.config.hidden_size, dtype=torch.float, device=torch_device
-                        )
-                    }
-                )
+                forward_parameters = inspect.signature(model.forward).parameters
+                if "input_ids" in forward_parameters and "inputs_embeds" in forward_parameters:
+                    inps = copy.deepcopy(inputs_to_test[0])
+
+                    embedding_size = (
+                        model.config.embedding_size
+                        if getattr(model.config, "embedding_size", None) is not None
+                        and model.config.model_type != "megatron-bert"
+                        else model.config.hidden_size
+                    )
+
+                    if (
+                        model.config.model_type in MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES
+                        and model.__class__.__name__
+                        == MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES[model.config.model_type]
+                    ):
+                        batch_size, num_choices, sequence_length = inputs["input_ids"].shape
+                        shape = (batch_size, num_choices, sequence_length, embedding_size)
+                    elif inps["input_ids"].ndim == 2:
+                        batch_size, sequence_length = inputs["input_ids"].shape
+                        shape = (batch_size, sequence_length, embedding_size)
+                    else:
+                        self.skipTest("Unknown case")
+
+                    del inps["input_ids"]
+                    inps["inputs_embeds"] = torch.rand(shape, dtype=torch.float, device=torch_device)
+                    inputs_to_test.append(inps)
 
             for inps in inputs_to_test:
                 filtered_inputs = {k: v for (k, v) in inps.items() if k in input_names}
