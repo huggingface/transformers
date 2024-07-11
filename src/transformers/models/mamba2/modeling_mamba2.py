@@ -570,7 +570,7 @@ class Mamba2Attention(nn.Module):
         value = self._split_heads(v, num_attention_heads=self.num_heads_kv, attn_head_size=self.head_dim)
 
         if self.rotary_emb_dim > 0:
-            # todo: do we need to cache sin and cos for RoPE, llama doesn't seem to cache it (except when using sink cache)?
+            # TODO do we need to cache sin and cos for RoPE, llama doesn't seem to cache it (except when using sink cache)?
             query, key = self._apply_rope(query, key, value, position_ids)
 
         # Cache KV values
@@ -1375,7 +1375,7 @@ class Mamba2Mixer(nn.Module):
         return y
 
     def forward(self, hidden_states, cache: Optional[HybridMamba2AttentionDynamicCache] = None):
-        # todo: check version for AMD support?
+        # TODO: check version for AMD support?
         if is_fast_path_available and "cuda" in self.in_proj.weight.device.type:
             return self.triton_kernels_forward(hidden_states, cache)
         return self.slow_forward(hidden_states, cache)
@@ -1725,7 +1725,7 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    # todo: is this necessary?
+    # TODO: is this necessary?
     def _tie_weights(self):
         # probably overwritten by `_tied_weights_keys` but just to be sure
         if self.config.tie_word_embeddings:
