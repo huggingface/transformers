@@ -622,16 +622,19 @@ class SpmConverter(Converter):
     def converted(self) -> Tokenizer:
         tokenizer = self.tokenizer(self.proto)
 
+        # control tokens are special
+        # user defined symbols are not
+        # both user and control tokens are AddedTokens
         # Add user defined symbols (type == 4) from sentnecepiece (https://github.com/google/sentencepiece/blob/6225e08edb2577757163b3f5dbba4c0b670ef445/src/sentencepiece_model.proto#L299C29-L299C33)
-        user_defined_symbols = [
-            AddedToken(token, normalized=False, special=False)
-            for token in [p.piece for p in self.proto.pieces if p.type == 4]
-        ]
-        control_symbols = [
-            AddedToken(token, normalized=False, special=True) for token in self.proto.trainer_spec.control_symbols
-        ]
 
-        tokenizer.add_tokens(user_defined_symbols + control_symbols)
+        all_added_tokens = {
+            id: AddedToken(token, normalized=False, special=special)
+            for token, id, special in [
+                (id, p.piece, p.type == 3) for p in enumerate(self.proto.pieces) if p.type in [3, 4]
+            ]
+        }
+
+        tokenizer.add_tokens(sorted(all_added_tokens))
 
         # Tokenizer assemble
         normalizer = self.normalizer(self.proto)
