@@ -731,18 +731,20 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix, keep_in
             """
 
             def __init__(self, precision):
+                if precision is None:
+                    precision = torch.float32
                 self.precision = precision
 
             def register_hook(self, module):
                 self.hook = module.register_forward_pre_hook(self.forward_pre_hook)
 
             def forward_pre_hook(self, module, args):
-                if module.dtype in (torch.float16, torch.bfloat16):
+                if module.dtype != self.precision and module.dtype in (torch.float16, torch.bfloat16):
                     module.to(self.precision)
                 self.hook.remove()
 
         # Attach hooks which will convert any layers that should be `float32` from `float16` or `bfloat16`
-        PrecisionMaintainingHook(precision=torch.float32).register_hook(model_to_load)
+        PrecisionMaintainingHook(precision=dtype).register_hook(model_to_load)
 
         # By passing in `assign=True`, we can be memory efficient by mapping the tensors directly, using only 1x
         # the memory of the original state_dict instead of 2.
