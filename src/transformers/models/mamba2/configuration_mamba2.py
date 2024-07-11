@@ -62,7 +62,6 @@ class Mamba2Config(PretrainedConfig):
             Multi-input SSM head dimension.
         attention_head_dim (`int`, *optional*, defaults to 128):
             Multi-head attention's head dimension.
-        # TODO: https://github.com/state-spaces/mamba/issues/457
         attention_num_heads (`int`, *optional*, defaults to 30):
             The number of heads in multi-head attention.
         attention_num_key_value_heads (`int`, *optional*, defaults to 30):
@@ -258,7 +257,9 @@ class Mamba2Config(PretrainedConfig):
         if isinstance(self.attention_layers_idx, list) and len(self.attention_layers_idx) == 0:
             return
 
-        if not isinstance(self.attention_layers_idx, List[int]):
+        if not isinstance(self.attention_layers_idx, List) and all(
+            isinstance(x, int) for x in self.attention_layers_idx
+        ):
             raise ValueError(
                 "`attention_layers_idx` must be a list of integers indicating the attention layers, "
                 f"got {self.attention_layers_idx}"
