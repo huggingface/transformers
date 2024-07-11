@@ -26,6 +26,7 @@ from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...cache_utils import DynamicCache
+from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask, _prepare_4d_causal_attention_mask_for_sdpa
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -1145,7 +1146,9 @@ class Mamba2Mixer(nn.Module):
         return y
 
     @classmethod
-    def _ssd_naive(cls, x, dt, A, B, C, D, chunk_size, dt_bias, dt_min, dt_max, initial_states=None, return_final_states=False):
+    def _ssd_naive(
+        cls, x, dt, A, B, C, D, chunk_size, dt_bias, dt_min, dt_max, initial_states=None, return_final_states=False
+    ):
         """
         Arguments:
             x:       (batch_size, seq_len, num_heads, head_dim)
@@ -1622,7 +1625,7 @@ class Mamba2Model(Mamba2PreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position)
+        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, past_key_values, output_attentions)
 
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
@@ -1679,9 +1682,35 @@ class Mamba2Model(Mamba2PreTrainedModel):
             attentions=all_self_attns,
         )
 
-    def _update_causal_mask(self, attention_mask, input_tensor, cache_position):
-        # todo: implement
-        return attention_mask
+    def _update_causal_mask(self, attention_mask, inputs_embeds, past_key_values, output_attentions):
+        if not self._uses_attn_layers:
+            return None
+
+        batch_size, seq_len, _ = inputs_embeds.shape
+        past_length = past_key_values.get_seq_length() if past_key_values is not None else 0
+
+        # Follows GPTNeoX based creation of masks
+        if attention_mask is not None:
+            attention_mask = attention_mask.view(batch_size, -1)
+            if self._attn_implementation == "flash_attention_2":
+                return attention_mask if 0 in attention_mask else None
+            elif self._attn_implementation == "sdpa" and not output_attentions:
+                return _prepare_4d_causal_attention_mask_for_sdpa(
+                    attention_mask=attention_mask,
+                    input_shape=(batch_size, seq_len),
+                    inputs_embeds=inputs_embeds,
+                    past_key_values_length=past_length,
+                )
+            else:
+                return _prepare_4d_causal_attention_mask(
+                    attention_mask=attention_mask,
+                    input_shape=(batch_size, seq_len),
+                    inputs_embeds=inputs_embeds,
+                    past_key_values_length=past_length,
+                )
+
+        # This should not happen as we covered all options
+        return None
 
 
 class Mamba2ForCausalLM(Mamba2PreTrainedModel):
