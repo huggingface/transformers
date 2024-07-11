@@ -13,6 +13,8 @@
 # limitations under the License.
 """PaliGemmamodel configuration"""
 
+import warnings
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING
@@ -86,7 +88,7 @@ class PaliGemmaConfig(PretrainedConfig):
     ):
         self.ignore_index = ignore_index
         self.image_token_index = image_token_index
-        self.vocab_size = vocab_size
+        self._vocab_size = vocab_size
         self.projection_dim = projection_dim
         self.hidden_size = hidden_size
         self.vision_config = vision_config
@@ -124,7 +126,25 @@ class PaliGemmaConfig(PretrainedConfig):
                 num_attention_heads=8,
                 num_key_value_heads=1,
                 is_encoder_decoder=False,
+                vocab_size=vocab_size,
             )
         self.text_config.num_image_tokens = (self.vision_config.image_size // self.vision_config.patch_size) ** 2
         self.vision_config.projection_dim = projection_dim
         super().__init__(**kwargs)
+
+    @property
+    def vocab_size(self):
+        warnings.warn(
+            "The `vocab_size` attribute is deprecated and will be removed in v4.44, Please use `text_config.vocab_size` instead.",
+            FutureWarning,
+        )
+        return self._vocab_size
+
+    @vocab_size.setter
+    def vocab_size(self, value):
+        self._vocab_size = value
+
+    def to_dict(self):
+        output = super().to_dict()
+        output.pop("_vocab_size", None)
+        return output
