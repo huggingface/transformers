@@ -176,6 +176,7 @@ from . import (
     persimmon,
     phi,
     phi3,
+    glm,
     phobert,
     pix2struct,
     plbart,

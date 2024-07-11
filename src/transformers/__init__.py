@@ -625,6 +625,10 @@ _import_structure = {
     "models.persimmon": ["PersimmonConfig"],
     "models.phi": ["PhiConfig"],
     "models.phi3": ["Phi3Config"],
+    "models.glm": [
+        "GLMConfig",
+        "GLMTokenizer"
+    ],
     "models.phobert": ["PhobertTokenizer"],
     "models.pix2struct": [
         "Pix2StructConfig",
@@ -1025,6 +1029,7 @@ else:
     _import_structure["models.fnet"].append("FNetTokenizerFast")
     _import_structure["models.funnel"].append("FunnelTokenizerFast")
     _import_structure["models.gemma"].append("GemmaTokenizerFast")
+    _import_structure["models.glm"].append("GLMTokenizerFast")
     _import_structure["models.gpt2"].append("GPT2TokenizerFast")
     _import_structure["models.gpt_neox"].append("GPTNeoXTokenizerFast")
     _import_structure["models.gpt_neox_japanese"].append("GPTNeoXJapaneseTokenizer")
@@ -2861,6 +2866,15 @@ else:
             "Phi3ForTokenClassification",
             "Phi3Model",
             "Phi3PreTrainedModel",
+        ]
+    )
+    _import_structure["models.glm"].extend(
+        [
+            "GLMForCausalLM",
+            "GLMForSequenceClassification",
+            "GLMForTokenClassification",
+            "GLMModel",
+            "GLMPreTrainedModel",
         ]
     )
     _import_structure["models.pix2struct"].extend(
@@ -5294,6 +5308,7 @@ if TYPE_CHECKING:
     )
     from .models.phi import PhiConfig
     from .models.phi3 import Phi3Config
+    from .models.glm import GLMConfig,GLMTokenizer
     from .models.phobert import PhobertTokenizer
     from .models.pix2struct import (
         Pix2StructConfig,
@@ -5716,6 +5731,7 @@ if TYPE_CHECKING:
         from .models.fnet import FNetTokenizerFast
         from .models.funnel import FunnelTokenizerFast
         from .models.gemma import GemmaTokenizerFast
+        from .models.glm import GLMTokenizerFast
         from .models.gpt2 import GPT2TokenizerFast
         from .models.gpt_neox import GPTNeoXTokenizerFast
         from .models.gpt_neox_japanese import GPTNeoXJapaneseTokenizer
@@ -7244,6 +7260,13 @@ if TYPE_CHECKING:
             Phi3ForTokenClassification,
             Phi3Model,
             Phi3PreTrainedModel,
+        )
+        from .models.glm import (
+            GLMForCausalLM,
+            GLMForSequenceClassification,
+            GLMForTokenClassification,
+            GLMModel,
+            GLMPreTrainedModel,
         )
         from .models.pix2struct import (
             Pix2StructForConditionalGeneration,
