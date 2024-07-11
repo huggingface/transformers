@@ -24,8 +24,11 @@ from transformers.utils import PaddingStrategy
 from transformers.tokenization_utils_base import EncodedInput, BatchEncoding
 
 VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model"}
+PRETOKENIZE_REGEX = "(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\\r\\n\\p{L}\\p{N}]?\\p{L}+|\\p{N}{1,3}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+"
+
 
 class GLMTokenizer(PreTrainedTokenizer):
+    vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask", "position_ids"]
 
     def __init__(
@@ -33,16 +36,14 @@ class GLMTokenizer(PreTrainedTokenizer):
             vocab_file,
             padding_side="left",
             clean_up_tokenization_spaces=False,
-            encode_special_tokens=False,
             **kwargs
     ):
+
         self.name = "GLMTokenizer"
         self.vocab_file = vocab_file
-        pat_str = "(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\\r\\n\\p{L}\\p{N}]?\\p{L}+|\\p{N}{1,3}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+"
-        self.pat_str = re.compile(pat_str)
-        self.encode_special_tokens = encode_special_tokens
-
+        pattern = PRETOKENIZE_REGEX
         mergeable_ranks = {}
+
         with open(vocab_file) as f:
             for line in f:
                 token, rank = line.strip().split()
@@ -53,8 +54,8 @@ class GLMTokenizer(PreTrainedTokenizer):
         self.mergeable_ranks = mergeable_ranks
 
         self.tokenizer = tiktoken.Encoding(
-            name="my_tokenizer",
-            pat_str=pat_str,
+            name="glm_tokenizer",
+            pat_str=pattern,
             mergeable_ranks=mergeable_ranks,
             special_tokens={}
         )
@@ -126,18 +127,13 @@ class GLMTokenizer(PreTrainedTokenizer):
             `Tuple(str)`: Paths to the files saved.
         """
         if os.path.isdir(save_directory):
-            vocab_file = os.path.join(
-                save_directory, self.vocab_files_names["vocab_file"]
-            )
+            vocab_file = os.path.join(save_directory, self.vocab_files_names["vocab_file"])
         else:
             vocab_file = save_directory
-
         with open(self.vocab_file, 'rb') as fin:
             proto_str = fin.read()
-
         with open(vocab_file, "wb") as writer:
             writer.write(proto_str)
-
         return (vocab_file,)
 
     def _pad(
