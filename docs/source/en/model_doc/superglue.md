@@ -38,7 +38,10 @@ can be readily integrated into modern SfM or SLAM systems. The code and trained 
 
 ## How to use
 
-Here is a quick example of using the model. Since this model is an image matching model, it requires pairs of images to be matched:
+Here is a quick example of using the model. Since this model is an image matching model, it requires pairs of images to be matched. 
+The outputs contain the list of keypoints detected by the keypoint detector as well as the list of matches with their corresponding 
+matching scores. Due to the nature of SuperGlue, to output a dynamic number of matches, you will need to use the mask attribute to 
+retrieve the respective information:
 
 ```python
 from transformers import AutoImageProcessor, AutoModel
@@ -46,34 +49,12 @@ import torch
 from PIL import Image
 import requests
 
-url = "https://github.com/magicleap/SuperGluePretrainedNetwork/blob/master/assets/phototourism_sample_images/london_bridge_78916675_4568141288.jpg?raw=true"
-im1 = Image.open(requests.get(url, stream=True).raw)
-url = "https://github.com/magicleap/SuperGluePretrainedNetwork/blob/master/assets/phototourism_sample_images/london_bridge_19481797_2295892421.jpg?raw=true"
-im2 = Image.open(requests.get(url, stream=True).raw)
-images = [im1, im2]
+url_image1 = "https://github.com/cvg/LightGlue/blob/main/assets/sacre_coeur1.jpg?raw=true"
+image1 = Image.open(requests.get(url_image1, stream=True).raw)
+url_image2 = "https://github.com/cvg/LightGlue/blob/main/assets/sacre_coeur2.jpg?raw=true"
+image2 = Image.open(requests.get(url_image2, stream=True).raw)
 
-processor = AutoImageProcessor.from_pretrained("stevenbucaille/superglue_outdoor")
-model = AutoModel.from_pretrained("stevenbucaille/superglue_outdoor")
-
-inputs = processor(images, return_tensors="pt")
-outputs = model(**inputs)
-```
-
-The outputs contain the list of keypoints detected by the keypoint detector as well as the list of matches with their corresponding matching scores.
-Due to the nature of SuperGlue, to output a dynamic number of matches, you will need to use the mask attribute to retrieve the respective information:
-
-```python
-from transformers import AutoImageProcessor, AutoModel
-import torch
-from PIL import Image
-import requests
-
-url_image_1 = "https://github.com/cvg/LightGlue/blob/main/assets/sacre_coeur1.jpg?raw=true"
-image_1 = Image.open(requests.get(url_image_1, stream=True).raw)
-url_image_2 = "https://github.com/cvg/LightGlue/blob/main/assets/sacre_coeur2.jpg?raw=true"
-image_2 = Image.open(requests.get(url_image_2, stream=True).raw)
-
-images = [image_1, image_2]
+images = [image1, image2]
 
 processor = AutoImageProcessor.from_pretrained("stevenbucaille/superglue_outdoor")
 model = AutoModel.from_pretrained("stevenbucaille/superglue_outdoor")
@@ -83,7 +64,7 @@ with torch.no_grad():
     outputs = model(**inputs)
 
 # Get the respective image masks 
-image0_mask, image1_mask = outputs_mask[0]
+image0_mask, image1_mask = outputs.mask[0]
 
 image0_indices = torch.nonzero(image0_mask).squeeze()
 image1_indices = torch.nonzero(image1_mask).squeeze()

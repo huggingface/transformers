@@ -774,10 +774,10 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         >>> import requests
 
         >>> url = "https://github.com/magicleap/SuperGluePretrainedNetwork/blob/master/assets/phototourism_sample_images/london_bridge_78916675_4568141288.jpg?raw=true"
-        >>> im1 = Image.open(requests.get(url, stream=True).raw)
+        >>> image_1 = Image.open(requests.get(url, stream=True).raw)
         >>> url = "https://github.com/magicleap/SuperGluePretrainedNetwork/blob/master/assets/phototourism_sample_images/london_bridge_19481797_2295892421.jpg?raw=true"
-        >>> im2 = Image.open(requests.get(url, stream=True).raw)
-        >>> images = [im1, im2]
+        >>> image_2 = Image.open(requests.get(url, stream=True).raw)
+        >>> images = [image_1, image_2]
 
         >>> processor = AutoImageProcessor.from_pretrained("stevenbucaille/superglue_outdoor")
         >>> model = AutoModel.from_pretrained("stevenbucaille/superglue_outdoor")
