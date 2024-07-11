@@ -702,7 +702,7 @@ class Mamba2FlashAttention2(Mamba2Attention):
         use_cache: Optional[bool] = False,
     ):
         # Apply attention-conv1d-specific projections and rope
-        query, key, value, cache = self._attn_conv1d_projections_and_rope(
+        query, key, value = self._attn_conv1d_projections_and_rope(
             hidden_states=hidden_states, position_ids=position_ids, cache=cache, use_cache=use_cache
         )
 
@@ -912,7 +912,7 @@ class Mamba2SdpaAttention(Mamba2Attention):
         bsz, q_len, _ = hidden_states.size()
 
         # Apply attention-conv1d-specific projections and rope
-        query, key, value, cache = self._attn_conv1d_projections_and_rope(
+        query, key, value = self._attn_conv1d_projections_and_rope(
             hidden_states=hidden_states, position_ids=position_ids, cache=cache, use_cache=use_cache
         )
 
