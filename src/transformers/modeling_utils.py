@@ -739,7 +739,7 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix, keep_in
                 self.hook = module.register_forward_pre_hook(self.forward_pre_hook)
 
             def forward_pre_hook(self, module, args):
-                if module.dtype != self.precision and module.dtype in (torch.float16, torch.bfloat16):
+                if module.dtype != self.precision and module.dtype in (torch.float32, torch.float16, torch.bfloat16):
                     module.to(self.precision)
                 self.hook.remove()
 
