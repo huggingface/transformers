@@ -171,6 +171,8 @@ class ChameleonConfig(PretrainedConfig):
             A dictionary containing the vocabulary map from the tokenizer. Used to obtain tokens from the image inputs.
         mlp_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
+        enable_image_generation (`bool`, *optional*, defaults to `False`):
+            Whether to allow the model to generate image tokens.
 
 
     ```python
@@ -215,6 +217,7 @@ class ChameleonConfig(PretrainedConfig):
         vq_config=None,
         vocabulary_map=None,
         mlp_bias=False,
+        enable_image_generation=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -224,6 +227,7 @@ class ChameleonConfig(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.mlp_bias = mlp_bias
+        self.enable_image_generation = enable_image_generation
 
         self.num_key_value_heads = num_key_value_heads
         self.hidden_act = hidden_act

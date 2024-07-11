@@ -1453,6 +1453,7 @@ class ChameleonForCausalLM(ChameleonPreTrainedModel):
         self.model = ChameleonModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.enable_image_generation = config.enable_image_generation
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1546,9 +1547,10 @@ class ChameleonForCausalLM(ChameleonPreTrainedModel):
         logits = self.lm_head(hidden_states)
         logits = logits.float()
 
-        # Disallow image tokens which does not include special begin-image and end-image tokens
-        image_tokens = self.model.vocabulary_mapping.image_tokens
-        logits[:, :, image_tokens] = torch.finfo(logits.dtype).min
+        if not self.enable_image_generation:
+            # Disallow image tokens which does not include special begin-image and end-image tokens
+            image_tokens = self.model.vocabulary_mapping.image_tokens
+            logits[:, :, image_tokens] = torch.finfo(logits.dtype).min
 
         loss = None
         if labels is not None:
