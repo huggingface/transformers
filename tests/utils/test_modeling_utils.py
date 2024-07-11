@@ -858,7 +858,7 @@ class ModelUtilsTest(TestCasePlus):
                 weights_name_file = os.path.join(tmp_dir, weights_name)
                 self.assertTrue(os.path.isfile(weights_name_file))
 
-            # Setting use_safetensors=False should raise an error as the checkpoint was saved with safetensors=False
+            # Setting use_safetensors=True should raise an error as the checkpoint was saved with safetensors=False
             with self.assertRaises(OSError):
                 _ = BertModel.from_pretrained(tmp_dir, use_safetensors=True)
 
