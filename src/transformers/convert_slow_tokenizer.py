@@ -629,7 +629,7 @@ class SpmConverter(Converter):
 
         all_added_tokens = {
             id: AddedToken(token, normalized=False, special=special)
-            for token, id, special in [
+            for id, token, special in [
                 (id, p.piece, p.type == 3) for p in enumerate(self.proto.pieces) if p.type in [3, 4]
             ]
         }
