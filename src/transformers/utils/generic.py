@@ -336,7 +336,7 @@ class ModelOutput(OrderedDict):
                     serialized_type_name=f"{cls.__module__}.{cls.__name__}",
                 )
             else:
-                _torch_pytree._register_pytree_node(
+                _torch_pytree.register_pytree_node(
                     cls,
                     _model_output_flatten,
                     partial(_model_output_unflatten, output_type=cls),
@@ -479,7 +479,7 @@ if is_torch_available():
             serialized_type_name=f"{ModelOutput.__module__}.{ModelOutput.__name__}",
         )
     else:
-        _torch_pytree._register_pytree_node(
+        _torch_pytree.register_pytree_node(
             ModelOutput,
             _model_output_flatten,
             partial(_model_output_unflatten, output_type=ModelOutput),
