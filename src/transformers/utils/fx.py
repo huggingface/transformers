@@ -996,6 +996,13 @@ class HFTracer(Tracer):
             inputs_dict[input_name] = torch.zeros(
                 *shape, model.config.input_feat_per_channel, dtype=torch.float, device=device
             )
+        elif "inputs_embeds" in input_name:
+            batch_size = shape[0]
+            sequence_length = shape[-1]
+
+            inputs_dict[input_name] = torch.zeros(
+                batch_size, sequence_length, model.config.hidden_size, dtype=torch.float, device=device
+            )
         elif "visual_feats" in input_name:
             inputs_dict[input_name] = torch.zeros(
                 shape

@@ -48,6 +48,7 @@ from .utils import (
     is_torch_bf16_cpu_available,
     is_torch_bf16_gpu_available,
     is_torch_mlu_available,
+    is_torch_mps_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_tf32_available,
@@ -1819,7 +1820,7 @@ class TrainingArguments:
             raise ValueError("warmup_steps must be either 0 or > 1")
 
         if isinstance(self.fsdp, bool):
-            self.fsdp = "full_shard" if self.fsdp else ""
+            self.fsdp = [FSDPOption.FULL_SHARD] if self.fsdp else ""
         if isinstance(self.fsdp, str):
             self.fsdp = [FSDPOption(s) for s in self.fsdp.split()]
         if self.fsdp == [FSDPOption.OFFLOAD]:
@@ -1829,6 +1830,15 @@ class TrainingArguments:
             )
         elif FSDPOption.FULL_SHARD in self.fsdp and FSDPOption.SHARD_GRAD_OP in self.fsdp:
             raise ValueError("`--fsdp full_shard` is not compatible with `--fsdp shard_grad_op`.")
+
+        if self.gradient_checkpointing and (
+            FSDPOption.FULL_SHARD in self.fsdp or FSDPOption.HYBRID_SHARD in self.fsdp
+        ):
+            logger.warning(
+                "When using FSDP full shard, instead of using `gradient_checkpointing` in TrainingArguments, please"
+                " use `activation_checkpointing` in `fsdp_config`. The former introduces a redundant AllGather"
+                " operation in backward pass. Reference: https://github.com/huggingface/transformers/issues/30404"
+            )
 
         if self.fsdp_config is None:
             self.fsdp_config = {}
@@ -2178,6 +2188,8 @@ class TrainingArguments:
                     )
             if self.use_cpu:
                 device = torch.device("cpu")
+            elif is_torch_mps_available():
+                device = torch.device("mps")
             elif is_torch_xpu_available():
                 if not is_ipex_available() and not is_accelerate_available("0.32.0.dev"):
                     raise ImportError("Using the XPU PyTorch backend requires `accelerate>=0.32.0.dev`")
