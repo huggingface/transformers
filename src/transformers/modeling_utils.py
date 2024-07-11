@@ -690,8 +690,10 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix, keep_in
         local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
         if len(list(module.state_dict().keys())) > 0:
             random_layer = list(module.state_dict().keys())[0]
-            if prefix+random_layer in state_dict:
-                local_metadata["assign_to_params_buffers"] = state_dict[prefix+random_layer].dtype == module.state_dict()[random_layer].dtype
+            if prefix + random_layer in state_dict:
+                local_metadata["assign_to_params_buffers"] = (
+                    state_dict[prefix + random_layer].dtype == module.state_dict()[random_layer].dtype
+                )
 
         args = (state_dict, prefix, local_metadata, True, [], [], error_msgs)
         # Parameters of module and children will start with prefix. We can exit early if there are none in this
@@ -717,6 +719,7 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix, keep_in
         for name, child in module._modules.items():
             if child is not None:
                 load(child, state_dict, prefix + name + ".")
+
     load(model_to_load, state_dict, prefix=start_prefix)
     # Delete `state_dict` so it could be collected by GC earlier. Note that `state_dict` is a copy of the argument, so
     # it's safe to delete it.
