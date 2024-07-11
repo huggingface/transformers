@@ -997,11 +997,23 @@ class HFTracer(Tracer):
             )
         elif "inputs_embeds" in input_name:
             batch_size = shape[0]
-            sequence_length = shape[-1]
 
-            inputs_dict[input_name] = torch.zeros(
-                batch_size, sequence_length, model.config.hidden_size, dtype=torch.float, device=device
-            )
+            if (
+                getattr(model.config, "embedding_size", None) is not None
+                and model.config.model_type != "megatron-bert"
+            ):
+                embedding_size = model.config.embedding_size
+            else:
+                embedding_size = model.config.hidden_size
+
+            if len(shape) == 3:
+                # (batch_size, num_choices, sequence_length, embedding_size)
+                embedding_shape = (batch_size, shape[1], shape[2], embedding_size)
+            else:
+                # (batch_size, sequence_length, embedding_size)
+                embedding_shape = (batch_size, shape[1], embedding_size)
+
+            inputs_dict[input_name] = torch.zeros(embedding_shape, dtype=torch.float, device=device)
         elif "visual_feats" in input_name:
             inputs_dict[input_name] = torch.zeros(
                 shape
