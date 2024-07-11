@@ -18,7 +18,7 @@ Processor class for Mllama.
 
 # TODO: update all docs
 
-from typing import List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 # TODO: uncomment
 # try:
@@ -38,18 +38,20 @@ from ...tokenization_utils_base import (
     TextInput,
 )
 
+# TODO: Can we do it that way or its better include as "Copied from ..."
+from .image_processing_mllama import make_list_of_images
+
 
 class MllamaImagesKwargs(ImagesKwargs, total=False):
-    do_image_splitting: Optional[bool]
-    max_image_splits: Optional[int]
+    max_image_tiles: Optional[int]
 
 
 class MllamaProcessorKwargs(ProcessingKwargs, total=False):
-    # see processing_utils.ProcessingKwargs documentation for usage.
+    images_kwargs: MllamaImagesKwargs
+    
     _defaults = {
         "image_kwargs": {
-            "do_image_splitting": True,
-            "max_image_splits": 4,
+            "max_image_tiles": 4,
         },
     }
 
@@ -91,15 +93,11 @@ class MllamaProcessor(ProcessorMixin):
     tokenizer_class = "PreTrainedTokenizerFast"
 
     def __init__(self, image_processor, tokenizer):
-        self.vision_token = "<|image|>"
-        self.vision_token_id = tokenizer.convert_tokens_to_ids(self.vision_token)
-
-        # TODO: this need resize_model_embeddings, original pad_id = -1, we cant do that
-        # TODO: similar to Llama3, see Tips here https://huggingface.co/docs/transformers/main/en/model_doc/llama3
-        self.pad_token = "<|pad|>"
-        tokenizer.add_special_tokens({"pad_token": self.pad_token})
-        self.pad_token_id = tokenizer.convert_tokens_to_ids(self.pad_token)
-
+        self.image_token = "<|image|>"
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
+        self.python_token = "<|python_tag|>"
+        self.python_token_id = tokenizer.convert_tokens_to_ids(self.python_token)
+        self.chat_template = tokenizer.chat_template
         super().__init__(image_processor, tokenizer)
 
     def __call__(
@@ -147,24 +145,58 @@ class MllamaProcessor(ProcessorMixin):
             **kwargs,
         )
 
+        text_kwargs = output_kwargs["text_kwargs"]
+        images_kwargs = output_kwargs["images_kwargs"]
+        common_kwargs = output_kwargs["common_kwargs"]
+
+        # remove the return_tensors key modality kwargs
+        text_kwargs.pop("return_tensors", None)
+        images_kwargs.pop("return_tensors", None)
+
         data = {}
 
+        # for data that can't be represented as tensors,
+        # because it stores nested objects of variable length
+        not_tensor_data = {}
+
         if text is not None:
-            encoding = self.tokenizer(text, **output_kwargs["text_kwargs"])
+
+            if isinstance(text, str):
+                text = [text]
+            elif not (isinstance(text, (list, tuple)) and all(isinstance(t, str) for t in text)):
+                raise ValueError(
+                    "Invalid input text. Please provide a string, or a list of strings"
+                )
+            n_images_in_text = [t.count(self.image_token) for t in text]
+            encoding = self.tokenizer(text, **text_kwargs)
             data.update(encoding)
 
             # create mask for vision tokens
-            # TODO: not working for return_tensors="pt"
-            # Is it worth creating MllamaTokenizer for this method?
             vision_mask = self.create_vision_mask(encoding["input_ids"])
-            data["vision_mask"] = vision_mask
+            not_tensor_data["vision_mask"] = vision_mask
 
         if images is not None:
-            image_features = self.image_processor(images, **output_kwargs["images_kwargs"])
+
+            images = make_list_of_images(images)
+            n_images_in_images = [len(sample) for sample in images]
+
+            if text is not None and not n_images_in_images == n_images_in_text:
+                raise ValueError(
+                    f"The number of images in the text {n_images_in_text} and images  {n_images_in_images} should be the same."
+                )
+
+            image_features = self.image_processor(images, **images_kwargs)
+            not_tensor_data["num_tiles"] = image_features.pop("num_tiles")
             data.update(image_features)
 
-        return_tensors = output_kwargs["common_kwargs"].pop("return_tensors", None)
-        batch_encoding = BatchEncoding(data=data, tensor_type=return_tensors)
+        return_tensors = common_kwargs.pop("return_tensors", None)
+        batch_encoding = BatchEncoding(data=data, tensor_type=return_tensors, **common_kwargs)
+        batch_encoding.update(not_tensor_data)
+
+        # fill missing keys with None
+        for key in self.model_input_names:
+            if key not in batch_encoding:
+                batch_encoding[key] = None
 
         return batch_encoding
 
@@ -186,7 +218,7 @@ class MllamaProcessor(ProcessorMixin):
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+        return list(tokenizer_input_names + image_processor_input_names + ["vision_mask"])
 
     def create_vision_mask(
         self, tokens: Union[List[int], List[List[int]]]
@@ -194,16 +226,16 @@ class MllamaProcessor(ProcessorMixin):
         if tokens and isinstance(tokens[0], list):
             return [self.create_vision_mask(t) for t in tokens]
 
-        vision_token_locations = [i for i, token in enumerate(tokens) if token == self.vision_token_id]
-        if len(vision_token_locations) == 0:
+        image_token_locations = [i for i, token in enumerate(tokens) if token == self.image_token_id]
+        if len(image_token_locations) == 0:
             return []
 
-        last_not_pad_token_id = max([i for i, token in enumerate(tokens) if token != self.pad_token_id])
+        last_not_pad_token_id = max([i for i, token in enumerate(tokens) if token != self.tokenizer.pad_token_id])
 
-        vision_masks = [[loc1, loc2] for loc1, loc2 in zip(vision_token_locations[:-1], vision_token_locations[1:])]
+        vision_masks = [[loc1, loc2] for loc1, loc2 in zip(image_token_locations[:-1], image_token_locations[1:])]
 
         # last image will attend to all subsequent text
-        vision_masks.append([vision_token_locations[-1], last_not_pad_token_id + 1])
+        vision_masks.append([image_token_locations[-1], last_not_pad_token_id + 1])
 
         # if there are two or more consecutive vision tokens,
         # they should all attend to all subsequent
@@ -215,42 +247,3 @@ class MllamaProcessor(ProcessorMixin):
             last_mask_end = vision_mask[1]
 
         return vision_masks
-
-    # TODO: how to find total_len? its min(params.max_seq_len, max_gen_len + max_prompt_len)
-    # TODO: worth it implement in modeling code?
-    # max_prompt_len - OK, derived from tokens, can be computed in model or in processor
-    # max_gen_len - ? stored in model config
-    # params.max_seq_len - ? stored in model config
-    # all_masks - OK, output of processor ("vision_mask")
-    # all_num_chunks - OK, output of processor ("num_patches")
-    # max_num_chunks - ? stored in image processor config, but can be derived from "pixel_values"
-    @staticmethod
-    def _pad_masks(
-        all_masks: List[List[List[int]]],
-        all_num_chunks: List[List[int]],
-        total_len: int,
-        max_num_chunks: int,
-    ):
-        import torch
-
-        dtype = torch.bfloat16
-        inf_value = float("-inf")
-
-        bsz = len(all_masks)
-        max_num_media = max([len(m) for m in all_masks])
-
-        out_masks = torch.full(
-            (bsz, total_len, max_num_media, max_num_chunks),
-            inf_value,
-            dtype=dtype,
-        )
-
-        for idx, (mask, num_chunks) in enumerate(zip(all_masks, all_num_chunks)):
-            for mask_idx, (mask_elem, mask_num_chunks) in enumerate(zip(mask, num_chunks)):
-                if len(mask_elem) == 2:
-                    mask_elem[1] = min(mask_elem[1], total_len)
-                    if mask_elem[1] == -1:
-                        mask_elem[1] = total_len
-                    out_masks[idx, mask_elem[0] : mask_elem[1], mask_idx, :mask_num_chunks].fill_(0.0)
-
-        return out_masks

@@ -624,17 +624,19 @@ class MllamaConverter(TikTokenConverter):
             "<|end_of_text|>",
             "<|reserved_special_token_0|>",
             "<|reserved_special_token_1|>",
-            "<|reserved_special_token_2|>",
-            "<|reserved_special_token_3|>",
+            "<|finetune_right_pad_id|>",
+            "<|step_id|>",
             "<|start_header_id|>",
             "<|end_header_id|>",
-            "<|reserved_special_token_4|>",
+            "<|eom_id|>",  # end of message
             "<|eot_id|>",  # end of turn
-            "<|reserved_special_token_5|>",
+            "<|python_tag|>",
             "<|image|>",
-        ] + [
-            f"<|reserved_special_token_{i}|>"
-            for i in range(6, num_reserved_special_tokens - 6)
+            "<|video|>",
+        ] 
+        special_tokens += [
+            f"<|reserved_special_token_{i + 2}|>"
+            for i in range(num_reserved_special_tokens - len(special_tokens))
         ]
         tokenizer.add_special_tokens(special_tokens)
 
@@ -642,6 +644,7 @@ class MllamaConverter(TikTokenConverter):
             tokenizer_object=tokenizer,
             bos_token="<|begin_of_text|>",
             eos_token="<|end_of_text|>",
+            pad_token="<|finetune_right_pad_id|>",
             chat_template=chat_template,
             model_input_names=["input_ids", "attention_mask"],
         )
@@ -662,7 +665,7 @@ def write_image_processor(config_path: str, save_dir: str):
     params = read_json(config_path)
 
     patch_size = params["vision_chunk_size"]
-    max_image_splits = params["vision_max_num_chunks"]
+    max_image_tiles = params["vision_max_num_chunks"]
 
     image_processor = MllamaImageProcessor(
         do_resize=True,
@@ -673,8 +676,7 @@ def write_image_processor(config_path: str, save_dir: str):
         image_mean=[0.48145466, 0.4578275, 0.40821073],
         image_std=[0.26862954, 0.26130258, 0.27577711],
         do_pad=True,
-        do_image_splitting=True,
-        max_image_splits=max_image_splits,
+        max_image_tiles=max_image_tiles,
     )
 
     image_processor.save_pretrained(save_dir)
@@ -690,11 +692,11 @@ write_model(
 )
 
 write_tokenizer(
-    "weights/Meta-Llama-3.1-87B-Vision-Dummy-20240624190000/tokenizer.model",
+    "../llama-87b-vision-dummy/weights/Meta-Llama-3.1-87B-Vision-Dummy-20240624190000/tokenizer.model",
     "mllama",
 )
 
 write_image_processor(
-    "weights/Meta-Llama-3.1-87B-Vision-Dummy-20240624190000/params.json",
+    "../llama-87b-vision-dummy/weights/Meta-Llama-3.1-87B-Vision-Dummy-20240624190000/params.json",
     "mllama",
 )
