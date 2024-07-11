@@ -693,8 +693,8 @@ class GenerationMixin:
             model_kwargs["cache_position"] = model_kwargs["cache_position"][-1:] + num_new_tokens
         else:
             new_positions = torch.arange(
-                model_kwargs["cache_position"][-1],
-                model_kwargs["cache_position"][-1] + num_new_tokens,
+                model_kwargs["cache_position"][-1] + 1,
+                model_kwargs["cache_position"][-1] + num_new_tokens + 1,
                 device=model_kwargs["cache_position"].device,
                 dtype=model_kwargs["cache_position"].dtype,
             )
