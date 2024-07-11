@@ -911,7 +911,7 @@ class SEWEncoder(nn.Module):
         position_embeddings = self.pos_conv_embed(hidden_states)
         pooled_hidden_states = self.pool(hidden_states)
         min_length = min(position_embeddings.size(-1), pooled_hidden_states.size(-1))
-        hidden_states = pooled_hidden_states[..., :min_length] + position_embeddings[..., :min_length]
+        hidden_states = pooled_hidden_states[:, :min_length] + position_embeddings[:, :min_length]
         hidden_states = hidden_states.transpose(1, 2)
 
         hidden_states = self.layer_norm(hidden_states)

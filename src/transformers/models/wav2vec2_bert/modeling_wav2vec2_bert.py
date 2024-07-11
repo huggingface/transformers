@@ -560,13 +560,13 @@ class Wav2Vec2BertSelfAttention(nn.Module):
         batch_size, sequence_length, hidden_size = hidden_states.size()
         hidden_states = hidden_states.view(batch_size, sequence_length, self.num_heads, self.head_size)
 
-        cos = relative_position_embeddings[0, :sequence_length, ...]
-        sin = relative_position_embeddings[1, :sequence_length, ...]
+        cos = relative_position_embeddings[0, :sequence_length, :]
+        sin = relative_position_embeddings[1, :sequence_length, :]
 
         # rotate hidden_states with rotary embeddings
         hidden_states = hidden_states.transpose(0, 1)
-        rotated_states_begin = hidden_states[..., : self.head_size // 2]
-        rotated_states_end = hidden_states[..., self.head_size // 2 :]
+        rotated_states_begin = hidden_states[:, : self.head_size // 2]
+        rotated_states_end = hidden_states[:, self.head_size // 2 :]
         rotated_states = torch.cat((-rotated_states_end, rotated_states_begin), dim=rotated_states_begin.ndim - 1)
         hidden_states = (hidden_states * cos) + (rotated_states * sin)
         hidden_states = hidden_states.transpose(0, 1)
