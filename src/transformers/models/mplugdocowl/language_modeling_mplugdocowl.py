@@ -64,6 +64,55 @@ def _get_unpad_data(attention_mask):
         max_seqlen_in_batch,
     )
 
+# Copied from transformers.models.bart.modeling_bart._make_causal_mask
+def _make_causal_mask(
+    input_ids_shape: torch.Size, dtype: torch.dtype, device: torch.device, past_key_values_length: int = 0
+):
+    """
+    Make causal mask used for bi-directional self-attention.
+    """
+    bsz, tgt_len = input_ids_shape
+    mask = torch.full((tgt_len, tgt_len), torch.finfo(dtype).min, device=device)
+    mask_cond = torch.arange(mask.size(-1), device=device)
+    mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
+    mask = mask.to(dtype)
+
+    if past_key_values_length > 0:
+        mask = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype, device=device), mask], dim=-1)
+    return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
+
+# Copied from transformers.models.bart.modeling_bart._expand_mask
+def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
+    """
+    Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
+    """
+    bsz, src_len = mask.size()
+    tgt_len = tgt_len if tgt_len is not None else src_len
+
+    expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
+
+    inverted_mask = 1.0 - expanded_mask
+
+    return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
+
+# Copied from transformers.models.bart.modeling_bart.BartDecoder._prepare_decoder_attention_mask
+def _prepare_decoder_attention_mask(attention_mask, input_shape, inputs_embeds, past_key_values_length):
+    # create causal mask
+    # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+    combined_attention_mask = None
+    if input_shape[-1] > 1:
+        combined_attention_mask = _make_causal_mask(
+            input_shape, inputs_embeds.dtype, inputs_embeds.device, past_key_values_length=past_key_values_length
+        ).to(inputs_embeds.device)
+
+    if attention_mask is not None:
+        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+        expanded_attn_mask = _expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
+        combined_attention_mask = (
+            expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
+        )
+
+    return combined_attention_mask
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->MPLUGDocOwl
 class MPLUGDocOwlRMSNorm(nn.Module):
@@ -81,7 +130,6 @@ class MPLUGDocOwlRMSNorm(nn.Module):
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
         return self.weight * hidden_states.to(input_dtype)
-
 
 ALL_LAYERNORM_LAYERS.append(MPLUGDocOwlRMSNorm)
 
@@ -659,7 +707,7 @@ class MPLUGDocOwlLanguageModel(MPLUGDocOwlPreTrainedLanguageModel):
 
     def set_input_embeddings(self, value):
         self.embed_tokens = value
-
+    
     @add_start_docstrings_to_model_forward(MPLUGDocOwl_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -715,7 +763,11 @@ class MPLUGDocOwlLanguageModel(MPLUGDocOwlPreTrainedLanguageModel):
                 (batch_size, seq_length_with_past), dtype=torch.bool, device=inputs_embeds.device
             )
 
-        attention_mask = _prepare_4d_causal_attention_mask(
+        #attention_mask = _prepare_4d_causal_attention_mask(
+        #    attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
+        #)
+
+        attention_mask = _prepare_decoder_attention_mask(
             attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
         )
 
@@ -1002,6 +1054,7 @@ class MPLUGDocOwlForCausalLM(MPLUGDocOwlPreTrainedLanguageModel):
         **kwargs,
     ):
         past_length = 0
+        breakpoint()
         if past_key_values is not None:
             if isinstance(past_key_values, Cache):
                 past_length = cache_position[0] if cache_position is not None else past_key_values.get_seq_length()

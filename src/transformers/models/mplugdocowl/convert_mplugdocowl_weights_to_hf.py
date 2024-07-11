@@ -83,7 +83,7 @@ def convert_state_dict_to_hf(state_dict):
 
 
 def convert_mplugdocowl_llama_to_hf(
-    text_model_id, vision_model_id, output_hub_path, old_state_dict_id, pretrained=True
+    text_model_id, vision_model_id, output_hub_path, old_state_dict_id, pretrained=False
 ):
     if not pretrained:
         torch.set_default_dtype(torch.float16)
@@ -138,13 +138,13 @@ def convert_mplugdocowl_llama_to_hf(
             dim=0,
         )
         model.to(torch.float16)
-        model.save_pretrained("/raid/dana/mplug_model_hf_omni/")
-        processor.save_pretrained("/raid/dana/mplug_model_hf_omni/")
+        model.save_pretrained("/raid/dana/mplug_model_hf_chat/")
+        processor.save_pretrained("/raid/dana/mplug_model_hf_chat/")
     else:
-        model = MPLUGDocOwlForConditionalGeneration.from_pretrained("/raid/dana/mplug_model_hf_omni/")
+        model = MPLUGDocOwlForConditionalGeneration.from_pretrained("/raid/dana/mplug_model_hf_chat/")
         model.to(torch.float16)
-        processor = MPLUGDocOwlProcessor.from_pretrained("/raid/dana/mplug_model_hf_omni/")
-
+        processor = MPLUGDocOwlProcessor.from_pretrained("/raid/dana/mplug_model_hf_chat/")
+    breakpoint()
     model.push_to_hub(output_hub_path)
     processor.push_to_hub(output_hub_path)
 
