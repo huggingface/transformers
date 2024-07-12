@@ -160,9 +160,9 @@ model = ChameleonForCausalLM.from_pretrained(
 
 [[autodoc]] ChameleonConfig
 
-## ChameleonVQConfig
+## ChameleonVQVAEConfig
 
-[[autodoc]] ChameleonVQConfig
+[[autodoc]] ChameleonVQVAEConfig
 
 ## ChameleonProcessor
 
@@ -172,6 +172,11 @@ model = ChameleonForCausalLM.from_pretrained(
 
 [[autodoc]] ChameleonImageProcessor
     - preprocess
+
+## ChameleonVQVAE
+
+[[autodoc]] ChameleonVQVAE
+    - forward
 
 ## ChameleonModel
 
