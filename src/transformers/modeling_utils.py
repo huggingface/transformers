@@ -686,7 +686,7 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix, keep_in
     # Note: for now this is only for DeepSpeed Zero3
     # PyTorch's `_load_from_state_dict` does not copy parameters in a module's descendants
     # so we need to apply the function recursively.
-    def load(module: nn.Module, state_dict, prefix=""):
+    def load(module: nn.Module, state_dict, prefix="", assign_to_param_buffers=False):
         local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
         if len(list(module.state_dict().keys())) > 0:
             random_layer = list(module.state_dict().keys())[0]
@@ -718,14 +718,20 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix, keep_in
 
         for name, child in module._modules.items():
             if child is not None:
-                load(child, state_dict, prefix + name + ".")
+                load(child, state_dict, prefix + name + ".", assign_to_param_buffers)
 
-    load(model_to_load, state_dict, prefix=start_prefix)
+    first_key = list(state_dict.keys())[0]
+    assign_to_param_buffers = state_dict[first_key].dtype == model_to_load.state_dict()[start_prefix + first_key].dtype
+    if hasattr(model_to_load, "supports_param_buffer_assignment"):
+        # Some models do not support param buffer assignment, so we need to set this to False
+        logger.debug(
+            f"{model_to_load.__class__.__name__} does not support param buffer assignment, loading will be slower"
+        )
+        assign_to_param_buffers = False
+    load(model_to_load, state_dict, prefix=start_prefix, assign_to_param_buffers=assign_to_param_buffers)
     # Delete `state_dict` so it could be collected by GC earlier. Note that `state_dict` is a copy of the argument, so
     # it's safe to delete it.
     del state_dict
-
-    model_to_load.tie_weights()
 
     return error_msgs
 
