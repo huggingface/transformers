@@ -75,7 +75,7 @@ class Mamba2Config(PretrainedConfig):
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `attention_num_heads`.
         num_hidden_layers (`int`, *optional*, defaults to 32):
             Number of hidden layers in the model.
-        attention_layers_idx (`List[int]`, *optional*, defaults to []):
+        attention_layers_idx (`List[int]`, *optional*, defaults to `[]`):
             The specific layers that exchange the mamba2 mixer block with the attention equivalent.
         layer_norm_epsilon (`float`, *optional*, defaults to 1e-05):
             The epsilon to use in the layer normalization layers.
@@ -93,9 +93,9 @@ class Mamba2Config(PretrainedConfig):
             The non-linear activation function (function or string) in the decoder.
         emb_initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing the embedding weight matrix.
-        conv_initializer_range (`float`, *optional*, defaults to None):
+        conv_initializer_range (`float`, *optional*):
             The range for uniformly initializing the convolution weights.
-        A_initializer_range (`Tuple[int]`, *optional*, defaults to (1, 16)):
+        A_initializer_range (`Tuple[int]`, *optional*, defaults to `(1, 16)`):
             The range for uniformly initializing the 1-SS(a) scalar.
         time_step_min (`float`, *optional*, defaults to 0.001):
             Minimum `time_step` used to bound `dt_proj.bias`.
@@ -103,7 +103,7 @@ class Mamba2Config(PretrainedConfig):
             Maximum `time_step` used to bound `dt_proj.bias`.
         time_step_floor (`float`, *optional*, defaults to 0.0001):
             Minimum clamping value of the `dt_proj.bias` layer initialization.
-        time_step_limit (`Tuple[float]`, *optional*, defaults to (0.0, float("inf"))):
+        time_step_limit (`Tuple[float]`, *optional*, defaults to `(0.0, inf)`):
             Clapping values for the dt weights.
         residual_in_fp32 (`bool`, *optional*, defaults to `True`):
             Whether or not residuals should be in `float32`. If set to `False` residuals will keep the same `dtype` as the rest of the model
@@ -134,6 +134,7 @@ class Mamba2Config(PretrainedConfig):
     """
 
     model_type = "mamba2"
+    keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
         self,

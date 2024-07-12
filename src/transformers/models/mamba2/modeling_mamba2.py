@@ -1643,7 +1643,11 @@ class Mamba2Model(Mamba2PreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, past_key_values, output_attentions)
+        causal_mask = (
+            self._update_causal_mask(attention_mask, inputs_embeds, past_key_values, output_attentions)
+            if self.uses_attention_layers
+            else None
+        )
 
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
