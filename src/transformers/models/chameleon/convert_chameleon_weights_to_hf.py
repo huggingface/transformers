@@ -316,8 +316,6 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
     vqgan_path = os.path.join(input_base_path, "tokenizer/vqgan.ckpt")
     vqgan_state_dict = torch.load(vqgan_path, map_location="cpu")["state_dict"]
     for k, v in vqgan_state_dict.items():
-        if "decoder" in k:
-            continue  # we dont do image generation yet
         state_dict[f"model.vqmodel.{k}"] = v
 
     # Write configs
