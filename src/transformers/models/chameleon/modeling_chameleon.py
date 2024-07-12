@@ -1054,8 +1054,6 @@ class ChameleonVQVAEDecoder(nn.Module):
         self.conv_out = torch.nn.Conv2d(block_in, out_channels, kernel_size=3, stride=1, padding=1)
 
     def forward(self, image_tokens: torch.LongTensor):
-        self.last_z_shape = image_tokens.shape
-
         # image_tokens to block_in
         hidden_state = self.conv_in(image_tokens)
 
@@ -1138,7 +1136,8 @@ class ChameleonVQVAE(PreTrainedModel):
     def decode(self, image_tokens: torch.Tensor):
         emb_dim: int = self.quantize.embedding.weight.shape[-1]
         codebook_entry = self.quantize.get_codebook_entry(image_tokens, (1, 32, 32, emb_dim))
-        pixels = self.decoder(codebook_entry)
+        hidden_states = self.post_quant_conv(codebook_entry)
+        pixels = self.decoder(hidden_states)
         return self._pil_from_chw_tensor(pixels[0])
 
     def _pil_from_chw_tensor(self, chw_tensor: torch.Tensor) -> PIL.Image:

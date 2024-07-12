@@ -45,6 +45,8 @@ class ChameleonVQVAEConfig(PretrainedConfig):
             Resolution of the input images.
         in_channels (`int`, *optional*, defaults to 3):
             Number of input channels.
+        out_channels (`int`, *optional*, defaults to 3):
+            Number of output channels.
         base_channels (`int`, *optional*, defaults to 128):
             Base channel count.
         channel_multiplier (`List[int]`, *optional*, defaults to `[1, 1, 2, 2, 4]`):
@@ -71,6 +73,7 @@ class ChameleonVQVAEConfig(PretrainedConfig):
         latent_channels: int = 256,
         resolution: int = 512,
         in_channels: int = 3,
+        out_channels: int = 3,
         base_channels: int = 128,
         channel_multiplier: List[int] = [1, 1, 2, 2, 4],
         num_res_blocks: int = 2,
@@ -87,6 +90,7 @@ class ChameleonVQVAEConfig(PretrainedConfig):
         self.latent_channels = latent_channels
         self.resolution = resolution
         self.in_channels = in_channels
+        self.out_channels = out_channels
         self.base_channels = base_channels
         self.channel_multiplier = channel_multiplier
         self.num_res_blocks = num_res_blocks
