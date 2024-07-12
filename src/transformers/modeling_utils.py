@@ -657,7 +657,7 @@ def _find_identical(tensors: List[Set[str]], state_dict: Dict[str, torch.Tensor]
     return shared_tensors, identical
 
 
-def _load_state_dict_into_model(model_to_load, state_dict, start_prefix):
+def _load_state_dict_into_model(model_to_load, state_dict, start_prefix, assign_to_params_buffers=False):
     # Convert old format to new format if needed from a PyTorch state_dict
     old_keys = []
     new_keys = []
@@ -682,29 +682,12 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix):
         state_dict._metadata = metadata
 
     error_msgs = []
-    if len([key for key in state_dict if key.startswith(start_prefix)]) > 0:
-        # Some models do not support param buffer assignment
-        if hasattr(model_to_load, "supports_param_buffer_assignment"):
-            logger.debug(
-                f"{model_to_load.__class__.__name__} does not support param buffer assignment, loading will be slower"
-            )
-            assign_to_param_buffers = False
-        else:
-            # If the model does, the incoming `state_dict` and the `model_to_load` must be the same dtype
-            first_key = list(model_to_load.state_dict().keys())[0]
-            if start_prefix + first_key in state_dict:
-                assign_to_param_buffers = (
-                    state_dict[start_prefix + first_key].dtype == model_to_load.state_dict()[first_key].dtype
-                )
-            else:
-                # For cases when the `state_dict` doesn't have any real weights (`albert`)
-                assign_to_param_buffers = False
 
     # PyTorch's `_load_from_state_dict` does not copy parameters in a module's descendants
     # so we need to apply the function recursively.
-    def load(module: nn.Module, state_dict, prefix="", assign_to_param_buffers=False):
+    def load(module: nn.Module, state_dict, prefix="", assign_to_params_buffers=False):
         local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
-        local_metadata["assign_to_params_buffers"] = assign_to_param_buffers
+        local_metadata["assign_to_params_buffers"] = assign_to_params_buffers
 
         args = (state_dict, prefix, local_metadata, True, [], [], error_msgs)
         # Parameters of module and children will start with prefix. We can exit early if there are none in this
@@ -729,9 +712,9 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix):
 
         for name, child in module._modules.items():
             if child is not None:
-                load(child, state_dict, prefix + name + ".", assign_to_param_buffers)
+                load(child, state_dict, prefix + name + ".", assign_to_params_buffers)
 
-    load(model_to_load, state_dict, prefix=start_prefix, assign_to_param_buffers=assign_to_param_buffers)
+    load(model_to_load, state_dict, prefix=start_prefix, assign_to_params_buffers=assign_to_params_buffers)
     # Delete `state_dict` so it could be collected by GC earlier. Note that `state_dict` is a copy of the argument, so
     # it's safe to delete it.
     del state_dict
@@ -3725,7 +3708,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
             init_contexts = [deepspeed.zero.Init(config_dict_or_path=deepspeed_config())] + init_contexts
-        elif low_cpu_mem_usage:
+        elif low_cpu_mem_usage or not hasattr(cls, "supports_param_buffer_assignment"):
             init_contexts.append(init_empty_weights())
 
         config = copy.deepcopy(config)  # We do not want to modify the config inplace in from_pretrained.
@@ -4271,7 +4254,27 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
             else:
                 # Sharded checkpoint or whole but low_cpu_mem_usage==True
-                error_msgs = _load_state_dict_into_model(model_to_load, state_dict, start_prefix)
+                if len([key for key in state_dict if key.startswith(start_prefix)]) > 0:
+                    # Some models do not support param buffer assignment
+                    if hasattr(model_to_load, "supports_param_buffer_assignment"):
+                        logger.debug(
+                            f"{model_to_load.__class__.__name__} does not support param buffer assignment, loading will be slower"
+                        )
+                        assign_to_params_buffers = False
+                    else:
+                        # If the model does, the incoming `state_dict` and the `model_to_load` must be the same dtype
+                        first_key = list(model_to_load.state_dict().keys())[0]
+                        if start_prefix + first_key in state_dict:
+                            assign_to_params_buffers = (
+                                state_dict[start_prefix + first_key].dtype
+                                == model_to_load.state_dict()[first_key].dtype
+                            )
+                        else:
+                            # For cases when the `state_dict` doesn't have any real weights (`albert`)
+                            assign_to_params_buffers = False
+                error_msgs = _load_state_dict_into_model(
+                    model_to_load, state_dict, start_prefix, assign_to_params_buffers
+                )
 
         else:
             # This should always be a list but, just to be sure.
@@ -4299,6 +4302,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             if len(resolved_archive_file) > 1:
                 resolved_archive_file = logging.tqdm(resolved_archive_file, desc="Loading checkpoint shards")
+            assign_to_params_buffers = None
             for shard_file in resolved_archive_file:
                 # Skip the load for shards that only contain disk-offloaded weights when using safetensors for the offload.
                 if shard_file in disk_only_shard_files:
@@ -4342,7 +4346,29 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         )
                         error_msgs += new_error_msgs
                 else:
-                    error_msgs += _load_state_dict_into_model(model_to_load, state_dict, start_prefix)
+                    # Sharded checkpoint or whole but low_cpu_mem_usage==True
+                    if assign_to_params_buffers is None:
+                        if len([key for key in state_dict if key.startswith(start_prefix)]) > 0:
+                            # Some models do not support param buffer assignment
+                            if hasattr(model_to_load, "supports_param_buffer_assignment"):
+                                logger.debug(
+                                    f"{model_to_load.__class__.__name__} does not support param buffer assignment, loading will be slower"
+                                )
+                                assign_to_params_buffers = False
+                            else:
+                                # If the model does, the incoming `state_dict` and the `model_to_load` must be the same dtype
+                                first_key = list(model_to_load.state_dict().keys())[0]
+                                if start_prefix + first_key in state_dict:
+                                    assign_to_params_buffers = (
+                                        state_dict[start_prefix + first_key].dtype
+                                        == model_to_load.state_dict()[first_key].dtype
+                                    )
+                                else:
+                                    # For cases when the `state_dict` doesn't have any real weights (`albert`)
+                                    assign_to_params_buffers = False
+                    error_msgs += _load_state_dict_into_model(
+                        model_to_load, state_dict, start_prefix, assign_to_params_buffers
+                    )
 
                 # force memory release
                 del state_dict
