@@ -224,7 +224,10 @@ class GraniteAttention(nn.Module):
         self.max_position_embeddings = config.max_position_embeddings
         self.rope_theta = config.rope_theta
         self.is_causal = True
-        self.attention_multiplier = config.attention_multiplier
+
+        self.scaling = config.attention_multiplier
+        if self.scaling is None:
+            self.scaling = config.attention_multiplier**-0.5
 
         if (self.head_dim * self.num_heads) != self.hidden_size:
             raise ValueError(
@@ -300,7 +303,7 @@ class GraniteAttention(nn.Module):
         if attention_multiplier is None:
             attention_multiplier = 1 / math.sqrt(self.head_dim)
 
-        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * attention_multiplier
+        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * self.scaling
 
         if attention_mask is not None:  # no matter the length, we just slice it
             causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
@@ -353,12 +356,6 @@ class GraniteFlashAttention2(GraniteAttention):
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        if isinstance(past_key_value, StaticCache):
-            raise ValueError(
-                "`static` cache implementation is not compatible with `attn_implementation==flash_attention_2` "
-                "make sure to use `sdpa` in the mean time, and open an issue at https://github.com/huggingface/transformers"
-            )
-
         output_attentions = False
 
         bsz, q_len, _ = hidden_states.size()
@@ -423,6 +420,7 @@ class GraniteFlashAttention2(GraniteAttention):
             attention_mask,
             q_len,
             dropout=dropout_rate,
+            softmax_scale=self.scaling,
             sliding_window=getattr(self, "sliding_window", None),
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
             is_causal=self.is_causal,
@@ -515,7 +513,7 @@ class GraniteSdpaAttention(GraniteAttention):
             attn_mask=causal_mask,
             dropout_p=self.attention_dropout if self.training else 0.0,
             is_causal=is_causal,
-            scale=self.attention_multiplier,
+            scale=self.scaling,
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
