@@ -986,9 +986,9 @@ class Mamba2Mixer(nn.Module):
             in_channels=conv1d_dim,
             out_channels=conv1d_dim,
             bias=config.use_conv_bias,
-            kernel_size=config.conv_kernel,
+            kernel_size=config.mamba2_conv_kernel,
             groups=conv1d_dim,
-            padding=config.conv_kernel - 1,
+            padding=config.mamba2_conv_kernel - 1,
         )
 
         self.activation = config.hidden_act
@@ -1517,7 +1517,7 @@ class Mamba2PreTrainedModel(PreTrainedModel):
             module.D._no_weight_decay = True
 
             dt = torch.exp(
-                torch.rand(self.config.num_heads)
+                torch.rand(self.config.mamba2_num_heads)
                 * (math.log(self.config.time_step_max) - math.log(self.config.time_step_min))
                 + math.log(self.config.time_step_min)
             ).clamp(min=self.config.time_step_floor)
