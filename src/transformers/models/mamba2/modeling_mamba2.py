@@ -504,15 +504,15 @@ class Mamba2Attention(nn.Module):
         if is_causal_conv1d_available:
             if cached_forward:
                 qkv = causal_conv1d_update(
-                    qkv.squeeze(1),
-                    cache.conv_states[self.layer_idx],
-                    self.conv1d.weight.squeeze(1),
-                    self.conv1d.bias,
+                    x=qkv.squeeze(1),
+                    conv_state=cache.conv_states[self.layer_idx],
+                    weight=self.conv1d.weight.squeeze(1),
+                    bias=self.conv1d.bias,
                 ).unsqueeze(1)
             else:
                 qkv = causal_conv1d_fn(
-                    qkv.transpose(1, 2),
-                    self.conv1d.weight.squeeze(1),
+                    x=qkv.transpose(1, 2),
+                    weight=self.conv1d.weight.squeeze(1),
                     bias=self.conv1d.bias,
                 ).transpose(1, 2)
         else:
@@ -1079,16 +1079,16 @@ class Mamba2Mixer(nn.Module):
 
         if cached_forward:
             xBC = causal_conv1d_update(
-                xBC,
-                cache.conv_states[self.layer_idx],
-                self.conv1d.weight.squeeze(1),
-                self.conv1d.bias,
-                self.activation,
+                x=xBC,
+                conv_state=cache.conv_states[self.layer_idx],
+                weight=self.conv1d.weight.squeeze(1),
+                bias=self.conv1d.bias,
+                activation=self.activation,
             )
         else:
             xBC = causal_conv1d_fn(
-                xBC.transpose(1, 2),
-                self.conv1d.weight.squeeze(1),
+                x=xBC.transpose(1, 2),
+                weight=self.conv1d.weight.squeeze(1),
                 bias=self.conv1d.bias,
                 activation=self.activation,
             ).transpose(1, 2)
