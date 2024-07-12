@@ -1062,21 +1062,18 @@ class ChameleonVQVAEDecoder(nn.Module):
     def forward(self, image_tokens: torch.LongTensor):
         self.last_z_shape = image_tokens.shape
 
-        # timestep embedding
-        temb = None
-
         # image_tokens to block_in
         hidden_state = self.conv_in(image_tokens)
 
         # middle
-        hidden_state = self.mid.block_1(hidden_state, temb)
+        hidden_state = self.mid.block_1(hidden_state)
         hidden_state = self.mid.attn_1(hidden_state)
-        hidden_state = self.mid.block_2(hidden_state, temb)
+        hidden_state = self.mid.block_2(hidden_state)
 
         # upsampling
         for i_level in reversed(range(self.num_resolutions)):
             for i_block in range(self.num_res_blocks + 1):
-                hidden_state = self.up[i_level].block[i_block](hidden_state, temb)
+                hidden_state = self.up[i_level].block[i_block](hidden_state)
                 if len(self.up[i_level].attn) > 0:
                     hidden_state = self.up[i_level].attn[i_block](hidden_state)
             if i_level != 0:
