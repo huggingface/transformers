@@ -706,7 +706,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
 
         hidden_states = inputs_embeds
 
-        if use_cache and inputs_embeds.shape[1] != 1:
+        if use_cache and inputs_embeds.shape[1] != 1:  # TODO let's maybe only call in the `generate`?
             self._setup_cache(self.config, hidden_states.shape[0], hidden_states.device, hidden_states.dtype)
 
         if cache_position is None:
