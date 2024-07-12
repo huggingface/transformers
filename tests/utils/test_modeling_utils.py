@@ -918,8 +918,8 @@ class ModelUtilsTest(TestCasePlus):
         elapsed_time_low_mem = end_time - start_time
 
         self.assertGreater(
-            elapsed_time_low_mem,
             elapsed_time_normal,
+            elapsed_time_low_mem,
             "using `low_cpu_mem_usage` should be faster, "
             f"but got elapsed_time_normal={elapsed_time_normal} and elapsed_time_low_mem={elapsed_time_low_mem}",
         )
