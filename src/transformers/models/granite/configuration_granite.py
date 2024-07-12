@@ -91,9 +91,9 @@ class GraniteConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         mlp_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
-        m_emb (`float`, *optional*): embedding multiplier
+        embedding_multiplier (`float`, *optional*): embedding multiplier
         logits_scaling (`float`, *optional*, defaults to 1.0): divisor for output logits
-        m_residual (`float`, *optional*): residual multiplier
+        residual_multiplier (`float`, *optional*): residual multiplier
         attention_multiplier (`float`, *optional*): attention multiplier. Defaults to 1 / sqrt(head_dim):
 
     ```python
@@ -134,9 +134,9 @@ class GraniteConfig(PretrainedConfig):
         attention_bias=False,
         attention_dropout=0.0,
         mlp_bias=False,
-        m_emb=None,
+        embedding_multiplier=None,
         logits_scaling=1.0,
-        m_residual=None,
+        residual_multiplier=None,
         attention_multiplier=None,
         **kwargs,
     ):
@@ -163,9 +163,9 @@ class GraniteConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.mlp_bias = mlp_bias
 
-        self.m_emb = m_emb
+        self.embedding_multiplier = embedding_multiplier
         self.logits_scaling = logits_scaling
-        self.m_residual = m_residual
+        self.residual_multiplier = residual_multiplier
         self.attention_multiplier = attention_multiplier
 
         super().__init__(

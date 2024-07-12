@@ -538,7 +538,7 @@ class GraniteDecoderLayer(nn.Module):
         self.input_layernorm = GraniteRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = GraniteRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-        self.m_residual = config.m_residual
+        self.residual_multiplier = config.residual_multiplier
 
     def forward(
         self,
@@ -585,8 +585,8 @@ class GraniteDecoderLayer(nn.Module):
             cache_position=cache_position,
         )
 
-        if self.m_residual is not None:
-            hidden_states = hidden_states * self.m_residual
+        if self.residual_multiplier is not None:
+            hidden_states = hidden_states * self.residual_multiplier
 
         hidden_states = residual + hidden_states
 
@@ -595,8 +595,8 @@ class GraniteDecoderLayer(nn.Module):
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
 
-        if self.m_residual is not None:
-            hidden_states = hidden_states * self.m_residual
+        if self.residual_multiplier is not None:
+            hidden_states = hidden_states * self.residual_multiplier
 
         hidden_states = residual + hidden_states
 
@@ -755,7 +755,7 @@ class GraniteModel(GranitePreTrainedModel):
         self.norm = GraniteRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
 
-        self.m_emb = config.m_emb
+        self.embedding_multiplier = config.embedding_multiplier
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -801,8 +801,8 @@ class GraniteModel(GranitePreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if self.m_emb is not None:
-            inputs_embeds = inputs_embeds * self.m_emb
+        if self.embedding_multiplier is not None:
+            inputs_embeds = inputs_embeds * self.embedding_multiplier
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
