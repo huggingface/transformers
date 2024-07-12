@@ -180,7 +180,7 @@ class GgufIntegrationTests(unittest.TestCase):
             tokenizer.save_pretrained(tmpdirname)
             tokenizer = AutoTokenizer.from_pretrained(tmpdirname)
             special_sentence = "สวัสดี"
-            predicted_text = tokenizer.decode(tokenizer_gguf.encode(special_sentence, return_tensors="pt")[0])
+            predicted_text = tokenizer.decode(tokenizer.encode(special_sentence, return_tensors="pt")[0])
             self.assertEqual(predicted_text, "<|begin_of_text|>" + special_sentence)
 
     def test_llama3_q4_0(self):
