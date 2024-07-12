@@ -27,6 +27,7 @@ from torch.nn import CrossEntropyLoss
 from ...activations import ACT2FN
 from ...cache_utils import Cache, StaticCache
 from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...modeling_flash_attention_utils import _flash_attention_forward
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -46,7 +47,6 @@ from .configuration_chameleon import ChameleonConfig, ChameleonVQVAEConfig
 
 
 if is_flash_attn_2_available():
-    from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
 
 
@@ -57,19 +57,6 @@ _CHECKPOINT_FOR_DOC = "meta/chameleon-7b"
 _EXPECTED_OUTPUT_SHAPE = [1, 7, 4096]
 _SEQ_CLASS_EXPECTED_LOSS = 1.03
 _SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_0'"
-
-
-# Copied from transformers.models.llama.modeling_llama._get_unpad_data
-def _get_unpad_data(attention_mask):
-    seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
-    indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
-    max_seqlen_in_batch = seqlens_in_batch.max().item()
-    cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
-    return (
-        indices,
-        cu_seqlens,
-        max_seqlen_in_batch,
-    )
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Chameleon
@@ -208,6 +195,24 @@ class ChameleonMLP(nn.Module):
         return down_proj
 
 
+class LayerNormChameleon(nn.LayerNorm):
+    """
+    LayerNorm but computes stats only over the last dim because Chameleon applies gamma and beta
+    from each shard separately to each head, instead of reducing. We can apply each head's own
+    gamma/beta by repeat-interleaving weights from each shard, but the stats have to be computed
+    in the last dimension. This module applies gamma/beta manually to fulfill this requirement.
+    """
+
+    def __init__(self, hidden_size, *args, **kwargs):
+        super().__init__(hidden_size, *args, **kwargs)
+        self.normalized_shape = (hidden_size[-1],)
+
+    def forward(self, hidden_states):
+        hidden_states = F.layer_norm(hidden_states, self.normalized_shape, None, None, eps=1e-5)
+        hidden_states = hidden_states * self.weight + self.bias
+        return hidden_states
+
+
 # Copied from transformers.models.llama.modeling_llama.repeat_kv
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
@@ -256,8 +261,8 @@ class ChameleonAttention(nn.Module):
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=config.attention_bias)
-        self.q_norm = nn.LayerNorm((self.num_heads, self.head_dim))
-        self.k_norm = nn.LayerNorm((self.num_key_value_heads, self.head_dim))
+        self.q_norm = LayerNormChameleon((self.num_heads, self.head_dim))
+        self.k_norm = LayerNormChameleon((self.num_key_value_heads, self.head_dim))
         self._init_rope()
 
     # Copied from transformers.models.llama.modeling_llama.LlamaAttention._init_rope with Llama->Chameleon
@@ -305,25 +310,11 @@ class ChameleonAttention(nn.Module):
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
-        # we need to expand on num_heads because there was not sharding done in 7B model
-        # and we need to calculate mean/var over each head_dim
-        # for sharded model we don't do expansion and simply do norm
-        if self.model_parallel_size == 1:
-            query_states = query_states.reshape(-1, 1, self.head_dim)
-            query_states = query_states.tile((1, self.num_heads, 1))
-            query_states = self.q_norm(query_states)
-            query_states = query_states[:, 0, :]
+        query_states = query_states.reshape(-1, self.num_heads, self.head_dim)
+        query_states = self.q_norm(query_states)
 
-            key_states = key_states.reshape(-1, 1, self.head_dim)
-            key_states = key_states.tile((1, self.num_key_value_heads, 1))
-            key_states = self.k_norm(key_states)
-            key_states = key_states[:, 0, :]
-        else:
-            query_states = query_states.reshape(-1, self.num_heads, self.head_dim)
-            query_states = self.q_norm(query_states)
-
-            key_states = key_states.reshape(-1, self.num_key_value_heads, self.head_dim)
-            key_states = self.k_norm(key_states)
+        key_states = key_states.reshape(-1, self.num_key_value_heads, self.head_dim)
+        key_states = self.k_norm(key_states)
 
         query_states = query_states.reshape(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         key_states = key_states.reshape(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
@@ -395,6 +386,12 @@ class ChameleonFlashAttention2(ChameleonAttention):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        if isinstance(past_key_value, StaticCache):
+            raise ValueError(
+                "`static` cache implementation is not compatible with `attn_implementation==flash_attention_2` "
+                "make sure to use `sdpa` in the mean time, and open an issue at https://github.com/huggingface/transformers"
+            )
+
         output_attentions = False
 
         bsz, q_len, _ = hidden_states.size()
@@ -403,28 +400,17 @@ class ChameleonFlashAttention2(ChameleonAttention):
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
-        if self.model_parallel_size == 1:
-            query_states = query_states.reshape(-1, 1, self.head_dim)
-            query_states = query_states.tile((1, self.num_heads, 1))
-            query_states = self.q_norm(query_states)
-            query_states = query_states[:, 0, :]
+        query_states = query_states.reshape(-1, self.num_heads, self.head_dim)
+        query_states = self.q_norm(query_states)
 
-            key_states = key_states.reshape(-1, 1, self.head_dim)
-            key_states = key_states.tile((1, self.num_key_value_heads, 1))
-            key_states = self.k_norm(key_states)
-            key_states = key_states[:, 0, :]
-        else:
-            query_states = query_states.reshape(-1, self.num_heads, self.head_dim)
-            query_states = self.q_norm(query_states)
-
-            key_states = key_states.reshape(-1, self.num_key_value_heads, self.head_dim)
-            key_states = self.k_norm(key_states)
+        key_states = key_states.reshape(-1, self.num_key_value_heads, self.head_dim)
+        key_states = self.k_norm(key_states)
 
         # Flash attention requires the input to have the shape
         # batch_size x seq_length x head_dim x hidden_dim
         # therefore we just need to keep the original shape
-        query_states = query_states.reshape(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.reshape(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         cos, sin = self.rotary_emb(value_states, position_ids)
@@ -469,114 +455,25 @@ class ChameleonFlashAttention2(ChameleonAttention):
             key_states = key_states.to(target_dtype)
             value_states = value_states.to(target_dtype)
 
-        attn_output = self._flash_attention_forward(
-            query_states, key_states, value_states, attention_mask, q_len, dropout=dropout_rate
+        attn_output = _flash_attention_forward(
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            q_len,
+            dropout=dropout_rate,
+            sliding_window=getattr(self, "sliding_window", None),
+            use_top_left_mask=self._flash_attn_uses_top_left_mask,
+            is_causal=self.is_causal,
         )
 
-        attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
+        attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
         attn_output = self.o_proj(attn_output)
 
         if not output_attentions:
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
-
-    def _flash_attention_forward(
-        self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
-    ):
-        """
-        Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
-        first unpad the input, then computes the attention scores and pad the final attention scores.
-
-        Args:
-            query_states (`torch.Tensor`):
-                Input query states to be passed to Flash Attention API
-            key_states (`torch.Tensor`):
-                Input key states to be passed to Flash Attention API
-            value_states (`torch.Tensor`):
-                Input value states to be passed to Flash Attention API
-            attention_mask (`torch.Tensor`):
-                The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
-                position of padding tokens and 1 for the position of non-padding tokens.
-            dropout (`float`):
-                Attention dropout
-            softmax_scale (`float`, *optional*):
-                The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
-        """
-        if not self._flash_attn_uses_top_left_mask:
-            causal = self.is_causal
-        else:
-            # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in ChameleonFlashAttention2 __init__.
-            causal = self.is_causal and query_length != 1
-
-        # Contains at least one padding token in the sequence
-        if attention_mask is not None:
-            batch_size = query_states.shape[0]
-            query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
-                query_states, key_states, value_states, attention_mask, query_length
-            )
-
-            cu_seqlens_q, cu_seqlens_k = cu_seq_lens
-            max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
-
-            attn_output_unpad = flash_attn_varlen_func(
-                query_states,
-                key_states,
-                value_states,
-                cu_seqlens_q=cu_seqlens_q,
-                cu_seqlens_k=cu_seqlens_k,
-                max_seqlen_q=max_seqlen_in_batch_q,
-                max_seqlen_k=max_seqlen_in_batch_k,
-                dropout_p=dropout,
-                softmax_scale=softmax_scale,
-                causal=causal,
-            )
-
-            attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
-        else:
-            attn_output = flash_attn_func(
-                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=causal
-            )
-
-        return attn_output
-
-    def _upad_input(self, query_layer, key_layer, value_layer, attention_mask, query_length):
-        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
-        batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
-
-        key_layer = index_first_axis(
-            key_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
-        )
-        value_layer = index_first_axis(
-            value_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
-        )
-        if query_length == kv_seq_len:
-            query_layer = index_first_axis(
-                query_layer.reshape(batch_size * kv_seq_len, self.num_heads, head_dim), indices_k
-            )
-            cu_seqlens_q = cu_seqlens_k
-            max_seqlen_in_batch_q = max_seqlen_in_batch_k
-            indices_q = indices_k
-        elif query_length == 1:
-            max_seqlen_in_batch_q = 1
-            cu_seqlens_q = torch.arange(
-                batch_size + 1, dtype=torch.int32, device=query_layer.device
-            )  # There is a memcpy here, that is very bad.
-            indices_q = cu_seqlens_q[:-1]
-            query_layer = query_layer.squeeze(1)
-        else:
-            # The -q_len: slice assumes left padding.
-            attention_mask = attention_mask[:, -query_length:]
-            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_layer, attention_mask)
-
-        return (
-            query_layer,
-            key_layer,
-            value_layer,
-            indices_q,
-            (cu_seqlens_q, cu_seqlens_k),
-            (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
-        )
 
 
 class ChameleonSdpaAttention(ChameleonAttention):
@@ -619,22 +516,11 @@ class ChameleonSdpaAttention(ChameleonAttention):
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
-        if self.model_parallel_size == 1:
-            query_states = query_states.reshape(-1, 1, self.head_dim)
-            query_states = query_states.tile((1, self.num_heads, 1))
-            query_states = self.q_norm(query_states)
-            query_states = query_states[:, 0, :]
+        query_states = query_states.reshape(-1, self.num_heads, self.head_dim)
+        query_states = self.q_norm(query_states)
 
-            key_states = key_states.reshape(-1, 1, self.head_dim)
-            key_states = key_states.tile((1, self.num_key_value_heads, 1))
-            key_states = self.k_norm(key_states)
-            key_states = key_states[:, 0, :]
-        else:
-            query_states = query_states.reshape(-1, self.num_heads, self.head_dim)
-            query_states = self.q_norm(query_states)
-
-            key_states = key_states.reshape(-1, self.num_key_value_heads, self.head_dim)
-            key_states = self.k_norm(key_states)
+        key_states = key_states.reshape(-1, self.num_key_value_heads, self.head_dim)
+        key_states = self.k_norm(key_states)
 
         query_states = query_states.reshape(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         key_states = key_states.reshape(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
@@ -745,6 +631,7 @@ class ChameleonDecoderLayer(nn.Module):
             output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
+            **kwargs,
         )
         hidden_states = residual + hidden_states
 

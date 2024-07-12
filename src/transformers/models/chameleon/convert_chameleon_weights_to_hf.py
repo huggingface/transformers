@@ -397,7 +397,9 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
     # taken from https://github.com/facebookresearch/chameleon/blob/7a72f40aa5f462965c8374f25257f55b65b25ff4/data/prompts_for_human_evaluations.jsonl
     print("Loading the checkpoint in a Chameleon model...")
     print("*" * 100)
-    model = ChameleonForCausalLM.from_pretrained(model_path, torch_dtype=torch.bfloat16, device_map="auto")
+    model = ChameleonForCausalLM.from_pretrained(
+        model_path, attn_implementation="eager", torch_dtype=torch.bfloat16, device_map="auto"
+    )
     processor = ChameleonProcessor.from_pretrained(model_path)
 
     prompt = "I'm very intrigued by this work of art:<image>Please tell me about the artist."
