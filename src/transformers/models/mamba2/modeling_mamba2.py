@@ -568,10 +568,11 @@ class Mamba2Attention(nn.Module):
         #   --> [batch, seq_len, (num_heads(_q) * head_dim + 2 * num_heads_kv * head_dim)]
         qkv = self.in_proj(hidden_states)
 
-        # Apply Conv1d, caching is applied in-place
-        qkv = self._conv1d(
-            qkv, seq_len=qkv.shape[1], cache=cache, cached_start=cached_start, cached_forward=cached_forward
-        )
+        # (Optional) Apply Conv1d, caching is applied in-place
+        if self.conv_kernel_size > 0:
+            qkv = self._conv1d(
+                qkv, seq_len=qkv.shape[1], cache=cache, cached_start=cached_start, cached_forward=cached_forward
+            )
 
         # Get the respective matrices from the parallel projection back
         q, k, v = qkv.split(
