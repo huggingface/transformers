@@ -46,7 +46,7 @@ class Mamba2Config(PretrainedConfig):
             The id of the end of sentence token in the vocabulary.
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the embeddings and hidden states.
-        state_size (`int`, *optional*, defaults to 16):
+        state_size (`int`, *optional*, defaults to 128):
             Shape of the state space latents.
         expand (`int`, *optional*, defaults to 2):
             Expanding factor used to determine the intermediate size.
@@ -73,7 +73,7 @@ class Mamba2Config(PretrainedConfig):
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
             by meanpooling all the original heads within that group. For more details checkout [this
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `attention_num_heads`.
-        num_hidden_layers (`int`, *optional*, defaults to 32):
+        num_hidden_layers (`int`, *optional*, defaults to 24):
             Number of hidden layers in the model.
         attention_layers_idx (`List[int]`, *optional*, defaults to `[]`):
             The specific layers that exchange the mamba2 mixer block with the attention equivalent.
@@ -155,7 +155,7 @@ class Mamba2Config(PretrainedConfig):
         attention_num_heads=30,
         attention_num_key_value_heads=30,
         num_hidden_layers=24,
-        attention_layers_idx=[],
+        attention_layers_idx=None,
         layer_norm_epsilon=1e-5,
         use_conv_bias=True,
         use_mlp_bias=False,
@@ -180,6 +180,10 @@ class Mamba2Config(PretrainedConfig):
         use_cache=True,
         **kwargs,
     ):
+        # Avoid mutable default args
+        if attention_layers_idx is None:
+            attention_layers_idx = []
+
         self.vocab_size = vocab_size
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
@@ -197,7 +201,7 @@ class Mamba2Config(PretrainedConfig):
         self.mamba2_num_heads = self.intermediate_size // self.mamba2_head_dim
         self.attention_head_dim = attention_head_dim
         self.attention_num_heads = attention_num_heads
-        self.attention_num_key_value_heads = attention_num_key_value_heads
+        self.attention_num_key_value_heads = attention_num_key_value_heads if attention_num_key_value_heads is not None else attention_num_heads
         self.num_hidden_layers = num_hidden_layers
         self.attention_layers_idx = attention_layers_idx
         self._attention_layers_idx_validation()
