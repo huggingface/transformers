@@ -364,26 +364,6 @@ class CLIPSdpaAttention(CLIPAttention):
         else:
             attn_mask = attention_mask
 
-        # CLIPTextModel has two attention masks: `causal_attention_mask` and `attention_mask`
-        # with `padding_side="left"` we got fully masked rows in `attn_mask` passed to `scaled_dot_product_attention`
-        # that lead to `nan` values in `attn_output` or/and high logits difference for `pooled_output`
-        # see also:
-        #  - https://github.com/huggingface/transformers/pull/31208
-        #  - https://github.com/pytorch/pytorch/issues/103749
-        if attn_mask is not None and (attn_mask.max(dim=-1).values <= torch.finfo(attn_mask.dtype).min).any():
-            logger.warning_once(
-                "`torch.nn.functional.scaled_dot_product_attention` doesn't support having an row-empty attention mask. "
-                "Empty attention mask probably happens because of empty `text` or `padding_side='left'`. "
-                "Try setting different `padding_side` or `attn_implementation='eager'` when loading the model. "
-                "See https://github.com/pytorch/pytorch/issues/103749 for more information."
-            )
-            return super().forward(
-                hidden_states=hidden_states,
-                attention_mask=attention_mask,
-                causal_attention_mask=causal_attention_mask,
-                output_attentions=output_attentions,
-            )
-
         bsz, tgt_len, embed_dim = hidden_states.size()
 
         query_states = self.q_proj(hidden_states)

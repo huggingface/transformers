@@ -637,7 +637,7 @@ class CLIPTextModelTest(CLIPModelTesterMixin, unittest.TestCase):
         super().test_eager_matches_sdpa_inference(
             torch_dtype=torch_dtype,
             logit_keys=("last_hidden_state", "pooler_output", "text_embeds"),
-            use_attention_mask_options=(None, "right", "left"),
+            use_attention_mask_options=(None, "right"),  # "left" is not supported for text model
         )
 
     @require_torch_sdpa
@@ -970,7 +970,7 @@ class CLIPModelTest(CLIPModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         super().test_eager_matches_sdpa_inference(
             torch_dtype=torch_dtype,
             logit_keys=("logits_per_image", "logits_per_text"),
-            use_attention_mask_options=(None, "right", "left"),
+            use_attention_mask_options=(None, "right"),  # "left" is not supported for text model
         )
 
     @require_torch_sdpa
