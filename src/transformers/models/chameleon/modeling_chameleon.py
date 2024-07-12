@@ -195,7 +195,7 @@ class ChameleonMLP(nn.Module):
         return down_proj
 
 
-class LayerNormChameleon(nn.LayerNorm):
+class ChameleonLayerNorm(nn.LayerNorm):
     """
     LayerNorm but computes stats only over the last dim because Chameleon applies gamma and beta
     from each shard separately to each head, instead of reducing. We can apply each head's own
@@ -261,8 +261,8 @@ class ChameleonAttention(nn.Module):
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=config.attention_bias)
-        self.q_norm = LayerNormChameleon((self.num_heads, self.head_dim))
-        self.k_norm = LayerNormChameleon((self.num_key_value_heads, self.head_dim))
+        self.q_norm = ChameleonLayerNorm((self.num_heads, self.head_dim))
+        self.k_norm = ChameleonLayerNorm((self.num_key_value_heads, self.head_dim))
         self._init_rope()
 
     # Copied from transformers.models.llama.modeling_llama.LlamaAttention._init_rope with Llama->Chameleon
