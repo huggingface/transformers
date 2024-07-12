@@ -173,14 +173,21 @@ class HybridMamba2AttentionDynamicCache(DynamicCache):
             device = self.ssm_states[layer_idx].device
             self.ssm_states[layer_idx] = self.ssm_states[layer_idx].index_select(0, beam_idx.to(device))
 
-    # Copied from transformers.models.jamba.modeling_jamba.HybridMambaAttentionDynamicCache.get_seq_length
+    # Adapted from transformers.models.jamba.modeling_jamba.HybridMambaAttentionDynamicCache.get_seq_length
+    # Fixes issues when accessing on empty cache
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
-        # take any layer that contains cache and not empty tensor
+        # TODO: make it independent of transformers layer?
+
+        # Take any layer that contains cache and not empty tensor
         layer_idx = self.transformer_layers[0] if layer_idx not in self.transformer_layers else layer_idx
         if len(self.key_cache) <= layer_idx:
             return 0
-        return self.key_cache[layer_idx].shape[-2]
+
+        # We also allow seq_len checks on empty tensors
+        size_idx = -2 if len(self.key_cache[layer_idx].shape) > 2 else -1
+
+        return self.key_cache[layer_idx].shape[size_idx]
 
     # Copied from transformers.models.jamba.modeling_jamba.HybridMambaAttentionDynamicCache.to_legacy_cache with Mamba->Mamba2
     def to_legacy_cache(self) -> Tuple[Tuple[torch.Tensor], Tuple[torch.Tensor]]:
@@ -397,7 +404,7 @@ class Mamba2Attention(nn.Module):
 
         if self.config.rope_scaling is None:
             self.rotary_emb = Mamba2RotaryEmbedding(
-                self.head_dim,
+                self.rotary_emb_dim,
                 max_position_embeddings=self.config.max_position_embeddings,
                 base=self.rope_theta,
             )
@@ -406,14 +413,14 @@ class Mamba2Attention(nn.Module):
             scaling_factor = self.config.rope_scaling["factor"]
             if scaling_type == "linear":
                 self.rotary_emb = Mamba2LinearScalingRotaryEmbedding(
-                    self.head_dim,
+                    self.rotary_emb_dim,
                     max_position_embeddings=self.config.max_position_embeddings,
                     scaling_factor=scaling_factor,
                     base=self.rope_theta,
                 )
             elif scaling_type == "dynamic":
                 self.rotary_emb = Mamba2DynamicNTKScalingRotaryEmbedding(
-                    self.head_dim,
+                    self.rotary_emb_dim,
                     max_position_embeddings=self.config.max_position_embeddings,
                     scaling_factor=scaling_factor,
                     base=self.rope_theta,
@@ -496,12 +503,12 @@ class Mamba2Attention(nn.Module):
     def _conv1d(self, qkv, seq_len, cache, cached_start, cached_forward):
         # Init cache with first "real" values
         if cached_start:
-            qkv_t = qkv.transpos(1, 2)
+            qkv_t = qkv.transpose(1, 2)
             cache.conv_states[self.layer_idx].copy_(
                 nn.functional.pad(qkv_t, (self.conv_kernel_size - qkv_t.shape[-1], 0))
             )
 
-        if is_causal_conv1d_available:
+        if is_causal_conv1d_available():
             if cached_forward:
                 qkv = causal_conv1d_update(
                     x=qkv.squeeze(1),
@@ -748,7 +755,7 @@ class Mamba2FlashAttention2(Mamba2Attention):
 
         # Reshape outputs
         attn_output = attn_weights.reshape(
-            attn_weights.shape[0], attn_weights.shape[1], self.num_heads * self.head_dim
+            attn_weights.shape[0], attn_weights.shape[1], self.out_dim
         )
         attn_output = self.out_proj(attn_output)
 
@@ -942,7 +949,7 @@ class Mamba2SdpaAttention(Mamba2Attention):
 
         # Reshape outputs
         attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.view(bsz, q_len, self.hidden_size)
+        attn_output = attn_output.view(bsz, q_len, self.out_dim)
 
         attn_output = self.out_proj(attn_output)
 
@@ -1224,7 +1231,7 @@ class Mamba2Mixer(nn.Module):
             """
             T = x.size(-1)
             # [..., chunk_size] -> [..., chunk_size, chunk_size]
-            x = x.unsqueeze(-1).expand(x.shape[0], x.shape[1], x.shape[2], x.shape[3], T)
+            x = x.unsqueeze(-1).expand(*x.size(), T)
             mask = torch.tril(torch.ones(T, T, device=x.device, dtype=torch.bool), diagonal=-1)
             x = x.masked_fill(~mask, 0)
             x_segsum = torch.cumsum(x, dim=-2)
@@ -1668,6 +1675,9 @@ class Mamba2Model(Mamba2PreTrainedModel):
         self.embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
         self.layers = nn.ModuleList([Mamba2Block(config, layer_idx=idx) for idx in range(config.num_hidden_layers)])
 
+        self._attn_implementation = config._attn_implementation
+        self._uses_attention_layers = len(config.attention_layers_idx) > 0
+
         self.gradient_checkpointing = False
         self.norm_f = Mamba2RMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
         # Initialize weights and apply final processing
@@ -1747,11 +1757,7 @@ class Mamba2Model(Mamba2PreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_mask = (
-            self._update_causal_mask(attention_mask, inputs_embeds, past_key_values, output_attentions)
-            if self.uses_attention_layers
-            else None
-        )
+        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, past_key_values, output_attentions)
 
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
@@ -1809,7 +1815,7 @@ class Mamba2Model(Mamba2PreTrainedModel):
         )
 
     def _update_causal_mask(self, attention_mask, inputs_embeds, past_key_values, output_attentions):
-        if not self._uses_attn_layers:
+        if not self._uses_attention_layers:
             return None
 
         batch_size, seq_len, _ = inputs_embeds.shape
