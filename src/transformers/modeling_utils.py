@@ -3708,7 +3708,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
             init_contexts = [deepspeed.zero.Init(config_dict_or_path=deepspeed_config())] + init_contexts
-        elif low_cpu_mem_usage or not hasattr(cls, "supports_param_buffer_assignment"):
+        elif low_cpu_mem_usage:
             init_contexts.append(init_empty_weights())
 
         config = copy.deepcopy(config)  # We do not want to modify the config inplace in from_pretrained.
@@ -4020,6 +4020,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         missing_keys = sorted(set(expected_keys) - set(loaded_keys))
         unexpected_keys = set(loaded_keys) - set(expected_keys)
+
         # Remove nonpersistent buffers from unexpected keys: they are not in the state dict but will be in the model
         # buffers
         model_buffers = {n for n, _ in model.named_buffers()}
@@ -4261,8 +4262,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             f"{model_to_load.__class__.__name__} does not support param buffer assignment, loading will be slower"
                         )
                         assign_to_params_buffers = False
-                    else:
-                        # If the model does, the incoming `state_dict` and the `model_to_load` must be the same dtype
+                    elif all(start_prefix + k in state_dict for k in model_to_load.state_dict().keys()):
+                        # If the model does, the incoming `state_dict` and the `model_to_load` must be the same dtype and have all their keys
                         first_key = list(model_to_load.state_dict().keys())[0]
                         if start_prefix + first_key in state_dict:
                             assign_to_params_buffers = (
