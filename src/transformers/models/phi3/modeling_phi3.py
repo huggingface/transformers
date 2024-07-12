@@ -563,6 +563,7 @@ class Phi3FlashAttention2(Phi3Attention):
             value_states,
             attention_mask,
             q_len,
+            position_ids=position_ids,
             dropout=attn_dropout,
             sliding_window=getattr(self.config, "sliding_window", None),
             use_top_left_mask=self._flash_attn_uses_top_left_mask,

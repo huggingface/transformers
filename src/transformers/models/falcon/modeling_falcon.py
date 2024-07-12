@@ -602,6 +602,7 @@ class FalconFlashAttention2(FalconAttention):
             value_layer,
             attention_mask,
             query_length,
+            position_ids=position_ids,
             dropout=attn_dropout,
             is_causal=self.is_causal,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
