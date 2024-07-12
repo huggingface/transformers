@@ -18,9 +18,12 @@ import math
 from functools import cached_property
 from typing import Optional, Tuple, Union
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
+import PIL
+from PIL import Image
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
@@ -772,6 +775,30 @@ class ChameleonVQVAEVectorQuantizer(nn.Module):
 
         return hidden_state_quant, loss, min_encoding_indices
 
+    def get_codebook_entry(self, image_tokens: torch.Tensor, shape: Tuple[int]) -> torch.Tensor:
+        # get quantized latent vectors
+        z_q = self.embedding(image_tokens)
+
+        if shape is not None:
+            z_q = z_q.view(shape)
+            # reshape back to match original input shape
+            z_q = z_q.permute(0, 3, 1, 2).contiguous()
+
+        return z_q
+
+
+class ChameleonVQVAEDecoderConvUpsample(nn.Module):
+    def __init__(self, in_channels):
+        super().__init__()
+        self.conv = torch.nn.Conv2d(
+            in_channels, in_channels, kernel_size=3, stride=1, padding=1
+        )
+
+    def forward(self, hidden_states):
+        hidden_states = F.interpolate(hidden_states, scale_factor=2.0, mode="nearest")
+        hidden_states = self.conv(hidden_states)
+        return hidden_states
+
 
 class ChameleonVQVAEEncoderConvDownsample(nn.Module):
     def __init__(self, in_channels):
@@ -785,7 +812,7 @@ class ChameleonVQVAEEncoderConvDownsample(nn.Module):
         return hidden_states
 
 
-class ChameleonVQVAEEncoderResnetBlock(nn.Module):
+class ChameleonVQVAEResnetBlock(nn.Module):
     def __init__(
         self,
         config,
@@ -829,7 +856,7 @@ class ChameleonVQVAEEncoderResnetBlock(nn.Module):
         return residual + hidden_states
 
 
-class ChameleonVQVAEEncoderAttnBlock(nn.Module):
+class ChameleonVQVAEAttnBlock(nn.Module):
     def __init__(self, in_channels):
         super().__init__()
         self.in_channels = in_channels
@@ -890,7 +917,7 @@ class ChameleonVQVAEEncoder(nn.Module):
             block_out = base_channels * channel_multiplier[i_level]
             for i_block in range(self.num_res_blocks):
                 block.append(
-                    ChameleonVQVAEEncoderResnetBlock(
+                    ChameleonVQVAEResnetBlock(
                         config=config,
                         in_channels=block_in,
                         out_channels=block_out,
@@ -902,7 +929,7 @@ class ChameleonVQVAEEncoder(nn.Module):
                     and curr_res in config.attn_resolutions
                     and config.attn_type == "vanilla"
                 ):
-                    attn.append(ChameleonVQVAEEncoderAttnBlock(block_in))
+                    attn.append(ChameleonVQVAEAttnBlock(block_in))
 
             down = nn.Module()
             down.block = block
@@ -913,13 +940,13 @@ class ChameleonVQVAEEncoder(nn.Module):
             self.down.append(down)
 
         self.mid = nn.Module()
-        self.mid.block_1 = ChameleonVQVAEEncoderResnetBlock(
+        self.mid.block_1 = ChameleonVQVAEResnetBlock(
             config=config,
             in_channels=block_in,
             out_channels=block_in,
         )
-        self.mid.attn_1 = ChameleonVQVAEEncoderAttnBlock(block_in) if config.attn_type == "vanilla" else nn.Identity()
-        self.mid.block_2 = ChameleonVQVAEEncoderResnetBlock(
+        self.mid.attn_1 = ChameleonVQVAEAttnBlock(block_in) if config.attn_type == "vanilla" else nn.Identity()
+        self.mid.block_2 = ChameleonVQVAEResnetBlock(
             config=config,
             in_channels=block_in,
             out_channels=block_in,
@@ -959,6 +986,105 @@ class ChameleonVQVAEEncoder(nn.Module):
         last_hidden_state *= torch.sigmoid(last_hidden_state)
         last_hidden_state = self.conv_out(last_hidden_state)
         return last_hidden_state
+
+
+class ChameleonVQVAEDecoder(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+
+        self.num_resolutions = len(config.channel_multiplier)
+        self.num_res_blocks = config.num_res_blocks
+        base_channels = config.base_channels
+        resolution = config.resolution
+        latent_channels = config.latent_channels
+        out_channels = config.out_channels
+
+        # compute in_ch_mult, block_in and curr_res at lowest res
+        block_in = base_channels * config.channel_multiplier[self.num_resolutions - 1]
+        curr_res = resolution // 2 ** (self.num_resolutions - 1)
+        self.z_shape = (1, latent_channels, curr_res, curr_res)
+
+        # z to block_in
+        self.conv_in = torch.nn.Conv2d(
+            latent_channels, block_in, kernel_size=3, stride=1, padding=1
+        )
+
+        # middle
+        self.mid = nn.Module()
+        self.mid.block_1 = ChameleonVQVAEResnetBlock(
+            config=config,
+            in_channels=block_in,
+            out_channels=block_in,
+        )
+        self.mid.attn_1 = ChameleonVQVAEAttnBlock(block_in) if config.attn_type == "vanilla" else nn.Identity()
+        self.mid.block_2 = ChameleonVQVAEResnetBlock(
+            config=config,
+            in_channels=block_in,
+            out_channels=block_in,
+        )
+
+        # upsampling
+        self.up = nn.ModuleList()
+        for i_level in reversed(range(self.num_resolutions)):
+            block = nn.ModuleList()
+            attn = nn.ModuleList()
+            block_out = base_channels * config.channel_multiplier[i_level]
+            for i_block in range(self.num_res_blocks + 1):
+                block.append(
+                    ChameleonVQVAEResnetBlock(
+                        config=config,
+                        in_channels=block_in,
+                        out_channels=block_out,
+                    )
+                )
+                block_in = block_out
+                if (
+                    config.attn_resolutions is not None
+                    and curr_res in config.attn_resolutions
+                    and config.attn_type == "vanilla"
+                ):
+                    attn.append(ChameleonVQVAEAttnBlock(block_in))
+            up = nn.Module()
+            up.block = block
+            up.attn = attn
+            if i_level != 0:
+                up.upsample = ChameleonVQVAEDecoderConvUpsample(block_in)
+                curr_res = curr_res * 2
+            self.up.insert(0, up)  # prepend to get consistent order
+
+        # end
+        self.norm_out = torch.nn.GroupNorm(num_groups=32, num_channels=block_in, eps=1e-6, affine=True)
+        self.conv_out = torch.nn.Conv2d(
+            block_in, out_channels, kernel_size=3, stride=1, padding=1
+        )
+
+    def forward(self, image_tokens: torch.LongTensor):
+        self.last_z_shape = image_tokens.shape
+
+        # timestep embedding
+        temb = None
+
+        # image_tokens to block_in
+        hidden_state = self.conv_in(image_tokens)
+
+        # middle
+        hidden_state = self.mid.block_1(hidden_state, temb)
+        hidden_state = self.mid.attn_1(hidden_state)
+        hidden_state = self.mid.block_2(hidden_state, temb)
+
+        # upsampling
+        for i_level in reversed(range(self.num_resolutions)):
+            for i_block in range(self.num_res_blocks + 1):
+                hidden_state = self.up[i_level].block[i_block](hidden_state, temb)
+                if len(self.up[i_level].attn) > 0:
+                    hidden_state = self.up[i_level].attn[i_block](hidden_state)
+            if i_level != 0:
+                hidden_state = self.up[i_level].upsample(hidden_state)
+
+        hidden_state = self.norm_out(hidden_state)
+        hidden_state *= torch.sigmoid(hidden_state)
+        hidden_state = self.conv_out(hidden_state)
+        return hidden_state
 
 
 CHAMELEON_VQ_START_DOCSTRING = r"""
@@ -1005,6 +1131,7 @@ class ChameleonVQVAE(PreTrainedModel):
         super().__init__(config)
 
         self.encoder = ChameleonVQVAEEncoder(config)
+        self.decoder = ChameleonVQVAEDecoder(config)
         self.quantize = ChameleonVQVAEVectorQuantizer(config)
         self.quant_conv = torch.nn.Conv2d(config.latent_channels, config.embed_dim, 1)
         self.post_quant_conv = torch.nn.Conv2d(config.embed_dim, config.latent_channels, 1)
@@ -1015,6 +1142,39 @@ class ChameleonVQVAE(PreTrainedModel):
         hidden_states = self.quant_conv(hidden_states)
         quant, emb_loss, indices = self.quantize(hidden_states)
         return quant, emb_loss, indices
+
+    def decode(self, image_tokens: torch.Tensor):
+        emb_dim: int = self.quantize.embedding.weight.shape[-1]
+        codebook_entry = self.quantize.get_codebook_entry(
+            image_tokens, (1, 32, 32, emb_dim)
+        )
+        pixels = self.decoder(codebook_entry)
+        return self._pil_from_chw_tensor(pixels[0])
+
+    def _pil_from_chw_tensor(self, chw_tensor: torch.Tensor) -> PIL.Image:
+
+        # Ensure detachment and move tensor to CPU.
+        detached_chw_tensor = chw_tensor.detach().cpu()
+
+        # Normalize tensor to [0, 1] range from [-1, 1] range.
+        normalized_chw_tensor = (
+            torch.clamp(detached_chw_tensor, -1.0, 1.0) + 1.0
+        ) / 2.0
+
+        # Permute CHW tensor to HWC format and convert to NumPy array.
+        hwc_array = normalized_chw_tensor.permute(1, 2, 0).numpy()
+
+        # Convert to an 8-bit unsigned integer format.
+        image_array_uint8 = (hwc_array * 255).astype(np.uint8)
+
+        # Convert NumPy array to PIL Image.
+        pil_image = Image.fromarray(image_array_uint8)
+
+        # Convert image to RGB if it is not already.
+        if pil_image.mode != "RGB":
+            pil_image = pil_image.convert("RGB")
+
+        return pil_image
 
 
 class ChameleonImageVocabularyMapping:
@@ -1231,6 +1391,16 @@ class ChameleonModel(ChameleonPreTrainedModel):
         bpe_toks = self.vocabulary_mapping.convert_img2bpe(image_toks)
         bpe_toks = bpe_toks.view(batch_size, -1)
         return bpe_toks
+
+    def decode_image_tokens(self, image_tokens: torch.tensor):
+        """
+        Decodes image tokens into pixel values with VQGAN module.
+
+        Args:
+            image_tokens (`torch.tensor` of shape `(batch_size, num_tokens)`):
+                The tokens corresponding to the input images.
+        """
+        return self.vqmodel.decode(image_tokens)
 
     @add_start_docstrings_to_model_forward(CHAMELEON_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
