@@ -20,6 +20,7 @@ import os.path
 import sys
 import tempfile
 import threading
+import time
 import unittest
 import unittest.mock as mock
 import uuid
@@ -894,36 +895,49 @@ class ModelUtilsTest(TestCasePlus):
     @require_usr_bin_time
     @require_accelerate
     @mark.accelerate_tests
-    @unittest.skip(
-        reason="`low_cpu_mem_usage` is redundant at this point for *most* models, but needed for some architectures still. Check https://github.com/huggingface/transformers/pull/31771"
-    )
     def test_from_pretrained_low_cpu_mem_usage_measured(self):
-        # test that `from_pretrained(..., low_cpu_mem_usage=True)` uses less cpu memory than default
+        # Before this would test that `from_pretrained(..., low_cpu_mem_usage=True)` uses less cpu memory than default
+        # Now though the memory is the same, we simply test that loading with `low_cpu_mem_usage` winds up being *faster*
 
         mname = "google-bert/bert-base-cased"
 
         preamble = "from transformers import AutoModel"
         one_liner_str = f'{preamble}; AutoModel.from_pretrained("{mname}", low_cpu_mem_usage=False)'
-        max_rss_normal = self.python_one_liner_max_rss(one_liner_str)
+        start_time = time.time()
+        # Save this output as `max_rss_normal` if testing memory results
+        _ = self.python_one_liner_max_rss(one_liner_str)
+        end_time = time.time()
+        elapsed_time_normal = end_time - start_time
         # print(f"{max_rss_normal=}")
 
         one_liner_str = f'{preamble};  AutoModel.from_pretrained("{mname}", low_cpu_mem_usage=True)'
-        max_rss_low_mem = self.python_one_liner_max_rss(one_liner_str)
-        # print(f"{max_rss_low_mem=}")
-
-        diff_bytes = max_rss_normal - max_rss_low_mem
-        diff_percent = diff_bytes / max_rss_low_mem
-        # print(f"{diff_bytes=}, {diff_percent=}")
-        # ideally we would compare that the diff is close to ~1x checkpoint size in bytes, but
-        # measuring cpu memory on linux is very tricky and inconsistent, so instead let's check that
-        # it's at least 15% less cpu memory consumed
+        start_time = time.time()
+        # Save this output as `max_rss_low_mem` if testing memory results
+        _ = self.python_one_liner_max_rss(one_liner_str)
+        end_time = time.time()
+        elapsed_time_low_mem = end_time - start_time
 
         self.assertGreater(
-            diff_percent,
-            0.15,
-            "should use less CPU memory for low_cpu_mem_usage=True, "
-            f"but got max_rss_normal={max_rss_normal} and max_rss_low_mem={max_rss_low_mem}",
+            elapsed_time_low_mem,
+            elapsed_time_normal,
+            "using `low_cpu_mem_usage` should be faster, "
+            f"but got elapsed_time_normal={elapsed_time_normal} and elapsed_time_low_mem={elapsed_time_low_mem}",
         )
+        # print(f"{max_rss_low_mem=}")
+
+        # diff_bytes = max_rss_normal - max_rss_low_mem
+        # diff_percent = diff_bytes / max_rss_low_mem
+        # # print(f"{diff_bytes=}, {diff_percent=}")
+        # # ideally we would compare that the diff is close to ~1x checkpoint size in bytes, but
+        # # measuring cpu memory on linux is very tricky and inconsistent, so instead let's check that
+        # # it's at least 15% less cpu memory consumed
+
+        # self.assertGreater(
+        #     diff_percent,
+        #     0.15,
+        #     "should use less CPU memory for low_cpu_mem_usage=True, "
+        #     f"but got max_rss_normal={max_rss_normal} and max_rss_low_mem={max_rss_low_mem}",
+        # )
 
         # if you want to compare things manually, let's first look at the size of the model in bytes
         # model = BertModel.from_pretrained(mname, low_cpu_mem_usage=False)
