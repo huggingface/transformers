@@ -227,7 +227,7 @@ class GraniteAttention(nn.Module):
 
         self.scaling = config.attention_multiplier
         if self.scaling is None:
-            self.scaling = config.attention_multiplier**-0.5
+            self.scaling = 1 / math.sqrt(self.head_dim)
 
         if (self.head_dim * self.num_heads) != self.hidden_size:
             raise ValueError(
@@ -298,10 +298,6 @@ class GraniteAttention(nn.Module):
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
-
-        attention_multiplier = self.attention_multiplier
-        if attention_multiplier is None:
-            attention_multiplier = 1 / math.sqrt(self.head_dim)
 
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * self.scaling
 
