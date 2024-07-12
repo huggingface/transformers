@@ -132,11 +132,17 @@ def create_rename_keys_vision(state_dict, config):
     for layer_name, params in state_dict.items():
         if "neck" in layer_name:
             layer_name_replace = layer_name.replace("neck", "encoder")
-            if "fpn_blocks" in layer_name or "pan_blocks" in layer_name:
+            if "fpn_blocks" in layer_name or "pan_blocks" in layer_name or "lateral_convs" in layer_name or "downsample_convs" in layer_name:
                 layer_name_replace = layer_name_replace.replace(".m.", ".bottlenecks.")
                 layer_name_replace = layer_name_replace.replace(".cv", ".conv")
                 layer_name_replace = layer_name_replace.replace(".bn", ".norm")
+            if "encoder_layer" in layer_name:
+                layer_name_replace = layer_name_replace.replace("encoder_layer", "encoder.0.layers.0")
+                layer_name_replace = layer_name_replace.replace(".linear", ".fc")
+                layer_name_replace = layer_name_replace.replace("norm1", "self_attn_layer_norm")
+                layer_name_replace = layer_name_replace.replace("norm2", "final_layer_norm")
             rename_keys.append((layer_name, layer_name_replace))
+
     ########################################## ENCODER - END
 
     ########################################## DECODER - START
@@ -260,6 +266,20 @@ def read_in_q_k_v_text(state_dict, config):
         ]
 
 
+def read_in_q_k_v_encoder(state_dict, config):
+    embed_dim = config.encoder_hidden_dim
+    # read in weights + bias of input projection layer (in original implementation, this is a single matrix + bias)
+    in_proj_weight = state_dict.pop("encoder.encoder.0.layers.0.self_attn.in_proj_weight")
+    in_proj_bias = state_dict.pop("encoder.encoder.0.layers.0.self_attn.in_proj_bias")
+    # next, add query, keys and values (in that order) to the state dict
+    state_dict["encoder.encoder.0.layers.0.self_attn.q_proj.weight"] = in_proj_weight[:embed_dim, :]
+    state_dict["encoder.encoder.0.layers.0.self_attn.q_proj.bias"] = in_proj_bias[:embed_dim]
+    state_dict["encoder.encoder.0.layers.0.self_attn.k_proj.weight"] = in_proj_weight[embed_dim : embed_dim * 2, :]
+    state_dict["encoder.encoder.0.layers.0.self_attn.k_proj.bias"] = in_proj_bias[embed_dim : embed_dim * 2]
+    state_dict["encoder.encoder.0.layers.0.self_attn.v_proj.weight"] = in_proj_weight[-embed_dim:, :]
+    state_dict["encoder.encoder.0.layers.0.self_attn.v_proj.bias"] = in_proj_bias[-embed_dim:]
+
+
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -309,6 +329,7 @@ def convert_omdet_turbo_checkpoint(args):
 
     read_in_q_k_v_vision(new_state_dict, config)
     read_in_q_k_v_text(new_state_dict, config)
+    # read_in_q_k_v_encoder(new_state_dict, config)
 
     # Load HF model
     model = OmDetTurboModel(config)
@@ -345,8 +366,8 @@ def convert_omdet_turbo_checkpoint(args):
     #     assert torch.allclose(outputs.logits[0, :3, :3], expected_slice, atol=1e-4)
     #     print("Looks ok!")
 
-    # if pytorch_dump_folder_path is not None:
-    #     model.save_pretrained(pytorch_dump_folder_path)
+    if pytorch_dump_folder_path is not None:
+        model.save_pretrained(pytorch_dump_folder_path)
     #     processor.save_pretrained(pytorch_dump_folder_path)
 
     # if push_to_hub:

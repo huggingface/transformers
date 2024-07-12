@@ -282,6 +282,13 @@ class GroundingDinoImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class OmDetTurboImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class IdeficsImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
