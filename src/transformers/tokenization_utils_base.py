@@ -1607,7 +1607,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             )
 
         # By default, cleaning tokenization spaces for both fast and slow tokenizers
-        self.clean_up_tokenization_spaces = kwargs.pop("clean_up_tokenization_spaces", True)
+        self.clean_up_tokenization_spaces = kwargs.pop("clean_up_tokenization_spaces", False)
 
         # By default, do not split special tokens for both fast and slow tokenizers
         self.split_special_tokens = kwargs.pop("split_special_tokens", False)
