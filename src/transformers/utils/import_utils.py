@@ -99,6 +99,7 @@ _av_available = importlib.util.find_spec("av") is not None
 _bitsandbytes_available = _is_package_available("bitsandbytes")
 _eetq_available = _is_package_available("eetq")
 _galore_torch_available = _is_package_available("galore_torch")
+_q_galore_torch_available = _is_package_available("q_galore_torch")
 _lomo_available = _is_package_available("lomo_optim")
 _torchao_available = _is_package_available("torchao")
 # `importlib.metadata.version` doesn't work with `bs4` but `beautifulsoup4`. For `importlib.util.find_spec`, reversed.
@@ -344,6 +345,10 @@ def is_torchao_available():
 
 def is_galore_torch_available():
     return _galore_torch_available
+
+
+def is_q_galore_torch_available():
+    return _q_galore_torch_available
 
 
 def is_lomo_available():
