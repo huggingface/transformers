@@ -147,7 +147,6 @@ class DacVectorQuantize(nn.Module):
                 Codebook indices for each codebook, quantized discrete representation of input.
             projected_latents (torch.FloatTensor of shape `(batch_size, num_codebooks * dimension, time_steps)`):
                 Projected latents (continuous representation of input before quantization).
-                
         """
 
         projected_latents = self.in_proj(hidden_state)
