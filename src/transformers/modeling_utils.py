@@ -682,18 +682,23 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix):
         state_dict._metadata = metadata
 
     error_msgs = []
-    # Some models do not support param buffer assignment
-    if hasattr(model_to_load, "supports_param_buffer_assignment"):
-        logger.debug(
-            f"{model_to_load.__class__.__name__} does not support param buffer assignment, loading will be slower"
-        )
-        assign_to_param_buffers = False
-    else:
-        # If the model does, the incoming `state_dict` and the `model_to_load` must be the same dtype
-        first_key = list(model_to_load.state_dict().keys())[0]
-        assign_to_param_buffers = (
-            state_dict[start_prefix + first_key].dtype == model_to_load.state_dict()[first_key].dtype
-        )
+    if len([key for key in state_dict if key.startswith(start_prefix)]) > 0:
+        # Some models do not support param buffer assignment
+        if hasattr(model_to_load, "supports_param_buffer_assignment"):
+            logger.debug(
+                f"{model_to_load.__class__.__name__} does not support param buffer assignment, loading will be slower"
+            )
+            assign_to_param_buffers = False
+        else:
+            # If the model does, the incoming `state_dict` and the `model_to_load` must be the same dtype
+            first_key = list(model_to_load.state_dict().keys())[0]
+            if start_prefix + first_key in state_dict:
+                assign_to_param_buffers = (
+                    state_dict[start_prefix + first_key].dtype == model_to_load.state_dict()[first_key].dtype
+                )
+            else:
+                # For cases when the `state_dict` doesn't have any real weights (`albert`)
+                assign_to_param_buffers = False
 
     # PyTorch's `_load_from_state_dict` does not copy parameters in a module's descendants
     # so we need to apply the function recursively.
