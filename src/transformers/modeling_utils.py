@@ -4254,6 +4254,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     unexpected_keys=unexpected_keys,
                 )
             else:
+                assign_to_params_buffers = False
                 # Sharded checkpoint or whole but low_cpu_mem_usage==True
                 if len([key for key in state_dict if key.startswith(start_prefix)]) > 0:
                     # Some models do not support param buffer assignment
@@ -4261,7 +4262,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         logger.debug(
                             f"{model_to_load.__class__.__name__} does not support param buffer assignment, loading will be slower"
                         )
-                        assign_to_params_buffers = False
                     elif all(start_prefix + k in state_dict for k in model_to_load.state_dict().keys()):
                         # If the model does, the incoming `state_dict` and the `model_to_load` must be the same dtype and have all their keys
                         first_key = list(model_to_load.state_dict().keys())[0]
