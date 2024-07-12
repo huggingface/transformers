@@ -86,6 +86,7 @@ else:
             ("glpn", ("GLPNImageProcessor",)),
             ("grounding-dino", ("GroundingDinoImageProcessor",)),
             ("groupvit", ("CLIPImageProcessor",)),
+            ("hiera", ("BitImageProcessor",)),
             ("idefics", ("IdeficsImageProcessor",)),
             ("idefics2", ("Idefics2ImageProcessor",)),
             ("imagegpt", ("ImageGPTImageProcessor",)),

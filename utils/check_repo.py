@@ -998,6 +998,7 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "DinatBackbone",
     "Dinov2Backbone",
     "FocalNetBackbone",
+    "HieraBackbone",
     "MaskFormerSwinBackbone",
     "MaskFormerSwinConfig",
     "MaskFormerSwinModel",

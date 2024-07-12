@@ -106,6 +106,7 @@ from . import (
     grounding_dino,
     groupvit,
     herbert,
+    hiera,
     hubert,
     ibert,
     idefics,
