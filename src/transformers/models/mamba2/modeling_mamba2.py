@@ -493,7 +493,7 @@ class Mamba2Attention(nn.Module):
                 nn.functional.pad(qkv_t, (self.conv_kernel_size - qkv_t.shape[-1], 0))
             )
 
-        if is_fast_path_available:
+        if is_causal_conv1d_available:
             if cached_forward:
                 qkv = causal_conv1d_update(
                     qkv.squeeze(1),
