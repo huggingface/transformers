@@ -866,6 +866,8 @@ class StaticCache(Cache):
             # `tensor[:, :, index] = tensor`, but the first one is compile-friendly and it does explicitly an in-place
             # operation, that avoids copies and uses less memory.
             try:
+                # If using several devices (e.g.: multiple GPUs), we need to ensure everything is on the same one
+                cache_position.to(device=k_out.device)
                 k_out.index_copy_(2, cache_position, key_states)
                 v_out.index_copy_(2, cache_position, value_states)
             except NotImplementedError:
