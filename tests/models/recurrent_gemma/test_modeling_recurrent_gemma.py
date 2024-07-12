@@ -332,22 +332,18 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip("RecurrentGemma only supports sdpa")
+    @unittest.skip(reason="RecurrentGemma only supports sdpa")
     def test_eager_matches_sdpa_generate(self):
         pass
 
-    @unittest.skip(reason="RecurrentGemma only supports sdpa")
-    def test_eager_matches_sdpa_inference(self):
-        pass
-
-    @unittest.skip("SQRBound is known to have issues with gc")
+    @unittest.skip(reason="SQRBound is known to have issues with gc")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     def _check_attentions_for_generate(self, *args, **kwargs):
         return True  # Model does not return attention
 
-    @unittest.skip("Past key values are not returned")
+    @unittest.skip(reason="Past key values are not returned")
     def test_model_parallelism(self):
         pass
 
