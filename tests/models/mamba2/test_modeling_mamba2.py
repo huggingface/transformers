@@ -53,7 +53,7 @@ import unittest
 
 from parameterized import parameterized
 
-from transformers import AutoTokenizer, Mamba2Config, is_torch_available
+from transformers import Mamba2Config, is_torch_available
 from transformers.testing_utils import (
     require_torch,
     torch_device,
@@ -69,11 +69,8 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        Mamba2Model,
         Mamba2ForCausalLM,
-    )
-    from transformers.models.mamba2.modeling_mamba2 import (
-        HybridMamba2AttentionDynamicCache,
+        Mamba2Model,
     )
 
 

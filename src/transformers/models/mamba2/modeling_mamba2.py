@@ -1823,24 +1823,24 @@ class Mamba2Model(Mamba2PreTrainedModel):
         past_length = past_key_values.get_seq_length() if past_key_values is not None else 0
 
         # Follows GPTNeoX based creation of masks
-        if attention_mask is not None:
-            attention_mask = attention_mask.view(batch_size, -1)
-            if self._attn_implementation == "flash_attention_2":
+        if self._attn_implementation == "flash_attention_2":
+            if attention_mask is not None:
+                attention_mask = attention_mask.view(batch_size, -1)
                 return attention_mask if 0 in attention_mask else None
-            elif self._attn_implementation == "sdpa" and not output_attentions:
-                return _prepare_4d_causal_attention_mask_for_sdpa(
-                    attention_mask=attention_mask,
-                    input_shape=(batch_size, seq_len),
-                    inputs_embeds=inputs_embeds,
-                    past_key_values_length=past_length,
-                )
-            else:
-                return _prepare_4d_causal_attention_mask(
-                    attention_mask=attention_mask,
-                    input_shape=(batch_size, seq_len),
-                    inputs_embeds=inputs_embeds,
-                    past_key_values_length=past_length,
-                )
+        elif self._attn_implementation == "sdpa" and not output_attentions:
+            return _prepare_4d_causal_attention_mask_for_sdpa(
+                attention_mask=attention_mask,
+                input_shape=(batch_size, seq_len),
+                inputs_embeds=inputs_embeds,
+                past_key_values_length=past_length,
+            )
+        else:
+            return _prepare_4d_causal_attention_mask(
+                attention_mask=attention_mask,
+                input_shape=(batch_size, seq_len),
+                inputs_embeds=inputs_embeds,
+                past_key_values_length=past_length,
+            )
 
         # This should not happen as we covered all options
         return None
