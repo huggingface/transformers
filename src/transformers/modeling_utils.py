@@ -657,7 +657,7 @@ def _find_identical(tensors: List[Set[str]], state_dict: Dict[str, torch.Tensor]
     return shared_tensors, identical
 
 
-def _load_state_dict_into_model(model_to_load, state_dict, start_prefix, keep_in_fp32_modules, dtype):
+def _load_state_dict_into_model(model_to_load, state_dict, start_prefix):
     # Convert old format to new format if needed from a PyTorch state_dict
     old_keys = []
     new_keys = []
@@ -4263,9 +4263,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
             else:
                 # Sharded checkpoint or whole but low_cpu_mem_usage==True
-                error_msgs = _load_state_dict_into_model(
-                    model_to_load, state_dict, start_prefix, keep_in_fp32_modules, dtype=dtype
-                )
+                error_msgs = _load_state_dict_into_model(model_to_load, state_dict, start_prefix)
 
         else:
             # This should always be a list but, just to be sure.
@@ -4336,9 +4334,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         )
                         error_msgs += new_error_msgs
                 else:
-                    error_msgs += _load_state_dict_into_model(
-                        model_to_load, state_dict, start_prefix, keep_in_fp32_modules, dtype=dtype
-                    )
+                    error_msgs += _load_state_dict_into_model(model_to_load, state_dict, start_prefix)
 
                 # force memory release
                 del state_dict
