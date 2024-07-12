@@ -99,47 +99,19 @@ class MSClapTextConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=50265,
+       
+        text_model = 'gpt2', 
+        projection_dim = 768, 
         hidden_size=768,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        intermediate_size=3072,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        projection_dropout_prob = 0.0, 
-        max_position_embeddings=514,
-        type_vocab_size=1,
-        initializer_factor=1.0,
-        layer_norm_eps=1e-12,
-        projection_dim=512,
-        pad_token_id=1,
-        bos_token_id=0,
-        eos_token_id=2,
-        position_embedding_type="absolute",
-        use_cache=True,
-        projection_hidden_act="relu",
+        projection_dropout_prob = 0, 
         **kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
-
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.hidden_act = hidden_act
-        self.intermediate_size = intermediate_size
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.projection_dropout_prob  = projection_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.initializer_factor = initializer_factor
-        self.layer_norm_eps = layer_norm_eps
-        self.position_embedding_type = position_embedding_type
-        self.use_cache = use_cache
-        self.projection_hidden_act = projection_hidden_act
+        super().__init__( **kwargs)
+        self.text_model = text_model
         self.projection_dim = projection_dim
+        self.hidden_size = hidden_size
+        self.projection_dropout_prob = projection_dropout_prob
+
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
@@ -392,7 +364,6 @@ class MSClapConfig(PretrainedConfig):
         audio_config=None,
         logit_scale_init_value=(1 / 0.07),
         projection_dim=1024,
-        projection_hidden_act="relu",
         initializer_factor=1.0,
         **kwargs,
     ):
@@ -411,16 +382,12 @@ class MSClapConfig(PretrainedConfig):
         self.text_config.projection_dim = projection_dim
         self.audio_config.projection_dim = projection_dim
 
-        self.text_config.projection_hidden_act = projection_hidden_act
-        self.audio_config.projection_hidden_act = projection_hidden_act
-
         self.projection_dim = projection_dim
-        self.projection_hidden_act = projection_hidden_act
         self.hidden_size = self.text_config.hidden_size
 
         self.logit_scale_init_value = logit_scale_init_value
         self.initializer_factor = initializer_factor
-        self.num_hidden_layers = self.text_config.num_hidden_layers + len(self.audio_config.depths)
+        self.num_hidden_layers = self.audio_config.num_hidden_layers + len(self.audio_config.depths)
 
     @classmethod
     def from_text_audio_configs(cls, text_config: MSClapTextConfig, audio_config: MSClapAudioConfig, **kwargs):

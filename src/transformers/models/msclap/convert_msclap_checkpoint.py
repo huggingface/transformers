@@ -23,6 +23,7 @@ from msclap import CLAP
 
 KEYS_TO_MODIFY_MAPPING = {
     "caption_encoder": "text_model",
+    "text_model.projection": "text_projection", 
     "audio_encoder.base.htsat": "audio_model.audio_encoder",
     "audio_encoder.projection": "audio_projection", 
     "attn": "attention.self",
@@ -42,6 +43,22 @@ IGNORE_WEIGHTS = [
     "attn_mask", 
     "head", 
 ]
+
+GPT2_WEIGHTS = "caption_encoder.base"
+
+def get_unused_weights(model, converted_state_dict, condition = "audio_model"): 
+
+    audio_model_state_dict = [layer for layer in model.state_dict().keys() if re.search(condition, layer)]
+    audio_layers_converted_checkpoints = [layer for layer in  converted_state_dict if re.search(condition, layer)]
+
+    unused_audio_weights = set(audio_layers_converted_checkpoints) ^ set(audio_model_state_dict)
+    unused_audio_weights = unused_audio_weights.intersection(set(audio_layers_converted_checkpoints))
+    unused_audio_weights = [
+        element for element in unused_audio_weights 
+        if not any(re.search(pattern, element) for pattern in IGNORE_WEIGHTS)
+    ]
+
+    return unused_audio_weights
 
 def init_msclap(version):
 
@@ -77,10 +94,14 @@ def rename_state_dict(state_dict):
     for key, value in state_dict.items():
         # check if any key needs to be modified
         is_used = False
-       
-        for key_to_modify, new_key in KEYS_TO_MODIFY_MAPPING.items():
-            if key_to_modify in key:
-                key = key.replace(key_to_modify, new_key)
+
+        if re.search(GPT2_WEIGHTS, key): 
+            # Avoid all the other mapping transformations applied to the Audio Model and Projection Layers: 
+            key = key.replace("caption_encoder", "text_model")
+        else: 
+            for key_to_modify, new_key in KEYS_TO_MODIFY_MAPPING.items():
+                if key_to_modify in key:
+                    key = key.replace(key_to_modify, new_key)
 
         if re.match(sequential_layers_pattern, key):
             # replace sequential layers with list
@@ -128,32 +149,20 @@ def convert_clap_checkpoint(version, pytorch_dump_folder_path, enable_fusion=Fal
     # ignore the spectrogram embedding layer
     model.load_state_dict(state_dict, strict=False)
 
-    # Check that all audio state dict have been converted: 
-    model.state_dict().keys() == state_dict.keys()
-    audio_model_state_dict = [layer for layer in model.state_dict().keys() if re.search("audio_model", layer)]
-    audio_layers_converted_checkpoints = [layer for layer in  state_dict if re.search('audio_model', layer)]
-
-    unused_audio_weights = set(audio_layers_converted_checkpoints) ^ set(audio_model_state_dict)
-    unused_audio_weights = unused_audio_weights.intersection(set(audio_layers_converted_checkpoints))
-    unused_audio_weights = [
-        element for element in unused_audio_weights 
-        if not any(re.search(pattern, element) for pattern in IGNORE_WEIGHTS)
-    ]
-
-    # Check that all audio state dict have been converted: 
-    model.state_dict().keys() == state_dict.keys()
-    audio_model_state_dict = [layer for layer in model.state_dict().keys() if re.search("audio_projection", layer)]
-    audio_layers_converted_checkpoints = [layer for layer in  state_dict if re.search('audio_projection', layer)]
-
-    unused_audio_weights = set(audio_layers_converted_checkpoints) ^ set(audio_model_state_dict)
-    unused_audio_weights = unused_audio_weights.intersection(set(audio_layers_converted_checkpoints))
-    unused_audio_weights = [
-        element for element in unused_audio_weights 
-        if not any(re.search(pattern, element) for pattern in IGNORE_WEIGHTS)
-    ]
+    unused_audio_encoder_weights = get_unused_weights(model, state_dict, "audio_model")
+    unused_audio_projection_weights = get_unused_weights(model, state_dict, "audio_projection")
+    unused_text_encoder_weights = get_unused_weights(model, state_dict, "text_model")
+    unused_text_projection_weights = get_unused_weights(model, state_dict, "text_projection")
+   
+    print(unused_audio_encoder_weights)
+    print(unused_audio_projection_weights)
+    print(unused_text_encoder_weights)
+    print(unused_text_projection_weights)
 
     model.save_pretrained(pytorch_dump_folder_path)
     transformers_config.save_pretrained(pytorch_dump_folder_path)
+
+
 
 
 # check that both models share the same state dict: 
