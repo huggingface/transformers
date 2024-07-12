@@ -32,13 +32,18 @@ from ...modeling_outputs import (
     CausalLMOutputWithPast,
 )
 from ...modeling_utils import PreTrainedModel
+from ...utils import logging
+from ...utils.doc import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+)
 from ...utils.import_utils import (
     get_torch_version,
     is_causal_conv1d_available,
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
     is_mamba_ssm_greater_or_equal_2_0_4,
-    logging,
 )
 from .configuration_mamba2 import Mamba2Config
 
@@ -71,6 +76,9 @@ is_fast_path_available = all(
 )
 
 
+_CONFIG_FOR_DOC = "Mamba2Config"
+
+
 # Adapted from transformers.models.jamba.modeling_jamba.HybridMambaAttentionDynamicCache with Mamba->Mamba2
 class HybridMamba2AttentionDynamicCache(DynamicCache):
     """
@@ -80,7 +88,7 @@ class HybridMamba2AttentionDynamicCache(DynamicCache):
     This cache has two sets of lists of tensors: `key_cache`, `value_cache`, and 'conv_states' for attention cache and
     `conv_states` and `ssm_states` for mamba2 cache. Each of these lists has `num_layers` tensors.
 
-    For attention layers, `key_cache` and `value_cache` have a shape of `(batch_size, num_heads, seq_len, head_dim)`,
+    For attention layers, `key_cache` and `value_cache` have a shape of `(batch_size, attention_num_key_value_heads, seq_len, attention_head_dim)`,
     while `conv_states` has a shape of `(batch_size, attention_head_dim * (attention_num_heads + 2 * attention_num_key_value_heads), attention_conv_kernel)`
     or `(batch_size, 0)` (empty tensors) and `ssm_states` have a shape of `(batch_size, 0)` (empty tensors).
 
@@ -1562,6 +1570,96 @@ class Mamba2PreTrainedModel(PreTrainedModel):
                         p /= math.sqrt(n_residuals * self.config.num_hidden_layers)
 
 
+MAMBA2_START_DOCSTRING = r"""
+
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`Mamba2Config`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+MAMBA2_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+            it.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            If `past_key_values` is used, optionally only the last `input_ids` have to be input (see
+            `past_key_values`).
+
+            If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
+            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
+            information on the default strategy.
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
+        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.n_positions - 1]`.
+
+            [What are position IDs?](../glossary#position-ids)
+        past_key_values (`HybridMamba2AttentionDynamicCache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            A HybridMamba2AttentionDynamicCache object containing pre-computed hidden-states (keys, values, and, if used, the convolution in the
+            self-attention blocks and convolution and ssm states in the mamba2 blocks) that can be used (see `past_key_values` input)
+            to speed up sequential decoding.
+            Key and value cache tensors have shape `(batch_size, attention_num_key_value_heads, seq_len, attention_head_dim)`.
+            Convolution and ssm states tensors have shape `(batch_size, intermediate_size + 2 * state_size, mamba2_conv_kernel)` if used in the mamba2 block
+            else it has shape `(batch_size, attention_head_dim * (attention_num_heads + 2 * attention_num_key_value_heads), attention_conv_kernel)`
+            and `(batch_size, mamba2_num_heads, mamba2_head_dim, state_size)` respectively.
+            See the `HybridMamba3AttentionDynamicCache` class for more details.
+
+            If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that
+            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
+            `input_ids` of shape `(batch_size, sequence_length)`.
+        use_cache (`bool`, *optional*):
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`).
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+            Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
+            this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
+            the complete sequence length.
+"""
+
+
+@add_start_docstrings(
+    "The bare MAMBA2 Model outputting raw hidden-states without any specific head on top.",
+    MAMBA2_START_DOCSTRING,
+)
 class Mamba2Model(Mamba2PreTrainedModel):
     # Copied from transformers.models.mamba.modeling_mamba.MambaModel.__init__ with Mamba->Mamba2
     def __init__(self, config):
@@ -1589,6 +1687,11 @@ class Mamba2Model(Mamba2PreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.embeddings = new_embeddings
 
+    @add_start_docstrings_to_model_forward(MAMBA2_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        output_type=BaseModelOutputWithPast,
+        config_class=_CONFIG_FOR_DOC,
+    )
     # Adapted from transformers.models.jamba.modeling_jamba.JambaModel.forward
     # No MoE logic, inits cache itself like Mamba does, and handles position_ids like Llama
     def forward(
@@ -1736,6 +1839,12 @@ class Mamba2Model(Mamba2PreTrainedModel):
         return None
 
 
+@add_start_docstrings(
+    """
+    The MAMBA2 Model with a language modeling head on top (linear layer with weights tied to the input embeddings).
+    """,
+    MAMBA2_START_DOCSTRING,
+)
 class Mamba2ForCausalLM(Mamba2PreTrainedModel):
     _tied_weights_keys = ["lm_head.weight", "backbone.embeddings.weight"]
 
@@ -1832,6 +1941,11 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel):
         )
         return model_inputs
 
+    @add_start_docstrings_to_model_forward(MAMBA2_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        output_type=CausalLMOutputWithPast,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
