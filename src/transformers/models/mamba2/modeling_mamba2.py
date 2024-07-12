@@ -1740,7 +1740,8 @@ class Mamba2Model(Mamba2PreTrainedModel):
             inputs_embeds = self.embeddings(input_ids)
         hidden_states = inputs_embeds
 
-        if past_key_values is None and use_cache:
+        # Force cache to be our custom hybrid one, something in the generation module incorrectly overwrites it...
+        if (past_key_values is None and use_cache) or isinstance(past_key_values, DynamicCache):
             past_key_values = HybridMamba2AttentionDynamicCache(
                 config=self.config,
                 batch_size=inputs_embeds.shape[0],
