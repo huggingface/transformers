@@ -26,7 +26,12 @@ The abstract from the paper is the following:
 
 *While existing large vision-language multimodal models focus on whole image understanding, there is a prominent gap in achieving region-specific comprehension. Current approaches that use textual coordinates or spatial encodings often fail to provide a user-friendly interface for visual prompting. To address this challenge, we introduce a novel multimodal model capable of decoding arbitrary visual prompts. This allows users to intuitively mark images and interact with the model using natural cues like a "red bounding box" or "pointed arrow". Our simple design directly overlays visual markers onto the RGB image, eliminating the need for complex region encodings, yet achieves state-of-the-art performance on region-understanding tasks like Visual7W, PointQA, and Visual Commonsense Reasoning benchmark. Furthermore, we present ViP-Bench, a comprehensive benchmark to assess the capability of models in understanding visual prompts across multiple dimensions, enabling future research in this domain. Code, data, and model are publicly available.*
 
-Tips:
+The original code can be found [here](https://github.com/mu-cai/ViP-LLaVA).
+
+This model was contributed by [Younes Belkada](https://huggingface.co/ybelkada)
+
+
+## Usage tips:
 
 - The architecture is similar than llava architecture except that the multi-modal projector takes a set of concatenated vision hidden states and has an additional layernorm layer on that module.
 
@@ -66,11 +71,18 @@ text_prompt = processor.apply_chat_template(conversation, add_generation_prompt=
 
 # Note that the template simply formats your prompt, you still have to tokenize it and obtain pixel values for your images
 print(text_prompt)
+>>> "###Human: <image>\nWhat’s shown in this image?###Assistant: This image shows a red stop sign.###Human: Decsribe the image in more details.###Assistant:"
 ```
 
-The original code can be found [here](https://github.com/mu-cai/ViP-LLaVA).
+- If you want to construct a chat prompt yourself, below is a list of prompt formats accepted by VipLLaVa checkpoints:
+```bash
+A chat between a curious human and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the human's questions.###Human: <image>\n<prompt>###Assistant:
+```
 
-This model was contributed by [Younes Belkada](https://huggingface.co/ybelkada)
+For multiple turns conversation:
+```bash
+A chat between a curious human and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the human's questions.###Human: <image>\n<prompt1>###Assistant: <answer1>###Human: <prompt2>###Assistant:
+```
 
 
 ## VipLlavaConfig
