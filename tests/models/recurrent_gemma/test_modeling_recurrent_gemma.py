@@ -298,7 +298,6 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     test_model_parallel = False
     test_pruning = False
     test_head_masking = False  # RecurrentGemma does not have attention heads
-    test_model_parallel = False
 
     # Need to remove 0.9 in `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer
@@ -329,6 +328,7 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @unittest.skip(reason="Fast init from base not tested for RecurrentGemma")
     def test_save_load_fast_init_from_base(self):
         pass
 
@@ -336,7 +336,7 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     def test_eager_matches_sdpa_generate(self):
         pass
 
-    @unittest.skip("RecurrentGemma only supports sdpa")
+    @unittest.skip(reason="RecurrentGemma only supports sdpa")
     def test_eager_matches_sdpa_inference(self):
         pass
 
@@ -373,7 +373,7 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
                 [expected_shape] * len(iter_hidden_states),
             )
 
-    @unittest.skip("TODO @arthurzucker not super important and failing.")
+    @unittest.skip(reason="TODO @arthurzucker not super important and failing.")
     def test_initialization(self):
         pass
 

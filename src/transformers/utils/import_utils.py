@@ -754,10 +754,13 @@ def is_torch_xpu_available(check_device=False):
     if not is_torch_available():
         return False
 
-    import torch
-
+    torch_version = version.parse(_torch_version)
     if is_ipex_available():
         import intel_extension_for_pytorch  # noqa: F401
+    elif torch_version.major < 2 or (torch_version.major == 2 and torch_version.minor < 4):
+        return False
+
+    import torch
 
     if check_device:
         try:
@@ -807,6 +810,13 @@ def is_flash_attn_greater_or_equal_2_10():
         return False
 
     return version.parse(importlib.metadata.version("flash_attn")) >= version.parse("2.1.0")
+
+
+def is_flash_attn_greater_or_equal(library_version: str):
+    if not _is_package_available("flash_attn"):
+        return False
+
+    return version.parse(importlib.metadata.version("flash_attn")) >= version.parse(library_version)
 
 
 def is_torchdistx_available():

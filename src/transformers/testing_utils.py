@@ -226,7 +226,7 @@ def is_pt_tf_cross_test(test_case):
 
     """
     if not _run_pt_tf_cross_tests or not is_torch_available() or not is_tf_available():
-        return unittest.skip("test is PT+TF test")(test_case)
+        return unittest.skip(reason="test is PT+TF test")(test_case)
     else:
         try:
             import pytest  # We don't need a hard dependency on pytest in the main library
@@ -245,7 +245,7 @@ def is_pt_flax_cross_test(test_case):
 
     """
     if not _run_pt_flax_cross_tests or not is_torch_available() or not is_flax_available():
-        return unittest.skip("test is PT+FLAX test")(test_case)
+        return unittest.skip(reason="test is PT+FLAX test")(test_case)
     else:
         try:
             import pytest  # We don't need a hard dependency on pytest in the main library
@@ -262,7 +262,7 @@ def is_staging_test(test_case):
     Those tests will run using the staging environment of huggingface.co instead of the real model hub.
     """
     if not _run_staging:
-        return unittest.skip("test is staging test")(test_case)
+        return unittest.skip(reason="test is staging test")(test_case)
     else:
         try:
             import pytest  # We don't need a hard dependency on pytest in the main library
@@ -278,7 +278,7 @@ def is_pipeline_test(test_case):
     skipped.
     """
     if not _run_pipeline_tests:
-        return unittest.skip("test is pipeline test")(test_case)
+        return unittest.skip(reason="test is pipeline test")(test_case)
     else:
         try:
             import pytest  # We don't need a hard dependency on pytest in the main library
@@ -293,7 +293,7 @@ def is_agent_test(test_case):
     Decorator marking a test as an agent test. If RUN_TOOL_TESTS is set to a falsy value, those tests will be skipped.
     """
     if not _run_agent_tests:
-        return unittest.skip("test is an agent test")(test_case)
+        return unittest.skip(reason="test is an agent test")(test_case)
     else:
         try:
             import pytest  # We don't need a hard dependency on pytest in the main library
@@ -321,7 +321,7 @@ def tooslow(test_case):
     these will not be tested by the CI.
 
     """
-    return unittest.skip("test is too slow")(test_case)
+    return unittest.skip(reason="test is too slow")(test_case)
 
 
 def custom_tokenizers(test_case):
@@ -713,7 +713,7 @@ def require_torch_multi_gpu(test_case):
     To run *only* the multi_gpu tests, assuming all test names contain multi_gpu: $ pytest -sv ./tests -k "multi_gpu"
     """
     if not is_torch_available():
-        return unittest.skip("test requires PyTorch")(test_case)
+        return unittest.skip(reason="test requires PyTorch")(test_case)
 
     import torch
 
@@ -727,7 +727,7 @@ def require_torch_multi_accelerator(test_case):
     multi_accelerator: $ pytest -sv ./tests -k "multi_accelerator"
     """
     if not is_torch_available():
-        return unittest.skip("test requires PyTorch")(test_case)
+        return unittest.skip(reason="test requires PyTorch")(test_case)
 
     return unittest.skipUnless(backend_device_count(torch_device) > 1, "test requires multiple accelerators")(
         test_case
@@ -739,7 +739,7 @@ def require_torch_non_multi_gpu(test_case):
     Decorator marking a test that requires 0 or 1 GPU setup (in PyTorch).
     """
     if not is_torch_available():
-        return unittest.skip("test requires PyTorch")(test_case)
+        return unittest.skip(reason="test requires PyTorch")(test_case)
 
     import torch
 
@@ -751,7 +751,7 @@ def require_torch_non_multi_accelerator(test_case):
     Decorator marking a test that requires 0 or 1 accelerator setup (in PyTorch).
     """
     if not is_torch_available():
-        return unittest.skip("test requires PyTorch")(test_case)
+        return unittest.skip(reason="test requires PyTorch")(test_case)
 
     return unittest.skipUnless(backend_device_count(torch_device) < 2, "test requires 0 or 1 accelerator")(test_case)
 
@@ -761,7 +761,7 @@ def require_torch_up_to_2_gpus(test_case):
     Decorator marking a test that requires 0 or 1 or 2 GPU setup (in PyTorch).
     """
     if not is_torch_available():
-        return unittest.skip("test requires PyTorch")(test_case)
+        return unittest.skip(reason="test requires PyTorch")(test_case)
 
     import torch
 
@@ -773,7 +773,7 @@ def require_torch_up_to_2_accelerators(test_case):
     Decorator marking a test that requires 0 or 1 or 2 accelerator setup (in PyTorch).
     """
     if not is_torch_available():
-        return unittest.skip("test requires PyTorch")(test_case)
+        return unittest.skip(reason="test requires PyTorch")(test_case)
 
     return unittest.skipUnless(backend_device_count(torch_device) < 3, "test requires 0 or 1 or 2 accelerators")
     (test_case)
@@ -810,7 +810,7 @@ def require_torch_multi_npu(test_case):
     To run *only* the multi_npu tests, assuming all test names contain multi_npu: $ pytest -sv ./tests -k "multi_npu"
     """
     if not is_torch_npu_available():
-        return unittest.skip("test requires PyTorch NPU")(test_case)
+        return unittest.skip(reason="test requires PyTorch NPU")(test_case)
 
     return unittest.skipUnless(torch.npu.device_count() > 1, "test requires multiple NPUs")(test_case)
 
@@ -834,7 +834,7 @@ def require_torch_multi_xpu(test_case):
     To run *only* the multi_xpu tests, assuming all test names contain multi_xpu: $ pytest -sv ./tests -k "multi_xpu"
     """
     if not is_torch_xpu_available():
-        return unittest.skip("test requires PyTorch XPU")(test_case)
+        return unittest.skip(reason="test requires PyTorch XPU")(test_case)
 
     return unittest.skipUnless(torch.xpu.device_count() > 1, "test requires multiple XPUs")(test_case)
 
@@ -1082,7 +1082,7 @@ def require_bitsandbytes(test_case):
         except ImportError:
             return test_case
     else:
-        return unittest.skip("test requires bitsandbytes and torch")(test_case)
+        return unittest.skip(reason="test requires bitsandbytes and torch")(test_case)
 
 
 def require_optimum(test_case):
