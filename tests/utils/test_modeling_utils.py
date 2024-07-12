@@ -894,6 +894,9 @@ class ModelUtilsTest(TestCasePlus):
     @require_usr_bin_time
     @require_accelerate
     @mark.accelerate_tests
+    @unittest.skip(
+        reason="`low_cpu_mem_usage` is redundant at this point for *most* models, but needed for some architectures still. Check https://github.com/huggingface/transformers/pull/31771"
+    )
     def test_from_pretrained_low_cpu_mem_usage_measured(self):
         # test that `from_pretrained(..., low_cpu_mem_usage=True)` uses less cpu memory than default
 
