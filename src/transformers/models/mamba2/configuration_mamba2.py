@@ -129,8 +129,20 @@ class Mamba2Config(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the cache should be used.
 
+    Example:
 
-    # TODO example usage
+    ```python
+    >>> from transformers import Mamba2Config, Mamba2Model
+
+    >>> # Initializing a Mamba2 configuration
+    >>> configuration = Mamba2Config()
+
+    >>> # Initializing a model (with random weights) from the configuration
+    >>> model = Mamba2Model(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```
     """
 
     model_type = "mamba2"
