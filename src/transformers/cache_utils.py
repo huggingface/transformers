@@ -969,6 +969,7 @@ class SlidingWindowCache(StaticCache):
         v_out = v_out[:, :, indices]
 
         try:
+            cache_position.to(device=k_out.device)
             k_out.index_copy_(2, cache_position, key_states)
             v_out.index_copy_(2, cache_position, value_states)
         except NotImplementedError:
