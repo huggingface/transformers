@@ -982,8 +982,6 @@ class GraniteForCausalLM(GranitePreTrainedModel):
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
-        self.m_width = config.m_width
-
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1068,10 +1066,8 @@ class GraniteForCausalLM(GranitePreTrainedModel):
 
         hidden_states = outputs[0]
         logits = self.lm_head(hidden_states)
+        logits = logits / self.config.m_width
         logits = logits.float()
-
-        if self.m_width is not None:
-            logits = logits / self.m_width
 
         loss = None
         if labels is not None:
