@@ -1369,10 +1369,10 @@ class CLIPTextModelWithProjection(CLIPPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
-        return self.text_model.text_model.embeddings.token_embedding
+        return self.text_model.embeddings.token_embedding
 
     def set_input_embeddings(self, value):
-        self.text_model.text_model.embeddings.token_embedding = value
+        self.text_model.embeddings.token_embedding = value
 
     @add_start_docstrings_to_model_forward(CLIP_TEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CLIPTextModelOutput, config_class=CLIPTextConfig)
@@ -1450,7 +1450,7 @@ class CLIPVisionModelWithProjection(CLIPPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
-        return self.vision_model.vision_model.embeddings.patch_embedding
+        return self.vision_model.embeddings.patch_embedding
 
     @add_start_docstrings_to_model_forward(CLIP_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CLIPVisionModelOutput, config_class=CLIPVisionConfig)
