@@ -1824,9 +1824,7 @@ class Mamba2Model(Mamba2PreTrainedModel):
 
         # Follows GPTNeoX based creation of masks
         if self._attn_implementation == "flash_attention_2":
-            if attention_mask is not None:
-                attention_mask = attention_mask.view(batch_size, -1)
-                return attention_mask if 0 in attention_mask else None
+            return attention_mask if (attention_mask is not None and 0 in attention_mask) else None
         elif self._attn_implementation == "sdpa" and not output_attentions:
             return _prepare_4d_causal_attention_mask_for_sdpa(
                 attention_mask=attention_mask,
