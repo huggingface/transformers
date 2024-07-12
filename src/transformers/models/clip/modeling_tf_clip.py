@@ -843,8 +843,8 @@ class TFCLIPMainLayer(keras.layers.Layer):
 
         self.projection_dim = config.projection_dim
 
-        self.text_model = TFCLIPTextTransformer(text_config, name="text_model")
-        self.vision_model = TFCLIPVisionTransformer(vision_config, name="vision_model")
+        self.text_model = TFCLIPTextTransformer(text_config, name="text_model.text_model")
+        self.vision_model = TFCLIPVisionTransformer(vision_config, name="vision_model.vision_model")
 
         self.visual_projection = keras.layers.Dense(
             units=self.projection_dim,
