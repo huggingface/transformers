@@ -3458,7 +3458,7 @@ class Trainer:
                     safe_serialization=self.args.save_safetensors,
                     is_main_process=self.args.should_save,
                 )
-            else:
+            elif self.args.should_save:
                 logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
                 if self.args.save_safetensors:
                     safetensors.torch.save_file(
