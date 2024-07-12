@@ -131,7 +131,7 @@ def convert_hf_config(nemo_config, tokenizer, vocab_size, dtype, hf_output_path,
         "vocab_size": vocab_size
     }
     if nemo_config.kv_channels is not None:
-        hf_config['kv_channels'] = nemo_config.kv_channels
+        hf_config['head_dim'] = nemo_config.kv_channels
     if nemo_config.activation == 'fast-swiglu':
         hf_config['gated_mlp'] = True
     json.dump(hf_config, open(f'{hf_output_path}/config.json', 'w'), indent=2)
