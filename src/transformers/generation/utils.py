@@ -685,12 +685,14 @@ class GenerationMixin:
                     dim=-1,
                 )
 
-        if (
-            model_kwargs.get("use_cache", True)
-            and "cache_position" in model_kwargs
-            and model_kwargs["cache_position"] is not None
-        ):
+        if model_kwargs.get("use_cache", True):
             model_kwargs["cache_position"] = model_kwargs["cache_position"][-1:] + num_new_tokens
+        else:
+            past_positions = model_kwargs.pop("cache_position")
+            new_positions = torch.arange(
+                past_positions[-1] + 1, past_positions[-1] + num_new_tokens + 1, dtype=past_positions.dtype
+            ).to(past_positions.device)
+            model_kwargs["cache_position"] = torch.cat((past_positions, new_positions))
 
         return model_kwargs
 
@@ -1389,10 +1391,6 @@ class GenerationMixin:
 
     def _get_initial_cache_position(self, input_ids, model_kwargs):
         """Calculates `cache_position` for the pre-fill stage based on `input_ids` and optionally past length"""
-        if not model_kwargs.get("use_cache", True):
-            model_kwargs["cache_position"] = None
-            return model_kwargs
-
         past_length = 0
         if "past_key_values" in model_kwargs:
             if isinstance(model_kwargs["past_key_values"], Cache):

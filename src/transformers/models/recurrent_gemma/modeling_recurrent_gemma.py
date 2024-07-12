@@ -434,7 +434,7 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
         x_branch = x_branch.transpose(1, 2)
 
         if use_cache:
-            if cache_position[0] == 0:  # prefill
+            if cache_position.shape[0] != 1:  # prefill
                 self.conv1d_state = nn.functional.pad(x_branch, (self.conv1d_width - x_branch.shape[-1] - 1, 0))
                 x_branch = self.conv_1d(x_branch)[..., :seq_len]
             else:  # decoding
@@ -707,13 +707,8 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
 
         hidden_states = inputs_embeds
 
-        if use_cache:
-            need_cache_setup = inputs_embeds.shape[1] != 1
-            # corner case: attention_mask and inputs_embeds both have length 1, i.e. prefill with 1 token
-            if attention_mask is not None:
-                need_cache_setup |= attention_mask.shape[1] == 1 and inputs_embeds.shape[1] == 1
-            if need_cache_setup:
-                self._setup_cache(self.config, hidden_states.shape[0], hidden_states.device, hidden_states.dtype)
+        if use_cache and inputs_embeds.shape[1] != 1:
+            self._setup_cache(self.config, hidden_states.shape[0], hidden_states.device, hidden_states.dtype)
 
         if cache_position is None:
             cache_position = torch.arange(hidden_states.shape[1], device=hidden_states.device)
@@ -901,50 +896,31 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
             hidden_states=outputs.hidden_states,
         )
 
-    # Ignore copy
+    # Ignore copy (no past_key_values, no inputs_embeds)
     def prepare_inputs_for_generation(
-        self, input_ids, attention_mask=None, inputs_embeds=None, cache_position=None, use_cache=None, **kwargs
+        self, input_ids, attention_mask=None, cache_position=None, use_cache=None, position_ids=None, **kwargs
     ):
-        past_length = cache_position[0] if cache_position is not None else 0
+        if cache_position.shape[0] == 1 and cache_position[0] == 0:
+            raise ValueError(
+                "Recurrent gemma doesn't work with an empty text prompt (i.e. only BOS token), as a minimum of two "
+                "tokens are needed to detect prefill. Please provide a non-empty text prompt."
+            )
 
-        # Keep only the unprocessed tokens:
-        # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
-        # some of the inputs are exclusively passed as part of the cache (e.g. when passing input_embeds as input)
-        if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
-            input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
-        # 2 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
-        # input_ids based on the past_length.
-        elif past_length < input_ids.shape[1]:
-            input_ids = input_ids[:, past_length:]
-        # 3 - Otherwise (past_length >= input_ids.shape[1]), let's assume input_ids only has unprocessed tokens.
+        # let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
+        input_ids = input_ids[:, cache_position]
 
-        # If we are about to go beyond the maximum cache length, we need to crop the input attention mask
-        attention_mask = attention_mask[:, -self.config.attention_window_size :]
-
-        position_ids = kwargs.get("position_ids", None)
         if attention_mask is not None and position_ids is None:
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
-        if past_length > 0:
-            position_ids = position_ids[:, past_length:]
+            position_ids = position_ids[:, -input_ids.shape[1] :]
 
-        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and past_length == 0:
-            model_inputs = {"inputs_embeds": inputs_embeds[:, past_length:]}
-        else:
-            model_inputs = {"input_ids": input_ids.contiguous()}
-
-        if cache_position is not None:
-            cache_position = cache_position[-position_ids.shape[1] :]
-
-        model_inputs.update(
-            {
-                "position_ids": position_ids,
-                "attention_mask": attention_mask,
-                "cache_position": cache_position,
-                "use_cache": use_cache,
-            }
-        )
+        model_inputs = {
+            "input_ids": input_ids.contiguous(),
+            "position_ids": position_ids,
+            "attention_mask": attention_mask,
+            "cache_position": cache_position,
+            "use_cache": use_cache,
+        }
         return model_inputs
 
     # Ignore copy

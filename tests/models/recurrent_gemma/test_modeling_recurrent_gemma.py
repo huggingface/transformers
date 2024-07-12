@@ -377,6 +377,11 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     def test_initialization(self):
         pass
 
+    # We require non-empty prompts in recurrent gemma to detect prefill, but we have a corresponding exception
+    def test_generate_without_input_ids(self):
+        with self.assertRaises(ValueError):
+            super().test_generate_without_input_ids()
+
 
 @require_torch_gpu
 @slow
