@@ -976,6 +976,7 @@ class GraniteModel(GranitePreTrainedModel):
 class GraniteForCausalLM(GranitePreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
+    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.__init__ with Llama->Granite
     def __init__(self, config):
         super().__init__(config)
         self.model = GraniteModel(config)
@@ -1066,7 +1067,7 @@ class GraniteForCausalLM(GranitePreTrainedModel):
 
         hidden_states = outputs[0]
         logits = self.lm_head(hidden_states)
-        logits = logits / self.config.m_width
+        logits = logits / self.config.logits_scaling
         logits = logits.float()
 
         loss = None
