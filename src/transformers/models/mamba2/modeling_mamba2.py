@@ -81,12 +81,12 @@ class HybridMamba2AttentionDynamicCache(DynamicCache):
     `conv_states` and `ssm_states` for mamba2 cache. Each of these lists has `num_layers` tensors.
 
     For attention layers, `key_cache` and `value_cache` have a shape of `(batch_size, num_heads, seq_len, head_dim)`,
-    while `conv_states` has a shape of `(batch_size, attn_head_dim * (attn_num_heads + 2 * attn_num_heads_kv), d_conv)`
-    and `ssm_states` have a shape of `(batch_size, 0)` (empty tensors).
+    while `conv_states` has a shape of `(batch_size, attention_head_dim * (attention_num_heads + 2 * attention_num_key_value_heads), attention_conv_kernel)`
+    or `(batch_size, 0)` (empty tensors) and `ssm_states` have a shape of `(batch_size, 0)` (empty tensors).
 
     For mamba2 layers, `key_cache` and `value_cache` have a shape of `(batch_size, 0)` (empty tensors),
-    while `conv_states` represents the convolution state and has a shape of `(batch_size, d_inner + 2 * d_state, d_conv)`,
-    and `ssm_states` represents the ssm state and has a shape of `(batch_size, num_heads, head_dim, d_state)`.
+    while `conv_states` represents the convolution state and has a shape of `(batch_size, intermediate_size + 2 * state_size, mamba2_conv_kernel)`,
+    and `ssm_states` represents the ssm state and has a shape of `(batch_size, mamba2_num_heads, mamba2_head_dim, state_size)`.
     """
 
     def __init__(self, config, batch_size, dtype=torch.float16, device=None):
@@ -95,7 +95,8 @@ class HybridMamba2AttentionDynamicCache(DynamicCache):
 
         in_channels = config.intermediate_size + 2 * config.state_size
         ssm_state_size = config.state_size
-        conv_kernel_size = config.conv_kernel
+        mamba2_conv_kernel_size = config.mamba2_conv_kernel
+        attention_conv_kernel_size = config.attention_conv_kernel
         mamba2_num_heads = config.mamba2_num_heads
         mamba2_head_dim = config.mamba2_head_dim
         attention_head_dim = config.attention_head_dim
@@ -109,7 +110,7 @@ class HybridMamba2AttentionDynamicCache(DynamicCache):
         for i in range(config.num_hidden_layers):
             if i not in config.attention_layers_idx:
                 self.conv_states += [
-                    torch.zeros(batch_size, in_channels, conv_kernel_size, device=device, dtype=dtype)
+                    torch.zeros(batch_size, in_channels, mamba2_conv_kernel_size, device=device, dtype=dtype)
                 ]
                 self.ssm_states += [
                     torch.zeros(
@@ -117,9 +118,15 @@ class HybridMamba2AttentionDynamicCache(DynamicCache):
                     )
                 ]
             else:
-                self.conv_states += [
-                    torch.zeros(batch_size, attention_qkv_dim, conv_kernel_size, device=device, dtype=dtype)
-                ]
+                # Conv1d is optional for the attention layer
+                if attention_conv_kernel_size > 0:
+                    self.conv_states += [
+                        torch.zeros(
+                            batch_size, attention_qkv_dim, attention_conv_kernel_size, device=device, dtype=dtype
+                        )
+                    ]
+                else:
+                    self.conv_states += [torch.tensor([[]] * batch_size, device=device)]
                 self.ssm_states += [torch.tensor([[]] * batch_size, device=device)]
                 self.transformer_layers.append(i)
 
@@ -184,12 +191,12 @@ class Mamba2MLP(nn.Module):
 
         self.hidden_size = config.hidden_size
         self.original_intermediate_size = config.mlp_intermediate_size
-        self.intermediate_padding_multiple = config.mlp_shape_padding_size
+        self.mlp_padding_size = config.mlp_padding_size
 
         self.intermediate_size = (
-            (self.original_intermediate_size + self.intermediate_padding_multiple - 1)
-            // self.intermediate_padding_multiple
-            * self.intermediate_padding_multiple
+            (self.original_intermediate_size + self.mlp_padding_size - 1)
+            // self.mlp_padding_size
+            * self.mlp_padding_size
         )
 
         self.fc1 = nn.Linear(self.hidden_size, 2 * self.intermediate_size, bias=config.use_mlp_bias)
@@ -326,14 +333,13 @@ class Mamba2Attention(nn.Module):
         self.config = config
 
         self.hidden_size = config.hidden_size
-        # For simplicity mamba2 and the attention blocks use same conv kernel sizes
-        self.conv_kernel_size = config.conv_kernel
+        self.conv_kernel_size = config.attention_conv_kernel
         self.head_dim = config.attention_head_dim
         self.num_heads = config.attention_num_heads
         self.num_heads_kv = config.attention_num_key_value_heads
         self.num_groups_kv = self.num_heads // self.num_heads_kv
         # See https://github.com/state-spaces/mamba/issues/457#issuecomment-2221116217
-        # d_model % num_heads == 0 is not necessary due to this custom head projection dim
+        # hidden_size % num_heads == 0 is not necessary due to this custom head projection dim
         self.qkv_dim = self.head_dim * (self.num_heads + 2 * self.num_heads_kv)
         self.out_dim = self.head_dim * self.num_heads
 
@@ -347,23 +353,20 @@ class Mamba2Attention(nn.Module):
         self._init_rope()
 
         self.in_proj = nn.Linear(self.hidden_size, self.qkv_dim, bias=config.use_attention_qkv_bias)
-        self.conv1d = nn.Conv1d(
-            self.qkv_dim,
-            self.qkv_dim,
-            kernel_size=self.conv_kernel_size,
-            padding=self.conv_kernel_size - 1,
-            groups=self.qkv_dim,
-        )
+        # Optional conv1d
+        self._init_conv1d()
         self.out_proj = nn.Linear(self.out_dim, self.hidden_size, bias=config.use_attention_out_bias)
 
         self.is_causal = True
         self.layer_idx = layer_idx
 
-        if not is_causal_conv1d_available():
-            logger.warning_once(
-                "Convolution implementation in Mamba2 attention is falling back to naive implementation because `(causal_conv1d_fn, causal_conv1d_update)`"
-                "is None. To install follow https://github.com/Dao-AILab/causal-conv1d."
-            )
+        # We throw a similar fast path warning, in case no mamba2 block is used
+        if config.num_hidden_layers == len(config.attention_layers_idx):
+            if not is_causal_conv1d_available():
+                logger.warning_once(
+                    "Convolution implementation in Mamba2 attention is falling back to naive implementation because `(causal_conv1d_fn, causal_conv1d_update)`"
+                    "is None. To install follow https://github.com/Dao-AILab/causal-conv1d."
+                )
 
     # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXAttention._init_bias
     def _init_bias(self, max_positions, device=None):
@@ -381,7 +384,7 @@ class Mamba2Attention(nn.Module):
     # Rope is optional and can be ignored if rope_emb_dim <= 0
     def _init_rope(self):
         # RoPE is optional
-        if self.rotary_emb_dim <= 0:
+        if self.rotary_emb_dim < 1:
             return
 
         if self.config.rope_scaling is None:
@@ -409,6 +412,19 @@ class Mamba2Attention(nn.Module):
                 )
             else:
                 raise ValueError(f"Unknown RoPE scaling type {scaling_type}")
+
+    def _init_conv1d(self):
+        # Conv1d is optional
+        if self.conv_kernel_size < 1:
+            return
+
+        self.conv1d = nn.Conv1d(
+            self.qkv_dim,
+            self.qkv_dim,
+            kernel_size=self.conv_kernel_size,
+            padding=self.conv_kernel_size - 1,
+            groups=self.qkv_dim,
+        )
 
     # Adapted from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXAttention.forward
     # Allowing MQA, involves causal-conv-1d, and uses Llama RoPE
@@ -947,7 +963,7 @@ class Mamba2Mixer(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.ssm_state_size = config.state_size
-        self.conv_kernel_size = config.conv_kernel
+        self.conv_kernel_size = config.mamba2_conv_kernel
         self.intermediate_size = config.intermediate_size
         self.head_dim = config.mamba2_head_dim
         self.num_heads = config.mamba2_num_heads
@@ -1098,24 +1114,24 @@ class Mamba2Mixer(nn.Module):
                 if cached_start:
                     cache.ssm_states[self.layer_idx].copy_(last_state)
 
-            # b l h p -> b l (h p)
+            # [bsz, seq_len, num_heads, head_dim] -> [bsz, seq_len, intermediate size]
             y = y.view(y.shape[0], y.shape[1], -1)
         else:
             # Preparing values for single step
-            # h -> h p n
+            # [num_heads] -> [num_heads, head_dim, state_size]
             A = (
                 A.unsqueeze(-1)
                 .unsqueeze(-1)
                 .expand(A.shape[0], self.head_dim, self.ssm_state_size)
                 .to(dtype=torch.float32)
             )
-            # b 1 h -> b h p
+            # [bsz, 1, num_heads] -> [bsz, num_heads, head_dim]
             dt = dt.transpose(1, 2).expand(dt.shape[0], dt.shape[-1], self.head_dim)
-            # h -> h p
+            # [num_heads] -> [num_heads, head_dim]
             dt_bias = self.dt_bias.unsqueeze(-1).expand(self.dt_bias.shape[0], self.head_dim)
-            # h -> h p
+            # [num_heads] -> [num_heads, head_dim]
             D = self.D.unsqueeze(-1).expand(self.D.shape[0], self.head_dim)
-            # b (h p) -> b h p
+            # [bsz, intermediate_size] -> [bsz, num_heads, head_dim]
             x_reshaped = x.view(x.shape[0], -1, self.head_dim)
 
             # Triton kernel for updating states in-place and returning the hidden state
@@ -1132,7 +1148,7 @@ class Mamba2Mixer(nn.Module):
                 dt_softplus=True,
             )
 
-            # b h p -> b 1 (h p)
+            # [bsz, num_heads, head_dim] -> [bsz, 1, intermediate_size]
             y = y.view(y.shape[0], -1).unsqueeze(1)
 
         # 4. Gate normalization introduced for instability, see section 7 of the paper
@@ -1181,14 +1197,16 @@ class Mamba2Mixer(nn.Module):
 
             Assumes that we only have tensors of either size 4 or 3
             """
-            # b l ... -> b (l multiple of chunk_size) ...
+            # [bsz, seq_len, ...] -> [bsz, seq_len multiple of chunk_size, ...]
             x = pad_by_size(x, pad_size)
 
             if len(x.shape) == 3:
                 # b (l c) h -> b l c h with c=chunk_size
+                # [bsz, seq_len multiple of chunk_size, num_heads] -> [bsz, -1, chunk_size, num_heads]
                 return x.view(x.shape[0], -1, chunk_size, x.shape[2])
             else:
                 # b (l c) h p -> b l c h p with c=chunk_size
+                # [bsz, seq_len multiple of chunk_size, num_heads, head_dim or state_size] -> [bsz, -1, chunk_size, num_heads, head_dim or state_size]
                 return x.view(x.shape[0], -1, chunk_size, x.shape[2], x.shape[3])
 
         def segsum(x):
@@ -1196,7 +1214,7 @@ class Mamba2Mixer(nn.Module):
             More stable segment sum calculation
             """
             T = x.size(-1)
-            # ... d -> ... d d
+            # [..., chunk_size] -> [..., chunk_size, chunk_size]
             x = x.unsqueeze(-1).expand(x.shape[0], x.shape[1], x.shape[2], x.shape[3], T)
             mask = torch.tril(torch.ones(T, T, device=x.device, dtype=torch.bool), diagonal=-1)
             x = x.masked_fill(~mask, 0)
@@ -1222,7 +1240,7 @@ class Mamba2Mixer(nn.Module):
         # Rearrange into blocks/chunks
         x, A, B, C = [reshape_into_chunks(t, pad_size, chunk_size) for t in (x, A, B, C)]
 
-        # b c l h -> b h c l
+        # [bsz, -1, chunk_size, num_heads] -> [bsz, num_heads, -1, chunk_size]
         A = A.permute(0, 3, 1, 2)
         A_cumsum = torch.cumsum(A, dim=-1)
 
@@ -1251,7 +1269,7 @@ class Mamba2Mixer(nn.Module):
 
         # Add output of intra-chunk and inter-chunk terms (diagonal and off-diagonal blocks)
         y = Y_diag + Y_off
-        # b c l h p -> b (c l) h p
+        # [bsz, -1, chunk_size, num_heads, head_dim] -> [bsz, (padded) seq_len, num_heads, head_dim]
         y = y.view(y.shape[0], -1, y.shape[-2], y.shape[-1])
 
         # Add D residual to final output
@@ -1313,13 +1331,13 @@ class Mamba2Mixer(nn.Module):
 
         if not cached_forward:
             y = self._ssd_naive(
-                # b l (h p) -> b l h p
+                # [bsz, seq_len, intermediate_size] -> [bsz, seq_len, num_heads, head_dim]
                 x=x.view(x.shape[0], x.shape[1], -1, self.head_dim),
                 dt=dt,
                 A=A,
-                # b l n -> b l 1 n
+                # [bsz, seq_len, state_size] -> [bsz, seq_len, num_groups=1, state_size]
                 B=B.unsqueeze(-2),
-                # b l n -> b l 1 n
+                # [bsz, seq_len, state_size] -> [bsz, seq_len, num_groups=1, state_size]
                 C=C.unsqueeze(-2),
                 chunk_size=self.chunk_size,
                 D=self.D,
@@ -1335,7 +1353,7 @@ class Mamba2Mixer(nn.Module):
                 if cached_start:
                     cache.ssm_states[self.layer_idx].copy_(last_state)
 
-            # b l h p -> b l (h p)
+            # [bsz, seq_len, num_heads, head_dim] -> [bsz, seq_len, intermediate_size]
             y = y.view(y.shape[0], y.shape[1], -1)
         else:
             # Get time step with softplus and bias
@@ -1346,7 +1364,7 @@ class Mamba2Mixer(nn.Module):
             dA = torch.exp(dt * A)
 
             # Discretize B and x
-            # b (h p) -> b h p
+            # [bsz, intermediate_size] -> [bsz, num_heads, head_dim]
             x = x.view(x.shape[0], -1, self.head_dim)
             dBx = torch.einsum("bh,bn,bhp->bhpn", dt, B, x)
 
@@ -1361,7 +1379,7 @@ class Mamba2Mixer(nn.Module):
             # D skip connection
             y = y + self.D.unsqueeze(-1) * x
 
-            # b h p -> b 1 (h p)
+            # [bsz, num_heads, head_dim] -> [bsz, 1, intermediate_size]
             y = y.view(y.shape[0], -1).unsqueeze(1)
 
         # 4. Gate normalization introduced for instability, see section 7 of the paper
@@ -1663,7 +1681,7 @@ class Mamba2Model(Mamba2PreTrainedModel):
 
         hidden_states = self.norm_f(hidden_states)
 
-        # Add hidden states from the last layer
+        # Add hidden states from the last block
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 

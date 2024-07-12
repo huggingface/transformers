@@ -52,11 +52,13 @@ class Mamba2Config(PretrainedConfig):
             Expanding factor used to determine the intermediate size.
         chunk_size (`int`, *optional*, defaults to 256):
             Block / Chunk size for the HW-efficient algorithm which parallelizes on intra- and inter-chunk calculations.
-        conv_kernel (`int`, *optional*, defaults to 4):
-            Size of the convolution kernel.
+        mamba2_conv_kernel (`int`, *optional*, defaults to 4):
+            Size of the convolution kernel in the mamba2 mixer.
+        attention_conv_kernel (`int`, *optional*, defaults to 4):
+            Size of the convolution kernel in the attention block.
         mlp_intermediate_size (`int`, *optional*, defaults to 0):
             Dimensionality of up-projections within the MLP blocks. If set to <=0, then MLP blocks are disabled.
-        mlp_shape_padding_size (`int`, *optional*, defaults to 128):
+        mlp_padding_size (`int`, *optional*, defaults to 128):
             Padding `mlp_intermediate_size` to a multiple of this.
         mamba2_head_dim (`int`, *optional*, defaults to 64):
             Multi-input SSM head dimension.
@@ -143,9 +145,10 @@ class Mamba2Config(PretrainedConfig):
         state_size=128,
         expand=2,
         chunk_size=256,
-        conv_kernel=4,
+        mamba2_conv_kernel=4,
+        attention_conv_kernel=4,
         mlp_intermediate_size=0,
-        mlp_shape_padding_size=128,
+        mlp_padding_size=128,
         mamba2_head_dim=64,
         attention_head_dim=128,
         attention_num_heads=30,
@@ -183,10 +186,11 @@ class Mamba2Config(PretrainedConfig):
         self.hidden_size = hidden_size
         self.state_size = state_size
         self.expand = expand
-        self.chunk_size = chunk_size
-        self.conv_kernel = conv_kernel
         self.intermediate_size = int(expand * self.hidden_size)
-        self.mlp_shape_padding_size = mlp_shape_padding_size
+        self.chunk_size = chunk_size
+        self.mamba2_conv_kernel = mamba2_conv_kernel
+        self.attention_conv_kernel = attention_conv_kernel
+        self.mlp_padding_size = mlp_padding_size
         self.mlp_intermediate_size = mlp_intermediate_size
         self.mamba2_head_dim = mamba2_head_dim
         self.mamba2_num_heads = self.intermediate_size // self.mamba2_head_dim
