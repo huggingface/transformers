@@ -791,9 +791,7 @@ class ChameleonVQVAEVectorQuantizer(nn.Module):
 class ChameleonVQVAEDecoderConvUpsample(nn.Module):
     def __init__(self, in_channels):
         super().__init__()
-        self.conv = torch.nn.Conv2d(
-            in_channels, in_channels, kernel_size=3, stride=1, padding=1
-        )
+        self.conv = torch.nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=1, padding=1)
 
     def forward(self, hidden_states):
         hidden_states = F.interpolate(hidden_states, scale_factor=2.0, mode="nearest")
@@ -1006,9 +1004,7 @@ class ChameleonVQVAEDecoder(nn.Module):
         self.z_shape = (1, latent_channels, curr_res, curr_res)
 
         # z to block_in
-        self.conv_in = torch.nn.Conv2d(
-            latent_channels, block_in, kernel_size=3, stride=1, padding=1
-        )
+        self.conv_in = torch.nn.Conv2d(latent_channels, block_in, kernel_size=3, stride=1, padding=1)
 
         # middle
         self.mid = nn.Module()
@@ -1055,9 +1051,7 @@ class ChameleonVQVAEDecoder(nn.Module):
 
         # end
         self.norm_out = torch.nn.GroupNorm(num_groups=32, num_channels=block_in, eps=1e-6, affine=True)
-        self.conv_out = torch.nn.Conv2d(
-            block_in, out_channels, kernel_size=3, stride=1, padding=1
-        )
+        self.conv_out = torch.nn.Conv2d(block_in, out_channels, kernel_size=3, stride=1, padding=1)
 
     def forward(self, image_tokens: torch.LongTensor):
         self.last_z_shape = image_tokens.shape
@@ -1143,21 +1137,16 @@ class ChameleonVQVAE(PreTrainedModel):
 
     def decode(self, image_tokens: torch.Tensor):
         emb_dim: int = self.quantize.embedding.weight.shape[-1]
-        codebook_entry = self.quantize.get_codebook_entry(
-            image_tokens, (1, 32, 32, emb_dim)
-        )
+        codebook_entry = self.quantize.get_codebook_entry(image_tokens, (1, 32, 32, emb_dim))
         pixels = self.decoder(codebook_entry)
         return self._pil_from_chw_tensor(pixels[0])
 
     def _pil_from_chw_tensor(self, chw_tensor: torch.Tensor) -> PIL.Image:
-
         # Ensure detachment and move tensor to CPU.
         detached_chw_tensor = chw_tensor.detach().cpu()
 
         # Normalize tensor to [0, 1] range from [-1, 1] range.
-        normalized_chw_tensor = (
-            torch.clamp(detached_chw_tensor, -1.0, 1.0) + 1.0
-        ) / 2.0
+        normalized_chw_tensor = (torch.clamp(detached_chw_tensor, -1.0, 1.0) + 1.0) / 2.0
 
         # Permute CHW tensor to HWC format and convert to NumPy array.
         hwc_array = normalized_chw_tensor.permute(1, 2, 0).numpy()
