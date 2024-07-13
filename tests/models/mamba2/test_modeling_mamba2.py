@@ -400,6 +400,11 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_new_cache_format(self, num_beams, do_sample):
         pass
 
+    # TODO: check test_flash_attn_2_fp32_ln and test_flash_attn_2_generate_padding_right
+    # TODO: check test_flash_attn_2_generate_padding_right
+    # TODO: check test_flash_attn_2_generate_use_cache
+    # TODO: check test_flash_attn_2_inference_equivalence_right_padding
+
 
 # TODO: in total
 """@require_torch
