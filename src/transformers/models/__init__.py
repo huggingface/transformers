@@ -105,6 +105,7 @@ from . import (
     grounding_dino,
     groupvit,
     herbert,
+    hiera,
     hubert,
     ibert,
     idefics,
@@ -264,4 +265,5 @@ from . import (
     xmod,
     yolos,
     yoso,
+    zoedepth,
 )
