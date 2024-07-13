@@ -16,13 +16,17 @@
 
 import math
 import unittest
+from typing import Dict, List, Tuple
+from unittest.util import safe_repr
 
 from parameterized import parameterized
 
-from transformers import Mamba2Config, is_torch_available
+from transformers import AutoTokenizer, Mamba2Config, is_torch_available
 from transformers.testing_utils import (
-    require_einops,
     require_torch,
+    require_torch_multi_gpu,
+    slow,
+    require_einops,
     torch_device,
 )
 
@@ -37,15 +41,19 @@ if is_torch_available():
 
     from transformers import (
         Mamba2ForCausalLM,
+        Mamba2ForSequenceClassification,
         Mamba2Model,
     )
+    from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_0
+else:
+    is_torch_greater_or_equal_than_2_0 = False
 
 
 class Mamba2ModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=14,
         seq_length=7,
         is_training=True,
         use_input_mask=True,
@@ -66,6 +74,7 @@ class Mamba2ModelTester:
         num_choices=4,
         scope=None,
         tie_word_embeddings=True,
+        classifier_dropout=0.1,
     ):
         if attention_layers_idx is None:
             self.attention_layers_idx = [1]
@@ -92,6 +101,9 @@ class Mamba2ModelTester:
         self.num_choices = num_choices
         self.scope = scope
         self.tie_word_embeddings = tie_word_embeddings
+        self.classifier_dropout = classifier_dropout
+
+    #TODO: Add get_large_model_config
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -134,10 +146,28 @@ class Mamba2ModelTester:
         config = self.get_config()
         config.vocab_size = 300
         return config
+    
+    def prepare_config_and_inputs_for_decoder(self):
+        (
+            config,
+            input_ids,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        ) = self.prepare_config_and_inputs()
+
+        return (
+            config,
+            input_ids,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        )
 
     def create_and_check_mamba2_model(
-        self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, input_mask, *args
     ):
+        config.output_hidden_states = True
         model = Mamba2Model(config=config)
         model.to(torch_device)
         model.eval()
@@ -146,9 +176,10 @@ class Mamba2ModelTester:
         result = model(input_ids, attention_mask=input_mask)
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(len(result.hidden_states), config.num_hidden_layers + 1)
 
     def create_and_check_mamba2_causal_lm(
-        self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, input_mask, token_labels, *args
     ):
         model = Mamba2ForCausalLM(config)
         model.to(torch_device)
@@ -163,7 +194,7 @@ class Mamba2ModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_mamba2_lm_head_forward_and_backwards(
-        self, config, input_ids, input_mask, sequence_labels, token_labels, choice_label, gradient_checkpointing=False
+        self, config, input_ids, input_mask, token_labels, gradient_checkpointing=False, *args
     ):
         model = Mamba2ForCausalLM(config)
         model.to(torch_device)
@@ -175,9 +206,22 @@ class Mamba2ModelTester:
         self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
         result.loss.backward()
+    
+    def create_and_check_mamba2_sequence_classification(
+        self, config, input_ids, input_mask, sequence_labels, *args
+    ):
+        config.num_labels = self.num_labels
+        model = Mamba2ForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+
+        result = model(input_ids, labels=sequence_labels)
+        result = model(input_ids, attention_mask=input_mask, labels=sequence_labels)
+
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def create_and_check_state_equivalency(
-        self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, input_mask, *args
     ):
         model = Mamba2Model(config=config)
         model.to(torch_device)
