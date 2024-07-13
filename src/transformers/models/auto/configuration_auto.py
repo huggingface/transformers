@@ -122,6 +122,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("graphormer", "GraphormerConfig"),
         ("grounding-dino", "GroundingDinoConfig"),
         ("groupvit", "GroupViTConfig"),
+        ("hiera", "HieraConfig"),
         ("hubert", "HubertConfig"),
         ("ibert", "IBertConfig"),
         ("idefics", "IdeficsConfig"),
@@ -291,6 +292,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("xmod", "XmodConfig"),
         ("yolos", "YolosConfig"),
         ("yoso", "YosoConfig"),
+        ("zoedepth", "ZoeDepthConfig"),
     ]
 )
 
@@ -402,6 +404,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("grounding-dino", "Grounding DINO"),
         ("groupvit", "GroupViT"),
         ("herbert", "HerBERT"),
+        ("hiera", "Hiera"),
         ("hubert", "Hubert"),
         ("ibert", "I-BERT"),
         ("idefics", "IDEFICS"),
@@ -589,6 +592,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("xmod", "X-MOD"),
         ("yolos", "YOLOS"),
         ("yoso", "YOSO"),
+        ("zoedepth", "ZoeDepth"),
     ]
 )
 
