@@ -824,6 +824,7 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
             inputs_embeds = self.embed_in(input_ids)
 
         # Attention mask.
+        attention_mask = attention_mask.view(batch_size, -1) if attention_mask is not None else None
         if self._attn_implementation == "flash_attention_2":
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
         elif self._attn_implementation == "sdpa" and not output_attentions and head_mask is None:
