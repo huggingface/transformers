@@ -52,7 +52,7 @@ class Mamba2ModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        A_initializer_range=(2, 2),
+        A_initializer_range=None,
         mlp_intermediate_size=64,
         num_hidden_layers=5,
         attention_layers_idx=None,
@@ -69,6 +69,8 @@ class Mamba2ModelTester:
     ):
         if attention_layers_idx is None:
             self.attention_layers_idx = [1]
+        if A_initializer_range is None:
+            self.A_initializer_range = [2, 2]
 
         self.parent = parent
         self.batch_size = batch_size
@@ -78,7 +80,6 @@ class Mamba2ModelTester:
         self.use_labels = use_labels
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
-        self.A_initializer_range = A_initializer_range
         self.mlp_intermediate_size = mlp_intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.attention_num_heads = attention_num_heads
@@ -393,52 +394,6 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
                 list(self_attentions[0].shape[-3:]),
                 [self.model_tester.attention_num_heads, encoder_seq_length, encoder_key_length],
             )
-
-    def test_left_padding_compatibility(self):
-        r"""
-        TODO: is this also the case over here?
-        Overriding the test_left_padding_compatibility test as the mamba layers accentuate the numerical differences
-        effect of the left padding discussed in the issue in the note. Using a more permissive tolerance value.
-        """
-        import inspect
-        # NOTE: left-padding results in small numerical differences. This is expected.
-        # See https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535
-
-        # First, filter out models that don't support left padding - generative and decoder-only.
-        # Jamba is a decoder-only architecture
-        decoder_only_classes = self.all_generative_model_classes
-
-        # Then, test left-padding
-        def _prepare_model_kwargs(input_ids, attention_mask, signature):
-            model_kwargs = {"input_ids": input_ids, "attention_mask": attention_mask}
-            if "position_ids" in signature:
-                position_ids = torch.cumsum(attention_mask, dim=-1) - 1
-                position_ids.masked_fill_(attention_mask == 0, 1)
-                model_kwargs["position_ids"] = position_ids
-            if "cache_position" in signature:
-                cache_position = torch.arange(input_ids.shape[-1], device=torch_device)
-                model_kwargs["cache_position"] = cache_position
-            return model_kwargs
-
-        for model_class in decoder_only_classes:
-            config, input_ids, attention_mask = self._get_input_ids_and_config()
-            model = model_class(config).to(torch_device).eval()
-            signature = inspect.signature(model.forward).parameters.keys()
-
-            # Without padding
-            model_kwargs = _prepare_model_kwargs(input_ids, attention_mask, signature)
-            next_logits_wo_padding = model(**model_kwargs).logits[:, -1, :]
-
-            # With left-padding (length 32)
-            pad_size = (input_ids.shape[0], 32)
-            padding = torch.ones(pad_size, dtype=input_ids.dtype, device=torch_device) * config.pad_token_id
-            padded_input_ids = torch.cat((padding, input_ids), dim=1)
-            padded_attention_mask = torch.cat((torch.zeros_like(padding), attention_mask), dim=1)
-            model_kwargs = _prepare_model_kwargs(padded_input_ids, padded_attention_mask, signature)
-            next_logits_with_padding = model(**model_kwargs).logits[:, -1, :]
-
-            # They should result in very similar logits
-            self.assertTrue(torch.allclose(next_logits_wo_padding, next_logits_with_padding, atol=3e-3))
 
     @unittest.skip(reason="Mamba2 has its own special cache type")
     @parameterized.expand([(1, False), (1, True), (4, False)])
