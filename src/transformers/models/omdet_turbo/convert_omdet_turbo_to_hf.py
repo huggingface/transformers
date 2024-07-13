@@ -34,7 +34,7 @@ IMAGENET_MEAN = [0.485, 0.456, 0.406]
 IMAGENET_STD = [0.229, 0.224, 0.225]
 
 
-def get_omdet_turbo_config(model_name):
+def get_omdet_turbo_config(model_name, use_timm_backbone):
     if "tiny" in model_name:
         window_size = 7
         embed_dim = 96
@@ -55,7 +55,13 @@ def get_omdet_turbo_config(model_name):
 
     clip_config = CLIPTextConfig()
 
-    config = OmDetTurboConfig(vision_config=vision_config, text_config=clip_config)
+    config = OmDetTurboConfig(
+        vision_config=vision_config,
+        text_config=clip_config,
+        use_timm_backbone=use_timm_backbone,
+        vision_backbone="swin_tiny_patch4_window7_224",
+        use_pretrained_backbone=False,
+    )
 
     return config
 
@@ -64,68 +70,81 @@ def create_rename_keys_vision(state_dict, config):
     rename_keys = []
     # fmt: off
     ########################################## VISION BACKBONE - START
+    if config.use_timm_backbone:
+        for layer_name, params in state_dict.items():
+            if layer_name.startswith("backbone") and not layer_name.startswith("backbone.norm"):
+                layer_name_replace = layer_name.replace("backbone", "backbone.vision_backbone")
+                layer_name_replace = layer_name_replace.replace(".layers.", ".layers_")
+                if "downsample" in layer_name:
+                    # get layer number
+                    layer_num = int(layer_name.split(".")[2])
+                    layer_name_replace = layer_name_replace.replace(f"{layer_num}.downsample", f"{layer_num+1}.downsample")
+                # layer_name_replace = layer_name_replace.replace("layers_0.downsample", "layers_1.downsample")
+                rename_keys.append((layer_name, layer_name_replace))
+    else:
     # embeddings
-    rename_keys.append(("backbone.patch_embed.proj.weight", "vision_backbone.embeddings.patch_embeddings.projection.weight"))
-    rename_keys.append(("backbone.patch_embed.proj.bias", "vision_backbone.embeddings.patch_embeddings.projection.bias"))
-    rename_keys.append(("backbone.patch_embed.norm.weight", "vision_backbone.embeddings.norm.weight"))
-    rename_keys.append(("backbone.patch_embed.norm.bias", "vision_backbone.embeddings.norm.bias"))
+        rename_keys.append(("backbone.patch_embed.proj.weight", "backbone.vision_backbone.embeddings.patch_embeddings.projection.weight"))
+        rename_keys.append(("backbone.patch_embed.proj.bias", "backbone.vision_backbone.embeddings.patch_embeddings.projection.bias"))
+        rename_keys.append(("backbone.patch_embed.norm.weight", "backbone.vision_backbone.embeddings.norm.weight"))
+        rename_keys.append(("backbone.patch_embed.norm.bias", "backbone.vision_backbone.embeddings.norm.bias"))
 
-    for layer, depth in enumerate(config.vision_config.depths):
-        for block in range(depth):
-            # layer norms
-            rename_keys.append((f"backbone.layers.{layer}.blocks.{block}.norm1.weight",
-                                f"vision_backbone.encoder.layers.{layer}.blocks.{block}.layernorm_before.weight"))
-            rename_keys.append((f"backbone.layers.{layer}.blocks.{block}.norm1.bias",
-                                f"vision_backbone.encoder.layers.{layer}.blocks.{block}.layernorm_before.bias"))
-            rename_keys.append((f"backbone.layers.{layer}.blocks.{block}.norm2.weight",
-                                f"vision_backbone.encoder.layers.{layer}.blocks.{block}.layernorm_after.weight"))
-            rename_keys.append((f"backbone.layers.{layer}.blocks.{block}.norm2.bias",
-                                f"vision_backbone.encoder.layers.{layer}.blocks.{block}.layernorm_after.bias"))
+        for layer, depth in enumerate(config.vision_config.depths):
+            for block in range(depth):
+                # layer norms
+                rename_keys.append((f"backbone.layers.{layer}.blocks.{block}.norm1.weight",
+                                    f"backbone.vision_backbone.encoder.layers.{layer}.blocks.{block}.layernorm_before.weight"))
+                rename_keys.append((f"backbone.layers.{layer}.blocks.{block}.norm1.bias",
+                                    f"backbone.vision_backbone.encoder.layers.{layer}.blocks.{block}.layernorm_before.bias"))
+                rename_keys.append((f"backbone.layers.{layer}.blocks.{block}.norm2.weight",
+                                    f"backbone.vision_backbone.encoder.layers.{layer}.blocks.{block}.layernorm_after.weight"))
+                rename_keys.append((f"backbone.layers.{layer}.blocks.{block}.norm2.bias",
+                                    f"backbone.vision_backbone.encoder.layers.{layer}.blocks.{block}.layernorm_after.bias"))
 
-            # relative position bias and index
-            rename_keys.append((f"backbone.layers.{layer}.blocks.{block}.attn.relative_position_bias_table",
-                                f"vision_backbone.encoder.layers.{layer}.blocks.{block}.attention.self.relative_position_bias_table"))
-            rename_keys.append((f"backbone.layers.{layer}.blocks.{block}.attn.relative_position_index",
-                                f"vision_backbone.encoder.layers.{layer}.blocks.{block}.attention.self.relative_position_index"))
+                # relative position bias and index
+                rename_keys.append((f"backbone.layers.{layer}.blocks.{block}.attn.relative_position_bias_table",
+                                    f"backbone.vision_backbone.encoder.layers.{layer}.blocks.{block}.attention.self.relative_position_bias_table"))
+                rename_keys.append((f"backbone.layers.{layer}.blocks.{block}.attn.relative_position_index",
+                                    f"backbone.vision_backbone.encoder.layers.{layer}.blocks.{block}.attention.self.relative_position_index"))
 
-            # attention projection
-            rename_keys.append((f"backbone.layers.{layer}.blocks.{block}.attn.proj.weight",
-                                f"vision_backbone.encoder.layers.{layer}.blocks.{block}.attention.output.dense.weight"))
-            rename_keys.append((f"backbone.layers.{layer}.blocks.{block}.attn.proj.bias",
-                                f"vision_backbone.encoder.layers.{layer}.blocks.{block}.attention.output.dense.bias"))
+                # attention projection
+                rename_keys.append((f"backbone.layers.{layer}.blocks.{block}.attn.proj.weight",
+                                    f"backbone.vision_backbone.encoder.layers.{layer}.blocks.{block}.attention.output.dense.weight"))
+                rename_keys.append((f"backbone.layers.{layer}.blocks.{block}.attn.proj.bias",
+                                    f"backbone.vision_backbone.encoder.layers.{layer}.blocks.{block}.attention.output.dense.bias"))
 
-            # mlp
-            rename_keys.append((f"backbone.layers.{layer}.blocks.{block}.mlp.fc1.weight",
-                                f"vision_backbone.encoder.layers.{layer}.blocks.{block}.intermediate.dense.weight"))
-            rename_keys.append((f"backbone.layers.{layer}.blocks.{block}.mlp.fc1.bias",
-                                f"vision_backbone.encoder.layers.{layer}.blocks.{block}.intermediate.dense.bias"))
-            rename_keys.append((f"backbone.layers.{layer}.blocks.{block}.mlp.fc2.weight",
-                                f"vision_backbone.encoder.layers.{layer}.blocks.{block}.output.dense.weight"))
-            rename_keys.append((f"backbone.layers.{layer}.blocks.{block}.mlp.fc2.bias",
-                                f"vision_backbone.encoder.layers.{layer}.blocks.{block}.output.dense.bias"))
+                # mlp
+                rename_keys.append((f"backbone.layers.{layer}.blocks.{block}.mlp.fc1.weight",
+                                    f"backbone.vision_backbone.encoder.layers.{layer}.blocks.{block}.intermediate.dense.weight"))
+                rename_keys.append((f"backbone.layers.{layer}.blocks.{block}.mlp.fc1.bias",
+                                    f"backbone.vision_backbone.encoder.layers.{layer}.blocks.{block}.intermediate.dense.bias"))
+                rename_keys.append((f"backbone.layers.{layer}.blocks.{block}.mlp.fc2.weight",
+                                    f"backbone.vision_backbone.encoder.layers.{layer}.blocks.{block}.output.dense.weight"))
+                rename_keys.append((f"backbone.layers.{layer}.blocks.{block}.mlp.fc2.bias",
+                                    f"backbone.vision_backbone.encoder.layers.{layer}.blocks.{block}.output.dense.bias"))
 
-        # downsample
-        if layer != len(config.vision_config.depths)-1:
-            rename_keys.append((f"backbone.layers.{layer}.downsample.reduction.weight",
-                                f"vision_backbone.encoder.layers.{layer}.downsample.reduction.weight"))
-            rename_keys.append((f"backbone.layers.{layer}.downsample.norm.weight",
-                                f"vision_backbone.encoder.layers.{layer}.downsample.norm.weight"))
-            rename_keys.append((f"backbone.layers.{layer}.downsample.norm.bias",
-                                f"vision_backbone.encoder.layers.{layer}.downsample.norm.bias"))
+            # downsample
+            if layer != len(config.vision_config.depths)-1:
+                rename_keys.append((f"backbone.layers.{layer}.downsample.reduction.weight",
+                                    f"backbone.vision_backbone.encoder.layers.{layer}.downsample.reduction.weight"))
+                rename_keys.append((f"backbone.layers.{layer}.downsample.norm.weight",
+                                    f"backbone.vision_backbone.encoder.layers.{layer}.downsample.norm.weight"))
+                rename_keys.append((f"backbone.layers.{layer}.downsample.norm.bias",
+                                    f"backbone.vision_backbone.encoder.layers.{layer}.downsample.norm.bias"))
 
-    # outputs
-    rename_keys.append(("backbone.norm1.weight",
-                        "vision_backbone.hidden_states_norms.stage2.weight"))
-    rename_keys.append(("backbone.norm1.bias",
-                        "vision_backbone.hidden_states_norms.stage2.bias"))
-    rename_keys.append(("backbone.norm2.weight",
-                        "vision_backbone.hidden_states_norms.stage3.weight"))
-    rename_keys.append(("backbone.norm2.bias",
-                        "vision_backbone.hidden_states_norms.stage3.bias"))
-    rename_keys.append(("backbone.norm3.weight",
-                        "vision_backbone.hidden_states_norms.stage4.weight"))
-    rename_keys.append(("backbone.norm3.bias",
-                        "vision_backbone.hidden_states_norms.stage4.bias"))
+        # outputs
+        rename_keys.append(("backbone.norm1.weight",
+                            "backbone.vision_backbone.hidden_states_norms.stage2.weight"))
+        rename_keys.append(("backbone.norm1.bias",
+                            "backbone.vision_backbone.hidden_states_norms.stage2.bias"))
+        rename_keys.append(("backbone.norm2.weight",
+                            "backbone.vision_backbone.hidden_states_norms.stage3.weight"))
+        rename_keys.append(("backbone.norm2.bias",
+                            "backbone.vision_backbone.hidden_states_norms.stage3.bias"))
+        rename_keys.append(("backbone.norm3.weight",
+                            "backbone.vision_backbone.hidden_states_norms.stage4.weight"))
+        rename_keys.append(("backbone.norm3.bias",
+                        "backbone.vision_backbone.hidden_states_norms.stage4.bias"))
+
     ########################################## VISION BACKBONE - END
 
     ########################################## ENCODER - START
@@ -218,22 +237,22 @@ def read_in_q_k_v_vision(state_dict, config):
             in_proj_weight = state_dict.pop(f"backbone.layers.{layer}.blocks.{block}.attn.qkv.weight")
             in_proj_bias = state_dict.pop(f"backbone.layers.{layer}.blocks.{block}.attn.qkv.bias")
             # next, add query, keys and values (in that order) to the state dict
-            state_dict[f"vision_backbone.encoder.layers.{layer}.blocks.{block}.attention.self.query.weight"] = (
+            state_dict[f"backbone.vision_backbone.encoder.layers.{layer}.blocks.{block}.attention.self.key.weight"] = (
                 in_proj_weight[:hidden_size, :]
             )
-            state_dict[f"vision_backbone.encoder.layers.{layer}.blocks.{block}.attention.self.query.bias"] = (
+            state_dict[f"backbone.vision_backbone.encoder.layers.{layer}.blocks.{block}.attention.self.key.bias"] = (
                 in_proj_bias[:hidden_size]
             )
-            state_dict[f"vision_backbone.encoder.layers.{layer}.blocks.{block}.attention.self.key.weight"] = (
-                in_proj_weight[hidden_size : hidden_size * 2, :]
-            )
-            state_dict[f"vision_backbone.encoder.layers.{layer}.blocks.{block}.attention.self.key.bias"] = (
+            state_dict[
+                f"backbone.vision_backbone.encoder.layers.{layer}.blocks.{block}.attention.self.query.weight"
+            ] = in_proj_weight[hidden_size : hidden_size * 2, :]
+            state_dict[f"backbone.vision_backbone.encoder.layers.{layer}.blocks.{block}.attention.self.query.bias"] = (
                 in_proj_bias[hidden_size : hidden_size * 2]
             )
-            state_dict[f"vision_backbone.encoder.layers.{layer}.blocks.{block}.attention.self.value.weight"] = (
-                in_proj_weight[-hidden_size:, :]
-            )
-            state_dict[f"vision_backbone.encoder.layers.{layer}.blocks.{block}.attention.self.value.bias"] = (
+            state_dict[
+                f"backbone.vision_backbone.encoder.layers.{layer}.blocks.{block}.attention.self.value.weight"
+            ] = in_proj_weight[-hidden_size:, :]
+            state_dict[f"backbone.vision_backbone.encoder.layers.{layer}.blocks.{block}.attention.self.value.bias"] = (
                 in_proj_bias[-hidden_size:]
             )
     ########################################## VISION BACKBONE - END
@@ -300,6 +319,7 @@ def convert_omdet_turbo_checkpoint(args):
     pytorch_dump_folder_path = args.pytorch_dump_folder_path
     push_to_hub = args.push_to_hub
     verify_logits = args.verify_logits
+    use_timm_backbone = args.use_timm_backbone
 
     checkpoint_mapping = {
         "omdet-turbo-tiny": [
@@ -308,7 +328,7 @@ def convert_omdet_turbo_checkpoint(args):
         ],
     }
     # Define default OmDetTurbo configuation
-    config = get_omdet_turbo_config(model_name)
+    config = get_omdet_turbo_config(model_name, use_timm_backbone)
 
     # Load original checkpoint
     checkpoint_url = checkpoint_mapping[model_name]
@@ -327,7 +347,8 @@ def convert_omdet_turbo_checkpoint(args):
     for src, dest in rename_keys_language:
         rename_key(new_state_dict, src, dest)
 
-    read_in_q_k_v_vision(new_state_dict, config)
+    if not use_timm_backbone:
+        read_in_q_k_v_vision(new_state_dict, config)
     read_in_q_k_v_text(new_state_dict, config)
     # read_in_q_k_v_encoder(new_state_dict, config)
 
@@ -393,6 +414,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--verify_logits", action="store_false", help="Whether or not to verify logits after conversion."
+    )
+    parser.add_argument(
+        "--use_timm_backbone", action="store_true", help="Whether or not to use timm backbone for vision backbone."
     )
 
     args = parser.parse_args()

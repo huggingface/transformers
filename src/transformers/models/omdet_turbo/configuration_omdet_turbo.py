@@ -16,7 +16,6 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from ...utils.backbone_utils import verify_backbone_config_arguments
 from ..auto import CONFIG_MAPPING
 
 
@@ -112,20 +111,19 @@ class OmDetTurboConfig(PretrainedConfig):
                 embed_dim=96,
                 depths=[2, 2, 6, 2],
                 num_heads=[3, 6, 12, 24],
-                out_indices=[2, 3, 4],
             )
         elif isinstance(vision_config, dict):
             backbone_model_type = backbone_config.pop("model_type")
             config_class = CONFIG_MAPPING[backbone_model_type]
             vision_config = config_class.from_dict(backbone_config)
 
-        verify_backbone_config_arguments(
-            use_timm_backbone=use_timm_backbone,
-            use_pretrained_backbone=False,
-            backbone=vision_backbone,
-            backbone_config=vision_config,
-            backbone_kwargs=backbone_kwargs,
-        )
+        # verify_backbone_config_arguments(
+        #     use_timm_backbone=use_timm_backbone,
+        #     use_pretrained_backbone=False,
+        #     backbone=vision_backbone,
+        #     backbone_config=vision_config,
+        #     backbone_kwargs=backbone_kwargs,
+        # )
 
         self.text_config = text_config
         self.vision_config = vision_config
