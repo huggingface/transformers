@@ -712,14 +712,6 @@ class Mamba2FlashAttention2(Mamba2Attention):
 
         query_length = query.shape[-2]
 
-        # TODO: this shouldn't be necessary anymore
-        # Mamba2 casts query and key in fp32 to apply rotary embedding in full precision
-        target_dtype = value.dtype
-        if query.dtype != target_dtype:
-            query = query.to(target_dtype)
-        if key.dtype != target_dtype:
-            key = key.to(target_dtype)
-
         # Permute to get the expected shape for Flash Attention
         query = query.transpose(1, 2)
         key = key.transpose(1, 2)
@@ -918,14 +910,6 @@ class Mamba2SdpaAttention(Mamba2Attention):
         # Repeat k/v heads if n_kv_heads < n_heads
         key = repeat_kv(key, self.num_groups_kv)
         value = repeat_kv(value, self.num_groups_kv)
-
-        # TODO: this shouldn't be necessary anymore
-        """# Mamba2 casts query and key in fp32 to apply rotary embedding in full precision
-        target_dtype = value.dtype
-        if query.dtype != target_dtype:
-            query = query.to(target_dtype)
-        if key.dtype != target_dtype:
-            key = key.to(target_dtype)"""
 
         # Avoid torch==2.1.2 specific bug for the memory-efficient backend in SDPA
         if self.require_contiguous_qkv and query.device.type == "cuda" and attention_mask is not None:
