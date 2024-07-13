@@ -20,6 +20,8 @@ import math
 import re
 import unittest
 
+from datasets import load_dataset
+
 from transformers import (
     GroundingDinoConfig,
     SwinConfig,
@@ -44,7 +46,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import GroundingDinoForObjectDetection, GroundingDinoModel
+    from transformers import GroundingDinoConfig, GroundingDinoForObjectDetection, GroundingDinoModel
     from transformers.pytorch_utils import id_tensor_storage
 
 
@@ -616,9 +618,6 @@ def prepare_text():
     return text
 
 
-def prepare_for_loss(): ...
-
-
 @require_timm
 @require_vision
 @slow
@@ -746,16 +745,65 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs2.logits, outputs_batched.logits[1:], atol=1.8e-3))
 
     def test_grounding_dino_loss(self):
-        model = GroundingDinoForObjectDetection.from_pretrained("IDEA-Research/grounding-dino-tiny").to(torch_device)
+        ds = load_dataset("EduardoPacheco/aquarium-sample", split="train")
+        image_processor = self.default_processor.image_processor
+        tokenizer = self.default_processor.tokenizer
+        id2label = {0: "fish", 1: "jellyfish", 2: "penguins", 3: "sharks", 4: "puffins", 5: "stingrays", 6: "starfish"}
+        prompt = ". ".join(id2label.values()) + "."
 
-        processor = self.default_processor
-        image, text, labels = prepare_for_loss()
-        encoding = processor(images=image, text=text, return_tensors="pt").to(torch_device)
+        text_inputs = tokenizer([prompt, prompt], return_tensors="pt")
+        image_inputs = image_processor(images=ds["image"], annotations=ds["annotations"], return_tensors="pt")
 
+        # Passing class_reduction="sum" and auxiliary_loss=True to compare with the expected loss
+        model = GroundingDinoForObjectDetection.from_pretrained(
+            "IDEA-Research/grounding-dino-tiny", auxiliary_loss=True, class_loss_reduction="sum"
+        )
+        # Interested in the loss only
+        model.eval()
         with torch.no_grad():
-            outputs = model(labels=labels, **encoding)
+            outputs = model(**text_inputs, **image_inputs)
 
-        # test loss
-        loss = outputs.loss
-        expected_loss = ...
-        self.assertEqual(loss.item(), expected_loss, msg="Loss is not matching expected value")
+        expected_loss_dict = {
+            "loss_ce": torch.tensor(1.1151),
+            "loss_bbox": torch.tensor(0.2031),
+            "loss_giou": torch.tensor(0.5819),
+            "loss_xy": torch.tensor(0.0927),
+            "loss_hw": torch.tensor(0.1104),
+            "loss_ce_0": torch.tensor(1.1942),
+            "loss_bbox_0": torch.tensor(0.1978),
+            "loss_giou_0": torch.tensor(0.5524),
+            "loss_xy_0": torch.tensor(0.0887),
+            "loss_hw_0": torch.tensor(0.1091),
+            "loss_ce_1": torch.tensor(1.1623),
+            "loss_bbox_1": torch.tensor(0.1909),
+            "loss_giou_1": torch.tensor(0.5892),
+            "loss_xy_1": torch.tensor(0.0926),
+            "loss_hw_1": torch.tensor(0.0982),
+            "loss_ce_2": torch.tensor(1.1643),
+            "loss_bbox_2": torch.tensor(0.1891),
+            "loss_giou_2": torch.tensor(0.5626),
+            "loss_xy_2": torch.tensor(0.0896),
+            "loss_hw_2": torch.tensor(0.0996),
+            "loss_ce_3": torch.tensor(1.1945),
+            "loss_bbox_3": torch.tensor(0.1943),
+            "loss_giou_3": torch.tensor(0.5592),
+            "loss_xy_3": torch.tensor(0.0895),
+            "loss_hw_3": torch.tensor(0.1048),
+            "loss_ce_4": torch.tensor(1.0946),
+            "loss_bbox_4": torch.tensor(0.2037),
+            "loss_giou_4": torch.tensor(0.5813),
+            "loss_xy_4": torch.tensor(0.0918),
+            "loss_hw_4": torch.tensor(0.1119),
+            "loss_ce_enc": torch.tensor(16226.3145),
+            "loss_bbox_enc": torch.tensor(0.3063),
+            "loss_giou_enc": torch.tensor(0.7380),
+            "loss_xy_enc": torch.tensor(0.1324),
+            "loss_hw_enc": torch.tensor(0.1739),
+        }
+
+        expected_loss = torch.tensor(32482.2344)
+
+        for key in expected_loss_dict:
+            self.assertTrue(torch.allclose(outputs.loss_dict[key], expected_loss_dict[key], atol=1e-3))
+
+        self.assertTrue(torch.allclose(outputs.loss, expected_loss, atol=1e-3))

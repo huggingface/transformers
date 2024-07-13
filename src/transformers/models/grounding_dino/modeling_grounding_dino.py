@@ -14,7 +14,6 @@
 # limitations under the License.
 """PyTorch Grounding DINO model."""
 
-import copy
 import math
 import os
 import warnings
@@ -259,12 +258,18 @@ class GroundingDinoModelOutput(ModelOutput):
             weighted average in the text-vision attention, vision-text attention, text-enhancer (self-attention) and
             multi-scale deformable attention heads. attention softmax, used to compute the weighted average in the
             bi-attention heads.
+        enc_topk_proposals (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*, returned when `config.two_stage=True`):
+            Top `config.num_queries` scoring bounding boxes indicies picked as region proposals in the first stage.
         enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.two_stage=True`):
             Predicted bounding boxes scores where the top `config.num_queries` scoring bounding boxes are picked as
             region proposals in the first stage. Output of bounding box binary classification (i.e. foreground and
             background).
         enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.two_stage=True`):
             Logits of predicted bounding boxes coordinates in the first stage.
+        encoder_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.two_stage=True`):
+            Logits of top `config.num_queries` scoring bounding boxes in the first stage.
+        encoder_pred_boxes (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.two_stage=True`):
+            Coordinates of top `config.num_queries` scoring bounding boxes in the first stage.
     """
 
     last_hidden_state: torch.FloatTensor = None
@@ -278,8 +283,11 @@ class GroundingDinoModelOutput(ModelOutput):
     encoder_vision_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_text_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    enc_topk_proposals: Optional[torch.FloatTensor] = None
     enc_outputs_class: Optional[torch.FloatTensor] = None
     enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
+    encoder_logits: Optional[torch.FloatTensor] = None
+    encoder_pred_boxes: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -338,12 +346,18 @@ class GroundingDinoObjectDetectionOutput(ModelOutput):
             Stacked intermediate reference points (reference points of each layer of the decoder).
         init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
             Initial reference points sent through the Transformer decoder.
+        enc_topk_proposals (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*, returned when `config.two_stage=True`):
+            Top `config.num_queries` scoring bounding boxes indicies picked as region proposals in the first stage.
         enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.two_stage=True`):
             Predicted bounding boxes scores where the top `config.num_queries` scoring bounding boxes are picked as
             region proposals in the first stage. Output of bounding box binary classification (i.e. foreground and
             background).
         enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.two_stage=True`):
             Logits of predicted bounding boxes coordinates in the first stage.
+        encoder_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.two_stage=True`):
+            Logits of top `config.num_queries` scoring bounding boxes in the first stage.
+        encoder_pred_boxes (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.two_stage=True`):
+            Coordinates of top `config.num_queries` scoring bounding boxes in the first stage.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -362,8 +376,11 @@ class GroundingDinoObjectDetectionOutput(ModelOutput):
     encoder_vision_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_text_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    enc_topk_proposals: Optional[torch.FloatTensor] = None
     enc_outputs_class: Optional[torch.FloatTensor] = None
     enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
+    encoder_logits: Optional[torch.FloatTensor] = None
+    encoder_pred_boxes: Optional[torch.FloatTensor] = None
 
 
 # Copied from transformers.models.detr.modeling_detr.DetrFrozenBatchNorm2d with Detr->GroundingDino
@@ -2384,8 +2401,11 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
             )
 
         # Fifth, prepare decoder inputs
+        topk_proposals = None
         enc_outputs_class = None
         enc_outputs_coord_logits = None
+        encoder_logits = None
+        encoder_pred_boxes = None
         if self.config.two_stage:
             object_query_embedding, output_proposals = self.generate_encoder_output_proposals(
                 encoder_outputs[0], ~mask_flatten, spatial_shapes
@@ -2418,6 +2438,10 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
                 target = torch.gather(
                     object_query_embedding, 1, topk_proposals.unsqueeze(-1).repeat(1, 1, self.d_model)
                 ).detach()
+
+            # Set intermediate topk proposals (coordsa nd class) for loss computation
+            encoder_pred_boxes = topk_coords_logits.sigmoid()
+            encoder_logits = self.encoder_output_class_embed(target, text_features, text_token_mask)
         else:
             target = query_embeds.unsqueeze(0).repeat(batch_size, 1, 1)
             reference_points = self.reference_points.weight.unsqueeze(0).repeat(batch_size, 1, 1).sigmoid()
@@ -2440,7 +2464,9 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
         )
 
         if not return_dict:
-            enc_outputs = tuple(value for value in [enc_outputs_class, enc_outputs_coord_logits] if value is not None)
+            enc_outputs = tuple(
+                value for value in [topk_proposals, enc_outputs_class, enc_outputs_coord_logits] if value is not None
+            )
             tuple_outputs = (
                 (decoder_outputs[0], init_reference_points) + decoder_outputs[1:] + encoder_outputs + enc_outputs
             )
@@ -2459,8 +2485,11 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
             encoder_vision_hidden_states=encoder_outputs.vision_hidden_states,
             encoder_text_hidden_states=encoder_outputs.text_hidden_states,
             encoder_attentions=encoder_outputs.attentions,
+            enc_topk_proposals=topk_proposals,
             enc_outputs_class=enc_outputs_class,
             enc_outputs_coord_logits=enc_outputs_coord_logits,
+            encoder_logits=encoder_logits,
+            encoder_pred_boxes=encoder_pred_boxes,
         )
 
 
@@ -2554,38 +2583,19 @@ def generalized_box_iou(boxes1, boxes2):
     return iou - (area - union) / area
 
 
-# Copied from transformers.models.detr.modeling_detr._max_by_axis
-def _max_by_axis(the_list):
-    # type: (List[List[int]]) -> List[int]
-    maxes = the_list[0]
-    for sublist in the_list[1:]:
-        for index, item in enumerate(sublist):
-            maxes[index] = max(maxes[index], item)
-    return maxes
-
-
-# Copied from transformers.models.detr.modeling_detr.dice_loss
-def dice_loss(inputs, targets, num_boxes):
-    """
-    Compute the DICE loss, similar to generalized IOU for masks
-
-    Args:
-        inputs: A float tensor of arbitrary shape.
-                The predictions for each example.
-        targets: A float tensor with the same shape as inputs. Stores the binary
-                 classification label for each element in inputs (0 for the negative class and 1 for the positive
-                 class).
-    """
-    inputs = inputs.sigmoid()
-    inputs = inputs.flatten(1)
-    numerator = 2 * (inputs * targets).sum(1)
-    denominator = inputs.sum(-1) + targets.sum(-1)
-    loss = 1 - (numerator + 1) / (denominator + 1)
-    return loss.sum() / num_boxes
-
-
-# Copied from transformers.models.detr.modeling_detr.sigmoid_focal_loss
-def sigmoid_focal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: float = 2):
+# Changed the way we reduce the loss since pass only valid logits to avoid inf/nan problems
+# also added num_queries and reduction args as the base implementation uses 'sum' reduction
+# but the sigmoid_focal_loss in the original implementation uses 'mean' reduction and the 'sum'
+# reduction leads to a loss_ce that is considerably higher than the other losses.
+def sigmoid_focal_loss(
+    inputs: torch.Tensor,
+    targets: torch.Tensor,
+    num_boxes: int,
+    num_queries: int,
+    reduction: str = "mean",
+    alpha: float = 0.25,
+    gamma: float = 2,
+):
     """
     Loss used in RetinaNet for dense detection: https://arxiv.org/abs/1708.02002.
 
@@ -2595,6 +2605,12 @@ def sigmoid_focal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: f
         targets (`torch.FloatTensor` with the same shape as `inputs`)
             A tensor storing the binary classification label for each element in the `inputs` (0 for the negative class
             and 1 for the positive class).
+        num_boxes (`int`):
+            The total number of boxes in the batch.
+        num_queries (`int`):
+            The number of query boxes per image.
+        reduction (`str`, *optional*, defaults to `'mean'`):
+            Specifies the redction to apply to the loss. Can be either `'mean'`, or `'sum'`.
         alpha (`float`, *optional*, defaults to `0.25`):
             Optional weighting factor in the range (0,1) to balance positive vs. negative examples.
         gamma (`int`, *optional*, defaults to `2`):
@@ -2613,7 +2629,9 @@ def sigmoid_focal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: f
         alpha_t = alpha * targets + (1 - alpha) * (1 - targets)
         loss = alpha_t * loss
 
-    return loss.mean(1).sum() / num_boxes
+    if reduction == "mean":
+        return loss.sum() / num_queries / num_boxes
+    return loss.sum() / num_boxes
 
 
 # Copied from transformers.models.detr.modeling_detr.NestedTensor
@@ -2715,7 +2733,7 @@ class GroundingDinoHungarianMatcher(nn.Module):
         label_maps = outputs["label_maps"]
 
         # First take the label map for each class in each batch and then concatenate them
-        label_maps = torch.cat([label_map[v["class_labels"]] for v in targets for label_map in label_maps])
+        label_maps = torch.cat([label_map[target["class_labels"]] for label_map, target in zip(label_maps, targets)])
         # Normalize label maps based on number of tokens per class
         label_maps = label_maps / label_maps.sum(dim=-1, keepdim=True)
 
@@ -2745,7 +2763,6 @@ class GroundingDinoHungarianMatcher(nn.Module):
         return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]
 
 
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrLoss with DeformableDetr->GroundingDino
 class GroundingDinoLoss(nn.Module):
     """
     This class computes the losses for `GroundingDinoForObjectDetection`. The process happens in two steps: 1) we
@@ -2755,22 +2772,38 @@ class GroundingDinoLoss(nn.Module):
     Args:
         matcher (`GroundingDinoHungarianMatcher`):
             Module able to compute a matching between targets and proposals.
-        num_classes (`int`):
-            Number of object categories, omitting the special no-object category.
         focal_alpha (`float`):
             Alpha parameter in focal loss.
         losses (`List[str]`):
             List of all the losses to be applied. See `get_loss` for a list of all available losses.
+        class_reduction (`str`):
+            Specifies the reduction to apply to the label loss. Can be either `'mean'` or `'sum'`
     """
 
-    def __init__(self, matcher, num_classes, focal_alpha, losses):
+    def __init__(self, matcher, focal_alpha, losses, class_reduction):
         super().__init__()
         self.matcher = matcher
-        self.num_classes = num_classes
         self.focal_alpha = focal_alpha
         self.losses = losses
+        self.class_reduction = class_reduction
 
-    # Ignore copy
+    def _get_target_classes_one_hot(self, outputs, targets, indices):
+        """
+        Create one_hot based on the matching indices
+        """
+        class_labels = [target["class_labels"] for target in targets]
+        logits = outputs["logits"]
+        label_maps = outputs["label_maps"]
+
+        target_classes_onehot = torch.zeros_like(logits, device=logits.device, dtype=torch.long)
+
+        for i, (source, target) in enumerate(indices):
+            labels = class_labels[i][target]
+            target_classes_onehot[i, source] = label_maps[i][labels].to(torch.long)
+
+        return target_classes_onehot
+
+    # Added new target_classes_onehot and step to get valid logits and new sigmoid_focal_loss signature
     def loss_labels(self, outputs, targets, indices, num_boxes):
         """
         Classification loss (Binary focal loss) targets dicts must contain the key "class_labels" containing a tensor
@@ -2778,74 +2811,35 @@ class GroundingDinoLoss(nn.Module):
         """
         if "logits" not in outputs:
             raise KeyError("No logits were found in the outputs")
-        if "one_hot_labels" not in outputs:
-            raise KeyError("No one_hot_labels were found in the outputs")
         if "text_mask" not in outputs:
             raise KeyError("No text_mask were found in the outputs")
 
+        target_classes_onehot = self._get_target_classes_one_hot(outputs, targets, indices)
         source_logits = outputs["logits"]
-        # TODO maybe create one_hot and text_mask here (pass attention mask to outputs)
-        target_classes_onehot = outputs["one_hot"]
         text_mask = outputs["text_mask"]
 
-        ### New implementation
-        batch_size, num_queries, hidden_dim = source_logits.shape
+        # Select only valid logits
+        source_logits = torch.masked_select(source_logits, text_mask)
+        target_classes_onehot = torch.masked_select(target_classes_onehot, text_mask)
 
-        if text_mask is not None:
-            text_mask = text_mask.repeat(1, num_queries)
-            text_mask = text_mask.view(batch_size, -1, hidden_dim)
-            source_logits = torch.masked_select(source_logits, text_mask)
-            target_classes_onehot = torch.masked_select(target_classes_onehot, text_mask)
+        num_queries = source_logits.shape[0]
 
         target_classes_onehot = target_classes_onehot.float()
-        loss_ce = sigmoid_focal_loss(source_logits, target_classes_onehot, num_boxes, alpha=self.focal_alpha, gamma=2)
+        loss_ce = sigmoid_focal_loss(
+            inputs=source_logits,
+            targets=target_classes_onehot,
+            num_boxes=num_boxes,
+            num_queries=num_queries,
+            reduction=self.class_reduction,
+            alpha=self.focal_alpha,
+            gamma=2,
+        )
 
         losses = {"loss_ce": loss_ce}
-        # return losses
-
-        ### Old implementation
-        # idx = self._get_source_permutation_idx(indices)
-        # target_classes_o = torch.cat([t["class_labels"][J] for t, (_, J) in zip(targets, indices)])
-        # target_classes = torch.full(
-        #     source_logits.shape[:2], self.num_classes, dtype=torch.int64, device=source_logits.device
-        # )
-        # target_classes[idx] = target_classes_o
-
-        # target_classes_onehot = torch.zeros(
-        #     [source_logits.shape[0], source_logits.shape[1], source_logits.shape[2] + 1],
-        #     dtype=source_logits.dtype,
-        #     layout=source_logits.layout,
-        #     device=source_logits.device,
-        # )
-        # target_classes_onehot.scatter_(2, target_classes.unsqueeze(-1), 1)
-
-        # target_classes_onehot = target_classes_onehot[:, :, :-1]
-        # loss_ce = (
-        #     sigmoid_focal_loss(source_logits, target_classes_onehot, num_boxes, alpha=self.focal_alpha, gamma=2)
-        #     * source_logits.shape[1]
-        # )
-        # losses = {"loss_ce": loss_ce}
 
         return losses
 
-    @torch.no_grad()
-    # Copied from transformers.models.detr.modeling_detr.DetrLoss.loss_cardinality
-    def loss_cardinality(self, outputs, targets, indices, num_boxes):
-        """
-        Compute the cardinality error, i.e. the absolute error in the number of predicted non-empty boxes.
-
-        This is not really a loss, it is intended for logging purposes only. It doesn't propagate gradients.
-        """
-        logits = outputs["logits"]
-        device = logits.device
-        target_lengths = torch.as_tensor([len(v["class_labels"]) for v in targets], device=device)
-        # Count the number of predictions that are NOT "no-object" (which is the last class)
-        card_pred = (logits.argmax(-1) != logits.shape[-1] - 1).sum(1)
-        card_err = nn.functional.l1_loss(card_pred.float(), target_lengths.float())
-        losses = {"cardinality_error": card_err}
-        return losses
-
-    # Ignore copy
+    # Added loss_xy and loss_hw to calculate the x,y and h,w loss
     def loss_boxes(self, outputs, targets, indices, num_boxes):
         """
         Compute the losses related to the bounding boxes, the L1 regression loss and the GIoU loss.
@@ -2876,70 +2870,30 @@ class GroundingDinoLoss(nn.Module):
 
         return losses
 
-    # Copied from transformers.models.detr.modeling_detr.DetrLoss._get_source_permutation_idx
+    # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrLoss._get_source_permutation_idx
     def _get_source_permutation_idx(self, indices):
         # permute predictions following indices
         batch_idx = torch.cat([torch.full_like(source, i) for i, (source, _) in enumerate(indices)])
         source_idx = torch.cat([source for (source, _) in indices])
         return batch_idx, source_idx
 
-    # Copied from transformers.models.detr.modeling_detr.DetrLoss._get_target_permutation_idx
+    # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrLoss._get_target_permutation_idx
     def _get_target_permutation_idx(self, indices):
         # permute targets following indices
         batch_idx = torch.cat([torch.full_like(target, i) for i, (_, target) in enumerate(indices)])
         target_idx = torch.cat([target for (_, target) in indices])
         return batch_idx, target_idx
 
-    # Ignore copy
-    def _get_label_maps(self, outputs):
-        """
-        Computes a mapping between the tokens associated with the prompt labels in the logit space with shape (batch_size, num_labels, hidden_size)
-        where `num_labels` is defined by the number of classes in the input prompt.
-
-        For instance if the prompt "fish. shark." we get input_ids = [  101,  3869,  1012, 11420,  1012,   102]
-        this function will then return a mapping for each of the prompt tokens (i.e. tokens associated with "fish" and "shark")
-        indicating their position in the logit space.
-
-        This is used in `loss_labels` and in the `GroundingDinoHungarianMatcher`.)
-        """
-        batch_size, num_boxes, hidden_size = outputs["logits"].shape
-        input_ids = outputs["input_ids"]  # (batch_size, num_tokens)
-        # Add [PAD] token to the list of special tokens
-        delimiter_tokens = torch.tensor(SPECIAL_TOKENS + [0], device=input_ids.device)
-
-        # NOTE: Loop for now, but then trying to do in a bachtwise manner
-        # things to remember for batchwise later on:
-        # Easy to get the delimiter indices (only the valid ones i.e. diff between two consecutive delimiters is > 1)
-        # Have to update the class_labels in the targets with previous amount of labels as the number of labes in prompt might be different.
-        # Have to update the delimiter_indices with seq_len.
-        delimiter_token_masks = torch.isin(input_ids, delimiter_tokens)
-        label_maps = ()
-        for delimiter_token_mask in delimiter_token_masks:
-            label_map_within_batch = []
-            delimiter_indices = torch.where(delimiter_token_mask)[0]
-            for i in range(len(delimiter_indices) - 1):
-                start = delimiter_indices[i]
-                end = delimiter_indices[i + 1]
-                if end - start > 1:
-                    label_map = torch.zeros(hidden_size, device=input_ids.device)
-                    label_map[start + 1 : end] = 1
-                    label_map_within_batch.append(label_map)
-
-            label_maps += (torch.stack(label_map_within_batch),)
-
-        return label_maps
-
+    # Removed cardinality loss as it is not used.
     def get_loss(self, loss, outputs, targets, indices, num_boxes):
         loss_map = {
             "labels": self.loss_labels,
-            "cardinality": self.loss_cardinality,
             "boxes": self.loss_boxes,
         }
         if loss not in loss_map:
             raise ValueError(f"Loss {loss} not supported")
         return loss_map[loss](outputs, targets, indices, num_boxes)
 
-    # Ignore copy
     def forward(self, outputs, targets):
         """
         This performs the loss computation.
@@ -2953,20 +2907,8 @@ class GroundingDinoLoss(nn.Module):
         """
         outputs_without_aux = {k: v for k, v in outputs.items() if k != "auxiliary_outputs" and k != "enc_outputs"}
 
-        outputs_without_aux["label_maps"] = self._get_label_maps(outputs)
-
         # Retrieve the matching between the outputs of the last layer and the targets
         indices = self.matcher(outputs_without_aux, targets)
-
-        # Create one_hot based on the matching indices
-        one_hot = torch.zeros_like(
-            outputs["logits"], device=outputs["logits"].device, dtype=torch.long
-        )  # (batch_size, num_queries, hidden_dim)
-        class_labels = [target["class_labels"] for target in targets]
-        for i, (source, target) in enumerate(indices):
-            labels = class_labels[i][target]
-            one_hot[i, source] = outputs_without_aux["label_maps"][i][labels].to(torch.long)
-        outputs_without_aux["one_hot"] = one_hot
 
         # Compute the average number of target boxes accross all nodes, for normalization purposes
         num_boxes = sum(len(t["class_labels"]) for t in targets)
@@ -2994,16 +2936,57 @@ class GroundingDinoLoss(nn.Module):
 
         if "enc_outputs" in outputs:
             enc_outputs = outputs["enc_outputs"]
-            bin_targets = copy.deepcopy(targets)
-            for bt in bin_targets:
-                bt["class_labels"] = torch.zeros_like(bt["class_labels"])
-            indices = self.matcher(enc_outputs, bin_targets)
+            indices = self.matcher(enc_outputs, targets)
             for loss in self.losses:
-                l_dict = self.get_loss(loss, enc_outputs, bin_targets, indices, num_boxes)
+                l_dict = self.get_loss(loss, enc_outputs, targets, indices, num_boxes)
                 l_dict = {k + "_enc": v for k, v in l_dict.items()}
                 losses.update(l_dict)
 
         return losses
+
+
+def build_label_maps(logits, input_ids):
+    """
+    Computes a mapping between the tokens associated with the prompt labels in the logit space with shape (batch_size, num_labels, hidden_size)
+    where `num_labels` is defined by the number of classes in the input prompt.
+
+    For instance if the prompt "fish. shark." we get input_ids = [  101,  3869,  1012, 11420,  1012,   102]
+    this function will then return a mapping for each of the prompt tokens (i.e. tokens associated with "fish" and "shark")
+    indicating their position in the logit space.
+
+    This is used in `loss_labels` and in the `GroundingDinoHungarianMatcher`.)
+    """
+    hidden_size = logits.shape[-1]
+    # Add [PAD] token to the list of special tokens
+    delimiter_tokens = torch.tensor(SPECIAL_TOKENS + [0], device=input_ids.device)
+
+    delimiter_token_masks = torch.isin(input_ids, delimiter_tokens)
+    label_maps = ()
+    for delimiter_token_mask in delimiter_token_masks:
+        label_map_within_batch = []
+        delimiter_indices = torch.where(delimiter_token_mask)[0]
+        for i in range(len(delimiter_indices) - 1):
+            start = delimiter_indices[i]
+            end = delimiter_indices[i + 1]
+            if end - start > 1:
+                label_map = torch.zeros(hidden_size, device=input_ids.device)
+                label_map[start + 1 : end] = 1
+                label_map_within_batch.append(label_map)
+
+        label_maps += (torch.stack(label_map_within_batch),)
+
+    return label_maps
+
+
+def build_text_mask(logits, attention_mask):
+    """
+    Create text_mask based on the matching indices
+    """
+    seq_len = attention_mask.shape[1]
+    text_mask = torch.zeros_like(logits, device=logits.device, dtype=attention_mask.dtype)
+    text_mask[:, :, :seq_len] = attention_mask[:, None, :]
+
+    return text_mask.bool()
 
 
 @add_start_docstrings(
@@ -3046,11 +3029,14 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
 
     # taken from https://github.com/facebookresearch/detr/blob/master/models/detr.py
     @torch.jit.unused
-    def _set_aux_loss(self, outputs_class, outputs_coord):
+    def _set_aux_loss(self, outputs_class, outputs_coord, label_maps, text_mask):
         # this is a workaround to make torchscript happy, as torchscript
         # doesn't support dictionary with non-homogeneous values, such
         # as a dict having both a Tensor and a list.
-        return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class[:-1], outputs_coord[:-1])]
+        return [
+            {"logits": a, "pred_boxes": b, "label_maps": label_maps, "text_mask": text_mask}
+            for a, b in zip(outputs_class[:-1], outputs_coord[:-1])
+        ]
 
     @add_start_docstrings_to_model_forward(GROUNDING_DINO_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=GroundingDinoObjectDetectionOutput, config_class=_CONFIG_FOR_DOC)
@@ -3172,36 +3158,53 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
                 class_cost=self.config.class_cost, bbox_cost=self.config.bbox_cost, giou_cost=self.config.giou_cost
             )
             # Second: create the criterion
-            losses = ["labels", "boxes", "cardinality"]
+            losses = ["labels", "boxes"]
             criterion = GroundingDinoLoss(
                 matcher=matcher,
-                num_classes=self.config.num_labels,
+                class_reduction=self.config.class_loss_reduction,
                 focal_alpha=self.config.focal_alpha,
                 losses=losses,
             )
             criterion.to(self.device)
+            label_maps = build_label_maps(logits, input_ids)
+            text_mask = build_text_mask(logits, attention_mask)
             # Third: compute the losses, based on outputs and labels
             outputs_loss = {}
             outputs_loss["logits"] = logits
             outputs_loss["pred_boxes"] = pred_boxes
-            outputs_loss["input_ids"] = input_ids
-            outputs_loss["attention_mask"] = attention_mask
+            outputs_loss["label_maps"] = label_maps
+            outputs_loss["text_mask"] = text_mask
+
             if self.config.auxiliary_loss:
-                auxiliary_outputs = self._set_aux_loss(outputs_class, outputs_coord)
+                auxiliary_outputs = self._set_aux_loss(outputs_class, outputs_coord, label_maps, text_mask)
                 outputs_loss["auxiliary_outputs"] = auxiliary_outputs
+
             if self.config.two_stage:
-                enc_outputs_coord = outputs[-1].sigmoid()
-                outputs_loss["enc_outputs"] = {"logits": outputs[-2], "pred_boxes": enc_outputs_coord}
+                outputs_loss["enc_outputs"] = {
+                    "logits": outputs[-2],
+                    "pred_boxes": outputs[-1],
+                    "label_maps": label_maps,
+                    "text_mask": text_mask,
+                }
 
             loss_dict = criterion(outputs_loss, labels)
             # Fourth: compute total loss, as a weighted sum of the various losses
-            weight_dict = {"loss_ce": 1, "loss_bbox": self.config.bbox_loss_coefficient}
-            weight_dict["loss_giou"] = self.config.giou_loss_coefficient
+            weight_dict = {
+                "loss_ce": self.config.class_loss_coefficient,
+                "loss_bbox": self.config.bbox_loss_coefficient,
+                "loss_giou": self.config.giou_loss_coefficient,
+            }
+
+            if self.config.two_stage:
+                enc_weight_dict = {k + "_enc": v for k, v in weight_dict.items()}
+                weight_dict.update(enc_weight_dict)
+
             if self.config.auxiliary_loss:
                 aux_weight_dict = {}
                 for i in range(self.config.decoder_layers - 1):
                     aux_weight_dict.update({k + f"_{i}": v for k, v in weight_dict.items()})
                 weight_dict.update(aux_weight_dict)
+
             loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
 
         if not return_dict:
@@ -3230,8 +3233,11 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
             intermediate_hidden_states=outputs.intermediate_hidden_states,
             intermediate_reference_points=outputs.intermediate_reference_points,
             init_reference_points=outputs.init_reference_points,
+            enc_topk_proposals=outputs.enc_topk_proposals,
             enc_outputs_class=outputs.enc_outputs_class,
             enc_outputs_coord_logits=outputs.enc_outputs_coord_logits,
+            encoder_logits=outputs.encoder_logits,
+            encoder_pred_boxes=outputs.encoder_pred_boxes,
         )
 
         return dict_outputs

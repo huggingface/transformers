@@ -97,10 +97,14 @@ class GroundingDinoConfig(PretrainedConfig):
             Relative weight of the L1 error of the bounding box coordinates in the Hungarian matching cost.
         giou_cost (`float`, *optional*, defaults to 2.0):
             Relative weight of the generalized IoU loss of the bounding box in the Hungarian matching cost.
+        class_loss_coefficient (`float`, *optional*, defaults to 2.0):
+            Relative weight of the cross-entropy loss in the object detection loss.
         bbox_loss_coefficient (`float`, *optional*, defaults to 5.0):
             Relative weight of the L1 bounding box loss in the object detection loss.
         giou_loss_coefficient (`float`, *optional*, defaults to 2.0):
             Relative weight of the generalized IoU loss in the object detection loss.
+        class_loss_reduction (`str`, *optional*, defaults to `"mean"`):
+            The reduction method for the classification loss. One of `"mean"` or `"sum"`.
         focal_alpha (`float`, *optional*, defaults to 0.25):
             Alpha parameter in the focal loss.
         disable_custom_kernels (`bool`, *optional*, defaults to `False`):
@@ -181,8 +185,10 @@ class GroundingDinoConfig(PretrainedConfig):
         class_cost=1.0,
         bbox_cost=5.0,
         giou_cost=2.0,
+        class_loss_coefficient=2.0,
         bbox_loss_coefficient=5.0,
         giou_loss_coefficient=2.0,
+        class_loss_reduction="mean",
         focal_alpha=0.25,
         disable_custom_kernels=False,
         # other parameters
@@ -255,8 +261,10 @@ class GroundingDinoConfig(PretrainedConfig):
         self.bbox_cost = bbox_cost
         self.giou_cost = giou_cost
         # Loss coefficients
+        self.class_loss_coefficient = class_loss_coefficient
         self.bbox_loss_coefficient = bbox_loss_coefficient
         self.giou_loss_coefficient = giou_loss_coefficient
+        self.class_loss_reduction = class_loss_reduction
         self.focal_alpha = focal_alpha
         self.disable_custom_kernels = disable_custom_kernels
         # Text backbone
