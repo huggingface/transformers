@@ -125,6 +125,7 @@ from .import_utils import (
     is_decord_available,
     is_detectron2_available,
     is_eetq_available,
+    is_einops_available,
     is_essentia_available,
     is_faiss_available,
     is_flash_attn_2_available,

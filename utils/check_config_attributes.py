@@ -50,6 +50,8 @@ SPECIAL_CASES_TO_ALLOW = {
     "RecurrentGemmaConfig": ["block_types"],
     # used as in the config to define `intermediate_size`
     "MambaConfig": ["expand"],
+    # expand used to compute the `intermediate_size`, tie_embedding_weights only used at __init__
+    "Mamba2Config": ["expand", "tie_embedding_weights"],
     # used as `self.bert_model = BertModel(config, ...)`
     "DPRConfig": True,
     "FuyuConfig": True,

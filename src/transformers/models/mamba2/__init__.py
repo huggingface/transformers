@@ -22,7 +22,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_mamba2": ["Mamba2Config", "Mamba2OnnxConfig"],
+    "configuration_mamba2": ["Mamba2Config"],
 }
 
 try:
@@ -33,14 +33,13 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_mamba2"] = [
         "Mamba2ForCausalLM",
-        "Mamba2ForSequenceClassification",
         "Mamba2Model",
         "Mamba2PreTrainedModel",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_mamba2 import Mamba2Config, Mamba2OnnxConfig
+    from .configuration_mamba2 import Mamba2Config
 
     try:
         if not is_torch_available():
@@ -50,7 +49,6 @@ if TYPE_CHECKING:
     else:
         from .modeling_mamba2 import (
             Mamba2ForCausalLM,
-            Mamba2ForSequenceClassification,
             Mamba2Model,
             Mamba2PreTrainedModel,
         )
