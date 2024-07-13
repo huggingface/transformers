@@ -388,3 +388,22 @@ class ChameleonImageProcessor(BaseImageProcessor):
         alpha = img_rgba[:, :, 3] / 255.0
         img_rgb = (1 - alpha[:, :, np.newaxis]) * 255 + alpha[:, :, np.newaxis] * img_rgba[:, :, :3]
         return PIL.Image.fromarray(img_rgb.astype("uint8"), "RGB")
+
+    def postprocess(self, pixel_values: np.ndarray) -> List[PIL.Image.Image]:
+        """
+        Postprocess a batch of pixel values to images.
+
+        Args:
+            pixel_values (`np.ndarray` of shape `(batch_size, num_channels, image_size, image_size)`):
+                Batch of pixel values to postprocess in CHW format.
+
+        Returns:
+            List[PIL.Image.Image]: A list of PIL images.
+        """
+        # Normalize tensor to [0, 1] range from [-1, 1] range.
+        image_chw_normalized = (np.clip(pixel_values, -1.0, 1.0) + 1.0) / 2.0
+        # Move channel dimension to last dimension.
+        image_hwc = image_chw_normalized.transpose(0, 2, 3, 1)
+        # Scale to [0, 255] range and convert to uint8 (RGB format)
+        image_rgb_list = (image_hwc * 255).astype(np.uint8)
+        return [PIL.Image.fromarray(image_rgb, "RGB") for image_rgb in image_rgb_list]
