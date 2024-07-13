@@ -15,6 +15,7 @@
 """PyTorch MAMBA2 model."""
 
 import math
+from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple, Union
 
 import torch
@@ -22,7 +23,7 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from packaging import version
 from torch import nn
-from torch.nn import CrossEntropyLoss
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...cache_utils import DynamicCache
@@ -32,11 +33,13 @@ from ...modeling_outputs import (
     CausalLMOutputWithPast,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import logging
-from ...utils.doc import (
+from ...utils import (
+    ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
 )
 from ...utils.import_utils import (
     get_torch_version,
@@ -76,7 +79,8 @@ is_fast_path_available = all(
 )
 
 
-_CONFIG_FOR_DOC = "Mamba2Config"
+_CHECKPOINT_FOR_DOC = "state-spaces/mamba2-130m"
+_CONFIG_FOR_DOC = "MambaConfig"
 
 
 # Adapted from transformers.models.jamba.modeling_jamba.HybridMambaAttentionDynamicCache with Mamba->Mamba2
@@ -450,13 +454,13 @@ class Mamba2Attention(nn.Module):
         hidden_states: torch.FloatTensor,
         attention_mask: torch.FloatTensor,
         position_ids: torch.LongTensor,
-        cache: Optional[HybridMamba2AttentionDynamicCache] = None,
+        cache_params: Optional[HybridMamba2AttentionDynamicCache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
     ):
         # Apply attention-conv1d-specific projections and rope
         query, key, value = self._attn_conv1d_projections_and_rope(
-            hidden_states=hidden_states, position_ids=position_ids, cache=cache, use_cache=use_cache
+            hidden_states=hidden_states, position_ids=position_ids, cache_params=cache_params, use_cache=use_cache
         )
 
         # Repeat k/v heads if n_kv_heads < n_heads
@@ -502,11 +506,11 @@ class Mamba2Attention(nn.Module):
         # -> [bs, seq_len, hidden_size]
         return tensor
 
-    def _conv1d(self, qkv, seq_len, cache, cached_start, cached_forward):
+    def _conv1d(self, qkv, seq_len, cache_params, cached_start, cached_forward):
         # Init cache with first "real" values
         if cached_start:
             qkv_t = qkv.transpose(1, 2)
-            cache.conv_states[self.layer_idx].copy_(
+            cache_params.conv_states[self.layer_idx].copy_(
                 nn.functional.pad(qkv_t, (self.conv_kernel_size - qkv_t.shape[-1], 0))
             )
 
@@ -514,7 +518,7 @@ class Mamba2Attention(nn.Module):
             if cached_forward:
                 qkv = causal_conv1d_update(
                     x=qkv.squeeze(1),
-                    conv_state=cache.conv_states[self.layer_idx],
+                    conv_state=cache_params.conv_states[self.layer_idx],
                     weight=self.conv1d.weight.squeeze(1),
                     bias=self.conv1d.bias,
                 ).unsqueeze(1)
@@ -526,11 +530,11 @@ class Mamba2Attention(nn.Module):
                 ).transpose(1, 2)
         else:
             if cached_forward:
-                cache.conv_states[self.layer_idx].copy_(
-                    torch.roll(cache.conv_states[self.layer_idx], shifts=-1, dims=-1)
+                cache_params.conv_states[self.layer_idx].copy_(
+                    torch.roll(cache_params.conv_states[self.layer_idx], shifts=-1, dims=-1)
                 )
-                cache.conv_states[self.layer_idx][:, :, -1] = qkv.squeeze(1)
-                qkv = torch.sum(cache.conv_states[self.layer_idx] * self.conv1d.weight.squeeze(1), dim=-1)
+                cache_params.conv_states[self.layer_idx][:, :, -1] = qkv.squeeze(1)
+                qkv = torch.sum(cache_params.conv_states[self.layer_idx] * self.conv1d.weight.squeeze(1), dim=-1)
                 if self.conv1d.bias is not None:
                     qkv = qkv + self.conv1d.bias
                 qkv = qkv.unsqueeze(1)
@@ -568,13 +572,14 @@ class Mamba2Attention(nn.Module):
         self,
         hidden_states: torch.FloatTensor,
         position_ids: torch.LongTensor,
-        cache: Optional[HybridMamba2AttentionDynamicCache] = None,
+        cache_params: Optional[HybridMamba2AttentionDynamicCache] = None,
         use_cache: Optional[bool] = False,
     ):
         # Managing cache state
-        has_layer_past = cache is not None
+        has_layer_past = cache_params is not None
+
         if has_layer_past:
-            cached_start = not cache.has_previous_state
+            cached_start = not cache_params.has_previous_state
             cached_forward = not cached_start
         else:
             cached_start = False
@@ -588,7 +593,7 @@ class Mamba2Attention(nn.Module):
         # (Optional) Apply Conv1d, caching is applied in-place
         if self.conv_kernel_size > 0:
             qkv = self._conv1d(
-                qkv, seq_len=qkv.shape[1], cache=cache, cached_start=cached_start, cached_forward=cached_forward
+                qkv, seq_len=qkv.shape[1], cache_params=cache_params, cached_start=cached_start, cached_forward=cached_forward
             )
 
         # Get the respective matrices from the parallel projection back
@@ -609,7 +614,7 @@ class Mamba2Attention(nn.Module):
 
         # Cache KV values
         if has_layer_past:
-            key, value = cache.update(key, value, self.layer_idx)
+            key, value = cache_params.update(key, value, self.layer_idx)
 
         return query, key, value
 
@@ -697,13 +702,13 @@ class Mamba2FlashAttention2(Mamba2Attention):
         hidden_states: torch.FloatTensor,
         attention_mask: torch.FloatTensor,
         position_ids: torch.LongTensor,
-        cache: Optional[HybridMamba2AttentionDynamicCache] = None,
+        cache_params: Optional[HybridMamba2AttentionDynamicCache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
     ):
         # Apply attention-conv1d-specific projections and rope
         query, key, value = self._attn_conv1d_projections_and_rope(
-            hidden_states=hidden_states, position_ids=position_ids, cache=cache, use_cache=use_cache
+            hidden_states=hidden_states, position_ids=position_ids, cache_params=cache_params, use_cache=use_cache
         )
 
         # Repeat k/v heads if n_kv_heads < n_heads
@@ -880,7 +885,7 @@ class Mamba2SdpaAttention(Mamba2Attention):
         hidden_states: torch.FloatTensor,
         attention_mask: torch.FloatTensor,
         position_ids: torch.LongTensor,
-        cache: Optional[HybridMamba2AttentionDynamicCache] = None,
+        cache_params: Optional[HybridMamba2AttentionDynamicCache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
     ):
@@ -896,7 +901,7 @@ class Mamba2SdpaAttention(Mamba2Attention):
                 attention_mask=attention_mask,
                 position_ids=position_ids,
                 output_attentions=output_attentions,
-                cache=cache,
+                cache_params=cache_params,
                 use_cache=use_cache,
             )
 
@@ -904,7 +909,7 @@ class Mamba2SdpaAttention(Mamba2Attention):
 
         # Apply attention-conv1d-specific projections and rope
         query, key, value = self._attn_conv1d_projections_and_rope(
-            hidden_states=hidden_states, position_ids=position_ids, cache=cache, use_cache=use_cache
+            hidden_states=hidden_states, position_ids=position_ids, cache_params=cache_params, use_cache=use_cache
         )
 
         # Repeat k/v heads if n_kv_heads < n_heads
@@ -1016,10 +1021,10 @@ class Mamba2Mixer(nn.Module):
                 " https://github.com/Dao-AILab/causal-conv1d"
             )
 
-    def triton_kernels_forward(self, hidden_states, cache):
+    def triton_kernels_forward(self, hidden_states, cache_params):
         # Managing cache state
-        if cache is not None:
-            cached_start = not cache.has_previous_state
+        if cache_params is not None:
+            cached_start = not cache_params.has_previous_state
             cached_forward = not cached_start
         else:
             cached_start = False
@@ -1029,7 +1034,7 @@ class Mamba2Mixer(nn.Module):
         zxbcdt = self.in_proj(hidden_states)
 
         # 2-5. Training combined into one triton kernel
-        if self.training and cache is None:
+        if self.training and cache_params is None:
             y = mamba_split_conv1d_scan_combined(
                 zxbcdt=zxbcdt,
                 conv1d_weight=self.conv1d.weight.squeeze(1),
@@ -1065,12 +1070,12 @@ class Mamba2Mixer(nn.Module):
         # Init cache with first "real" values
         if cached_start:
             xBC_t = xBC.transpose(1, 2)
-            cache.conv_states[self.layer_idx].copy_(F.pad(xBC_t, (self.conv_kernel_size - xBC_t.shape[-1], 0)))
+            cache_params.conv_states[self.layer_idx].copy_(F.pad(xBC_t, (self.conv_kernel_size - xBC_t.shape[-1], 0)))
 
         if cached_forward:
             xBC = causal_conv1d_update(
                 x=xBC,
-                conv_state=cache.conv_states[self.layer_idx],
+                conv_state=cache_params.conv_states[self.layer_idx],
                 weight=self.conv1d.weight.squeeze(1),
                 bias=self.conv1d.bias,
                 activation=self.activation,
@@ -1111,7 +1116,7 @@ class Mamba2Mixer(nn.Module):
             if cached_start:
                 y, last_state = y
                 if cached_start:
-                    cache.ssm_states[self.layer_idx].copy_(last_state)
+                    cache_params.ssm_states[self.layer_idx].copy_(last_state)
 
             # [bsz, seq_len, num_heads, head_dim] -> [bsz, seq_len, intermediate size]
             y = y.view(y.shape[0], y.shape[1], -1)
@@ -1135,7 +1140,7 @@ class Mamba2Mixer(nn.Module):
 
             # Triton kernel for updating states in-place and returning the hidden state
             y = selective_state_update(
-                state=cache.ssm_states[self.layer_idx],
+                state=cache_params.ssm_states[self.layer_idx],
                 x=x_reshaped,
                 dt=dt,
                 A=A,
@@ -1283,12 +1288,12 @@ class Mamba2Mixer(nn.Module):
         else:
             return y, final_state
 
-    def slow_forward(self, hidden_states, cache):
+    def slow_forward(self, hidden_states, cache_params):
         seq_len = hidden_states.shape[1]
 
-        # Managing cache state
-        if cache is not None:
-            cached_start = not cache.has_previous_state
+        # Managing cache_params state
+        if cache_params is not None:
+            cached_start = not cache_params.has_previous_state
             cached_forward = not cached_start
         else:
             cached_start = False
@@ -1309,12 +1314,12 @@ class Mamba2Mixer(nn.Module):
         # Init cache with first "real" values
         if cached_start:
             xBC_t = xBC.transpose(1, 2)
-            cache.conv_states[self.layer_idx].copy_(F.pad(xBC_t, (self.conv_kernel_size - xBC_t.shape[-1], 0)))
+            cache_params.conv_states[self.layer_idx].copy_(F.pad(xBC_t, (self.conv_kernel_size - xBC_t.shape[-1], 0)))
 
         if cached_forward:
-            cache.conv_states[self.layer_idx].copy_(torch.roll(cache.conv_states[self.layer_idx], shifts=-1, dims=-1))
-            cache.conv_states[self.layer_idx][:, :, -1] = xBC.squeeze(1)
-            xBC = torch.sum(cache.conv_states[self.layer_idx] * self.conv1d.weight.squeeze(1), dim=-1)
+            cache_params.conv_states[self.layer_idx].copy_(torch.roll(cache_params.conv_states[self.layer_idx], shifts=-1, dims=-1))
+            cache_params.conv_states[self.layer_idx][:, :, -1] = xBC.squeeze(1)
+            xBC = torch.sum(cache_params.conv_states[self.layer_idx] * self.conv1d.weight.squeeze(1), dim=-1)
             if self.conv1d.bias is not None:
                 xBC = xBC + self.conv1d.bias
             xBC = self.act(xBC)
@@ -1350,7 +1355,7 @@ class Mamba2Mixer(nn.Module):
             if cached_start:
                 y, last_state = y
                 if cached_start:
-                    cache.ssm_states[self.layer_idx].copy_(last_state)
+                    cache_params.ssm_states[self.layer_idx].copy_(last_state)
 
             # [bsz, seq_len, num_heads, head_dim] -> [bsz, seq_len, intermediate_size]
             y = y.view(y.shape[0], y.shape[1], -1)
@@ -1368,12 +1373,12 @@ class Mamba2Mixer(nn.Module):
             dBx = torch.einsum("bh,bn,bhp->bhpn", dt, B, x)
 
             # State calculation
-            cache.ssm_states[self.layer_idx].copy_(
-                cache.ssm_states[self.layer_idx] * dA.unsqueeze(-1).unsqueeze(-1) + dBx
+            cache_params.ssm_states[self.layer_idx].copy_(
+                cache_params.ssm_states[self.layer_idx] * dA.unsqueeze(-1).unsqueeze(-1) + dBx
             )
 
             # Subsequent output
-            y = torch.einsum("bhpn,bn->bhp", cache.ssm_states[self.layer_idx], C)
+            y = torch.einsum("bhpn,bn->bhp", cache_params.ssm_states[self.layer_idx], C)
 
             # D skip connection
             y = y + self.D.unsqueeze(-1) * x
@@ -1391,11 +1396,11 @@ class Mamba2Mixer(nn.Module):
 
         return y
 
-    def forward(self, hidden_states, cache: Optional[HybridMamba2AttentionDynamicCache] = None):
+    def forward(self, hidden_states, cache_params: Optional[HybridMamba2AttentionDynamicCache] = None):
         # TODO: check version for AMD support?
         if is_fast_path_available and "cuda" in self.in_proj.weight.device.type:
-            return self.triton_kernels_forward(hidden_states, cache)
-        return self.slow_forward(hidden_states, cache)
+            return self.triton_kernels_forward(hidden_states, cache_params)
+        return self.slow_forward(hidden_states, cache_params)
 
 
 # Adapted from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Mamba2
@@ -1454,7 +1459,7 @@ class Mamba2Block(nn.Module):
         hidden_states: torch.FloatTensor,
         attention_mask: torch.FloatTensor,
         position_ids: torch.LongTensor,
-        cache: Optional[HybridMamba2AttentionDynamicCache] = None,
+        cache_params: Optional[HybridMamba2AttentionDynamicCache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
     ):
@@ -1465,7 +1470,7 @@ class Mamba2Block(nn.Module):
 
         # Mamba2 path
         if not self.attention_layer:
-            hidden_states = self.mixer(hidden_states, cache=cache)
+            hidden_states = self.mixer(hidden_states, cache_params=cache_params)
             attn_weights = None
         # Attention path
         else:
@@ -1473,7 +1478,7 @@ class Mamba2Block(nn.Module):
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
-                cache=cache,
+                cache_params=cache_params,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
             )
@@ -1558,6 +1563,82 @@ class Mamba2PreTrainedModel(PreTrainedModel):
                     n_residuals = 2 if self.config.mlp_intermediate_size > 0 else 1
                     with torch.no_grad():
                         p /= math.sqrt(n_residuals * self.config.num_hidden_layers)
+
+
+@dataclass
+class Mamba2Output(ModelOutput):
+    """
+    Class for the MAMBA2 model outputs.
+
+    Args:
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        cache_params (`HybridMamba2AttentionDynamicCache`):
+            The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
+            avoid providing the old `input_ids`. Includes both both the attention cache (which has a seq_len dimension)
+            and the mamba2 cache (which has a constant shape regardless of seq_len).
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+    """
+
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    cache_params: Optional[HybridMamba2AttentionDynamicCache] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@dataclass
+class Mamba2SequenceClassifierOutput(ModelOutput):
+    """
+    Base class for outputs of sentence classification models.
+
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Classification (or regression if config.num_labels==1) loss.
+        logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
+            Classification (or regression if config.num_labels==1) scores (before SoftMax).
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        cache_params (`HybridMamba2AttentionDynamicCache`):
+            The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
+            avoid providing the old `input_ids`. Includes both both the attention cache (which has a seq_len dimension)
+            and the mamba2 cache (which has a constant shape regardless of seq_len).
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
+    cache_params: Optional[HybridMamba2AttentionDynamicCache] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+
+
+@dataclass
+class Mamba2CausalLMOutput(ModelOutput):
+    """
+    Base class for causal language model (or autoregressive) outputs.
+
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Language modeling loss (for next-token prediction).
+        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        cache_params (`HybridMamba2AttentionDynamicCache`):
+            The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
+            avoid providing the old `input_ids`. Includes both both the attention cache (which has a seq_len dimension)
+            and the mamba2 cache (which has a constant shape regardless of seq_len).
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    logits: Optional[torch.FloatTensor] = None
+    cache_params: Optional[HybridMamba2AttentionDynamicCache] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
 MAMBA2_START_DOCSTRING = r"""
@@ -1768,7 +1849,7 @@ class Mamba2Model(Mamba2PreTrainedModel):
                     hidden_states=hidden_states,
                     attention_mask=causal_mask,
                     position_ids=position_ids,
-                    cache=past_key_values,
+                    cache_params=past_key_values,
                     output_attentions=output_attentions,
                     use_cache=use_cache,
                 )
