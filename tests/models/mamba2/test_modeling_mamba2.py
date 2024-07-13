@@ -103,7 +103,9 @@ class Mamba2ModelTester:
         self.tie_word_embeddings = tie_word_embeddings
         self.classifier_dropout = classifier_dropout
 
-    #TODO: Add get_large_model_config
+    # TODO: This might fail, need to create an internal testing
+    def get_large_model_config(self):
+        return Mamba2Config.from_pretrained("state-spaces/mamba2-2.7b")
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -299,12 +301,21 @@ class Mamba2ModelTester:
         return config, inputs_dict
 
 
+@unittest.skipIf(
+    not is_torch_greater_or_equal_than_2_0, reason="See https://github.com/huggingface/transformers/pull/24204"
+)
 @require_torch
 class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (Mamba2Model, Mamba2ForCausalLM) if is_torch_available() else ()
+    all_model_classes = (Mamba2Model, Mamba2ForCausalLM, Mamba2ForSequenceClassification) if is_torch_available() else ()
     all_generative_model_classes = (Mamba2ForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": Mamba2Model, "text-generation": Mamba2ForCausalLM} if is_torch_available() else {}
+        {
+            "feature-extraction": Mamba2Model,
+            "text-generation": Mamba2ForCausalLM,
+            "text-classification": Mamba2ForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
     )
     test_headmasking = False
     test_pruning = False
@@ -324,6 +335,31 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
     def test_config(self):
         self.config_tester.run_common_tests()
+    
+    @require_torch_multi_gpu
+    def test_multi_gpu_data_parallel_forward(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        # some params shouldn't be scattered by nn.DataParallel
+        # so just remove them if they are present.
+        blacklist_non_batched_params = ["cache_params"]
+        for k in blacklist_non_batched_params:
+            inputs_dict.pop(k, None)
+
+        # move input tensors to cuda:O
+        for k, v in inputs_dict.items():
+            if torch.is_tensor(v):
+                inputs_dict[k] = v.to(0)
+
+        for model_class in self.all_model_classes:
+            model = model_class(config=config)
+            model.to(0)
+            model.eval()
+
+            # Wrap model in nn.DataParallel
+            model = torch.nn.DataParallel(model)
+            with torch.no_grad():
+                _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
     def test_mamba2_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -336,6 +372,10 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_mamba2_lm_head_forward_and_backwards(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mamba2_lm_head_forward_and_backwards(*config_and_inputs)
+    
+    def test_mamba2_sequence_classification_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_mamba2_sequence_classification(*config_and_inputs)
 
     def test_state_equivalency(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -438,19 +478,25 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
                 list(self_attentions[0].shape[-3:]),
                 [self.model_tester.attention_num_heads, encoder_seq_length, encoder_key_length],
             )
+    
+    @slow
+    def test_model_from_pretrained(self):
+        model = Mamba2Model.from_pretrained("state-spaces/mamba2-130m")
+        self.assertIsNotNone(model)
 
     @unittest.skip(reason="Mamba2 has its own special cache type")
     @parameterized.expand([(1, False), (1, True), (4, False)])
     def test_new_cache_format(self, num_beams, do_sample):
         pass
-
+    
+    # TODO: add test_model_outputs_equivalence test
     # TODO: check test_flash_attn_2_fp32_ln and test_flash_attn_2_generate_padding_right
     # TODO: check test_flash_attn_2_generate_padding_right
     # TODO: check test_flash_attn_2_generate_use_cache
     # TODO: check test_flash_attn_2_inference_equivalence_right_padding
 
 
-# TODO: in total
+# TODO: in total, add integration tests for Mamba2
 """@require_torch
 class JambaModelIntegrationTest(unittest.TestCase):
     model = None
