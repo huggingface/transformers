@@ -180,14 +180,14 @@ class Mamba2ModelTester:
         model.to(torch_device)
         model.eval()
 
-        outputs = model(input_ids)
+        outputs = model(input_ids, attention_mask=input_mask)
         output_whole = outputs.last_hidden_state
 
-        outputs = model(input_ids[:, :-1], use_cache=True)
+        outputs = model(input_ids[:, :-1], attention_mask=input_mask[:, :-1], use_cache=True)
         output_one = outputs.last_hidden_state
 
         # Using the state computed on the first inputs, we will get the same output
-        outputs = model(input_ids[:, -1:], past_key_values=outputs.past_key_values)
+        outputs = model(input_ids[:, -1:], attention_mask=input_mask, past_key_values=outputs.past_key_values)
         output_two = outputs.last_hidden_state
 
         self.parent.assertTrue(torch.allclose(torch.cat([output_one, output_two], dim=1), output_whole, atol=1e-5))
@@ -237,68 +237,6 @@ class Mamba2ModelTester:
         self.parent.assertTrue(
             z.transpose(1, 2).expand(z.shape[0], z.shape[-1], 2).equal(repeat(z, "b 1 h -> b h p", p=2))
         )
-
-    # TODO: check and write for mamba2
-    """def create_and_check_decoder_model_past_large_inputs(
-            self,
-            config,
-            input_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-    ):
-        config.is_decoder = True
-        config.add_cross_attention = True
-        model = JambaForCausalLM(config=config)
-        model.to(torch_device)
-        model.eval()
-
-        # first forward pass
-        # Attention: Jamba needs the cache to be initialized to return a cache!
-        past_key_values = HybridMambaAttentionDynamicCache(
-            config, input_ids.shape[0], model.dtype, device=model.device
-        )
-        outputs = model(
-            input_ids,
-            attention_mask=input_mask,
-            past_key_values=past_key_values,
-            use_cache=True,
-        )
-        past_key_values = outputs.past_key_values
-
-        # create hypothetical multiple next token and extent to next_input_ids
-        next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
-        next_mask = ids_tensor((self.batch_size, 3), vocab_size=2)
-
-        # append to next input_ids and
-        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
-        next_attention_mask = torch.cat([input_mask, next_mask], dim=-1)
-
-        output_from_no_past = model(
-            next_input_ids,
-            attention_mask=next_attention_mask,
-            output_hidden_states=True,
-        )["hidden_states"][0]
-        output_from_past = model(
-            next_tokens,
-            attention_mask=next_attention_mask,
-            past_key_values=past_key_values,
-            output_hidden_states=True,
-            cache_position=torch.arange(
-                input_ids.shape[1], input_ids.shape[1] + next_tokens.shape[1], device=model.device
-            ),
-        )["hidden_states"][0]
-
-        # select random slice
-        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
-        output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
-
-        self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
-
-        # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))"""
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -390,14 +328,6 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
                     if param.requires_grad:
                         # check if it's a ones like
                         self.assertTrue(torch.allclose(param.data, torch.ones_like(param.data), atol=1e-5, rtol=1e-5))
-
-    def test_mismatched_shapes_have_properly_initialized_weights(self):
-        r"""
-        # TODO: also check if this is relevant
-        Overriding the test_mismatched_shapes_have_properly_initialized_weights test because A_log and D params of the
-        Jamba block are initialized differently and we tested that in test_initialization
-        """
-        self.skipTest(reason="Cumbersome and redundant for Mamba2")
 
     def test_attention_outputs(self):
         r"""
