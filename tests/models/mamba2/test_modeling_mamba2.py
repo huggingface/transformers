@@ -175,7 +175,9 @@ class Mamba2ModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
         result.loss.backward()
 
-    def create_and_check_state_equivalency(self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels):
+    def create_and_check_state_equivalency(
+        self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
         model = Mamba2Model(config=config)
         model.to(torch_device)
         model.eval()
@@ -331,8 +333,7 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
     def test_attention_outputs(self):
         r"""
-        TODO: reformulate for mamba2 as the indices are handled differently
-        Overriding the test_attention_outputs test as the Jamba model outputs attention only for its attention layers
+        Overriding the test_attention_outputs test as the Mamba2 model outputs attention only for its attention layers
         """
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
@@ -341,10 +342,7 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
         encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
 
-        expected_num_attentions = math.ceil(
-            (self.model_tester.num_hidden_layers - self.model_tester.attn_layer_offset)
-            / self.model_tester.attn_layer_period
-        )
+        expected_num_attentions = len(config.attention_layers_idx)
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
@@ -372,7 +370,7 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
             self.assertListEqual(
                 list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+                [self.model_tester.attention_num_heads, encoder_seq_length, encoder_key_length],
             )
             out_len = len(outputs)
 
@@ -393,7 +391,7 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             self.assertEqual(len(self_attentions), expected_num_attentions)
             self.assertListEqual(
                 list(self_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+                [self.model_tester.attention_num_heads, encoder_seq_length, encoder_key_length],
             )
 
     def test_left_padding_compatibility(self):

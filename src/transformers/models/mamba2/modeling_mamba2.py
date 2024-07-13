@@ -640,7 +640,6 @@ class Mamba2Attention(nn.Module):
             query,
             key.transpose(1, 2),
             beta=1.0,
-            alpha=self.norm_factor,
         )
         attn_scores = attn_scores.view(batch_size, num_attention_heads, query_length, key_length)
 
@@ -1742,7 +1741,9 @@ class Mamba2Model(Mamba2PreTrainedModel):
         hidden_states = inputs_embeds
 
         # Force cache to be our custom hybrid one, something in the generation module incorrectly overwrites it...
-        if (past_key_values is None and use_cache) or not isinstance(past_key_values, HybridMamba2AttentionDynamicCache):
+        if (past_key_values is None and use_cache) or not isinstance(
+            past_key_values, HybridMamba2AttentionDynamicCache
+        ):
             past_key_values = HybridMamba2AttentionDynamicCache(
                 config=self.config,
                 batch_size=inputs_embeds.shape[0],
