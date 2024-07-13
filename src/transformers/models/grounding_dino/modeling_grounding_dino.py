@@ -2465,7 +2465,15 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
 
         if not return_dict:
             enc_outputs = tuple(
-                value for value in [topk_proposals, enc_outputs_class, enc_outputs_coord_logits] if value is not None
+                value
+                for value in [
+                    topk_proposals,
+                    enc_outputs_class,
+                    enc_outputs_coord_logits,
+                    encoder_logits,
+                    encoder_pred_boxes,
+                ]
+                if value is not None
             )
             tuple_outputs = (
                 (decoder_outputs[0], init_reference_points) + decoder_outputs[1:] + encoder_outputs + enc_outputs

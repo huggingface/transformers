@@ -39,7 +39,7 @@ from transformers.testing_utils import (
 )
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -54,6 +54,41 @@ if is_vision_available():
     from PIL import Image
 
     from transformers import AutoProcessor
+
+
+def generate_fake_bounding_boxes(n_boxes):
+    """Generate bounding boxes in the format (cx, cy, w, h)"""
+    # Validate the input
+    if not isinstance(n_boxes, int):
+        raise ValueError("n_boxes must be an integer")
+    if n_boxes <= 0:
+        raise ValueError("n_boxes must be a positive integer")
+
+    # Generate random bounding boxes in the format (cx, cy, w, h)
+    bounding_boxes = torch.rand((n_boxes, 4))
+
+    for i in range(n_boxes):
+        cx, cy, w, h = bounding_boxes[i]
+
+        # Ensure width and height do not exceed bounds
+        if w > 1.0:
+            w = 1.0
+        if h > 1.0:
+            h = 1.0
+
+        # Ensure the bounding box stays within the normalized space
+        if cx - w / 2 < 0:
+            cx = w / 2
+        if cx + w / 2 > 1:
+            cx = 1 - w / 2
+        if cy - h / 2 < 0:
+            cy = h / 2
+        if cy + h / 2 > 1:
+            cy = 1 - h / 2
+
+        bounding_boxes[i] = torch.tensor([cx, cy, w, h])
+
+    return bounding_boxes
 
 
 class GroundingDinoModelTester:
@@ -74,7 +109,7 @@ class GroundingDinoModelTester:
         num_channels=3,
         image_size=98,
         n_targets=8,
-        num_labels=3,
+        num_labels=2,
         num_feature_levels=4,
         encoder_n_points=2,
         decoder_n_points=6,
@@ -117,7 +152,8 @@ class GroundingDinoModelTester:
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
         pixel_mask = torch.ones([self.batch_size, self.image_size, self.image_size], device=torch_device)
 
-        input_ids = ids_tensor([self.batch_size, self.max_text_len], self.num_labels)
+        input_ids = torch.tensor([101, 3869, 1012, 11420, 1012, 1012, 102])
+        input_ids = input_ids.unsqueeze(0).expand(self.batch_size, -1)
 
         labels = None
         if self.use_labels:
@@ -128,7 +164,7 @@ class GroundingDinoModelTester:
                 target["class_labels"] = torch.randint(
                     high=self.num_labels, size=(self.n_targets,), device=torch_device
                 )
-                target["boxes"] = torch.rand(self.n_targets, 4, device=torch_device)
+                target["boxes"] = generate_fake_bounding_boxes(self.n_targets).to(torch_device)
                 target["masks"] = torch.rand(self.n_targets, self.image_size, self.image_size, device=torch_device)
                 labels.append(target)
 
@@ -319,7 +355,7 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
             )
             out_len = len(outputs)
 
-            correct_outlen = 10
+            correct_outlen = 13
 
             # loss is at first position
             if "labels" in inputs_dict:
