@@ -73,7 +73,7 @@ class Mamba2Config(PretrainedConfig):
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
             by meanpooling all the original heads within that group. For more details checkout [this
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `attention_num_heads`.
-        num_hidden_layers (`int`, *optional*, defaults to 24):
+        num_hidden_layers (`int`, *optional*, defaults to 32):
             Number of hidden layers in the model.
         attention_layers_idx (`List[int]`, *optional*, defaults to `[]`):
             The specific layers that exchange the mamba2 mixer block with the attention equivalent.
@@ -166,7 +166,7 @@ class Mamba2Config(PretrainedConfig):
         attention_head_dim=128,
         attention_num_heads=30,
         attention_num_key_value_heads=30,
-        num_hidden_layers=24,
+        num_hidden_layers=32,
         attention_layers_idx=None,
         layer_norm_epsilon=1e-5,
         use_conv_bias=True,
