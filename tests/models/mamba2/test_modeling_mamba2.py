@@ -1,37 +1,3 @@
-# TODO
-"""
-add tests like this for einops -> torch (covers all cases that have exchanged einops for torch)
-
-import torch
-from einops import rearrange, repeat
-
-x = torch.randn(size=(2, 6, 4))
-z = torch.randn(size=(2, 1, 4))
-d = torch.randn(size=(4,))
-y = torch.randn(size=(2, 6, 4, 5))
-w = torch.randn(size=(2, 3, 4, 5, 6))
-v = torch.randn(size=(2, 4))
-
-
-print(x.transpose(1, 2).equal(rearrange(x, "b l d -> b d l")))
-print(z.squeeze(1).equal(rearrange(z, "d 1 w -> d w")))
-print(rearrange(y, "b c l h -> b h c l").equal(y.permute(0, 3, 1, 2)))
-This one below needs to be changed to "*y.size(), 5"
-print(y.unsqueeze(-1).expand(y.shape[0], y.shape[1], y.shape[2], y.shape[3], 5).equal(repeat(y, "... d -> ... d e", e=5)))
-print(rearrange(w, "b c l h p -> b (c l) h p").equal(w.view(w.shape[0], -1, w.shape[-2], w.shape[-1])))
-print(rearrange(x, "b (c l) ... -> b c l ...", l=3).equal(x.view(x.shape[0], -1, 3, x.shape[2])))
-print(rearrange(y, "b (c l) ... -> b c l ...", l=3).equal(y.view(y.shape[0], -1, 3, y.shape[2], y.shape[3])))
-print(rearrange(x, pattern="b l n -> b l 1 n").equal(x.unsqueeze(-2)))
-print(rearrange(x, pattern="b l (h p) -> b l h p", p=2).equal(x.view(x.shape[0], x.shape[1], -1, 2)))
-print(rearrange(y, "b l h p -> b l (h p)").equal(y.view(y.shape[0], y.shape[1], -1)))
-print(v.view(v.shape[0], -1, 2).equal(rearrange(v, "b (h p) -> b h p", p=2)))
-print(rearrange(v, "b h -> b h 1 1").equal(v.unsqueeze(-1).unsqueeze(-1)))
-print(rearrange(x, "b h p -> b 1 (h p)").equal(x.view(x.shape[0], -1).unsqueeze(1)))
-print(repeat(d, "h -> h p n", p=2, n=3).equal(d.unsqueeze(-1).unsqueeze(-1).expand(d.shape[0], 2, 3)))
-print(repeat(z, "b 1 h -> b h p", p=2).equal(z.transpose(1, 2).expand(z.shape[0], z.shape[-1], 2)))
-print(d.unsqueeze(-1).expand(d.shape[0], 3).equal(repeat(d, "h -> h p", p=3)))
-"""
-
 # coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
@@ -55,6 +21,7 @@ from parameterized import parameterized
 
 from transformers import Mamba2Config, is_torch_available
 from transformers.testing_utils import (
+    require_einops,
     require_torch,
     torch_device,
 )
@@ -76,29 +43,29 @@ if is_torch_available():
 
 class Mamba2ModelTester:
     def __init__(
-            self,
-            parent,
-            batch_size=13,
-            seq_length=7,
-            is_training=True,
-            use_input_mask=True,
-            use_labels=True,
-            vocab_size=99,
-            hidden_size=32,
-            A_initializer_range=(2,2),
-            mlp_intermediate_size=64,
-            num_hidden_layers=5,
-            attention_layers_idx=None,
-            attention_num_heads=4,
-            attention_num_key_value_heads=2,
-            hidden_act="silu",
-            max_position_embeddings=512,
-            type_vocab_size=16,
-            type_sequence_label_size=2,
-            num_labels=3,
-            num_choices=4,
-            scope=None,
-            tie_word_embeddings=True,
+        self,
+        parent,
+        batch_size=13,
+        seq_length=7,
+        is_training=True,
+        use_input_mask=True,
+        use_labels=True,
+        vocab_size=99,
+        hidden_size=32,
+        A_initializer_range=(2, 2),
+        mlp_intermediate_size=64,
+        num_hidden_layers=5,
+        attention_layers_idx=None,
+        attention_num_heads=4,
+        attention_num_key_value_heads=2,
+        hidden_act="silu",
+        max_position_embeddings=512,
+        type_vocab_size=16,
+        type_sequence_label_size=2,
+        num_labels=3,
+        num_choices=4,
+        scope=None,
+        tie_word_embeddings=True,
     ):
         if attention_layers_idx is None:
             self.attention_layers_idx = [1]
@@ -167,7 +134,9 @@ class Mamba2ModelTester:
         config.vocab_size = 300
         return config
 
-    def create_and_check_mamba2_model(self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels):
+    def create_and_check_mamba2_model(
+        self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
         model = Mamba2Model(config=config)
         model.to(torch_device)
         model.eval()
@@ -177,7 +146,9 @@ class Mamba2ModelTester:
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    def create_and_check_mamba2_causal_lm(self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels):
+    def create_and_check_mamba2_causal_lm(
+        self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
         model = Mamba2ForCausalLM(config)
         model.to(torch_device)
         model.eval()
@@ -191,7 +162,7 @@ class Mamba2ModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_mamba2_lm_head_forward_and_backwards(
-            self, config, input_ids, input_mask, sequence_labels, token_labels, choice_label, gradient_checkpointing=False
+        self, config, input_ids, input_mask, sequence_labels, token_labels, choice_label, gradient_checkpointing=False
     ):
         model = Mamba2ForCausalLM(config)
         model.to(torch_device)
@@ -204,13 +175,51 @@ class Mamba2ModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
         result.loss.backward()
 
-    # TODO:
-    def create_and_check_naive_fast_equivalence(self):
-        pass
-
-    # TODO:
     def create_and_check_einops_torch_equivalence(self):
-        pass
+        from einops import rearrange, repeat
+
+        # cover all operations in the original mamba2 repo that used einops operations as we use pure torch only
+        d = torch.randn(size=(4,))
+        v = torch.randn(size=(2, 4))
+        w = torch.randn(size=(2, 3, 4, 5, 6))
+        x = torch.randn(size=(2, 6, 4))
+        y = torch.randn(size=(2, 6, 4, 5))
+        z = torch.randn(size=(2, 1, 4))
+
+        self.parent.assertTrue(d.unsqueeze(-1).expand(d.shape[0], 3).equal(repeat(d, "h -> h p", p=3)))
+        self.parent.assertTrue(
+            d.unsqueeze(-1).unsqueeze(-1).expand(d.shape[0], 2, 3).equal(repeat(d, "h -> h p n", p=2, n=3))
+        )
+
+        self.parent.assertTrue(v.view(v.shape[0], -1, 2).equal(rearrange(v, "b (h p) -> b h p", p=2)))
+        self.parent.assertTrue(v.unsqueeze(-1).unsqueeze(-1).equal(rearrange(v, "b h -> b h 1 1")))
+
+        self.parent.assertTrue(
+            w.view(w.shape[0], -1, w.shape[-2], w.shape[-1]).equal(rearrange(w, "b c l h p -> b (c l) h p"))
+        )
+
+        self.parent.assertTrue(x.transpose(1, 2).equal(rearrange(x, "b l d -> b d l")))
+        self.parent.assertTrue(x.unsqueeze(-1).expand(*x.size(), 5).equal(repeat(x, "... d -> ... d e", e=5)))
+        self.parent.assertTrue(
+            x.view(x.shape[0], -1, 3, x.shape[2]).equal(rearrange(x, "b (c l) ... -> b c l ...", l=3))
+        )
+        self.parent.assertTrue(x.unsqueeze(-2).equal(rearrange(x, pattern="b l n -> b l 1 n")))
+        self.parent.assertTrue(
+            x.view(x.shape[0], x.shape[1], -1, 2).equal(rearrange(x, pattern="b l (h p) -> b l h p", p=2))
+        )
+        self.parent.assertTrue(x.view(x.shape[0], -1).unsqueeze(1).equal((rearrange(x, "b h p -> b 1 (h p)"))))
+
+        self.parent.assertTrue(y.permute(0, 3, 1, 2).equal(rearrange(y, "b c l h -> b h c l")))
+        self.parent.assertTrue(y.unsqueeze(-1).expand(*y.size(), 5).equal(repeat(y, "... d -> ... d e", e=5)))
+        self.parent.assertTrue(
+            y.view(y.shape[0], -1, 3, y.shape[2], y.shape[3]).equal(rearrange(y, "b (c l) ... -> b c l ...", l=3))
+        )
+        self.parent.assertTrue(y.view(y.shape[0], y.shape[1], -1).equal(rearrange(y, "b l h p -> b l (h p)")))
+
+        self.parent.assertTrue(z.squeeze(1).equal(rearrange(z, "d 1 w -> d w")))
+        self.parent.assertTrue(
+            z.transpose(1, 2).expand(z.shape[0], z.shape[-1], 2).equal(repeat(z, "b 1 h -> b h p", p=2))
+        )
 
     # TODO: check and write for mamba2
     """def create_and_check_decoder_model_past_large_inputs(
@@ -304,8 +313,12 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
     def setUp(self):
         self.model_tester = Mamba2ModelTester(self)
-        # TODO: overwrite common properties
-        self.config_tester = ConfigTester(self, config_class=Mamba2Config, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self,
+            config_class=Mamba2Config,
+            hidden_size=37,
+            common_properties=["hidden_size", "mamba2_head_dim", "attention_head_dim", "attention_num_heads"],
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -321,6 +334,10 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_mamba2_lm_head_forward_and_backwards(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mamba2_lm_head_forward_and_backwards(*config_and_inputs)
+
+    @require_einops
+    def test_einops_torch_equivalence(self):
+        self.model_tester.create_and_check_einops_torch_equivalence()
 
     def test_initialization(self):
         r"""

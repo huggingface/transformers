@@ -754,9 +754,7 @@ class Mamba2FlashAttention2(Mamba2Attention):
         )
 
         # Reshape outputs
-        attn_output = attn_weights.reshape(
-            attn_weights.shape[0], attn_weights.shape[1], self.out_dim
-        )
+        attn_output = attn_weights.reshape(attn_weights.shape[0], attn_weights.shape[1], self.out_dim)
         attn_output = self.out_proj(attn_output)
 
         if not output_attentions:
@@ -1244,7 +1242,7 @@ class Mamba2Mixer(nn.Module):
         pad_size = chunk_size - (seq_len % chunk_size)
 
         # dt softplus and clamping
-        dt = nn.functional.softplus(dt + dt_bias)
+        dt = F.softplus(dt + dt_bias)
         dt = torch.clamp(dt, dt_min, dt_max)
 
         D_residual = D.unsqueeze(-1) * pad_by_size(x, pad_size)

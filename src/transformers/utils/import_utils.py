@@ -108,6 +108,7 @@ _cv2_available = importlib.util.find_spec("cv2") is not None
 _datasets_available = _is_package_available("datasets")
 _decord_available = importlib.util.find_spec("decord") is not None
 _detectron2_available = _is_package_available("detectron2")
+_einops_available = _is_package_available("einops")
 # We need to check both `faiss` and `faiss-cpu`.
 _faiss_available = importlib.util.find_spec("faiss") is not None
 try:
@@ -382,7 +383,7 @@ def is_mamba_ssm_available():
 
 
 def is_mamba_ssm_greater_or_equal_2_0_4():
-    if not _is_package_available("mamba_ssm"):
+    if not is_mamba_ssm_available():
         return False
 
     return version.parse(importlib.metadata.version("mamba_ssm")) >= version.parse("2.0.4")
@@ -396,6 +397,10 @@ def is_causal_conv1d_available():
             return False
         return _is_package_available("causal_conv1d")
     return False
+
+
+def is_einops_available():
+    return _einops_available
 
 
 def is_torch_mps_available():

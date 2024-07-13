@@ -95,7 +95,7 @@ class Mamba2Config(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing the embedding weight matrix.
         conv_initializer_range (`float`, *optional*):
             The range for uniformly initializing the convolution weights.
-        A_initializer_range (`Tuple[int]`, *optional*, defaults to `(1, 16)`):
+        A_initializer_range (`List[int]`, *optional*, defaults to `[1, 16]`):
             The range for uniformly initializing the 1-SS(a) scalar.
         time_step_min (`float`, *optional*, defaults to 0.001):
             Minimum `time_step` used to bound `dt_proj.bias`.
@@ -103,7 +103,7 @@ class Mamba2Config(PretrainedConfig):
             Maximum `time_step` used to bound `dt_proj.bias`.
         time_step_floor (`float`, *optional*, defaults to 0.0001):
             Minimum clamping value of the `dt_proj.bias` layer initialization.
-        time_step_limit (`Tuple[float]`, *optional*, defaults to `(0.0, inf)`):
+        time_step_limit (`List[float]`, *optional*, defaults to `[0.0, inf]`):
             Clapping values for the dt weights.
         residual_in_fp32 (`bool`, *optional*, defaults to `True`):
             Whether or not residuals should be in `float32`. If set to `False` residuals will keep the same `dtype` as the rest of the model
@@ -177,11 +177,11 @@ class Mamba2Config(PretrainedConfig):
         hidden_act="silu",
         emb_initializer_range=0.02,
         conv_initializer_range=None,
-        A_initializer_range=(1, 16),
+        A_initializer_range=None,
         time_step_min=0.001,
         time_step_max=0.1,
         time_step_floor=1e-4,
-        time_step_limit=(0.0, float("inf")),
+        time_step_limit=None,
         residual_in_fp32=True,
         rescale_prenorm_residual=False,
         rope_emb_dim=64,
@@ -195,6 +195,10 @@ class Mamba2Config(PretrainedConfig):
         # Avoid mutable default args
         if attention_layers_idx is None:
             attention_layers_idx = []
+        if A_initializer_range is None:
+            A_initializer_range = [1, 16]
+        if time_step_limit is None:
+            time_step_limit = [0.0, float("inf")]
 
         self.vocab_size = vocab_size
         self.pad_token_id = pad_token_id
