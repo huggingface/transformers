@@ -920,12 +920,12 @@ class Mamba2SdpaAttention(Mamba2Attention):
         value = repeat_kv(value, self.num_groups_kv)
 
         # TODO: this shouldn't be necessary anymore
-        # Mamba2 casts query and key in fp32 to apply rotary embedding in full precision
+        """# Mamba2 casts query and key in fp32 to apply rotary embedding in full precision
         target_dtype = value.dtype
         if query.dtype != target_dtype:
             query = query.to(target_dtype)
         if key.dtype != target_dtype:
-            key = key.to(target_dtype)
+            key = key.to(target_dtype)"""
 
         # Avoid torch==2.1.2 specific bug for the memory-efficient backend in SDPA
         if self.require_contiguous_qkv and query.device.type == "cuda" and attention_mask is not None:
@@ -1250,7 +1250,7 @@ class Mamba2Mixer(nn.Module):
 
         # Discretize x and A
         x = x * dt.unsqueeze(-1)
-        A = A * dt
+        A = A.to(x.dtype) * dt
 
         # Rearrange into blocks/chunks
         x, A, B, C = [reshape_into_chunks(t, pad_size, chunk_size) for t in (x, A, B, C)]
