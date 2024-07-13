@@ -1823,6 +1823,7 @@ class Mamba2Model(Mamba2PreTrainedModel):
         past_length = past_key_values.get_seq_length() if past_key_values is not None else 0
 
         # Follows GPTNeoX based creation of masks
+        attention_mask = attention_mask.view(batch_size, -1) if attention_mask is not None else None
         if self._attn_implementation == "flash_attention_2":
             return attention_mask if (attention_mask is not None and 0 in attention_mask) else None
         elif self._attn_implementation == "sdpa" and not output_attentions:
