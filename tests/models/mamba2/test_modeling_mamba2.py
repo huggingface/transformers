@@ -175,6 +175,23 @@ class Mamba2ModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
         result.loss.backward()
 
+    def create_and_check_state_equivalency(self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels):
+        model = Mamba2Model(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        outputs = model(input_ids)
+        output_whole = outputs.last_hidden_state
+
+        outputs = model(input_ids[:, :-1], use_cache=True)
+        output_one = outputs.last_hidden_state
+
+        # Using the state computed on the first inputs, we will get the same output
+        outputs = model(input_ids[:, -1:], past_key_values=outputs.past_key_values)
+        output_two = outputs.last_hidden_state
+
+        self.parent.assertTrue(torch.allclose(torch.cat([output_one, output_two], dim=1), output_whole, atol=1e-5))
+
     def create_and_check_einops_torch_equivalence(self):
         from einops import rearrange, repeat
 
@@ -334,6 +351,10 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_mamba2_lm_head_forward_and_backwards(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mamba2_lm_head_forward_and_backwards(*config_and_inputs)
+
+    def test_state_equivalency(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_state_equivalency(*config_and_inputs)
 
     @require_einops
     def test_einops_torch_equivalence(self):

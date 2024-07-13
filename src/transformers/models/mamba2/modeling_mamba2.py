@@ -177,7 +177,9 @@ class HybridMamba2AttentionDynamicCache(DynamicCache):
     # Fixes issues when accessing on empty cache
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
-        # TODO: make it independent of transformers layer?
+        # Mamba2 layers don't need the seq_len either way
+        if len(self.transformer_layers) == 0:
+            return 0
 
         # Take any layer that contains cache and not empty tensor
         layer_idx = self.transformer_layers[0] if layer_idx not in self.transformer_layers else layer_idx
@@ -1328,7 +1330,7 @@ class Mamba2Mixer(nn.Module):
 
         if cached_forward:
             cache.conv_states[self.layer_idx].copy_(torch.roll(cache.conv_states[self.layer_idx], shifts=-1, dims=-1))
-            cache.conv_states[self.layer_idx][:, :, -1] = xBC
+            cache.conv_states[self.layer_idx][:, :, -1] = xBC.squeeze(1)
             xBC = torch.sum(cache.conv_states[self.layer_idx] * self.conv1d.weight.squeeze(1), dim=-1)
             if self.conv1d.bias is not None:
                 xBC = xBC + self.conv1d.bias
@@ -1740,7 +1742,7 @@ class Mamba2Model(Mamba2PreTrainedModel):
         hidden_states = inputs_embeds
 
         # Force cache to be our custom hybrid one, something in the generation module incorrectly overwrites it...
-        if (past_key_values is None and use_cache) or isinstance(past_key_values, DynamicCache):
+        if (past_key_values is None and use_cache) or not isinstance(past_key_values, HybridMamba2AttentionDynamicCache):
             past_key_values = HybridMamba2AttentionDynamicCache(
                 config=self.config,
                 batch_size=inputs_embeds.shape[0],
