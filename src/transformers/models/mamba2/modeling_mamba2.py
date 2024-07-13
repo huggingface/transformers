@@ -1668,7 +1668,8 @@ MAMBA2_INPUTS_DOCSTRING = r"""
     MAMBA2_START_DOCSTRING,
 )
 class Mamba2Model(Mamba2PreTrainedModel):
-    # Copied from transformers.models.mamba.modeling_mamba.MambaModel.__init__ with Mamba->Mamba2
+    # Adapted from transformers.models.mamba.modeling_mamba.MambaModel.__init__ with Mamba->Mamba2
+    # Additional information about possible attention layers
     def __init__(self, config):
         super().__init__(config)
 
