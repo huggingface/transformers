@@ -1011,8 +1011,6 @@ class GLMTransformer(torch.nn.Module):
     ):
         if not kv_caches:
             kv_caches = [None] * self.num_layers
-        else:
-            kv_caches = kv_caches[1]  # transformers 4.43 and later
         presents = () if use_cache else None
 
         if self.gradient_checkpointing and self.training and use_cache:
@@ -1194,9 +1192,10 @@ class GLMForCausalLM(GLMPreTrainedModel):
     ) -> Dict[str, Any]:
 
         # update past_key_values
-        model_kwargs["past_key_values"] = self._extract_past_from_model_output(
+        cache_name, cache = self._extract_past_from_model_output(
             outputs, standardize_cache_format=standardize_cache_format
         )
+        model_kwargs[cache_name] = cache
 
         # update attention mask
         if "attention_mask" in model_kwargs:
