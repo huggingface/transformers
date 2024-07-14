@@ -36,6 +36,7 @@ FLAX_MODEL_MAPPING_NAMES = OrderedDict(
         ("blenderbot-small", "FlaxBlenderbotSmallModel"),
         ("bloom", "FlaxBloomModel"),
         ("clip", "FlaxCLIPModel"),
+        ("dinov2", "FlaxDinov2Model"),
         ("distilbert", "FlaxDistilBertModel"),
         ("electra", "FlaxElectraModel"),
         ("gemma", "FlaxGemmaModel"),
