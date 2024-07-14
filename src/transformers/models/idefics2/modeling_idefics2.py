@@ -1697,7 +1697,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
         return model_kwargs
 
     @staticmethod
-    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM._reorder_cache
+    # Copied from transformers.models.opt.modeling_opt.OPTForCausalLM._reorder_cache
     def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
         for layer_past in past_key_values:
