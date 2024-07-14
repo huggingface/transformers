@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The Google Flax Team Authors and The HuggingFace Inc. team.
+# Copyright 2023 Meta AI and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,17 +12,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from safetensors.flax import load_file
-import os
-import math
-from typing import Optional, Tuple
+"""Flax DINOv2 model."""
+
+
 import collections.abc
+import math
+import os
+from typing import Optional, Tuple
+
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen.attention import dot_product_attention_weights
 from flax.traverse_util import flatten_dict, unflatten_dict
+from safetensors.flax import load_file
 
 from ...modeling_flax_outputs import FlaxBaseModelOutput, FlaxBaseModelOutputWithPooling, FlaxSequenceClassifierOutput
 from ...modeling_flax_utils import (
@@ -92,15 +96,17 @@ class FlaxDinov2PatchEmbeddings(nn.Module):
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
-        image_size = self.config.image_size   # ? 518
-        patch_size = self.config.patch_size   # ? 14
+        image_size = self.config.image_size  # ? 518
+        patch_size = self.config.patch_size  # ? 14
         image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
         patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])   # ? 518//14 * 518//14 = 36*36 = 1296
- 
+        num_patches = (image_size[1] // patch_size[1]) * (
+            image_size[0] // patch_size[0]
+        )  # ? 518//14 * 518//14 = 36*36 = 1296
+
         self.num_patches = num_patches
         self.num_channels = self.config.num_channels
-        self.projection = nn.Conv(            
+        self.projection = nn.Conv(
             self.config.hidden_size,
             kernel_size=(patch_size[0], patch_size[1]),  # ? (14, 14)
             strides=(patch_size[0], patch_size[1]),
@@ -112,48 +118,61 @@ class FlaxDinov2PatchEmbeddings(nn.Module):
         )
 
     def __call__(self, pixel_values):
-        num_channels = pixel_values.shape[-1]  # ? jax convention is NHWC 
+        num_channels = pixel_values.shape[-1]  # ? jax convention is NHWC
         if num_channels != self.num_channels:
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
                 f" Expected {self.num_channels} but got {num_channels}."
             )
-        embeddings = self.projection(pixel_values)    # ? (B,224,224,3) -> (B, 16, 16, 768)
+        embeddings = self.projection(pixel_values)  # ? (B,224,224,3) -> (B, 16, 16, 768)
         batch_size, _, _, channels = embeddings.shape
         return jnp.reshape(embeddings, (batch_size, -1, channels))  # ? (B, 16*16, 768) = (B, 256, 768)
-    
 
 
 def interpolate_pos_encoding(config, hidden_states, height, width, position_embeddings):
     num_patches = hidden_states.shape[1] - 1
     num_positions = position_embeddings.shape[1] - 1
     if num_patches == num_positions and height == width:
-            return position_embeddings
+        return position_embeddings
     class_pos_embed = position_embeddings[:, 0]
     patch_pos_embed = position_embeddings[:, 1:]
     dim = hidden_states.shape[-1]
-    ##print(patch_pos_embed.shape)
+
     height = height // config.patch_size
     width = width // config.patch_size
     height, width = height + 0.1, width + 0.1
 
     patch_pos_embed = patch_pos_embed.reshape((1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim))
     patch_pos_embed = jnp.transpose(patch_pos_embed, (0, 3, 1, 2))
-    #print(patch_pos_embed.shape, patch_pos_embed[0,:3,:3])
+
     new_height_ratio = jnp.float32(height / math.sqrt(num_positions))
     new_width_ratio = jnp.float32(width / math.sqrt(num_positions))
-    #print(patch_pos_embed.shape)
-    #patch_pos_embed = jax.image.resize(patch_pos_embed, shape=(hidden_states.shape[0], dim, height, width), method='bicubic', antialias=False)
-    scale, translation = jnp.array([new_height_ratio, new_width_ratio], dtype=jnp.float32), jnp.array([0.0, 0.0], dtype=jnp.float32)
-     
-    patch_pos_embed = jax.image.scale_and_translate(patch_pos_embed, shape=(1,768,16,16), spatial_dims=(2,3), scale=scale, translation=translation, method='bicubic', antialias=False)
-    #print(patch_pos_embed.shape, patch_pos_embed[0,:3,:3])
+
+    # patch_pos_embed = jax.image.resize(patch_pos_embed, shape=(hidden_states.shape[0], dim, height, width), method='bicubic', antialias=False)
+    scale, translation = (
+        jnp.array([new_height_ratio, new_width_ratio], dtype=jnp.float32),
+        jnp.array([0.0, 0.0], dtype=jnp.float32),
+    )
+
+    patch_pos_embed = jax.image.scale_and_translate(
+        patch_pos_embed,
+        shape=(1, 768, 16, 16),
+        spatial_dims=(2, 3),
+        scale=scale,
+        translation=translation,
+        method="bicubic",
+        antialias=False,
+    )
+
     if True:
-        patch_pos_embed = load_file(os.path.join(os.path.dirname(__file__),"Dinov2_pos_encoding.safetensors"))["pos_encoding"]    # ! Remove this if interpolation can be fixed
-    #print(patch_pos_embed.shape)
+        patch_pos_embed = load_file(os.path.join(os.path.dirname(__file__), "Dinov2_pos_encoding.safetensors"))[
+            "pos_encoding"
+        ]  # ! Remove this if interpolation can be fixed
+
     patch_pos_embed = jnp.transpose(patch_pos_embed, (0, 2, 3, 1)).reshape((hidden_states.shape[0], -1, dim))
-    #print(patch_pos_embed.shape, patch_pos_embed[0,:3,:3])
+
     return jnp.concatenate((class_pos_embed[jnp.newaxis, :], patch_pos_embed), axis=1)
+
 
 class FlaxDinov2Embeddings(nn.Module):
     """Construct the CLS token, position and patch embeddings."""
@@ -164,38 +183,45 @@ class FlaxDinov2Embeddings(nn.Module):
     def setup(self):
         self.cls_token = self.param(
             "cls_token",
-            jax.nn.initializers.variance_scaling(self.config.initializer_range**2, "fan_in", "truncated_normal"),  # ? NTU initializer_range**2
+            jax.nn.initializers.variance_scaling(
+                self.config.initializer_range**2, "fan_in", "truncated_normal"
+            ),  # ? NTU initializer_range**2
             (1, 1, self.config.hidden_size),
         )
         self.mask_token = self.param(
             "mask_token",
-            jax.nn.initializers.variance_scaling(self.config.initializer_range**2, "fan_in", "truncated_normal"),  # ? NTU initializer_range**2
-            (1, self.config.hidden_size),        
+            jax.nn.initializers.variance_scaling(
+                self.config.initializer_range**2, "fan_in", "truncated_normal"
+            ),  # ? NTU initializer_range**2
+            (1, self.config.hidden_size),
         )
         self.patch_embeddings = FlaxDinov2PatchEmbeddings(self.config, dtype=self.dtype)
-        num_patches = self.patch_embeddings.num_patches      # ? 1296
+        num_patches = self.patch_embeddings.num_patches  # ? 1296
         self.position_embeddings = self.param(
             "position_embeddings",
             jax.nn.initializers.variance_scaling(self.config.initializer_range**2, "fan_in", "truncated_normal"),
-            (1, num_patches + 1, self.config.hidden_size),   # ? (1, 1297, 768)
+            (1, num_patches + 1, self.config.hidden_size),  # ? (1, 1297, 768)
         )
-        self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)  
+        self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
 
     def __call__(self, pixel_values, deterministic=True):
-        #print(pixel_values[0,:3,:3])
+
         batch_size = pixel_values.shape[0]
         height, width = pixel_values.shape[1], pixel_values.shape[2]  # ? 224, 224
 
         embeddings = self.patch_embeddings(pixel_values)
 
-
-        cls_tokens = jnp.broadcast_to(self.cls_token, (batch_size, 1, self.config.hidden_size))  # ? (batch_size, 1, 768)
+        cls_tokens = jnp.broadcast_to(
+            self.cls_token, (batch_size, 1, self.config.hidden_size)
+        )  # ? (batch_size, 1, 768)
         embeddings = jnp.concatenate((cls_tokens, embeddings), axis=1)
-        
-        embeddings = embeddings + interpolate_pos_encoding(self.config, embeddings, height, width, self.position_embeddings)
-        #print(embeddings.shape, embeddings[0,:3,:3])
+
+        embeddings = embeddings + interpolate_pos_encoding(
+            self.config, embeddings, height, width, self.position_embeddings
+        )
+
         embeddings = self.dropout(embeddings, deterministic=deterministic)
-        return embeddings      # ? (B, 257, 768)
+        return embeddings  # ? (B, 257, 768)
 
 
 # Copied from transformers.models.vit.modeling_flax_vit.FlaxViTSelfAttention with ViT->Dinov2
@@ -204,13 +230,13 @@ class FlaxDinov2SelfAttention(nn.Module):
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
-        if self.config.hidden_size % self.config.num_attention_heads != 0 and not hasattr(self.config, "embedding_size"):
+        if self.config.hidden_size % self.config.num_attention_heads != 0:
             raise ValueError(
-                f"The hidden size {self.config.hidden_size,} is not a multiple of the number of attention "
-                f"heads {self.config.num_attention_heads}."
+                "`config.hidden_size`: {self.config.hidden_size} has to be a multiple of `config.num_attention_heads`:"
+                " {self.config.num_attention_heads}"
             )
 
-        self.query = nn.Dense(      # ? (768, 768) applied over the last dimension of input, so no need to specify input dim, just make sure the shape is correct
+        self.query = nn.Dense(
             self.config.hidden_size,
             dtype=self.dtype,
             kernel_init=jax.nn.initializers.variance_scaling(
@@ -218,7 +244,7 @@ class FlaxDinov2SelfAttention(nn.Module):
             ),
             use_bias=self.config.qkv_bias,
         )
-        self.key = nn.Dense(             
+        self.key = nn.Dense(
             self.config.hidden_size,
             dtype=self.dtype,
             kernel_init=jax.nn.initializers.variance_scaling(
@@ -236,13 +262,13 @@ class FlaxDinov2SelfAttention(nn.Module):
         )
 
     def __call__(self, hidden_states, deterministic: bool = True, output_attentions: bool = False):
-        head_dim = self.config.hidden_size // self.config.num_attention_heads        # ? 768//12 = 64 
+        head_dim = self.config.hidden_size // self.config.num_attention_heads
 
         query_states = self.query(hidden_states).reshape(
-            hidden_states.shape[:2] + (self.config.num_attention_heads, head_dim)    # ? hidden_states.shape[:2] = (B, 257)
+            hidden_states.shape[:2] + (self.config.num_attention_heads, head_dim)
         )
         value_states = self.value(hidden_states).reshape(
-            hidden_states.shape[:2] + (self.config.num_attention_heads, head_dim)    # ? (B, 257, 768) -> (B, 257, 12, 64)
+            hidden_states.shape[:2] + (self.config.num_attention_heads, head_dim)
         )
         key_states = self.key(hidden_states).reshape(
             hidden_states.shape[:2] + (self.config.num_attention_heads, head_dim)
@@ -250,9 +276,9 @@ class FlaxDinov2SelfAttention(nn.Module):
 
         dropout_rng = None
         if not deterministic and self.config.attention_probs_dropout_prob > 0.0:
-            dropout_rng = self.make_rng("dropout")                                    # ? NTU make_rng is a method of nn.Module
+            dropout_rng = self.make_rng("dropout")
 
-        attn_weights = dot_product_attention_weights(                                 # ? attn_weights.shape = (B, 12, 257, 257) although the method takes in (B, 257, 12, 64) and (B, 257, 12, 64)
+        attn_weights = dot_product_attention_weights(
             query_states,
             key_states,
             dropout_rng=dropout_rng,
@@ -263,11 +289,12 @@ class FlaxDinov2SelfAttention(nn.Module):
             precision=None,
         )
 
-        attn_output = jnp.einsum("...hqk,...khd->...qhd", attn_weights, value_states) # ? (B, 257, 12, 64) 
-        attn_output = attn_output.reshape(attn_output.shape[:2] + (-1,))              # ? (B, 257, 768)
+        attn_output = jnp.einsum("...hqk,...khd->...qhd", attn_weights, value_states)
+        attn_output = attn_output.reshape(attn_output.shape[:2] + (-1,))
 
         outputs = (attn_output, attn_weights) if output_attentions else (attn_output,)
         return outputs
+    
 
 # Copied from transformers.models.vit.modeling_flax_vit.FlaxViTSelfOutput with ViT->Dinov2
 class FlaxDinov2SelfOutput(nn.Module):
@@ -288,8 +315,9 @@ class FlaxDinov2SelfOutput(nn.Module):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states, deterministic=deterministic)
         return hidden_states
+    
 
-
+# Copied from transformers.models.vit.modeling_flax_vit.FlaxViTAttention with ViT->Dinov2
 class FlaxDinov2Attention(nn.Module):
     config: Dinov2Config
     dtype: jnp.dtype = jnp.float32
@@ -309,8 +337,6 @@ class FlaxDinov2Attention(nn.Module):
             outputs += (attn_outputs[1],)
 
         return outputs
-
-
 def ones_with_scale(key, shape, scale, dtype=jnp.float32):
     return jnp.ones(shape, dtype) * scale
 
@@ -320,11 +346,11 @@ class FlaxDinov2LayerScale(nn.Module):
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
-        self.lambda1 = self.param("lambda1", ones_with_scale,(self.config.hidden_size,), self.config.layerscale_value)
+        self.lambda1 = self.param("lambda1", ones_with_scale, (self.config.hidden_size,), self.config.layerscale_value)
 
     def __call__(self, hidden_states):
         return self.lambda1 * hidden_states
-    
+
 
 class FlaxDinov2DropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
@@ -341,7 +367,8 @@ class FlaxDinov2DropPath(nn.Module):
         random_tensor = jnp.floor(random_tensor)
         output = inputs / keep_prob * random_tensor
         return output
-    
+
+
 class FlaxDinov2MLP(nn.Module):
     config: Dinov2Config
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -372,19 +399,18 @@ class FlaxDinov2MLP(nn.Module):
         hidden_states = self.act(hidden_states)
         hidden_states = self.fc2(hidden_states)
         return hidden_states
-    
+
 
 class FlaxDinov2SwiGLUFFN(nn.Module):
     config: Dinov2Config
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
-
         self.hidden_features = int(self.config.hidden_size * self.config.mlp_ratio)
         self.hidden_features = (int(self.hidden_features * 2 / 3) + 7) // 8 * 8
 
         self.weights_in = nn.Dense(
-            2*self.hidden_features,
+            2 * self.hidden_features,
             kernel_init=jax.nn.initializers.variance_scaling(
                 self.config.initializer_range**2, "fan_in", "truncated_normal"
             ),
@@ -413,7 +439,9 @@ class FlaxDinov2Layer(nn.Module):
         self.norm1 = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
         self.attention = FlaxDinov2Attention(self.config, dtype=self.dtype)
         self.layer_scale1 = FlaxDinov2LayerScale(self.config, dtype=self.dtype)
-        self.drop_path = FlaxDinov2DropPath(self.config.drop_path_rate) #if self.config.drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path = FlaxDinov2DropPath(
+            self.config.drop_path_rate
+        )  # if self.config.drop_path_rate > 0.0 else nn.Identity()
         self.norm2 = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
 
         if self.config.use_swiglu_ffn:
@@ -494,7 +522,7 @@ class FlaxDinov2LayerCollection(nn.Module):
         return FlaxBaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
         )
-
+    
 
 # Copied from transformers.models.vit.modeling_flax_vit.FlaxViTEncoder with ViT->Dinov2
 class FlaxDinov2Encoder(nn.Module):
@@ -519,27 +547,6 @@ class FlaxDinov2Encoder(nn.Module):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-
-
-# class FlaxDinov2Pooler(nn.Module):
-#     config: Dinov2Config
-#     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-
-#     def setup(self):
-#         self.dense = nn.Dense(
-#             self.config.hidden_size,
-#             kernel_init=jax.nn.initializers.variance_scaling(
-#                 self.config.initializer_range**2, "fan_in", "truncated_normal"
-#             ),
-#             dtype=self.dtype,
-#         )
-
-#     def __call__(self, hidden_states):
-#         cls_hidden_state = hidden_states[:, 0]
-#         cls_hidden_state = self.dense(cls_hidden_state)
-#         return nn.tanh(cls_hidden_state)
-
-
 class FlaxDinov2PreTrainedModel(FlaxPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -621,7 +628,6 @@ class FlaxDinov2PreTrainedModel(FlaxPreTrainedModel):
 class FlaxDinov2Module(nn.Module):
     config: Dinov2Config
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-    #add_pooling_layer: bool = True
 
     def setup(self):
         self.embeddings = FlaxDinov2Embeddings(self.config, dtype=self.dtype)
@@ -636,9 +642,8 @@ class FlaxDinov2Module(nn.Module):
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ):
-        #print(pixel_values.shape, pixel_values.dtype, pixel_values[0,:3,:3,0])
         hidden_states = self.embeddings(pixel_values, deterministic=deterministic)
-        #print(hidden_states.shape, hidden_states.dtype, hidden_states[0,:3,:3])
+
         encoder_outputs = self.encoder(
             hidden_states,
             deterministic=deterministic,
@@ -646,11 +651,11 @@ class FlaxDinov2Module(nn.Module):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        #print(encoder_outputs[0].shape, encoder_outputs[0].dtype, encoder_outputs[0][0,:3,:3])
+
         sequence_output = encoder_outputs[0]
         sequence_output = self.layernorm(sequence_output)
         pooled_output = sequence_output[:, 0, :]
-        
+
         if not return_dict:
             head_outputs = (sequence_output, pooled_output)
             return head_outputs + encoder_outputs[1:]
@@ -684,8 +689,8 @@ FLAX_VISION_MODEL_DOCSTRING = """
     >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     >>> image = Image.open(requests.get(url, stream=True).raw)
 
-    >>> image_processor = AutoImageProcessor.from_pretrained("google/Dinov2-base-patch16-224-in21k")
-    >>> model = FlaxDinov2Model.from_pretrained("google/Dinov2-base-patch16-224-in21k")
+    >>> image_processor = AutoImageProcessor.from_pretrained("facebook/dinov2-base")
+    >>> model = FlaxDinov2Model.from_pretrained("facebook/dinov2-base")
 
     >>> inputs = image_processor(images=image, return_tensors="np")
     >>> outputs = model(**inputs)
@@ -694,11 +699,10 @@ FLAX_VISION_MODEL_DOCSTRING = """
 """
 
 overwrite_call_docstring(FlaxDinov2Model, FLAX_VISION_MODEL_DOCSTRING)
-append_replace_return_docstrings(FlaxDinov2Model, output_type=FlaxBaseModelOutputWithPooling, config_class=Dinov2Config)
+append_replace_return_docstrings(
+    FlaxDinov2Model, output_type=FlaxBaseModelOutputWithPooling, config_class=Dinov2Config
+)
 
-# def printf(x):
-#     print(x.shape)
-#     return x
 
 class FlaxDinov2ForImageClassificationModule(nn.Module):
     config: Dinov2Config
@@ -733,13 +737,13 @@ class FlaxDinov2ForImageClassificationModule(nn.Module):
         )
 
         hidden_states = outputs[0]
-        #print(hidden_states.shape, hidden_states.dtype, hidden_states[0,:3,:3])
+
         cls_token = hidden_states[:, 0]
         patch_tokens = hidden_states[:, 1:]
         linear_input = jnp.concatenate([cls_token, patch_tokens.mean(axis=1)], axis=-1)
-        #print(linear_input.mean(), linear_input[0,:10])
+
         logits = self.classifier(linear_input)
-        #print(logits.shape, logits.mean(), logits[0,:10])
+
 
         if not return_dict:
             output = (logits,) + outputs[2:]
@@ -777,8 +781,8 @@ FLAX_VISION_CLASSIF_DOCSTRING = """
     >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     >>> image = Image.open(requests.get(url, stream=True).raw)
 
-    >>> image_processor = AutoImageProcessor.from_pretrained("google/Dinov2-base-patch16-224")
-    >>> model = FlaxDinov2ForImageClassification.from_pretrained("google/Dinov2-base-patch16-224")
+    >>> image_processor = AutoImageProcessor.from_pretrained("facebook/dinov2-base-imagenet1k-1-layer")
+    >>> model = FlaxDinov2ForImageClassification.from_pretrained("facebook/dinov2-base-imagenet1k-1-layer")
 
     >>> inputs = image_processor(images=image, return_tensors="np")
     >>> outputs = model(**inputs)

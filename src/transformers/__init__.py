@@ -8576,8 +8576,8 @@ if TYPE_CHECKING:
             FlaxCLIPVisionPreTrainedModel,
         )
         from .models.dinov2 import (
-            FlaxDinov2Model,
             FlaxDinov2ForImageClassification,
+            FlaxDinov2Model,
         )
         from .models.distilbert import (
             FlaxDistilBertForMaskedLM,

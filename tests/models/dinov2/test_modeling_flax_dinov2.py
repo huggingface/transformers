@@ -1,4 +1,5 @@
-# Copyright 2021 The HuggingFace Team. All rights reserved.
+# coding=utf-8
+# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,14 +12,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""Testing suite for the Flax Dinov2 model."""
 
 import inspect
 import unittest
 
 import numpy as np
+
 from transformers import Dinov2Config
-from transformers.utils import is_flax_available, cached_property, is_vision_available
 from transformers.testing_utils import require_flax, require_vision, slow
+from transformers.utils import cached_property, is_flax_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor
@@ -191,6 +194,7 @@ class FlaxDionv2ModelTest(FlaxModelTesterMixin, unittest.TestCase):
             outputs = model(np.ones((1, 3, 224, 224)))
             self.assertIsNotNone(outputs)
 
+
 # We will verify our results on an image of cute cats
 def prepare_img():
     image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
@@ -220,16 +224,20 @@ class FlaxDinov2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
         expected_slice = np.array(
-            [[-2.1746933, -0.47294563, 1.0936179],
-            [-3.2779698, -0.826912, -0.9209641],
-            [-2.9128823, 1.1284153, -0.7305769]]
+            [
+                [-2.1746933, -0.47294563, 1.0936179],
+                [-3.2779698, -0.826912, -0.9209641],
+                [-2.9128823, 1.1284153, -0.7305769],
+            ]
         )
 
         self.assertTrue(np.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-2))
 
     @slow
     def test_inference_image_classification_head_imagenet_1k(self):
-        model = FlaxDinov2ForImageClassification.from_pretrained("facebook/dinov2-base-imagenet1k-1-layer", from_pt=True)  # change from_pt to False when the checkpoints are uploaded to hub
+        model = FlaxDinov2ForImageClassification.from_pretrained(
+            "facebook/dinov2-base-imagenet1k-1-layer", from_pt=True
+        )  # change from_pt to False when the checkpoints are uploaded to hub
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -249,4 +257,3 @@ class FlaxDinov2ModelIntegrationTest(unittest.TestCase):
 
         expected_class_idx = 281
         self.assertEqual(logits.argmax(-1).item(), expected_class_idx)
-
