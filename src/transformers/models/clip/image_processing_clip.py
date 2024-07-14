@@ -306,7 +306,7 @@ class CLIPImageProcessor(BaseImageProcessor):
 
         if do_convert_rgb:
             images = [convert_to_rgb(image) for image in images]
-            
+
         if input_data_format is None and is_pil_image(images[0]):
             # Before PIL Image is converted to Numpy array
             # In case we have a 1-row or 3-row image in the shape of (1, xxx, 3) or (3, xxx, 3)
