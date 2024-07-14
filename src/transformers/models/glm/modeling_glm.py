@@ -24,7 +24,7 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 
-from ...cache_utils import Cache
+from ...cache_utils import Cache, DynamicCache
 from torch.nn import CrossEntropyLoss, LayerNorm, MSELoss, BCEWithLogitsLoss
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
@@ -215,7 +215,7 @@ class SelfAttention(torch.nn.Module):
         )
 
     def forward(
-            self, hidden_states, attention_mask, rotary_pos_emb, kv_cache=None, use_cache=True
+            self, hidden_states, attention_mask, rotary_pos_emb, past_key_value=None, use_cache=True
     ):
         # hidden_states: [b, sq, h]
 
@@ -266,18 +266,8 @@ class SelfAttention(torch.nn.Module):
             key_layer = apply_rotary_pos_emb(key_layer, rotary_pos_emb)
 
         # adjust key and value for inference
-        if kv_cache is not None:
-            cache_k, cache_v = kv_cache
-            key_layer = torch.cat((cache_k, key_layer), dim=2)
-            value_layer = torch.cat((cache_v, value_layer), dim=2)
-        if use_cache:
-            if kv_cache is None:
-                kv_cache = torch.cat((key_layer.unsqueeze(0).unsqueeze(0), value_layer.unsqueeze(0).unsqueeze(0)),
-                                     dim=1)
-            else:
-                kv_cache = (key_layer, value_layer)
-        else:
-            kv_cache = None
+        if past_key_value is not None:
+            key_layer, value_layer = past_key_value.update(key_layer, value_layer, self.layer_number - 1)
 
         if self.multi_query_attention:
             key_layer = key_layer.unsqueeze(2)
@@ -307,7 +297,7 @@ class SelfAttention(torch.nn.Module):
 
         output = self.dense(context_layer)
 
-        return output, kv_cache
+        return output, past_key_value
 
 
 class GLMMLP(nn.Module):
@@ -507,193 +497,21 @@ class GLMFlashAttention2(GLMAttention):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
-        # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
-        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
-        # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
 
-    def forward(
-            self,
-            hidden_states: torch.Tensor,
-            attention_mask: Optional[torch.LongTensor] = None,
-            position_ids: Optional[torch.LongTensor] = None,
-            past_key_value: Optional[Cache] = None,
-            output_attentions: bool = False,
-            use_cache: bool = False,
-            cache_position: Optional[torch.LongTensor] = None,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        # GLMFlashAttention2 attention does not support output_attentions
-
-        if not _flash_supports_window_size:
-            logger.warning_once(
-                "The current flash attention version does not support sliding window attention. Please use `attn_implementation='eager'` or upgrade flash-attn library."
-            )
-            raise ValueError("The current flash attention version does not support sliding window attention.")
-
-        output_attentions = False
-
-        bsz, q_len, _ = hidden_states.size()
-
-        qkv = self.qkv_proj(hidden_states)
-        query_pos = self.num_heads * self.head_dim
-        query_states = qkv[..., :query_pos]
-        key_states = qkv[..., query_pos: query_pos + self.num_key_value_heads * self.head_dim]
-        value_states = qkv[..., query_pos + self.num_key_value_heads * self.head_dim:]
-
-        # Flash attention requires the input to have the shape
-        # batch_size x seq_length x head_dim x hidden_dim
-        # therefore we just need to keep the original shape
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-
-        kv_seq_len = key_states.shape[-2]
-        if past_key_value is not None:
-            if self.layer_idx is None:
-                raise ValueError(
-                    f"The cache structure has changed since version v4.36. If you are using {self.__class__.__name__} "
-                    "for auto-regressive decoding with k/v caching, please make sure to initialize the attention class "
-                    "with a layer index."
-                )
-            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
-
-        # Because the input can be padded, the absolute sequence length depends on the max position id.
-        rotary_seq_len = max(kv_seq_len, position_ids[:, -1].max().item()) + 1
-        cos, sin = self.rotary_emb(value_states, position_ids, seq_len=rotary_seq_len)
-
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
-
-        use_sliding_windows = (
-                _flash_supports_window_size
-                and getattr(self.config, "sliding_window", None) is not None
-                and kv_seq_len > self.config.sliding_window
-        )
-
-        if past_key_value is not None:
-            # Activate slicing cache only if the config has a value `sliding_windows` attribute
-            cache_has_contents = past_key_value.get_seq_length(self.layer_idx) > 0
-            if (
-                    getattr(self.config, "sliding_window", None) is not None
-                    and kv_seq_len > self.config.sliding_window
-                    and cache_has_contents
-            ):
-                slicing_tokens = 1 - self.config.sliding_window
-
-                past_key = past_key_value[self.layer_idx][0]
-                past_value = past_key_value[self.layer_idx][1]
-
-                past_key = past_key[:, :, slicing_tokens:, :].contiguous()
-                past_value = past_value[:, :, slicing_tokens:, :].contiguous()
-
-                if past_key.shape[-2] != self.config.sliding_window - 1:
-                    raise ValueError(
-                        f"past key must have a shape of (`batch_size, num_heads, self.config.sliding_window-1, head_dim`), got"
-                        f" {past_key.shape}"
-                    )
-
-                if attention_mask is not None:
-                    attention_mask = attention_mask[:, slicing_tokens:]
-                    attention_mask = torch.cat([attention_mask, torch.ones_like(attention_mask[:, -1:])], dim=-1)
-
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}  # Specific to RoPE models
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
-
-        # repeat k/v heads if n_kv_heads < n_heads
-        key_states = repeat_kv(key_states, self.num_key_value_groups)
-        value_states = repeat_kv(value_states, self.num_key_value_groups)
-
-        attn_dropout = self.attention_dropout if self.training else 0.0
-
-        # In PEFT, usually we cast the layer norms in float32 for training stability reasons
-        # therefore the input hidden states gets silently casted in float32. Hence, we need
-        # cast them back in the correct dtype just to be sure everything works as expected.
-        # This might slowdown training & inference so it is recommended to not cast the LayerNorms
-        # in fp32.
-
-        if query_states.dtype == torch.float32:
-            if torch.is_autocast_enabled():
-                target_dtype = torch.get_autocast_gpu_dtype()
-            # Handle the case where the model is quantized
-            elif hasattr(self.config, "_pre_quantization_dtype"):
-                target_dtype = self.config._pre_quantization_dtype
-            else:
-                target_dtype = self.qkv_proj.weight.dtype
-
-            logger.warning_once(
-                f"The input hidden states seems to be silently casted in float32, this might be related to"
-                f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
-                f" {target_dtype}."
-            )
-
-            query_states = query_states.to(target_dtype)
-            key_states = key_states.to(target_dtype)
-            value_states = value_states.to(target_dtype)
-
-        # Reashape to the expected shape for Flash Attention
+    def forward(self, query_states, key_states, value_states, attention_mask):
         query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
-
-        attn_output = self._flash_attention_forward(
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            q_len,
-            dropout=attn_dropout,
-            use_sliding_windows=use_sliding_windows,
-        )
-
-        attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
-        attn_output = self.o_proj(attn_output)
-
-        if not output_attentions:
-            attn_weights = None
-
-        return attn_output, attn_weights, past_key_value
-
-    def _flash_attention_forward(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            query_length,
-            dropout=0.0,
-            softmax_scale=None,
-            use_sliding_windows=False,
-    ):
-        """
-        Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
-        first unpad the input, then computes the attention scores and pad the final attention scores.
-
-        Args:
-            query_states (`torch.Tensor`):
-                Input query states to be passed to Flash Attention API
-            key_states (`torch.Tensor`):
-                Input key states to be passed to Flash Attention API
-            value_states (`torch.Tensor`):
-                Input value states to be passed to Flash Attention API
-            attention_mask (`torch.Tensor`):
-                The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
-                position of padding tokens and 1 for the position of non-padding tokens.
-            dropout (`float`):
-                Attention dropout
-            softmax_scale (`float`, *optional*):
-                The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
-            use_sliding_windows (`bool`, *optional*):
-                Whether to activate sliding window attention.
-        """
+        batch_size, query_length = query_states.shape[:2]
         if not self._flash_attn_uses_top_left_mask:
             causal = self.is_causal
         else:
             # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in LlamaFlashAttention2 __init__.
             causal = self.is_causal and query_length != 1
-
+        dropout = self.config.attention_dropout if self.training else 0.0
         # Contains at least one padding token in the sequence
         if attention_mask is not None:
-            batch_size = query_states.shape[0]
             query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
                 query_states, key_states, value_states, attention_mask, query_length
             )
@@ -701,75 +519,41 @@ class GLMFlashAttention2(GLMAttention):
             cu_seqlens_q, cu_seqlens_k = cu_seq_lens
             max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
 
-            if not use_sliding_windows:
-                attn_output_unpad = flash_attn_varlen_func(
-                    query_states,
-                    key_states,
-                    value_states,
-                    cu_seqlens_q=cu_seqlens_q,
-                    cu_seqlens_k=cu_seqlens_k,
-                    max_seqlen_q=max_seqlen_in_batch_q,
-                    max_seqlen_k=max_seqlen_in_batch_k,
-                    dropout_p=dropout,
-                    softmax_scale=softmax_scale,
-                    causal=causal,
-                )
-            else:
-                attn_output_unpad = flash_attn_varlen_func(
-                    query_states,
-                    key_states,
-                    value_states,
-                    cu_seqlens_q=cu_seqlens_q,
-                    cu_seqlens_k=cu_seqlens_k,
-                    max_seqlen_q=max_seqlen_in_batch_q,
-                    max_seqlen_k=max_seqlen_in_batch_k,
-                    dropout_p=dropout,
-                    softmax_scale=softmax_scale,
-                    causal=causal,
-                    window_size=(self.config.sliding_window, self.config.sliding_window),
-                )
+            attn_output_unpad = flash_attn_varlen_func(
+                query_states,
+                key_states,
+                value_states,
+                cu_seqlens_q=cu_seqlens_q,
+                cu_seqlens_k=cu_seqlens_k,
+                max_seqlen_q=max_seqlen_in_batch_q,
+                max_seqlen_k=max_seqlen_in_batch_k,
+                dropout_p=dropout,
+                softmax_scale=None,
+                causal=causal,
+            )
 
             attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
         else:
-            if not use_sliding_windows:
-                attn_output = flash_attn_func(
-                    query_states,
-                    key_states,
-                    value_states,
-                    dropout,
-                    softmax_scale=softmax_scale,
-                    causal=causal,
-                )
-            else:
-                attn_output = flash_attn_func(
-                    query_states,
-                    key_states,
-                    value_states,
-                    dropout,
-                    softmax_scale=softmax_scale,
-                    causal=causal,
-                    window_size=(self.config.sliding_window, self.config.sliding_window),
-                )
-
+            attn_output = flash_attn_func(
+                query_states, key_states, value_states, dropout, softmax_scale=None, causal=causal
+            )
+        attn_output = attn_output.reshape(batch_size, query_length, self.hidden_size_per_partition).contiguous()
         return attn_output
 
     def _upad_input(self, query_layer, key_layer, value_layer, attention_mask, query_length):
-        batch_size, kv_seq_len, num_heads, head_dim = key_layer.shape
-
-        # On the first iteration we need to properly re-create the padding mask
-        # by slicing it on the proper place
-        if kv_seq_len != attention_mask.shape[-1]:
-            attention_mask_num_tokens = attention_mask.shape[-1]
-            attention_mask = attention_mask[:, attention_mask_num_tokens - kv_seq_len:]
-
         indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
+        batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
 
-        key_layer = index_first_axis(key_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k)
-        value_layer = index_first_axis(value_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k)
-
+        key_layer = index_first_axis(
+            key_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
+        )
+        value_layer = index_first_axis(
+            value_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
+        )
         if query_length == kv_seq_len:
             query_layer = index_first_axis(
-                query_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k
+                query_layer.reshape(batch_size * kv_seq_len, self.num_attention_heads_per_partition, head_dim),
+                indices_k
             )
             cu_seqlens_q = cu_seqlens_k
             max_seqlen_in_batch_q = max_seqlen_in_batch_k
@@ -861,7 +645,7 @@ class GLMPreTrainedModel(PreTrainedModel):
         full_attention_mask.tril_()
         past_length = 0
         if past_key_values:
-            past_length = past_key_values[0][0].shape[2]
+            past_length = past_key_values.get_seq_length()
         if past_length:
             full_attention_mask = torch.cat((torch.ones(batch_size, seq_length, past_length,
                                                         device=input_ids.device), full_attention_mask), dim=-1)
@@ -929,18 +713,18 @@ class GLMBlock(torch.nn.Module):
         self.mlp = GLMMLP(config, device=device)
 
     def forward(
-            self, hidden_states, attention_mask, rotary_pos_emb, kv_cache=None, use_cache=True,
+            self, hidden_states, attention_mask, rotary_pos_emb, past_key_value=None, use_cache=True,
     ):
         # hidden_states: [s, b, h]
 
         # Layer norm at the beginning of the transformer layer.
         layernorm_output = self.input_layernorm(hidden_states)
         # Self attention.
-        attention_output, kv_cache = self.self_attention(
+        attention_output, past_key_value = self.self_attention(
             layernorm_output,
             attention_mask,
             rotary_pos_emb,
-            kv_cache=kv_cache,
+            past_key_value=past_key_value,
             use_cache=use_cache
         )
 
@@ -968,7 +752,7 @@ class GLMBlock(torch.nn.Module):
         output = torch.nn.functional.dropout(mlp_output, p=self.hidden_dropout, training=self.training)
         output = residual + output
 
-        return output, kv_cache
+        return output, past_key_value
 
 
 class GLMTransformer(torch.nn.Module):
@@ -1005,13 +789,10 @@ class GLMTransformer(torch.nn.Module):
             hidden_states,
             attention_mask,
             rotary_pos_emb,
-            kv_caches=None,
+            past_key_values,
             use_cache: Optional[bool] = True,
             output_hidden_states: Optional[bool] = False,
     ):
-        if not kv_caches:
-            kv_caches = [None] * self.num_layers
-        presents = () if use_cache else None
 
         if self.gradient_checkpointing and self.training and use_cache:
             logger.warning("`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`...")
@@ -1019,7 +800,7 @@ class GLMTransformer(torch.nn.Module):
 
         all_self_attentions = None
         all_hidden_states = () if output_hidden_states else None
-
+        next_decoder_cache = None
         for index in range(self.num_layers):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -1031,7 +812,7 @@ class GLMTransformer(torch.nn.Module):
                     hidden_states,
                     attention_mask,
                     rotary_pos_emb,
-                    kv_caches[index],
+                    past_key_values,
                     use_cache,
                     use_reentrant=False
                 )
@@ -1040,21 +821,12 @@ class GLMTransformer(torch.nn.Module):
                     hidden_states,
                     attention_mask,
                     rotary_pos_emb,
-                    kv_cache=kv_caches[index],
+                    past_key_value=past_key_values,
                     use_cache=use_cache
                 )
 
-            hidden_states, kv_cache = layer_ret
-            if use_cache:
-                # token by token decoding, use tuple format
-                if kv_caches[0] is not None:
-                    presents = presents + (kv_cache,)
-                # prefilling in decoding, use tensor format to save cuda memory
-                else:
-                    if len(presents) == 0:
-                        presents = kv_cache
-                    else:
-                        presents = torch.cat((presents, kv_cache.to(presents.device)), dim=0)
+            hidden_states, next_decoder_cache = layer_ret
+
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -1062,7 +834,7 @@ class GLMTransformer(torch.nn.Module):
         if self.post_layer_norm:
             hidden_states = self.final_layernorm(hidden_states)
 
-        return hidden_states, presents, all_hidden_states, all_self_attentions
+        return hidden_states, next_decoder_cache, all_hidden_states, all_self_attentions
 
 
 class GLMModel(GLMPreTrainedModel):
@@ -1117,7 +889,7 @@ class GLMModel(GLMPreTrainedModel):
             position_ids: Optional[torch.Tensor] = None,
             attention_mask: Optional[torch.BoolTensor] = None,
             full_attention_mask: Optional[torch.BoolTensor] = None,
-            past_key_values: Optional[Tuple[Tuple[torch.Tensor, torch.Tensor], ...]] = None,
+            past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
             inputs_embeds: Optional[torch.Tensor] = None,
             use_cache: Optional[bool] = None,
             output_attentions: Optional[bool] = None,
@@ -1131,6 +903,15 @@ class GLMModel(GLMPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         batch_size, seq_length = input_ids.shape
+
+        return_legacy_cache = False
+        if use_cache and not isinstance(past_key_values, Cache):  # kept for BC (non `Cache` `past_key_values` inputs)
+            return_legacy_cache = True
+            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+            logger.warning_once(
+                "We detected that you are passing `past_key_values` as a tuple and this is deprecated and will be removed in v4.43. "
+                "Please use an appropriate `Cache` class (https://huggingface.co/docs/transformers/v4.41.3/en/internal/generation_utils#transformers.Cache)"
+            )
 
         if inputs_embeds is None:
             inputs_embeds = self.embedding(input_ids)
@@ -1151,16 +932,15 @@ class GLMModel(GLMPreTrainedModel):
             inputs_embeds,
             full_attention_mask,
             rotary_pos_emb=rotary_pos_emb,
-            kv_caches=past_key_values,
+            past_key_values=past_key_values,
             use_cache=use_cache,
             output_hidden_states=output_hidden_states
         )
-        if presents is not None and type(presents) is torch.Tensor:
-            presents = presents.split(1, dim=0)
-            presents = list(presents)
-            presents = [list(x.squeeze(0).split(1, dim=0)) for x in presents]
-            presents = [tuple([x.squeeze(0) for x in y]) for y in presents]
-            presents = tuple(presents)
+
+        if return_legacy_cache:
+            presents = presents.to_legacy_cache()
+        if not use_cache:
+            presents = None
 
         if not return_dict:
             return tuple(v for v in [hidden_states, presents, all_hidden_states, all_self_attentions] if v is not None)
