@@ -183,7 +183,8 @@ class ChameleonConfig(PretrainedConfig):
             `image_start_token` and `image_end_token` markers will be left as-is.
             - If set to `"image-only"`, the logits for tokens other than the image tokens, and the `image_start_token`,
             `image_end_token`, `image_token` markers will be masked out during generation.
-            - `"interleaved-text-image"` is currently not supported.
+            - For `"interleaved-text-image"`, Chameleon impelements a simple state machine to switch between text and
+            image generation. This is not natively supported yet.
 
 
     ```python

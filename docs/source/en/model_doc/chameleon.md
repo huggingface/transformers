@@ -136,8 +136,6 @@ processor = ChameleonProcessor.from_pretrained("leloy/Anole-7b-v0.1-hf")
 model = ChameleonForCausalLM.from_pretrained(
     "leloy/Anole-7b-v0.1-hf",
     device_map="auto",
-    # This flag enables the model to generate images
-    multimodal_generation_mode="image-only",
 )
 
 # Prepare a prompt
@@ -145,6 +143,9 @@ prompt = "Generate an image of a snowman."
 
 # Preprocess the prompt
 inputs = processor(prompt, return_tensors="pt", padding=True).to(model.device)
+
+# Set the multimodal generation mode to `image-only` to force the model to only generate image tokens.
+model.multimodal_generation_mode="image-only"
 
 # Generate discrete image tokens
 # Note: We need to set `max_new_tokens` to 1026 since the model generates the `image_start_token` marker token first, then 1024 image tokens, and finally the `image_end_token` marker token.
@@ -174,8 +175,6 @@ processor = ChameleonProcessor.from_pretrained("leloy/Anole-7b-v0.1-hf")
 model = ChameleonForCausalLM.from_pretrained(
     "leloy/Anole-7b-v0.1-hf",
     device_map="auto",
-    # This flag enables the model to generate images
-    multimodal_generation_mode="image-only",
 )
 
 # Get image of a snowman
@@ -187,6 +186,9 @@ prompt = "Generate a variation of this image.<image>"
 
 # Preprocess the prompt
 inputs = processor(prompt, images=[image_snowman], return_tensors="pt", padding=True).to(model.device)
+
+# Set the multimodal generation mode to `image-only` to force the model to only generate image tokens.
+model.multimodal_generation_mode="image-only"
 
 # Generate discrete image tokens
 # Note: We need to set `max_new_tokens` to 1026 since the model generates the `image_start_token` marker token first, then 1024 image tokens, and finally the `image_end_token` marker token.
@@ -204,7 +206,37 @@ images[0].save("snowman.png")
 
 ### Interleaved image and text generation
 
-Currently not supported yet.
+Chameleon implements a simple state machine to dynamically switch between text and image generation modes. This is not natively supported by Transformers yet. But you can enable it on finetuned models by setting `multimodal_generation_mode` to `"interleaved-text-image"`.
+
+```python
+from transformers import ChameleonProcessor, ChameleonForCausalLM
+import torch
+from PIL import Image
+import requests
+
+processor = ChameleonProcessor.from_pretrained("leloy/Anole-7b-v0.1-hf")
+model = ChameleonForCausalLM.from_pretrained(
+    "leloy/Anole-7b-v0.1-hf",
+    device_map="auto",
+)
+
+# Get image of a snowman
+url = "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/snowman.jpg"
+image_snowman = Image.open(requests.get(url, stream=True).raw)
+
+# Prepare a prompt
+prompt = "Generate a variation of this image and describe the changes you made.<image>"
+
+# Preprocess the prompt
+inputs = processor(prompt, images=[image_snowman], return_tensors="pt", padding=True).to(model.device)
+
+# Set the multimodal generation mode to `interleaved-text-image` to leave the logits as-is.
+model.multimodal_generation_mode="interleaved-text-image"
+
+# Generate discrete image tokens
+# Note: We need to set `max_new_tokens` to 1026 since the model generates the `image_start_token` marker token first, then 1024 image tokens, and finally the `image_end_token` marker token.
+generate_ids = model.generate(**inputs, max_new_tokens=1026)
+```
 
 ## Model optimization
 

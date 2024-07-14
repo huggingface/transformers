@@ -1185,16 +1185,13 @@ class ChameleonImageVocabularyMapping:
         return sorted([val for name, val in self.vocab_map.items() if name.startswith("IMGIMG")])
 
     @cached_property
-    def all_image_tokens_mask(self):
-        all_image_tokens = [
+    def all_image_tokens(self):
+        return [
             *self.image_tokens,
             self.image_token_id,
             self.image_start_token_id,
             self.image_end_token_id,
         ]
-        mask = torch.zeros(self.vocab_map.size(), dtype=torch.bool)
-        mask[all_image_tokens] = True
-        return mask
 
     @cached_property
     def bpe2img(self):
@@ -1738,10 +1735,16 @@ class ChameleonForCausalLM(ChameleonPreTrainedModel):
             logits[:, :, image_tokens] = torch.finfo(logits.dtype).min
         elif self.multimodal_generation_mode == "image-only":
             # Only allow image tokens, and the special begin-image and end-image tokens
-            all_image_tokens_mask = self.model.vocabulary_mapping.all_image_tokens_mask
-            logits[:, :, ~all_image_tokens_mask] = torch.finfo(logits.dtype).min
+            all_image_tokens = self.model.vocabulary_mapping.all_image_tokens
+            # Mask for non-image tokens
+            mask = torch.ones(logits.shape[-1], dtype=torch.bool, device=logits.device)
+            mask[all_image_tokens] = False
+            logits[:, :, mask] = torch.finfo(logits.dtype).min
         elif self.multimodal_generation_mode == "interleaved-text-image":
-            raise NotImplementedError("Interleaved text-image multimodal generation is not yet supported.")
+            # Chameleon implements a simple state machine to dynamically switch between text and
+            # image generation modes. This is not natively supported by Transformers yet. Here,
+            # we simply leave the logits unchanged for now.
+            pass
         else:
             raise ValueError(
                 f"Invalid multimodal generation mode: {self.multimodal_generation_mode}. "
