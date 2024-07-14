@@ -94,6 +94,21 @@ GGUF_TENSOR_MAPPING = {
         "output.weight": "lm_head.weight",
         "output_norm": "model.norm",
     },
+    "phi3": {
+        "token_embd": "model.embed_tokens",
+        "blk": "model.layers",
+        "ffn_up": "mlp.gate_up_proj",
+        "ffn_down": "mlp.down_proj",
+        "ffn_gate": "mlp.gate_up_proj",
+        "ffn_norm": "post_attention_layernorm",
+        "attn_norm": "input_layernorm",
+        "attn_q": "self_attn.qkv_proj",
+        "attn_v": "self_attn.qkv_proj",
+        "attn_k": "self_attn.qkv_proj",
+        "attn_output": "self_attn.o_proj",
+        "output.weight": "lm_head.weight",
+        "output_norm": "model.norm",
+    }
 }
 
 
@@ -156,6 +171,18 @@ GGUF_CONFIG_MAPPING = {
         "ggml.unknown_token_id": "unk_token_id",
         "ggml.padding_token_id": "pad_token_id",
     },
+    "phi3": {
+        "context_length": "max_position_embeddings",
+        "block_count": "num_hidden_layers",
+        "feed_forward_length": "intermediate_size",
+        "embedding_length": "hidden_size",
+        "rope.dimension_count": None,
+        "rope.freq_base": "rope_theta",
+        "attention.head_count": "num_attention_heads",
+        "attention.head_count_kv": "num_key_value_heads",
+        "attention.layer_norm_rms_epsilon": "rms_norm_eps",
+        "vocab_size": "vocab_size"
+    }
 }
 
 GGUF_TOKENIZER_MAPPING = {
@@ -390,10 +417,47 @@ class GGUFQwen2Converter(Qwen2Converter):
         return tokenizer
 
 
+class GGUFPhi3Converter(LlamaConverter):
+    def __init__(self, tokenizer_dict):
+        self.original_tokenizer = GGUFTokenizerSkeleton(tokenizer_dict)
+        self.additional_kwargs = {}
+
+    def converted(self) -> Tokenizer:
+        vocab = {word: i for i, word in enumerate(self.original_tokenizer.tokens)}
+        merges = self.original_tokenizer.merges
+
+        tokenizer = Tokenizer(BPE(vocab, merges))
+
+        tokenizer.normalizer = normalizers.Sequence([normalizers.NFC(), normalizers.Lowercase()])
+        tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=True)
+        tokenizer.decoder = decoders.ByteLevel()
+
+        tokenizer.add_special_tokens(
+            [
+                AddedToken("<|endoftext|>", normalized=False, special=True),
+                AddedToken("<|assistant|>", normalized=False, special=True),
+                AddedToken("<|placeholder1|>", normalized=False, special=True),
+                AddedToken("<|placeholder2|>", normalized=False, special=True),
+                AddedToken("<|placeholder3|>", normalized=False, special=True),
+                AddedToken("<|placeholder4|>", normalized=False, special=True),
+                AddedToken("<|system|>", normalized=False, special=True),
+                AddedToken("<|end|>", normalized=False, special=True),
+                AddedToken("<|placeholder5|>", normalized=False, special=True),
+                AddedToken("<|placeholder6|>", normalized=False, special=True),
+                AddedToken("<|user|>", normalized=False, special=True)
+            ]
+        )
+
+        return tokenizer
+
 GGUF_TO_FAST_CONVERTERS = {
     "llama": GGUFLlamaConverter,
     "qwen2": GGUFQwen2Converter,
+<<<<<<< HEAD
     "qwen2_moe": GGUFQwen2Converter,
+=======
+    "phi3": GGUFPhi3Converter,
+>>>>>>> 64bbec9e1 (Add tensor mappings and define class GGUFPhi3Converter)
 }
 
 
