@@ -814,6 +814,13 @@ def is_flash_attn_greater_or_equal_2_10():
     return version.parse(importlib.metadata.version("flash_attn")) >= version.parse("2.1.0")
 
 
+def is_flash_attn_greater_or_equal_2_41():
+    if not _is_package_available("flash_attn"):
+        return False
+
+    return version.parse(importlib.metadata.version("flash_attn")) >= version.parse("2.4.1")
+
+
 def is_flash_attn_greater_or_equal(library_version: str):
     if not _is_package_available("flash_attn"):
         return False
