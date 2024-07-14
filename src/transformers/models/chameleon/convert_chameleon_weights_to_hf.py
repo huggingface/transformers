@@ -333,6 +333,7 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
         for token in tokenizer_config["added_tokens"]:
             if token["content"] == "<reserved08707>":
                 token["content"] = "<image>"
+                token["special"] = False
 
     with open(os.path.join(input_base_path, "tokenizer/text_tokenizer_modified.json"), "w") as f:
         json.dump(tokenizer_config, f)  # save the new file to init tokenizer later
