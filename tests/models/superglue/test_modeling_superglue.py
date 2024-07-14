@@ -41,16 +41,7 @@ class SuperGlueModelTester:
         batch_size=2,
         image_width=80,
         image_height=60,
-        keypoint_detector_config={
-            "encoder_hidden_sizes": [32, 64],
-            "decoder_hidden_size": 64,
-            "keypoint_decoder_dim": 65,
-            "descriptor_decoder_dim": 64,
-            "keypoint_threshold": 0.005,
-            "max_keypoints": 256,
-            "nms_radius": 4,
-            "border_removal_distance": 4,
-        },
+        keypoint_detector_config=None,
         descriptor_dim: int = 64,
         keypoint_encoder_sizes: List[int] = [32, 64],
         gnn_layers_types: List[str] = ["self", "cross"] * 2,
@@ -58,6 +49,17 @@ class SuperGlueModelTester:
         sinkhorn_iterations: int = 100,
         matching_threshold: float = 0.2,
     ):
+        if keypoint_detector_config is None:
+            keypoint_detector_config = {
+                "encoder_hidden_sizes": [32, 64],
+                "decoder_hidden_size": 64,
+                "keypoint_decoder_dim": 65,
+                "descriptor_decoder_dim": 64,
+                "keypoint_threshold": 0.005,
+                "max_keypoints": 256,
+                "nms_radius": 4,
+                "border_removal_distance": 4,
+            }
         self.parent = parent
         self.batch_size = batch_size
         self.image_width = image_width
@@ -124,7 +126,6 @@ class SuperGlueModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_head_masking = False
     has_attentions = True
-    from_pretrained_ids = ["stevenbucaille/superglue_indoor", "stevenbucaille/superglue_outdoor"]
 
     def setUp(self):
         self.model_tester = SuperGlueModelTester(self)
@@ -258,7 +259,8 @@ class SuperGlueModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in self.from_pretrained_ids:
+        from_pretrained_ids = ["stevenbucaille/superglue_indoor", "stevenbucaille/superglue_outdoor"]
+        for model_name in from_pretrained_ids:
             model = SuperGlueForKeypointMatching.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
@@ -299,7 +301,7 @@ class SuperGlueModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
         model = SuperGlueForKeypointMatching.from_pretrained(
-            "stevenbucaille/superglue_outdoor", matching_threshold=0.2
+            "stevenbucaille/superglue_indoor", matching_threshold=0.2
         ).to(torch_device)
         preprocessor = self.default_image_processor
         images = prepare_imgs()
@@ -320,9 +322,11 @@ class SuperGlueModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.matches.shape, expected_matches_shape)
         self.assertEqual(outputs.matching_scores.shape, expected_matching_scores_shape)
 
-        expected_matches_values = torch.tensor([-1, 0, 2, 4, -1, 3, 6, -1, -1, -1], dtype=torch.int32).to(torch_device)
+        expected_matches_values = torch.tensor([12, 18, 13, -1, 28, -1, 14, 4, -1, 10], dtype=torch.int32).to(
+            torch_device
+        )
         expected_matching_scores_values = torch.tensor(
-            [1.1161e-5, 9.8031e-1, 8.8953e-1, 9.6738e-1, 0, 9.767e-1, 8.1111e-1, 2.1811e-2, 9.7602e-4, 1.0968e-3]
+            [0.4011, 0.8695, 0.4706, 0.0000, 0.4633, 0.1913, 0.2411, 0.2172, 0.1674, 0.5096]
         ).to(torch_device)
 
         predicted_matches_values = outputs.matches[0, 0, :10]
@@ -332,6 +336,6 @@ class SuperGlueModelIntegrationTest(unittest.TestCase):
 
         self.assertTrue(torch.allclose(predicted_matching_scores_values, expected_matching_scores_values, atol=1e-4))
 
-        expected_number_of_matches = 144
+        expected_number_of_matches = 175
         predicted_number_of_matches = torch.sum(outputs.matches[0][0] != -1).item()
         self.assertEqual(predicted_number_of_matches, expected_number_of_matches)

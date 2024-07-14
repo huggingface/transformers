@@ -84,18 +84,45 @@ def create_rename_keys(config, state_dict):
         )
         rename_keys.append((f"gnn.layers.{i}.attn.merge.bias", f"gnn.layers.{i}.attention.merge.bias"))
         for j in range(3):
-            rename_keys.append(
-                (
-                    f"gnn.layers.{i}.attn.proj.{j}.weight",
-                    f"gnn.layers.{i}.attention.proj.{j}.weight",
+            if j == 0:
+                rename_keys.append(
+                    (
+                        f"gnn.layers.{i}.attn.proj.{j}.weight",
+                        f"gnn.layers.{i}.attention.query.weight",
+                    )
                 )
-            )
-            rename_keys.append(
-                (
-                    f"gnn.layers.{i}.attn.proj.{j}.bias",
-                    f"gnn.layers.{i}.attention.proj.{j}.bias",
+                rename_keys.append(
+                    (
+                        f"gnn.layers.{i}.attn.proj.{j}.bias",
+                        f"gnn.layers.{i}.attention.query.bias",
+                    )
                 )
-            )
+            elif j == 1:
+                rename_keys.append(
+                    (
+                        f"gnn.layers.{i}.attn.proj.{j}.weight",
+                        f"gnn.layers.{i}.attention.key.weight",
+                    )
+                )
+                rename_keys.append(
+                    (
+                        f"gnn.layers.{i}.attn.proj.{j}.bias",
+                        f"gnn.layers.{i}.attention.key.bias",
+                    )
+                )
+            elif j == 2:
+                rename_keys.append(
+                    (
+                        f"gnn.layers.{i}.attn.proj.{j}.weight",
+                        f"gnn.layers.{i}.attention.value.weight",
+                    )
+                )
+                rename_keys.append(
+                    (
+                        f"gnn.layers.{i}.attn.proj.{j}.bias",
+                        f"gnn.layers.{i}.attention.value.bias",
+                    )
+                )
         for j in range(
             len(
                 [
@@ -150,6 +177,14 @@ def rename_key(dct, old, new):
     val = dct.pop(old)
     dct[new] = val
 
+def convert_conv1ds_to_linears(state_dict):
+    for key, value in state_dict.items():
+        if isinstance(value, torch.Tensor):
+            if value.ndim == 3:
+                value = value.squeeze(2)
+                state_dict[key] = value
+    return state_dict
+
 
 def add_keypoint_detector_state_dict(superglue_state_dict, keypoint_detector_state_dict):
     for k, v in keypoint_detector_state_dict.items():
@@ -158,8 +193,8 @@ def add_keypoint_detector_state_dict(superglue_state_dict, keypoint_detector_sta
 
 
 def prepare_imgs_for_image_processor():
-    dataset = load_dataset("stevenbucaille/image_matching", split="train")
-    return [dataset[0]["image"], dataset[1]["image"], dataset[2]["image"], dataset[1]["image"]]
+    dataset = load_dataset("stevenbucaille/image_matching_fixtures", split="train")
+    return [[dataset[0]["image"], dataset[1]["image"]], [dataset[2]["image"], dataset[1]["image"]]]
 
 
 def extract_keypoint_information_from_image_point_description_output(
@@ -196,6 +231,7 @@ def convert_superglue_checkpoint(checkpoint_url, pytorch_dump_folder_path, save_
     new_superglue_state_dict = original_superglue_state_dict.copy()
     for src, dest in rename_keys:
         rename_key(new_superglue_state_dict, src, dest)
+    new_superglue_state_dict = convert_conv1ds_to_linears(new_superglue_state_dict)
     new_superglue_state_dict = add_keypoint_detector_state_dict(new_superglue_state_dict, keypoint_detector_state_dict)
 
     model = SuperGlueForKeypointMatching(superglue_config)
@@ -225,12 +261,12 @@ def convert_superglue_checkpoint(checkpoint_url, pytorch_dump_folder_path, save_
             model_name = "superglue"
             if (
                 checkpoint_url
-                == "https://github.com/magicleap/SuperGluePretrainedNetwork/blob/master/models/weights/superglue_outdoor.pth"
+                == "https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/master/models/weights/superglue_outdoor.pth"
             ):
                 model_name += "_outdoor"
             elif (
                 checkpoint_url
-                == "https://github.com/magicleap/SuperGluePretrainedNetwork/blob/master/models/weights/superglue_indoor.pth"
+                == "https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/master/models/weights/superglue_indoor.pth"
             ):
                 model_name += "_indoor"
 
@@ -247,7 +283,7 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--checkpoint_url",
-        default="https://github.com/magicleap/SuperGluePretrainedNetwork/blob/master/models/weights/superglue_outdoor.pth",
+        default="https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/master/models/weights/superglue_outdoor.pth",
         type=str,
         help="URL of the original SuperGlue checkpoint you'd like to convert.",
     )
