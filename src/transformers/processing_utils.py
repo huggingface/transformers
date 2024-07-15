@@ -756,7 +756,8 @@ class ProcessorMixin(PushToHubMixin):
                     # check if this key was passed as a flat kwarg.
                     if kwarg_value != "__empty__" and modality_key in non_modality_kwargs:
                         raise ValueError(
-                            f"Keyword argument {modality_key} was passed two times: in a dictionary for {modality} and as a **kwarg."
+                            f"Keyword argument {modality_key} was passed two times:\n"
+                            f"in a dictionary for {modality} and as a **kwarg."
                         )
                 elif modality_key in kwargs:
                     kwarg_value = kwargs.pop(modality_key, "__empty__")
