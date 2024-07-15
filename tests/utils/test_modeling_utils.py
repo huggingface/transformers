@@ -923,21 +923,6 @@ class ModelUtilsTest(TestCasePlus):
             "using `low_cpu_mem_usage` should be faster, "
             f"but got elapsed_time_normal={elapsed_time_normal} and elapsed_time_low_mem={elapsed_time_low_mem}",
         )
-        # print(f"{max_rss_low_mem=}")
-
-        # diff_bytes = max_rss_normal - max_rss_low_mem
-        # diff_percent = diff_bytes / max_rss_low_mem
-        # # print(f"{diff_bytes=}, {diff_percent=}")
-        # # ideally we would compare that the diff is close to ~1x checkpoint size in bytes, but
-        # # measuring cpu memory on linux is very tricky and inconsistent, so instead let's check that
-        # # it's at least 15% less cpu memory consumed
-
-        # self.assertGreater(
-        #     diff_percent,
-        #     0.15,
-        #     "should use less CPU memory for low_cpu_mem_usage=True, "
-        #     f"but got max_rss_normal={max_rss_normal} and max_rss_low_mem={max_rss_low_mem}",
-        # )
 
         # if you want to compare things manually, let's first look at the size of the model in bytes
         # model = BertModel.from_pretrained(mname, low_cpu_mem_usage=False)
