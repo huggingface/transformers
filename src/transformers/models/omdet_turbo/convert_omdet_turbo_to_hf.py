@@ -190,7 +190,7 @@ def create_rename_keys_language(state_dict, config):
 
     # projection layer
     rename_keys.append(("language_backbone.text_projection",
-                        "language_backbone.text_projection.weight", ))
+                        "language_backbone.text_projection", ))
 
     for layer in range(config.text_config.num_hidden_layers):
             # attention

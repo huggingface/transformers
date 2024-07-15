@@ -99,6 +99,7 @@ class OmDetTurboConfig(PretrainedConfig):
         decoder_num_points=4,
         decoder_dropout=0.0,
         decoder_eval_idx=-1,
+        learnt_init_query=False,
         fuse_type="merged_attn",
         is_encoder_decoder=True,
         **kwargs,
@@ -165,6 +166,7 @@ class OmDetTurboConfig(PretrainedConfig):
         self.decoder_num_points = decoder_num_points
         self.decoder_dropout = decoder_dropout
         self.decoder_eval_idx = decoder_eval_idx
+        self.learnt_init_query = learnt_init_query
         self.fuse_type = fuse_type
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)

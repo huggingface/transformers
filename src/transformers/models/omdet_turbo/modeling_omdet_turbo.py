@@ -332,16 +332,23 @@ class OmDetTurboLanguageBackbone(nn.Module):
     def __init__(self, config: OmDetTurboConfig):
         super().__init__()
         self.model = AutoModel.from_config(config.text_config)
-        self.text_projection = nn.Linear(
-            config.text_projection_in_features, config.text_projection_out_features, bias=False
+        self.text_projection = nn.Parameter(
+            torch.empty(config.text_projection_in_features, config.text_projection_out_features)
         )
 
-    def forward(self, hidden_states, pos_embed=None):
+    def forward(self, hidden_states, encode_type="task", pos_embed=None):
         text_outputs = self.model(hidden_states)
-        pooled_output = text_outputs[1]
-        text_embeds = self.text_projection(pooled_output)
-
-        return text_embeds
+        pooled_output = text_outputs[0]
+        if encode_type == "task":
+            mask = (hidden_states != 0).int()
+            max_len = (hidden_states != 0).sum(1).max().item()
+            return pooled_output[:, :max_len, :].transpose(0, 1), mask[:, :max_len]
+        else:
+            out = (
+                pooled_output[torch.arange(pooled_output.shape[0]), hidden_states.argmax(dim=-1)]
+                @ self.text_projection
+            )
+            return out.float()
 
 
 # temporary while timm doesn't support always partition for swin
@@ -422,6 +429,7 @@ class OmDetTurboVisionBackbone(nn.Module):
                 embed_dim=embed_dim,
                 out_indices=self.out_indices,
                 qkv_bias=True,
+                img_size=640,
             )
             # add a norm layer for each output
             for i_layer in self.out_indices:
@@ -441,7 +449,6 @@ class OmDetTurboVisionBackbone(nn.Module):
             out_before_norm = self.vision_backbone(pixel_values)
             out = []
             for i_layer in self.out_indices:
-                print("out_before_norm[i_layer - 1]", out_before_norm[i_layer - 1].shape)
                 out.append(
                     getattr(self, f"norm{i_layer}")(out_before_norm[i_layer - 1]).permute(0, 3, 1, 2).contiguous()
                 )
@@ -469,9 +476,95 @@ class OmDetTurboModel(OmDetTurboPreTrainedModel):
         self.language_cache_prompt = LRUCache(100)
         self.post_init()
 
+    def get_cached_label_emb(self, labels):
+        print("processing labels embeddings for {}".format(labels["text"]))
+        not_cached_index = []
+        not_cached_labels = []
+        total_embs = []
+        for idx, l in enumerate(labels["text"]):
+            if self.language_cache_label.has(l):
+                total_embs.append(self.language_cache_label.get(l))
+            else:
+                total_embs.append(None)
+                not_cached_index.append(idx)
+                not_cached_labels.append(l)
+
+        print(
+            "cached label emb num: {}, not cached num: {}".format(
+                len(total_embs) - len(not_cached_labels), len(not_cached_labels)
+            )
+        )
+
+        if not_cached_labels:
+            not_cached_labels_ids = torch.stack([labels["input_ids"][idx] for idx in not_cached_index])
+            embeddings = self.language_backbone(not_cached_labels_ids, encode_type="label")
+            for idx, emb in enumerate(embeddings):
+                idx_to_put = not_cached_index[idx]
+                total_embs[idx_to_put] = emb
+                self.language_cache_label.put(not_cached_labels[idx], emb)
+
+        total_label_embs = torch.stack(total_embs).to(self.device)
+        return total_label_embs
+
+    def get_cached_prompt_emb(self, batched_tasks):
+        print("processing prompt embeddings for {}".format(batched_tasks["text"]))
+        not_cached_index = []
+        not_cached_tasks = []
+        total_task_features = []
+        total_task_masks = []
+        for idx, task in enumerate(batched_tasks["text"]):
+            if self.language_cache_prompt.has(task):
+                task_feature, task_mask = self.language_cache_prompt.get(task)
+                total_task_features.append(task_feature)
+                total_task_masks.append(task_mask)
+            else:
+                total_task_features.append(None)
+                total_task_masks.append(None)
+                not_cached_index.append(idx)
+                not_cached_tasks.append(task)
+
+        print(
+            "cached prompt emb num: {}, not cached num: {}".format(
+                len(total_task_features) - len(not_cached_tasks), len(not_cached_tasks)
+            )
+        )
+        if not_cached_tasks:
+            not_cached_index_ids = torch.stack([batched_tasks["input_ids"][idx] for idx in not_cached_index])
+            embeddings, masks = self.language_backbone(not_cached_index_ids, encode_type="task")
+            for idx in range(embeddings.shape[1]):
+                emb = embeddings[:, [idx], :]
+                idx_to_put = not_cached_index[idx]
+                cur_mask = torch.unsqueeze(masks[idx], dim=0).to(self.device)
+                total_task_features[idx_to_put] = emb
+                total_task_masks[idx_to_put] = cur_mask
+                self.language_cache_prompt.put(not_cached_tasks[idx], (emb, cur_mask))
+
+        total_prompt_features = torch.cat(total_task_features, dim=1)
+        total_prompt_masks = torch.cat(total_task_masks, dim=0).to(self.device)
+
+        return total_prompt_features, total_prompt_masks
+
+    def get_language_embedding(self, batched_labels, batched_tasks):
+        max_label_size = max([len(label["text"]) for label in batched_labels])
+        label_features = []
+        for i, s_labels in enumerate(batched_labels):
+            pad_size = max_label_size - len(s_labels["text"])
+            label_emb = self.get_cached_label_emb(s_labels)
+            label_features.append(F.pad(label_emb, (0, 0, 0, pad_size)).unsqueeze(1).to(self.device))
+
+        label_features = torch.cat(label_features, dim=1)  # num_label x batch_size x dim_size
+
+        # Task Features
+        # prompt_features: max_task_len x batch_size x dim_size
+        # prompt_mask: batch_size x max_task_len
+        # batched_tasks = ['detect a person', 'detect dog and cat']
+        prompt_features, prompt_mask = self.get_cached_prompt_emb(batched_tasks)
+
+        return label_features, prompt_features, prompt_mask
+
     # @add_start_docstrings_to_model_forward(GROUNDING_DINO_INPUTS_DOCSTRING)
     # @replace_return_docstrings(output_type=OmDetTurboModelOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(self, pixel_values: Tensor, labels_ids: Tensor, tasks_ids: Tensor, labels: Optional[Tensor] = None):
+    def forward(self, pixel_values: Tensor, labels: Tensor, tasks: Tensor, ground_truths: Optional[Tensor] = None):
         r"""
         Returns:
 
@@ -497,14 +590,15 @@ class OmDetTurboModel(OmDetTurboPreTrainedModel):
         [1, 900, 256]
         ```"""
         loss = None
-        if labels is not None:
+        if ground_truths is not None:
             raise NotImplementedError("Training is not implemented yet")
 
         body_feats = self.backbone(pixel_values)
-        encoder_feats = self.encoder(body_feats)
-        label_feats = self.language_backbone(labels_ids, return_tokens=False)
-        prompt_feats, prompt_mask = self.language_backbone(tasks_ids, return_tokens=True)
-        decoder_feats = self.decoder(encoder_feats, label_feats, prompt_feats, prompt_mask)
+        encoder_feats = self.encoder(body_feats)[0]
+
+        label_features, prompt_features, prompt_mask = self.get_language_embedding(labels, tasks)
+
+        decoder_feats = self.decoder(encoder_feats, label_features, prompt_features, prompt_mask)
 
         return decoder_feats
 
@@ -528,13 +622,7 @@ class OmDetTurboBaseConv(nn.Module):
             groups=groups,
             bias=bias,
         )
-        self.bn = nn.BatchNorm2d(
-            out_channels,
-            # epsilon=1e-3,  # for amp(fp16), set in ppdet/engine/trainer.py
-            # momentum=0.97,
-            # weight_attr=ParamAttr(regularizer=L2Decay(0.0)),
-            # bias_attr=ParamAttr(regularizer=L2Decay(0.0))
-        )
+        self.bn = nn.BatchNorm2d(out_channels)
 
         self.act = ACT2FN[act]
 
@@ -991,20 +1079,16 @@ class OmDetTurboHybridEncoder(nn.Module):
             if output_hidden_states:
                 encoder_states = encoder_states + (projection_features[enc_ind],)
 
-        print("projection_features", projection_features)
         # broadcasting and fusion
         fpn_feature_maps = [projection_features[-1]]
         for idx in range(len(self.in_channels) - 1, 0, -1):
             feat_high = fpn_feature_maps[0]
             feat_low = projection_features[idx - 1]
             feat_high = self.lateral_convs[len(self.in_channels) - 1 - idx](feat_high)
-            print("feat_high", feat_high)
             fpn_feature_maps[0] = feat_high
             upsample_feat = F.interpolate(feat_high, scale_factor=2.0, mode="nearest")
             fps_map = self.fpn_blocks[len(self.in_channels) - 1 - idx](torch.concat([upsample_feat, feat_low], dim=1))
             fpn_feature_maps.insert(0, fps_map)
-
-        print("fpn_feature_maps", fpn_feature_maps)
 
         fpn_states = [fpn_feature_maps[0]]
         for idx in range(len(self.in_channels) - 1):
@@ -1188,8 +1272,13 @@ class DeformableTransformerDecoderLayer(nn.Module):
 
         # cross attention
         tgt = self.cross_attn(
-            self.with_pos_embed(embed, query_pos), refer_bbox.unsqueeze(2), feats, shapes, padding_mask
-        )
+            hidden_states=self.with_pos_embed(embed, query_pos),
+            attention_mask=padding_mask,
+            encoder_hidden_states=feats,
+            reference_points=refer_bbox.unsqueeze(2),
+            spatial_shapes=torch.tensor(shapes, dtype=torch.int64),
+            # self.with_pos_embed(embed, query_pos), refer_bbox.unsqueeze(2), feats, shapes, padding_mask
+        )[0]
         embed = embed + self.dropout2(tgt)
         embed = self.norm2(embed)
 
@@ -1285,6 +1374,7 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
         self.label_dim = config.label_dim
         self.cls_type = config.cls_type
         self.logit_scale = torch.tensor(np.log(1 / 0.07), dtype=torch.float32)
+        self.learnt_init_query = config.learnt_init_query
 
         activation = ACT2FN[config.decoder_activation]
         dim_feedforward = config.decoder_dim_feedforward
@@ -1332,6 +1422,9 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
         # self.denoising_embed_proj = nn.Linear(self.label_dim, self.hidden_dim)
 
         # decoder embedding
+        self.learnt_init_query = self.learnt_init_query
+        if self.learnt_init_query:
+            self.tgt_embed = nn.Embedding(self.num_queries, self.hidden_dim)
         self.query_pos_head = OmDetTurboMLP(4, 2 * self.hidden_dim, self.hidden_dim, num_layers=2)
 
         # encoder head
@@ -1408,7 +1501,7 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
             fusion_size = attn_mask_len + task_feats.shape[0]
             new_attn_mask = torch.zeros([bs, fusion_size, fusion_size], dtype=torch.bool)
             new_attn_mask[:, :, attn_mask_len:] = src_key_mask.unsqueeze(1)
-            new_attn_mask = new_attn_mask.repeat(self.nhead, 1, 1)
+            new_attn_mask = new_attn_mask.repeat(self.num_head, 1, 1)
             attn_mask = new_attn_mask.to(task_mask.device)
 
         embed, refer_bbox, enc_bboxes, enc_scores = self._get_decoder_input(
