@@ -743,34 +743,39 @@ class ProcessorMixin(PushToHubMixin):
                 if modality_key in tokenizer_init_kwargs:
                     default_kwargs[modality][modality_key] = tokenizer_init_kwargs[modality_key]
         # now defaults kwargs are updated with the tokenizers defaults.
+        # pass defaults to output dictionary
         output_kwargs.update(default_kwargs)
 
-        # gather common kwargs and remove them from individual kwargs if present
-        common_kwargs = {
-            key: value
-            for key, value in kwargs.items()
-            if key not in ModelProcessorKwargs.__annotations__["text_kwargs"].__annotations__
-            and key not in ModelProcessorKwargs.__annotations__["images_kwargs"].__annotations__
-            and key not in ModelProcessorKwargs.__annotations__["audio_kwargs"].__annotations__
-            and key not in ModelProcessorKwargs.__annotations__["videos_kwargs"].__annotations__
-        }
-
-        # ensure common kwargs are propagated to all relevant modalities
-        for key, value in common_kwargs.items():
-            for modality in output_kwargs:
-                if modality != "common_kwargs":
-                    output_kwargs[modality][key] = value
-
-        # remove common kwargs from the kwargs to process the rest
-        kwargs = {k: v for k, v in kwargs.items() if k not in common_kwargs}
-
         # update modality kwargs with passed kwargs
+        non_modality_kwargs = set(kwargs) - set(output_kwargs)
         for modality in output_kwargs:
             for modality_key in ModelProcessorKwargs.__annotations__[modality].__annotations__.keys():
-                if modality in kwargs and modality_key in kwargs[modality]:
-                    output_kwargs[modality][modality_key] = kwargs[modality][modality_key]
+                # check if we received a structured kwarg dict or not to handle it correctly
+                if modality in kwargs:
+                    kwarg_value = kwargs[modality].pop(modality_key, "__empty__")
+                    # check if this key was passed as a flat kwarg.
+                    if kwarg_value != "__empty__" and modality_key in non_modality_kwargs:
+                        raise ValueError(
+                            f"Keyword argument {modality_key} was passed two times:\n"
+                            f"in a dictionary for {modality} and as a **kwarg."
+                        )
                 elif modality_key in kwargs:
-                    output_kwargs[modality][modality_key] = kwargs[modality_key]
+                    kwarg_value = kwargs.pop(modality_key, "__empty__")
+                else:
+                    kwarg_value = "__empty__"
+                if kwarg_value != "__empty__":
+                    output_kwargs[modality][modality_key] = kwarg_value
+        # if something remains in kwargs, it belongs to common after flattening
+        if set(kwargs) & set(default_kwargs):
+            # here kwargs is dictionary-based since it shares keys with default set
+            [output_kwargs["common_kwargs"].update(subdict) for _, subdict in kwargs.items()]
+        else:
+            # here it's a flat dict
+            output_kwargs["common_kwargs"].update(kwargs)
+
+        # all modality-specific kwargs are updated with common kwargs
+        for modality in output_kwargs:
+            output_kwargs[modality].update(output_kwargs["common_kwargs"])
         return output_kwargs
 
     @classmethod
