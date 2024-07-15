@@ -30,7 +30,7 @@ if sys.version_info >= (3, 11):
 else:
     from typing_extensions import Unpack
 
-from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
+from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
 from ...utils import TensorType, is_torch_available
 
 
