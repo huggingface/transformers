@@ -17,6 +17,7 @@
 import gc
 import tempfile
 import unittest
+from parameterized import parameterized
 
 import pytest
 
@@ -60,7 +61,7 @@ class GLMModelTester:
             use_labels=True,
             vocab_size=99,
             hidden_size=40,
-            num_hidden_layers=40,
+            num_hidden_layers=2,
             num_attention_heads=4,
             num_key_value_heads=2,
             intermediate_size=37,
@@ -335,12 +336,6 @@ class GLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
-
     def test_GLM_sequence_classification_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
@@ -400,6 +395,37 @@ class GLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     @unittest.skip(reason="GLM buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):
         pass
+
+    @parameterized.expand([("linear",), ("dynamic",)])
+    def test_model_rope_scaling(self, scaling_type):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        short_input = ids_tensor([1, 10], config.vocab_size)
+        long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
+
+        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
+        original_model = GLMModel(config)
+        original_model.to(torch_device)
+        original_model.eval()
+        original_short_output = original_model(short_input).last_hidden_state
+        original_long_output = original_model(long_input).last_hidden_state
+
+        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
+        config.rope_scaling = {"type": scaling_type, "factor": 10.0}
+        scaled_model = GLMModel(config)
+        scaled_model.to(torch_device)
+        scaled_model.eval()
+        scaled_short_output = scaled_model(short_input).last_hidden_state
+        scaled_long_output = scaled_model(long_input).last_hidden_state
+
+        # Dynamic scaling does not change the RoPE embeddings until it receives an input longer than the original
+        # maximum sequence length, so the outputs for the short input should match.
+        if scaling_type == "dynamic":
+            self.assertTrue(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
+        else:
+            self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
+
+        # The output should be different for long inputs
+        self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
 
     @unittest.skip(reason="GLM uses GQA on all models so the KV cache is a non standard format")
     def test_past_key_values_format(self):

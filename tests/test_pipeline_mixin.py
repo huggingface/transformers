@@ -32,7 +32,7 @@ from transformers.testing_utils import (
 from transformers.utils import direct_transformers_import, logging
 
 from .pipelines.test_pipelines_audio_classification import AudioClassificationPipelineTests
-# from .pipelines.test_pipelines_automatic_speech_recognition import AutomaticSpeechRecognitionPipelineTests
+from .pipelines.test_pipelines_automatic_speech_recognition import AutomaticSpeechRecognitionPipelineTests
 from .pipelines.test_pipelines_depth_estimation import DepthEstimationPipelineTests
 from .pipelines.test_pipelines_document_question_answering import DocumentQuestionAnsweringPipelineTests
 from .pipelines.test_pipelines_feature_extraction import FeatureExtractionPipelineTests
@@ -63,7 +63,7 @@ from .pipelines.test_pipelines_zero_shot_object_detection import ZeroShotObjectD
 
 pipeline_test_mapping = {
     "audio-classification": {"test": AudioClassificationPipelineTests},
-    # "automatic-speech-recognition": {"test": AutomaticSpeechRecognitionPipelineTests},
+    "automatic-speech-recognition": {"test": AutomaticSpeechRecognitionPipelineTests},
     "depth-estimation": {"test": DepthEstimationPipelineTests},
     "document-question-answering": {"test": DocumentQuestionAnsweringPipelineTests},
     "feature-extraction": {"test": FeatureExtractionPipelineTests},

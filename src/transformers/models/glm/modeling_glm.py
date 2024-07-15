@@ -973,7 +973,7 @@ class GLMModel(GLMPreTrainedModel):
 
 
 class GLMForCausalLM(GLMPreTrainedModel):
-    _tied_weights_keys = ["transformer.output_layer.weight"]
+    _tied_weights_keys = ["output_layer.weight"]
 
     def __init__(self, config: GLMConfig, empty_init=True, device=None):
         super().__init__(config)
@@ -983,7 +983,7 @@ class GLMForCausalLM(GLMPreTrainedModel):
         self.config = config
 
     def get_input_embeddings(self):
-        return self.transformer.embedding.word_embeddings
+        return self.embedding.word_embeddings
 
     def _update_model_kwargs_for_generation(
         self, outputs: ModelOutput, model_kwargs: Dict[str, Any], standardize_cache_format: bool = False, **kwargs
@@ -1127,7 +1127,7 @@ class GLMForSequenceClassification(GLMPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.transformer.embedding.word_embeddings
+        return self.embedding.word_embeddings
 
     def set_input_embeddings(self, value):
         self.embed_tokens = value
@@ -1242,7 +1242,7 @@ class GLMForTokenClassification(GLMPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.transformer.embedding.word_embeddings
+        return self.embedding.word_embeddings
 
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
