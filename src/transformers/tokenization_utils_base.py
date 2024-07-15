@@ -843,6 +843,8 @@ class SpecialTokensMixin:
         "cls_token",
         "mask_token",
         "image_token",
+        "boi_token",
+        "eoi_token",
         "additional_special_tokens",
     ]
 
