@@ -2944,7 +2944,8 @@ class GenerationMixin:
                         (outputs.decoder_hidden_states,)
                         if self.config.is_encoder_decoder
                         else (outputs.hidden_states,)
-                    )            
+                    )
+
             # token selection
             if do_sample:
                 probs = nn.functional.softmax(next_token_scores, dim=-1)
@@ -2965,6 +2966,7 @@ class GenerationMixin:
                 model_kwargs,
                 is_encoder_decoder=self.config.is_encoder_decoder,
             )
+
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
             this_peer_finished = unfinished_sequences.max() == 0
 
@@ -2974,6 +2976,7 @@ class GenerationMixin:
 
         if streamer is not None:
             streamer.end()
+
         if return_dict_in_generate:
             if self.config.is_encoder_decoder:
                 return GenerateEncoderDecoderOutput(
@@ -3980,7 +3983,7 @@ class GenerationMixin:
             if do_sample and len(logits_warper) > 0:
                 for i in range(candidate_length + 1):
                     new_logits[:, i, :] = logits_warper(candidate_input_ids[:, : cur_len + i], new_logits[:, i, :])
-                    
+
             # 3. Select the accepted tokens. There are two possible cases:
             # Case 1: `do_sample=True` and we have logits for the candidates (originally from speculative decoding)
             # 👉 Apply algorithm 1 from the speculative decoding paper (https://arxiv.org/pdf/2211.17192.pdf).
