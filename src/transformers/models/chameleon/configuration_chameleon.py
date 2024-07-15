@@ -14,7 +14,7 @@
 # limitations under the License.
 """chameleon model configuration"""
 
-from typing import List
+from typing import List, Literal
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -175,7 +175,7 @@ class ChameleonConfig(PretrainedConfig):
             A dictionary containing the vocabulary map from the tokenizer. Used to obtain tokens from the image inputs.
         mlp_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
-        multimodal_generation_mode (`Literal["text-only", "image-only", "interleaved-text-image"]`, *optional*, defaults to `"text-only"`):
+        multimodal_generation_mode (`Literal["text-only", "image-only", "interleaved-text-image", "free"]`, *optional*, defaults to `"text-only"`):
             Chameleon can generate text, images, or both in an interleaved manner. However, only text generation is
             supported by the official model checkpoint. This flag enables the other modes for use with finetuned versions of
             the model such as [Anole](https://arxiv.org/abs/2407.06135).
@@ -183,8 +183,8 @@ class ChameleonConfig(PretrainedConfig):
             `image_start_token` and `image_end_token` markers will be left as-is.
             - If set to `"image-only"`, the logits for tokens other than the image tokens, and the `image_start_token`,
             `image_end_token`, `image_token` markers will be masked out during generation.
-            - For `"interleaved-text-image"`, Chameleon impelements a simple state machine to switch between text and
-            image generation. This is not natively supported yet.
+            - For `"interleaved-text-image"`, Chameleon implements a finite state machine to dynamically switch between text and image modalities.
+            - If set to `"free"`, the logits are left as-is.
 
 
     ```python
@@ -229,7 +229,7 @@ class ChameleonConfig(PretrainedConfig):
         vq_config=None,
         vocabulary_map=None,
         mlp_bias=False,
-        multimodal_generation_mode="text-only",
+        multimodal_generation_mode: Literal["text-only", "image-only", "interleaved-text-image", "free"]="text-only",
         **kwargs,
     ):
         self.vocab_size = vocab_size

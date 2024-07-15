@@ -26,6 +26,8 @@ from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, StaticCache
+from ...generation.logits_process import LogitsProcessorList
+from ...generation.utils import GenerationConfig
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import _flash_attention_forward
 from ...modeling_outputs import (
@@ -44,6 +46,11 @@ from ...utils import (
     replace_return_docstrings,
 )
 from .configuration_chameleon import ChameleonConfig, ChameleonVQVAEConfig
+from .logits_processors import (
+    ChameleonFSMLogitsProcessor,
+    ChameleonModalityFSMGuide,
+    ChameleonTextOnlyLogitsProcessor,
+)
 
 
 if is_flash_attn_2_available():
@@ -1185,15 +1192,6 @@ class ChameleonImageVocabularyMapping:
         return sorted([val for name, val in self.vocab_map.items() if name.startswith("IMGIMG")])
 
     @cached_property
-    def all_image_tokens(self):
-        return [
-            *self.image_tokens,
-            self.image_token_id,
-            self.image_start_token_id,
-            self.image_end_token_id,
-        ]
-
-    @cached_property
     def bpe2img(self):
         img_tkn_chr_mapping = {chr(ord("A") + i): str(i) for i in range(10)}
 
@@ -1630,12 +1628,11 @@ class ChameleonModel(ChameleonPreTrainedModel):
 class ChameleonForCausalLM(ChameleonPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
-    def __init__(self, config):
+    def __init__(self, config: ChameleonConfig):
         super().__init__(config)
         self.model = ChameleonModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        self.multimodal_generation_mode = config.multimodal_generation_mode
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1657,6 +1654,58 @@ class ChameleonForCausalLM(ChameleonPreTrainedModel):
 
     def get_decoder(self):
         return self.model
+
+    @property
+    def multimodal_generation_mode(self):
+        return self.model.config.multimodal_generation_mode
+
+    @multimodal_generation_mode.setter
+    def multimodal_generation_mode(self, value):
+        self.model.config.multimodal_generation_mode = value
+
+    def _get_logits_processor(
+        self,
+        generation_config: GenerationConfig,
+        logits_processor: Optional[LogitsProcessorList],
+        **kwargs,
+    ) -> LogitsProcessorList:
+        if logits_processor is None:
+            logits_processor = LogitsProcessorList()
+        if self.multimodal_generation_mode == "free":
+            return super()._get_logits_processor(
+                generation_config=generation_config,
+                logits_processor=logits_processor,
+                **kwargs,
+            )
+        elif self.multimodal_generation_mode == "text-only":
+            logits_processor.append(
+                ChameleonTextOnlyLogitsProcessor(
+                    image_token_ids=self.model.vocabulary_mapping.image_tokens,
+                    max_length=generation_config.max_length,
+                    image_start_token_id=self.model.vocabulary_mapping.image_start_token_id,
+                    image_end_token_id=self.model.vocabulary_mapping.image_end_token_id,
+                )
+            )
+        else:
+            logits_processor.append(
+                ChameleonFSMLogitsProcessor(
+                    fsm=ChameleonModalityFSMGuide(
+                        all_token_ids=self.model.vocabulary_mapping.vocab_map.values(),
+                        image_token_ids=self.model.vocabulary_mapping.image_tokens,
+                        eos_token_id=self.model.config.eos_token_id,
+                        image_start_token_id=self.model.vocabulary_mapping.image_start_token_id,
+                        image_end_token_id=self.model.vocabulary_mapping.image_end_token_id,
+                        multimodal_generation_mode=self.multimodal_generation_mode,
+                    ),
+                    max_length=generation_config.max_length,
+                    multimodal_generation_mode=self.multimodal_generation_mode,
+                )
+            )
+        return super()._get_logits_processor(
+            generation_config=generation_config,
+            logits_processor=logits_processor,
+            **kwargs,
+        )
 
     @add_start_docstrings_to_model_forward(CHAMELEON_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
@@ -1728,28 +1777,6 @@ class ChameleonForCausalLM(ChameleonPreTrainedModel):
         hidden_states = outputs[0]
         logits = self.lm_head(hidden_states)
         logits = logits.float()
-
-        if self.multimodal_generation_mode == "text-only":
-            # Disallow image tokens which does not include special begin-image and end-image tokens
-            image_tokens = self.model.vocabulary_mapping.image_tokens
-            logits[:, :, image_tokens] = torch.finfo(logits.dtype).min
-        elif self.multimodal_generation_mode == "image-only":
-            # Only allow image tokens, and the special begin-image and end-image tokens
-            all_image_tokens = self.model.vocabulary_mapping.all_image_tokens
-            # Mask for non-image tokens
-            mask = torch.ones(logits.shape[-1], dtype=torch.bool, device=logits.device)
-            mask[all_image_tokens] = False
-            logits[:, :, mask] = torch.finfo(logits.dtype).min
-        elif self.multimodal_generation_mode == "interleaved-text-image":
-            # Chameleon implements a simple state machine to dynamically switch between text and
-            # image generation modes. This is not natively supported by Transformers yet. Here,
-            # we simply leave the logits unchanged for now.
-            pass
-        else:
-            raise ValueError(
-                f"Invalid multimodal generation mode: {self.multimodal_generation_mode}. "
-                "Valid modes are: 'text-only', 'image-only', 'interleaved-text-image'."
-            )
 
         loss = None
         if labels is not None:
