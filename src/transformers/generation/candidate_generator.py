@@ -107,6 +107,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
         # Prepare the assistant and the starting number of candidate tokens
         self.assistant_model = assistant_model
         self.num_assistant_tokens = assistant_model.generation_config.num_assistant_tokens
+        self.assistant_confidence_threshold = assistant_model.generation_config.assistant_confidence_threshold
 
         # Prepare the kwargs for the assistant model
         assistant_kwargs = {}
@@ -149,6 +150,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
         self.generation_config = copy.deepcopy(generation_config)
         self.generation_config.return_dict_in_generate = True
         self.generation_config.output_scores = True
+        self.generation_config.assistant_confidence_threshold = self.assistant_confidence_threshold
 
         # Disable sampling -- this implementation of assisted generation/speculative decoding uses the assistant
         # greedily to maximize matches. Disables sampling-related flags to prevent warnings

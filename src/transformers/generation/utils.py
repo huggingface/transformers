@@ -94,6 +94,7 @@ from .logits_process import (
     WatermarkLogitsProcessor,
 )
 from .stopping_criteria import (
+    ConfidenceCriteria,
     EosTokenCriteria,
     MaxLengthCriteria,
     MaxTimeCriteria,
@@ -989,6 +990,8 @@ class GenerationMixin:
             criteria.append(StopStringCriteria(stop_strings=generation_config.stop_strings, tokenizer=tokenizer))
         if generation_config.eos_token_id is not None:
             criteria.append(EosTokenCriteria(eos_token_id=generation_config.eos_token_id))
+        if generation_config.assistant_confidence_threshold is not None and generation_config.assistant_confidence_threshold > 0:
+            criteria.append(ConfidenceCriteria(assistant_confidence_threshold=generation_config.assistant_confidence_threshold))
         criteria = self._merge_criteria_processor_list(criteria, stopping_criteria)
         return criteria
 
@@ -1305,6 +1308,7 @@ class GenerationMixin:
                     "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)"
                 )
             generation_config.max_length = generation_config.max_new_tokens + input_ids_length
+            print(f"{generation_config.max_new_tokens=}\t{input_ids_length=}")
 
         # if both `inputs_embeds` and `input_ids` are passed, we do not correct the length
         # otherwise we need total length [inputs-embeds-len + new-tokens-len] to not go beyond indicated `max_length``
@@ -2693,17 +2697,6 @@ class GenerationMixin:
                 next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
             else:
                 next_tokens = torch.argmax(next_token_scores, dim=-1)
-            
-            if (
-                hasattr(generation_config, "assistant_confidence_threshold")
-                and generation_config.assistant_confidence_threshold > 0
-            ):    
-                if do_sample:
-                    p = probs[torch.arange(probs.size(0)), next_tokens]
-                else:
-                    p = next_token_scores.softmax(-1).max(-1).values
-                if p < generation_config.assistant_confidence_threshold:
-                    this_peer_finished = True
 
             # finished sentences should have their next token be a padding token
             if has_eos_stopping_criteria:
@@ -2721,6 +2714,7 @@ class GenerationMixin:
             if not this_peer_finished:
                 unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
                 this_peer_finished = unfinished_sequences.max() == 0
+                print(f"{this_peer_finished.item()=}")
 
             # This is needed to properly delete outputs.logits which may be very large for first iteration
             # Otherwise a reference to outputs is kept which keeps the logits alive in the next iteration
@@ -2728,7 +2722,6 @@ class GenerationMixin:
 
         if streamer is not None:
             streamer.end()
-
         if return_dict_in_generate:
             if self.config.is_encoder_decoder:
                 return GenerateEncoderDecoderOutput(
@@ -3729,7 +3722,7 @@ class GenerationMixin:
                 candidate_logits = candidate_logits.to(self.device)
 
             candidate_length = candidate_input_ids.shape[1] - input_ids.shape[1]
-            is_done_candidate = stopping_criteria(candidate_input_ids, None)
+            is_done_candidate = stopping_criteria(candidate_input_ids, candidate_logits)
 
             # 2. Use the original model to obtain the next token logits given the candidate sequence. We obtain
             # `candidate_length + 1` relevant logits from this process: in the event that all candidates are correct,
@@ -3876,16 +3869,10 @@ class GenerationMixin:
 
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
             this_peer_finished = unfinished_sequences.max() == 0
+            print(f"{this_peer_finished=}")
 
         if streamer is not None:
             streamer.end()
-
-        if (
-            hasattr(candidate_generator, "assistant_threshold")
-        ):
-            candidate_generator.assistant_model.generation_config.assistant_threshold = (
-                candidate_generator.assistant_threshold
-            )
 
         if (
             hasattr(candidate_generator, "assistant_model")

@@ -73,6 +73,7 @@ class MaxLengthCriteria(StoppingCriteria):
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
         cur_len = input_ids.shape[-1]
+        print(f"{cur_len=}\t{self.max_length=}")
         is_done = cur_len >= self.max_length
         if self.max_position_embeddings is not None and not is_done and cur_len >= self.max_position_embeddings:
             logger.warning_once(
@@ -499,13 +500,28 @@ class EosTokenCriteria(StoppingCriteria):
             is_done = torch.isin(input_ids[:, -1], self.eos_token_id)
         return is_done
 
+class ConfidenceCriteria(StoppingCriteria):
+
+    def __init__(self, assistant_confidence_threshold):
+        self.assistant_confidence_threshold = assistant_confidence_threshold
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
+        probs = scores[-1].softmax(-1)
+        p = probs[0, input_ids[0,-1]].item()
+        print(f"{p=}")
+        if p < self.assistant_confidence_threshold:
+            return True
+        return False
+
 
 class StoppingCriteriaList(list):
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
         is_done = torch.full((input_ids.shape[0],), False, device=input_ids.device, dtype=torch.bool)
+        print(f"BEFORE {is_done=}")
         for criteria in self:
             is_done = is_done | criteria(input_ids, scores, **kwargs)
+            print(f"{criteria=},{is_done=}")
         return is_done
 
     @property
