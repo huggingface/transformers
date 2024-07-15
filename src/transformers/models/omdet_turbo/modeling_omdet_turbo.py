@@ -933,7 +933,7 @@ class OmDetTurboHybridEncoder(nn.Module):
         config: OmDetTurboConfig
     """
 
-    # ignore copy
+    # Ignore copy
     def __init__(self, config: OmDetTurboConfig):
         super().__init__()
         self.config = config
@@ -997,7 +997,7 @@ class OmDetTurboHybridEncoder(nn.Module):
 
         return torch.concat([out_w.sin(), out_w.cos(), out_h.sin(), out_h.cos()], dim=1)[None, :, :]
 
-    # ignore copy
+    # Ignore copy
     def forward(
         self,
         inputs_embeds=None,
