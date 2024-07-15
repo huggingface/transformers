@@ -1312,7 +1312,6 @@ class GenerationMixin:
                     "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)"
                 )
             generation_config.max_length = generation_config.max_new_tokens + input_ids_length
-            print(f"{generation_config.max_new_tokens=}\t{input_ids_length=}")
 
         # if both `inputs_embeds` and `input_ids` are passed, we do not correct the length
         # otherwise we need total length [inputs-embeds-len + new-tokens-len] to not go beyond indicated `max_length``
@@ -2967,10 +2966,8 @@ class GenerationMixin:
                 model_kwargs,
                 is_encoder_decoder=self.config.is_encoder_decoder,
             )
-            if not this_peer_finished:
-                unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
-                this_peer_finished = unfinished_sequences.max() == 0
-                print(f"{this_peer_finished.item()=}")
+            unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
+            this_peer_finished = unfinished_sequences.max() == 0
 
             # This is needed to properly delete outputs.logits which may be very large for first iteration
             # Otherwise a reference to outputs is kept which keeps the logits alive in the next iteration
@@ -3934,7 +3931,6 @@ class GenerationMixin:
 
         this_peer_finished = False
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
-            print("****** START DRAFT")
             cur_len = input_ids.shape[-1]
 
             #  1. Fetch candidate sequences from a `CandidateGenerator`
@@ -3985,7 +3981,6 @@ class GenerationMixin:
             if do_sample and len(logits_warper) > 0:
                 for i in range(candidate_length + 1):
                     new_logits[:, i, :] = logits_warper(candidate_input_ids[:, : cur_len + i], new_logits[:, i, :])
-            print("****** END DRAFT")
             # 3. Select the accepted tokens. There are two possible cases:
             # Case 1: `do_sample=True` and we have logits for the candidates (originally from speculative decoding)
             # 👉 Apply algorithm 1 from the speculative decoding paper (https://arxiv.org/pdf/2211.17192.pdf).
@@ -4091,7 +4086,6 @@ class GenerationMixin:
 
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
             this_peer_finished = unfinished_sequences.max() == 0
-            print(f"{this_peer_finished=}")
 
         if streamer is not None:
             streamer.end()
