@@ -135,6 +135,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "distilbert",
     "donut-swin",
     "electra",
+    "glm",
     "gpt2",
     "gpt_neo",
     "gptj",

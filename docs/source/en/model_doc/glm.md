@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -18,48 +18,31 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The GLM model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
-
-The abstract from the paper is the following:
-
-*<INSERT PAPER ABSTRACT HERE>*
+The GLM Model was proposed
+in [ChatGLM: A Family of Large Language Models from GLM-130B to GLM-4 All Tools](https://arxiv.org/html/2406.12793v1)
+by GLM Team, THUDM & ZhipuAI. GLM models released with 5 versions, Which are GLM-130B,ChatGLM-6B,ChatGLM2-6B,ChatGLM3-6B
+and GLM-4.
 
 Tips:
 
-<INSERT TIPS ABOUT MODEL HERE>
-
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
-
+- This model was contributed by [THUDM](https://huggingface.co/THUDM). The most recent code can be
+  found [here](https://github.com/thudm/GLM-4).
 
 ## GLMConfig
 
 [[autodoc]] GLMConfig
 
-<frameworkcontent>
-<pt>
-
 ## GLMModel
 
 [[autodoc]] GLMModel
-    - forward
+- forward
 
 ## GLMForCausalLM
 
 [[autodoc]] GLMForCausalLM
-    - forward
-    - generate
+- forward
 
 ## GLMForSequenceClassification
 
 [[autodoc]] GLMForSequenceClassification
-    - forward
-
-## GLMForTokenClassification
-
-[[autodoc]] GLMForTokenClassification
-    - forward
-
-</pt>
-</frameworkcontent>
+- forward

@@ -71,24 +71,6 @@ class GLMConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`. Whether to tie weight embeddings or not.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie weight embeddings
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
-        rope_scaling (`dict`, *optional*):
-            The scaling strategy for the RoPE embeddings. If `None`, no scaling is applied. If a dictionary, it must
-            contain the following keys: `type`, `short_factor` and `long_factor`. The `type` must be either `su` or `yarn` and
-            the `short_factor` and `long_factor` must be lists of numbers with the same length as the hidden size
-            divided by the number of attention heads divided by 2.
-        bos_token_id (`int`, *optional*, defaults to 1):
-            The id of the "beginning-of-sequence" token.
-        eos_token_id (`int`, *optional*, defaults to 32000):
-            The id of the "end-of-sequence" token.
-        pad_token_id (`int`, *optional*, defaults to 32000):
-            The id of the padding token.
-        sliding_window (`int`, *optional*):
-            Sliding window attention window size. If `None`, no sliding window is applied.
-
     Example:
 
     ```python
@@ -103,8 +85,8 @@ class GLMConfig(PretrainedConfig):
 
     def __init__(
             self,
-            num_layers=40,
-            padded_vocab_size=151552,
+            num_hidden_layers=40,
+            vocab_size=151552,
             hidden_size=4096,
             ffn_hidden_size=13696,
             kv_channels=128,
@@ -127,11 +109,14 @@ class GLMConfig(PretrainedConfig):
             apply_query_key_layer_scaling=True,
             attention_softmax_in_fp32=True,
             fp32_residual_connection=False,
+            use_cache=True,
+            use_sliding_window=False,
+            sliding_window=4096,
             **kwargs
     ):
-        self.num_layers = num_layers
-        self.vocab_size = padded_vocab_size
-        self.padded_vocab_size = padded_vocab_size
+        self.num_hidden_layers = num_hidden_layers
+        self.vocab_size = vocab_size
+        self.padded_vocab_size = vocab_size
         self.initializer_range = initializer_range
         self.hidden_size = hidden_size
         self.ffn_hidden_size = ffn_hidden_size
@@ -154,4 +139,5 @@ class GLMConfig(PretrainedConfig):
         self.apply_query_key_layer_scaling = apply_query_key_layer_scaling
         self.attention_softmax_in_fp32 = attention_softmax_in_fp32
         self.fp32_residual_connection = fp32_residual_connection
+        self.use_cache = use_cache
         super().__init__(**kwargs)
