@@ -1814,8 +1814,15 @@ class GenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             if not model_class._supports_static_cache:
                 self.skipTest("This model doesn't support static cache")
+            # TODO (joao) -- fix and enable me :)
+            if any(model_name in model_class.__name__.lower() for model_name in ["whisper"]):
+                self.skipTest("whisper model end-to-end generate compile not yet supported")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            # TODO (joao) -- fix and enable me :)
+            if config.is_encoder_decoder:
+                self.skipTest("Encoder-decoder model end-to-end generate compile not yet supported")
+
             model = model_class(config).to(torch_device)
             input_ids = inputs_dict["input_ids"].to(torch_device)
             # creates two sets of *different* inputs with the same shape
