@@ -52,9 +52,6 @@ _CHECKPOINT_FOR_DOC = "andreasmadsen/efficient_mlm_m0.40"
 _CONFIG_FOR_DOC = "RobertaPreLayerNormConfig"
 
 
-from ..deprecated._archive_maps import ROBERTA_PRELAYERNORM_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 # Copied from transformers.models.roberta.modeling_roberta.RobertaEmbeddings with Roberta->RobertaPreLayerNorm
 class RobertaPreLayerNormEmbeddings(nn.Module):
     """

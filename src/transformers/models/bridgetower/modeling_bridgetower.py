@@ -45,9 +45,6 @@ _CHECKPOINT_FOR_DOC = "BridgeTower/bridgetower-base"
 _TOKENIZER_FOR_DOC = "RobertaTokenizer"
 
 
-from ..deprecated._archive_maps import BRIDGETOWER_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 BRIDGETOWER_START_DOCSTRING = r"""
     This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ subclass. Use
     it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
@@ -562,11 +559,18 @@ class BridgeTowerSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->BridgeTower
+BRIDGE_TOWER_SELF_ATTENTION_CLASSES = {
+    "eager": BridgeTowerSelfAttention,
+}
+
+
+# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->BridgeTower,BERT->BRIDGE_TOWER
 class BridgeTowerAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = BridgeTowerSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.self = BRIDGE_TOWER_SELF_ATTENTION_CLASSES[config._attn_implementation](
+            config, position_embedding_type=position_embedding_type
+        )
         self.output = BridgeTowerSelfOutput(config)
         self.pruned_heads = set()
 
@@ -1317,6 +1321,11 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         all_hidden_states_cross = () if output_hidden_states else None
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
+
+        if inputs_embeds is not None and input_ids is None:
+            raise NotImplementedError(
+                "BridgeTowerModel does not use `inputs_embeds`.  Make sure to pass in `input_ids` instead."
+            )
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         image_token_type_idx = image_token_type_idx if image_token_type_idx else 1

@@ -107,6 +107,20 @@ class TextGenerationPipelineTests(unittest.TestCase):
         )
         assert output_str != output_str_with_truncation  # results must be different because one had truncation
 
+        ## -- test kwargs for preprocess_params
+        outputs = text_generator("This is a test", do_sample=False, add_special_tokens=False, padding=False)
+        self.assertEqual(
+            outputs,
+            [
+                {
+                    "generated_text": (
+                        "This is a test ☃ ☃ segmental segmental segmental 议议eski eski flutter flutter Lacy oscope."
+                        " oscope. FiliFili@@"
+                    )
+                }
+            ],
+        )
+
         # -- what is the point of this test? padding is hardcoded False in the pipeline anyway
         text_generator.tokenizer.pad_token_id = text_generator.model.config.eos_token_id
         text_generator.tokenizer.pad_token = "<pad>"
@@ -176,6 +190,48 @@ class TextGenerationPipelineTests(unittest.TestCase):
                 [{"generated_text": expected_chat2}],
             ],
         )
+
+    @require_torch
+    def test_small_chat_model_with_dataset_pt(self):
+        from torch.utils.data import Dataset
+
+        from transformers.pipelines.pt_utils import KeyDataset
+
+        class MyDataset(Dataset):
+            data = [
+                [
+                    {"role": "system", "content": "This is a system message."},
+                    {"role": "user", "content": "This is a test"},
+                    {"role": "assistant", "content": "This is a reply"},
+                ],
+            ]
+
+            def __len__(self):
+                return 1
+
+            def __getitem__(self, i):
+                return {"text": self.data[i]}
+
+        text_generator = pipeline(
+            task="text-generation", model="rocketknight1/tiny-gpt2-with-chatml-template", framework="pt"
+        )
+
+        dataset = MyDataset()
+        key_dataset = KeyDataset(dataset, "text")
+
+        for outputs in text_generator(key_dataset, do_sample=False, max_new_tokens=10):
+            expected_chat = dataset.data[0] + [
+                {
+                    "role": "assistant",
+                    "content": " factors factors factors factors factors factors factors factors factors factors",
+                }
+            ]
+            self.assertEqual(
+                outputs,
+                [
+                    {"generated_text": expected_chat},
+                ],
+            )
 
     @require_tf
     def test_small_model_tf(self):
@@ -264,8 +320,8 @@ class TextGenerationPipelineTests(unittest.TestCase):
             ],
         )
 
-    def get_test_pipeline(self, model, tokenizer, processor):
-        text_generator = TextGenerationPipeline(model=model, tokenizer=tokenizer)
+    def get_test_pipeline(self, model, tokenizer, processor, torch_dtype="float32"):
+        text_generator = TextGenerationPipeline(model=model, tokenizer=tokenizer, torch_dtype=torch_dtype)
         return text_generator, ["This is a test", "Another test"]
 
     def test_stop_sequence_stopping_criteria(self):
@@ -342,13 +398,13 @@ class TextGenerationPipelineTests(unittest.TestCase):
             self.assertEqual(outputs, [{"generated_text": ANY(str)}])
         else:
             with self.assertRaises((ValueError, AssertionError)):
-                outputs = text_generator("")
+                outputs = text_generator("", add_special_tokens=False)
 
         if text_generator.framework == "tf":
             # TF generation does not support max_new_tokens, and it's impossible
             # to control long generation with only max_length without
             # fancy calculation, dismissing tests for now.
-            return
+            self.skipTest(reason="TF generation does not support max_new_tokens")
         # We don't care about infinite range models.
         # They already work.
         # Skip this test for XGLM, since it uses sinusoidal positional embeddings which are resized on-the-fly.

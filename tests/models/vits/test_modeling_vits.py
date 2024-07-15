@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch VITS model. """
+"""Testing suite for the PyTorch VITS model."""
 
 import copy
 import os
@@ -181,7 +181,11 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_pipeline_feature_extraction(self):
         super().test_pipeline_feature_extraction()
 
-    @unittest.skip("Need to fix this after #26538")
+    @is_flaky(description="torch 2.2.0 gives `Timeout >120.0s`")
+    def test_pipeline_feature_extraction_fp16(self):
+        super().test_pipeline_feature_extraction_fp16()
+
+    @unittest.skip(reason="Need to fix this after #26538")
     def test_model_forward(self):
         set_seed(12345)
         global_rng.seed(12345)
@@ -212,11 +216,11 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 _ = model(**self._prepare_for_class(inputs_dict, model_class)).waveform
 
-    @unittest.skip("VITS is not deterministic")
+    @unittest.skip(reason="VITS is not deterministic")
     def test_determinism(self):
         pass
 
-    @unittest.skip("VITS is not deterministic")
+    @unittest.skip(reason="VITS is not deterministic")
     def test_batching_equivalence(self):
         pass
 
@@ -260,12 +264,12 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
 
-    @unittest.skip("VITS has no inputs_embeds")
+    @unittest.skip(reason="VITS has no inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip("VITS has no input embeddings")
-    def test_model_common_attributes(self):
+    @unittest.skip(reason="VITS has no input embeddings")
+    def test_model_get_set_embeddings(self):
         pass
 
     # override since the model is not deterministic, so we need to set the seed for each forward pass

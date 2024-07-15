@@ -71,6 +71,9 @@ def enable_full_determinism(seed: int, warn_only: bool = False):
         # depending on the CUDA version, so we set them both here
         os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
         os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
+        # The environment variable required to enable deterministic mode on Ascend NPUs.
+        os.environ["ASCEND_LAUNCH_BLOCKING"] = "1"
+        os.environ["HCCL_DETERMINISTIC"] = "1"
         torch.use_deterministic_algorithms(True, warn_only=warn_only)
 
         # Enable CUDNN deterministic mode
@@ -412,6 +415,7 @@ class SchedulerType(ExplicitEnum):
     INVERSE_SQRT = "inverse_sqrt"
     REDUCE_ON_PLATEAU = "reduce_lr_on_plateau"
     COSINE_WITH_MIN_LR = "cosine_with_min_lr"
+    WARMUP_STABLE_DECAY = "warmup_stable_decay"
 
 
 class TrainerMemoryTracker:

@@ -23,6 +23,8 @@ if is_tf_available():
     from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES
 
 if is_torch_available():
+    import torch
+
     from ..models.auto.modeling_auto import MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES
 
 logger = logging.get_logger(__name__)
@@ -159,6 +161,8 @@ class ImageClassificationPipeline(Pipeline):
     def preprocess(self, image, timeout=None):
         image = load_image(image, timeout=timeout)
         model_inputs = self.image_processor(images=image, return_tensors=self.framework)
+        if self.framework == "pt":
+            model_inputs = model_inputs.to(self.torch_dtype)
         return model_inputs
 
     def _forward(self, model_inputs):
@@ -180,7 +184,10 @@ class ImageClassificationPipeline(Pipeline):
             top_k = self.model.config.num_labels
 
         outputs = model_outputs["logits"][0]
-        outputs = outputs.numpy()
+        if self.framework == "pt" and outputs.dtype in (torch.bfloat16, torch.float16):
+            outputs = outputs.to(torch.float32).numpy()
+        else:
+            outputs = outputs.numpy()
 
         if function_to_apply == ClassificationFunction.SIGMOID:
             scores = sigmoid(outputs)

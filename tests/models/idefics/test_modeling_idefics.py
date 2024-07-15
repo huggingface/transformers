@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Idefics model. """
+"""Testing suite for the PyTorch Idefics model."""
 
 import unittest
 
@@ -21,6 +21,7 @@ from parameterized import parameterized
 from transformers import BitsAndBytesConfig, IdeficsConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import (
     TestCasePlus,
+    is_pt_tf_cross_test,
     require_bitsandbytes,
     require_torch,
     require_torch_sdpa,
@@ -315,7 +316,7 @@ class IdeficsModelTester:
     @slow
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     def test_eager_matches_sdpa_inference(self, torch_dtype: str):
-        self.skipTest("Idefics has a hard requirement on SDPA, skipping this test")
+        self.skipTest(reason="Idefics has a hard requirement on SDPA, skipping this test")
 
 
 @unittest.skipIf(not is_torch_greater_or_equal_than_2_0, reason="pytorch 2.0 or higher is required")
@@ -421,13 +422,13 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def test_training(self):
         if not self.model_tester.is_training:
-            return
+            self.skipTest(reason="model_tester.is_training is set to False")
 
         for model_class in self.all_model_classes:
             # IdeficsModel does not support training, users should use
             # IdeficsForVisionText2Text for this purpose
             if model_class == IdeficsModel:
-                return
+                self.skipTest(reason="IdeficsModel does not support training")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             config.return_dict = True
@@ -441,13 +442,13 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def test_training_gradient_checkpointing(self):
         if not self.model_tester.is_training:
-            return
+            self.skipTest(reason="model_tester.is_training is set to False")
 
         for model_class in self.all_model_classes:
             # IdeficsModel does not support training, users should use
             # IdeficsForVisionText2Text for this purpose
             if model_class == IdeficsModel:
-                return
+                self.skipTest(reason="IdeficsModel does not support training")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             config.use_cache = False
@@ -559,6 +560,11 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
+    @is_pt_tf_cross_test
+    def test_pt_tf_model_equivalence(self, allow_missing_keys=False):
+        self.has_attentions = False
+        super().test_pt_tf_model_equivalence(allow_missing_keys=allow_missing_keys)
+
     @slow
     def test_model_from_pretrained(self):
         model_name = "HuggingFaceM4/idefics-9b"
@@ -569,7 +575,7 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     @slow
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     def test_eager_matches_sdpa_inference(self, torch_dtype: str):
-        self.skipTest("Idefics has a hard requirement on SDPA, skipping this test")
+        self.skipTest(reason="Idefics has a hard requirement on SDPA, skipping this test")
 
 
 @unittest.skipIf(not is_torch_greater_or_equal_than_2_0, reason="pytorch 2.0 or higher is required")
@@ -584,11 +590,11 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, unittest.TestCase):
         )
         self.config_tester = ConfigTester(self, config_class=IdeficsConfig, hidden_size=37)
 
-    @unittest.skip("We only test the model that takes in multiple images")
+    @unittest.skip(reason="We only test the model that takes in multiple images")
     def test_model(self):
         pass
 
-    @unittest.skip("We only test the model that takes in multiple images")
+    @unittest.skip(reason="We only test the model that takes in multiple images")
     def test_for_token_classification(self):
         pass
 

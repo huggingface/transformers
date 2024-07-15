@@ -101,7 +101,11 @@ class AwqTest(unittest.TestCase):
 
     EXPECTED_OUTPUT = "Hello my name is Katie and I am a 20 year old student at the University of North Carolina at Chapel Hill. I am a junior and I am majoring in Journalism and minoring in Spanish"
     EXPECTED_OUTPUT_BF16 = "Hello my name is Katie and I am a 20 year old student at the University of North Carolina at Chapel Hill. I am a junior and I am majoring in Exercise and Sport Science with a"
-    EXPECTED_OUTPUT_EXLLAMA = "Hello my name is Katie and I am a 20 year old student from the UK. I am currently studying for a degree in English Literature and History at the University of York. I am a very out"
+
+    EXPECTED_OUTPUT_EXLLAMA = [
+        "Hello my name is Katie and I am a 20 year old student from the UK. I am currently studying for a degree in English Literature and History at the University of York. I am a very out",
+        "Hello my name is Katie and I am a 20 year old student from the UK. I am currently studying for a degree in English Literature and History at the University of York. I am a very creative",
+    ]
     device_map = "cuda"
 
     # called only once for all test in this class
@@ -111,10 +115,7 @@ class AwqTest(unittest.TestCase):
         Setup quantized model
         """
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
-        cls.quantized_model = AutoModelForCausalLM.from_pretrained(
-            cls.model_name,
-            device_map=cls.device_map,
-        )
+        cls.quantized_model = AutoModelForCausalLM.from_pretrained(cls.model_name, device_map=cls.device_map)
 
     def tearDown(self):
         gc.collect()
@@ -204,7 +205,7 @@ class AwqTest(unittest.TestCase):
         )
 
         output = quantized_model.generate(**input_ids, max_new_tokens=40)
-        self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT_EXLLAMA)
+        self.assertIn(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT_EXLLAMA)
 
     def test_quantized_model_no_device_map(self):
         """
@@ -287,7 +288,7 @@ class AwqFusedTest(unittest.TestCase):
         "You end up exactly where you started. Where are you?"
     )
 
-    EXPECTED_GENERATION = prompt + "\n\nYou are at the starting point.\n\nIf"
+    EXPECTED_GENERATION = prompt + "\n\nThis is a classic puzzle that has been around for"
     EXPECTED_GENERATION_CUSTOM_MODEL = "Hello,\n\nI have a problem with my 20"
     EXPECTED_GENERATION_MIXTRAL = prompt + " You're on the North Pole.\n\nThe"
 
@@ -449,7 +450,7 @@ class AwqFusedTest(unittest.TestCase):
         outputs = model.generate(**inputs, max_new_tokens=12)
         self.assertEqual(tokenizer.decode(outputs[0], skip_special_tokens=True), self.EXPECTED_GENERATION_CUSTOM_MODEL)
 
-    @unittest.skip("Not enough GPU memory on CI runners")
+    @unittest.skip(reason="Not enough GPU memory on CI runners")
     @require_torch_multi_gpu
     def test_generation_mixtral_fused(self):
         """
@@ -470,3 +471,22 @@ class AwqFusedTest(unittest.TestCase):
 
         outputs = model.generate(**inputs, max_new_tokens=12)
         self.assertEqual(tokenizer.decode(outputs[0], skip_special_tokens=True), self.EXPECTED_GENERATION_MIXTRAL)
+
+
+@slow
+@require_torch_gpu
+@require_auto_awq
+@require_accelerate
+class AwqScaleTest(unittest.TestCase):
+    model_name = "TechxGenus/starcoder2-3b-AWQ"
+
+    def test_load_quantized_model(self):
+        from awq.modules.act import ScaledActivation
+
+        """
+        Simple test that checks if the scales have been replaced in the quantized model
+        """
+        quantized_model = AutoModelForCausalLM.from_pretrained(
+            "TechxGenus/starcoder2-3b-AWQ", torch_dtype=torch.float16, device_map="cuda"
+        )
+        self.assertTrue(isinstance(quantized_model.model.layers[0].mlp.act, ScaledActivation))

@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch FNet model. """
-
+"""Testing suite for the PyTorch FNet model."""
 
 import unittest
 from typing import Dict, List, Tuple
@@ -296,7 +295,6 @@ class FNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     # Skip Tests
     test_pruning = False
     test_head_masking = False
-    test_pruning = False
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
@@ -322,6 +320,7 @@ class FNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         return inputs_dict
 
     # Overriden Tests
+    @unittest.skip
     def test_attention_outputs(self):
         pass
 

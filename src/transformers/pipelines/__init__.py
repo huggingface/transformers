@@ -58,7 +58,6 @@ from .base import (
     get_default_model_and_revision,
     infer_framework_load_model,
 )
-from .conversational import Conversation, ConversationalPipeline
 from .depth_estimation import DepthEstimationPipeline
 from .document_question_answering import DocumentQuestionAnsweringPipeline
 from .feature_extraction import FeatureExtractionPipeline
@@ -340,15 +339,6 @@ SUPPORTED_TASKS = {
         },
         "type": "multimodal",
     },
-    "conversational": {
-        "impl": ConversationalPipeline,
-        "tf": (TFAutoModelForSeq2SeqLM, TFAutoModelForCausalLM) if is_tf_available() else (),
-        "pt": (AutoModelForSeq2SeqLM, AutoModelForCausalLM) if is_torch_available() else (),
-        "default": {
-            "model": {"pt": ("microsoft/DialoGPT-medium", "8bada3b"), "tf": ("microsoft/DialoGPT-medium", "8bada3b")}
-        },
-        "type": "text",
-    },
     "image-classification": {
         "impl": ImageClassificationPipeline,
         "tf": (TFAutoModelForImageClassification,) if is_tf_available() else (),
@@ -367,8 +357,8 @@ SUPPORTED_TASKS = {
         "pt": (AutoModel,) if is_torch_available() else (),
         "default": {
             "model": {
-                "pt": ("google/vit-base-patch16-224", "29e7a1e183"),
-                "tf": ("google/vit-base-patch16-224", "29e7a1e183"),
+                "pt": ("google/vit-base-patch16-224", "3f49326"),
+                "tf": ("google/vit-base-patch16-224", "3f49326"),
             }
         },
         "type": "image",
@@ -593,7 +583,6 @@ def pipeline(
 
             - `"audio-classification"`: will return a [`AudioClassificationPipeline`].
             - `"automatic-speech-recognition"`: will return a [`AutomaticSpeechRecognitionPipeline`].
-            - `"conversational"`: will return a [`ConversationalPipeline`].
             - `"depth-estimation"`: will return a [`DepthEstimationPipeline`].
             - `"document-question-answering"`: will return a [`DocumentQuestionAnsweringPipeline`].
             - `"feature-extraction"`: will return a [`FeatureExtractionPipeline`].
@@ -782,6 +771,7 @@ def pipeline(
                 _raise_exceptions_for_gated_repo=False,
                 _raise_exceptions_for_missing_entries=False,
                 _raise_exceptions_for_connection_errors=False,
+                cache_dir=model_kwargs.get("cache_dir"),
                 **hub_kwargs,
             )
             hub_kwargs["_commit_hash"] = extract_commit_hash(resolved_config_file, commit_hash)

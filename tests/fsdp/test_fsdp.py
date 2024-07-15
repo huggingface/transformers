@@ -14,6 +14,7 @@
 
 import itertools
 import os
+import subprocess
 import unittest
 from copy import deepcopy
 from functools import partial
@@ -31,6 +32,7 @@ from transformers.testing_utils import (
     require_accelerate,
     require_fsdp,
     require_torch_accelerator,
+    require_torch_gpu,
     require_torch_multi_accelerator,
     slow,
     torch_device,
@@ -144,6 +146,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
             "limit_all_gathers": "False",
             "use_orig_params": "True",
             "sync_module_states": "True",
+            "cpu_ram_efficient_loading": "True",
             "activation_checkpointing": "False",
             "min_num_params": 1,
         }
@@ -208,6 +211,9 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(os.environ[f"{prefix}FORWARD_PREFETCH"], fsdp_config["forward_prefetch"])
             self.assertEqual(os.environ[f"{prefix}USE_ORIG_PARAMS"], fsdp_config["use_orig_params"])
             self.assertEqual(os.environ[f"{prefix}SYNC_MODULE_STATES"], fsdp_config["sync_module_states"])
+            self.assertEqual(
+                os.environ[f"{prefix}CPU_RAM_EFFICIENT_LOADING"], fsdp_config["cpu_ram_efficient_loading"]
+            )
             self.assertEqual(os.environ.get("ACCELERATE_USE_FSDP", "false"), "true")
 
     @parameterized.expand(params, name_func=_parameterized_custom_name_func)
@@ -272,6 +278,20 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
             if "learning_rate" in log:
                 self.assertAlmostEqual(log["learning_rate"], log1["learning_rate"], delta=1e-5)
 
+    @require_torch_multi_accelerator
+    @slow
+    @require_torch_gpu
+    @require_fsdp
+    def test_fsdp_cpu_offloading(self):
+        try:
+            subprocess.run(
+                "accelerate launch utils/testing_scripts/fsdp_cpu_offloading.py --config utils/testing_scripts/dummy_fsdp_config.yml",
+                shell=True,
+                check=True,
+            )
+        except:  # noqa
+            raise AssertionError("CPU offloading failed with FSDP!")
+
     def run_cmd_and_get_logs(self, use_accelerate, sharding_strategy, launcher, script, args, output_dir):
         if not use_accelerate:
             fsdp_args = [
@@ -308,6 +328,6 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
             --logging_steps {logging_steps}
             --save_strategy epoch
             --do_eval
-            --evaluation_strategy epoch
+            --eval_strategy epoch
             --report_to none
         """

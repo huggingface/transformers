@@ -97,7 +97,9 @@ _apex_available = _is_package_available("apex")
 _aqlm_available = _is_package_available("aqlm")
 _av_available = importlib.util.find_spec("av") is not None
 _bitsandbytes_available = _is_package_available("bitsandbytes")
+_eetq_available = _is_package_available("eetq")
 _galore_torch_available = _is_package_available("galore_torch")
+_lomo_available = _is_package_available("lomo_optim")
 # `importlib.metadata.version` doesn't work with `bs4` but `beautifulsoup4`. For `importlib.util.find_spec`, reversed.
 _bs4_available = importlib.util.find_spec("bs4") is not None
 _coloredlogs_available = _is_package_available("coloredlogs")
@@ -141,6 +143,7 @@ _phonemizer_available = _is_package_available("phonemizer")
 _psutil_available = _is_package_available("psutil")
 _py3nvml_available = _is_package_available("py3nvml")
 _pyctcdecode_available = _is_package_available("pyctcdecode")
+_pygments_available = _is_package_available("pygments")
 _pytesseract_available = _is_package_available("pytesseract")
 _pytest_available = _is_package_available("pytest")
 _pytorch_quantization_available = _is_package_available("pytorch_quantization")
@@ -150,6 +153,7 @@ _safetensors_available = _is_package_available("safetensors")
 _scipy_available = _is_package_available("scipy")
 _sentencepiece_available = _is_package_available("sentencepiece")
 _is_seqio_available = _is_package_available("seqio")
+_is_gguf_available = _is_package_available("gguf")
 _sklearn_available = importlib.util.find_spec("sklearn") is not None
 if _sklearn_available:
     try:
@@ -169,6 +173,7 @@ _torchaudio_available = _is_package_available("torchaudio")
 _torchdistx_available = _is_package_available("torchdistx")
 _torchvision_available = _is_package_available("torchvision")
 _mlx_available = _is_package_available("mlx")
+_hqq_available = _is_package_available("hqq")
 
 
 _torch_version = "N/A"
@@ -291,6 +296,26 @@ def is_torch_available():
     return _torch_available
 
 
+def is_torch_deterministic():
+    """
+    Check whether pytorch uses deterministic algorithms by looking if torch.set_deterministic_debug_mode() is set to 1 or 2"
+    """
+    import torch
+
+    if torch.get_deterministic_debug_mode() == 0:
+        return False
+    else:
+        return True
+
+
+def is_hqq_available():
+    return _hqq_available
+
+
+def is_pygments_available():
+    return _pygments_available
+
+
 def get_torch_version():
     return _torch_version
 
@@ -314,6 +339,10 @@ def is_torchvision_available():
 
 def is_galore_torch_available():
     return _galore_torch_available
+
+
+def is_lomo_available():
+    return _lomo_available
 
 
 def is_pyctcdecode_available():
@@ -367,7 +396,7 @@ def is_torch_mps_available():
         import torch
 
         if hasattr(torch.backends, "mps"):
-            return torch.backends.mps.is_available()
+            return torch.backends.mps.is_available() and torch.backends.mps.is_built()
     return False
 
 
@@ -613,12 +642,8 @@ def is_torch_mlu_available(check_device=False):
 def is_torchdynamo_available():
     if not is_torch_available():
         return False
-    try:
-        import torch._dynamo as dynamo  # noqa: F401
 
-        return True
-    except Exception:
-        return False
+    return version.parse(_torch_version) >= version.parse("2.0.0")
 
 
 def is_torch_compile_available():
@@ -636,9 +661,15 @@ def is_torchdynamo_compiling():
     if not is_torch_available():
         return False
     try:
-        import torch._dynamo as dynamo  # noqa: F401
+        # Importing torch._dynamo causes issues with PyTorch profiler (https://github.com/pytorch/pytorch/issues/130622) hence rather relying on `torch.compiler.is_compiling()` when possible.
+        if version.parse(_torch_version) >= version.parse("2.3.0"):
+            import torch
 
-        return dynamo.is_compiling()
+            return torch.compiler.is_compiling()
+        else:
+            import torch._dynamo as dynamo  # noqa: F401
+
+            return dynamo.is_compiling()
     except Exception:
         return False
 
@@ -718,11 +749,19 @@ def is_ipex_available():
 
 @lru_cache
 def is_torch_xpu_available(check_device=False):
-    "Checks if `intel_extension_for_pytorch` is installed and potentially if a XPU is in the environment"
-    if not is_ipex_available():
+    """
+    Checks if XPU acceleration is available either via `intel_extension_for_pytorch` or
+    via stock PyTorch (>=2.4) and potentially if a XPU is in the environment
+    """
+    if not is_torch_available():
         return False
 
-    import intel_extension_for_pytorch  # noqa: F401
+    torch_version = version.parse(_torch_version)
+    if is_ipex_available():
+        import intel_extension_for_pytorch  # noqa: F401
+    elif torch_version.major < 2 or (torch_version.major == 2 and torch_version.minor < 4):
+        return False
+
     import torch
 
     if check_device:
@@ -775,6 +814,13 @@ def is_flash_attn_greater_or_equal_2_10():
     return version.parse(importlib.metadata.version("flash_attn")) >= version.parse("2.1.0")
 
 
+def is_flash_attn_greater_or_equal(library_version: str):
+    if not _is_package_available("flash_attn"):
+        return False
+
+    return version.parse(importlib.metadata.version("flash_attn")) >= version.parse(library_version)
+
+
 def is_torchdistx_available():
     return _torchdistx_available
 
@@ -797,6 +843,10 @@ def is_sentencepiece_available():
 
 def is_seqio_available():
     return _is_seqio_available
+
+
+def is_gguf_available():
+    return _is_gguf_available
 
 
 def is_protobuf_available():
@@ -827,6 +877,10 @@ def is_quanto_available():
 
 def is_auto_gptq_available():
     return _auto_gptq_available
+
+
+def is_eetq_available():
+    return _eetq_available
 
 
 def is_levenshtein_available():
@@ -1282,6 +1336,11 @@ NATTEN_IMPORT_ERROR = """
 {0} requires the natten library but it was not found in your environment. You can install it by referring to:
 shi-labs.com/natten . You can also install it with pip (may take longer to build):
 `pip install natten`. Please note that you may need to restart your runtime after installation.
+"""
+
+NUMEXPR_IMPORT_ERROR = """
+{0} requires the numexpr library but it was not found in your environment. You can install it by referring to:
+https://numexpr.readthedocs.io/en/latest/index.html.
 """
 
 

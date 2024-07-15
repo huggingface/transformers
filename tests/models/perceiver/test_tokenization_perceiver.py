@@ -164,7 +164,7 @@ class PerceiverTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # Isolate this from the other tests because we save additional tokens/etc
                 tmpdirname = tempfile.mkdtemp()
 
-                sample_text = " He is very happy, UNwant\u00E9d,running"
+                sample_text = " He is very happy, UNwant\u00e9d,running"
                 before_tokens = tokenizer.encode(sample_text, add_special_tokens=False)
                 tokenizer.save_pretrained(tmpdirname)
 
@@ -180,7 +180,7 @@ class PerceiverTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # Isolate this from the other tests because we save additional tokens/etc
                 tmpdirname = tempfile.mkdtemp()
 
-                sample_text = " He is very happy, UNwant\u00E9d,running"
+                sample_text = " He is very happy, UNwant\u00e9d,running"
                 tokenizer.add_tokens(["bim", "bambam"])
                 additional_special_tokens = tokenizer.additional_special_tokens
                 additional_special_tokens.append("new_additional_special_token")
@@ -270,15 +270,16 @@ class PerceiverTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = self.perceiver_tokenizer
         self.assertEqual(tokenizer.decode([178]), "�")
 
-    # tokenizer does not have vocabulary
+    @unittest.skip(reason="tokenizer does not have vocabulary")
     def test_get_vocab(self):
         pass
 
-    # inputs cannot be pretokenized since ids depend on whole input string and not just on single characters
+    @unittest.skip(reason="inputs cannot be pretokenized")
     def test_pretokenized_inputs(self):
+        # inputs cannot be pretokenized since ids depend on whole input string and not just on single characters
         pass
 
-    # tests all ids in vocab => vocab doesn't exist so unnecessary to test
+    @unittest.skip(reason="vocab does not exist")
     def test_conversion_reversible(self):
         pass
 

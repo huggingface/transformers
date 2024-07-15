@@ -113,7 +113,9 @@ This will work regardless of whether you are using PyTorch or Tensorflow.
 transcriber = pipeline(model="openai/whisper-large-v2", device=0)
 ```
 
-If the model is too large for a single GPU and you are using PyTorch, you can set `device_map="auto"` to automatically 
+If the model is too large for a single GPU and you are using PyTorch, you can set `torch_dtype='float16'` to enable FP16 precision inference. Usually this would not cause significant performance drops but make sure you evaluate it on your models!
+
+Alternatively, you can set `device_map="auto"` to automatically 
 determine how to load and store the model weights. Using the `device_map` argument requires the 🤗 [Accelerate](https://huggingface.co/docs/accelerate)
 package:
 
@@ -270,11 +272,13 @@ For example, if you use this [invoice image](https://huggingface.co/spaces/impir
 >>> from transformers import pipeline
 
 >>> vqa = pipeline(model="impira/layoutlm-document-qa")
->>> vqa(
+>>> output = vqa(
 ...     image="https://huggingface.co/spaces/impira/docquery/resolve/2359223c1837a7587402bda0f2643382a6eefeab/invoice.png",
 ...     question="What is the invoice number?",
 ... )
-[{'score': 0.42515, 'answer': 'us-001', 'start': 16, 'end': 16}]
+>>> output[0]["score"] = round(output[0]["score"], 3)
+>>> output
+[{'score': 0.425, 'answer': 'us-001', 'start': 16, 'end': 16}]
 ```
 
 <Tip>
@@ -340,4 +344,3 @@ gr.Interface.from_pipeline(pipe).launch()
 
 By default, the web demo runs on a local server. If you'd like to share it with others, you can generate a temporary public
 link by setting `share=True` in `launch()`. You can also host your demo on [Hugging Face Spaces](https://huggingface.co/spaces) for a permanent link. 
-

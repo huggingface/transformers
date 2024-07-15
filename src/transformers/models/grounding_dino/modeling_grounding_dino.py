@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Grounding DINO model."""
+"""PyTorch Grounding DINO model."""
 
 import copy
 import math
@@ -73,7 +73,7 @@ def load_cuda_kernels():
 
     global MultiScaleDeformableAttention
 
-    root = Path(__file__).resolve().parent.parent.parent / "kernels" / "grounding_dino"
+    root = Path(__file__).resolve().parent.parent.parent / "kernels" / "deformable_detr"
     src_files = [
         root / filename
         for filename in [
@@ -151,11 +151,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "GroundingDinoConfig"
 _CHECKPOINT_FOR_DOC = "IDEA-Research/grounding-dino-tiny"
-
-GROUNDING_DINO_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "IDEA-Research/grounding-dino-tiny",
-    # See all Grounding DINO models at https://huggingface.co/models?filter=grounding-dino
-]
 
 
 @dataclass
@@ -468,7 +463,14 @@ class GroundingDinoConvEncoder(nn.Module):
             self.model.feature_info.channels() if config.use_timm_backbone else self.model.channels
         )
 
-        backbone_model_type = config.backbone if config.use_timm_backbone else config.backbone_config.model_type
+        backbone_model_type = None
+        if config.backbone is not None:
+            backbone_model_type = config.backbone
+        elif config.backbone_config is not None:
+            backbone_model_type = config.backbone_config.model_type
+        else:
+            raise ValueError("Either `backbone` or `backbone_config` should be provided in the config")
+
         if "resnet" in backbone_model_type:
             for name, parameter in self.model.named_parameters():
                 if config.use_timm_backbone:
@@ -818,7 +820,7 @@ class GroundingDinoTextEnhancerLayer(nn.Module):
             attention_masks = attention_masks[:, None, :, :]
             attention_masks = attention_masks.repeat(1, self.num_heads, 1, 1)
 
-            dtype = torch.float16
+            dtype = hidden_states.dtype
             attention_masks = attention_masks.to(dtype=dtype)  # fp16 compatibility
             attention_masks = (1.0 - attention_masks) * torch.finfo(dtype).min
 
@@ -1425,12 +1427,11 @@ class GroundingDinoDecoderLayer(nn.Module):
 
         # Cross-Attention Text
         queries = self.with_pos_embed(hidden_states, position_embeddings)
-
         hidden_states, text_cross_attn_weights = self.encoder_attn_text(
             queries=queries,
             keys=text_encoder_hidden_states,
             values=text_encoder_hidden_states,
-            # attention_mask=text_encoder_attention_mask, # TODO fix cross-attention mask here
+            attention_mask=text_encoder_attention_mask,
             output_attentions=True,
         )
 
@@ -1893,6 +1894,16 @@ class GroundingDinoDecoder(GroundingDinoPreTrainedModel):
         intermediate = ()
         intermediate_reference_points = ()
 
+        if text_encoder_attention_mask is not None:
+            dtype = text_encoder_hidden_states.dtype
+
+            text_encoder_attention_mask = text_encoder_attention_mask[:, None, None, :]
+            text_encoder_attention_mask = text_encoder_attention_mask.repeat(
+                1, self.config.decoder_attention_heads, self.config.num_queries, 1
+            )
+            text_encoder_attention_mask = text_encoder_attention_mask.to(dtype=dtype)
+            text_encoder_attention_mask = text_encoder_attention_mask * torch.finfo(dtype).min
+
         for idx, decoder_layer in enumerate(self.layers):
             num_coordinates = reference_points.shape[-1]
             if num_coordinates == 4:
@@ -2104,7 +2115,9 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
             )
 
         # Create text backbone
-        self.text_backbone = AutoModel.from_config(config.text_config, add_pooling_layer=False)
+        self.text_backbone = AutoModel.from_config(
+            config.text_config, add_pooling_layer=False, attn_implementation=config._attn_implementation
+        )
         self.text_projection = nn.Linear(config.text_config.hidden_size, config.d_model)
 
         if config.embedding_init_target or not config.two_stage:
@@ -2996,10 +3009,10 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
         ...     outputs, threshold=0.35, target_sizes=target_sizes
         ... )[0]
         >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
-        ...     box = [round(i, 2) for i in box.tolist()]
-        ...     print(f"Detected {label.item()} with confidence " f"{round(score.item(), 3)} at location {box}")
-        Detected 1 with confidence 0.453 at location [344.82, 23.18, 637.4, 373.83]
-        Detected 1 with confidence 0.408 at location [11.92, 51.58, 316.57, 472.89]
+        ...     box = [round(i, 1) for i in box.tolist()]
+        ...     print(f"Detected {label.item()} with confidence " f"{round(score.item(), 2)} at location {box}")
+        Detected 1 with confidence 0.45 at location [344.8, 23.2, 637.4, 373.8]
+        Detected 1 with confidence 0.41 at location [11.9, 51.6, 316.6, 472.9]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

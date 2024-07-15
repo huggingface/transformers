@@ -17,10 +17,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_wav2vec2_conformer": [
-        "WAV2VEC2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "Wav2Vec2ConformerConfig",
-    ],
+    "configuration_wav2vec2_conformer": ["Wav2Vec2ConformerConfig"],
 }
 
 
@@ -31,7 +28,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_wav2vec2_conformer"] = [
-        "WAV2VEC2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "Wav2Vec2ConformerForAudioFrameClassification",
         "Wav2Vec2ConformerForCTC",
         "Wav2Vec2ConformerForPreTraining",
@@ -43,7 +39,6 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_wav2vec2_conformer import (
-        WAV2VEC2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         Wav2Vec2ConformerConfig,
     )
 
@@ -54,7 +49,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_wav2vec2_conformer import (
-            WAV2VEC2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             Wav2Vec2ConformerForAudioFrameClassification,
             Wav2Vec2ConformerForCTC,
             Wav2Vec2ConformerForPreTraining,

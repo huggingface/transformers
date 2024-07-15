@@ -52,8 +52,6 @@ Here is a step-by-step guide to transcribing an audio sample using a pre-trained
 >>> # Select an audio file and read it:
 >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 >>> audio_sample = ds[0]["audio"]
->>> waveform = audio_sample["array"]
->>> sampling_rate = audio_sample["sampling_rate"]
 
 >>> # Load the Whisper model in Hugging Face format:
 >>> processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
@@ -61,7 +59,7 @@ Here is a step-by-step guide to transcribing an audio sample using a pre-trained
 
 >>> # Use the model and processor to transcribe the audio:
 >>> input_features = processor(
-...     waveform, sampling_rate=sampling_rate, return_tensors="pt"
+...     audio_sample["array"], sampling_rate=audio_sample["sampling_rate"], return_tensors="pt"
 ... ).input_features
 
 >>> # Generate token ids
@@ -74,10 +72,55 @@ Here is a step-by-step guide to transcribing an audio sample using a pre-trained
 ' Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.'
 ```
 
+Whisper is compatible with the following optimisations:
+- [PyTorch Scaled Dot Product Attention (SDPA)](../perf_infer_gpu_one#pytorch-scaled-dot-product-attention): flash attention and memory-efficient attention kernels. Enabled by default for `torch>=2.1.1`.
+- [Flash Attention 2](../perf_infer_gpu_one#flashattention-2): improved implementation of flash attention through better parallelism and work partitioning. 
+- [torch.compile](../llm_optims#static-kv-cache-and-torchcompile): JIT-compile the forward pass to dispatch to efficient fused kernels.
+
+As an example, the following codesnippet enables SDPA and `torch.compile` for up to 5x faster inference:
+
+```python
+>>> from datasets import load_dataset
+>>> from transformers import WhisperProcessor, WhisperForConditionalGeneration
+
+>>> # Select an audio file and read it:
+>>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+>>> audio_sample = ds[0]["audio"]
+
+>>> # Load the Whisper model with SDPA attention
+>>> processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
+>>> model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en", attn_implementation="sdpa")
+
+>>> # Enable static cache and compile the forward pass
+>>> model.generation_config.cache_implementation = "static"
+>>> model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
+
+>>> # Use the model and processor to transcribe the audio:
+>>> input_features = processor(
+...     audio_sample["array"], sampling_rate=audio_sample["sampling_rate"], return_tensors="pt"
+... ).input_features
+
+>>> # Compile the forward pass
+>>> _ = model.generate(input_features)
+
+>>> # Generate token ids using compiled graph (fast!)
+>>> predicted_ids = model.generate(input_features)
+
+>>> # Decode token ids to text
+>>> transcription = processor.batch_decode(predicted_ids, skip_special_tokens=True)
+
+>>> transcription[0]
+' Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.'
+```
+
+For more details on each optimisation, refer to the documentation linked above.
+
 ## Resources
 
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with Whisper. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
 
+- [Fine-tune Whisper](https://huggingface.co/blog/fine-tune-whisper) on your own dataset for better downstream performance.
+- [Distil-Whisper](https://huggingface.co/distil-whisper): Upto 6x faster, 2x smaller distilled Whisper models for English. We release the [model checkpoints](https://huggingface.co/distil-whisper), and [distillation code](https://github.com/huggingface/distil-whisper).
 - A fork with a script to [convert a Whisper model in Hugging Face format to OpenAI format](https://github.com/zuazo-forks/transformers/blob/convert_hf_to_openai/src/transformers/models/whisper/convert_hf_to_openai.py). 🌎
 Usage example:
 ```bash

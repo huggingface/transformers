@@ -153,7 +153,9 @@ class ASTFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Test
     def _load_datasamples(self, num_samples):
         from datasets import load_dataset
 
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        ds = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
+        )
         # automatic decoding with librispeech
         speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
 
@@ -173,7 +175,7 @@ class ASTFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Test
         input_speech = self._load_datasamples(1)
         feature_extractor = ASTFeatureExtractor()
         input_values = feature_extractor(input_speech, return_tensors="pt").input_values
-        self.assertEquals(input_values.shape, (1, 1024, 128))
+        self.assertEqual(input_values.shape, (1, 1024, 128))
         self.assertTrue(torch.allclose(input_values[0, 0, :30], EXPECTED_INPUT_VALUES, atol=1e-4))
 
     def test_feat_extract_from_and_save_pretrained(self):

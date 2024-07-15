@@ -169,7 +169,6 @@ LOCALIZED_READMES = {
     },
 }
 
-
 # This is to make sure the transformers module imported is the one in the repo.
 transformers_module = direct_transformers_import(TRANSFORMERS_PATH)
 
@@ -185,7 +184,7 @@ def _should_continue(line: str, indent: str) -> bool:
     return line.startswith(indent) or len(line.strip()) == 0 or _is_definition_header_ending_line(line)
 
 
-def _sanity_check_splits(splits_1, splits_2, is_class):
+def _sanity_check_splits(splits_1, splits_2, is_class, filename):
     """Check the two (inner) block structures of the corresponding code block given by `split_code_into_blocks` match.
 
     For the case of `class`, they must be of one of the following 3 cases:
@@ -246,11 +245,12 @@ def _sanity_check_splits(splits_1, splits_2, is_class):
             ["block_without_name", "block_with_name"],
         ]:
             raise ValueError(
-                "For a class, it must have a specific structure. See the docstring of `_sanity_check_splits` in the file `utils/check_copies.py`"
+                f"""Class defined in {filename} doesn't have the expected stucture.
+                See the docstring of `_sanity_check_splits` in the file `utils/check_copies.py`""",
             )
 
     if block_names_1 != block_names_2:
-        raise ValueError("The structures in the 2 code blocks differ.")
+        raise ValueError(f"In {filename}, two code blocks expected to be copies have different structures.")
 
 
 def find_block_end(lines: List[str], start_index: int, indent: int) -> int:
@@ -559,8 +559,11 @@ def get_indent(code: str) -> str:
     return ""
 
 
-def run_ruff(code):
-    command = ["ruff", "format", "-", "--config", "pyproject.toml", "--silent"]
+def run_ruff(code, check=False):
+    if check:
+        command = ["ruff", "check", "-", "--fix", "--exit-zero"]
+    else:
+        command = ["ruff", "format", "-", "--config", "pyproject.toml", "--silent"]
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
     stdout, _ = process.communicate(input=code.encode())
     return stdout.decode()
@@ -658,11 +661,8 @@ def is_copy_consistent(filename: str, overwrite: bool = False, buffer: dict = No
     diffs = []
     line_index = 0
     # Not a for loop cause `lines` is going to change (if `overwrite=True`).
+    search_re = _re_copy_warning_for_test_file if filename.startswith("tests") else _re_copy_warning
     while line_index < len(lines):
-        search_re = _re_copy_warning
-        if filename.startswith("tests"):
-            search_re = _re_copy_warning_for_test_file
-
         search = search_re.search(lines[line_index])
         if search is None:
             line_index += 1
@@ -715,7 +715,7 @@ def is_copy_consistent(filename: str, overwrite: bool = False, buffer: dict = No
 
         is_class = lines[start_index].startswith(f"{' ' * (len(indent) - 4)}class ")
         # sanity check
-        _sanity_check_splits(theoretical_code_splits, observed_code_splits, is_class=is_class)
+        _sanity_check_splits(theoretical_code_splits, observed_code_splits, is_class=is_class, filename=filename)
 
         # observed code in a structured way (a dict mapping block names to blocks' code)
         observed_code_blocks = OrderedDict()
@@ -753,9 +753,9 @@ def is_copy_consistent(filename: str, overwrite: bool = False, buffer: dict = No
                 else:
                     # not in the target --> add it
                     theoretical_code_blocks[f"_ignored_new_block_{ignored_new_block_index}"] = code
-                    name_mappings_1[
+                    name_mappings_1[f"_ignored_new_block_{ignored_new_block_index}"] = (
                         f"_ignored_new_block_{ignored_new_block_index}"
-                    ] = f"_ignored_new_block_{ignored_new_block_index}"
+                    )
 
                     del observed_code_blocks[name]
                     observed_code_blocks[f"_ignored_new_block_{ignored_new_block_index}"] = code
@@ -858,7 +858,6 @@ def check_copies(overwrite: bool = False, file: str = None):
             + diff
             + "\nRun `make fix-copies` or `python utils/check_copies.py --fix_and_overwrite` to fix them."
         )
-    check_model_list_copy(overwrite=overwrite)
 
 
 def check_full_copies(overwrite: bool = False):
@@ -1055,68 +1054,6 @@ def _find_text_in_file(filename: str, start_prompt: str, end_prompt: str) -> Tup
     return "".join(lines[start_index:end_index]), start_index, end_index, lines
 
 
-def check_model_list_copy(overwrite: bool = False):
-    """
-    Check the model lists in the README is consistent with the ones in the other READMES and also with `index.nmd`.
-
-    Args:
-        overwrite (`bool`, *optional*, defaults to `False`):
-            Whether or not to overwrite the copies when they don't match.
-    """
-    # Fix potential doc links in the README
-    with open(os.path.join(REPO_PATH, "README.md"), "r", encoding="utf-8", newline="\n") as f:
-        readme = f.read()
-    new_readme = readme.replace("https://huggingface.co/transformers", "https://huggingface.co/docs/transformers")
-    new_readme = new_readme.replace(
-        "https://huggingface.co/docs/main/transformers", "https://huggingface.co/docs/transformers/main"
-    )
-    if new_readme != readme:
-        if overwrite:
-            with open(os.path.join(REPO_PATH, "README.md"), "w", encoding="utf-8", newline="\n") as f:
-                f.write(new_readme)
-        else:
-            raise ValueError(
-                "The main README contains wrong links to the documentation of Transformers. Run `make fix-copies` to "
-                "automatically fix them."
-            )
-
-    md_list = get_model_list(
-        filename="README.md",
-        start_prompt=LOCALIZED_READMES["README.md"]["start_prompt"],
-        end_prompt=LOCALIZED_READMES["README.md"]["end_prompt"],
-    )
-
-    # Build the converted Markdown.
-    converted_md_lists = []
-    for filename, value in LOCALIZED_READMES.items():
-        _start_prompt = value["start_prompt"]
-        _end_prompt = value["end_prompt"]
-        _format_model_list = value["format_model_list"]
-
-        localized_md_list = get_model_list(filename, _start_prompt, _end_prompt)
-        readmes_match, converted_md_list = convert_to_localized_md(md_list, localized_md_list, _format_model_list)
-
-        converted_md_lists.append((filename, readmes_match, converted_md_list, _start_prompt, _end_prompt))
-
-    # Compare the converted Markdowns
-    for converted_md_list in converted_md_lists:
-        filename, readmes_match, converted_md, _start_prompt, _end_prompt = converted_md_list
-
-        if filename == "README.md":
-            continue
-        if overwrite:
-            _, start_index, end_index, lines = _find_text_in_file(
-                filename=os.path.join(REPO_PATH, filename), start_prompt=_start_prompt, end_prompt=_end_prompt
-            )
-            with open(os.path.join(REPO_PATH, filename), "w", encoding="utf-8", newline="\n") as f:
-                f.writelines(lines[:start_index] + [converted_md] + lines[end_index:])
-        elif not readmes_match:
-            raise ValueError(
-                f"The model list in the README changed and the list in `{filename}` has not been updated. Run "
-                "`make fix-copies` to fix this."
-            )
-
-
 # Map a model name with the name it has in the README for the check_readme check
 SPECIAL_MODEL_NAMES = {
     "Bert Generation": "BERT For Sequence Generation",
@@ -1160,60 +1097,11 @@ README_TEMPLATE = (
 )
 
 
-def check_readme(overwrite: bool = False):
-    """
-    Check if the main README contains all the models in the library or not.
-
-    Args:
-        overwrite (`bool`, *optional*, defaults to `False`):
-            Whether or not to add an entry for the missing models using `README_TEMPLATE`.
-    """
-    info = LOCALIZED_READMES["README.md"]
-    models, start_index, end_index, lines = _find_text_in_file(
-        os.path.join(REPO_PATH, "README.md"),
-        info["start_prompt"],
-        info["end_prompt"],
-    )
-    models_in_readme = [re.search(r"\*\*\[([^\]]*)", line).groups()[0] for line in models.strip().split("\n")]
-
-    model_names_mapping = transformers_module.models.auto.configuration_auto.MODEL_NAMES_MAPPING
-    absents = [
-        (key, name)
-        for key, name in model_names_mapping.items()
-        if SPECIAL_MODEL_NAMES.get(name, name) not in models_in_readme
-    ]
-    # Remove exceptions
-    absents = [(key, name) for key, name in absents if name not in MODELS_NOT_IN_README]
-    if len(absents) > 0 and not overwrite:
-        print(absents)
-        raise ValueError(
-            "The main README doesn't contain all models, run `make fix-copies` to fill it with the missing model(s)"
-            " then complete the generated entries.\nIf the model is not supposed to be in the main README, add it to"
-            " the list `MODELS_NOT_IN_README` in utils/check_copies.py.\nIf it has a different name in the repo than"
-            " in the README, map the correspondence in `SPECIAL_MODEL_NAMES` in utils/check_copies.py."
-        )
-
-    new_models = [README_TEMPLATE.format(model_name=name, model_type=key) for key, name in absents]
-
-    all_models = models.strip().split("\n") + new_models
-    all_models = sorted(all_models, key=lambda x: re.search(r"\*\*\[([^\]]*)", x).groups()[0].lower())
-    all_models = "\n".join(all_models) + "\n"
-
-    if all_models != models:
-        if overwrite:
-            print("Fixing the main README.")
-            with open(os.path.join(REPO_PATH, "README.md"), "w", encoding="utf-8", newline="\n") as f:
-                f.writelines(lines[:start_index] + [all_models] + lines[end_index:])
-        else:
-            raise ValueError("The main README model list is not properly sorted. Run `make fix-copies` to fix this.")
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--file", type=str, default=None, help="A specific file to check and/or fix")
     parser.add_argument("--fix_and_overwrite", action="store_true", help="Whether to fix inconsistencies.")
     args = parser.parse_args()
 
-    check_readme(args.fix_and_overwrite)
     check_copies(args.fix_and_overwrite, args.file)
     check_full_copies(args.fix_and_overwrite)

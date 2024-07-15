@@ -14,6 +14,7 @@
 """
 Integrations with other Python libraries.
 """
+
 import functools
 import importlib.metadata
 import importlib.util
@@ -31,8 +32,17 @@ from typing import TYPE_CHECKING, Any, Dict, Literal, Optional, Union
 import numpy as np
 import packaging.version
 
+from .. import PreTrainedModel, TFPreTrainedModel
 from .. import __version__ as version
-from ..utils import flatten_dict, is_datasets_available, is_pandas_available, is_torch_available, logging
+from ..utils import (
+    PushToHubMixin,
+    flatten_dict,
+    is_datasets_available,
+    is_pandas_available,
+    is_tf_available,
+    is_torch_available,
+    logging,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -41,19 +51,25 @@ if is_torch_available():
     import torch
 
 # comet_ml requires to be imported before any ML frameworks
-_has_comet = importlib.util.find_spec("comet_ml") is not None and os.getenv("COMET_MODE", "").upper() != "DISABLED"
-if _has_comet:
-    try:
-        import comet_ml  # noqa: F401
+_MIN_COMET_VERSION = "3.43.2"
+try:
+    _comet_version = importlib.metadata.version("comet_ml")
+    _is_comet_installed = True
 
-        if hasattr(comet_ml, "config") and comet_ml.config.get_config("comet.api_key"):
-            _has_comet = True
-        else:
-            if os.getenv("COMET_MODE", "").upper() != "DISABLED":
-                logger.warning("comet_ml is installed but `COMET_API_KEY` is not set.")
-            _has_comet = False
-    except (ImportError, ValueError):
-        _has_comet = False
+    _is_comet_recent_enough = packaging.version.parse(_comet_version) >= packaging.version.parse(_MIN_COMET_VERSION)
+
+    # Check if the Comet API Key is set
+    import comet_ml
+
+    if comet_ml.config.get_config("comet.api_key") is not None:
+        _is_comet_configured = True
+    else:
+        _is_comet_configured = False
+except (importlib.metadata.PackageNotFoundError, ImportError, ValueError, TypeError, AttributeError, KeyError):
+    _comet_version = None
+    _is_comet_installed = False
+    _is_comet_recent_enough = False
+    _is_comet_configured = False
 
 _has_neptune = (
     importlib.util.find_spec("neptune") is not None or importlib.util.find_spec("neptune-client") is not None
@@ -69,6 +85,7 @@ if TYPE_CHECKING and _has_neptune:
         except importlib.metadata.PackageNotFoundError:
             _has_neptune = False
 
+from .. import modelcard  # noqa: E402
 from ..trainer_callback import ProgressCallback, TrainerCallback  # noqa: E402
 from ..trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun, IntervalStrategy  # noqa: E402
 from ..training_args import ParallelMode  # noqa: E402
@@ -92,7 +109,36 @@ def is_clearml_available():
 
 
 def is_comet_available():
-    return _has_comet
+    if os.getenv("COMET_MODE", "").upper() == "DISABLED":
+        logger.warning(
+            "Using the `COMET_MODE=DISABLED` environment variable is deprecated and will be removed in v5. Use the "
+            "--report_to flag to control the integrations used for logging result (for instance --report_to none)."
+        )
+        return False
+
+    if _is_comet_installed is False:
+        return False
+
+    if _is_comet_recent_enough is False:
+        logger.warning(
+            "comet_ml version %s is installed, but version %s or higher is required. "
+            "Please update comet_ml to the latest version to enable Comet logging with pip install 'comet-ml>=%s'.",
+            _comet_version,
+            _MIN_COMET_VERSION,
+            _MIN_COMET_VERSION,
+        )
+        return False
+
+    if _is_comet_configured is False:
+        logger.warning(
+            "comet_ml is installed but the Comet API Key is not configured. "
+            "Please set the `COMET_API_KEY` environment variable to enable Comet logging. "
+            "Check out the documentation for other ways of configuring it: "
+            "https://www.comet.com/docs/v2/guides/experiment-management/configure-sdk/#set-the-api-key"
+        )
+        return False
+
+    return True
 
 
 def is_tensorboard_available():
@@ -320,13 +366,13 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
         # Check for `do_eval` and `eval_during_training` for schedulers that require intermediate reporting.
         if isinstance(
             kwargs["scheduler"], (ASHAScheduler, MedianStoppingRule, HyperBandForBOHB, PopulationBasedTraining)
-        ) and (not trainer.args.do_eval or trainer.args.evaluation_strategy == IntervalStrategy.NO):
+        ) and (not trainer.args.do_eval or trainer.args.eval_strategy == IntervalStrategy.NO):
             raise RuntimeError(
                 "You are using {cls} as a scheduler but you haven't enabled evaluation during training. "
                 "This means your trials will not report intermediate results to Ray Tune, and "
                 "can thus not be stopped early or used to exploit other trials parameters. "
                 "If this is what you want, do not use {cls}. If you would like to use {cls}, "
-                "make sure you pass `do_eval=True` and `evaluation_strategy='steps'` in the "
+                "make sure you pass `do_eval=True` and `eval_strategy='steps'` in the "
                 "Trainer `args`.".format(cls=type(kwargs["scheduler"]).__name__)
             )
 
@@ -663,6 +709,22 @@ class TensorBoardCallback(TrainerCallback):
             self.tb_writer = None
 
 
+def save_model_architecture_to_file(model: Any, output_dir: str):
+    with open(f"{output_dir}/model_architecture.txt", "w+") as f:
+        if isinstance(model, PreTrainedModel):
+            print(model, file=f)
+        elif is_tf_available() and isinstance(model, TFPreTrainedModel):
+
+            def print_to_file(s):
+                print(s, file=f)
+
+            model.summary(print_fn=print_to_file)
+        elif is_torch_available() and (
+            isinstance(model, (torch.nn.Module, PushToHubMixin)) and hasattr(model, "base_model")
+        ):
+            print(model, file=f)
+
+
 class WandbCallback(TrainerCallback):
     """
     A [`TrainerCallback`] that logs metrics, media, model checkpoints to [Weight and Biases](https://www.wandb.com/).
@@ -726,16 +788,24 @@ class WandbCallback(TrainerCallback):
             combined_dict = {**args.to_dict()}
 
             if hasattr(model, "config") and model.config is not None:
-                model_config = model.config.to_dict()
+                model_config = model.config if isinstance(model.config, dict) else model.config.to_dict()
                 combined_dict = {**model_config, **combined_dict}
+            if hasattr(model, "peft_config") and model.peft_config is not None:
+                peft_config = model.peft_config
+                combined_dict = {**{"peft_config": peft_config}, **combined_dict}
             trial_name = state.trial_name
             init_args = {}
             if trial_name is not None:
                 init_args["name"] = trial_name
                 init_args["group"] = args.run_name
-            else:
-                if not (args.run_name is None or args.run_name == args.output_dir):
-                    init_args["name"] = args.run_name
+            elif args.run_name is not None:
+                init_args["name"] = args.run_name
+                if args.run_name == args.output_dir:
+                    self._wandb.termwarn(
+                        "The `run_name` is currently set to the same value as `TrainingArguments.output_dir`. If this was "
+                        "not intended, please specify a different run name by setting the `TrainingArguments.run_name` parameter.",
+                        repeat=False,
+                    )
 
             if self._wandb.run is None:
                 self._wandb.init(
@@ -755,6 +825,45 @@ class WandbCallback(TrainerCallback):
             if not is_torch_xla_available() and _watch_model in ("all", "parameters", "gradients"):
                 self._wandb.watch(model, log=_watch_model, log_freq=max(100, state.logging_steps))
             self._wandb.run._label(code="transformers_trainer")
+
+            # add number of model parameters to wandb config
+            try:
+                self._wandb.config["model/num_parameters"] = model.num_parameters()
+            except AttributeError:
+                logger.info("Could not log the number of model parameters in Weights & Biases.")
+
+            # log the initial model architecture to an artifact
+            with tempfile.TemporaryDirectory() as temp_dir:
+                model_name = (
+                    f"model-{self._wandb.run.id}"
+                    if (args.run_name is None or args.run_name == args.output_dir)
+                    else f"model-{self._wandb.run.name}"
+                )
+                model_artifact = self._wandb.Artifact(
+                    name=model_name,
+                    type="model",
+                    metadata={
+                        "model_config": model.config.to_dict() if hasattr(model, "config") else None,
+                        "num_parameters": self._wandb.config.get("model/num_parameters"),
+                        "initial_model": True,
+                    },
+                )
+                # add the architecture to a separate text file
+                save_model_architecture_to_file(model, temp_dir)
+
+                for f in Path(temp_dir).glob("*"):
+                    if f.is_file():
+                        with model_artifact.new_file(f.name, mode="wb") as fa:
+                            fa.write(f.read_bytes())
+                self._wandb.run.log_artifact(model_artifact, aliases=["base_model"])
+
+                badge_markdown = (
+                    f'[<img src="https://raw.githubusercontent.com/wandb/assets/main/wandb-github-badge'
+                    f'-28.svg" alt="Visualize in Weights & Biases" width="20'
+                    f'0" height="32"/>]({self._wandb.run.get_url()})'
+                )
+
+                modelcard.AUTOGENERATED_TRAINER_COMMENT += f"\n{badge_markdown}"
 
     def on_train_begin(self, args, state, control, model=None, **kwargs):
         if self._wandb is None:
@@ -786,20 +895,25 @@ class WandbCallback(TrainerCallback):
                     else {
                         f"eval/{args.metric_for_best_model}": state.best_metric,
                         "train/total_floss": state.total_flos,
+                        "model/num_parameters": self._wandb.config.get("model/num_parameters"),
                     }
                 )
+                metadata["final_model"] = True
                 logger.info("Logging model artifacts. ...")
                 model_name = (
                     f"model-{self._wandb.run.id}"
                     if (args.run_name is None or args.run_name == args.output_dir)
                     else f"model-{self._wandb.run.name}"
                 )
+                # add the model architecture to a separate text file
+                save_model_architecture_to_file(model, temp_dir)
+
                 artifact = self._wandb.Artifact(name=model_name, type="model", metadata=metadata)
                 for f in Path(temp_dir).glob("*"):
                     if f.is_file():
                         with artifact.new_file(f.name, mode="wb") as fa:
                             fa.write(f.read_bytes())
-                self._wandb.run.log_artifact(artifact)
+                self._wandb.run.log_artifact(artifact, aliases=["final_model"])
 
     def on_log(self, args, state, control, model=None, logs=None, **kwargs):
         single_value_scalars = [
@@ -829,72 +943,137 @@ class WandbCallback(TrainerCallback):
                 for k, v in dict(self._wandb.summary).items()
                 if isinstance(v, numbers.Number) and not k.startswith("_")
             }
+            checkpoint_metadata["model/num_parameters"] = self._wandb.config.get("model/num_parameters")
 
             ckpt_dir = f"checkpoint-{state.global_step}"
             artifact_path = os.path.join(args.output_dir, ckpt_dir)
             logger.info(f"Logging checkpoint artifacts in {ckpt_dir}. ...")
             checkpoint_name = (
-                f"checkpoint-{self._wandb.run.id}"
+                f"model-{self._wandb.run.id}"
                 if (args.run_name is None or args.run_name == args.output_dir)
-                else f"checkpoint-{self._wandb.run.name}"
+                else f"model-{self._wandb.run.name}"
             )
             artifact = self._wandb.Artifact(name=checkpoint_name, type="model", metadata=checkpoint_metadata)
             artifact.add_dir(artifact_path)
-            self._wandb.log_artifact(artifact, aliases=[f"checkpoint-{state.global_step}"])
+            self._wandb.log_artifact(
+                artifact, aliases=[f"epoch_{round(state.epoch, 2)}", f"checkpoint_global_step_{state.global_step}"]
+            )
+
+    def on_predict(self, args, state, control, metrics, **kwargs):
+        if self._wandb is None:
+            return
+        if not self._initialized:
+            self.setup(args, state, **kwargs)
+        if state.is_world_process_zero:
+            metrics = rewrite_logs(metrics)
+            self._wandb.log(metrics)
 
 
 class CometCallback(TrainerCallback):
     """
-    A [`TrainerCallback`] that sends the logs to [Comet ML](https://www.comet.ml/site/).
+    A [`TrainerCallback`] that sends the logs to [Comet ML](https://www.comet.com/site/).
     """
 
     def __init__(self):
-        if not _has_comet:
-            raise RuntimeError("CometCallback requires comet-ml to be installed. Run `pip install comet-ml`.")
+        if _is_comet_installed is False or _is_comet_recent_enough is False:
+            raise RuntimeError(
+                f"CometCallback requires comet-ml>={_MIN_COMET_VERSION} to be installed. Run `pip install comet-ml>={_MIN_COMET_VERSION}`."
+            )
         self._initialized = False
         self._log_assets = False
+        self._experiment = None
 
     def setup(self, args, state, model):
         """
-        Setup the optional Comet.ml integration.
+        Setup the optional Comet integration.
 
         Environment:
-        - **COMET_MODE** (`str`, *optional*, defaults to `ONLINE`):
-            Whether to create an online, offline experiment or disable Comet logging. Can be `OFFLINE`, `ONLINE`, or
-            `DISABLED`.
+        - **COMET_MODE** (`str`, *optional*, default to `get_or_create`):
+            Control whether to create and log to a new Comet experiment or append to an existing experiment.
+            It accepts the following values:
+                * `get_or_create`: Decides automatically depending if
+                  `COMET_EXPERIMENT_KEY` is set and whether an Experiment
+                  with that key already exists or not.
+                * `create`: Always create a new Comet Experiment.
+                * `get`: Always try to append to an Existing Comet Experiment.
+                  Requires `COMET_EXPERIMENT_KEY` to be set.
+                * `ONLINE`: **deprecated**, used to create an online
+                  Experiment. Use `COMET_START_ONLINE=1` instead.
+                * `OFFLINE`: **deprecated**, used to created an offline
+                  Experiment. Use `COMET_START_ONLINE=0` instead.
+                * `DISABLED`: **deprecated**, used to disable Comet logging.
+                  Use the `--report_to` flag to control the integrations used
+                  for logging result instead.
         - **COMET_PROJECT_NAME** (`str`, *optional*):
             Comet project name for experiments.
-        - **COMET_OFFLINE_DIRECTORY** (`str`, *optional*):
-            Folder to use for saving offline experiments when `COMET_MODE` is `OFFLINE`.
         - **COMET_LOG_ASSETS** (`str`, *optional*, defaults to `TRUE`):
             Whether or not to log training assets (tf event logs, checkpoints, etc), to Comet. Can be `TRUE`, or
             `FALSE`.
 
         For a number of configurable items in the environment, see
-        [here](https://www.comet.ml/docs/python-sdk/advanced/#comet-configuration-variables).
+        [here](https://www.comet.com/docs/v2/guides/experiment-management/configure-sdk/#explore-comet-configuration-options).
         """
         self._initialized = True
         log_assets = os.getenv("COMET_LOG_ASSETS", "FALSE").upper()
         if log_assets in {"TRUE", "1"}:
             self._log_assets = True
         if state.is_world_process_zero:
-            comet_mode = os.getenv("COMET_MODE", "ONLINE").upper()
-            experiment = None
-            experiment_kwargs = {"project_name": os.getenv("COMET_PROJECT_NAME", "huggingface")}
-            if comet_mode == "ONLINE":
-                experiment = comet_ml.Experiment(**experiment_kwargs)
-                experiment.log_other("Created from", "transformers")
-                logger.info("Automatic Comet.ml online logging enabled")
-            elif comet_mode == "OFFLINE":
-                experiment_kwargs["offline_directory"] = os.getenv("COMET_OFFLINE_DIRECTORY", "./")
-                experiment = comet_ml.OfflineExperiment(**experiment_kwargs)
-                experiment.log_other("Created from", "transformers")
-                logger.info("Automatic Comet.ml offline logging enabled; use `comet upload` when finished")
-            if experiment is not None:
-                experiment._set_model_graph(model, framework="transformers")
-                experiment._log_parameters(args, prefix="args/", framework="transformers")
-                if hasattr(model, "config"):
-                    experiment._log_parameters(model.config, prefix="config/", framework="transformers")
+            comet_old_mode = os.getenv("COMET_MODE")
+
+            mode = None
+            online = None
+
+            if comet_old_mode is not None:
+                comet_old_mode = comet_old_mode.lower()
+
+                if comet_old_mode == "online":
+                    online = True
+                elif comet_old_mode == "offline":
+                    online = False
+                elif comet_old_mode in ("get", "get_or_create", "create"):
+                    mode = comet_old_mode
+                elif comet_old_mode:
+                    logger.warning("Invalid COMET_MODE env value %r, Comet logging is disabled", comet_old_mode)
+                    return
+
+            # For HPO, we always create a new experiment for each trial
+            if state.is_hyper_param_search:
+                if mode is not None:
+                    logger.warning(
+                        "Hyperparameter Search is enabled, forcing the creation of new experimetns, COMET_MODE value %r  is ignored",
+                        comet_old_mode,
+                    )
+                mode = "create"
+
+            import comet_ml
+
+            # Do not use the default run_name as the experiment name
+            if args.run_name is not None and args.run_name != args.output_dir:
+                experiment_config = comet_ml.ExperimentConfig(name=args.run_name)
+            else:
+                experiment_config = comet_ml.ExperimentConfig()
+
+            self._experiment = comet_ml.start(online=online, mode=mode, experiment_config=experiment_config)
+            self._experiment.__internal_api__set_model_graph__(model, framework="transformers")
+
+            params = {"args": args.to_dict()}
+
+            if hasattr(model, "config") and model.config is not None:
+                model_config = model.config.to_dict()
+                params["config"] = model_config
+            if hasattr(model, "peft_config") and model.peft_config is not None:
+                peft_config = model.peft_config
+                params["peft_config"] = peft_config
+
+            self._experiment.__internal_api__log_parameters__(
+                params, framework="transformers", source="manual", flatten_nested=True
+            )
+
+            if state.is_hyper_param_search:
+                optimization_id = getattr(state, "trial_name", None)
+                optimization_params = getattr(state, "trial_params", None)
+
+                self._experiment.log_optimization(optimization_id=optimization_id, parameters=optimization_params)
 
     def on_train_begin(self, args, state, control, model=None, **kwargs):
         if not self._initialized:
@@ -904,20 +1083,24 @@ class CometCallback(TrainerCallback):
         if not self._initialized:
             self.setup(args, state, model)
         if state.is_world_process_zero:
-            experiment = comet_ml.config.get_global_experiment()
-            if experiment is not None:
-                experiment._log_metrics(logs, step=state.global_step, epoch=state.epoch, framework="transformers")
+            if self._experiment is not None:
+                self._experiment.__internal_api__log_metrics__(
+                    logs, step=state.global_step, epoch=state.epoch, framework="transformers"
+                )
 
     def on_train_end(self, args, state, control, **kwargs):
         if self._initialized and state.is_world_process_zero:
-            experiment = comet_ml.config.get_global_experiment()
-            if experiment is not None:
+            if self._experiment is not None:
                 if self._log_assets is True:
                     logger.info("Logging checkpoints. This may take time.")
-                    experiment.log_asset_folder(
+                    self._experiment.log_asset_folder(
                         args.output_dir, recursive=True, log_file_name=True, step=state.global_step
                     )
-                experiment.end()
+
+            # We create one experiment per trial in HPO mode
+            if state.is_hyper_param_search:
+                self._experiment.clean()
+                self._initialized = False
 
 
 class AzureMLCallback(TrainerCallback):
@@ -1454,6 +1637,11 @@ class CodeCarbonCallback(TrainerCallback):
             raise RuntimeError(
                 "CodeCarbonCallback requires `codecarbon` to be installed. Run `pip install codecarbon`."
             )
+        elif torch.version.hip:
+            raise RuntimeError(
+                "CodeCarbonCallback requires `codecarbon` package, which is not compatible with AMD ROCm (https://github.com/mlco2/codecarbon/pull/490). When using the Trainer, please specify the `report_to` argument (https://huggingface.co/docs/transformers/v4.39.3/en/main_classes/trainer#transformers.TrainingArguments.report_to) to disable CodeCarbonCallback."
+            )
+
         import codecarbon
 
         self._codecarbon = codecarbon

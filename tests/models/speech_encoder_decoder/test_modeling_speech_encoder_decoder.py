@@ -18,12 +18,11 @@ import tempfile
 import unittest
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_deterministic_for_xpu, require_torch, slow, torch_device
 
 from ...test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
 from ..bert.test_modeling_bert import BertModelTester
 from ..speech_to_text.test_modeling_speech_to_text import Speech2TextModelTester
-from ..speech_to_text_2.test_modeling_speech_to_text_2 import Speech2Text2StandaloneDecoderModelTester
 from ..wav2vec2.test_modeling_wav2vec2 import Wav2Vec2ModelTester
 
 
@@ -33,7 +32,6 @@ if is_torch_available():
 
     from transformers import (
         BertLMHeadModel,
-        Speech2Text2ForCausalLM,
         SpeechEncoderDecoderConfig,
         SpeechEncoderDecoderModel,
         Wav2Vec2Model,
@@ -422,6 +420,7 @@ class EncoderDecoderMixin:
         loss.backward()
 
     @slow
+    @require_deterministic_for_xpu
     def test_real_model_save_load_from_pretrained(self):
         model_2, inputs = self.get_pretrained_model_and_inputs()
         model_2.to(torch_device)
@@ -570,54 +569,15 @@ class Speech2TextBertModelTest(EncoderDecoderMixin, unittest.TestCase):
             "labels": decoder_token_labels,
         }
 
-    # can't save full model for now because Speech2TextModel != Speech2TextEncoder
+    @unittest.skip(reason="Cannot save full model as Speech2TextModel != Speech2TextEncoder")
     def test_encoder_decoder_model_from_pretrained_configs(self):
         pass
 
-    # can't save full model for now because Speech2TextModel != Speech2TextEncoder
+    @unittest.skip(reason="Cannot save full model as Speech2TextModel != Speech2TextEncoder")
     def test_save_and_load_from_pretrained(self):
         pass
 
-    # all published pretrained models are Speech2TextModel != Speech2TextEncoder
-    def test_real_model_save_load_from_pretrained(self):
-        pass
-
-
-@require_torch
-class Wav2Vec2Speech2Text2(EncoderDecoderMixin, unittest.TestCase):
-    def get_encoder_decoder_model(self, config, decoder_config):
-        encoder_model = Wav2Vec2Model(config).eval()
-        decoder_model = Speech2Text2ForCausalLM(decoder_config).eval()
-        return encoder_model, decoder_model
-
-    def prepare_config_and_inputs(self):
-        model_tester_encoder = Wav2Vec2ModelTester(self, batch_size=13)
-        model_tester_decoder = Speech2Text2StandaloneDecoderModelTester(
-            self, batch_size=13, d_model=32, max_position_embeddings=512
-        )
-        encoder_config_and_inputs = model_tester_encoder.prepare_config_and_inputs()
-        decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs()
-        (
-            config,
-            input_values,
-            input_mask,
-        ) = encoder_config_and_inputs
-        (decoder_config, decoder_input_ids, decoder_attention_mask, _) = decoder_config_and_inputs
-
-        # make sure that cross attention layers are added
-        decoder_config.add_cross_attention = True
-        #  disable cache for now
-        decoder_config.use_cache = False
-        return {
-            "config": config,
-            "input_values": input_values,
-            "attention_mask": input_mask,
-            "decoder_config": decoder_config,
-            "decoder_input_ids": decoder_input_ids,
-            "decoder_attention_mask": decoder_attention_mask,
-            "labels": decoder_input_ids,
-        }
-
-    # there are no published pretrained Speech2Text2ForCausalLM for now
+    @require_deterministic_for_xpu
+    @unittest.skip(reason="Cannot save full model as Speech2TextModel != Speech2TextEncoder")
     def test_real_model_save_load_from_pretrained(self):
         pass

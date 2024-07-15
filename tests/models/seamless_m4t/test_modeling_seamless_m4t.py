@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch SeamlessM4T model. """
-
+"""Testing suite for the PyTorch SeamlessM4T model."""
 
 import copy
 import tempfile
@@ -414,9 +413,11 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
         encoder_outputs["last_hidden_state"] = encoder_outputs.last_hidden_state.repeat_interleave(
             num_interleave, dim=0
         )
+        generation_config = copy.deepcopy(model.generation_config)
+        model._prepare_special_tokens(generation_config)
         input_ids = (
             torch.zeros(input_ids.shape[:2], dtype=torch.int64, layout=input_ids.layout, device=input_ids.device)
-            + model._get_decoder_start_token_id()
+            + generation_config.decoder_start_token_id
         )
         attention_mask = None
         return encoder_outputs, input_ids, attention_mask
@@ -461,6 +462,10 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="SeamlessM4TSpeechEncoder doesn't have an embedding layer")
     def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(reason="SeamlessM4TSpeechEncoder doesn't have an embedding layer")
+    def test_inputs_embeds_matches_input_ids(self):
         pass
 
     @unittest.skip(
@@ -607,11 +612,11 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
                 [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
             )
 
-    @unittest.skip(
-        reason="In training model, the first speech encoder layer is sometimes skipped. Training is not supported yet, so the test is ignored."
-    )
     def test_retain_grad_hidden_states_attentions(self):
-        pass
+        # When training the model, the first speech encoder layer is sometimes skipped.
+        # Setting the seed to always have the first layer.
+        set_seed(0)
+        super().test_retain_grad_hidden_states_attentions()
 
 
 @require_torch
@@ -640,7 +645,6 @@ class SeamlessM4TModelWithTextInputTest(
     pipeline_model_mapping = (
         {
             "automatic-speech-recognition": SeamlessM4TForSpeechToText,
-            "conversational": SeamlessM4TForTextToText,
             "feature-extraction": SeamlessM4TModel,
             "summarization": SeamlessM4TForTextToText,
             "text-to-audio": SeamlessM4TForTextToSpeech,

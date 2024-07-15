@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Fuyu model. """
+"""Testing suite for the PyTorch Fuyu model."""
 
 import io
 import unittest
@@ -295,17 +295,17 @@ class FuyuModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pass
 
     # TODO: Fix me (once this model gets more usage)
-    @unittest.skip("Does not work on the tiny model.")
+    @unittest.skip(reason="Does not work on the tiny model.")
     def test_disk_offload_bin(self):
         super().test_disk_offload()
 
     # TODO: Fix me (once this model gets more usage)
-    @unittest.skip("Does not work on the tiny model.")
+    @unittest.skip(reason="Does not work on the tiny model.")
     def test_disk_offload_safetensors(self):
         super().test_disk_offload()
 
     # TODO: Fix me (once this model gets more usage)
-    @unittest.skip("Does not work on the tiny model.")
+    @unittest.skip(reason="Does not work on the tiny model.")
     def test_model_parallelism(self):
         super().test_model_parallelism()
 

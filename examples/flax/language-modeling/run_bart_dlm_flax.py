@@ -26,7 +26,6 @@ import math
 import os
 import sys
 import time
-import warnings
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from itertools import chain
@@ -178,12 +177,6 @@ class ModelArguments:
             )
         },
     )
-    use_auth_token: bool = field(
-        default=None,
-        metadata={
-            "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead."
-        },
-    )
 
 
 @dataclass
@@ -197,6 +190,16 @@ class DataTrainingArguments:
     )
     dataset_config_name: Optional[str] = field(
         default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
+    )
+    trust_remote_code: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Whether to trust the execution of code from datasets/models defined on the Hub."
+                " This option should only be set to `True` for repositories you trust and in which you have read the"
+                " code, as it will execute code present on the Hub on your local machine."
+            )
+        },
     )
     train_file: Optional[str] = field(default=None, metadata={"help": "The input training data file (a text file)."})
     validation_file: Optional[str] = field(
@@ -287,7 +290,7 @@ class FlaxDataCollatorForBartDenoisingLM:
     def __post_init__(self):
         if self.tokenizer.mask_token is None or self.tokenizer.eos_token is None:
             raise ValueError(
-                "This tokenizer does not have a mask token or eos token token which is necessary for denoising"
+                "This tokenizer does not have a mask token or eos token which is necessary for denoising"
                 " language modeling. "
             )
 
@@ -470,15 +473,6 @@ def main():
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
-    if model_args.use_auth_token is not None:
-        warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead.",
-            FutureWarning,
-        )
-        if model_args.token is not None:
-            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
-        model_args.token = model_args.use_auth_token
-
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # information sent is the one passed as arguments along with your Python/PyTorch versions.
     send_example_telemetry("run_bart_dlm", model_args, data_args, framework="flax")
@@ -534,6 +528,7 @@ def main():
             cache_dir=model_args.cache_dir,
             token=model_args.token,
             num_proc=data_args.preprocessing_num_workers,
+            trust_remote_code=data_args.trust_remote_code,
         )
 
         if "validation" not in datasets.keys():
@@ -544,6 +539,7 @@ def main():
                 cache_dir=model_args.cache_dir,
                 token=model_args.token,
                 num_proc=data_args.preprocessing_num_workers,
+                trust_remote_code=data_args.trust_remote_code,
             )
             datasets["train"] = load_dataset(
                 data_args.dataset_name,
@@ -552,6 +548,7 @@ def main():
                 cache_dir=model_args.cache_dir,
                 token=model_args.token,
                 num_proc=data_args.preprocessing_num_workers,
+                trust_remote_code=data_args.trust_remote_code,
             )
     else:
         data_files = {}

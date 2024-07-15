@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch FLAVA model."""
+"""PyTorch FLAVA model."""
 
 import collections
 import math
@@ -55,10 +55,7 @@ _CONFIG_CLASS_FOR_TEXT_MODEL_DOC = "FlavaTextConfig"
 _CONFIG_CLASS_FOR_MULTIMODAL_MODEL_DOC = "FlavaMultimodalConfig"
 _EXPECTED_IMAGE_OUTPUT_SHAPE = [1, 197, 768]
 
-from ..deprecated._archive_maps import FLAVA_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
-
-FLAVA_CODEBOOK_PRETRAINED_MODEL_ARCHIVE_LIST = ["facebook/flava-image-codebook"]
 LOGIT_SCALE_CLAMP_MIN = 0
 LOGIT_SCALE_CLAMP_MAX = 4.6052
 
@@ -473,8 +470,6 @@ class FlavaSelfAttention(nn.Module):
             # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
             attention_scores = attention_scores + attention_mask
 
-        # Normalize the attention scores to probabilities.
-        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
         # Normalize the attention scores to probabilities.
         attention_probs = nn.functional.softmax(attention_scores, dim=-1)
 
@@ -1659,6 +1654,9 @@ class FlavaMaskedPredictionHead(nn.Module):
             self.decoder.weight = weight
 
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
+        self.decoder.bias = self.bias
+
+    def _tie_weights(self):
         self.decoder.bias = self.bias
 
     def forward(self, x):

@@ -14,7 +14,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch PVT model."""
+"""PyTorch PVT model."""
 
 import collections
 import math
@@ -48,9 +48,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 50, 512]
 
 _IMAGE_CLASS_CHECKPOINT = "Zetatech/pvt-tiny-224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
-
-
-from ..deprecated._archive_maps import PVT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
@@ -462,6 +459,7 @@ class PvtPreTrainedModel(PreTrainedModel):
     config_class = PvtConfig
     base_model_prefix = "pvt"
     main_input_name = "pixel_values"
+    _no_split_modules = []
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""

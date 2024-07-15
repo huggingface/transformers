@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Audio Spectrogram Transformer (AST) model. """
+"""Testing suite for the PyTorch Audio Spectrogram Transformer (AST) model."""
 
 import inspect
 import unittest
@@ -63,6 +63,7 @@ class ASTModelTester:
         scope=None,
         frequency_stride=2,
         time_stride=2,
+        attn_implementation="eager",
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -83,6 +84,7 @@ class ASTModelTester:
         self.scope = scope
         self.frequency_stride = frequency_stride
         self.time_stride = time_stride
+        self.attn_implementation = attn_implementation
 
         # in AST, the seq length equals the number of patches + 2 (we add 2 for the [CLS] and distillation tokens)
         frequency_out_dimension = (self.num_mel_bins - self.patch_size) // self.frequency_stride + 1
@@ -117,6 +119,7 @@ class ASTModelTester:
             initializer_range=self.initializer_range,
             frequency_stride=self.frequency_stride,
             time_stride=self.time_stride,
+            attn_implementation=self.attn_implementation,
         )
 
     def create_and_check_model(self, config, input_values, labels):
@@ -182,7 +185,7 @@ class ASTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:

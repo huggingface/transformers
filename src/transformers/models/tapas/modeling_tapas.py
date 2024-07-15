@@ -14,7 +14,6 @@
 # limitations under the License.
 """PyTorch TAPAS model."""
 
-
 import enum
 import math
 import os
@@ -55,9 +54,6 @@ if not is_torch_greater_or_equal_than_1_12:
 
 _CONFIG_FOR_DOC = "TapasConfig"
 _CHECKPOINT_FOR_DOC = "google/tapas-base"
-
-
-from ..deprecated._archive_maps import TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 EPSILON_ZERO_DIVISION = 1e-10
@@ -699,6 +695,9 @@ class TapasLMPredictionHead(nn.Module):
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
 
+    def _tie_weights(self):
+        self.decoder.bias = self.bias
+
     def forward(self, hidden_states):
         hidden_states = self.transform(hidden_states)
         hidden_states = self.decoder(hidden_states)
@@ -978,6 +977,7 @@ class TapasForMaskedLM(TapasPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
+        self.cls.predictions.bias = new_embeddings.bias
 
     @add_start_docstrings_to_model_forward(TAPAS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=MaskedLMOutput, config_class=_CONFIG_FOR_DOC)

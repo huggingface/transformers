@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Tokenization class for TAPAS model."""
-
+"""Tokenization class for TAPAS model."""
 
 import collections
 import datetime
@@ -24,7 +23,7 @@ import os
 import re
 import unicodedata
 from dataclasses import dataclass
-from typing import Callable, Dict, Generator, List, Optional, Text, Tuple, Union
+from typing import Callable, Dict, Generator, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -70,19 +69,19 @@ class TokenCoordinates:
 
 @dataclass
 class TokenizedTable:
-    rows: List[List[List[Text]]]
+    rows: List[List[List[str]]]
     selected_tokens: List[TokenCoordinates]
 
 
 @dataclass(frozen=True)
 class SerializedExample:
-    tokens: List[Text]
+    tokens: List[str]
     column_ids: List[int]
     row_ids: List[int]
     segment_ids: List[int]
 
 
-def _is_inner_wordpiece(token: Text):
+def _is_inner_wordpiece(token: str):
     return token.startswith("##")
 
 
@@ -2224,14 +2223,14 @@ class NumericValueSpan:
 
 @dataclass
 class Cell:
-    text: Text
+    text: str
     numeric_value: Optional[NumericValue] = None
 
 
 @dataclass
 class Question:
-    original_text: Text  # The original raw question string.
-    text: Text  # The question string after normalization.
+    original_text: str  # The original raw question string.
+    text: str  # The question string after normalization.
     numeric_spans: Optional[List[NumericValueSpan]] = None
 
 

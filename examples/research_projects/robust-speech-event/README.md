@@ -362,7 +362,7 @@ echo '''python run_speech_recognition_ctc.py \
 	--per_device_train_batch_size="2" \
 	--learning_rate="3e-4" \
 	--save_total_limit="1" \
-	--evaluation_strategy="steps" \
+	--eval_strategy="steps" \
 	--text_column_name="sentence" \
 	--length_column_name="input_length" \
 	--save_steps="5" \
@@ -438,7 +438,7 @@ echo '''python run_speech_recognition_ctc.py \
 	--learning_rate="7.5e-5" \
 	--warmup_steps="2000" \
 	--length_column_name="input_length" \
-	--evaluation_strategy="steps" \
+	--eval_strategy="steps" \
 	--text_column_name="sentence" \
 	--chars_to_ignore , ? . ! \- \; \: \" “ % ‘ ” � — ’ … – \
 	--save_steps="500" \

@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the Longformer tokenizer. """
-
+"""Testing suite for the Longformer tokenizer."""
 
 import itertools
 import json
@@ -167,6 +166,7 @@ class LongformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         first_char = tokenizer.convert_ids_to_tokens(encoded[mask_loc + 1])[0]
         self.assertNotEqual(first_char, space_encoding)
 
+    @unittest.skip
     def test_pretokenized_inputs(self):
         pass
 

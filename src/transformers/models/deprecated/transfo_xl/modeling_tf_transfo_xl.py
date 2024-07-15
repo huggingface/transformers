@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
- TF 2.0 Transformer XL model.
+TF 2.0 Transformer XL model.
 """
 
 from __future__ import annotations
@@ -50,9 +50,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "transfo-xl/transfo-xl-wt103"
 _CONFIG_FOR_DOC = "TransfoXLConfig"
-
-
-from .._archive_maps import TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 class TFPositionalEmbedding(keras.layers.Layer):
@@ -1087,7 +1084,7 @@ class TFTransfoXLForSequenceClassification(TFTransfoXLPreTrainedModel, TFSequenc
                 in_logits = tf.gather(logits, sequence_lengths, batch_dims=1, axis=1)
             else:
                 sequence_lengths = -1
-                logger.warning(
+                logger.warning_once(
                     f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
                     "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
                 )

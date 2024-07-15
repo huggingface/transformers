@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Musicgen model. """
+"""Testing suite for the PyTorch Musicgen model."""
+
 import copy
 import inspect
 import math
@@ -35,6 +36,7 @@ from transformers.testing_utils import (
     is_torch_available,
     require_flash_attn,
     require_torch,
+    require_torch_accelerator,
     require_torch_fp16,
     require_torch_gpu,
     require_torch_sdpa,
@@ -109,8 +111,7 @@ class MusicgenDecoderTester:
         parent,
         batch_size=4,  # need batch_size != num_hidden_layers
         seq_length=7,
-        is_training=False,
-        use_labels=False,
+        is_training=True,
         vocab_size=99,
         hidden_size=16,
         num_hidden_layers=2,
@@ -128,7 +129,6 @@ class MusicgenDecoderTester:
         self.batch_size = batch_size
         self.seq_length = seq_length
         self.is_training = is_training
-        self.use_labels = use_labels
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
@@ -148,7 +148,9 @@ class MusicgenDecoderTester:
 
         config = self.get_config()
         inputs_dict = prepare_musicgen_decoder_inputs_dict(
-            config, input_ids, encoder_hidden_states=encoder_hidden_states
+            config,
+            input_ids,
+            encoder_hidden_states=encoder_hidden_states,
         )
         return config, inputs_dict
 
@@ -189,6 +191,45 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    # special case for labels
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+
+        if return_labels:
+            inputs_dict["labels"] = torch.zeros(
+                (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_codebooks),
+                dtype=torch.long,
+                device=torch_device,
+            )
+        return inputs_dict
+
+    def check_training_gradient_checkpointing(self, gradient_checkpointing_kwargs=None):
+        if not self.model_tester.is_training:
+            self.skipTest(reason="model_tester.is_training is set to False")
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.use_cache = False
+        config.return_dict = True
+        model = MusicgenForCausalLM(config)
+
+        model.to(torch_device)
+        model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
+        model.train()
+
+        # Contrarily to the initial method, we don't unfreeze freezed parameters.
+        # Indeed, sinusoidal position embeddings have frozen weights that should stay frozen.
+
+        optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
+
+        inputs = self._prepare_for_class(inputs_dict, MusicgenForCausalLM, return_labels=True)
+        loss = model(**inputs).loss
+        loss.backward()
+        optimizer.step()
+
+        for k, v in model.named_parameters():
+            if v.requires_grad:
+                self.assertTrue(v.grad is not None, f"{k} in {MusicgenForCausalLM.__name__} has no gradient!")
+
     # override since we have to compute the input embeddings over codebooks
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -215,7 +256,7 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                 model(**inputs)[0]
 
     # override since we have embeddings / LM heads over multiple codebooks
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -225,15 +266,19 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             lm_heads = model.get_output_embeddings()
             self.assertTrue(lm_heads is None or isinstance(lm_heads[0], torch.nn.Linear))
 
-    # skip as this model doesn't support all arguments tested
+    @unittest.skip(reason="MusicGen does not use inputs_embeds")
+    def test_inputs_embeds_matches_input_ids(self):
+        pass
+
+    @unittest.skip(reason="MusicGen does not support all arguments tested")
     def test_model_outputs_equivalence(self):
         pass
 
-    # skip as this model has multiple inputs embeds and lm heads that should not be tied
+    @unittest.skip(reason="MusicGen has multiple inputs embeds and lm heads that should not be tied")
     def test_tie_model_weights(self):
         pass
 
-    # skip as this model has multiple inputs embeds and lm heads that should not be tied
+    @unittest.skip(reason="MusicGen has multiple inputs embeds and lm heads that should not be tied")
     def test_tied_weights_keys(self):
         pass
 
@@ -245,34 +290,28 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         sequence_length = input_ids.shape[-1]
         input_ids = input_ids[: batch_size * config.num_codebooks, :]
 
-        # generate max 3 tokens
-        max_length = input_ids.shape[-1] + 3
         attention_mask = torch.ones((batch_size, sequence_length), dtype=torch.long)
-        return config, input_ids, attention_mask, max_length
+        return config, input_ids, attention_mask
 
     @staticmethod
     def _get_logits_processor_and_warper_kwargs(
         input_length,
         forced_bos_token_id=None,
         forced_eos_token_id=None,
-        max_length=None,
     ):
-        process_kwargs = {
-            "min_length": input_length + 1 if max_length is None else max_length - 1,
-        }
+        process_kwargs = {}
         warper_kwargs = {}
         return process_kwargs, warper_kwargs
 
     def test_greedy_generate_stereo_outputs(self):
         for model_class in self.greedy_sample_model_classes:
-            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
+            config, input_ids, attention_mask = self._get_input_ids_and_config()
             config.audio_channels = 2
             model = model_class(config).to(torch_device).eval()
             output_generate = self._greedy_generate(
                 model=model,
                 input_ids=input_ids.to(torch_device),
                 attention_mask=attention_mask.to(torch_device),
-                max_length=max_length,
                 output_scores=True,
                 output_hidden_states=True,
                 output_attentions=True,
@@ -585,6 +624,9 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     @slow
     # Copied from tests.test_modeling_common.ModelTesterMixin.test_eager_matches_sdpa_inference
     def test_eager_matches_sdpa_inference(self, torch_dtype: str):
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
         if not self.all_model_classes[0]._supports_sdpa:
             self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
 
@@ -902,6 +944,7 @@ def prepare_musicgen_inputs_dict(
     head_mask=None,
     decoder_head_mask=None,
     cross_attn_head_mask=None,
+    labels=None,
 ):
     if decoder_attention_mask is None:
         decoder_attention_mask = decoder_input_ids.reshape(
@@ -928,6 +971,7 @@ def prepare_musicgen_inputs_dict(
         "head_mask": head_mask,
         "decoder_head_mask": decoder_head_mask,
         "cross_attn_head_mask": cross_attn_head_mask,
+        "labels": labels,
     }
 
 
@@ -937,8 +981,7 @@ class MusicgenTester:
         parent,
         batch_size=4,  # need batch_size != num_hidden_layers
         seq_length=7,
-        is_training=False,
-        use_labels=False,
+        is_training=True,
         vocab_size=99,
         hidden_size=16,
         num_hidden_layers=2,
@@ -958,7 +1001,6 @@ class MusicgenTester:
         self.batch_size = batch_size
         self.seq_length = seq_length
         self.is_training = is_training
-        self.use_labels = use_labels
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
@@ -1031,6 +1073,47 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
     def setUp(self):
         self.model_tester = MusicgenTester(self)
+
+    # special case for labels
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+
+        if return_labels:
+            inputs_dict["labels"] = torch.zeros(
+                (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_codebooks),
+                dtype=torch.long,
+                device=torch_device,
+            )
+        return inputs_dict
+
+    def check_training_gradient_checkpointing(self, gradient_checkpointing_kwargs=None):
+        if not self.model_tester.is_training:
+            self.skipTest(reason="model_tester.is_training is set to False")
+
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config.use_cache = False
+            config.return_dict = True
+            model = model_class(config)
+
+            model.to(torch_device)
+            model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
+            model.train()
+
+            # The audio encoder weights are not used during the forward pass (only during the generate pass)
+            # So we need to freeze it to be able to train.
+            model.freeze_audio_encoder()
+
+            optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
+
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            loss = model(**inputs).loss
+            loss.backward()
+            optimizer.step()
+
+            for k, v in model.named_parameters():
+                if v.requires_grad:
+                    self.assertTrue(v.grad is not None, f"{k} in {model_class.__name__} has no gradient!")
 
     def _check_output_with_attentions(self, outputs, config, input_ids, decoder_input_ids):
         text_encoder_config = config.text_encoder
@@ -1182,16 +1265,28 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             model = model_class(config)
             self.assertTrue(model.is_gradient_checkpointing)
 
-    # skip as this model has multiple inputs embeds and lm heads that should not be tied
+    @unittest.skip(reason="MusicGen has multiple inputs embeds and lm heads that should not be tied.")
     def test_tie_model_weights(self):
         pass
 
-    # skip as this model has multiple inputs embeds and lm heads that should not be tied
+    @unittest.skip(reason="MusicGen has multiple inputs embeds and lm heads that should not be tied.")
     def test_tied_model_weights_key_ignore(self):
         pass
 
-    # skip as this model has multiple inputs embeds and lm heads that should not be tied
+    @unittest.skip(reason="MusicGen has multiple inputs embeds and lm heads that should not be tied.")
     def test_tied_weights_keys(self):
+        pass
+
+    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
+    def test_save_load_low_cpu_mem_usage(self):
+        pass
+
+    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
+    def test_save_load_low_cpu_mem_usage_checkpoints(self):
+        pass
+
+    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
+    def test_save_load_low_cpu_mem_usage_no_safetensors(self):
         pass
 
     # override since changing `output_hidden_states` / `output_attentions` from the top-level model config won't work
@@ -1309,7 +1404,7 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                         )
 
     # override since we have embeddings / LM heads over multiple codebooks
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -1327,9 +1422,7 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         input_ids = input_ids[:batch_size, :]
         attention_mask = torch.ones((batch_size, sequence_length), dtype=torch.long)
 
-        # generate max 3 tokens
-        max_length = 3
-        return config, input_ids, attention_mask, max_length
+        return config, input_ids, attention_mask
 
     # override since the `input_ids` cannot be used as the `decoder_input_ids` for musicgen (input / outputs are
     # different modalities -> different shapes)
@@ -1338,29 +1431,22 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         model,
         input_ids,
         attention_mask,
-        max_length,
         output_scores=False,
         output_attentions=False,
         output_hidden_states=False,
         return_dict_in_generate=False,
     ):
-        logits_process_kwargs, _ = self._get_logits_processor_and_warper_kwargs(
-            input_ids.shape[-1],
-            max_length=max_length,
-        )
-
         model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
         output_generate = model.generate(
             input_ids,
             do_sample=False,
             num_beams=1,
-            max_length=max_length,
+            max_new_tokens=self.max_new_tokens,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             output_scores=output_scores,
             return_dict_in_generate=return_dict_in_generate,
             remove_invalid_values=True,
-            **logits_process_kwargs,
             **model_kwargs,
         )
 
@@ -1373,10 +1459,7 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         model,
         input_ids,
         attention_mask,
-        max_length,
         num_return_sequences,
-        logits_warper_kwargs,
-        process_kwargs,
         output_scores=False,
         output_attentions=False,
         output_hidden_states=False,
@@ -1388,15 +1471,13 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             input_ids,
             do_sample=True,
             num_beams=1,
-            max_length=max_length,
+            max_new_tokens=self.max_new_tokens,
             num_return_sequences=num_return_sequences,
             output_scores=output_scores,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict_in_generate=return_dict_in_generate,
             remove_invalid_values=True,
-            **logits_warper_kwargs,
-            **process_kwargs,
             **model_kwargs,
         )
 
@@ -1407,25 +1488,21 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         input_length,
         forced_bos_token_id=None,
         forced_eos_token_id=None,
-        max_length=None,
     ):
-        process_kwargs = {
-            "min_length": input_length + 1 if max_length is None else max_length - 1,
-        }
+        process_kwargs = {}
         warper_kwargs = {}
         return process_kwargs, warper_kwargs
 
     def test_greedy_generate_dict_outputs(self):
         for model_class in self.greedy_sample_model_classes:
             # disable cache
-            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
+            config, input_ids, attention_mask = self._get_input_ids_and_config()
             config.use_cache = False
             model = model_class(config).to(torch_device).eval()
             output_generate = self._greedy_generate(
                 model=model,
                 input_ids=input_ids.to(torch_device),
                 attention_mask=attention_mask.to(torch_device),
-                max_length=max_length,
                 output_scores=True,
                 output_hidden_states=True,
                 output_attentions=True,
@@ -1439,7 +1516,7 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def test_greedy_generate_dict_outputs_use_cache(self):
         for model_class in self.greedy_sample_model_classes:
             # enable cache
-            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
+            config, input_ids, attention_mask = self._get_input_ids_and_config()
 
             config.use_cache = True
             config.is_decoder = True
@@ -1448,7 +1525,6 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 model=model,
                 input_ids=input_ids.to(torch_device),
                 attention_mask=attention_mask.to(torch_device),
-                max_length=max_length,
                 output_scores=True,
                 output_hidden_states=True,
                 output_attentions=True,
@@ -1459,46 +1535,30 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
     def test_sample_generate(self):
         for model_class in self.greedy_sample_model_classes:
-            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
+            config, input_ids, attention_mask = self._get_input_ids_and_config()
             model = model_class(config).to(torch_device).eval()
-
-            process_kwargs, logits_warper_kwargs = self._get_logits_processor_and_warper_kwargs(
-                input_ids.shape[-1],
-                max_length=max_length,
-            )
 
             # check `generate()` and `sample()` are equal
             output_generate = self._sample_generate(
                 model=model,
                 input_ids=input_ids.to(torch_device),
                 attention_mask=attention_mask.to(torch_device),
-                max_length=max_length,
                 num_return_sequences=1,
-                logits_warper_kwargs=logits_warper_kwargs,
-                process_kwargs=process_kwargs,
             )
             self.assertIsInstance(output_generate, torch.Tensor)
 
     def test_sample_generate_dict_output(self):
         for model_class in self.greedy_sample_model_classes:
             # disable cache
-            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
+            config, input_ids, attention_mask = self._get_input_ids_and_config()
             config.use_cache = False
             model = model_class(config).to(torch_device).eval()
-
-            process_kwargs, logits_warper_kwargs = self._get_logits_processor_and_warper_kwargs(
-                input_ids.shape[-1],
-                max_length=max_length,
-            )
 
             output_generate = self._sample_generate(
                 model=model,
                 input_ids=input_ids.to(torch_device),
                 attention_mask=attention_mask.to(torch_device),
-                max_length=max_length,
                 num_return_sequences=3,
-                logits_warper_kwargs=logits_warper_kwargs,
-                process_kwargs=process_kwargs,
                 output_scores=True,
                 output_hidden_states=True,
                 output_attentions=True,
@@ -1508,20 +1568,23 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             self.assertIsInstance(output_generate, GenerateEncoderDecoderOutput)
 
     def test_generate_without_input_ids(self):
-        config, _, _, max_length = self._get_input_ids_and_config()
+        config, _, _ = self._get_input_ids_and_config()
 
         # if no bos token id => cannot generate from None
         if config.bos_token_id is None:
-            return
+            self.skipTest(reason="bos_token_id is None")
 
         for model_class in self.greedy_sample_model_classes:
             model = model_class(config).to(torch_device)
             model.eval()
 
-            output_ids_generate = model.generate(do_sample=False, max_length=max_length, remove_invalid_values=True)
+            output_ids_generate = model.generate(
+                do_sample=False, max_new_tokens=self.max_new_tokens, remove_invalid_values=True
+            )
             self.assertIsNotNone(output_ids_generate)
 
     @require_torch_fp16
+    @require_torch_accelerator  # not all operations are supported in fp16 on CPU
     def test_generate_fp16(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
 
@@ -1537,7 +1600,7 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
     def test_greedy_generate_stereo_outputs(self):
         for model_class in self.greedy_sample_model_classes:
-            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
+            config, input_ids, attention_mask = self._get_input_ids_and_config()
             config.audio_channels = 2
 
             model = model_class(config).to(torch_device).eval()
@@ -1545,7 +1608,6 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 model=model,
                 input_ids=input_ids.to(torch_device),
                 attention_mask=attention_mask.to(torch_device),
-                max_length=max_length,
                 output_scores=True,
                 output_hidden_states=True,
                 output_attentions=True,
@@ -1555,6 +1617,12 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             self.assertIsInstance(output_generate, GenerateEncoderDecoderOutput)
 
             self.assertNotIn(config.pad_token_id, output_generate)
+
+    @unittest.skip(
+        reason="MusicgenModel is actually not the base of MusicgenForCausalLM as the latter is a composit model"
+    )
+    def test_save_load_fast_init_from_base(self):
+        pass
 
     @require_flash_attn
     @require_torch_gpu
@@ -1871,6 +1939,9 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     @slow
     # Copied from tests.test_modeling_common.ModelTesterMixin.test_eager_matches_sdpa_inference
     def test_eager_matches_sdpa_inference(self, torch_dtype: str):
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
         if not self.all_model_classes[0]._supports_sdpa:
             self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
 
@@ -2188,6 +2259,27 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 )
 
                 self.assertTrue(torch.allclose(res_eager, res_sdpa))
+
+    def test_requires_grad_with_frozen_encoders(self):
+        config = self.model_tester.get_config()
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.freeze_audio_encoder()
+
+            audio_encoder_grads = [param.requires_grad for param in model.audio_encoder.parameters()]
+            text_encoder_grads = [param.requires_grad for param in model.text_encoder.parameters()]
+
+            self.assertFalse(all(audio_encoder_grads))
+            self.assertTrue(all(text_encoder_grads))
+
+            model = model_class(config)
+            model.freeze_text_encoder()
+
+            audio_encoder_grads = [param.requires_grad for param in model.audio_encoder.parameters()]
+            text_encoder_grads = [param.requires_grad for param in model.text_encoder.parameters()]
+
+            self.assertTrue(all(audio_encoder_grads))
+            self.assertFalse(all(text_encoder_grads))
 
 
 def get_bip_bip(bip_duration=0.125, duration=0.5, sample_rate=32000):

@@ -28,6 +28,7 @@ logger = logging.get_logger(__name__)
 
 parsed_torch_version_base = version.parse(version.parse(torch.__version__).base_version)
 
+is_torch_greater_or_equal_than_2_3 = parsed_torch_version_base >= version.parse("2.3")
 is_torch_greater_or_equal_than_2_2 = parsed_torch_version_base >= version.parse("2.2")
 is_torch_greater_or_equal_than_2_1 = parsed_torch_version_base >= version.parse("2.1")
 is_torch_greater_or_equal_than_2_0 = parsed_torch_version_base >= version.parse("2.0")
