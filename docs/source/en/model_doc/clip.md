@@ -88,7 +88,7 @@ First, make sure to install the latest version of Flash Attention 2.
 pip install -U flash-attn --no-build-isolation
 ```
 
-Make also sure that you have a hardware that is compatible with Flash-Attention 2. Read more about it in the official documentation of flash-attn repository. Make also sure to load your model in half-precision (e.g. `torch.float16``)
+Make also sure that you have a hardware that is compatible with Flash-Attention 2. Read more about it in the official documentation of flash-attn repository. Make also sure to load your model in half-precision (e.g. `torch.float16`)
 
 <Tip warning={true}>
 
