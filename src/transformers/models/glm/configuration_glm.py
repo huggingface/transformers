@@ -43,14 +43,6 @@ class GLMConfig(PretrainedConfig):
             Number of hidden layers in the Transformer decoder.
         num_attention_heads (`int`, *optional*, defaults to 32):
             Number of attention heads for each attention layer in the Transformer decoder.
-        num_key_value_heads (`int`, *optional*):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
-            `num_attention_heads`.
         resid_pdrop (`float`, *optional*, defaults to 0.0):
             Dropout probability for mlp outputs.
         embd_pdrop (`int`, *optional*, defaults to 0.0):
@@ -61,9 +53,6 @@ class GLMConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 4096):
             The maximum sequence length that this model might ever be used with.
-        original_max_position_embeddings (`int`, *optional*, defaults to 4096):
-            The maximum sequence length that this model was trained with. This is used to determine the size of the
-            original RoPE embeddings when using long scaling.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         rms_norm_eps (`float`, *optional*, defaults to 1e-05):
@@ -95,6 +84,7 @@ class GLMConfig(PretrainedConfig):
             hidden_dropout=0.0,
             classifier_dropout=None,
             attention_dropout=0.0,
+            max_position_embeddings=32768,
             initializer_range=0.02,
             layernorm_epsilon=1.5625e-07,
             rmsnorm=True,
@@ -110,12 +100,11 @@ class GLMConfig(PretrainedConfig):
             attention_softmax_in_fp32=True,
             fp32_residual_connection=False,
             use_cache=True,
-            use_sliding_window=False,
-            sliding_window=4096,
             **kwargs
     ):
         self.num_hidden_layers = num_hidden_layers
         self.vocab_size = vocab_size
+        self.max_position_embeddings = max_position_embeddings
         self.padded_vocab_size = vocab_size
         self.initializer_range = initializer_range
         self.hidden_size = hidden_size

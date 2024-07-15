@@ -148,6 +148,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                        [Gemma2](model_doc/gemma2)                        |       ✅        |         ❌         |      ❌      |
 |                           [GIT](model_doc/git)                           |       ✅        |         ❌         |      ❌      |
 |                          [GLPN](model_doc/glpn)                          |       ✅        |         ❌         |      ❌      |
+|                           [GLM](model_doc/glm)                           |       ✅        |         ❌         |      ❌      |
 |                       [GPT Neo](model_doc/gpt_neo)                       |       ✅        |         ❌         |      ✅      |
 |                      [GPT NeoX](model_doc/gpt_neox)                      |       ✅        |         ❌         |      ❌      |
 |             [GPT NeoX Japanese](model_doc/gpt_neox_japanese)             |       ✅        |         ❌         |      ❌      |
