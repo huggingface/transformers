@@ -522,6 +522,10 @@ _import_structure = {
         "LlavaNextVideoConfig",
         "LlavaNextVideoProcessor",
     ],
+    "models.llark": [
+        "LLARK_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "LLarkConfig",
+    ],
     "models.longformer": [
         "LongformerConfig",
         "LongformerTokenizer",
@@ -2465,6 +2469,14 @@ else:
         [
             "LlavaNextVideoForConditionalGeneration",
             "LlavaNextVideoPreTrainedModel",
+        ]
+    )
+    _import_structure["models.llark"].extend(
+        [
+            "LLARK_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "LLarkForConditionalGeneration",
+            "LLarkPreTrainedModel",
+            "LLarkProcessor",
         ]
     )
     _import_structure["models.longformer"].extend(
@@ -5184,6 +5196,10 @@ if TYPE_CHECKING:
         LlavaNextVideoConfig,
         LlavaNextVideoProcessor,
     )
+    from .models.llark import (
+        LLARK_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        LLarkConfig,
+    )
     from .models.longformer import (
         LongformerConfig,
         LongformerTokenizer,
@@ -6942,6 +6958,12 @@ if TYPE_CHECKING:
         from .models.llava_next_video import (
             LlavaNextVideoForConditionalGeneration,
             LlavaNextVideoPreTrainedModel,
+        )
+        from .models.llark import (
+            LLARK_PRETRAINED_MODEL_ARCHIVE_LIST,
+            LLarkForConditionalGeneration,
+            LLarkPreTrainedModel,
+            LLarkProcessor,
         )
         from .models.longformer import (
             LongformerForMaskedLM,

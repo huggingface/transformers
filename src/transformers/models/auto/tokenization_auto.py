@@ -249,8 +249,12 @@ else:
                 ),
             ),
             ("llava", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
+<<<<<<< Updated upstream
             ("llava-next-video", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
             ("llava_next", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
+=======
+            ("llark", ("LLarkTokenizer", "LLarkTokenizerFast" if is_tokenizers_available() else None)),
+>>>>>>> Stashed changes
             ("longformer", ("LongformerTokenizer", "LongformerTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "longt5",

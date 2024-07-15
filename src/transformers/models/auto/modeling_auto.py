@@ -302,8 +302,12 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("idefics2", "Idefics2ForConditionalGeneration"),
         ("layoutlm", "LayoutLMForMaskedLM"),
         ("llava", "LlavaForConditionalGeneration"),
+<<<<<<< Updated upstream
         ("llava-next-video", "LlavaNextVideoForConditionalGeneration"),
         ("llava_next", "LlavaNextForConditionalGeneration"),
+=======
+        ("llark", "LLarkForConditionalGeneration"),
+>>>>>>> Stashed changes
         ("longformer", "LongformerForMaskedLM"),
         ("luke", "LukeForMaskedLM"),
         ("lxmert", "LxmertForPreTraining"),
@@ -707,9 +711,13 @@ MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES = OrderedDict(
         ("instructblipvideo", "InstructBlipVideoForConditionalGeneration"),
         ("kosmos-2", "Kosmos2ForConditionalGeneration"),
         ("llava", "LlavaForConditionalGeneration"),
+<<<<<<< Updated upstream
         ("llava-next-video", "LlavaNextVideoForConditionalGeneration"),
         ("llava_next", "LlavaNextForConditionalGeneration"),
         ("paligemma", "PaliGemmaForConditionalGeneration"),
+=======
+        ("llark", "LLarkForConditionalGeneration"),
+>>>>>>> Stashed changes
         ("pix2struct", "Pix2StructForConditionalGeneration"),
         ("video_llava", "VideoLlavaForConditionalGeneration"),
         ("vipllava", "VipLlavaForConditionalGeneration"),

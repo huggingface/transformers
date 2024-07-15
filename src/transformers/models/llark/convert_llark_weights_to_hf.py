@@ -1,0 +1,153 @@
+# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+import argparse
+
+import torch
+from huggingface_hub import hf_hub_download
+
+from transformers import (
+    AddedToken,
+    AutoConfig,
+    AutoTokenizer,
+    AutoProcessor,
+    LlarkConfig,
+    LlarkForConditionalGeneration,
+    LlarkProcessor,
+)
+
+
+EPILOG_TXT = """Example:
+    python transformers/src/transformers/models/llark/convert_llark_weights_to_hf.py --text_model_id lmsys/vicuna-7b-v1.5 --audio_model_id openai/clip-vit-large-patch14-336 --output_hub_path org/llark-v1.5-7b-conv --old_state_dict_id liuhaotian/llark-v1.5-7b
+
+Example for creating the old state dict file with Python:
+
+    import torch
+    from llark.model.language_model.llark_llama import LlarkLlamaForCausalLM
+
+    # load model
+    kwargs = {"device_map": "auto", "torch_dtype": torch.float16}
+    model = LlarkLlamaForCausalLM.from_pretrained("liuhaotian/llark-v1.5-7b", low_cpu_mem_usage=True, **kwargs)
+
+    # load audio tower
+    model.get_audio_tower().load_model()
+
+    # Save state dict
+    torch.save(model.state_dict(), "tmp/hf_models/llark-v1.5-7b/model_state_dict.bin")
+"""
+
+KEYS_TO_MODIFY_MAPPING = {
+    "model.audio_tower.": "",
+    "model.mm_projector": "multi_modal_projector",
+    "model": "model.model",
+    "audio_model.model": "audio_model",
+    "lm_head": "language_model.lm_head",
+    "model.model": "language_model.model",
+    "multi_modal_projector.0": "multi_modal_projector.linear_1",
+    "multi_modal_projector.2": "multi_modal_projector.linear_2",
+}
+
+
+def convert_state_dict_to_hf(state_dict):
+    new_state_dict = {}
+    for key, value in state_dict.items():
+        if key.endswith(".inv_freq"):
+            continue
+        for key_to_modify, new_key in KEYS_TO_MODIFY_MAPPING.items():
+            if key_to_modify in key:
+                key = key.replace(key_to_modify, new_key)
+
+        new_state_dict[key] = value
+    return new_state_dict
+
+
+def convert_llark_llama_to_hf(text_model_id, audio_model_id, output_hub_path, old_state_dict_id):
+    torch.set_default_dtype(torch.float16)
+    text_config = AutoConfig.from_pretrained(text_model_id)
+
+    AUDIO_START_TOKEN = "<AUDIO_START>"
+    AUDIO_END_TOKEN = "<AUDIO_END>"
+
+    tokenizer = AutoTokenizer.from_pretrained(text_model_id)
+    tokenizer.add_tokens([AddedToken(AUDIO_START_TOKEN, special=True, normalized=False), AddedToken(AUDIO_END_TOKEN, special=True, normalized=False)], special_tokens=True)
+    tokenizer.add_special_tokens({"pad_token": "<pad>"})
+
+    audio_processor = AutoProcessor.from_pretrained(audio_model_id)
+
+    processor = LlarkProcessor(tokenizer=tokenizer, audio_processor=audio_processor)
+
+    config = LlarkConfig(text_config=text_config)
+    config.pad_token_id = 32001
+
+    config.audio_start_token_id = tokenizer.convert_tokens_to_ids(AUDIO_START_TOKEN)
+    config.audio_end_token_id = tokenizer.convert_tokens_to_ids(AUDIO_START_TOKEN)
+
+    with torch.device("meta"):
+        model = LlarkForConditionalGeneration(config)
+
+    # Pad to 64 for performance reasons
+    pad_shape = 64
+
+    state_dict_path = hf_hub_download(old_state_dict_id, "model_state_dict.bin")
+
+    state_dict = torch.load(state_dict_path, map_location="cpu")
+    state_dict = convert_state_dict_to_hf(state_dict)
+    model.load_state_dict(state_dict, strict=True, assign=True)
+
+    pre_expansion_embeddings = model.language_model.model.embed_tokens.weight.data
+    mu = torch.mean(pre_expansion_embeddings, dim=0).float()
+    n = pre_expansion_embeddings.size()[0]
+    sigma = ((pre_expansion_embeddings - mu).T @ (pre_expansion_embeddings - mu)) / n
+    dist = torch.distributions.multivariate_normal.MultivariateNormal(mu, covariance_matrix=1e-5 * sigma)
+
+    model.resize_token_embeddings(len(tokenizer), pad_shape)
+    model.language_model.model.embed_tokens.weight.data[32000:] = torch.stack(
+        tuple((dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[32000:].shape[0]))),
+        dim=0,
+    )
+    model.language_model.lm_head.weight.data[32000:] = torch.stack(
+        tuple((dist.sample() for _ in range(model.language_model.lm_head.weight.data[32000:].shape[0]))),
+        dim=0,
+    )
+
+    model.push_to_hub(output_hub_path)
+    processor.push_to_hub(output_hub_path)
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        epilog=EPILOG_TXT,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--text_model_id",
+        help="Hub location of the text model",
+    )
+    parser.add_argument(
+        "--audio_model_id",
+        help="Hub location of the audio model",
+    )
+    parser.add_argument(
+        "--output_hub_path",
+        help="Location on the hub of the converted model",
+    )
+    parser.add_argument(
+        "--old_state_dict_id",
+        help="Location on the hub of the raw state dict of the original model. The filename needs to be `model_state_dict.bin`",
+    )
+    args = parser.parse_args()
+    convert_llark_llama_to_hf(args.text_model_id, args.audio_model_id, args.output_hub_path, args.old_state_dict_id)
+
+
+if __name__ == "__main__":
+    main()

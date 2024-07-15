@@ -135,8 +135,13 @@
     title: Community resources
   - local: troubleshooting
     title: Troubleshoot
+<<<<<<< Updated upstream
   - local: gguf
     title: Interoperability with GGUF files
+=======
+  - local: hf_quantizer
+    title: Contribute new quantization method
+>>>>>>> Stashed changes
   title: Developer guides
 - sections:
   - local: quantization/overview
@@ -800,6 +805,8 @@
         title: LayoutXLM
       - local: model_doc/lilt
         title: LiLT
+      - local: model_doc/llark
+        title: LLark
       - local: model_doc/llava
         title: Llava
       - local: model_doc/llava_next
