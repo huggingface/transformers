@@ -4,7 +4,7 @@ name: Self-hosted runner (scheduled)
 on:
   push:
     branches:
-      - short_prep_inputs_ci
+      - muellerzr-speedup-inference
 
 jobs:
   model-ci:
