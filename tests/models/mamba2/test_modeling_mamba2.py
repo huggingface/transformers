@@ -53,7 +53,7 @@ class Mamba2ModelTester:
     def __init__(
         self,
         parent,
-        batch_size=14,
+        batch_size=13,
         seq_length=7,
         is_training=True,
         use_input_mask=True,
@@ -103,9 +103,7 @@ class Mamba2ModelTester:
         self.tie_word_embeddings = tie_word_embeddings
         self.classifier_dropout = classifier_dropout
 
-    # TODO: This might fail, need to create an internal testing
-    def get_large_model_config(self):
-        return Mamba2Config.from_pretrained("state-spaces/mamba2-2.7b")
+    # TODO: Add get_large_model_config test
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -196,7 +194,7 @@ class Mamba2ModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_mamba2_lm_head_forward_and_backwards(
-        self, config, input_ids, input_mask, token_labels, gradient_checkpointing=False, *args
+        self, config, input_ids, input_mask, token_labels, *args, gradient_checkpointing=False
     ):
         model = Mamba2ForCausalLM(config)
         model.to(torch_device)

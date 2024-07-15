@@ -55,17 +55,17 @@ from .configuration_mamba2 import Mamba2Config
 logger = logging.get_logger(__name__)
 
 if is_flash_attn_2_available():
-    from flash_attn import flash_attn_func, flash_attn_varlen_func # type: ignore
-    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input # type: ignore
+    from flash_attn import flash_attn_func, flash_attn_varlen_func
+    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input
 
 if is_mamba_ssm_greater_or_equal_2_0_4():
-    from mamba_ssm.ops.triton.selective_state_update import selective_state_update # type: ignore
-    from mamba_ssm.ops.triton.ssd_combined import mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined # type: ignore
+    from mamba_ssm.ops.triton.selective_state_update import selective_state_update
+    from mamba_ssm.ops.triton.ssd_combined import mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined
 else:
     selective_state_update, mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined = None, None, None
 
 if is_causal_conv1d_available():
-    from causal_conv1d import causal_conv1d_fn, causal_conv1d_update # type: ignore
+    from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
 else:
     causal_conv1d_update, causal_conv1d_fn = None, None
 
@@ -2037,7 +2037,7 @@ class Mamba2ClassificationHead(nn.Module):
     Mamba2 Model backbone with a sequence classification/regression head on top
     (a linear layer on top of the pooled output) e.g. for GLUE tasks.
 
-    [`Mamb2aForSequenceClassification`] uses the last token in order to do the classification, as other causal models
+    [`Mamba2ForSequenceClassification`] uses the last token in order to do the classification, as other causal models
     (e.g. GPT-2) do.
 
     Since it does classification on the last token, it requires to know the position of the last token.
@@ -2048,7 +2048,7 @@ class Mamba2ClassificationHead(nn.Module):
     """,
     MAMBA2_START_DOCSTRING,
 )
-class MambaForSequenceClassification(Mamba2PreTrainedModel):
+class Mamba2ForSequenceClassification(Mamba2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
