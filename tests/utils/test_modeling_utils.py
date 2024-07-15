@@ -1847,8 +1847,11 @@ class ModelPushToHubTester(unittest.TestCase):
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
             self.assertTrue(torch.equal(p1, p2))
 
-        # Reset repo
-        delete_repo(token=self._token, repo_id="test-model")
+        try:
+            # Reset repo
+            delete_repo(token=self._token, repo_id="test-model")
+        except:
+            pass
 
         # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -1887,8 +1890,11 @@ The commit description supports markdown synthax see:
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
             self.assertTrue(torch.equal(p1, p2))
 
-        # Reset repo
-        delete_repo(token=self._token, repo_id="valid_org/test-model-org")
+        try:
+            # Reset repo
+            delete_repo(token=self._token, repo_id="valid_org/test-model-org")
+        except:
+            pass
 
         # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
