@@ -2,12 +2,9 @@ name: Self-hosted runner (scheduled)
 
 
 on:
-  repository_dispatch:
-  schedule:
-    - cron: "17 2 * * *"
   push:
     branches:
-      - run_scheduled_ci*
+      - short_prep_inputs_ci
 
 jobs:
   model-ci:
@@ -15,7 +12,7 @@ jobs:
     uses: ./.github/workflows/self-scheduled.yml
     with:
       job: run_models_gpu
-      slack_report_channel: "#transformers-ci-daily-models"
+      slack_report_channel: "#transformers-ci-feedback-tests"
       runner: daily-ci
       docker: huggingface/transformers-all-latest-gpu
       ci_event: Daily CI
@@ -26,7 +23,7 @@ jobs:
     uses: ./.github/workflows/self-scheduled.yml
     with:
       job: run_pipelines_torch_gpu
-      slack_report_channel: "#transformers-ci-daily-pipeline-torch"
+      slack_report_channel: "#transformers-ci-feedback-tests"
       runner: daily-ci
       docker: huggingface/transformers-pytorch-gpu
       ci_event: Daily CI
@@ -37,7 +34,7 @@ jobs:
     uses: ./.github/workflows/self-scheduled.yml
     with:
       job: run_pipelines_tf_gpu
-      slack_report_channel: "#transformers-ci-daily-pipeline-tf"
+      slack_report_channel: "#transformers-ci-feedback-tests"
       runner: daily-ci
       docker: huggingface/transformers-tensorflow-gpu
       ci_event: Daily CI
@@ -48,7 +45,7 @@ jobs:
     uses: ./.github/workflows/self-scheduled.yml
     with:
       job: run_examples_gpu
-      slack_report_channel: "#transformers-ci-daily-examples"
+      slack_report_channel: "#transformers-ci-feedback-tests"
       runner: daily-ci
       docker: huggingface/transformers-all-latest-gpu
       ci_event: Daily CI
@@ -59,7 +56,7 @@ jobs:
     uses: ./.github/workflows/self-scheduled.yml
     with:
       job: run_torch_cuda_extensions_gpu
-      slack_report_channel: "#transformers-ci-daily-deepspeed"
+      slack_report_channel: "#transformers-ci-feedback-tests"
       runner: daily-ci
       docker: huggingface/transformers-pytorch-deepspeed-latest-gpu
       ci_event: Daily CI
@@ -71,7 +68,7 @@ jobs:
     uses: ./.github/workflows/self-scheduled.yml
     with:
       job: run_quantization_torch_gpu
-      slack_report_channel: "#transformers-ci-daily-quantization"
+      slack_report_channel: "#transformers-ci-feedback-tests"
       runner: daily-ci
       docker: huggingface/transformers-quantization-latest-gpu
       ci_event: Daily CI
