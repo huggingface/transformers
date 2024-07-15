@@ -1387,6 +1387,7 @@ class GenerationMixin:
                     self.generation_config = new_generation_config
             using_model_generation_config = True
             generation_config = self.generation_config
+            using_model_generation_config = True
 
         # `torch.compile` can't compile `copy.deepcopy`, arguments in `kwargs` that are part of `generation_config`
         # will mutate the object with `.update`. As such, passing these arguments through `kwargs` is disabled -- an
@@ -1404,6 +1405,8 @@ class GenerationMixin:
                     generation_config.pad_token_id = self.generation_config.pad_token_id
                 if generation_config.decoder_start_token_id is None:
                     generation_config.decoder_start_token_id = self.generation_config.decoder_start_token_id
+        else:
+            model_kwargs = kwargs
 
         return generation_config, model_kwargs
 
@@ -1519,6 +1522,9 @@ class GenerationMixin:
 
         # Convert special tokens to tensors
         def _tensor_or_none(token, device=None):
+            if device is None:
+                device = self.device
+
             if token is None:
                 return token
 
