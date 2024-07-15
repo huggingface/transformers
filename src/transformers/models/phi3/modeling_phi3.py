@@ -76,13 +76,13 @@ class Phi3RMSNorm(nn.Module):
 
 # Copied from transformers.models.gemma.modeling_gemma.GemmaRotaryEmbedding with gemma->phi3, Gemma->Phi3
 class Phi3RotaryEmbedding(nn.Module):
-    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
+    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
         super().__init__()
 
+        self.scaling_factor = scaling_factor
         self.dim = dim
         self.max_position_embeddings = max_position_embeddings
         self.base = base
-
         inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float() / self.dim))
         self.register_buffer("inv_freq", tensor=inv_freq, persistent=False)
 
@@ -102,6 +102,31 @@ class Phi3RotaryEmbedding(nn.Module):
             cos = emb.cos()
             sin = emb.sin()
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+
+class Phi3LinearScalingRotaryEmbedding(Phi3RotaryEmbedding):
+    def forward(self, x, position_ids):
+        # difference to the original RoPE: a scaling factor is aplied to the position ids
+        position_ids = position_ids.float() / self.scaling_factor
+        cos, sin = super().forward(x, position_ids)
+        return cos, sin
+
+
+class Phi3DynamicNTKScalingRotaryEmbedding(Phi3RotaryEmbedding):
+    def forward(self, x, position_ids):
+        # difference to the original RoPE: inv_freq is recomputed when the sequence length > original length
+        seq_len = torch.max(position_ids) + 1
+        if seq_len > self.max_position_embeddings:
+            base = self.base * (
+                (self.scaling_factor * seq_len / self.max_position_embeddings) - (self.scaling_factor - 1)
+            ) ** (self.dim / (self.dim - 2))
+            inv_freq = 1.0 / (
+                base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float().to(x.device) / self.dim)
+            )
+            self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: this may break with compilation
+
+        cos, sin = super().forward(x, position_ids)
+        return cos, sin
 
 
 class Phi3SuScaledRotaryEmbedding(Phi3RotaryEmbedding):
@@ -300,7 +325,21 @@ class Phi3Attention(nn.Module):
             )
         else:
             scaling_type = self.config.rope_scaling["type"]
-            if scaling_type == "su":
+            if scaling_type == "linear":
+                self.rotary_emb = Phi3LinearScalingRotaryEmbedding(
+                    self.head_dim,
+                    max_position_embeddings=self.max_position_embeddings,
+                    scaling_factor=self.config.rope_scaling["factor"],
+                    base=self.rope_theta,
+                )
+            elif scaling_type == "dynamic":
+                self.rotary_emb = Phi3DynamicNTKScalingRotaryEmbedding(
+                    self.head_dim,
+                    max_position_embeddings=self.max_position_embeddings,
+                    scaling_factor=self.config.rope_scaling["factor"],
+                    base=self.rope_theta,
+                )
+            elif scaling_type == "su":
                 self.rotary_emb = Phi3SuScaledRotaryEmbedding(self.head_dim, self.config)
             elif scaling_type == "yarn":
                 self.rotary_emb = Phi3YarnScaledRotaryEmbedding(self.head_dim, self.config)
