@@ -78,6 +78,16 @@ class ImageProcessorPushToHubTester(unittest.TestCase):
         except HTTPError:
             pass
 
+        try:
+            delete_repo(token=cls._token, repo_id="valid_org/test-image-processor-org")
+        except HTTPError:
+            pass
+
+        try:
+            delete_repo(token=cls._token, repo_id="test-dynamic-image-processor")
+        except HTTPError:
+            pass
+
     def test_push_to_hub(self):
         image_processor = ViTImageProcessor.from_pretrained(SAMPLE_IMAGE_PROCESSING_CONFIG_DIR)
         image_processor.push_to_hub("test-image-processor", token=self._token)
