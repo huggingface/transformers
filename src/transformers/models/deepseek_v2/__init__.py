@@ -64,7 +64,11 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_flax_deepseek_v2"] = ["FlaxDeepseekV2ForCausalLM", "FlaxDeepseekV2Model", "FlaxDeepseekV2PreTrainedModel"]
+    _import_structure["modeling_flax_deepseek_v2"] = [
+        "FlaxDeepseekV2ForCausalLM",
+        "FlaxDeepseekV2Model",
+        "FlaxDeepseekV2PreTrainedModel",
+    ]
 
 
 if TYPE_CHECKING:
@@ -107,7 +111,11 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_flax_deepseek_v2 import FlaxDeepseekV2ForCausalLM, FlaxDeepseekV2Model, FlaxDeepseekV2PreTrainedModel
+        from .modeling_flax_deepseek_v2 import (
+            FlaxDeepseekV2ForCausalLM,
+            FlaxDeepseekV2Model,
+            FlaxDeepseekV2PreTrainedModel,
+        )
 
 
 else:
