@@ -196,7 +196,7 @@ class ChameleonFSMLogitsProcessor:
             self._is_first_token = False
             self._seq_start_idx = len(input_ids[0])
 
-            self._fsm_states = {hash(tuple()): self.fsm.initial_state}
+            self._fsm_states = {hash(()): self.fsm.initial_state}
             sequence_states = [self.fsm.initial_state] * len(input_ids)
 
         else:
