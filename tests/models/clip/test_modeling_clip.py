@@ -283,16 +283,6 @@ class CLIPModelTesterMixin(ModelTesterMixin):
             for use_mask, output_attentions, sdpa_backend, batch_size in cases:
                 processed_inputs = inputs_dict.copy()
 
-                # CLIP Text model attention has two attention masks: `causal_attention_mask` and `attention_mask`
-                # with `use_mask == "left"` we got fully masked rows in `attn_mask` passed to `scaled_dot_product_attention`
-                # for dtypes float32 and bfloat16 that lead to `nan` values in `attn_output` and `nan` value for all tokens,
-                # for float16 that lead to 1e-1 difference in logits.
-                # see also:
-                #  - https://github.com/huggingface/transformers/pull/31208
-                #  - https://github.com/pytorch/pytorch/issues/103749
-                # if use_mask == "left" and SDPBackend.EFFICIENT_ATTENTION in sdpa_backend:
-                #     continue
-
                 # convert to torch_dtype
                 if "pixel_values" in processed_inputs:
                     processed_inputs["pixel_values"] = processed_inputs["pixel_values"].to(torch_dtype)
@@ -979,6 +969,10 @@ class CLIPModelTest(CLIPModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     @require_torch_sdpa
     def test_sdpa_can_dispatch_on_flash(self):
         self.skipTest(reason="CLIP text tower has two attention masks: `causal_attention_mask` and `attention_mask`")
+
+    @require_torch_sdpa
+    def test_sdpa_can_compile_dynamic(self):
+        self.skipTest(reason="CLIP model can't be compiled dynamic, error in clip_loss`")
 
     @require_flash_attn
     @require_torch_gpu
