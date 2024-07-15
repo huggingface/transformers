@@ -20,7 +20,7 @@ from typing import Optional, Tuple
 import torch
 import torch.nn.functional as F
 
-from .utils import is_flash_attn_2_available, is_flash_attn_greater_or_equal_2_41
+from .utils import is_flash_attn_2_available, is_flash_attn_greater_or_equal
 
 
 if is_flash_attn_2_available():
@@ -181,7 +181,7 @@ def _flash_attention_forward(
     )
     flash_kwargs = {"window_size": (sliding_window, sliding_window)} if use_sliding_windows else {}
 
-    if is_flash_attn_greater_or_equal_2_41():
+    if is_flash_attn_greater_or_equal("2.4.1"):
         flash_kwargs["deterministic"] = deterministic
 
     if softcap is not None:
