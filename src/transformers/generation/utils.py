@@ -2944,8 +2944,7 @@ class GenerationMixin:
                         (outputs.decoder_hidden_states,)
                         if self.config.is_encoder_decoder
                         else (outputs.hidden_states,)
-                    )
-            
+                    )            
             # token selection
             if do_sample:
                 probs = nn.functional.softmax(next_token_scores, dim=-1)
@@ -3940,7 +3939,7 @@ class GenerationMixin:
                 candidate_logits = candidate_logits.to(self.device)
 
             candidate_length = candidate_input_ids.shape[1] - input_ids.shape[1]
-            is_done_candidate = stopping_criteria(candidate_input_ids, candidate_logits)
+            is_done_candidate = stopping_criteria(candidate_input_ids, None)
 
             # 2. Use the original model to obtain the next token logits given the candidate sequence. We obtain
             # `candidate_length + 1` relevant logits from this process: in the event that all candidates are correct,
@@ -3981,6 +3980,7 @@ class GenerationMixin:
             if do_sample and len(logits_warper) > 0:
                 for i in range(candidate_length + 1):
                     new_logits[:, i, :] = logits_warper(candidate_input_ids[:, : cur_len + i], new_logits[:, i, :])
+                    
             # 3. Select the accepted tokens. There are two possible cases:
             # Case 1: `do_sample=True` and we have logits for the candidates (originally from speculative decoding)
             # 👉 Apply algorithm 1 from the speculative decoding paper (https://arxiv.org/pdf/2211.17192.pdf).
@@ -4097,7 +4097,6 @@ class GenerationMixin:
             candidate_generator.assistant_model.generation_config.num_assistant_tokens = (
                 candidate_generator.num_assistant_tokens
             )
-        
         if return_dict_in_generate:
             if self.config.is_encoder_decoder:
                 return GenerateEncoderDecoderOutput(
