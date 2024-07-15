@@ -129,7 +129,7 @@ class ConfigPushToHubTester(unittest.TestCase):
         try:
             # Reset repo
             delete_repo(token=self._token, repo_id="test-config")
-        except: # noqa E722
+        except:  # noqa E722
             pass
 
         # Push to hub via save_pretrained
@@ -155,7 +155,7 @@ class ConfigPushToHubTester(unittest.TestCase):
         try:
             # Reset repo
             delete_repo(token=self._token, repo_id="valid_org/test-config-org")
-        except: # noqa E722
+        except:  # noqa E722
             pass
 
         # Push to hub via save_pretrained

@@ -1850,7 +1850,7 @@ class ModelPushToHubTester(unittest.TestCase):
         try:
             # Reset repo
             delete_repo(token=self._token, repo_id="test-model")
-        except: # noqa E722
+        except:  # noqa E722
             pass
 
         # Push to hub via save_pretrained
@@ -1893,7 +1893,7 @@ The commit description supports markdown synthax see:
         try:
             # Reset repo
             delete_repo(token=self._token, repo_id="valid_org/test-model-org")
-        except: # noqa E722
+        except:  # noqa E722
             pass
 
         # Push to hub via save_pretrained
