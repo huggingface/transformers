@@ -3203,19 +3203,19 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         )
         test_bos_id = 50
 
-        # the model has a BOS token set, and the first generated token is a BOS token
+        # Sanity-check: the model has a BOS token set, and the first generated token is a BOS token
         gen_output = model.generate()
         self.assertTrue(model.generation_config.bos_token_id is not None)
         self.assertTrue(model.generation_config.bos_token_id == gen_output[0, 0])
 
-        # If pass a generation config **with** a BOS token, `generate` will use it
+        # If we pass a generation config **with** a BOS token, `generate` will use it
         generation_config = GenerationConfig(bos_token_id=test_bos_id)
         gen_output = model.generate(generation_config=generation_config)
         self.assertFalse(model.generation_config.bos_token_id == gen_output[0, 0])
         self.assertTrue(generation_config.bos_token_id == gen_output[0, 0])
         self.assertTrue(test_bos_id == gen_output[0, 0])
 
-        # If pass a generation config **without** a BOS token, `generate` will fetch the BOS token from
+        # If we pass a generation config **without** a BOS token, `generate` will fetch the BOS token from
         # `model.generation_config`
         generation_config = GenerationConfig(bos_token_id=None)
         gen_output = model.generate(generation_config=generation_config)
@@ -3223,6 +3223,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         self.assertFalse(test_bos_id == gen_output[0, 0])
         self.assertTrue(generation_config.bos_token_id is None)
 
+        # Changing `model.generation_config` will affect fallback behavior
         model.generation_config.bos_token_id = test_bos_id
         gen_output = model.generate(generation_config=generation_config)
         self.assertTrue(model.generation_config.bos_token_id == gen_output[0, 0])
