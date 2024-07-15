@@ -495,30 +495,35 @@ class GLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 @slow
 @require_torch
 class GLMIntegrationTest(unittest.TestCase):
-    def test_glm_instruct_logits(self):
-        input_ids = {
-            "input_ids": torch.tensor(
-                [[151331, 151333, 151336, 198, 102162, 220, 16, 10, 16,
-                  100694, 99312, 3837, 99558, 104559, 100295, 151337]], dtype=torch.long, device=torch_device
-            )
-        }
-        model = GLMForCausalLM.from_pretrained("/share/home/zyx/Models/glm-4-9b-chat-new").to(torch_device)
-        model.eval()
-        output = model(**input_ids).logits
-        EXPECTED_OUTPUT = torch.tensor([[0.9979, -1.9449, -2.5613, -2.2110, -0.9323, -2.2726, -3.2468, -2.0122, -1.0021,
-                                         -1.2764, -1.0876, -1.2358, 3.9385, 6.2152, -0.3695, -2.3285, -1.2907, -1.8238,
-                                         -1.9941, -2.2098, -0.6923, -1.6793, -1.1660, -2.0469, -0.7369, -1.4101,
-                                         -1.4091, -3.1694, -1.8383, -1.1952],
-                                        [3.0525, 1.9178, 3.7016, 0.9263, 0.3397, 1.9584, 2.1347, 0.3482, 1.3773, 0.2153,
-                                         0.2798, 0.8360, 9.0936, 11.4944, -0.3575, -0.9442, -0.1246, 1.3869, 0.9846,
-                                         1.7243, 0.9150, 1.0823, 0.4313, 1.5742, 0.2566, -0.1401, -1.3019, 0.4967,
-                                         0.6941, 0.7214]]).to(torch_device)
 
-        self.assertTrue(torch.allclose(EXPECTED_OUTPUT, output[0, :2, :30], atol=1e-4, rtol=1e-4))
+    def test_glm_instruct_logits(self):
+        input_ids = [151331, 151333, 151336, 198, 102162, 220, 16, 10, 16,
+                     100694, 99312, 3837, 99558, 104559, 100295, 151337]
+        model = GLMForCausalLM.from_pretrained("THUDM/glm-4-9b-chat").to(torch_device)
+        input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
+        with torch.no_grad():
+            out = model(input_ids).logits.cpu()
+
+        # Expected mean on dim = -1
+        EXPECTED_MEAN = torch.tensor([[-2.6504, -0.0175, -1.7773, -1.9961, -2.2734, -2.8457, -2.4512, -2.6133,
+                                       -2.4199, -2.3535, -2.8203, -2.5664, -1.9512, -3.4766, -3.4395, -3.0156]])
+        torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
+
+        # slicing logits[0, 0, 0:30]
+        EXPECTED_SLICE = torch.tensor([3.9199, 6.3906, 4.7812, 4.1914, -1.0078, -1.2148, 4.2109, 5.5625,
+                                       2.4121, 2.2910, 4.3438, 5.7969, 7.0859, 4.5273, 0.9565, -1.8076,
+                                       3.1582, 3.7305, 4.5977, 5.7500, 4.1211, 4.2461, 4.4883, 2.9395,
+                                       4.0703, 7.1953, 3.5430, 2.4707, 0.0379, 2.0449])
+
+        torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, atol=1e-4, rtol=1e-4)
+
+        del model
+        backend_empty_cache(torch_device)
+        gc.collect()
 
     def test_glm_instruct_generation(self):
-        model = GLMForCausalLM.from_pretrained("/share/home/zyx/Models/glm-4-9b-chat-new")
-        tokenizer = AutoTokenizer.from_pretrained("/share/home/zyx/Models/glm-4-9b-chat-new")
+        model = GLMForCausalLM.from_pretrained("THUDM/glm-4-9b-chat")
+        tokenizer = AutoTokenizer.from_pretrained("THUDM/glm-4-9b-chat")
         messages = [
             {
                 "role": "system",
