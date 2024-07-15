@@ -842,8 +842,8 @@ class SeamlessM4TConformerEncoder(nn.Module):
                         hidden_states,
                         attention_mask,
                         relative_position_embeddings,
-                        output_attentions=output_attentions,
-                        conv_attention_mask=conv_attention_mask,
+                        output_attentions,
+                        conv_attention_mask,
                     )
                 else:
                     layer_outputs = layer(
