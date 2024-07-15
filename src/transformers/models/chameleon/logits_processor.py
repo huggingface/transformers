@@ -17,8 +17,8 @@ Here, we implement four generation modes, each with its own FSM guide (or none t
 Note: We decided to follow [Outline](https://github.com/outlines-dev/outlines)'s interface to make integration easier.
 """
 
-from typing import Dict, List, Literal, Protocol, Optional
 from dataclasses import dataclass
+from typing import Dict, List, Literal, Optional, Protocol
 
 import torch
 
@@ -117,7 +117,7 @@ class ChameleonModalityFSMGuide(Guide):
         elif multimodal_generation_mode == "free":
             raise ValueError("Unconstrained generation of text and image tokens is incompatible with this FSM.")
         else:
-            raise ValueError(f"Invalid mode: {mode}. Must be one of 'text-only', 'image-only', or 'interleaved-text-image'")
+            raise ValueError(f"Invalid mode: {multimodal_generation_mode}. Must be one of 'text-only', 'image-only', or 'interleaved-text-image'")
 
         self.states_to_token_maps[self.TEXT_STATE][self.eos_token_id] = self.FINAL_STATE
 
@@ -196,7 +196,7 @@ class ChameleonFSMLogitsProcessor:
             self._is_first_token = False
             self._seq_start_idx = len(input_ids[0])
 
-            self._fsm_states = {hash(tuple([])): self.fsm.initial_state}
+            self._fsm_states = {hash(tuple()): self.fsm.initial_state}
             sequence_states = [self.fsm.initial_state] * len(input_ids)
 
         else:
