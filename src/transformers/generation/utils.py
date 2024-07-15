@@ -1522,9 +1522,6 @@ class GenerationMixin:
 
         # Convert special tokens to tensors
         def _tensor_or_none(token, device=None):
-            if device is None:
-                device = self.device
-
             if token is None:
                 return token
 
