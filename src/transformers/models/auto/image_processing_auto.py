@@ -85,15 +85,18 @@ else:
             ("glpn", ("GLPNImageProcessor",)),
             ("grounding-dino", ("GroundingDinoImageProcessor",)),
             ("groupvit", ("CLIPImageProcessor",)),
+            ("hiera", ("BitImageProcessor",)),
             ("idefics", ("IdeficsImageProcessor",)),
             ("idefics2", ("Idefics2ImageProcessor",)),
             ("imagegpt", ("ImageGPTImageProcessor",)),
             ("instructblip", ("BlipImageProcessor",)),
+            ("instructblipvideo", ("InstructBlipVideoImageProcessor",)),
             ("kosmos-2", ("CLIPImageProcessor",)),
             ("layoutlmv2", ("LayoutLMv2ImageProcessor",)),
             ("layoutlmv3", ("LayoutLMv3ImageProcessor",)),
             ("levit", ("LevitImageProcessor",)),
             ("llava", ("CLIPImageProcessor",)),
+            ("llava-next-video", ("LlavaNextVideoImageProcessor",)),
             ("llava_next", ("LlavaNextImageProcessor",)),
             ("mask2former", ("Mask2FormerImageProcessor",)),
             ("maskformer", ("MaskFormerImageProcessor",)),
@@ -140,6 +143,7 @@ else:
             ("vitmatte", ("VitMatteImageProcessor",)),
             ("xclip", ("CLIPImageProcessor",)),
             ("yolos", ("YolosImageProcessor",)),
+            ("zoedepth", ("ZoeDepthImageProcessor",)),
         ]
     )
 
@@ -155,7 +159,6 @@ for model_type, image_processors in IMAGE_PROCESSOR_MAPPING_NAMES.items():
         fast_image_processor_class = fast_image_processor_class[0]
 
     IMAGE_PROCESSOR_MAPPING_NAMES[model_type] = (slow_image_processor_class, fast_image_processor_class)
-
 
 IMAGE_PROCESSOR_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, IMAGE_PROCESSOR_MAPPING_NAMES)
 
@@ -399,7 +402,7 @@ class AutoImageProcessor:
             kwargs["token"] = use_auth_token
 
         config = kwargs.pop("config", None)
-        use_fast = kwargs.pop("use_fast", False)
+        use_fast = kwargs.pop("use_fast", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         kwargs["_from_auto"] = True
 
@@ -430,10 +433,11 @@ class AutoImageProcessor:
 
         if image_processor_class is not None:
             # Update class name to reflect the use_fast option. If class is not found, None is returned.
-            if use_fast and not image_processor_class.endswith("Fast"):
-                image_processor_class += "Fast"
-            elif not use_fast and image_processor_class.endswith("Fast"):
-                image_processor_class = image_processor_class[:-4]
+            if use_fast is not None:
+                if use_fast and not image_processor_class.endswith("Fast"):
+                    image_processor_class += "Fast"
+                elif not use_fast and image_processor_class.endswith("Fast"):
+                    image_processor_class = image_processor_class[:-4]
             image_processor_class = image_processor_class_from_name(image_processor_class)
 
         has_remote_code = image_processor_auto_map is not None

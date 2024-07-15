@@ -397,11 +397,11 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
         )
 
-    @unittest.skip("Mistral buffers include complex numbers, which breaks this test")
+    @unittest.skip(reason="Mistral buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip("Mistral uses GQA on all models so the KV cache is a non standard format")
+    @unittest.skip(reason="Mistral uses GQA on all models so the KV cache is a non standard format")
     def test_past_key_values_format(self):
         pass
 
@@ -489,7 +489,7 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest("Mistral flash attention does not support right padding")
+        self.skipTest(reason="Mistral flash attention does not support right padding")
 
 
 @require_torch_gpu
@@ -554,6 +554,30 @@ class MistralIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(input_ids, max_new_tokens=20, temperature=0)
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION[self.cuda_compute_capability_major_version], text)
+
+    @slow
+    def test_model_7b_dola_generation(self):
+        # ground truth text generated with dola_layers="low", repetition_penalty=1.2
+        EXPECTED_TEXT_COMPLETION = (
+            """My favourite condiment is 100% ketchup. I love it on everything, and I’m not ash"""
+        )
+        prompt = "My favourite condiment is "
+        tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", use_fast=False)
+        model = MistralForCausalLM.from_pretrained(
+            "mistralai/Mistral-7B-v0.1", device_map="auto", torch_dtype=torch.float16
+        )
+        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
+
+        # greedy generation outputs
+        generated_ids = model.generate(
+            input_ids, max_new_tokens=20, temperature=0, dola_layers="low", repetition_penalty=1.2
+        )
+        text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
+
+        del model
+        backend_empty_cache(torch_device)
+        gc.collect()
 
     @require_bitsandbytes
     @slow
@@ -647,10 +671,10 @@ class MistralIntegrationTest(unittest.TestCase):
         # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
         # work as intended. See https://github.com/pytorch/pytorch/issues/121943
         if version.parse(torch.__version__) < version.parse("2.3.0"):
-            self.skipTest("This test requires torch >= 2.3 to run.")
+            self.skipTest(reason="This test requires torch >= 2.3 to run.")
 
         if self.cuda_compute_capability_major_version == 7:
-            self.skipTest("This test is failing (`torch.compile` fails) on Nvidia T4 GPU.")
+            self.skipTest(reason="This test is failing (`torch.compile` fails) on Nvidia T4 GPU.")
 
         NUM_TOKENS_TO_GENERATE = 40
         EXPECTED_TEXT_COMPLETION = {

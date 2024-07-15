@@ -850,7 +850,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
                     or is_torch_xpu_available(check_device=True)
                     or is_torch_mps_available()
                 ):
-                    logging.warning(
+                    logger.warning(
                         "Hardware accelerator e.g. GPU is available in the environment, but no `device` argument"
                         " is passed to the `Pipeline` object. Model will be on CPU."
                     )
