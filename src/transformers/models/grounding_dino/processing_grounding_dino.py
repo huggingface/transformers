@@ -17,7 +17,7 @@ Processor class for Grounding DINO.
 """
 
 import sys
-from typing import List, Optional, Tuple, Union
+from typing import List, Tuple, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import center_to_corners_format
@@ -69,18 +69,18 @@ class GroundingDinoProcessorKwargs(ProcessingKwargs, total=False):
         "text_kwargs": {
             "add_special_tokens": True,
             "padding": False,
-            "truncation": None,
-            "max_length": None,
             "stride": 0,
-            "pad_to_multiple_of": None,
-            "return_attention_mask": None,
             "return_overflowing_tokens": False,
             "return_special_tokens_mask": False,
             "return_offsets_mapping": False,
-            "return_token_type_ids": True,
+            "return_token_type_ids": False,
             "return_length": False,
             "verbose": True,
-        }
+        },
+        "images_kwargs": {
+            "do_convert_annotations": True,
+            "do_resize": True,
+        },
     }
 
 
@@ -111,7 +111,8 @@ class GroundingDinoProcessor(ProcessorMixin):
         self,
         images: ImageInput = None,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        audio=None,
+        videos=None,
         **kwargs: Unpack[GroundingDinoProcessorKwargs],
     ) -> BatchEncoding:
         """

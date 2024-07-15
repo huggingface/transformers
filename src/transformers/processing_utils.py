@@ -20,6 +20,7 @@ import copy
 import inspect
 import json
 import os
+import pathlib
 import warnings
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, TypedDict, Union
@@ -40,6 +41,7 @@ from .tokenization_utils_base import (
 )
 from .utils import (
     PROCESSOR_NAME,
+    ExplicitEnum,
     PushToHubMixin,
     TensorType,
     add_model_info_to_auto_map,
@@ -55,6 +57,14 @@ from .utils import (
 
 
 logger = logging.get_logger(__name__)
+
+AnnotationType = Dict[str, Union[int, str, List[Dict]]]
+
+
+class AnnotationFormat(ExplicitEnum):
+    COCO_DETECTION = "coco_detection"
+    COCO_PANOPTIC = "coco_panoptic"
+
 
 # Dynamically import the Transformers module to grab the attribute classes of the processor form their names.
 transformers_module = direct_transformers_import(Path(__file__).parent)
@@ -128,6 +138,12 @@ class ImagesKwargs(TypedDict, total=False):
     class methods and docstrings.
 
     Attributes:
+        annotations (`AnnotationType` or `List[AnnotationType]`, *optional*):
+            List of annotations associated with the image or batch of images.
+        return_segmentation_masks (`bool`, *optional*):
+            Whether to return segmentation masks.
+        masks_path (`str` or `pathlib.Path`, *optional*):
+            Path to the directory containing the segmentation masks.
         do_resize (`bool`, *optional*):
             Whether to resize the image.
         size (`Dict[str, int]`, *optional*):
@@ -144,6 +160,8 @@ class ImagesKwargs(TypedDict, total=False):
             Scale factor to use if rescaling the image.
         do_normalize (`bool`, *optional*):
             Whether to normalize the image.
+        do_convert_annotations (`bool`, *optional*):
+            Whether to convert the annotations to the format expected by the model.
         image_mean (`float` or `List[float]`, *optional*):
             Mean to use if normalizing the image.
         image_std (`float` or `List[float]`, *optional*):
@@ -152,12 +170,19 @@ class ImagesKwargs(TypedDict, total=False):
             Whether to pad the image to the `(max_height, max_width)` of the images in the batch.
         do_center_crop (`bool`, *optional*):
             Whether to center crop the image.
+        format (`str` or `AnnotationFormat`, *optional*):
+            Format of the annotations.
         data_format (`ChannelDimension` or `str`, *optional*):
             The channel dimension format for the output image.
         input_data_format (`ChannelDimension` or `str`, *optional*):
             The channel dimension format for the input image.
+        pad_size (`Dict[str, int]`, *optional*):
+            The size `{"height": int, "width" int}` to pad the images to.
     """
 
+    annotations: Optional[Union[AnnotationType, List[AnnotationType]]]
+    return_segmentation_masks: Optional[bool]
+    masks_path: Optional[Union[str, pathlib.Path]]
     do_resize: Optional[bool]
     size: Optional[Dict[str, int]]
     size_divisor: Optional[int]
@@ -166,12 +191,15 @@ class ImagesKwargs(TypedDict, total=False):
     do_rescale: Optional[bool]
     rescale_factor: Optional[float]
     do_normalize: Optional[bool]
+    do_convert_annotations: Optional[bool]
     image_mean: Optional[Union[float, List[float]]]
     image_std: Optional[Union[float, List[float]]]
     do_pad: Optional[bool]
     do_center_crop: Optional[bool]
+    format: Optional[Union[str, AnnotationFormat]]
     data_format: Optional[ChannelDimension]
     input_data_format: Optional[Union[str, ChannelDimension]]
+    pad_size: Optional[Dict[str, int]]
 
 
 class VideosKwargs(TypedDict, total=False):

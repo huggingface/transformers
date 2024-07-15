@@ -26,6 +26,8 @@ from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import IMAGE_PROCESSOR_NAME, is_torch_available, is_vision_available
 
+from ...test_processing_common import ProcessorTesterMixin
+
 
 if is_torch_available():
     import torch
@@ -40,7 +42,9 @@ if is_vision_available():
 
 @require_torch
 @require_vision
-class GroundingDinoProcessorTest(unittest.TestCase):
+class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = GroundingDinoProcessor
+
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 
@@ -251,3 +255,30 @@ class GroundingDinoProcessorTest(unittest.TestCase):
         inputs = processor(text=input_str, images=image_input)
 
         self.assertListEqual(list(inputs.keys()), processor.model_input_names)
+
+    @require_torch
+    @require_vision
+    def test_unstructured_kwargs_batched(self):
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        image_processor = self.get_component("image_processor")
+        tokenizer = self.get_component("tokenizer")
+        if not tokenizer.pad_token:
+            tokenizer.pad_token = "[TEST_PAD]"
+        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        input_str = ["lower newer", "upper older longer string"]
+        image_input = self.prepare_image_inputs() * 2
+        inputs = processor(
+            text=input_str,
+            images=image_input,
+            return_tensors="pt",
+            crop_size={"height": 214, "width": 214},
+            size={"height": 214, "width": 214},
+            padding="longest",
+            max_length=76,
+        )
+        self.assertEqual(inputs["pixel_values"].shape[2], 214)
+
+        self.assertEqual(len(inputs["input_ids"][0]), 11)
