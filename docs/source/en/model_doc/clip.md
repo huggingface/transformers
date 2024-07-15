@@ -94,7 +94,7 @@ Make also sure that you have a hardware that is compatible with Flash-Attention 
 
 For small batch sizes, you might notice a slowdown in your model when using flash attention. Refer to the section [Expected speedups with Flash Attention and SDPA](#Expected-speedups-with-Flash-Attention-and-SDPA) below and select an appropriate attention implementation.
 
-<Tip>
+</Tip>
 
 To load and run a model using Flash Attention 2, refer to the snippet below:
 
