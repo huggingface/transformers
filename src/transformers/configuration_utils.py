@@ -1086,7 +1086,7 @@ class PretrainedConfig(PushToHubMixin):
             if hasattr(self, parameter_name) and getattr(self, parameter_name) != default_value:
                 return True
         return False
-    
+
     def _rope_scaling_validation(self):
         """
         Validate the `rope_scaling` configuration.
@@ -1095,21 +1095,20 @@ class PretrainedConfig(PushToHubMixin):
             return
 
         if not isinstance(self.rope_scaling, dict) or "type" not in self.rope_scaling:
-            raise ValueError(
-                "`rope_scaling` must be a dictionary with a field, `type`, " f"got {self.rope_scaling}"
-            )
-        
+            raise ValueError("`rope_scaling` must be a dictionary with a field, `type`, " f"got {self.rope_scaling}")
+
         rope_scaling_type = self.rope_scaling.get("type", None)
         if rope_scaling_type is None or rope_scaling_type not in ["linear", "dynamic", "su", "yarn", "longrope"]:
             raise ValueError(
                 f"`rope_scaling`'s type field must be one of ['linear', 'dynamic', 'su', 'yarn', 'longrope'], got {rope_scaling_type}"
             )
-        
+
         if rope_scaling_type is None or rope_scaling_type in ["linear", "dynamic"]:
             rope_scaling_factor = self.rope_scaling.get("factor", None)
             if rope_scaling_factor is None:
                 raise ValueError(
-                    f"`rope_scaling` with rope_scaling_type '{rope_scaling_type}' must be a dictionary with a field, `factor`, " f"got {self.rope_scaling}"
+                    f"`rope_scaling` with rope_scaling_type '{rope_scaling_type}' must be a dictionary with a field, `factor`, "
+                    f"got {self.rope_scaling}"
                 )
             if rope_scaling_factor is None or not isinstance(rope_scaling_factor, float) or rope_scaling_factor <= 1.0:
                 raise ValueError(f"`rope_scaling`'s factor field must be a float > 1, got {rope_scaling_factor}")
@@ -1119,7 +1118,8 @@ class PretrainedConfig(PushToHubMixin):
             rope_scaling_long_factor = self.rope_scaling.get("long_factor", None)
             if rope_scaling_short_factor is None or rope_scaling_long_factor is None:
                 raise ValueError(
-                    f"`rope_scaling` with rope_scaling_type '{rope_scaling_type}' must be a dictionary with two fields, `short_factor` and `long_factor`, " f"got {self.rope_scaling}"
+                    f"`rope_scaling` with rope_scaling_type '{rope_scaling_type}' must be a dictionary with two fields, `short_factor` and `long_factor`, "
+                    f"got {self.rope_scaling}"
                 )
             if not (
                 isinstance(rope_scaling_short_factor, list)
@@ -1143,7 +1143,7 @@ class PretrainedConfig(PushToHubMixin):
                 raise ValueError(
                     f"`rope_scaling`'s long_factor field must have length {self.hidden_size // self.num_attention_heads // 2}, got {len(rope_scaling_long_factor)}"
                 )
-                    
+
 
 def get_configuration_file(configuration_files: List[str]) -> str:
     """
