@@ -177,7 +177,7 @@ class LayoutLMv2Config(PretrainedConfig):
         )
 
     @classmethod
-    def get_default_detectron2_config(self):
+    def get_default_detectron2_config(cls):
         return {
             "MODEL.MASK_ON": True,
             "MODEL.PIXEL_STD": [57.375, 57.120, 58.395],

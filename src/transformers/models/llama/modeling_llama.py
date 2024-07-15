@@ -29,6 +29,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...modeling_flash_attention_utils import _flash_attention_forward
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -41,7 +42,6 @@ from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
     logging,
     replace_return_docstrings,
@@ -49,26 +49,9 @@ from ...utils import (
 from .configuration_llama import LlamaConfig
 
 
-if is_flash_attn_2_available():
-    from flash_attn import flash_attn_func, flash_attn_varlen_func
-    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
-
-
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LlamaConfig"
-
-
-def _get_unpad_data(attention_mask):
-    seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
-    indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
-    max_seqlen_in_batch = seqlens_in_batch.max().item()
-    cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
-    return (
-        indices,
-        cu_seqlens,
-        max_seqlen_in_batch,
-    )
 
 
 class LlamaRMSNorm(nn.Module):
@@ -464,8 +447,16 @@ class LlamaFlashAttention2(LlamaAttention):
             key_states = key_states.to(target_dtype)
             value_states = value_states.to(target_dtype)
 
-        attn_output = self._flash_attention_forward(
-            query_states, key_states, value_states, attention_mask, q_len, dropout=dropout_rate
+        attn_output = _flash_attention_forward(
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            q_len,
+            dropout=dropout_rate,
+            sliding_window=getattr(self, "sliding_window", None),
+            use_top_left_mask=self._flash_attn_uses_top_left_mask,
+            is_causal=self.is_causal,
         )
 
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
@@ -475,103 +466,6 @@ class LlamaFlashAttention2(LlamaAttention):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
-
-    def _flash_attention_forward(
-        self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
-    ):
-        """
-        Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
-        first unpad the input, then computes the attention scores and pad the final attention scores.
-
-        Args:
-            query_states (`torch.Tensor`):
-                Input query states to be passed to Flash Attention API
-            key_states (`torch.Tensor`):
-                Input key states to be passed to Flash Attention API
-            value_states (`torch.Tensor`):
-                Input value states to be passed to Flash Attention API
-            attention_mask (`torch.Tensor`):
-                The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
-                position of padding tokens and 1 for the position of non-padding tokens.
-            dropout (`float`):
-                Attention dropout
-            softmax_scale (`float`, *optional*):
-                The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
-        """
-        if not self._flash_attn_uses_top_left_mask:
-            causal = self.is_causal
-        else:
-            # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in LlamaFlashAttention2 __init__.
-            causal = self.is_causal and query_length != 1
-
-        # Contains at least one padding token in the sequence
-        if attention_mask is not None:
-            batch_size = query_states.shape[0]
-            query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
-                query_states, key_states, value_states, attention_mask, query_length
-            )
-
-            cu_seqlens_q, cu_seqlens_k = cu_seq_lens
-            max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
-
-            attn_output_unpad = flash_attn_varlen_func(
-                query_states,
-                key_states,
-                value_states,
-                cu_seqlens_q=cu_seqlens_q,
-                cu_seqlens_k=cu_seqlens_k,
-                max_seqlen_q=max_seqlen_in_batch_q,
-                max_seqlen_k=max_seqlen_in_batch_k,
-                dropout_p=dropout,
-                softmax_scale=softmax_scale,
-                causal=causal,
-            )
-
-            attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
-        else:
-            attn_output = flash_attn_func(
-                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=causal
-            )
-
-        return attn_output
-
-    def _upad_input(self, query_layer, key_layer, value_layer, attention_mask, query_length):
-        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
-        batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
-
-        key_layer = index_first_axis(
-            key_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
-        )
-        value_layer = index_first_axis(
-            value_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
-        )
-        if query_length == kv_seq_len:
-            query_layer = index_first_axis(
-                query_layer.reshape(batch_size * kv_seq_len, self.num_heads, head_dim), indices_k
-            )
-            cu_seqlens_q = cu_seqlens_k
-            max_seqlen_in_batch_q = max_seqlen_in_batch_k
-            indices_q = indices_k
-        elif query_length == 1:
-            max_seqlen_in_batch_q = 1
-            cu_seqlens_q = torch.arange(
-                batch_size + 1, dtype=torch.int32, device=query_layer.device
-            )  # There is a memcpy here, that is very bad.
-            indices_q = cu_seqlens_q[:-1]
-            query_layer = query_layer.squeeze(1)
-        else:
-            # The -q_len: slice assumes left padding.
-            attention_mask = attention_mask[:, -query_length:]
-            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_layer, attention_mask)
-
-        return (
-            query_layer,
-            key_layer,
-            value_layer,
-            indices_q,
-            (cu_seqlens_q, cu_seqlens_k),
-            (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
-        )
 
 
 class LlamaSdpaAttention(LlamaAttention):
@@ -723,6 +617,7 @@ class LlamaDecoderLayer(nn.Module):
             output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
+            **kwargs,
         )
         hidden_states = residual + hidden_states
 
@@ -1225,40 +1120,19 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         attention_mask=None,
         inputs_embeds=None,
         cache_position=None,
+        position_ids=None,
         use_cache=True,
         **kwargs,
     ):
-        past_length = 0
+        # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
+        # Exception 1: when passing input_embeds, input_ids may be missing entries
+        # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
         if past_key_values is not None:
-            # Past key values are always initialized with a `Cache` object -> no need for if-else anymore
-            past_length = cache_position[0] if cache_position is not None else past_key_values.get_seq_length()
-            max_cache_length = (
-                torch.tensor(past_key_values.get_max_length(), device=input_ids.device)
-                if past_key_values.get_max_length() is not None
-                else None
-            )
-            cache_length = past_length if max_cache_length is None else torch.min(max_cache_length, past_length)
+            if inputs_embeds is not None:  # Exception 1
+                input_ids = input_ids[:, -cache_position.shape[0] :]
+            elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
+                input_ids = input_ids[:, cache_position]
 
-            # Keep only the unprocessed tokens:
-            # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
-            # some of the inputs are exclusively passed as part of the cache (e.g. when passing input_embeds as input)
-            if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
-                input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
-            # 2 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
-            # input_ids based on the past_length.
-            elif past_length < input_ids.shape[1]:
-                input_ids = input_ids[:, past_length:]
-            # 3 - Otherwise (past_length >= input_ids.shape[1]), let's assume input_ids only has unprocessed tokens.
-
-            # If we are about to go beyond the maximum cache length, we need to crop the input attention mask.
-            if (
-                max_cache_length is not None
-                and attention_mask is not None
-                and cache_length + input_ids.shape[1] > max_cache_length
-            ):
-                attention_mask = attention_mask[:, -max_cache_length:]
-
-        position_ids = kwargs.get("position_ids", None)
         if attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
@@ -1267,19 +1141,10 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
                 position_ids = position_ids[:, -input_ids.shape[1] :]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and past_length == 0:
+        if inputs_embeds is not None and cache_position[0] == 0:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
-            # The `contiguous()` here is necessary to have a static stride during decoding. torchdynamo otherwise
-            # recompiles graphs as the stride of the inputs is a guard. Ref: https://github.com/huggingface/transformers/pull/29114
-            # TODO: use `next_tokens` directly instead.
-            model_inputs = {"input_ids": input_ids.contiguous()}
-
-        input_length = position_ids.shape[-1] if position_ids is not None else input_ids.shape[-1]
-        if cache_position is None:
-            cache_position = torch.arange(past_length, past_length + input_length, device=input_ids.device)
-        elif use_cache:
-            cache_position = cache_position[-input_length:]
+            model_inputs = {"input_ids": input_ids.contiguous()}  # `contiguous()` needed for compilation use cases
 
         model_inputs.update(
             {
@@ -1291,15 +1156,6 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
             }
         )
         return model_inputs
-
-    @staticmethod
-    def _reorder_cache(past_key_values, beam_idx):
-        reordered_past = ()
-        for layer_past in past_key_values:
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
-            )
-        return reordered_past
 
 
 @add_start_docstrings(
