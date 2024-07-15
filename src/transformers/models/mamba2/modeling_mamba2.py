@@ -88,8 +88,8 @@ class HybridMamba2AttentionDynamicCache(DynamicCache):
     This cache has two sets of lists of tensors: `key_cache`, `value_cache`, and 'conv_states' for attention cache and
     `conv_states` and `ssm_states` for mamba2 cache. Each of these lists has `num_layers` tensors.
 
-    For attention layers, `key_cache` and `value_cache` have a shape of `(batch_size, attention_num_key_value_heads, seq_len, attention_head_dim)`,
-    while `conv_states` has a shape of `(batch_size, attention_head_dim * (attention_num_heads + 2 * attention_num_key_value_heads), attention_conv_kernel)`
+    For attention layers, `key_cache` and `value_cache` have a shape of `(batch_size, num_key_value_heads, seq_len, attention_head_dim)`,
+    while `conv_states` has a shape of `(batch_size, attention_head_dim * (num_attention_heads + 2 * num_key_value_heads), attention_conv_kernel)`
     or `(batch_size, 0)` (empty tensors) and `ssm_states` have a shape of `(batch_size, 0)` (empty tensors).
 
     For mamba2 layers, `key_cache` and `value_cache` have a shape of `(batch_size, 0)` (empty tensors),
@@ -108,8 +108,8 @@ class HybridMamba2AttentionDynamicCache(DynamicCache):
         mamba2_num_heads = config.mamba2_num_heads
         mamba2_head_dim = config.mamba2_head_dim
         attention_head_dim = config.attention_head_dim
-        attention_num_heads = config.attention_num_heads
-        attention_num_heads_kv = config.attention_num_key_value_heads
+        attention_num_heads = config.num_attention_heads
+        attention_num_heads_kv = config.num_key_value_heads
         attention_qkv_dim = attention_head_dim * (attention_num_heads + 2 * attention_num_heads_kv)
 
         self.conv_states = []
@@ -174,7 +174,7 @@ class HybridMamba2AttentionDynamicCache(DynamicCache):
             self.ssm_states[layer_idx] = self.ssm_states[layer_idx].index_select(0, beam_idx.to(device))
 
     # Adapted from transformers.models.jamba.modeling_jamba.HybridMambaAttentionDynamicCache.get_seq_length
-    # Fixes issues when accessing on empty cache
+    # Fixes issues when accessing on empty cache and allow mamba2 pure architectures
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         # Mamba2 layers don't need the seq_len either way
@@ -352,8 +352,8 @@ class Mamba2Attention(nn.Module):
         self.hidden_size = config.hidden_size
         self.conv_kernel_size = config.attention_conv_kernel
         self.head_dim = config.attention_head_dim
-        self.num_heads = config.attention_num_heads
-        self.num_heads_kv = config.attention_num_key_value_heads
+        self.num_heads = config.num_attention_heads
+        self.num_heads_kv = config.num_key_value_heads
         self.num_groups_kv = self.num_heads // self.num_heads_kv
         # See https://github.com/state-spaces/mamba/issues/457#issuecomment-2221116217
         # hidden_size % num_heads == 0 is not necessary due to this custom head projection dim
@@ -1619,11 +1619,11 @@ MAMBA2_INPUTS_DOCSTRING = r"""
             A HybridMamba2AttentionDynamicCache object containing pre-computed hidden-states (keys, values, and, if used, the convolution in the
             self-attention blocks and convolution and ssm states in the mamba2 blocks) that can be used (see `past_key_values` input)
             to speed up sequential decoding.
-            Key and value cache tensors have shape `(batch_size, attention_num_key_value_heads, seq_len, attention_head_dim)`.
+            Key and value cache tensors have shape `(batch_size, num_key_value_heads, seq_len, attention_head_dim)`.
             Convolution and ssm states tensors have shape `(batch_size, intermediate_size + 2 * state_size, mamba2_conv_kernel)` if used in the mamba2 block
-            else it has shape `(batch_size, attention_head_dim * (attention_num_heads + 2 * attention_num_key_value_heads), attention_conv_kernel)`
+            else it has shape `(batch_size, attention_head_dim * (num_attention_heads + 2 * num_key_value_heads), attention_conv_kernel)`
             and `(batch_size, mamba2_num_heads, mamba2_head_dim, state_size)` respectively.
-            See the `HybridMamba3AttentionDynamicCache` class for more details.
+            See the `HybridMamba2AttentionDynamicCache` class for more details.
 
             If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
@@ -1838,22 +1838,15 @@ class Mamba2Model(Mamba2PreTrainedModel):
     MAMBA2_START_DOCSTRING,
 )
 class Mamba2ForCausalLM(Mamba2PreTrainedModel):
-    _tied_weights_keys = ["lm_head.weight", "backbone.embeddings.weight"]
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
         self.backbone = Mamba2Model(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        self._tie_weights()
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    # TODO: is this necessary?
-    def _tie_weights(self):
-        # probably overwritten by `_tied_weights_keys` but just to be sure
-        if self.config.tie_word_embeddings:
-            self.lm_head.weight = self.backbone.embeddings.weight
 
     def get_output_embeddings(self):
         return self.lm_head

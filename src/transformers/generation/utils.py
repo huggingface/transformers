@@ -1464,12 +1464,14 @@ class GenerationMixin:
     def _supports_default_dynamic_cache(self) -> bool:
         """
         Return `True` if current model can use a `DynamicCache` instance when initializing the `past_key_values`.
-        This is mostly the same as `_supports_cache_class` attribute, but add exception for `Jamba` model which
-        uses its own `HybridMambaAttentionDynamicCache` and do not need to initialize the Cache in advance in
+        This is mostly the same as `_supports_cache_class` attribute, but add exception for `Jamba` and `Mamba2` model which
+        uses its own `HybridMamba(2)AttentionDynamicCache` and do not need to initialize the Cache in advance in
         order to save memory (because no back and forth `to_legacy_cache` and `from_legacy_cache` will be performed
-        for `HybridMambaAttentionDynamicCache`).
+        for `HybridMamba(2)AttentionDynamicCache`).
         """
-        return self._supports_cache_class and "jamba" not in self.__class__.__name__.lower()
+        return self._supports_cache_class and all(
+            model_name not in self.__class__.__name__.lower() for model_name in ["jamba", "mamba2"]
+        )
 
     def _prepare_special_tokens(
         self,
@@ -3148,6 +3150,7 @@ class GenerationMixin:
                         "xlnet",
                         "cpm",
                         "jamba",
+                        "mamba2",
                     ]
                 ):
                     raise RuntimeError(
