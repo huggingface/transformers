@@ -258,7 +258,6 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     test_model_parallel = False
     test_pruning = False
     test_head_masking = False  # Mamba does not have attention heads
-    test_model_parallel = False
     pipeline_model_mapping = (
         {"feature-extraction": MambaModel, "text-generation": MambaForCausalLM} if is_torch_available() else {}
     )

@@ -30,7 +30,7 @@ from transformers.configuration_utils import PretrainedConfig
 from transformers.testing_utils import TOKEN, USER, is_staging_test
 
 
-sys.path.append(str(Path(__file__).parent.parent / "utils"))
+sys.path.append(str(Path(__file__).parent.parent.parent / "utils"))
 
 from test_module.custom_configuration import CustomConfig  # noqa E402
 

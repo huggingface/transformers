@@ -188,7 +188,7 @@ class AgentAudio(AgentType, str):
         self.samplerate = samplerate
         if isinstance(value, (str, pathlib.Path)):
             self._path = value
-        elif isinstance(value, torch.Tensor):
+        elif is_torch_available() and isinstance(value, torch.Tensor):
             self._tensor = value
         elif isinstance(value, tuple):
             self.samplerate = value[0]
@@ -232,7 +232,10 @@ class AgentAudio(AgentType, str):
 
 
 AGENT_TYPE_MAPPING = {"text": AgentText, "image": AgentImage, "audio": AgentAudio}
-INSTANCE_TYPE_MAPPING = {str: AgentText, float: AgentText, int: AgentText, Tensor: AgentAudio, ImageType: AgentImage}
+INSTANCE_TYPE_MAPPING = {str: AgentText, ImageType: AgentImage}
+
+if is_torch_available():
+    INSTANCE_TYPE_MAPPING[Tensor] = AgentAudio
 
 
 def handle_agent_inputs(*args, **kwargs):
@@ -251,4 +254,4 @@ def handle_agent_outputs(output, output_type=None):
         for _k, _v in INSTANCE_TYPE_MAPPING.items():
             if isinstance(output, _k):
                 return _v(output)
-        return AgentType(output)
+        return output
