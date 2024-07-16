@@ -345,21 +345,22 @@ def check_support_param_buffer_assignment(model_to_load, state_dict, start_prefi
     if the model explicitly disables it, then by ensuring that the state dict keys
     are a subset of the model's parameters.
     """
-    if len([key for key in state_dict if key.startswith(start_prefix)]) > 0:
-        # Some models explicitly do not support param buffer assignment
-        if hasattr(model_to_load, "supports_param_buffer_assignment"):
-            logger.debug(
-                f"{model_to_load.__class__.__name__} does not support param buffer assignment, loading will be slower"
-            )
-            return False
-        else:
-            # If the model does, the incoming `state_dict` and the `model_to_load` must be the same dtype
-            first_key = list(model_to_load.state_dict().keys())[0]
-            if start_prefix + first_key in state_dict:
-                return state_dict[start_prefix + first_key].dtype == model_to_load.state_dict()[first_key].dtype
-            else:
-                # For cases when the `state_dict` doesn't have any real weights (`albert`)
-                return False
+    if len([key for key in state_dict if key.startswith(start_prefix)]) == 0:
+        return False
+
+    # Some models explicitly do not support param buffer assignment
+    if hasattr(model_to_load, "supports_param_buffer_assignment"):
+        logger.debug(
+            f"{model_to_load.__class__.__name__} does not support param buffer assignment, loading will be slower"
+        )
+        return False
+
+    # If the model does, the incoming `state_dict` and the `model_to_load` must be the same dtype
+    first_key = list(model_to_load.state_dict().keys())[0]
+    if start_prefix + first_key in state_dict:
+        return state_dict[start_prefix + first_key].dtype == model_to_load.state_dict()[first_key].dtype
+
+    # For cases when the `state_dict` doesn't have any real weights (`albert`)
     return False
 
 
