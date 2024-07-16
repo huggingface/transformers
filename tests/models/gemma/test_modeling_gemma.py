@@ -526,6 +526,12 @@ class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                 assert torch.allclose(logits_fa, logits, atol=3e-3)
 
 
+    @require_flash_attn
+    @require_torch_gpu
+    @slow
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        super().test_flash_attention_2_padding_matches_padding_free_with_position_ids()
+        
 @slow
 @require_torch_gpu
 class GemmaIntegrationTest(unittest.TestCase):

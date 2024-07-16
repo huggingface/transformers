@@ -492,6 +492,12 @@ class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         self.skipTest(reason="Mixtral flash attention does not support right padding")
 
+    @require_flash_attn
+    @require_torch_gpu
+    @slow
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        super().test_flash_attention_2_padding_matches_padding_free_with_position_ids()
+        
     # Ignore copy
     def test_load_balancing_loss(self):
         r"""

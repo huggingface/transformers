@@ -29,8 +29,10 @@ from transformers import (
 from transformers.testing_utils import (
     is_flaky,
     require_bitsandbytes,
+    require_flash_attn,
     require_torch,
     require_torch_sdpa,
+    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -581,6 +583,11 @@ class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
                 self.assertTrue(torch.allclose(res_eager, res_sdpa))
 
+    @require_flash_attn
+    @require_torch_gpu
+    @slow
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        super().test_flash_attention_2_padding_matches_padding_free_with_position_ids()
 
 @require_torch
 class FalconLanguageGenerationTest(unittest.TestCase):

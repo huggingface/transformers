@@ -590,6 +590,12 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                 if not has_flash:
                     raise ValueError("The flash model should have flash attention layers")
 
+    @require_flash_attn
+    @require_torch_gpu
+    @slow
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        super().test_flash_attention_2_padding_matches_padding_free_with_position_ids()
+
     @require_torch_sdpa
     @slow
     def test_eager_matches_sdpa_generate(self):
