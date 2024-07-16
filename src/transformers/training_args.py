@@ -2031,14 +2031,8 @@ class TrainingArguments:
                 "version. Using `--per_device_train_batch_size` is preferred."
             )
 
-        world_size = self.n_gpu
-        if is_accelerate_available():
-            from accelerate.utils import parallel_state as mpu
-            if mpu.model_parallel_is_initialized():
-                world_size = mpu.get_data_parallel_world_size()
-
         per_device_batch_size = self.per_gpu_train_batch_size or self.per_device_train_batch_size
-        train_batch_size = per_device_batch_size * max(1, world_size)
+        train_batch_size = per_device_batch_size * max(1, self.n_gpu)
         return train_batch_size
 
     @property
