@@ -176,10 +176,10 @@ def prepare_img():
 
 
 name_to_path = {
-    "vitpose-base-simple": "/Users/nielsrogge/Documents/ViTPose/vitpose-b-simple.pth",
-    "vitpose-base": "/Users/nielsrogge/Documents/ViTPose/vitpose-b.pth",
-    "vitpose-base-coco-aic-mpii": "/Users/nielsrogge/Documents/ViTPose/vitpose_base_coco_aic_mpii.pth",
-    "vitpose+-base": "/Users/nielsrogge/Documents/ViTPose/vitpose+_base.pth",
+    "vitpose-base-simple": "vitpose-b-simple.pth",
+    "vitpose-base": "vitpose-b.pth",
+    "vitpose-base-coco-aic-mpii": "vitpose_base_coco_aic_mpii.pth",
+    "vitpose+-base": "vitpose+_base.pth",
 }
 
 
@@ -199,9 +199,6 @@ def convert_vitpose_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     # load original state_dict
     checkpoint_path = name_to_path[model_name]
     state_dict = torch.load(checkpoint_path, map_location="cpu")["state_dict"]
-
-    # for name, param in state_dict.items():
-    #     print(name, param.shape)
 
     # rename some keys
     new_state_dict = convert_state_dict(state_dict, dim=config.backbone_config.hidden_size, config=config)
