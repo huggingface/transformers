@@ -122,7 +122,7 @@ class GroundingDinoProcessor(ProcessorMixin):
         Please refer to the docstring of the above two methods for more information.
         """
         if images is None and text is None:
-            raise ValueError("You have to specify either images or text.")
+            raise ValueError("You must specify either text or images.")
 
         output_kwargs = self._merge_kwargs(
             GroundingDinoProcessorKwargs,
@@ -130,14 +130,10 @@ class GroundingDinoProcessor(ProcessorMixin):
             **kwargs,
         )
 
-        # BC for explicit return_tensors
-        if "return_tensors" in output_kwargs["common_kwargs"]:
-            return_tensors = output_kwargs["common_kwargs"].pop("return_tensors", None)
-
         # Get only text
         if images is not None:
             encoding_image_processor = self.image_processor(
-                images, return_tensors=return_tensors, **output_kwargs["images_kwargs"]
+                images, **output_kwargs["common_kwargs"], **output_kwargs["images_kwargs"]
             )
         else:
             encoding_image_processor = BatchFeature()
@@ -145,7 +141,7 @@ class GroundingDinoProcessor(ProcessorMixin):
         if text is not None:
             text_encoding = self.tokenizer(
                 text=text,
-                return_tensors=return_tensors,
+                **output_kwargs["common_kwargs"],
                 **output_kwargs["text_kwargs"],
             )
         else:
