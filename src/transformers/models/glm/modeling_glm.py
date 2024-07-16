@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+"""PyTorch GLM model."""
 
 import inspect
 import math
@@ -34,23 +34,21 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
-    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
     logging,
 )
 from .configuration_glm import GLMConfig
 
-
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
 
     _flash_supports_window_size = "window_size" in list(inspect.signature(flash_attn_func).parameters)
-"""PyTorch GLM model."""
 
 logger = logging.get_logger(__name__)
-
 _CHECKPOINT_FOR_DOC = "THUDM/glm-4-9b-chat"
 _CONFIG_FOR_DOC = "GLMConfig"
 
@@ -103,7 +101,9 @@ class GLMRotaryEmbedding(nn.Module):
         self.original_impl = original_impl
         self.rope_ratio = rope_ratio
 
-    def forward_impl(self, seq_len: int, n_elem: int, dtype: torch.dtype, device: torch.device, base: int = 10000):
+    def forward_impl(
+            self, seq_len: int, n_elem: int, dtype: torch.dtype, device: torch.device, base: int = 10000
+    ):
         """Enhanced Transformer with Rotary Position Embedding.
 
         Derived from: https://github.com/labmlai/annotated_deep_learning_paper_implementations/blob/master/labml_nn/
@@ -128,13 +128,15 @@ class GLMRotaryEmbedding(nn.Module):
         return cache
 
     def forward(self, max_seq_len, offset=0):
-        return self.forward_impl(max_seq_len, self.dim, dtype=self.inv_freq.dtype, device=self.inv_freq.device)
+        return self.forward_impl(
+            max_seq_len, self.dim, dtype=self.inv_freq.dtype, device=self.inv_freq.device
+        )
 
 
 def split_tensor_along_last_dim(
-    tensor: torch.Tensor,
-    num_partitions: int,
-    contiguous_split_chunks: bool = False,
+        tensor: torch.Tensor,
+        num_partitions: int,
+        contiguous_split_chunks: bool = False,
 ) -> List[torch.Tensor]:
     """Split a tensor along its last dimension.
 
@@ -167,6 +169,7 @@ class SelfAttention(torch.nn.Module):
     """
 
     def __init__(self, config: GLMConfig, layer_number, device=None):
+
         super(SelfAttention, self).__init__()
         self.layer_number = max(1, layer_number)
 
@@ -181,26 +184,19 @@ class SelfAttention(torch.nn.Module):
         if self.multi_query_attention:
             self.num_multi_query_groups_per_partition = config.multi_query_group_num
             self.qkv_hidden_size = (
-                self.projection_size + 2 * self.hidden_size_per_attention_head * config.multi_query_group_num
+                    self.projection_size + 2 * self.hidden_size_per_attention_head * config.multi_query_group_num
             )
-        self.query_key_value = nn.Linear(
-            config.hidden_size,
-            self.qkv_hidden_size,
-            bias=config.add_bias_linear or config.add_qkv_bias,
-            device=device,
-            **_config_to_kwargs(config),
-        )
+        self.query_key_value = nn.Linear(config.hidden_size, self.qkv_hidden_size,
+                                         bias=config.add_bias_linear or config.add_qkv_bias,
+                                         device=device, **_config_to_kwargs(config)
+                                         )
 
         self.core_attention = GLM_ATTENTION_CLASSES[config._attn_implementation](config, self.layer_number)
 
         # Output.
-        self.dense = nn.Linear(
-            self.projection_size,
-            config.hidden_size,
-            bias=config.add_bias_linear,
-            device=device,
-            **_config_to_kwargs(config),
-        )
+        self.dense = nn.Linear(self.projection_size, config.hidden_size, bias=config.add_bias_linear,
+                               device=device, **_config_to_kwargs(config)
+                               )
 
     def _allocate_memory(self, inference_max_sequence_len, batch_size, device=None, dtype=None):
         if self.multi_query_attention:
@@ -216,7 +212,9 @@ class SelfAttention(torch.nn.Module):
             device=device,
         )
 
-    def forward(self, hidden_states, attention_mask, rotary_pos_emb, past_key_value=None, use_cache=True):
+    def forward(
+            self, hidden_states, attention_mask, rotary_pos_emb, past_key_value=None, use_cache=True
+    ):
         # hidden_states: [b, sq, h]
 
         # =================================================
@@ -242,18 +240,16 @@ class SelfAttention(torch.nn.Module):
                 query_layer.size()[:-1] + (self.num_attention_heads_per_partition, self.hidden_size_per_attention_head)
             )
             key_layer = key_layer.view(
-                key_layer.size()[:-1]
-                + (self.num_multi_query_groups_per_partition, self.hidden_size_per_attention_head)
+                key_layer.size()[:-1] + (self.num_multi_query_groups_per_partition, self.hidden_size_per_attention_head)
             )
             value_layer = value_layer.view(
                 value_layer.size()[:-1]
                 + (self.num_multi_query_groups_per_partition, self.hidden_size_per_attention_head)
             )
         else:
-            new_tensor_shape = mixed_x_layer.size()[:-1] + (
-                self.num_attention_heads_per_partition,
-                3 * self.hidden_size_per_attention_head,
-            )
+            new_tensor_shape = mixed_x_layer.size()[:-1] + \
+                               (self.num_attention_heads_per_partition,
+                                3 * self.hidden_size_per_attention_head)
             mixed_x_layer = mixed_x_layer.view(*new_tensor_shape)
 
             # [b, sq, np, 3 * hn] --> 3 [b, sq, np, hn]
@@ -321,7 +317,7 @@ class GLMMLP(nn.Module):
             config.ffn_hidden_size * 2,
             bias=self.add_bias,
             device=device,
-            **_config_to_kwargs(config),
+            **_config_to_kwargs(config)
         )
 
         def swiglu(x):
@@ -332,7 +328,11 @@ class GLMMLP(nn.Module):
 
         # Project back to h.
         self.dense_4h_to_h = nn.Linear(
-            config.ffn_hidden_size, config.hidden_size, bias=self.add_bias, device=device, **_config_to_kwargs(config)
+            config.ffn_hidden_size,
+            config.hidden_size,
+            bias=self.add_bias,
+            device=device,
+            **_config_to_kwargs(config)
         )
 
     def forward(self, hidden_states):
@@ -466,7 +466,7 @@ class GLMAttention(nn.Module):
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
+    x2 = x[..., x.shape[-1] // 2:]
     return torch.cat((-x2, x1), dim=-1)
 
 
@@ -555,7 +555,7 @@ class GLMFlashAttention2(GLMAttention):
         if query_length == kv_seq_len:
             query_layer = index_first_axis(
                 query_layer.reshape(batch_size * kv_seq_len, self.num_attention_heads_per_partition, head_dim),
-                indices_k,
+                indices_k
             )
             cu_seqlens_q = cu_seqlens_k
             max_seqlen_in_batch_q = max_seqlen_in_batch_k
@@ -592,23 +592,15 @@ class GLMSdpaAttention(GLMAttention):
 
     def forward(self, query_layer, key_layer, value_layer, attention_mask):
         if attention_mask is None and query_layer.shape[2] == key_layer.shape[2]:
-            context_layer = torch.nn.functional.scaled_dot_product_attention(
-                query_layer,
-                key_layer,
-                value_layer,
-                is_causal=True,
-                dropout_p=self.config.attention_dropout if self.training else 0.0,
-            )
+            context_layer = torch.nn.functional.scaled_dot_product_attention(query_layer, key_layer, value_layer,
+                                                                             is_causal=True,
+                                                                             dropout_p=self.config.attention_dropout if self.training else 0.0)
         else:
             if attention_mask is not None:
                 attention_mask = ~attention_mask
-            context_layer = torch.nn.functional.scaled_dot_product_attention(
-                query_layer,
-                key_layer,
-                value_layer,
-                attention_mask,
-                dropout_p=self.config.attention_dropout if self.training else 0.0,
-            )
+            context_layer = torch.nn.functional.scaled_dot_product_attention(query_layer, key_layer, value_layer,
+                                                                             attention_mask,
+                                                                             dropout_p=self.config.attention_dropout if self.training else 0.0)
         context_layer = context_layer.transpose(1, 2).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.hidden_size_per_partition,)
         context_layer = context_layer.reshape(*new_context_layer_shape)
@@ -621,7 +613,27 @@ GLM_ATTENTION_CLASSES = {
     "sdpa": GLMSdpaAttention,
 }
 
+GLM_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
 
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`GLMConfig`]):
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+
+@add_start_docstrings(
+    "The bare GLM Model outputting raw hidden-states without any specific head on top.",
+    GLM_START_DOCSTRING,
+)
 class GLMPreTrainedModel(PreTrainedModel):
     config_class = GLMConfig
     base_model_prefix = "model"
@@ -667,7 +679,6 @@ class GLMPreTrainedModel(PreTrainedModel):
         if padding_mask is not None:
             padding_mask = padding_mask.bool()  # Ensure padding_mask is a boolean tensor
             expanded_padding_mask = padding_mask.unsqueeze(1).expand(-1, seq_length, -1)
-            # Debug print shapes
             full_attention_mask = full_attention_mask * expanded_padding_mask
 
         if not past_length and padding_mask is not None:
@@ -688,12 +699,10 @@ class Embedding(torch.nn.Module):
 
     def __init__(self, config: GLMConfig, device=None):
         super(Embedding, self).__init__()
-
+        self.vocab_size = config.vocab_size
         self.hidden_size = config.hidden_size
         # Word embeddings (parallel).
-        self.word_embeddings = nn.Embedding(
-            config.padded_vocab_size, self.hidden_size, dtype=config.torch_dtype, device=device
-        )
+        self.word_embeddings = nn.Embedding(self.vocab_size, self.hidden_size, dtype=config.torch_dtype, device=device)
         self.fp32_residual_connection = config.fp32_residual_connection
 
     def forward(self, input_ids):
@@ -720,24 +729,17 @@ class GLMBlock(torch.nn.Module):
         self.apply_residual_connection_post_layernorm = config.apply_residual_connection_post_layernorm
         self.fp32_residual_connection = config.fp32_residual_connection
         LayerNormFunc = GLMRMSNorm if config.rmsnorm else LayerNorm
-        self.input_layernorm = LayerNormFunc(
-            config.hidden_size, eps=config.layernorm_epsilon, device=device, dtype=config.torch_dtype
-        )
+        self.input_layernorm = LayerNormFunc(config.hidden_size, eps=config.layernorm_epsilon, device=device,
+                                             dtype=config.torch_dtype)
 
         self.self_attention = SelfAttention(config, layer_number, device=device)
         self.hidden_dropout = config.hidden_dropout
-        self.post_attention_layernorm = LayerNormFunc(
-            config.hidden_size, eps=config.layernorm_epsilon, device=device, dtype=config.torch_dtype
-        )
+        self.post_attention_layernorm = LayerNormFunc(config.hidden_size, eps=config.layernorm_epsilon, device=device,
+                                                      dtype=config.torch_dtype)
         self.mlp = GLMMLP(config, device=device)
 
     def forward(
-        self,
-        hidden_states,
-        attention_mask,
-        rotary_pos_emb,
-        past_key_value=None,
-        use_cache=True,
+            self, hidden_states, attention_mask, rotary_pos_emb, past_key_value=None, use_cache=True,
     ):
         # hidden_states: [s, b, h]
 
@@ -745,7 +747,11 @@ class GLMBlock(torch.nn.Module):
         layernorm_output = self.input_layernorm(hidden_states)
         # Self attention.
         attention_output, past_key_value = self.self_attention(
-            layernorm_output, attention_mask, rotary_pos_emb, past_key_value=past_key_value, use_cache=use_cache
+            layernorm_output,
+            attention_mask,
+            rotary_pos_emb,
+            past_key_value=past_key_value,
+            use_cache=use_cache
         )
 
         # Residual connection.
@@ -796,9 +802,8 @@ class GLMTransformer(torch.nn.Module):
         if self.post_layer_norm:
             LayerNormFunc = GLMRMSNorm if config.rmsnorm else LayerNorm
             # Final layer norm before output.
-            self.final_layernorm = LayerNormFunc(
-                config.hidden_size, eps=config.layernorm_epsilon, device=device, dtype=config.torch_dtype
-            )
+            self.final_layernorm = LayerNormFunc(config.hidden_size, eps=config.layernorm_epsilon, device=device,
+                                                 dtype=config.torch_dtype)
 
         self.gradient_checkpointing = False
 
@@ -806,18 +811,17 @@ class GLMTransformer(torch.nn.Module):
         return self.layers[layer_number]
 
     def forward(
-        self,
-        hidden_states,
-        attention_mask,
-        rotary_pos_emb,
-        past_key_values,
-        use_cache: Optional[bool] = True,
-        output_hidden_states: Optional[bool] = False,
+            self,
+            hidden_states,
+            attention_mask,
+            rotary_pos_emb,
+            past_key_values,
+            use_cache: Optional[bool] = True,
+            output_hidden_states: Optional[bool] = False,
     ):
+
         if self.gradient_checkpointing and self.training and use_cache:
-            logger.warning(
-                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-            )
+            logger.warning("`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`...")
             use_cache = False
 
         all_self_attentions = None
@@ -836,11 +840,15 @@ class GLMTransformer(torch.nn.Module):
                     rotary_pos_emb,
                     past_key_values,
                     use_cache,
-                    use_reentrant=False,
+                    use_reentrant=False
                 )
             else:
                 layer_ret = layer(
-                    hidden_states, attention_mask, rotary_pos_emb, past_key_value=past_key_values, use_cache=use_cache
+                    hidden_states,
+                    attention_mask,
+                    rotary_pos_emb,
+                    past_key_value=past_key_values,
+                    use_cache=use_cache
                 )
 
             hidden_states, next_decoder_cache = layer_ret
@@ -855,6 +863,84 @@ class GLMTransformer(torch.nn.Module):
         return hidden_states, next_decoder_cache, all_hidden_states, all_self_attentions
 
 
+GLM_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+            it.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            If `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
+            `past_key_values`).
+
+            If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
+            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
+            information on the default strategy.
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.n_positions - 1]`.
+
+            [What are position IDs?](../glossary#position-ids)
+        past_key_values (`Cache` or `tuple(tuple(torch.FloatTensor))`, *optional*):
+            Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
+            blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
+            returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
+
+            Two formats are allowed:
+            - a [`~cache_utils.Cache`] instance;
+            - Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
+            shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`). This is also known as the legacy
+            cache format.
+
+            The model will output the same cache format that is fed as input. If no `past_key_values` are passed, the
+            legacy cache format will be returned.
+
+            If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that don't
+            have their past key value states given to this model) of shape `(batch_size, 1)` instead of all `input_ids`
+            of shape `(batch_size, sequence_length)`.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
+        use_cache (`bool`, *optional*):
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`).
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+            Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
+            this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
+            the complete sequence length.
+"""
+
+
+@add_start_docstrings(
+    "The bare GLM Model outputting raw hidden-states without any specific head on top.",
+    GLM_START_DOCSTRING,
+)
 class GLMModel(GLMPreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`GLMDecoderLayer`]
@@ -885,33 +971,34 @@ class GLMModel(GLMPreTrainedModel):
         )
 
         self.rotary_pos_emb = GLMRotaryEmbedding(
-            rotary_dim // 2, rope_ratio=config.rope_ratio, original_impl=True, device=device, dtype=config.torch_dtype
+            rotary_dim // 2,
+            rope_ratio=config.rope_ratio,
+            original_impl=True,
+            device=device,
+            dtype=config.torch_dtype
         )
         self.encoder = init_method(GLMTransformer, config, **init_kwargs)
-        self.output_layer = init_method(
-            nn.Linear,
-            config.hidden_size,
-            config.padded_vocab_size,
-            bias=False,
-            dtype=config.torch_dtype,
-            **init_kwargs,
-        )
+        self.output_layer = init_method(nn.Linear, config.hidden_size, config.padded_vocab_size, bias=False,
+                                        dtype=config.torch_dtype, **init_kwargs)
 
     def get_input_embeddings(self):
         return self.embedding.word_embeddings
 
+    def set_input_embeddings(self, value):
+        self.embedding.word_embeddings = value
+
     def forward(
-        self,
-        input_ids: torch.LongTensor = None,
-        position_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.BoolTensor] = None,
-        full_attention_mask: Optional[torch.BoolTensor] = None,
-        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+            self,
+            input_ids,
+            position_ids: Optional[torch.Tensor] = None,
+            attention_mask: Optional[torch.BoolTensor] = None,
+            full_attention_mask: Optional[torch.BoolTensor] = None,
+            past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+            inputs_embeds: Optional[torch.Tensor] = None,
+            use_cache: Optional[bool] = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
     ):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -934,9 +1021,7 @@ class GLMModel(GLMPreTrainedModel):
             inputs_embeds = self.embedding(input_ids)
 
         if full_attention_mask is None:
-            if (attention_mask is not None and not torch.all(attention_mask).item()) or (
-                past_key_values and seq_length != 1
-            ):
+            if (attention_mask is not None and not attention_mask.all()) or (past_key_values and seq_length != 1):
                 full_attention_mask = self.get_masks(input_ids, past_key_values, padding_mask=attention_mask)
 
         # Rotary positional embeddings
@@ -953,7 +1038,7 @@ class GLMModel(GLMPreTrainedModel):
             rotary_pos_emb=rotary_pos_emb,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            output_hidden_states=output_hidden_states,
+            output_hidden_states=output_hidden_states
         )
 
         if return_legacy_cache:
@@ -972,6 +1057,10 @@ class GLMModel(GLMPreTrainedModel):
         )
 
 
+@add_start_docstrings(
+    "The bare GLM Model outputting raw hidden-states without any specific head on top.",
+    GLM_START_DOCSTRING,
+)
 class GLMForCausalLM(GLMPreTrainedModel):
     _tied_weights_keys = ["output_layer.weight"]
 
@@ -983,12 +1072,15 @@ class GLMForCausalLM(GLMPreTrainedModel):
         self.config = config
 
     def get_input_embeddings(self):
-        return self.embedding.word_embeddings
+        return self.transformer.model.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.transformer.model.embed_tokens = value
 
     def _update_model_kwargs_for_generation(
-        self, outputs: ModelOutput, model_kwargs: Dict[str, Any], standardize_cache_format: bool = False, **kwargs
+            self, outputs: ModelOutput, model_kwargs: Dict[str, Any], standardize_cache_format: bool = False, **kwargs
     ) -> Dict[str, Any]:
-        # update past_key_values
+
         cache_name, cache = self._extract_past_from_model_output(
             outputs, standardize_cache_format=standardize_cache_format
         )
@@ -1012,14 +1104,14 @@ class GLMForCausalLM(GLMPreTrainedModel):
         return model_kwargs
 
     def prepare_inputs_for_generation(
-        self,
-        input_ids: torch.LongTensor,
-        past_key_values: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        use_cache: Optional[bool] = None,
-        is_first_forward: bool = True,
-        **kwargs,
+            self,
+            input_ids: torch.LongTensor,
+            past_key_values: Optional[torch.Tensor] = None,
+            attention_mask: Optional[torch.Tensor] = None,
+            position_ids: Optional[torch.Tensor] = None,
+            use_cache: Optional[bool] = None,
+            is_first_forward: bool = True,
+            **kwargs,
     ) -> dict:
         # only last token for input_ids if past is not None
         if position_ids is None:
@@ -1038,18 +1130,18 @@ class GLMForCausalLM(GLMPreTrainedModel):
         }
 
     def forward(
-        self,
-        input_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Tuple[torch.FloatTensor]] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        return_last_logit: Optional[bool] = False,
+            self,
+            input_ids: Optional[torch.Tensor] = None,
+            position_ids: Optional[torch.Tensor] = None,
+            attention_mask: Optional[torch.Tensor] = None,
+            past_key_values: Optional[Tuple[torch.FloatTensor]] = None,
+            inputs_embeds: Optional[torch.Tensor] = None,
+            labels: Optional[torch.Tensor] = None,
+            use_cache: Optional[bool] = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
+            return_last_logit: Optional[bool] = False,
     ):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1098,7 +1190,7 @@ class GLMForCausalLM(GLMPreTrainedModel):
 
     @staticmethod
     def _reorder_cache(
-        past: Tuple[Tuple[torch.Tensor, torch.Tensor], ...], beam_idx: torch.LongTensor, **kwargs
+            past: Tuple[Tuple[torch.Tensor, torch.Tensor], ...], beam_idx: torch.LongTensor, **kwargs
     ) -> Tuple[Tuple[torch.Tensor, torch.Tensor], ...]:
         """
         This function is used to re-order the `past_key_values` cache if [`~PreTrainedModel.beam_search`] or
@@ -1116,6 +1208,21 @@ class GLMForCausalLM(GLMPreTrainedModel):
         )
 
 
+@add_start_docstrings(
+    """
+    The GLM Model transformer with a sequence classification head on top (linear layer).
+
+    [`GLMForSequenceClassification`] uses the last token in order to do the classification, as other causal models
+    (e.g. GPT-2) do.
+
+    Since it does classification on the last token, it requires to know the position of the last token. If a
+    `pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each row. If
+    no `pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot guess the
+    padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take the last value in
+    each row of the batch).
+    """,
+    GLM_START_DOCSTRING,
+)
 class GLMForSequenceClassification(GLMPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1127,23 +1234,23 @@ class GLMForSequenceClassification(GLMPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.embedding.word_embeddings
+        return self.model.embed_tokens
 
     def set_input_embeddings(self, value):
-        self.embed_tokens = value
+        self.model.embed_tokens = value
 
     def forward(
-        self,
-        input_ids: torch.LongTensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+            self,
+            input_ids: torch.LongTensor = None,
+            attention_mask: Optional[torch.Tensor] = None,
+            position_ids: Optional[torch.LongTensor] = None,
+            past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+            inputs_embeds: Optional[torch.FloatTensor] = None,
+            labels: Optional[torch.LongTensor] = None,
+            use_cache: Optional[bool] = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
     ) -> Union[Tuple, SequenceClassifierOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1223,6 +1330,13 @@ class GLMForSequenceClassification(GLMPreTrainedModel):
         )
 
 
+@add_start_docstrings(
+    """
+    The GLM Model transformer with a token classification head on top (a linear layer on top of the hidden-states
+    output) e.g. for Named-Entity-Recognition (NER) tasks.
+    """,
+    GLM_START_DOCSTRING,
+)
 class GLMForTokenClassification(GLMPreTrainedModel):
     def __init__(self, config: GLMConfig):
         super().__init__(config)
@@ -1241,26 +1355,19 @@ class GLMForTokenClassification(GLMPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.embedding.word_embeddings
-
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=TokenClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @add_start_docstrings_to_model_forward(GLM_START_DOCSTRING)
     def forward(
-        self,
-        input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor, torch.Tensor], ...]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        **deprecated_arguments,
+            self,
+            input_ids: Optional[torch.LongTensor] = None,
+            past_key_values: Optional[Tuple[Tuple[torch.Tensor, torch.Tensor], ...]] = None,
+            attention_mask: Optional[torch.Tensor] = None,
+            inputs_embeds: Optional[torch.Tensor] = None,
+            labels: Optional[torch.Tensor] = None,
+            use_cache: Optional[bool] = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
+            **deprecated_arguments,
     ) -> Union[Tuple[torch.Tensor], TokenClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
