@@ -1286,7 +1286,7 @@ else:
             "WhisperTimeStampLogitsProcessor",
         ]
     )
-    _import_structure["modeling_flash_attention_utils"]: []
+    _import_structure["modeling_flash_attention_utils"] = []
     _import_structure["modeling_outputs"] = []
     _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
