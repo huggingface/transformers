@@ -565,7 +565,6 @@ class WhisperGenerationMixin:
         # 5 Prepare running variables, list for generation
         num_return_sequences = generation_config.num_return_sequences
         (
-            batch_size,
             batch_idx_map,
             cur_bsz,
             input_features,
@@ -585,7 +584,7 @@ class WhisperGenerationMixin:
 
         current_segments = self._prepare_segments(
             prompt_ids=prompt_ids,
-            batch_size=batch_size,
+            batch_size=cur_bsz,
             generation_config=generation_config,
         )
 
@@ -721,19 +720,15 @@ class WhisperGenerationMixin:
         if is_shortform:
             # add eos token:
             if generation_config.max_new_tokens is None and generation_config.max_length is None:
+                # fmt: off
                 sequences = torch.cat(
                     [
                         sequences,
-                        torch.full(
-                            (
-                                sequences.shape[0],
-                                1,
-                            ),
-                            generation_config.eos_token_id,
-                        ).to(sequences.device),
+                        torch.full((sequences.shape[0], 1,), generation_config.eos_token_id).to(sequences.device),
                     ],
                     dim=-1,
                 )
+                #fmt= on
 
             if return_token_timestamps:
                 outputs = {}
@@ -947,6 +942,7 @@ class WhisperGenerationMixin:
         return sequence_tokens, seek_outputs
 
     def _stack_split_outputs(self, seek_outputs, model_output_type, device):
+        # Stack back seek_outputs tensors after splitting them with the split_by_batch_index method
         outputs = {}
         for key in seek_outputs[0].keys():
             if key == "sequences":
@@ -1026,7 +1022,6 @@ class WhisperGenerationMixin:
     ):
         if generation_config.num_return_sequences is not None and generation_config.num_return_sequences > 1:
             batch_idx_map = list(range(batch_size * generation_config.num_return_sequences))
-            batch_size = len(batch_idx_map)
             cur_bsz = len(batch_idx_map)
             do_condition_on_prev_tokens = [condition_on_prev_tokens for _ in range(len(batch_idx_map))]
             input_features = input_features.repeat_interleave(generation_config.num_return_sequences, dim=0)
@@ -1036,11 +1031,10 @@ class WhisperGenerationMixin:
             generation_config.num_return_sequences = 1
         else:
             cur_bsz = batch_size
-            batch_idx_map = list(range(batch_size))
-            do_condition_on_prev_tokens = [condition_on_prev_tokens for _ in range(batch_size)]
+            batch_idx_map = list(range(cur_bsz))
+            do_condition_on_prev_tokens = [condition_on_prev_tokens for _ in range(cur_bsz)]
 
         return (
-            batch_size,
             batch_idx_map,
             cur_bsz,
             input_features,
