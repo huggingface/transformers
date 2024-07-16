@@ -333,10 +333,10 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         )
         data = load_dataset("openslr/librispeech_asr", "clean", split="test", streaming=True, trust_remote_code=True)
         sample = next(iter(data))
-        pipe.model.config.forced_decoder_ids = pipe.tokenizer.get_decoder_prompt_ids(language="en", task="transcribe")
 
         res = pipe(sample["audio"]["array"])
         self.assertEqual(res, {"text": " Conquered returned to its place amidst the tents."})
+
         res = pipe(sample["audio"]["array"], return_timestamps=True)
         self.assertEqual(
             res,
@@ -345,9 +345,8 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
                 "chunks": [{"timestamp": (0.0, 3.36), "text": " Conquered returned to its place amidst the tents."}],
             },
         )
-        pipe.model.generation_config.alignment_heads = [[2, 2], [3, 0], [3, 2], [3, 3], [3, 4], [3, 5]]
-        res = pipe(sample["audio"]["array"], return_timestamps="word")
 
+        res = pipe(sample["audio"]["array"], return_timestamps="word")
         # fmt: off
         self.assertEqual(
             res,
