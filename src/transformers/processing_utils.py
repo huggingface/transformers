@@ -39,6 +39,7 @@ from .tokenization_utils_base import (
     TruncationStrategy,
 )
 from .utils import (
+    CHAT_TEMPLATE_NAME,
     PROCESSOR_NAME,
     PushToHubMixin,
     TensorType,
@@ -555,20 +556,23 @@ class ProcessorMixin(PushToHubMixin):
 
         pretrained_model_name_or_path = str(pretrained_model_name_or_path)
         is_local = os.path.isdir(pretrained_model_name_or_path)
-        chat_template_file = None
         if os.path.isdir(pretrained_model_name_or_path):
             processor_file = os.path.join(pretrained_model_name_or_path, PROCESSOR_NAME)
             chat_template_file = os.path.join(pretrained_model_name_or_path, "chat_template.json")
 
         if os.path.isfile(pretrained_model_name_or_path):
             resolved_processor_file = pretrained_model_name_or_path
+            # cant't load chat-template when given a file as pretrained_model_name_or_path
+            resolved_chat_template_file = None
             is_local = True
         elif is_remote_url(pretrained_model_name_or_path):
             processor_file = pretrained_model_name_or_path
             resolved_processor_file = download_url(pretrained_model_name_or_path)
+            # cant't load chat-template when given a file url as pretrained_model_name_or_path
+            resolved_chat_template_file = None
         else:
             processor_file = PROCESSOR_NAME
-            chat_template_file = "chat_template.json"
+            chat_template_file = CHAT_TEMPLATE_NAME
             try:
                 # Load from local folder or from cache or download from model Hub and cache
                 resolved_processor_file = cached_file(
@@ -586,8 +590,9 @@ class ProcessorMixin(PushToHubMixin):
                     _raise_exceptions_for_missing_entries=False,
                 )
 
-                # load chat template from a separate json if exists
-                # TODO @raushan: remove this hack after a few major releases
+                # Load chat template from a separate json if exists
+                # because making it part of processor-config break BC.
+                # Processors in older version do not accept any kwargs
                 resolved_chat_template_file = cached_file(
                     pretrained_model_name_or_path,
                     chat_template_file,
@@ -615,7 +620,7 @@ class ProcessorMixin(PushToHubMixin):
                     f" directory containing a {PROCESSOR_NAME} file"
                 )
 
-        # add chat template as kwarg before returning below because most models don't have processor config
+        # Add chat template as kwarg before returning because most models don't have processor config
         chat_template = None
         if resolved_chat_template_file is not None:
             with open(resolved_chat_template_file, "r", encoding="utf-8") as reader:
