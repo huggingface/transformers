@@ -1565,7 +1565,7 @@ class GenerationMixin:
         # https://pytorch.org/docs/stable/torch.compiler_cudagraph_trees.html#limitations
         generation_config._bos_token_tensor = bos_token_tensor
         generation_config._eos_token_tensor = eos_token_tensor
-        generation_config._pad_token_tensor = eos_token_tensor
+        generation_config._pad_token_tensor = pad_token_tensor
         generation_config._decoder_start_token_tensor = decoder_start_token_tensor
 
     @torch.no_grad()
