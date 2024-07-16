@@ -723,8 +723,11 @@ class TFModelPushToHubTester(unittest.TestCase):
                 break
         self.assertTrue(models_equal)
 
-        # Reset repo
-        delete_repo(token=self._token, repo_id="test-model-tf")
+        try:
+            # Reset repo
+            delete_repo(token=self._token, repo_id="test-model-tf")
+        except:  # noqa E722
+            pass
 
         # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -786,8 +789,11 @@ class TFModelPushToHubTester(unittest.TestCase):
                 break
         self.assertTrue(models_equal)
 
-        # Reset repo
-        delete_repo(token=self._token, repo_id="valid_org/test-model-tf-org")
+        try:
+            # Reset repo
+            delete_repo(token=self._token, repo_id="valid_org/test-model-tf-org")
+        except:  # noqa E722
+            pass
 
         # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
