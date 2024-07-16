@@ -53,7 +53,7 @@ import torch.distributed as dist
 from huggingface_hub import ModelCard, create_repo, upload_folder
 from packaging import version
 from torch import nn
-from torch.utils.data import DataLoader, Dataset, IterableDataset, RandomSampler, SequentialSampler, DistributedSampler
+from torch.utils.data import DataLoader, Dataset, DistributedSampler, IterableDataset, RandomSampler, SequentialSampler
 
 from . import __version__
 from .configuration_utils import PretrainedConfig
@@ -241,7 +241,7 @@ if is_accelerate_available():
 
     if is_deepspeed_available():
         from accelerate.utils import DeepSpeedSchedulerWrapper
-    
+
     from accelerate.utils import parallel_state as mpu
 
 if is_accelerate_available("0.28.0"):

@@ -3,13 +3,12 @@
 
 # DeepSpeed Team
 
-import torch
-
 from typing import Any, Tuple
-from torch import Tensor
-from torch.nn import Module
 
+import torch
+from torch import Tensor
 from torch import distributed as dist
+from torch.nn import Module
 
 
 def rank_print(*args, **kwargs):

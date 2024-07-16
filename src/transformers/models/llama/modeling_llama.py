@@ -42,15 +42,17 @@ from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_accelerate_available,
     is_flash_attn_greater_or_equal_2_10,
     logging,
     replace_return_docstrings,
-    is_accelerate_available,
 )
 from .configuration_llama import LlamaConfig
 
+
 if is_accelerate_available():
     from accelerate.utils import parallel_state as mpu
+
     from ...layer import DistributedAttention
 
 logger = logging.get_logger(__name__)
