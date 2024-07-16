@@ -126,8 +126,11 @@ class ConfigPushToHubTester(unittest.TestCase):
             if k != "transformers_version":
                 self.assertEqual(v, getattr(new_config, k))
 
-        # Reset repo
-        delete_repo(token=self._token, repo_id="test-config")
+        try:
+            # Reset repo
+            delete_repo(token=self._token, repo_id="test-config")
+        except:  # noqa E722
+            pass
 
         # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -149,8 +152,11 @@ class ConfigPushToHubTester(unittest.TestCase):
             if k != "transformers_version":
                 self.assertEqual(v, getattr(new_config, k))
 
-        # Reset repo
-        delete_repo(token=self._token, repo_id="valid_org/test-config-org")
+        try:
+            # Reset repo
+            delete_repo(token=self._token, repo_id="valid_org/test-config-org")
+        except:  # noqa E722
+            pass
 
         # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
