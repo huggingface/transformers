@@ -349,7 +349,7 @@ def check_support_param_buffer_assignment(model_to_load, state_dict, start_prefi
         return False
 
     # Some models explicitly do not support param buffer assignment
-    if not getattr(model_to_load, "_supports_param_buffer_assignment", False):
+    if not getattr(model_to_load, "_supports_param_buffer_assignment", True):
         logger.debug(
             f"{model_to_load.__class__.__name__} does not support param buffer assignment, loading will be slower"
         )
@@ -4294,6 +4294,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 assign_to_params_buffers = check_support_param_buffer_assignment(
                     model_to_load, state_dict, start_prefix
                 )
+                raise ValueError(assign_to_params_buffers)
                 error_msgs = _load_state_dict_into_model(
                     model_to_load, state_dict, start_prefix, assign_to_params_buffers
                 )
