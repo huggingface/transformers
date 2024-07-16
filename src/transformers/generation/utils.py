@@ -748,12 +748,12 @@ class GenerationMixin:
         warpers = LogitsProcessorList()
 
         # In beam methods, we need to keep at least one non-eos token to explore continuations that might have a
-        # better score (i.e. keep len(list(generation_config.eos_token_tensor)) + 1)
+        # better score (i.e. keep len(list(generation_config._eos_token_tensor)) + 1)
         if generation_config.num_beams > 1:
-            if isinstance(generation_config.eos_token_tensor, list):
-                min_tokens_to_keep = len(generation_config.eos_token_tensor) + 1
-            elif isinstance(generation_config.eos_token_tensor, torch.Tensor):
-                min_tokens_to_keep = generation_config.eos_token_tensor.shape[0] + 1
+            if isinstance(generation_config._eos_token_tensor, list):
+                min_tokens_to_keep = len(generation_config._eos_token_tensor) + 1
+            elif isinstance(generation_config._eos_token_tensor, torch.Tensor):
+                min_tokens_to_keep = generation_config._eos_token_tensor.shape[0] + 1
             else:
                 min_tokens_to_keep = 2
         else:
@@ -857,31 +857,31 @@ class GenerationMixin:
             processors.append(
                 NoBadWordsLogitsProcessor(
                     generation_config.bad_words_ids,
-                    generation_config.eos_token_tensor,
+                    generation_config._eos_token_tensor,
                 )
             )
         if (
             generation_config.min_length is not None
-            and generation_config.eos_token_tensor is not None
+            and generation_config._eos_token_tensor is not None
             and generation_config.min_length > 0
         ):
             processors.append(
                 MinLengthLogitsProcessor(
                     generation_config.min_length,
-                    generation_config.eos_token_tensor,
+                    generation_config._eos_token_tensor,
                     device=device,
                 )
             )
         if (
             generation_config.min_new_tokens is not None
-            and generation_config.eos_token_tensor is not None
+            and generation_config._eos_token_tensor is not None
             and generation_config.min_new_tokens > 0
         ):
             processors.append(
                 MinNewTokensLengthLogitsProcessor(
                     input_ids_seq_length,
                     generation_config.min_new_tokens,
-                    generation_config.eos_token_tensor,
+                    generation_config._eos_token_tensor,
                     device=device,
                 )
             )
@@ -912,7 +912,7 @@ class GenerationMixin:
             processors.append(
                 ExponentialDecayLengthPenalty(
                     generation_config.exponential_decay_length_penalty,
-                    generation_config.eos_token_tensor,
+                    generation_config._eos_token_tensor,
                     input_ids_seq_length,
                 )
             )
@@ -991,8 +991,8 @@ class GenerationMixin:
                     "stop strings, you must pass the model's tokenizer to the `tokenizer` argument of `generate`."
                 )
             criteria.append(StopStringCriteria(stop_strings=generation_config.stop_strings, tokenizer=tokenizer))
-        if generation_config.eos_token_tensor is not None:
-            criteria.append(EosTokenCriteria(eos_token_id=generation_config.eos_token_tensor))
+        if generation_config._eos_token_tensor is not None:
+            criteria.append(EosTokenCriteria(eos_token_id=generation_config._eos_token_tensor))
         criteria = self._merge_criteria_processor_list(criteria, stopping_criteria)
         return criteria
 
@@ -1563,10 +1563,10 @@ class GenerationMixin:
         # NOTE: this must be written into a different attribute name than the one holding the original special tokens
         # (in their non-tensor form), in order to enable end-to-end compilation. See
         # https://pytorch.org/docs/stable/torch.compiler_cudagraph_trees.html#limitations
-        generation_config.bos_token_tensor = bos_token_tensor
-        generation_config.eos_token_tensor = eos_token_tensor
-        generation_config.pad_token_tensor = eos_token_tensor
-        generation_config.decoder_start_token_tensor = decoder_start_token_tensor
+        generation_config._bos_token_tensor = bos_token_tensor
+        generation_config._eos_token_tensor = eos_token_tensor
+        generation_config._pad_token_tensor = eos_token_tensor
+        generation_config._decoder_start_token_tensor = decoder_start_token_tensor
 
     @torch.no_grad()
     def generate(
@@ -1701,10 +1701,10 @@ class GenerationMixin:
             # If `input_ids` was given, check if the last id in any sequence is `pad_token_id`
             # Note: If using, `inputs_embeds` this check does not work, because we want to be more hands-off.
             if (
-                generation_config.pad_token_tensor is not None
+                generation_config._pad_token_tensor is not None
                 and batch_size > 1
                 and len(inputs_tensor.shape) == 2
-                and torch.sum(inputs_tensor[:, -1] == generation_config.pad_token_tensor) > 0
+                and torch.sum(inputs_tensor[:, -1] == generation_config._pad_token_tensor) > 0
             ):
                 logger.warning(
                     "A decoder-only architecture is being used, but right-padding was detected! For correct "
@@ -1721,7 +1721,7 @@ class GenerationMixin:
 
         if not kwargs_has_attention_mask and requires_attention_mask and accepts_attention_mask:
             model_kwargs["attention_mask"] = self._prepare_attention_mask_for_generation(
-                inputs_tensor, generation_config.pad_token_tensor, generation_config.eos_token_tensor
+                inputs_tensor, generation_config._pad_token_tensor, generation_config._eos_token_tensor
             )
 
         if self.config.is_encoder_decoder and "encoder_outputs" not in model_kwargs:
@@ -1736,7 +1736,7 @@ class GenerationMixin:
                 batch_size=batch_size,
                 model_input_name=model_input_name,
                 model_kwargs=model_kwargs,
-                decoder_start_token_id=generation_config.decoder_start_token_tensor,
+                decoder_start_token_id=generation_config._decoder_start_token_tensor,
                 device=inputs_tensor.device,
             )
         else:
@@ -2280,7 +2280,7 @@ class GenerationMixin:
             raise ValueError("DoLa decoding is only available for decoder-only models.")
         # init values
 
-        pad_token_id = generation_config.pad_token_tensor
+        pad_token_id = generation_config._pad_token_tensor
         output_attentions = generation_config.output_attentions
         output_hidden_states = generation_config.output_hidden_states
         output_scores = generation_config.output_scores
@@ -2487,7 +2487,7 @@ class GenerationMixin:
         has_eos_stopping_criteria = any(hasattr(criteria, "eos_token_id") for criteria in stopping_criteria)
         top_k = generation_config.top_k
         penalty_alpha = generation_config.penalty_alpha
-        pad_token_id = generation_config.pad_token_tensor
+        pad_token_id = generation_config._pad_token_tensor
         output_attentions = generation_config.output_attentions
         output_hidden_states = generation_config.output_hidden_states
         output_scores = generation_config.output_scores
@@ -2878,7 +2878,7 @@ class GenerationMixin:
             `model.config.is_encoder_decoder=True`.
         """
         # init values
-        pad_token_id = generation_config.pad_token_tensor
+        pad_token_id = generation_config._pad_token_tensor
         output_attentions = generation_config.output_attentions
         output_hidden_states = generation_config.output_hidden_states
         output_scores = generation_config.output_scores
@@ -3085,8 +3085,8 @@ class GenerationMixin:
             `model.config.is_encoder_decoder=True`.
         """
         # init values
-        pad_token_id = generation_config.pad_token_tensor
-        eos_token_id = generation_config.eos_token_tensor
+        pad_token_id = generation_config._pad_token_tensor
+        eos_token_id = generation_config._eos_token_tensor
         output_attentions = generation_config.output_attentions
         output_hidden_states = generation_config.output_hidden_states
         output_scores = generation_config.output_scores
@@ -3367,8 +3367,8 @@ class GenerationMixin:
             `model.config.is_encoder_decoder=True`.
         """
         # init values
-        pad_token_id = generation_config.pad_token_tensor
-        eos_token_id = generation_config.eos_token_tensor
+        pad_token_id = generation_config._pad_token_tensor
+        eos_token_id = generation_config._eos_token_tensor
         output_attentions = generation_config.output_attentions
         output_hidden_states = generation_config.output_hidden_states
         output_scores = generation_config.output_scores
@@ -3659,8 +3659,8 @@ class GenerationMixin:
             `model.config.is_encoder_decoder=True`.
         """
         # init values
-        pad_token_id = generation_config.pad_token_tensor
-        eos_token_id = generation_config.eos_token_tensor
+        pad_token_id = generation_config._pad_token_tensor
+        eos_token_id = generation_config._eos_token_tensor
         output_attentions = generation_config.output_attentions
         output_hidden_states = generation_config.output_hidden_states
         output_scores = generation_config.output_scores
