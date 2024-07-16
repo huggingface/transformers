@@ -407,9 +407,7 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
             )
 
         final_embedding[image_to_overwrite] = image_features.contiguous().reshape(-1, embed_dim).to(target_device)
-        # breakpoint()
         final_attention_mask |= image_to_overwrite
-        # breakpoint()
         modality_indicators[image_to_overwrite] = 1
         position_ids = (final_attention_mask.cumsum(-1) - 1).masked_fill_((final_attention_mask == 0), 1)
 
