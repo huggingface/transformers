@@ -320,6 +320,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "SegGptForImageSegmentation",
     "SiglipVisionModel",
     "SiglipTextModel",
+    "ChameleonVQVAE", # no autoclass for VQ-VAE models
 ]
 
 # DO NOT edit this list!
