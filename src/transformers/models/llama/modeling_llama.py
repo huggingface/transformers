@@ -29,6 +29,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...modeling_rope_utils import RopeModelMixin, compute_frequencies
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -92,22 +93,42 @@ ALL_LAYERNORM_LAYERS.append(LlamaRMSNorm)
 
 
 class LlamaRotaryEmbedding(nn.Module):
-    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
+    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0, **kwargs):
         super().__init__()
-        self.scaling_factor = scaling_factor
-        self.dim = dim
-        self.max_position_embeddings = max_position_embeddings
-        self.base = base
-        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float().to(device) / self.dim))
+        self.rope_config = {
+            "base": base,
+            "dim": dim,
+            "max_position_embeddings": max_position_embeddings,
+            "scaling_factor": scaling_factor,
+        }
+        self.rope_config.update(kwargs)
+        # BC: in absence of "rope_type" in kwargs, set it to "default"
+        self.rope_config["rope_type"] = self.rope_config.get("rope_type", "default")
+
+        inv_freq = compute_frequencies(self.rope_config, device)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        # For BC we register cos and sin cached
         self.max_seq_len_cached = max_position_embeddings
+
+        # BC: dynamic NTK and yarn used `scaling_factor` as a frequency-computing parameter, not as a position_ids
+        # scaling factor
+        if "dynamic" in self.rope_config["rope_type"] or "yarn" in self.rope_config["rope_type"]:
+            self.rope_config["scaling_factor"] = 1.0
 
     @torch.no_grad()
     def forward(self, x, position_ids):
+        position_ids = position_ids.float() / self.rope_config["scaling_factor"]
+
+        # dynamic RoPE layers may need to recompute `inv_freq`
+        if "dynamic" in self.rope_config["rope_type"]:
+            seq_len = torch.max(position_ids) + 1
+            if seq_len > self.max_seq_len_cached:
+                inv_freq = compute_frequencies(self.rope_config | {"seq_len": seq_len}, x.device)
+                self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
+                self.max_seq_len_cached = seq_len
+
         # x: [bs, num_attention_heads, seq_len, head_size]
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
-        position_ids_expanded = position_ids[:, None, :].float()
+        position_ids_expanded = position_ids[:, None, :]
         # Force float32 since bfloat16 loses precision on long contexts
         # See https://github.com/huggingface/transformers/pull/29285
         device_type = x.device.type
@@ -120,34 +141,7 @@ class LlamaRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-class LlamaLinearScalingRotaryEmbedding(LlamaRotaryEmbedding):
-    """LlamaRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
-
-    def forward(self, x, position_ids):
-        # difference to the original RoPE: a scaling factor is aplied to the position ids
-        position_ids = position_ids.float() / self.scaling_factor
-        cos, sin = super().forward(x, position_ids)
-        return cos, sin
-
-
-class LlamaDynamicNTKScalingRotaryEmbedding(LlamaRotaryEmbedding):
-    """LlamaRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
-
-    def forward(self, x, position_ids):
-        # difference to the original RoPE: inv_freq is recomputed when the sequence length > original length
-        seq_len = torch.max(position_ids) + 1
-        if seq_len > self.max_position_embeddings:
-            base = self.base * (
-                (self.scaling_factor * seq_len / self.max_position_embeddings) - (self.scaling_factor - 1)
-            ) ** (self.dim / (self.dim - 2))
-            inv_freq = 1.0 / (
-                base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float().to(x.device) / self.dim)
-            )
-            self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: this may break with compilation
-
-        cos, sin = super().forward(x, position_ids)
-        return cos, sin
-
+# Missing: deprecation of old classes
 
 class LlamaYarnScalingRotaryEmbedding(LlamaRotaryEmbedding):
     def __init__(
@@ -852,7 +846,7 @@ LLAMA_START_DOCSTRING = r"""
     "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
     LLAMA_START_DOCSTRING,
 )
-class LlamaPreTrainedModel(PreTrainedModel):
+class LlamaPreTrainedModel(PreTrainedModel, RopeModelMixin):
     config_class = LlamaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
@@ -1210,6 +1204,14 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
 
     def get_decoder(self):
         return self.model
+
+    def get_rope_embeddings(self, maximum_position_embeddings: Optional[int] = None) -> Tuple[torch.Tensor, torch.Tensor]:
+        """See [~LlamaModel.get_rope_embeddings]"""
+        return self.model.get_position_embeddings(maximum_position_embeddings)
+
+    def set_rope_embeddings(self, frequencies: torch.Tensor, scaling_factor: float):
+        """See [~LlamaModel.set_rope_embeddings]"""
+        self.model.set_position_embeddings(frequencies, scaling_factor)
 
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
