@@ -339,7 +339,6 @@ class MambaPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _is_stateful = True
 
-
     def _init_weights(self, module):
         """Initialize the weights."""
         if isinstance(module, MambaMixer):
