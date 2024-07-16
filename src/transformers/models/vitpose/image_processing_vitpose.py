@@ -247,7 +247,12 @@ def get_warp_matrix(theta: float, size_input: np.ndarray, size_dst: np.ndarray, 
     return matrix
 
 
-def warp_affine(src, M):
+def scipy_warp_affine(src, M):
+"""
+This function implements cv2.warpAffine used in the original implementation using scipy.
+
+Note: the original implementation uses cv2.INTER_LINEAR.
+"""
     channels = [src[..., i] for i in range(src.shape[-1])]
 
     # Convert to a 3x3 matrix used by SciPy
