@@ -39,7 +39,8 @@ if is_vision_available():
     import PIL
 
 if is_scipy_available():
-    from scipt.ndimage import gaussian_filter
+    from scipy.linalg import inv
+    from scipy.ndimage import affine_transform, gaussian_filter
 
 logger = logging.get_logger(__name__)
 
@@ -246,23 +247,24 @@ def get_warp_matrix(theta: float, size_input: np.ndarray, size_dst: np.ndarray, 
     return matrix
 
 
-def warp_affine(src, M, borderValue=0):
-    new_src = np.full_like(src, borderValue, dtype=src.dtype)
-    h, w = src.shape[:2]
-    y, x = np.indices((h, w))
-    x = x.flatten()
-    y = y.flatten()
-    ones = np.ones((h * w, 1))
-    coords = np.vstack([x, y, ones.T])
-    coords_transformed = M.dot(coords)
-    coords_transformed = np.round(coords_transformed).astype(int)
-    mask = (
-        (coords_transformed[0, :] >= 0)
-        & (coords_transformed[0, :] < w)
-        & (coords_transformed[1, :] >= 0)
-        & (coords_transformed[1, :] < h)
+def warp_affine(src, M):
+    channels = [src[..., i] for i in range(src.shape[-1])]
+
+    # Convert to a 3x3 matrix used by SciPy
+    M_scipy = np.vstack([M, [0, 0, 1]])
+    # If you have a matrix for the ‘push’ transformation, use its inverse (numpy.linalg.inv) in this function.
+    M_inv = inv(M_scipy)
+    M_inv[0, 0], M_inv[0, 1], M_inv[1, 0], M_inv[1, 1], M_inv[0, 2], M_inv[1, 2] = (
+        M_inv[1, 1],
+        M_inv[1, 0],
+        M_inv[0, 1],
+        M_inv[0, 0],
+        M_inv[1, 2],
+        M_inv[0, 2],
     )
-    new_src[coords_transformed[1, mask], coords_transformed[0, mask]] = src[y[mask], x[mask]]
+
+    new_src = [affine_transform(channel, M_inv, order=1) for channel in channels]
+    new_src = np.stack(new_src, axis=-1)
     return new_src
 
 
