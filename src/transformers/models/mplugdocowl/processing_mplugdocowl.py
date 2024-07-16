@@ -174,7 +174,7 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
             )
         else:
             pixel_values = None
-        # text prpeocessing
+        # text preprocessing
         patch_positions = pixel_values["patch_positions"]
         num_patches = pixel_values["num_patches"]
         anchor_max = pixel_values["anchor_max"]
