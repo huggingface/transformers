@@ -20,15 +20,20 @@ from functools import partial
 from typing import List, Optional, Tuple, Union
 
 import torch
-import torch.utils.checkpoint
 import torch.nn.functional as F
+import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ... import PreTrainedModel
 from ...activations import ACT2FN
+from ...modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    CausalLMOutputWithPast,
+)
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
-from ...modeling_outputs import ModelOutput, BaseModelOutput, BaseModelOutputWithPooling, BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -42,6 +47,18 @@ from .configuration_mplugdocowl import MPLUGDocOwlConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "MPLUGDocOwlConfig"
+
+
+# contrastive loss function, adapted from
+# https://sachinruk.github.io/blog/2021-03-07-clip.html
+def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
+    return nn.functional.cross_entropy(logits, torch.arange(len(logits), device=logits.device))
+
+
+def clip_loss(similarity: torch.Tensor) -> torch.Tensor:
+    caption_loss = contrastive_loss(similarity)
+    image_loss = contrastive_loss(similarity.t())
+    return (caption_loss + image_loss) / 2.0
 
 
 @dataclass
@@ -194,16 +211,6 @@ MPLUGDOCOWL_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
-# contrastive loss function, adapted from
-# https://sachinruk.github.io/blog/2021-03-07-clip.html
-def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
-    return nn.functional.cross_entropy(logits, torch.arange(len(logits), device=logits.device))
-
-
-def clip_loss(similarity: torch.Tensor) -> torch.Tensor:
-    caption_loss = contrastive_loss(similarity)
-    image_loss = contrastive_loss(similarity.t())
-    return (caption_loss + image_loss) / 2.0
 
 class MPLUGDocOwlVisionEmbeddings(nn.Module):
     def __init__(self, config: MPLUGDocOwlConfig):
@@ -226,7 +233,7 @@ class MPLUGDocOwlVisionEmbeddings(nn.Module):
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches + 1
         self.position_embedding = nn.Parameter(torch.randn(1, self.num_patches + 1, self.embed_dim))
-        
+
         self.pre_layernorm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
@@ -244,6 +251,7 @@ class MPLUGDocOwlVisionEmbeddings(nn.Module):
         embeddings = self.pre_layernorm(embeddings)
 
         return embeddings
+
 
 class MPLUGDocOwlAttention(MPLUGDocOwlPreTrainedModel):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
@@ -557,7 +565,7 @@ class MPLUGDocOwlVisionTransformer(PreTrainedModel):
         self.embed_dim = config.hidden_size
 
         self.embeddings = MPLUGDocOwlVisionEmbeddings(config)
-        
+
         self.encoder = MPLUGDocOwlEncoder(config)
         self.post_layernorm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.post_init()
@@ -617,6 +625,7 @@ class MPLUGDocOwlVisionModel(PreTrainedModel):
     config_class = MPLUGDocOwlConfig
     main_input_name = "pixel_values"
     _no_split_modules = ["MPLUGDocOwlEncoderLayer"]
+    _supports_sdpa = False
 
     def __init__(self, config: MPLUGDocOwlConfig):
         super().__init__(config)
@@ -696,7 +705,8 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
-# Copied from transformers.models.bart.modeling_bart.BartDecoder._prepare_decoder_attention_mask
+
+# Copied from transformers.models.kosmos2.modeling_kosmos2.Kosmos2TextTransformer._prepare_decoder_attention_mask
 def _prepare_decoder_attention_mask(attention_mask, input_shape, inputs_embeds, past_key_values_length):
     # create causal mask
     # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
@@ -824,7 +834,7 @@ def rotate_half(x):
     x2 = x[..., x.shape[-1] // 2 :]
     return torch.cat((-x2, x1), dim=-1)
 
- 
+
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
     # The first two dimensions of cos and sin are always 1, so we can `squeeze` them.
     cos = cos.squeeze(1).squeeze(0)  # [seq_len, dim]
@@ -1433,6 +1443,7 @@ class MPLUGDocOwlLanguageModel(MPLUGDocOwlPreTrainedLanguageModel):
             attentions=all_self_attns,
         )
 
+
 class MPLUGDocOwlForCausalLM(MPLUGDocOwlPreTrainedLanguageModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1558,7 +1569,7 @@ class MPLUGDocOwlForCausalLM(MPLUGDocOwlPreTrainedLanguageModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-    
+
     @staticmethod
     def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
@@ -1656,7 +1667,7 @@ class MPLUGDocOwlHReducer(MPLUGDocOwlPreTrainedModel):
 
         encoder_hidden_states = encoder_hidden_states.view(B, C, H, H)  # Reshape to (batch_size, hidden_size, 32, 32)
         # Shape: (B, C, 32, 32)
-       
+
         hidden_states = self.reducer_before(encoder_hidden_states)  # Apply reducer (e.g., a convolution)
         # Shape: (B, XD, H, W/D) where XD depends on the convolution output channels and W/D is the reduced width
 
@@ -1673,8 +1684,8 @@ class MPLUGDocOwlHReducer(MPLUGDocOwlPreTrainedModel):
         hidden_states = hidden_states.reshape(B, D, H, W_div_X * X)
         # Reshape to: (B, D, H, W)
 
-        sequence_output = self.reducer(hidden_states)  
-        #Shape: (B, C, H/conv_shape[0], W/(conv_shape[1]))
+        sequence_output = self.reducer(hidden_states)
+        # Shape: (B, C, H/conv_shape[0], W/(conv_shape[1]))
 
         sequence_output = sequence_output.flatten(2).transpose(1, 2)
         # Flatten and transpose to shape: (B, L/X, C)
@@ -1834,7 +1845,6 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         patch_positions: Optional[torch.LongTensor] = None,
-        # modality_indicators: Optional[torch.LongTensor] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, MPLUGDocOwlCausalLMOutputWithPast]:
         r"""
