@@ -122,6 +122,90 @@ generate_ids = model.generate(**inputs, max_new_tokens=50)
 processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
 ```
 
+### Text to image generation
+
+Chameleon can also generate images. However, the official model checkpoint currently only supports text generation. We need to use finetuned versions such as [Anole](https://arxiv.org/abs/2407.06135) to do image generation. Here is how you can do it:
+
+```python
+from transformers import ChameleonProcessor, ChameleonForCausalLM
+import torch
+from PIL import Image
+import requests
+
+processor = ChameleonProcessor.from_pretrained("leloy/Anole-7b-v0.1-hf")
+model = ChameleonForCausalLM.from_pretrained(
+    "leloy/Anole-7b-v0.1-hf",
+    device_map="auto",
+    # This flag enables the model to generate images
+    multimodal_generation_mode="image-only",
+)
+
+# Prepare a prompt
+prompt = "Generate an image of a snowman."
+
+# Preprocess the prompt
+inputs = processor(prompt, return_tensors="pt", padding=True).to(model.device)
+
+# Generate discrete image tokens
+# Note: We need to set `max_new_tokens` to 1026 since the model generates the `image_start_token` marker token first, then 1024 image tokens, and finally the `image_end_token` marker token.
+generate_ids = model.generate(**inputs, max_new_tokens=1026)
+
+# Decode the generated image tokens
+pixel_values = model.decode_image_tokens(generate_ids[, 1:-1])
+images = processor.postprocess_pixel_values(
+    pixel_values.detach().cpu().numpy()
+)
+
+# Save the image
+images[0].save("snowman.png")
+```
+
+### Text-image to image generation
+
+We can also interleave text and images in the prompt to generate images. Here is how you can do it:
+
+```python
+from transformers import ChameleonProcessor, ChameleonForCausalLM
+import torch
+from PIL import Image
+import requests
+
+processor = ChameleonProcessor.from_pretrained("leloy/Anole-7b-v0.1-hf")
+model = ChameleonForCausalLM.from_pretrained(
+    "leloy/Anole-7b-v0.1-hf",
+    device_map="auto",
+    # This flag enables the model to generate images
+    multimodal_generation_mode="image-only",
+)
+
+# Get image of a snowman
+url = "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/snowman.jpg"
+image_snowman = Image.open(requests.get(url, stream=True).raw)
+
+# Prepare a prompt
+prompt = "Generate a variation of this image.<image>"
+
+# Preprocess the prompt
+inputs = processor(prompt, images=[image_snowman], return_tensors="pt", padding=True).to(model.device)
+
+# Generate discrete image tokens
+# Note: We need to set `max_new_tokens` to 1026 since the model generates the `image_start_token` marker token first, then 1024 image tokens, and finally the `image_end_token` marker token.
+generate_ids = model.generate(**inputs, max_new_tokens=1026)
+
+# Decode the generated image tokens
+pixel_values = model.decode_image_tokens(generate_ids[, 1:-1])
+images = processor.postprocess_pixel_values(
+    pixel_values.detach().cpu().numpy()
+)
+
+# Save the image
+images[0].save("snowman.png")
+```
+
+### Interleaved image and text generation
+
+Currently not supported yet.
+
 ## Model optimization
 
 ### Quantization using Bitsandbytes

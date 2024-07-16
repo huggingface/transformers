@@ -389,7 +389,7 @@ class ChameleonImageProcessor(BaseImageProcessor):
         img_rgb = (1 - alpha[:, :, np.newaxis]) * 255 + alpha[:, :, np.newaxis] * img_rgba[:, :, :3]
         return PIL.Image.fromarray(img_rgb.astype("uint8"), "RGB")
 
-    def postprocess(self, pixel_values: np.ndarray) -> List[PIL.Image.Image]:
+    def postprocess_pixel_values(self, pixel_values: np.ndarray) -> List[PIL.Image.Image]:
         """
         Postprocess a batch of pixel values to images.
 

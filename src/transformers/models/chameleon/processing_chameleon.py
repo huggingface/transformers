@@ -18,6 +18,9 @@ Processor class for Chameleon.
 
 from typing import List, Optional, Union
 
+import numpy as np
+import PIL
+
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
@@ -160,3 +163,16 @@ class ChameleonProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+
+    def postprocess_pixel_values(self, pixel_values: np.ndarray) -> List[PIL.Image.Image]:
+        """
+        Postprocess a batch of pixel values to images.
+
+        Args:
+            pixel_values (`np.ndarray` of shape `(batch_size, num_channels, image_size, image_size)`):
+                Batch of pixel values to postprocess in CHW format.
+
+        Returns:
+            List[PIL.Image.Image]: A list of PIL images.
+        """
+        return self.image_processor.postprocess_pixel_values(pixel_values)

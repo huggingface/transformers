@@ -175,8 +175,15 @@ class ChameleonConfig(PretrainedConfig):
             A dictionary containing the vocabulary map from the tokenizer. Used to obtain tokens from the image inputs.
         mlp_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
-        enable_image_generation (`bool`, *optional*, defaults to `False`):
-            Whether to allow the model to generate image tokens.
+        multimodal_generation_mode (`Literal["text-only", "image-only", "interleaved-text-image"]`, *optional*, defaults to `"text-only"`):
+            Chameleon can generate text, images, or both in an interleaved manner. However, only text generation is
+            supported by the official model checkpoint. This flag enables the other modes for use with finetuned versions of
+            the model such as [Anole](https://arxiv.org/abs/2407.06135).
+            - If set to `"text-only"`, the logits for the image tokens will be masked out during generation. However, the
+            `image_start_token` and `image_end_token` markers will be left as-is.
+            - If set to `"image-only"`, the logits for tokens other than the image tokens, and the `image_start_token`,
+            `image_end_token`, `image_token` markers will be masked out during generation.
+            - `"interleaved-text-image"` is currently not supported.
 
 
     ```python
@@ -221,7 +228,7 @@ class ChameleonConfig(PretrainedConfig):
         vq_config=None,
         vocabulary_map=None,
         mlp_bias=False,
-        enable_image_generation=False,
+        multimodal_generation_mode="text-only",
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -231,7 +238,7 @@ class ChameleonConfig(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.mlp_bias = mlp_bias
-        self.enable_image_generation = enable_image_generation
+        self.multimodal_generation_mode = multimodal_generation_mode
 
         self.num_key_value_heads = num_key_value_heads
         self.hidden_act = hidden_act
