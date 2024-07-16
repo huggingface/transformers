@@ -895,9 +895,10 @@ class ModelUtilsTest(TestCasePlus):
     @require_usr_bin_time
     @require_accelerate
     @mark.accelerate_tests
-    def test_from_pretrained_low_cpu_mem_usage_faster(self):
+    def test_from_pretrained_low_cpu_mem_usage_slower(self):
         # Before this would test that `from_pretrained(..., low_cpu_mem_usage=True)` uses less cpu memory than default
-        # Now though the memory is the same, we simply test that loading with `low_cpu_mem_usage` winds up being *faster*
+        # Now though the memory is the same, we simply test that loading with `low_cpu_mem_usage` winds up being *slower*
+        # (mostly from extra logic needed)
 
         mname = "hf-internal-testing/tiny-random-bert"
 
@@ -926,9 +927,9 @@ class ModelUtilsTest(TestCasePlus):
         )
 
         self.assertGreater(
-            elapsed_time_normal,
             elapsed_time_low_mem,
-            "using `low_cpu_mem_usage` should be faster, "
+            elapsed_time_normal,
+            "using `low_cpu_mem_usage` should be slower due to extra logic, "
             f"but got elapsed_time_normal={elapsed_time_normal} and elapsed_time_low_mem={elapsed_time_low_mem}",
         )
 
