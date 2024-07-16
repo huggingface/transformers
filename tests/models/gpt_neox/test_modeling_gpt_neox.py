@@ -225,7 +225,7 @@ class GPTNeoXModelTester:
         model.to(torch_device)
         model.eval()
 
-        # We want this for SDPA, eager works without a `None` attention mask
+        # We want this for SDPA, eager works with a `None` attention mask
         assert (
             model.config._attn_implementation == "sdpa"
         ), "This test assumes the model to have the SDPA implementation for its attention calculations."
