@@ -229,7 +229,7 @@ class ChameleonConfig(PretrainedConfig):
         vq_config=None,
         vocabulary_map=None,
         mlp_bias=False,
-        multimodal_generation_mode: Literal["text-only", "image-only", "interleaved-text-image", "free"]="text-only",
+        multimodal_generation_mode: Literal["text-only", "image-only", "interleaved-text-image", "free"] = "text-only",
         **kwargs,
     ):
         self.vocab_size = vocab_size
