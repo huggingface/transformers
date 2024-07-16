@@ -31,7 +31,7 @@ from transformers.models.mplugdocowl.image_processing_mplugdocowl import MPLUGDo
 EPILOG_TXT = """Example:
     python transformers/src/transformers/models/mplugdocowl/convert_mplugdocowl_weights_to_hf.py --text_model_id meta-llama/Llama-2-7b-hf --vision_model_id openai/clip-vit-large-patch14-336 --output_hub_path danaaubakirova/mplugdocowl1.5-Chat-hf --old_state_dict_id mPLUG/DocOwl1.5-Chat
 
-Example for creating the old state dict file with Python:
+    Example for creating the old state dict file with Python:
 
     import torch
     from mplugdocowl.model.language_model.mplugdocowl_llama import MPLUGDocOwlLlamaForCausalLM
@@ -141,9 +141,9 @@ def convert_mplugdocowl_llama_to_hf(
         model.save_pretrained("/raid/dana/mplug_model_hf_chat/")
         processor.save_pretrained("/raid/dana/mplug_model_hf_chat/")
     else:
-        model = MPLUGDocOwlForConditionalGeneration.from_pretrained("/raid/dana/mplug_model_hf_chat/")
+        model = MPLUGDocOwlForConditionalGeneration.from_pretrained("/raid/dana/mplug_model_hf_omni/")
         model.to(torch.float16)
-        processor = MPLUGDocOwlProcessor.from_pretrained("/raid/dana/mplug_model_hf_chat/")
+        processor = MPLUGDocOwlProcessor.from_pretrained("/raid/dana/mplug_model_hf_omni/")
     breakpoint()
     model.push_to_hub(output_hub_path)
     processor.push_to_hub(output_hub_path)

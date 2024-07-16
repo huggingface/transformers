@@ -66,10 +66,11 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
         - str: The generated text with appropriate image placeholders and optional crop indicators.
         """
         media_token = "<image>"
-        assert media_token in text
+        if media_token not in text:
+            raise ValueError("The prompt must contain the media token '<image>'")
         text_list = text.split(media_token)
         text = "USER: "
-        image_token_ptr = 0
+        image_token_count = 0
 
         for next_text in text_list[1:]:
             if add_textual_crop_indicator:
@@ -85,7 +86,7 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
                 text += "<image>" * num_patches
 
             text += next_text
-            image_token_ptr += 1
+            image_token_count += 1
 
         text += " ASSISTANT:"
         return text

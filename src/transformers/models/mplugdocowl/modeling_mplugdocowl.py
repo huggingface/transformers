@@ -456,10 +456,10 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
         >>> import requests
         >>> from transformers import AutoProcessor, MPLUGDocOwlForConditionalGeneration
 
-        >>> model = MPLUGDocOwlForConditionalGeneration.from_pretrained("mplugdocowl-hf/mplugdocowl-1.5-7b-hf")
-        >>> processor = AutoProcessor.from_pretrained("mplugdocowl-hf/mplugdocowl-1.5-7b-hf")
+        >>> model = MPLUGDocOwlForConditionalGeneration.from_pretrained("danaaubakirova/mplugdocowl1.5-Chat-hf")
+        >>> processor = AutoProcessor.from_pretrained("danaaubakirova/mplugdocowl1.5-Chat-hf")
 
-        >>> prompt = "USER: <image>\nWhat's the content of the image? ASSISTANT:"
+        >>> prompt = "<image>What's the content of the image? ASSISTANT:"
         >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
@@ -468,7 +468,7 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
         >>> # Generate
         >>> generate_ids = model.generate(**inputs, max_new_tokens=15)
         >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "USER:  \nWhat's the content of the image? ASSISTANT: The image features a busy city street with a stop sign prominently displayed"
+        "USER:  What's the content of the image? ASSISTANT: The image features a busy city street with a stop sign prominently displayed"
         ```
 
         """
@@ -565,9 +565,6 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
             input_ids = input_ids[:, -1:]
 
         position_ids = kwargs.get("position_ids", None)
-        # modality_indicators = kwargs.get("modality_indicators", None)
-        # if modality_indicators is None:
-        # modality_indicators = torch.zeros_like(input_ids).long().to(self.device)
 
         if attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation

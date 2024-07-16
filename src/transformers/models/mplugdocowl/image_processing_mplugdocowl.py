@@ -161,15 +161,15 @@ def box_iou(boxes1, area1, boxes2, eps=1e-5):
     """
     area2 = box_area(boxes2)
 
-    lt = np.maximum(boxes1[:, None, :2], boxes2[:, :2])  # [N,M,2]
-    rb = np.minimum(boxes1[:, None, 2:], boxes2[:, 2:])  # [N,M,2]
+    top_left = np.maximum(boxes1[:, None, :2], boxes2[:, :2])  # [N,M,2]
+    bottom_right = np.minimum(boxes1[:, None, 2:], boxes2[:, 2:])  # [N,M,2]
 
-    wh = np.clip(rb - lt, a_min=0, a_max=None)  # [N,M,2]
-    inter = wh[:, :, 0] * wh[:, :, 1]  # [N,M]
+    width_height = np.clip(bottom_right - top_left, a_min=0, a_max=None)  # [N,M,2]
+    intersection = width_height[:, :, 0] * width_height[:, :, 1]  # [N,M]
 
-    union = area1[:, None] + area2 - inter
+    union = area1[:, None] + area2 - intersection
 
-    iou = inter / (union + eps)
+    iou = intersection / (union + eps)
 
     return iou, union
 
@@ -453,6 +453,9 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
             "return_tensors",
             "data_format",
             "input_data_format",
+            "do_shape_adaptive_cropping",
+            "do_anchor_resize",
+            "do_add_global_image",
         ]
 
     def anchor_resize(

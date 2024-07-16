@@ -115,7 +115,7 @@ class MPLUGDocOwlVisionEmbeddings(nn.Module):
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches + 1
         self.position_embedding = nn.Parameter(torch.randn(1, self.num_patches + 1, self.embed_dim))
-        # self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
+        
         self.pre_layernorm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
@@ -458,6 +458,7 @@ class MPLUGDocOwlVisionTransformer(PreTrainedModel):
         self.embed_dim = config.hidden_size
 
         self.embeddings = MPLUGDocOwlVisionEmbeddings(config)
+        
         self.encoder = MPLUGDocOwlEncoder(config)
         self.post_layernorm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.post_init()

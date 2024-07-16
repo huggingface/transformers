@@ -209,7 +209,7 @@ class MPLUGDocOwlForConditionalGenerationModelTest(ModelTesterMixin, unittest.Te
 @require_torch
 class MPLUGDocOwlForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.processor = MPLUGDocOwlProcessor.from_pretrained("/raid/dana/mplug_model_hf_chat")
+        self.processor = MPLUGDocOwlProcessor.from_pretrained("danaaubakirova/mplugdocowl1.5-Chat-hf")
 
     def tearDown(self):
         gc.collect()
@@ -218,7 +218,7 @@ class MPLUGDocOwlForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test(self):
         model = MPLUGDocOwlForConditionalGeneration.from_pretrained(
-            "/raid/dana/mplug_model_hf_chat", load_in_4bit=False
+            "danaaubakirova/mplugdocowl1.5-Chat-hf", load_in_4bit=False
         )
 
         prompt = "<image>What's the value of the Very well bar in the 65+ age group? Answer the question with detailed explanation."
@@ -228,7 +228,7 @@ class MPLUGDocOwlForConditionalGenerationIntegrationTest(unittest.TestCase):
         inputs = self.processor(prompt, raw_image, return_tensors="pt")
 
         output = model.generate(**inputs, max_new_tokens=500)
-        EXPECTED_DECODED_TEXT = " 68%\nIn the image, which appears to be a chart from a Pew Research Center report, the bar representing the percentage of Republicans and Republican leaners who believe 'very well' describes how fights for what they believe in describe Trump is at 68% for the 65+ age group."
+        EXPECTED_DECODED_TEXT = """ 68%\nIn the image, which appears to be a chart from a Pew Research Center report, the bar representing the percentage of Republicans and Republican leaners who believe "very well" describes how fights for what they believe in describe Trump is at 68% for the 65+ age group."""
 
         self.assertEqual(
             self.processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True),
@@ -239,7 +239,7 @@ class MPLUGDocOwlForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_small_model_integration_test_single(self):
         # Let' s make sure we test the preprocessing to replace what is used
         model = MPLUGDocOwlForConditionalGeneration.from_pretrained(
-            "/raid/dana/mplug_model_hf_chat", load_in_4bit=False
+            "danaaubakirova/mplugdocowl1.5-Chat-hf", load_in_4bit=False
         )
 
         prompt = "<image><image>What is the name of the movie in the poster? Provide detailed explanation."
@@ -258,10 +258,10 @@ class MPLUGDocOwlForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_mplugdocowl_single(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model_id = "/raid/dana/mplug_model_hf_chat"
+        model_id = "danaaubakirova/mplugdocowl1.5-Chat-hf"
 
         model = MPLUGDocOwlForConditionalGeneration.from_pretrained(
-            "/raid/dana/mplug_model_hf_chat", load_in_4bit=False
+            "danaaubakirova/mplugdocowl1.5-Chat-hf", load_in_4bit=False
         )
         processor = MPLUGDocOwlProcessor.from_pretrained(model_id)
 
@@ -282,10 +282,10 @@ class MPLUGDocOwlForConditionalGenerationIntegrationTest(unittest.TestCase):
     # @require_bitsandbytes
     def test_small_model_integration_test_llama_batched(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model_id = "/raid/dana/mplug_model_hf_chat"
+        model_id = "danaaubakirova/mplugdocowl1.5-Chat-hf"
 
         model = MPLUGDocOwlForConditionalGeneration.from_pretrained(
-            "/raid/dana/mplug_model_hf_chat", load_in_4bit=False
+            "danaaubakirova/mplugdocowl1.5-Chat-hf", load_in_4bit=False
         )
         processor = MPLUGDocOwlProcessor.from_pretrained(model_id)
 
@@ -310,173 +310,3 @@ class MPLUGDocOwlForConditionalGenerationIntegrationTest(unittest.TestCase):
             processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
-
-
-"""
-    @slow
-    @require_bitsandbytes
-    def test_small_model_integration_test_batch(self):
-        # Let' s make sure we test the preprocessing to replace what is used
-        model = MPLUGDocOwlForConditionalGeneration.from_pretrained("mplugdocowl-hf/bakMPLUGDocOwl-v1-hf", load_in_4bit=False)
-        # The first batch is longer in terms of text, but only has 1 image. The second batch will be padded in text, but the first will be padded because images take more space!.
-        prompts = [
-            "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
-            "USER: <image>\nWhat is this?\nASSISTANT:",
-        ]
-        image1 = Image.open(requests.get("https://mplugdocowl-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
-
-        inputs = self.processor(prompts, images=[image1, image2], return_tensors="pt", padding=True)
-
-        output = model.generate(**inputs, max_new_tokens=20)
-
-        EXPECTED_DECODED_TEXT = ['USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this place, there are a few things to be cautious about and items to bring along', 'USER:  \nWhat is this?\nASSISTANT: Cats']  # fmt: skip
-        self.assertEqual(
-            self.processor.batch_decode(output, skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
-        )
-
-    @slow
-    @require_bitsandbytes
-    def test_small_model_integration_test_llama_batched_regression(self):
-        # Let' s make sure we test the preprocessing to replace what is used
-        model_id = "/raid/dana/mplug_model_hf"
-
-        # Multi-image & multi-prompt (e.g. 3 images and 2 prompts now fails with SDPA, this tests if "eager" works as before)
-        model = MPLUGDocOwlForConditionalGeneration.from_pretrained(
-            "/raid/dana/mplug_model_hf", load_in_4bit=True, attn_implementation="eager"
-        )
-        processor = AutoProcessor.from_pretrained(model_id, pad_token="<pad>")
-
-        prompts = [
-            "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
-            "USER: <image>\nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER: <image>\nAnd this?\nASSISTANT:",
-        ]
-        image1 = Image.open(requests.get("https://mplugdocowl-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
-
-        inputs = processor(prompts, images=[image1, image2, image1], return_tensors="pt", padding=True)
-
-        output = model.generate(**inputs, max_new_tokens=20)
-
-        EXPECTED_DECODED_TEXT = ['USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this place, which appears to be a dock or pier extending over a body of water', 'USER:  \nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER:  \nAnd this?\nASSISTANT: A cat sleeping on a bed.']  # fmt: skip
-
-        self.assertEqual(
-            processor.batch_decode(output, skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
-        )
-
-    @slow
-    @require_torch
-    @require_vision
-    def test_batched_generation(self):
-        model = MPLUGDocOwlForConditionalGeneration.from_pretrained("mplugdocowl-hf/mplugdocowl-1.5-7b-hf").to(torch_device)
-
-        processor = AutoProcessor.from_pretrained("/raid/dana/mplug_model_hf")
-
-        prompt1 = "<image>\n<image>\nUSER: What's the the difference of two images?\nASSISTANT:"
-        prompt2 = "<image>\nUSER: Describe the image.\nASSISTANT:"
-        prompt3 = "<image>\nUSER: Describe the image.\nASSISTANT:"
-        url1 = "https://images.unsplash.com/photo-1552053831-71594a27632d?q=80&w=3062&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
-        url2 = "https://images.unsplash.com/photo-1617258683320-61900b281ced?q=80&w=3087&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
-        image1 = Image.open(requests.get(url1, stream=True).raw)
-        image2 = Image.open(requests.get(url2, stream=True).raw)
-
-        inputs = processor(
-            text=[prompt1, prompt2, prompt3],
-            images=[image1, image2, image1, image2],
-            return_tensors="pt",
-            padding=True,
-        ).to(torch_device)
-
-        model = model.eval()
-
-        EXPECTED_OUTPUT = [
-            "\n \nUSER: What's the the difference of two images?\nASSISTANT: In the two images, the primary difference is the presence of a small dog in one and a ll",
-            "\nUSER: Describe the image.\nASSISTANT: The image features a small, fluffy dog sitting on a sidewalk. The dog is holding",
-            "\nUSER: Describe the image.\nASSISTANT: The image features a lone, adult llama standing on a grassy hill. The llama",
-        ]
-
-        generate_ids = model.generate(**inputs, max_new_tokens=20)
-        outputs = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
-        self.assertEqual(outputs, EXPECTED_OUTPUT)
-
-    @slow
-    @require_bitsandbytes
-    def test_mplugdocowl_index_error_bug(self):
-        # This is a reproducer of https://github.com/huggingface/transformers/pull/28032 and makes sure it does not happen anymore
-        # Please refer to that PR, or specifically https://github.com/huggingface/transformers/pull/28032#issuecomment-1860650043 for
-        # more details
-        model_id = "mplugdocowl-hf/mplugdocowl-1.5-7b-hf"
-        model = MPLUGDocOwlForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
-
-        processor = AutoProcessor.from_pretrained(model_id)
-
-        # Simulate a super long prompt
-        user_prompt = "Describe the image:?\n" * 200
-        prompt = f"USER: <image>\n{user_prompt}ASSISTANT:"
-        image_file = "http://images.cocodataset.org/val2017/000000039769.jpg"
-
-        raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        inputs = processor(prompt, raw_image, return_tensors="pt").to(torch_device, torch.float16)
-
-        # Make sure that `generate` works
-        _ = model.generate(**inputs, max_new_tokens=20)
-
-    @slow
-    @require_torch_gpu
-    def test_mplugdocowl_merge_inputs_error_bug(self):
-        # This is a reproducer of https://github.com/huggingface/transformers/pull/28333 and makes sure it does not happen anymore
-        model_id = "mplugdocowl-hf/mplugdocowl-1.5-7b-hf"
-        model = MPLUGDocOwlForConditionalGeneration.from_pretrained(
-            model_id, torch_dtype=torch.float16, low_cpu_mem_usage=True
-        ).to(torch_device)
-
-        # Simulate some user inputs
-        pixel_values = torch.randn(
-            (2, 3, 336, 336),
-            dtype=torch.float,
-            device=torch_device,
-        )
-        input_ids = torch.tensor(
-            [
-                [32001, 32001, 1, 15043, 7084, 32000, 29871, 13, 7900],
-                [1, 15043, 7084, 29901, 29871, 32000, 29871, 13, 7900],
-            ],
-            dtype=torch.long,
-            device=torch_device,
-        )
-        attention_mask = torch.tensor(
-            [[0, 0, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1]],
-            dtype=torch.long,
-            device=torch_device,
-        )
-
-        # Make sure that the loss is properly computed
-        loss = model(
-            pixel_values=pixel_values,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            labels=input_ids,
-        ).loss
-        loss.backward()
-
-    def test_tokenizer_integration(self):
-        slow_tokenizer = AutoTokenizer.from_pretrained("/raid/dana/mplug_model_hf", use_fast=False)
-        slow_tokenizer.add_tokens("<image>", True)
-
-        fast_tokenizer = AutoTokenizer.from_pretrained(
-            "liuhaotian/mplugdocowl-v1.6-34b",
-            bos_token="<|startoftext|>",
-            eos_token="<|endoftext|>",
-            from_slow=True,
-            legacy=False,
-        )
-        fast_tokenizer.add_tokens("<image>", True)
-
-        prompt = "<|im_start|>system\nAnswer the questions.<|im_end|><|im_start|>user\n<image>\nWhat is shown in this image?<|im_end|><|im_start|>assistant\n"
-        EXPECTED_OUTPUT = ['<|im_start|>', 'system', '\n', 'Answer', '▁the', '▁questions', '.', '<|im_end|>', '<|im_start|>', 'user', '\n', '<image>', '\n', 'What', '▁is', '▁shown', '▁in', '▁this', '▁image', '?', '<|im_end|>', '<|im_start|>', 'ass', 'istant', '\n']  # fmt: skip
-        self.assertEqual(slow_tokenizer.tokenize(prompt), EXPECTED_OUTPUT)
-        self.assertEqual(fast_tokenizer.tokenize(prompt), EXPECTED_OUTPUT)
-
-"""
