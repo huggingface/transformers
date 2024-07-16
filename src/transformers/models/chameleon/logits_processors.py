@@ -193,16 +193,16 @@ class ChameleonFSMLogitsProcessor:
             self._is_first_token = False
             self._seq_start_idx = len(input_ids[0])
 
-            self._fsm_states = {hash(torch.empty(0, device=input_ids.device, dtype=input_ids.dtype)): self.fsm.initial_state}
+            self._fsm_states = {hash(()): self.fsm.initial_state}
             sequence_states = [self.fsm.initial_state] * len(input_ids)
 
         else:
-            for seq_ids in input_ids:
-                prev_state_key = hash(seq_ids[self._seq_start_idx : -1])
+            for seq_ids in input_ids.tolist():
+                prev_state_key = hash(tuple(seq_ids[self._seq_start_idx : -1]))
                 prev_state = self._fsm_states[prev_state_key]
 
-                curr_state_key = hash(seq_ids[self._seq_start_idx :])
-                curr_state = self.fsm.get_next_state(prev_state, seq_ids[-1].item())
+                curr_state_key = hash(tuple(seq_ids[self._seq_start_idx :]))
+                curr_state = self.fsm.get_next_state(prev_state, seq_ids[-1])
 
                 self._fsm_states[curr_state_key] = curr_state
                 sequence_states.append(curr_state)
