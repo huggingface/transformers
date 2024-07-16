@@ -73,7 +73,7 @@ class RopeModelMixin:
         cos, sin = rope_layer(dummy_hidden_states, all_position_ids)
         return cos, sin
 
-    def set_rope_embeddings(self, frequencies: torch.Tensor, scaling_factor: float):
+    def set_rope_embeddings(self, frequencies: torch.Tensor, scaling_factor: Optional[float], attention_factor: Optional[float]):
         """
         Sets the RoPE embeddings, parameterized by the frequencies and scaling factor.
 
@@ -82,14 +82,18 @@ class RopeModelMixin:
                 The **inverse** frequencies of the RoPE embeddings.
             scaling_factor (`float`):
                 A scaling factor to be applied to `position_ids` before computing the RoPE embeddings.
+            attention_factor (`float`):
+                A scaling factor to be applied to `cos` and `sin` after they are computed. Used in advaced RoPE types,
+                like YaRN.
         """
         layers = self.layers if hasattr(self, "layers") else getattr(self, self.base_model_prefix).layers
         for layer in layers:
             layer.self_attn.rotary_emb.inv_freq = frequencies
-            layer.self_attn.rotary_emb.scaling_factor = scaling_factor
+            layer.self_attn.rotary_emb.rope_config["scaling_factor"] = scaling_factor
+            layer.self_attn.rotary_emb.rope_config["attention_factor"] = attention_factor
 
 
-# MISSING: `self.attention_factor = 0.1 * math.log(scaling_factor) + 1.0`
+# MISSING: `self.attention_factor = 0.1 * math.log(scaling_factor) + 1.0` by default on yarn
 def rope_config_validation(rope_scaling):
     """
     Validate the `rope_scaling` configuration.

@@ -35,8 +35,8 @@ from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
 )
+from ...modeling_rope_utils import RopeModelMixin, compute_frequencies
 from ...modeling_utils import PreTrainedModel
-from ...modeling_rope_utils import RopeModelMixin
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     add_start_docstrings,

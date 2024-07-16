@@ -38,6 +38,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
     TokenClassifierOutput,
 )
+from ...modeling_rope_utils import RopeModelMixin, compute_frequencies
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
@@ -780,7 +781,7 @@ MISTRAL_START_DOCSTRING = r"""
     "The bare Mistral Model outputting raw hidden-states without any specific head on top.",
     MISTRAL_START_DOCSTRING,
 )
-class MistralPreTrainedModel(PreTrainedModel):
+class MistralPreTrainedModel(PreTrainedModel, RopeModelMixin):
     config_class = MistralConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True

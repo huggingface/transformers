@@ -28,7 +28,7 @@ logger = logging.get_logger(__name__)
 
 
 class LlamaConfig(PretrainedConfig):
-    fr"""
+    rf"""
     This is the configuration class to store the configuration of a [`LlamaModel`]. It is used to instantiate an LLaMA
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the LLaMA-7B.
