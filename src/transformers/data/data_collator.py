@@ -1615,11 +1615,12 @@ class DataCollatorForPermutationLanguageModeling(DataCollatorMixin):
 @dataclass
 class DataCollatorWithFlattening(DefaultDataCollator):
     return_tensors: str = "pt"
-    def __init__(self, return_position_ids=True):
+    def __init__(self, *args, return_position_ids=True, **kwargs):
+        super().__init__(*args, **kwargs)
         self.return_position_ids=return_position_ids
         warnings.warn(
-            "Using `DataCollatorForBatchFlattening` will flatten the entire mini batch into single long sequence."
-            "Make sure your attention computation is able to handles it!"
+            "Using `DataCollatorWithFlattening` will flatten the entire mini batch into single long sequence."
+            "Make sure your attention computation is able to handle it!"
         )
     def __call__(self, features, return_tensors=None):
         if return_tensors is None:
