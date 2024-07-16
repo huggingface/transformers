@@ -558,7 +558,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         ]
         return "".join(outputs)
 
-    def _compute_offsets(self, token_ids, time_precision=0.02):
+    def _compute_offsets(self, token_ids, time_precision=0.02, segments=None):
         """
         Compute offsets for a given tokenized input
 
@@ -567,6 +567,8 @@ class WhisperTokenizer(PreTrainedTokenizer):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
             time_precision (`float`, `optional`, defaults to 0.02):
                 The time ratio to convert from token to time.
+            segments (List[dict], `optional`, defaults to None):
+                Timestamps obtained using long form generation in Whisper, to be used to replace predicted timestamps in token_ids.   
         """
         offsets = []
         # ensure torch tensor of token ids is placed on cpu
@@ -587,7 +589,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
             consecutive = np.append(consecutive, np.where(timestamp_tokens)[0][-1] + 1)
 
         last_slice = np.where(timestamp_tokens)[0][0]
-        for current_slice in consecutive:
+        for i, current_slice in enumerate(consecutive):
             sliced_tokens = token_ids[last_slice:current_slice]
             if len(sliced_tokens) > 1:
                 start_timestamp_position = sliced_tokens[0].item() - timestamp_begin
@@ -596,15 +598,28 @@ class WhisperTokenizer(PreTrainedTokenizer):
                 sliced_tokens = self._preprocess_token_ids(sliced_tokens)
                 text = self._decode(sliced_tokens)
                 text = self._filter_timestamp_ids(text)
-                offsets.append(
-                    {
-                        "text": text,
-                        "timestamp": (
-                            start_timestamp_position * time_precision,
-                            end_timestamp_position * time_precision,
-                        ),
-                    }
-                )
+                
+                if segments is not None: 
+                
+                    offsets.append(
+                        {
+                            "text": text,
+                            "timestamp": (
+                                segments[0][i]['start'].item(),
+                                segments[0][i]['end'].item(),
+                            ),
+                        }
+                    )
+                else: 
+                    offsets.append(
+                        {
+                            "text": text,
+                            "timestamp": (
+                                start_timestamp_position * time_precision,
+                                end_timestamp_position * time_precision,
+                            ),
+                        }
+                    )
             last_slice = current_slice
 
         return offsets
@@ -713,7 +728,14 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
         # retrieve offsets
         if output_offsets:
-            offsets = self._compute_offsets(token_ids, time_precision=time_precision)
+            
+            if "segments" in kwargs: 
+                segments = kwargs['segments']
+            else: 
+                segments = None
+            
+            offsets = self._compute_offsets(token_ids, time_precision=time_precision, segments=segments )
+            
             return {"text": text, "offsets": offsets}
         return text
 
@@ -852,6 +874,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         return batch_encoding["input_ids"]
 
     def _strip_prompt(self, token_ids: List[int], prompt_token_id: int, decoder_start_token_id: int):
+        
         if not isinstance(token_ids, list):
             token_ids = self._convert_to_list(token_ids)
 
