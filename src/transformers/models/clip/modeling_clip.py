@@ -451,6 +451,7 @@ class CLIPSdpaAttention(CLIPAttention):
                 output_attentions=output_attentions,
             )
 
+        # CLIP text model uses both `causal_attention_mask` and `attention_mask`
         if attention_mask is not None and causal_attention_mask is not None:
             attn_mask = attention_mask + causal_attention_mask
         elif causal_attention_mask is not None:
