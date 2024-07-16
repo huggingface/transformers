@@ -288,6 +288,7 @@ def _flash_attention_forward(
             dropout_p=dropout,
             softmax_scale=softmax_scale,
             causal=causal,
+            **flash_kwargs
         )
 
         attn_output = attn_output.view(batch_size, -1, attn_output.size(-2), attn_output.size(-1))
