@@ -773,6 +773,7 @@ class LxmertPreTrainedModel(PreTrainedModel):
     config_class = LxmertConfig
     load_tf_weights = load_tf_weights_in_lxmert
     base_model_prefix = "lxmert"
+    _supports_param_buffer_assignment = False
 
     def _init_weights(self, module):
         """Initialize the weights"""
