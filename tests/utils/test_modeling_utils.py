@@ -895,17 +895,17 @@ class ModelUtilsTest(TestCasePlus):
     @require_usr_bin_time
     @require_accelerate
     @mark.accelerate_tests
-    def test_from_pretrained_low_cpu_mem_usage_measured(self):
+    def test_from_pretrained_low_cpu_mem_usage_faster(self):
         # Before this would test that `from_pretrained(..., low_cpu_mem_usage=True)` uses less cpu memory than default
         # Now though the memory is the same, we simply test that loading with `low_cpu_mem_usage` winds up being *faster*
 
-        mname = "google-bert/bert-base-cased"
+        mname = "hf-internal-testing/tiny-random-bert"
 
         preamble = "from transformers import AutoModel"
         one_liner_str = f'{preamble}; AutoModel.from_pretrained("{mname}", low_cpu_mem_usage=False)'
         start_time = time.time()
         # Save this output as `max_rss_normal` if testing memory results
-        _ = self.python_one_liner_max_rss(one_liner_str)
+        max_rss_normal = self.python_one_liner_max_rss(one_liner_str)
         end_time = time.time()
         elapsed_time_normal = end_time - start_time
         # print(f"{max_rss_normal=}")
@@ -913,9 +913,17 @@ class ModelUtilsTest(TestCasePlus):
         one_liner_str = f'{preamble};  AutoModel.from_pretrained("{mname}", low_cpu_mem_usage=True)'
         start_time = time.time()
         # Save this output as `max_rss_low_mem` if testing memory results
-        _ = self.python_one_liner_max_rss(one_liner_str)
+        max_rss_low_mem = self.python_one_liner_max_rss(one_liner_str)
         end_time = time.time()
         elapsed_time_low_mem = end_time - start_time
+
+        # Should be within 2MBs of each other (overhead)
+        self.assertAlmostEqual(
+            max_rss_normal / 1024 / 1024,
+            max_rss_low_mem / 1024 / 1024,
+            delta=2,
+            msg="using `low_cpu_mem_usage` should incur the same memory usage in both cases.",
+        )
 
         self.assertGreater(
             elapsed_time_normal,
