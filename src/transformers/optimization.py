@@ -20,7 +20,6 @@ from functools import partial
 from typing import Callable, Iterable, Optional, Tuple, Union
 
 import torch
-import torch.distributed as dist
 from torch import nn
 from torch.distributed._tensor import Replicate
 from torch.optim import Optimizer
@@ -29,11 +28,15 @@ from torch.optim.lr_scheduler import LambdaLR, ReduceLROnPlateau
 from .modeling_utils import PreTrainedModel
 from .trainer_pt_utils import LayerWiseDummyOptimizer, LayerWiseDummyScheduler
 from .trainer_utils import SchedulerType
-from .utils import logging
+from .utils import is_accelerate_available, logging
 from .utils.versions import require_version
 
 
 logger = logging.get_logger(__name__)
+
+if is_accelerate_available():
+    from accelerate import PartialState
+    from accelerate.utils import gather, reduce
 
 
 def _get_constant_lambda(_=None):
@@ -981,7 +984,7 @@ class AdamMini(Optimizer):
         weight_decay: float = 0.0,
         model_sharding: bool = False,
         n_feature: int = None,
-        n_head: int = 32,
+        n_head: int = None,
         n_kv_head: int = None,
     ):
         if lr < 0.0:
@@ -1004,8 +1007,10 @@ class AdamMini(Optimizer):
         else:
             self.n_kv_head = self.n_head
         self.model = model
-        self.world_size = torch.cuda.device_count()
         self.model_sharding = model_sharding
+        self.world_size = 1
+        if is_accelerate_available():
+            self.world_size = PartialState().num_processes
 
         optim_groups = []
         count_embd = 0
@@ -1206,9 +1211,7 @@ class AdamMini(Optimizer):
                         dimension = torch.tensor(p.data.numel()).to(self.device).to(torch.float32)
                         reduced = False
                         if (self.world_size > 1) and (self.model_sharding is True):
-                            tensor_list = [torch.zeros_like(dimension) for _ in range(self.world_size)]
-
-                            dist.all_gather(tensor_list, dimension)
+                            tensor_list = gather(dimension)
                             s = 0
                             dimension = 0
                             for d in tensor_list:
@@ -1233,10 +1236,10 @@ class AdamMini(Optimizer):
                     if state["reduced"]:
                         if "device_mesh" in dir(tmp_lr):
                             lr_local = tmp_lr.to_local()
-                            dist.all_reduce(lr_local, op=dist.ReduceOp.SUM)
+                            reduce(lr_local, reduction="sum")
                             tmp_lr.redistribute(placements=[Replicate()])
                         else:
-                            dist.all_reduce(tmp_lr, op=dist.ReduceOp.SUM)
+                            reduce(tmp_lr, reduction="sum")
 
                     if p.grad is None:
                         continue
