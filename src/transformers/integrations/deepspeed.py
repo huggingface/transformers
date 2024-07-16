@@ -138,10 +138,13 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
         creation.
         """
 
-        if getattr(args, 'sequence_parallel', 1) > 1:
-            assert is_accelerate_available(), "DeepSpeed sequence parallelism requires Accelerate, install it with 'pip install accelerate'"
+        if getattr(args, "sequence_parallel", 1) > 1:
+            assert (
+                is_accelerate_available()
+            ), "DeepSpeed sequence parallelism requires Accelerate, install it with 'pip install accelerate'"
 
             from accelerate.utils import parallel_state as mpu
+
             mpu.initialize_model_parallel(
                 sequence_parallel_size=args.sequence_parallel,
             )

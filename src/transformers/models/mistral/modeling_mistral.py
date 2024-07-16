@@ -426,7 +426,12 @@ class MistralSdpaAttention(MistralAttention):
         super().__init__(*args, **kwargs)
 
         if is_accelerate_available() and mpu.sequence_parallel_is_enabled():
-            self.attn_func = DistributedAttention(torch.nn.functional.scaled_dot_product_attention, mpu.get_sequence_parallel_group(), scatter_idx=1, gather_idx=2)
+            self.attn_func = DistributedAttention(
+                torch.nn.functional.scaled_dot_product_attention,
+                mpu.get_sequence_parallel_group(),
+                scatter_idx=1,
+                gather_idx=2,
+            )
             self.q_len_multiplier = mpu.get_sequence_parallel_world_size()
         else:
             self.attn_func = torch.nn.functional.scaled_dot_product_attention
@@ -799,7 +804,9 @@ class MistralModel(MistralPreTrainedModel):
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1] * self.q_len_multiplier, device=inputs_embeds.device
+                past_seen_tokens,
+                past_seen_tokens + inputs_embeds.shape[1] * self.q_len_multiplier,
+                device=inputs_embeds.device,
             )
 
         if position_ids is None:

@@ -3907,9 +3907,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if is_accelerate_available() and mpu.get_sequence_parallel_world_size_or_one() > 1:
             if not getattr(model, "supports_sequence_parallel", False):
-                raise ValueError(
-                    "The model does not support sequence parallelism."
-                )
+                raise ValueError("The model does not support sequence parallelism.")
 
         # Dispatch model with hooks on all devices if necessary
         if device_map is not None:

@@ -1252,7 +1252,7 @@ class TrainingArguments:
                 "Enable sequence parallel provided by Deepspeed-Ulysses. Requires deepspeed to be enabled."
                 " This require handling dataset loader manually with DistributedSampler."
             )
-        }
+        },
     )
     label_smoothing_factor: float = field(
         default=0.0, metadata={"help": "The label smoothing epsilon to apply (zero means no label smoothing)."}
@@ -2292,6 +2292,7 @@ class TrainingArguments:
             world_size = self.distributed_state.num_processes
             if is_accelerate_available():
                 from accelerate.utils import parallel_state as mpu
+
                 if mpu.model_parallel_is_initialized():
                     world_size = mpu.get_data_parallel_world_size()
             return world_size
