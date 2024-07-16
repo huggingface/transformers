@@ -24,23 +24,24 @@ import torch
 from transformers import AutoTokenizer, Mamba2Config, Mamba2ForCausalLM
 from transformers.utils import logging
 from transformers.utils.import_utils import is_mamba2_ssm_available
-
+from safetensors import safe_open
 
 if is_mamba2_ssm_available():
-    from mamba2_ssm.models.config_mamba2 import Mamba2Config as Mamba2ConfigSSM
-    from mamba2_ssm.models.mixer_seq_simple import Mamba2LMHeadModel
+    from mamba_ssm.models.config_mamba import MambaConfig as Mamba2ConfigSSM
+    from mamba_ssm.models.mixer_seq_simple import MambaLMHeadModel 
 
-    def convert_ssm_config_to_hf_config(config_ssm: Mamba2ConfigSSM) -> Mamba2Config:
+    def convert_ssm_config_to_hf_config() -> Mamba2Config:
         """Convert a Mamba2Config from mamba2_ssm to a Mamba2Config from transformers."""
         hf_config = Mamba2Config()
         # Set config hidden size, num hidden layers, and vocab size directly from the original config
-        hf_config.hidden_size = config_ssm.d_model
-        hf_config.intermediate_size = config_ssm.d_model * 2
-        hf_config.time_step_rank = math.ceil(config_ssm.d_model / 16)
+        # TODO get from params.json
+        hf_config.hidden_size = 4096
+        hf_config.intermediate_size = 4096 * 2
+        hf_config.time_step_rank = math.ceil(4096 / 16)
 
-        hf_config.num_hidden_layers = config_ssm.n_layer
-        vocab_size = config_ssm.vocab_size
-        pad_vocab_size_multiple = config_ssm.pad_vocab_size_multiple
+        hf_config.num_hidden_layers = 64
+        vocab_size = 32768
+        pad_vocab_size_multiple = 1
         if (vocab_size % pad_vocab_size_multiple) != 0:
             vocab_size += pad_vocab_size_multiple - (vocab_size % pad_vocab_size_multiple)
         hf_config.vocab_size = vocab_size
@@ -58,10 +59,10 @@ def convert_mamba2_ssm_checkpoint_to_huggingface_model(
         raise ImportError(
             "Calling convert_mamba2_ssm_checkpoint_to_huggingface_model requires the mamba2_ssm library to be installed. Please install it with `pip install mamba2_ssm`."
         )
-    original_ssm_config = Mamba2ConfigSSM(**original_ssm_config_dict)
+    #original_ssm_config = Mamba2ConfigSSM(**original_ssm_config_dict)
 
     # Convert mamba2_ssm config to huggingface Mamba2Config
-    hf_config = convert_ssm_config_to_hf_config(original_ssm_config)
+    hf_config = convert_ssm_config_to_hf_config()# original_ssm_config)
 
     # No weights need to be renamed between the two models.
     converted_state_dict = original_state_dict
@@ -80,7 +81,7 @@ def validate_converted_model(
     torch_device = "cuda"
 
     original_config = Mamba2ConfigSSM(**original_ssm_config_dict)
-    original_model = Mamba2LMHeadModel(original_config).to(torch_device)
+    original_model = MambaLMHeadModel(original_config).to(torch_device)
     original_model.load_state_dict(original_state_dict)
 
     hf_model = hf_model.to(torch_device)
@@ -108,7 +109,10 @@ def convert_mamba2_checkpoint_file_to_huggingface_model_file(
         )
     logger.info(f"Loading model from {mamba2_checkpoint_path} based on config from {config_json_file}")
     # Load weights and config from paths
-    original_state_dict = torch.load(mamba2_checkpoint_path, map_location="cpu")
+    original_state_dict = {}
+    with safe_open 
+    
+
     with open(config_json_file, "r", encoding="utf-8") as json_file:
         original_ssm_config_dict = json.load(json_file)
 
@@ -118,7 +122,7 @@ def convert_mamba2_checkpoint_file_to_huggingface_model_file(
     )
 
     # Validate the conversion
-    validate_converted_model(original_state_dict, original_ssm_config_dict, hf_model, tokenizer)
+    # validate_converted_model(original_state_dict, original_ssm_config_dict, hf_model, tokenizer)
 
     logger.info(f"Model converted successfully. Saving model to {output_dir}")
 
@@ -135,6 +139,13 @@ if __name__ == "__main__":
         type=str,
         required=True,
         help="Path to a `pytorch_model.bin` mamba2_ssm checkpoint file to be converted.",
+    )
+    parser.add_argument(
+        "-p",
+        "--codestral_params_file",
+        type=str,
+        required=True,
+        help="Path to a `params.json` with model parameters.",
     )
     parser.add_argument(
         "-c",

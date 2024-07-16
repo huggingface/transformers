@@ -100,16 +100,18 @@ class Mamba2Config(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=50280,
-        hidden_size=768,
-        state_size=16,
-        num_hidden_layers=32,
+        num_heads=128,
+        vocab_size=32768,
+        hidden_size=4096,
+        state_size=64,
+        num_hidden_layers=64,
         layer_norm_epsilon=1e-5,
         pad_token_id=0,
         bos_token_id=0,
         eos_token_id=0,
         expand=2,
         conv_kernel=4,
+        n_groups=8,
         use_bias=False,
         use_conv_bias=True,
         hidden_act="silu",
@@ -123,6 +125,7 @@ class Mamba2Config(PretrainedConfig):
         time_step_floor=1e-4,
         rescale_prenorm_residual=False,
         use_cache=True,
+        norm_before_gate=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -149,5 +152,9 @@ class Mamba2Config(PretrainedConfig):
         self.rescale_prenorm_residual = rescale_prenorm_residual
         self.residual_in_fp32 = residual_in_fp32
         self.use_cache = use_cache
+        self.n_groups = n_groups
+        self.num_heads = num_heads
+        self.norm_before_gate = norm_before_gate
+        self.state_size = state_size
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, pad_token_id=pad_token_id, **kwargs)
