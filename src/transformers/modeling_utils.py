@@ -2129,7 +2129,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             new_embeddings.weight.data[:n, :] = old_embeddings.weight.data[:n, :]
 
-        return new_embeddings
+        old_embeddings.weight.data = new_embeddings.weight.data
+        return old_embeddings
 
     def _get_resized_lm_head(
         self, old_lm_head: nn.Linear, new_num_tokens: Optional[int] = None, transposed: Optional[bool] = False
