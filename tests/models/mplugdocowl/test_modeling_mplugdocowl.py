@@ -16,6 +16,7 @@
 
 import gc
 import unittest
+import requests
 
 from transformers import (
     MPLUGDocOwlConfig,
@@ -222,9 +223,7 @@ class MPLUGDocOwlForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
         prompt = "<image>What's the value of the Very well bar in the 65+ age group? Answer the question with detailed explanation."
-        image_file = "/raid/dana/test_image.png"
-        # raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        raw_image = Image.open(image_file)
+        raw_image = Image.open(requests.get("https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/test_image.png", stream=True).raw)
         inputs = self.processor(prompt, raw_image, return_tensors="pt")
 
         output = model.generate(**inputs, max_new_tokens=500)
@@ -242,14 +241,11 @@ class MPLUGDocOwlForConditionalGenerationIntegrationTest(unittest.TestCase):
             "danaaubakirova/mplugdocowl1.5-Chat-hf", load_in_4bit=False
         )
 
-        prompt = "<image><image>What is the name of the movie in the poster? Provide detailed explanation."
-        image_file = "/raid/dana/examples_Rebecca_(1939_poster)_Small.jpeg"
-        # raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        raw_image = Image.open(image_file)
-        inputs = self.processor(prompt, raw_image, return_tensors="pt")
-        print(inputs["input_ids"])
+        prompt = "<image>What is the name of the movie in the poster? Provide detailed explanation."
+        raw_image = Image.open(requests.get("https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/examples_Rebecca_(1939_poster)_Small.jpeg", stream=True).raw)
+        inputs = self.processor(prompt, raw_image, return_tensors="pt", do_add_global_image = True)
         output = model.generate(**inputs, max_new_tokens=500)
-        EXPECTED_DECODED_TEXT = "Rebecca\n The name of the movie in the poster is 'Rebecca,' as indicated by the large title at the top of the poster. The poster also includes the names of the stars, Laurence Olivier and Joan Fontaine, suggesting that they are the lead actors in the film. The poster features a classic Hollywood style with a focus on the two main characters and the title."  # fmt: skip
+        EXPECTED_DECODED_TEXT = 'Rebecca\nThe name of the movie in the poster is "Rebecca," as indicated by the large title at the top of the poster. The poster also includes the names of the stars, Laurence Olivier and Joan Fontaine, suggesting that they are the lead actors in the film. The poster features a classic Hollywood style with a focus on the two main characters and the title.'  # fmt: skip
         self.assertEqual(
             self.processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
@@ -266,8 +262,8 @@ class MPLUGDocOwlForConditionalGenerationIntegrationTest(unittest.TestCase):
         processor = MPLUGDocOwlProcessor.from_pretrained(model_id)
 
         prompt = "<image>Recognize text in the image."
-        image_file = "/raid/dana/test_image.tif"
-        raw_image = Image.open(image_file)
+        raw_image = Image.open(requests.get("https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/test_image.tif", stream=True).raw)
+
         inputs = processor(prompt, raw_image, return_tensors="pt")  # .to(torch_device, torch.float16)
 
         output = model.generate(**inputs, max_new_tokens=500, do_sample=False)
@@ -289,18 +285,13 @@ class MPLUGDocOwlForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
         processor = MPLUGDocOwlProcessor.from_pretrained(model_id)
 
-        prompts = [
-            "<image>What is the name of the movie in the poster? Provide detailed explanation.",
-            "<image>What is unusual about this image? Provide detailed explanation.",
-        ]
-        # image1 = Image.open(requests.get("https://mplugdocowl-vl.github.io/static/images/view.jpg", stream=True).raw)
-        # image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
-        image1 = Image.open("/raid/dana/examples_Rebecca_(1939_poster)_Small.jpeg")
-        image2 = Image.open("/raid/dana/extreme_ironing.jpg")
+        prompts = ["<image>What is the name of the movie in the poster? Provide detailed explanation.", "<image>What is unusual about this image? Provide detailed explanation."]
+        image1 = Image.open(requests.get("https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/examples_Rebecca_(1939_poster)_Small.jpeg", stream=True).raw)
+        image2 = Image.open(requests.get("https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/extreme_ironing.jpg", stream=True).raw)
 
-        inputs = processor(prompts, images=[image1, image2], return_tensors="pt")
+        inputs = processor(text = prompts, images=[image1, image2], return_tensors="pt")
 
-        output = model.generate(**inputs, max_new_tokens=512)
+        output = model.generate(**inputs, max_new_tokens=512, do_sample=False, use_cache=True)
 
         EXPECTED_DECODED_TEXT = [
             'USER: <global_img><crop_img_row0_col0><crop_img_row0_col1><crop_img_row1_col0><crop_img_row1_col1><crop_img_row2_col0><crop_img_row2_col1>What is the name of the movie in the poster? Provide detailed explanation. ASSISTANT: Rebecca\nThe name of the movie in the poster is "Rebecca," as indicated by the large title at the top of the poster. The poster also includes the names of the stars, Laurence Olivier and Joan Fontaine, suggesting that they are the lead actors in the film. The poster features a classic Hollywood style with a focus on the two main characters and the title.',
