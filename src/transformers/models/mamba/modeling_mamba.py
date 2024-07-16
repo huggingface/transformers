@@ -338,7 +338,7 @@ class MambaPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["MambaBlock"]
     supports_gradient_checkpointing = True
     _is_stateful = True
-    cache_name = "cache_params"
+
 
     def _init_weights(self, module):
         """Initialize the weights."""
