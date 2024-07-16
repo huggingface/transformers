@@ -2233,7 +2233,12 @@ class TrainingArguments:
         """
         requires_backends(self, ["torch"])
         if self.distributed_state is not None:
-            return self.distributed_state.num_processes
+            world_size = self.distributed_state.num_processes
+            if is_accelerate_available():
+                from accelerate.utils import parallel_state as mpu
+                if mpu.model_parallel_is_initialized():
+                    world_size = mpu.get_data_parallel_world_size()
+            return world_size
         elif is_sagemaker_mp_enabled():
             return smp.dp_size() if not smp.state.cfg.prescaled_batch else smp.rdp_size()
         return 1
