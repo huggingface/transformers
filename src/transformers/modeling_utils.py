@@ -349,7 +349,7 @@ def check_support_param_buffer_assignment(model_to_load, state_dict, start_prefi
         return False
 
     # Some models explicitly do not support param buffer assignment
-    if hasattr(model_to_load, "supports_param_buffer_assignment"):
+    if getattr(model_to_load, "_supports_param_buffer_assignment", False):
         logger.debug(
             f"{model_to_load.__class__.__name__} does not support param buffer assignment, loading will be slower"
         )
@@ -360,7 +360,7 @@ def check_support_param_buffer_assignment(model_to_load, state_dict, start_prefi
     if start_prefix + first_key in state_dict:
         return state_dict[start_prefix + first_key].dtype == model_to_load.state_dict()[first_key].dtype
 
-    # For cases when the `state_dict` doesn't have any real weights (`albert`)
+    # For cases when the `state_dict` doesn't contain real weights to the model (`test_model_weights_reload_no_missing_tied_weights`)
     return False
 
 
