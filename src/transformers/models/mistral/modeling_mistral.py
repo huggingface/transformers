@@ -32,6 +32,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
 from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...modeling_rope_utils import RopeModelMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -106,9 +107,18 @@ class MistralRotaryEmbedding(nn.Module):
     @torch.no_grad()
     # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding.forward
     def forward(self, x, position_ids):
-        # x: [bs, num_attention_heads, seq_len, head_size]
+        # dynamic RoPE layers need to recompute `inv_freq` when going beyond the original maximum sequence length
+        if "dynamic" in self.rope_config["rope_type"]:
+            seq_len = torch.max(position_ids) + 1
+            if seq_len > self.max_seq_len_cached:
+                inv_freq = compute_frequencies(self.rope_config | {"seq_len": seq_len}, x.device)
+                self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
+                self.max_seq_len_cached = seq_len
+
+        # Core RoPE block
+        position_ids = position_ids.float() / self.rope_config["scaling_factor"]
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
-        position_ids_expanded = position_ids[:, None, :].float()
+        position_ids_expanded = position_ids[:, None, :]
         # Force float32 since bfloat16 loses precision on long contexts
         # See https://github.com/huggingface/transformers/pull/29285
         device_type = x.device.type
@@ -118,6 +128,13 @@ class MistralRotaryEmbedding(nn.Module):
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos()
             sin = emb.sin()
+
+        # Advanced RoPE scaling types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling the
+        # attention operation
+        if "yarn" in self.rope_config["rope_type"]:
+            cos = cos * self.rope_config["attention_factor"]
+            sin = sin * self.rope_config["attention_factor"]
+
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 

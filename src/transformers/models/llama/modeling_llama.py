@@ -29,7 +29,6 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...modeling_attn_mask_utils import AttentionMaskConverter
-from ...modeling_rope_utils import RopeModelMixin, compute_frequencies
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -37,6 +36,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
     TokenClassifierOutput,
 )
+from ...modeling_rope_utils import RopeModelMixin, compute_frequencies
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
@@ -109,16 +109,13 @@ class LlamaRotaryEmbedding(nn.Module):
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.max_seq_len_cached = max_position_embeddings
 
-        # BC: dynamic NTK and yarn used `scaling_factor` as a frequency-computing parameter, not as a position_ids
-        # scaling factor
+        # BC: dynamic NTK and yarn used `scaling_factor` as a frequency parameter, not for position_ids scaling
         if "dynamic" in self.rope_config["rope_type"] or "yarn" in self.rope_config["rope_type"]:
             self.rope_config["scaling_factor"] = 1.0
 
     @torch.no_grad()
     def forward(self, x, position_ids):
-        position_ids = position_ids.float() / self.rope_config["scaling_factor"]
-
-        # dynamic RoPE layers may need to recompute `inv_freq`
+        # dynamic RoPE layers need to recompute `inv_freq` when going beyond the original maximum sequence length
         if "dynamic" in self.rope_config["rope_type"]:
             seq_len = torch.max(position_ids) + 1
             if seq_len > self.max_seq_len_cached:
@@ -126,7 +123,8 @@ class LlamaRotaryEmbedding(nn.Module):
                 self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
                 self.max_seq_len_cached = seq_len
 
-        # x: [bs, num_attention_heads, seq_len, head_size]
+        # Core RoPE block
+        position_ids = position_ids.float() / self.rope_config["scaling_factor"]
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :]
         # Force float32 since bfloat16 loses precision on long contexts
@@ -138,10 +136,41 @@ class LlamaRotaryEmbedding(nn.Module):
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos()
             sin = emb.sin()
+
+        # Advanced RoPE scaling types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling the
+        # attention operation
+        if "yarn" in self.rope_config["rope_type"]:
+            cos = cos * self.rope_config["attention_factor"]
+            sin = sin * self.rope_config["attention_factor"]
+
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-# Missing: deprecation of old classes
+class LlamaLinearScalingRotaryEmbedding(LlamaRotaryEmbedding):
+    """LlamaRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
+
+    def __init__(self, **kwargs):
+        logger.warning_once(
+            "`LlamaLinearScalingRotaryEmbedding` is deprecated an will be removed in v4.45. Please use "
+            "`LlamaRotaryEmbedding`, which now also does linear scaling (pass in the same kwargs plus "
+            "`rope_type='default'`)."
+        )
+        kwargs["rope_type"] = "default"
+        super().__init__(**kwargs)
+
+
+class LlamaDynamicNTKScalingRotaryEmbedding(LlamaRotaryEmbedding):
+    """LlamaRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
+
+    def __init__(self, **kwargs):
+        logger.warning_once(
+            "`LlamaDynamicNTKScalingRotaryEmbedding` is deprecated an will be removed in v4.45. Please use "
+            "`LlamaRotaryEmbedding`, which now also does dynamic ntk scaling (pass in the same kwargs plus "
+            "`rope_type='dynamic'`)."
+        )
+        kwargs["rope_type"] = "dynamic"
+        super().__init__(**kwargs)
+
 
 class LlamaYarnScalingRotaryEmbedding(LlamaRotaryEmbedding):
     def __init__(
@@ -328,51 +357,22 @@ class LlamaAttention(nn.Module):
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=config.attention_bias)
-        self._init_rope()
 
-    def _init_rope(self):
-        if self.config.rope_scaling is None:
-            self.rotary_emb = LlamaRotaryEmbedding(
-                self.head_dim,
-                max_position_embeddings=self.max_position_embeddings,
-                base=self.rope_theta,
-            )
-        else:
-            scaling_type = self.config.rope_scaling["type"]
-            scaling_factor = self.config.rope_scaling["factor"]
-            # Yarn parameters
-            kwargs = {
-                "dim": self.config.rope_scaling.get("original_max_position_embeddings", None),
-                "max_position_embeddings": self.config.rope_scaling.get("attention_factor", None),
-                "base": self.config.rope_scaling.get("beta_fast", None),
-                "scaling_factor": self.config.rope_scaling.get("beta_slow", None),
-            }
-            kwargs = {k: v for k, v in kwargs.items() if v is not None}
+        rope_config = {
+            "dim": self.head_dim,
+            "max_position_embeddings": self.max_position_embeddings,
+            "base": self.rope_theta,
+            "rope_type": "default",
+        }
 
-            if scaling_type == "linear":
-                self.rotary_emb = LlamaLinearScalingRotaryEmbedding(
-                    self.head_dim,
-                    max_position_embeddings=self.max_position_embeddings,
-                    scaling_factor=scaling_factor,
-                    base=self.rope_theta,
-                )
-            elif scaling_type == "dynamic":
-                self.rotary_emb = LlamaDynamicNTKScalingRotaryEmbedding(
-                    self.head_dim,
-                    max_position_embeddings=self.max_position_embeddings,
-                    scaling_factor=scaling_factor,
-                    base=self.rope_theta,
-                )
-            elif scaling_type == "yarn":
-                self.rotary_emb = LlamaYarnScalingRotaryEmbedding(
-                    self.head_dim,
-                    max_position_embeddings=self.max_position_embeddings,
-                    scaling_factor=scaling_factor,
-                    base=self.rope_theta,
-                    **kwargs,
-                )
-            else:
-                raise ValueError(f"Unknown RoPE scaling type {scaling_type}")
+        if self.config.rope_scaling is not None:
+            rope_config["rope_type"] = self.config.rope_scaling["type"]  # overwrites '"rope_type": "default"'
+            rope_config["scaling_factor"] = self.config.rope_scaling["factor"]
+            for yarn_parameter in ["original_max_position_embeddings", "attention_factor", "beta_fast", "beta_slow"]:
+                if yarn_parameter in self.config.rope_scaling:
+                    rope_config[yarn_parameter] = self.config.rope_scaling[yarn_parameter]
+
+        self.rotary_emb = LlamaRotaryEmbedding(**rope_config)
 
     def forward(
         self,
@@ -1204,14 +1204,6 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
 
     def get_decoder(self):
         return self.model
-
-    def get_rope_embeddings(self, maximum_position_embeddings: Optional[int] = None) -> Tuple[torch.Tensor, torch.Tensor]:
-        """See [~LlamaModel.get_rope_embeddings]"""
-        return self.model.get_position_embeddings(maximum_position_embeddings)
-
-    def set_rope_embeddings(self, frequencies: torch.Tensor, scaling_factor: float):
-        """See [~LlamaModel.set_rope_embeddings]"""
-        self.model.set_position_embeddings(frequencies, scaling_factor)
 
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)

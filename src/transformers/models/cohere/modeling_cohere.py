@@ -34,6 +34,7 @@ from torch.nn import CrossEntropyLoss
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...modeling_rope_utils import RopeModelMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -704,7 +705,7 @@ COHERE_START_DOCSTRING = r"""
     COHERE_START_DOCSTRING,
 )
 # Copied from transformers.models.llama.modeling_llama.LlamaPreTrainedModel with Llama->Cohere
-class CoherePreTrainedModel(PreTrainedModel):
+class CoherePreTrainedModel(PreTrainedModel, RopeModelMixin):
     config_class = CohereConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
