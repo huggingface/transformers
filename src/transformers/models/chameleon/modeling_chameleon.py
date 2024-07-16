@@ -1159,9 +1159,7 @@ class ChameleonVQVAE(PreTrainedModel):
         """
         batch_size = image_tokens.shape[0]
         emb_dim: int = self.quantize.embedding.weight.shape[-1]
-        codebook_entry = self.quantize.get_codebook_entry(
-            image_tokens, (batch_size, 32, 32, emb_dim)
-        )
+        codebook_entry = self.quantize.get_codebook_entry(image_tokens, (batch_size, 32, 32, emb_dim))
         hidden_states = self.post_quant_conv(codebook_entry)
         pixel_values = self.decoder(hidden_states)
         return pixel_values
@@ -1189,7 +1187,10 @@ class ChameleonImageVocabularyMapping:
     @cached_property
     def all_image_tokens_mask(self):
         all_image_tokens = [
-            *self.image_tokens, self.image_token_id, self.image_start_token_id, self.image_end_token_id
+            *self.image_tokens,
+            self.image_token_id,
+            self.image_start_token_id,
+            self.image_end_token_id,
         ]
         mask = torch.zeros(self.vocab_map.size(), dtype=torch.bool)
         mask[all_image_tokens] = True
