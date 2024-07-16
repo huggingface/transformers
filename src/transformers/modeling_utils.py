@@ -4294,7 +4294,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 assign_to_params_buffers = check_support_param_buffer_assignment(
                     model_to_load, state_dict, start_prefix
                 )
-                raise ValueError(assign_to_params_buffers)
                 error_msgs = _load_state_dict_into_model(
                     model_to_load, state_dict, start_prefix, assign_to_params_buffers
                 )
