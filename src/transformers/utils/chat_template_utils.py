@@ -80,7 +80,7 @@ def _parse_type_hint(hint: str) -> Dict:
             return_dict = subtypes[0]
         elif all(isinstance(subtype["type"], str) for subtype in subtypes):
             # A union of basic types can be expressed as a list in the schema
-            return_dict = {"type": [subtype["type"] for subtype in subtypes]}
+            return_dict = {"type": sorted([subtype["type"] for subtype in subtypes])}
         else:
             # A union of more complex types requires "anyOf"
             return_dict = {"anyOf": subtypes}
