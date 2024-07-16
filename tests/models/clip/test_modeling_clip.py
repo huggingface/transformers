@@ -185,6 +185,12 @@ class CLIPVisionModelTester:
 
 
 class CLIPModelTesterMixin(ModelTesterMixin):
+    """
+    Subclass of ModelTesterMixin with methods specific to testing CLIP models.
+    The SDPA equivalence test is overridden here because CLIP models may have test/vision/text+vision inputs,
+    different output logits, and are not supposed to be used or tested with padding_side="left".
+    """
+
     def test_eager_matches_sdpa_inference(
         self,
         torch_dtype: str,
