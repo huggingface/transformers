@@ -112,23 +112,31 @@ class LlamaRotaryEmbedding(nn.Module):
         # BC: dynamic NTK and yarn used `scaling_factor` as a frequency parameter, not for position_ids scaling
         if "dynamic" in self.rope_config["rope_type"] or "yarn" in self.rope_config["rope_type"]:
             self.rope_config["scaling_factor"] = 1.0
+        # Special case: on yarn, `attention_factor` has a default suggested by the paper
+        if "yarn" in self.rope_config["rope_type"]:
+            self.rope_config["attention_factor"] = self.rope_config.get(
+                "attention_factor", 0.1 * math.log(scaling_factor) + 1.0
+            )
+
+    def dynamic_frequency_update(self, position_ids, device):
+        """dynamic RoPE layers need to recompute `inv_freq` when going beyond the original maximum sequence length"""
+        seq_len = torch.max(position_ids) + 1
+        if seq_len > self.max_seq_len_cached:
+            inv_freq = compute_frequencies(self.rope_config | {"seq_len": seq_len}, device)
+            self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
+            self.max_seq_len_cached = seq_len
 
     @torch.no_grad()
     def forward(self, x, position_ids):
-        # dynamic RoPE layers need to recompute `inv_freq` when going beyond the original maximum sequence length
         if "dynamic" in self.rope_config["rope_type"]:
-            seq_len = torch.max(position_ids) + 1
-            if seq_len > self.max_seq_len_cached:
-                inv_freq = compute_frequencies(self.rope_config | {"seq_len": seq_len}, x.device)
-                self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
-                self.max_seq_len_cached = seq_len
+            self.dynamic_frequency_update(position_ids, device=x.device)
 
         # Core RoPE block
-        position_ids = position_ids.float() / self.rope_config["scaling_factor"]
+        if self.rope_config["scaling_factor"] != 1.0:
+            position_ids = position_ids.float() / self.rope_config["scaling_factor"]
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
-        position_ids_expanded = position_ids[:, None, :]
-        # Force float32 since bfloat16 loses precision on long contexts
-        # See https://github.com/huggingface/transformers/pull/29285
+        position_ids_expanded = position_ids[:, None, :].float()
+        # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
         device_type = x.device.type
         device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):
@@ -137,9 +145,8 @@ class LlamaRotaryEmbedding(nn.Module):
             cos = emb.cos()
             sin = emb.sin()
 
-        # Advanced RoPE scaling types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling the
-        # attention operation
-        if "yarn" in self.rope_config["rope_type"]:
+        # Advanced RoPE types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling attention
+        if self.rope_config["attention_factor"] is not None:
             cos = cos * self.rope_config["attention_factor"]
             sin = sin * self.rope_config["attention_factor"]
 
@@ -297,9 +304,14 @@ class LlamaAttention(nn.Module):
         if self.config.rope_scaling is not None:
             rope_config["rope_type"] = self.config.rope_scaling["type"]  # overwrites '"rope_type": "default"'
             rope_config["scaling_factor"] = self.config.rope_scaling["factor"]
-            for yarn_parameter in ["original_max_position_embeddings", "attention_factor", "beta_fast", "beta_slow"]:
-                if yarn_parameter in self.config.rope_scaling:
-                    rope_config[yarn_parameter] = self.config.rope_scaling[yarn_parameter]
+            if "yarn" in rope_config["rope_type"]:
+                for yarn_parameter in [
+                    "original_max_position_embeddings",
+                    "attention_factor",
+                    "beta_fast",
+                    "beta_slow",
+                ]:
+                    rope_config[yarn_parameter] = self.config.rope_scaling.get(yarn_parameter)
 
         self.rotary_emb = LlamaRotaryEmbedding(**rope_config)
 
