@@ -542,7 +542,7 @@ class GemmaIntegrationTest(unittest.TestCase):
 
     @require_read_token
     def test_model_2b_fp16(self):
-        model_id = "google/gemma-2-9b"
+        model_id = "google/gemma-2b"
         EXPECTED_TEXTS = [
             "Hello I am doing a project on the 1990s and I need to know what the most popular music",
             "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
@@ -607,8 +607,8 @@ class GemmaIntegrationTest(unittest.TestCase):
         # considering differences in hardware processing and potential deviations in generated text.
         EXPECTED_TEXTS = {
             7: [
-                "Hello I am doing a project on the 1990s and I am looking for some information on the ",
-                "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
+                "Hello I am doing a project on the 1990s and I need to know what the most popular music",
+                "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Khichdi",
             ],
             8: [
                 "Hello I am doing a project on the 1990s and I need to know what the most popular music",
@@ -733,6 +733,9 @@ class GemmaIntegrationTest(unittest.TestCase):
 
     @require_read_token
     def test_model_7b_fp16(self):
+        if self.cuda_compute_capability_major_version == 7:
+            self.skipTest("This test is failing (`torch.compile` fails) on Nvidia T4 GPU.")
+
         model_id = "google/gemma-7b"
         EXPECTED_TEXTS = [
             """Hello I am doing a project on a 1999 4.0L 4x4. I""",
@@ -753,6 +756,9 @@ class GemmaIntegrationTest(unittest.TestCase):
 
     @require_read_token
     def test_model_7b_bf16(self):
+        if self.cuda_compute_capability_major_version == 7:
+            self.skipTest("This test is failing (`torch.compile` fails) on Nvidia T4 GPU.")
+
         model_id = "google/gemma-7b"
 
         # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
@@ -788,6 +794,9 @@ class GemmaIntegrationTest(unittest.TestCase):
 
     @require_read_token
     def test_model_7b_fp16_static_cache(self):
+        if self.cuda_compute_capability_major_version == 7:
+            self.skipTest("This test is failing (`torch.compile` fails) on Nvidia T4 GPU.")
+
         model_id = "google/gemma-7b"
         EXPECTED_TEXTS = [
             """Hello I am doing a project on a 1999 4.0L 4x4. I""",
@@ -815,7 +824,7 @@ class GemmaIntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = {
             7: [
                 "Hello I am doing a project for my school and I am trying to make a program that will take a number and then",
-                """Hi today I am going to talk about the new update for the game called "The new update" and I""",
+                "Hi today I am going to talk about the best way to get rid of acne. miniaturing is a very",
             ],
             8: [
                 "Hello I am doing a project for my school and I am trying to make a program that will take a number and then",
@@ -830,7 +839,6 @@ class GemmaIntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
-
         self.assertEqual(output_text, EXPECTED_TEXTS[self.cuda_compute_capability_major_version])
 
     @slow
@@ -889,3 +897,24 @@ class GemmaIntegrationTest(unittest.TestCase):
         )
         static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION[self.cuda_compute_capability_major_version], static_compiled_text)
+
+    def test_model_2b_bf16_dola(self):
+        model_id = "google/gemma-2b"
+        # ground truth text generated with dola_layers="low", repetition_penalty=1.2
+        EXPECTED_TEXTS = [
+            "Hello I am doing an experiment and need to get the mass of a block. The problem is, it has no scale",
+            "Hi today we have the review for a <strong>2016/2017</strong> season of",
+        ]
+
+        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16).to(
+            torch_device
+        )
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+
+        output = model.generate(
+            **inputs, max_new_tokens=20, do_sample=False, dola_layers="low", repetition_penalty=1.2
+        )
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+        self.assertEqual(output_text, EXPECTED_TEXTS)

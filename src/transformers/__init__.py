@@ -462,6 +462,7 @@ _import_structure = {
         "GroupViTVisionConfig",
     ],
     "models.herbert": ["HerbertTokenizer"],
+    "models.hiera": ["HieraConfig"],
     "models.hubert": ["HubertConfig"],
     "models.ibert": ["IBertConfig"],
     "models.idefics": ["IdeficsConfig"],
@@ -807,6 +808,7 @@ _import_structure = {
     "models.xmod": ["XmodConfig"],
     "models.yolos": ["YolosConfig"],
     "models.yoso": ["YosoConfig"],
+    "models.zoedepth": ["ZoeDepthConfig"],
     "onnx": [],
     "pipelines": [
         "AudioClassificationPipeline",
@@ -1182,6 +1184,7 @@ else:
     _import_structure["models.vitmatte"].append("VitMatteImageProcessor")
     _import_structure["models.vivit"].append("VivitImageProcessor")
     _import_structure["models.yolos"].extend(["YolosFeatureExtractor", "YolosImageProcessor"])
+    _import_structure["models.zoedepth"].append("ZoeDepthImageProcessor")
 
 try:
     if not is_torchvision_available():
@@ -1212,6 +1215,7 @@ else:
         "Cache",
         "CacheConfig",
         "DynamicCache",
+        "EncoderDecoderCache",
         "HQQQuantizedCache",
         "QuantizedCache",
         "QuantizedCacheConfig",
@@ -1282,6 +1286,7 @@ else:
             "WhisperTimeStampLogitsProcessor",
         ]
     )
+    _import_structure["modeling_flash_attention_utils"]: []
     _import_structure["modeling_outputs"] = []
     _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
@@ -2279,6 +2284,15 @@ else:
             "GroupViTPreTrainedModel",
             "GroupViTTextModel",
             "GroupViTVisionModel",
+        ]
+    )
+    _import_structure["models.hiera"].extend(
+        [
+            "HieraBackbone",
+            "HieraForImageClassification",
+            "HieraForPreTraining",
+            "HieraModel",
+            "HieraPreTrainedModel",
         ]
     )
     _import_structure["models.hubert"].extend(
@@ -3583,6 +3597,12 @@ else:
             "YosoLayer",
             "YosoModel",
             "YosoPreTrainedModel",
+        ]
+    )
+    _import_structure["models.zoedepth"].extend(
+        [
+            "ZoeDepthForDepthEstimation",
+            "ZoeDepthPreTrainedModel",
         ]
     )
     _import_structure["optimization"] = [
@@ -5102,6 +5122,7 @@ if TYPE_CHECKING:
         GroupViTVisionConfig,
     )
     from .models.herbert import HerbertTokenizer
+    from .models.hiera import HieraConfig
     from .models.hubert import HubertConfig
     from .models.ibert import IBertConfig
     from .models.idefics import (
@@ -5496,6 +5517,7 @@ if TYPE_CHECKING:
     from .models.xmod import XmodConfig
     from .models.yolos import YolosConfig
     from .models.yoso import YosoConfig
+    from .models.zoedepth import ZoeDepthConfig
 
     # Pipelines
     from .pipelines import (
@@ -5871,6 +5893,7 @@ if TYPE_CHECKING:
         from .models.vitmatte import VitMatteImageProcessor
         from .models.vivit import VivitImageProcessor
         from .models.yolos import YolosFeatureExtractor, YolosImageProcessor
+        from .models.zoedepth import ZoeDepthImageProcessor
 
     try:
         if not is_torchvision_available():
@@ -5895,6 +5918,7 @@ if TYPE_CHECKING:
             Cache,
             CacheConfig,
             DynamicCache,
+            EncoderDecoderCache,
             HQQQuantizedCache,
             QuantizedCache,
             QuantizedCacheConfig,
@@ -6781,6 +6805,13 @@ if TYPE_CHECKING:
             GroupViTPreTrainedModel,
             GroupViTTextModel,
             GroupViTVisionModel,
+        )
+        from .models.hiera import (
+            HieraBackbone,
+            HieraForImageClassification,
+            HieraForPreTraining,
+            HieraModel,
+            HieraPreTrainedModel,
         )
         from .models.hubert import (
             HubertForCTC,
@@ -7795,6 +7826,10 @@ if TYPE_CHECKING:
             YosoLayer,
             YosoModel,
             YosoPreTrainedModel,
+        )
+        from .models.zoedepth import (
+            ZoeDepthForDepthEstimation,
+            ZoeDepthPreTrainedModel,
         )
 
         # Optimization
