@@ -142,9 +142,7 @@ class Mamba2ModelTester:
         config.vocab_size = 300
         return config
 
-    def create_and_check_mamba2_model(
-        self, config, input_ids, input_mask, *args
-    ):
+    def create_and_check_mamba2_model(self, config, input_ids, input_mask, *args):
         model = Mamba2Model(config=config)
         model.to(torch_device)
         model.eval()
@@ -183,9 +181,7 @@ class Mamba2ModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
         result.loss.backward()
 
-    def create_and_check_state_equivalency(
-        self, config, input_ids, input_mask, *args
-    ):
+    def create_and_check_state_equivalency(self, config, input_ids, input_mask, *args):
         model = Mamba2Model(config=config)
         model.to(torch_device)
         model.eval()
