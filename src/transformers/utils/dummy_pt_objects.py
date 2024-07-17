@@ -5476,21 +5476,21 @@ class MambaPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class MambaFalconForCausalLM(metaclass=DummyObject):
+class SindibadForCausalLM(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class MambaFalconModel(metaclass=DummyObject):
+class SindibadModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class MambaFalconPreTrainedModel(metaclass=DummyObject):
+class SindibadPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

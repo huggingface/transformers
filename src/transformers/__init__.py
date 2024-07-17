@@ -537,7 +537,7 @@ _import_structure = {
     ],
     "models.m2m_100": ["M2M100Config"],
     "models.mamba": ["MambaConfig"],
-    "models.mambafalcon": ["MambaFalconConfig"],
+    "models.sindibad": ["SindibadConfig"],
     "models.marian": ["MarianConfig"],
     "models.markuplm": [
         "MarkupLMConfig",
@@ -2527,11 +2527,11 @@ else:
             "MambaPreTrainedModel",
         ]
     )
-    _import_structure["models.mambafalcon"].extend(
+    _import_structure["models.sindibad"].extend(
         [
-            "MambaFalconForCausalLM",
-            "MambaFalconModel",
-            "MambaFalconPreTrainedModel",
+            "SindibadForCausalLM",
+            "SindibadModel",
+            "SindibadPreTrainedModel",
         ]
     )
     _import_structure["models.marian"].extend(["MarianForCausalLM", "MarianModel", "MarianMTModel"])
@@ -5207,7 +5207,7 @@ if TYPE_CHECKING:
     )
     from .models.m2m_100 import M2M100Config
     from .models.mamba import MambaConfig
-    from .models.mambafalcon import MambaFalconConfig
+    from .models.sindibad import SindibadConfig
     from .models.marian import MarianConfig
     from .models.markuplm import (
         MarkupLMConfig,
@@ -6999,10 +6999,10 @@ if TYPE_CHECKING:
             MambaModel,
             MambaPreTrainedModel,
         )
-        from .models.mambafalcon import (
-            MambaFalconForCausalLM,
-            MambaFalconModel,
-            MambaFalconPreTrainedModel,
+        from .models.sindibad import (
+            SindibadForCausalLM,
+            SindibadModel,
+            SindibadPreTrainedModel,
         )
         from .models.marian import MarianForCausalLM, MarianModel, MarianMTModel
         from .models.markuplm import (

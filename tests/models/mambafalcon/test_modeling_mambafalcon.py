@@ -19,7 +19,7 @@ import unittest
 from typing import Dict, List, Tuple
 from unittest.util import safe_repr
 
-from transformers import AutoTokenizer, MambaFalconConfig, is_torch_available
+from transformers import AutoTokenizer, SindibadConfig, is_torch_available
 from transformers.testing_utils import require_torch, require_torch_multi_gpu, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -32,16 +32,16 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        MambaFalconForCausalLM,
-        MambaFalconModel,
+        SindibadForCausalLM,
+        SindibadModel,
     )
-    from transformers.models.mambafalcon.modeling_mambafalcon import MambaFalconCache
+    from transformers.models.sindibad.modeling_sindibad import SindibadCache
     from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_0
 else:
     is_torch_greater_or_equal_than_2_0 = False
 
 
-class MambaFalconModelTester:
+class SindibadModelTester:
     def __init__(
         self,
         parent,
@@ -86,7 +86,7 @@ class MambaFalconModelTester:
         self.tie_word_embeddings = tie_word_embeddings
 
     def get_large_model_config(self):
-        return MambaFalconConfig.from_pretrained("hf-internal-testing/mambafalcon-2.8b")
+        return SindibadConfig.from_pretrained("hf-internal-testing/sindibad-2.8b")
 
     def prepare_config_and_inputs(
         self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
@@ -119,7 +119,7 @@ class MambaFalconModelTester:
     def get_config(
         self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
     ):
-        return MambaFalconConfig(
+        return SindibadConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -157,9 +157,9 @@ class MambaFalconModelTester:
             choice_labels,
         )
 
-    def create_and_check_mambafalcon_model(self, config, input_ids, *args):
+    def create_and_check_sindibad_model(self, config, input_ids, *args):
         config.output_hidden_states = True
-        model = MambaFalconModel(config=config)
+        model = SindibadModel(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -169,7 +169,7 @@ class MambaFalconModelTester:
         self.parent.assertEqual(len(result.hidden_states), config.num_hidden_layers + 1)
 
     def create_and_check_causal_lm(self, config, input_ids, *args):
-        model = MambaFalconForCausalLM(config)
+        model = SindibadForCausalLM(config)
         model.to(torch_device)
         model.eval()
 
@@ -178,7 +178,7 @@ class MambaFalconModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_state_equivalency(self, config, input_ids, *args):
-        model = MambaFalconModel(config=config)
+        model = SindibadModel(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -193,12 +193,12 @@ class MambaFalconModelTester:
         output_two = outputs.last_hidden_state
 
         self.parent.assertTrue(torch.allclose(torch.cat([output_one, output_two], dim=1), output_whole, atol=1e-5))
-        # TODO the orignal mambafalcon does not support decoding more than 1 token neither do we
+        # TODO the orignal sindibad does not support decoding more than 1 token neither do we
 
-    def create_and_check_mambafalcon_cached_slow_forward_and_backwards(
+    def create_and_check_sindibad_cached_slow_forward_and_backwards(
         self, config, input_ids, *args, gradient_checkpointing=False
     ):
-        model = MambaFalconModel(config)
+        model = SindibadModel(config)
         model.to(torch_device)
         if gradient_checkpointing:
             model.gradient_checkpointing_enable()
@@ -216,10 +216,10 @@ class MambaFalconModelTester:
         self.parent.assertEqual(outputs.shape, (self.batch_size, self.seq_length, self.hidden_size))
         loss.backward()
 
-    def create_and_check_mambafalcon_lm_head_forward_and_backwards(
+    def create_and_check_sindibad_lm_head_forward_and_backwards(
         self, config, input_ids, *args, gradient_checkpointing=False
     ):
-        model = MambaFalconForCausalLM(config)
+        model = SindibadForCausalLM(config)
         model.to(torch_device)
         if gradient_checkpointing:
             model.gradient_checkpointing_enable()
@@ -246,26 +246,26 @@ class MambaFalconModelTester:
     not is_torch_greater_or_equal_than_2_0, reason="See https://github.com/huggingface/transformers/pull/24204"
 )
 @require_torch
-class MambaFalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (MambaFalconModel, MambaFalconForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (MambaFalconForCausalLM,) if is_torch_available() else ()
-    has_attentions = False  # MambaFalcon does not support attentions
+class SindibadModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    all_model_classes = (SindibadModel, SindibadForCausalLM) if is_torch_available() else ()
+    all_generative_model_classes = (SindibadForCausalLM,) if is_torch_available() else ()
+    has_attentions = False  # Sindibad does not support attentions
     fx_compatible = False  # FIXME let's try to support this @ArthurZucker
     test_torchscript = False  # FIXME let's try to support this @ArthurZucker
     test_missing_keys = False
     test_model_parallel = False
     test_pruning = False
-    test_head_masking = False  # MambaFalcon does not have attention heads
+    test_head_masking = False  # Sindibad does not have attention heads
     pipeline_model_mapping = (
-        {"feature-extraction": MambaFalconModel, "text-generation": MambaFalconForCausalLM}
+        {"feature-extraction": SindibadModel, "text-generation": SindibadForCausalLM}
         if is_torch_available()
         else {}
     )
 
     def setUp(self):
-        self.model_tester = MambaFalconModelTester(self)
+        self.model_tester = SindibadModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=MambaFalconConfig, n_embd=37, common_properties=["hidden_size", "num_hidden_layers"]
+            self, config_class=SindibadConfig, n_embd=37, common_properties=["hidden_size", "num_hidden_layers"]
         )
 
     def assertInterval(self, member, container, msg=None):
@@ -318,11 +318,11 @@ class MambaFalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
             with torch.no_grad():
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
-    def test_mambafalcon_model(self):
+    def test_sindibad_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_mambafalcon_model(*config_and_inputs)
+        self.model_tester.create_and_check_sindibad_model(*config_and_inputs)
 
-    def test_mambafalcon_lm_head_model(self):
+    def test_sindibad_lm_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_causal_lm(*config_and_inputs)
 
@@ -330,13 +330,13 @@ class MambaFalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_state_equivalency(*config_and_inputs)
 
-    def test_mambafalcon_cached_slow_forward_and_backwards(self):
+    def test_sindibad_cached_slow_forward_and_backwards(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_mambafalcon_cached_slow_forward_and_backwards(*config_and_inputs)
+        self.model_tester.create_and_check_sindibad_cached_slow_forward_and_backwards(*config_and_inputs)
 
-    def test_mambafalcon_lm_head_forward_and_backwards(self):
+    def test_sindibad_lm_head_forward_and_backwards(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_mambafalcon_lm_head_forward_and_backwards(*config_and_inputs)
+        self.model_tester.create_and_check_sindibad_lm_head_forward_and_backwards(*config_and_inputs)
 
     def test_initialization(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -363,7 +363,7 @@ class MambaFalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
 
     @slow
     def test_model_from_pretrained(self):
-        model = MambaFalconModel.from_pretrained("hf-internal-testing/mambafalcon-130m")
+        model = SindibadModel.from_pretrained("hf-internal-testing/sindibad-130m")
         self.assertIsNotNone(model)
 
     def test_model_outputs_equivalence(self):
@@ -375,7 +375,7 @@ class MambaFalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
                 dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
 
                 def recursive_check(tuple_object, dict_object):
-                    if isinstance(tuple_object, MambaFalconCache):  # MODIFIED PART START
+                    if isinstance(tuple_object, SindibadCache):  # MODIFIED PART START
                         recursive_check(tuple_object.conv_states, dict_object.conv_states)
                         recursive_check(tuple_object.ssm_states, dict_object.ssm_states)
                     elif isinstance(tuple_object, (List, Tuple)):  # MODIFIED PART END
@@ -425,7 +425,7 @@ class MambaFalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
 
 @require_torch
 @slow
-class MambaFalconIntegrationTests(unittest.TestCase):
+class SindibadIntegrationTests(unittest.TestCase):
     def setUp(self):
-        self.model_id = "state-spaces/mambafalcon-2.8b-hf"
+        self.model_id = "state-spaces/sindibad-2.8b-hf"
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_id)

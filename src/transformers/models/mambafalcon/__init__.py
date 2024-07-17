@@ -22,7 +22,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_mambafalcon": ["MambaFalconConfig", "MambaFalconOnnxConfig"],
+    "configuration_sindibad": ["SindibadConfig", "SindibadOnnxConfig"],
 }
 
 try:
@@ -31,15 +31,15 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_mambafalcon"] = [
-        "MambaFalconForCausalLM",
-        "MambaFalconModel",
-        "MambaFalconPreTrainedModel",
+    _import_structure["modeling_sindibad"] = [
+        "SindibadForCausalLM",
+        "SindibadModel",
+        "SindibadPreTrainedModel",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_mambafalcon import MambaFalconConfig, MambaFalconOnnxConfig
+    from .configuration_sindibad import SindibadConfig, SindibadOnnxConfig
 
     try:
         if not is_torch_available():
@@ -47,10 +47,10 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_mambafalcon import (
-            MambaFalconForCausalLM,
-            MambaFalconModel,
-            MambaFalconPreTrainedModel,
+        from .modeling_sindibad import (
+            SindibadForCausalLM,
+            SindibadModel,
+            SindibadPreTrainedModel,
         )
 else:
     import sys
