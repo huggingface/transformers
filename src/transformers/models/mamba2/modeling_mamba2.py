@@ -272,8 +272,8 @@ class Mamba2Mixer(nn.Module):
         # 1. Gated MLP's linear projection
         projected_states =  self.in_proj(input_states)
         d_mlp = (projected_states.shape[-1] - 2 * self.ssm_state_size - 2 * self.n_groups * self.state_size - self.num_heads) // 2
-        if seq_len != 1:
-            d_mlp = 0
+        # if seq_len != 1:
+        d_mlp = 0
         z0, x0, gate, hidden_states, dt = projected_states.split(
                 [d_mlp, d_mlp, self.intermediate_size, self.intermediate_size + 2 * self.n_groups * self.state_size, self.num_heads], dim=-1
         )
@@ -288,10 +288,10 @@ class Mamba2Mixer(nn.Module):
                 conv_state = torch.roll(conv_state, shifts=-1, dims=-1)
                 conv_state[:, :, -1] = hidden_states
                 cache_params.conv_states[self.layer_idx].copy_(conv_state)
-                hidden_states = torch.sum(conv_state * self.conv1d.weight[:, 0, :], dim=-1)
+                hidden_states = torch.sum(conv_state.to(projected_states.device) * self.conv1d.weight[:, 0, :], dim=-1)
                 if self.use_conv_bias:
                     hidden_states += self.conv1d.bias
-                hidden_states = self.act(hidden_states).to(dtype).unsqueeze(-1)         # [batch, intermediate_size, 1] : decoding
+                hidden_states = self.act(hidden_states).to(dtype).unsqueeze(1)         # [batch, 1, intermediate_size] : decoding
             else:
                 hidden_states = hidden_states.transpose(1,2)
                 conv_state = nn.functional.pad(
