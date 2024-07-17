@@ -217,12 +217,11 @@ def anchor_resize(
     Resize an image based on selected anchor and its associated size.
 
     Args:
-        image (ImageInput): The input image to be resized.
-        anchors (str, optional): The key for selecting anchor sizes from the grid_dict. Defaults to "grid_9".
-        size (Dict[str, int], optional): A dictionary containing the target size for resizing. Defaults to None.
-        grid_dict (Dict[str, List[Tuple[int, int]]], optional): A dictionary containing the anchor grid configurations. Defaults to GRID_DICT.
-        resample (PILImageResampling, optional): The resampling method to use. Defaults to PILImageResampling.BICUBIC.
-
+        image (`ImageInput`): The input image to be resized.
+        anchors (`str`, *optional*, defaults to "grid_9"): The key for selecting anchor sizes from the grid_dict. Defaults to "grid_9".
+        size (`Dict[str, int]`, *optional*): A dictionary containing the target size for resizing. Defaults to None.
+        grid_dict (`Dict[str, List[Tuple[int, int]]]`, *optional*): A dictionary containing the anchor grid configurations. Defaults to GRID_DICT.
+        resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`): The resampling method to use. Defaults to PILImageResampling.BICUBIC.
     Returns:
         tuple: A tuple containing:
             - List[np.ndarray]: A list containing the resized image.
