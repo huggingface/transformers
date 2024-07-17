@@ -91,7 +91,7 @@ class Mamba2Cache:
             for i in range(config.num_hidden_layers)
         }
         self.ssm_states = {
-            i: torch.zeros(batch_size, config.n_groups * config.state_size, config.head_dim, device=device, dtype=dtype)
+            i: torch.zeros(batch_size, config.n_groups * config.state_size, config.intermediate_size, device=device, dtype=dtype)
             for i in range(config.num_hidden_layers)
         }
 
@@ -324,7 +324,7 @@ class Mamba2Mixer(nn.Module):
         # 3.c perform the recurrence y ← SSM(A, B, C)(x)
         scan_outputs = []
         for i in range(seq_len):
-            ssm_state = ssm_state * discrete_A[:, i, :, None, None] + deltaB_u[:, i, :, :]      # [batch, intermediate_size, ssm_state]
+            ssm_state = ssm_state.view(batch_size, self.ssm_state_size, -1, self.head_dim) * discrete_A[:, i, :, None, None] + deltaB_u[:, i, :, :]      # [batch, intermediate_size, ssm_state]
             scan_output = torch.matmul(C[:,i, :].float(), ssm_state)  # [batch, intermediate_size, 1]
             scan_outputs.append(scan_output[:,:, 0,: ])
         scan_output = torch.stack(scan_outputs, dim=1)                                # [batch, intermediate_size, seq_len]
@@ -333,10 +333,10 @@ class Mamba2Mixer(nn.Module):
         if d_mlp > 0:
             scan_output = torch.cat([nn.functional.silu(z0) * x0, scan_output], dim=-1)
         if cache_params is not None:
-            cache_params.ssm_states[self.layer_idx].copy_(ssm_state)
+            cache_params.ssm_states[self.layer_idx].copy_(ssm_state.view(batch_size, -1, self.intermediate_size))
 
         # 4. Final linear projection
-        contextualized_states = self.out_proj(scan_output.transpose(1, 2))  # [batch, seq_len, hidden_size]
+        contextualized_states = self.out_proj(scan_output.view(batch_size, seq_len, -1).to(hidden_states))  # [batch, seq_len, hidden_size]
         return contextualized_states
     # fmt: on
 
