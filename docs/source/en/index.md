@@ -193,7 +193,6 @@ Flax), PyTorch, and/or TensorFlow.
 |                       [M2M100](model_doc/m2m_100)                        |       ✅        |         ❌         |      ❌      |
 |                    [MADLAD-400](model_doc/madlad-400)                    |       ✅        |         ✅         |      ✅      |
 |                         [Mamba](model_doc/mamba)                         |       ✅        |         ❌         |      ❌      |
-|                   [Sindibad](model_doc/sindibad)                   |       ✅        |         ❌         |      ❌      |
 |                        [Marian](model_doc/marian)                        |       ✅        |         ✅         |      ✅      |
 |                      [MarkupLM](model_doc/markuplm)                      |       ✅        |         ❌         |      ❌      |
 |                   [Mask2Former](model_doc/mask2former)                   |       ✅        |         ❌         |      ❌      |
@@ -278,6 +277,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                           [SEW](model_doc/sew)                           |       ✅        |         ❌         |      ❌      |
 |                         [SEW-D](model_doc/sew-d)                         |       ✅        |         ❌         |      ❌      |
 |                        [SigLIP](model_doc/siglip)                        |       ✅        |         ❌         |      ❌      |
+|                      [Sindibad](model_doc/sindibad)                      |       ✅        |         ❌         |      ❌      |
 |        [Speech Encoder decoder](model_doc/speech-encoder-decoder)        |       ✅        |         ❌         |      ✅      |
 |                 [Speech2Text](model_doc/speech_to_text)                  |       ✅        |         ✅         |      ❌      |
 |                      [SpeechT5](model_doc/speecht5)                      |       ✅        |         ❌         |      ❌      |
