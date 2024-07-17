@@ -72,7 +72,7 @@ text_prompt = processor.apply_chat_template(conversation, add_generation_prompt=
 
 # Note that the template simply formats your prompt, you still have to tokenize it and obtain pixel values for your images
 print(text_prompt)
->>> "USER: <image>\n<What’s shown in this image? ASSISTANT: This image shows a red stop sign.</s>USER: Decsribe the image in more details. ASSISTANT:"
+>>> "USER: <image>\n<What’s shown in this image? ASSISTANT: This image shows a red stop sign.</s>USER: Describe the image in more details. ASSISTANT:"
 ```
 
 - If you want to construct a chat prompt yourself, below is a list of prompt formats accepted by each llava checkpoint:
