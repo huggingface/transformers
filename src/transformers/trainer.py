@@ -399,6 +399,9 @@ class Trainer:
                     " boolean argument which will be triggered after the last batch of the eval set to signal that the"
                     " summary statistics should be returned by the function."
                 )
+        if not args.gradient_accumulation_steps or args.gradient_accumulation_steps < 1 :
+            raise ValueError(f"gradient_accumulation_steps in the TrainingArguments takes a positive integer, not {args.gradient_accumulation_steps}")
+            
         self.args = args
         # Seed must be set before instantiating the model when using model
         enable_full_determinism(self.args.seed) if self.args.full_determinism else set_seed(self.args.seed)
