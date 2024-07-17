@@ -3335,7 +3335,7 @@ class WhisperEncoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
                 fx_model_class_name = "Flax" + model_class.__name__
 
                 if not hasattr(transformers, fx_model_class_name):
-                    self.skip("Flax model does not exist")
+                    self.skipTest("Flax model does not exist")
 
                 # Output all for aggressive testing
                 config.output_hidden_states = True
