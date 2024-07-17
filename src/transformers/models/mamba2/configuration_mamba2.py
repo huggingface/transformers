@@ -64,9 +64,9 @@ class Mamba2Config(PretrainedConfig):
             Multi-input SSM head dimension.
         attention_head_dim (`int`, *optional*, defaults to 128):
             Multi-head attention's head dimension.
-        attention_num_heads (`int`, *optional*, defaults to 30):
+        num_attention_heads (`int`, *optional*, defaults to 30):
             The number of heads in multi-head attention.
-        attention_num_key_value_heads (`int`, *optional*, defaults to 30):
+        num_key_value_heads (`int`, *optional*, defaults to 30):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If
             `attention_num_key_value_heads=attention_num_heads`, the model will use Multi Head Attention (MHA), if
             `attention_num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
@@ -164,8 +164,8 @@ class Mamba2Config(PretrainedConfig):
         mlp_padding_size=128,
         mamba2_head_dim=64,
         attention_head_dim=128,
-        attention_num_heads=30,
-        attention_num_key_value_heads=30,
+        num_attention_heads=30,
+        num_key_value_heads=30,
         num_hidden_layers=24,
         attention_layers_idx=None,
         layer_norm_epsilon=1e-5,
@@ -193,12 +193,9 @@ class Mamba2Config(PretrainedConfig):
         **kwargs,
     ):
         # Avoid mutable default args
-        if attention_layers_idx is None:
-            attention_layers_idx = []
-        if A_initializer_range is None:
-            A_initializer_range = [1, 16]
-        if time_step_limit is None:
-            time_step_limit = [0.0, float("inf")]
+        attention_layers_idx = [] if attention_layers_idx is None else attention_layers_idx
+        A_initializer_range = [1, 16] if A_initializer_range is None else A_initializer_range
+        time_step_limit = [0.0, float("inf")] if time_step_limit is None else time_step_limit
 
         self.vocab_size = vocab_size
         self.pad_token_id = pad_token_id
@@ -216,10 +213,8 @@ class Mamba2Config(PretrainedConfig):
         self.mamba2_head_dim = mamba2_head_dim
         self.mamba2_num_heads = self.intermediate_size // self.mamba2_head_dim
         self.attention_head_dim = attention_head_dim
-        self.attention_num_heads = attention_num_heads
-        self.attention_num_key_value_heads = (
-            attention_num_key_value_heads if attention_num_key_value_heads is not None else attention_num_heads
-        )
+        self.num_attention_heads = num_attention_heads
+        self.num_key_value_heads = num_key_value_heads if num_key_value_heads is not None else num_attention_heads
         self.num_hidden_layers = num_hidden_layers
         self.attention_layers_idx = attention_layers_idx
         self._attention_layers_idx_validation()
@@ -252,6 +247,7 @@ class Mamba2Config(PretrainedConfig):
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             pad_token_id=pad_token_id,
+            tie_embedding_weights=tie_embedding_weights,
             **kwargs,
         )
 
