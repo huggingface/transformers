@@ -28,25 +28,6 @@ from transformers import (
 from transformers.models.mplugdocowl.image_processing_mplugdocowl import MPLUGDocOwlImageProcessor
 
 
-EPILOG_TXT = """Example:
-    python transformers/src/transformers/models/mplugdocowl/convert_mplugdocowl_weights_to_hf.py --text_model_id meta-llama/Llama-2-7b-hf --vision_model_id openai/clip-vit-large-patch14-336 --output_hub_path danaaubakirova/mplugdocowl1.5-Chat-hf --old_state_dict_id mPLUG/DocOwl1.5-Chat
-
-    Example for creating the old state dict file with Python:
-
-    import torch
-    from mplugdocowl.model.language_model.mplugdocowl_llama import MPLUGDocOwlLlamaForCausalLM
-
-    # load model
-    kwargs = {"device_map": "auto", "torch_dtype": torch.float16}
-    model = MPLUGDocOwlLlamaForCausalLM.from_pretrained("danaaubakirova/mplugdocowl1.5-Chat-hf", low_cpu_mem_usage=True, **kwargs)
-
-    # load vision tower
-    model.get_vision_tower().load_model()
-
-    # Save state dict
-    torch.save(model.state_dict(), "tmp/hf_models/mplugdocowl1.5-Chat-hf/model_state_dict.bin")
-"""
-
 KEYS_TO_MODIFY_MAPPING = {
     r"model\.vision_model\.embeddings\.position_embedding": r"vision_tower.vision_model.embeddings.position_embedding",
     r"model\.vision_model\.encoder\.layers\.(\d+)\.input_layernorm": r"vision_tower.vision_model.encoder.layers.\1.layer_norm1",
