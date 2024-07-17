@@ -72,6 +72,10 @@ class Bnb8BitHfQuantizer(HfQuantizer):
             raise ImportError(
                 "Using `bitsandbytes` 8-bit quantization requires the latest version of bitsandbytes: `pip install -U bitsandbytes`"
             )
+        if not torch.cuda.is_available():
+            import bitsandbytes as bnb
+            if not getattr(bnb, "is_multi_backend_refactor_preview", False):
+                raise RuntimeError("Current bitsandbytes only support cuda, please switch to multi_backend_refactor to support multi backends.")
 
         if kwargs.get("from_tf", False) or kwargs.get("from_flax", False):
             raise ValueError(
