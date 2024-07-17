@@ -778,6 +778,12 @@ class LxmertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_save_load_low_cpu_mem_usage_no_safetensors(self):
         pass
 
+    @unittest.skip(
+        reason="This architecure has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
+    )
+    def test_load_save_without_tied_weights(self):
+        pass
+
 
 @require_torch
 class LxmertModelIntegrationTest(unittest.TestCase):

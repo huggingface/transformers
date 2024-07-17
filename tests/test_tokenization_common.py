@@ -2678,7 +2678,7 @@ class TokenizerTesterMixin:
                 config = config_class()
 
                 if config.is_encoder_decoder or config.pad_token_id is None:
-                    self.skip("Model is not an encoder-decoder model or has no set pad token id")
+                    self.skipTest("Model is not an encoder-decoder model or has no set pad token id")
 
                 # Build sequence
                 first_ten_tokens = list(tokenizer.get_vocab().keys())[:10]

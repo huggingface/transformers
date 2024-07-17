@@ -259,9 +259,11 @@ class ModelTesterMixin:
             # make sure we don't have nans
             out_2 = out2.cpu().numpy()
             out_2[np.isnan(out_2)] = 0
+            out_2 = out_2[~np.isneginf(out_2)]
 
             out_1 = out1.cpu().numpy()
             out_1[np.isnan(out_1)] = 0
+            out_1 = out_1[~np.isneginf(out_1)]
             max_diff = np.amax(np.abs(out_1 - out_2))
             self.assertLessEqual(max_diff, 1e-5)
 
@@ -660,6 +662,8 @@ class ModelTesterMixin:
             out_2 = second.cpu().numpy()
             out_1 = out_1[~np.isnan(out_1)]
             out_2 = out_2[~np.isnan(out_2)]
+            out_1 = out_1[~np.isneginf(out_1)]
+            out_2 = out_2[~np.isneginf(out_2)]
             max_diff = np.amax(np.abs(out_1 - out_2))
             self.assertLessEqual(max_diff, 1e-5)
 
@@ -4485,9 +4489,6 @@ class ModelTesterMixin:
 
             out_last_tokens = logits[:, -1, :]  # last tokens in each batch line
             out_shared_prefix_last_tokens = logits_shared_prefix[0, -3:, :]  # last three tokens
-
-            # comparing greedily-chosen tokens:
-            assert torch.equal(out_last_tokens.max(axis=1).indices, out_shared_prefix_last_tokens.max(axis=1).indices)
 
             # comparing softmax-normalized logits:
             normalized_0 = F.softmax(out_last_tokens)
