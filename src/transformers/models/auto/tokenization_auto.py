@@ -122,13 +122,13 @@ else:
                     "RobertaTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
-            # (
-            #     "msclap",
-            #     (
-            #         "MSClapTokenizer",
-            #         "MSClapTokenizerFast" if is_tokenizers_available() else None,
-            #     ),
-            # )
+            (
+                "msclap",
+                (
+                    "MSClapTokenizer",
+                    "MSClapTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ), 
             (
                 "clip",
                 (

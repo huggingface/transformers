@@ -17,7 +17,7 @@ import argparse
 import re
 
 
-from transformers import MSClapConfig, MSClapModel
+from transformers import MSClapConfig, MSClapModel, MSClapFeatureExtractor
 
 from msclap import CLAP
 
@@ -134,7 +134,7 @@ def rename_state_dict(state_dict):
     return model_state_dict
 
 
-def convert_clap_checkpoint(version, pytorch_dump_folder_path, enable_fusion=False):
+def convert_msclap_checkpoint(version, pytorch_dump_folder_path, enable_fusion=False):
     clap_model = init_msclap(version)
 
     clap_model.clap.eval()
@@ -161,7 +161,20 @@ def convert_clap_checkpoint(version, pytorch_dump_folder_path, enable_fusion=Fal
 
     model.save_pretrained(pytorch_dump_folder_path)
     transformers_config.save_pretrained(pytorch_dump_folder_path)
+    
 
+def convert_feature_extractor_checkpoints(version ): 
+    clap_model = init_msclap(version)
+    
+    clap_model.clap.eval()
+    
+    
+    feature_extractor = MSClapFeatureExtractor()
+    
+    print('ok')
+    
+    
+    pass
 
 
 
@@ -175,7 +188,9 @@ if __name__ == "__main__":
     # parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
     # args = parser.parse_args()
 
+    convert_feature_extractor_checkpoints("2023")
+
     pytorch_dump_folder_path = "/home/kamil/cache/msclap/"
-    convert_clap_checkpoint(
+    convert_msclap_checkpoint(
         '2023', pytorch_dump_folder_path
     )

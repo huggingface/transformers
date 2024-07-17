@@ -1423,8 +1423,8 @@ class MSClapModel(MSClapPreTrainedModel):
         >>> dataset = load_dataset("hf-internal-testing/ashraq-esc50-1-dog-example")
         >>> audio_sample = dataset["train"]["audio"][0]["array"]
 
-        >>> model = MSClapModel.from_pretrained("laion/MSclap-htsat-unfused")
-        >>> processor = AutoProcessor.from_pretrained("laion/MSclap-htsat-unfused")
+        >>> model = MSClapModel.from_pretrained("")
+        >>> processor = AutoProcessor.from_pretrained("")
 
         >>> input_text = ["Sound of a dog", "Sound of vaccum cleaner"]
 

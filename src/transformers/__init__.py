@@ -1671,7 +1671,7 @@ else:
         [
             # "MSClapAudioModel",
             # "MSClapAudioModelWithProjection",
-            # "MSClapFeatureExtractor",
+            "MSClapFeatureExtractor",
             "MSClapModel",
             "MSClapPreTrainedModel",
             # "MSClapTextModel",

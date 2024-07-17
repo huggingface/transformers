@@ -22,7 +22,7 @@ _import_structure = {
         "MSClapConfig",
         "MSClapTextConfig",
     ],
-    # "processing_clap": ["ClapProcessor"],
+    "processing_clap": ["MSClapProcessor"],
 }
 
 try:
@@ -39,7 +39,7 @@ else:
         # "MSClapAudioModel",
         # "ClapAudioModelWithProjection",
     ]
-    # _import_structure["feature_extraction_clap"] = ["ClapFeatureExtractor"]
+    _import_structure["feature_extraction_msclap"] = ["MSClapFeatureExtractor"]
 
 if TYPE_CHECKING:
     from .configuration_msclap import (
@@ -47,7 +47,7 @@ if TYPE_CHECKING:
         MSClapConfig,
         MSClapTextConfig,
     )
-    # from .processing_clap import ClapProcessor
+    from .processing_msclap import MSClapProcessor
 
     try:
         if not is_torch_available():
@@ -55,7 +55,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        # from .feature_extraction_clap import ClapFeatureExtractor
+        from .feature_extraction_msclap import MSClapFeatureExtractor
         from .modeling_msclap import (
             # MSClapAudioModel,
             MSClapModel, 
