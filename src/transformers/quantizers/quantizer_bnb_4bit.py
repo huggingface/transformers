@@ -74,8 +74,11 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             )
         if not torch.cuda.is_available():
             import bitsandbytes as bnb
+
             if not getattr(bnb, "is_multi_backend_refactor_preview", False):
-                raise RuntimeError("Current bitsandbytes only support cuda, please switch to multi_backend_refactor to support multi backends.")
+                raise RuntimeError(
+                    "Current bitsandbytes only support cuda, please switch to multi_backend_refactor to support multi backends."
+                )
 
         if kwargs.get("from_tf", False) or kwargs.get("from_flax", False):
             raise ValueError(
