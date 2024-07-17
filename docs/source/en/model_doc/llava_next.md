@@ -128,7 +128,7 @@ conversation = [
         "content": [
             {"type": "image"},
             {"type": "text", "text": "What is shown in this image?"},
-            ],
+        ],
     },
 ]
 prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)
