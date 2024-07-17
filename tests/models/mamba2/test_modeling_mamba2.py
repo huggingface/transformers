@@ -310,7 +310,7 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         self.config_tester.run_common_tests()
 
     # TODO: add test_model_from_pretrained test
-    # TODO: add test_model_from_pretrained test
+    # TODO: add test_multi_gpu_parallel_forward test
 
     def test_mamba2_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
