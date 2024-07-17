@@ -30,7 +30,9 @@ from transformers.testing_utils import (
     require_auto_gptq,
     require_quanto,
     require_torch,
+    require_torch_gpu,
     require_torch_multi_accelerator,
+    require_torch_multi_gpu,
     slow,
     torch_device,
 )
@@ -57,7 +59,7 @@ if is_torch_available():
         ImageGPTForCausalImageModeling,
         SpeechEncoderDecoderModel,
     )
-    from transformers.cache_utils import DynamicCache, QuantoQuantizedCache
+    from transformers.cache_utils import DynamicCache, EncoderDecoderCache, QuantoQuantizedCache
     from transformers.generation import (
         BeamSampleDecoderOnlyOutput,
         BeamSampleEncoderDecoderOutput,
@@ -463,7 +465,9 @@ class GenerationTesterMixin:
             config, input_ids, attention_mask = self._get_input_ids_and_config()
 
             if not hasattr(config, "use_cache"):
-                self.skipTest("This model doesn't support caching")
+                self.skipTest(reason="This model doesn't support caching")
+            if any(model_name in model_class.__name__.lower() for model_name in ["rwkv"]):
+                self.skipTest(reason="Won't fix: model with non-standard dictionary output shapes")
 
             config.use_cache = True
             config.is_decoder = True
@@ -623,7 +627,9 @@ class GenerationTesterMixin:
             config, input_ids, attention_mask = self._get_input_ids_and_config()
 
             if not hasattr(config, "use_cache"):
-                self.skipTest("This model doesn't support caching")
+                self.skipTest(reason="This model doesn't support caching")
+            if any(model_name in model_class.__name__.lower() for model_name in ["rwkv"]):
+                self.skipTest(reason="Won't fix: model with non-standard dictionary output shapes")
 
             model = model_class(config).to(torch_device).eval()
             logits_process_kwargs, _ = self._get_logits_processor_and_warper_kwargs(
@@ -663,7 +669,7 @@ class GenerationTesterMixin:
     def test_model_parallel_beam_search(self):
         for model_class in self.all_generative_model_classes:
             if "xpu" in torch_device:
-                return unittest.skip("device_map='auto' does not work with XPU devices")
+                return unittest.skip(reason="device_map='auto' does not work with XPU devices")
 
             if model_class._no_split_modules is None:
                 continue
@@ -761,7 +767,7 @@ class GenerationTesterMixin:
 
         # if no bos token id => cannot generate from None
         if config.bos_token_id is None:
-            return
+            self.skipTest(reason="bos_token_id is None")
 
         # hack in case they are equal, otherwise the attn mask will be [0]
         if config.bos_token_id == config.pad_token_id:
@@ -978,17 +984,17 @@ class GenerationTesterMixin:
     def test_contrastive_generate(self):
         for model_class in self.all_generative_model_classes:
             if model_class._is_stateful:
-                self.skipTest("Stateful models don't support contrastive search generation")
+                self.skipTest(reason="Stateful models don't support contrastive search generation")
 
             # won't fix: FSMT and Reformer have a different cache variable type (and format).
             if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
-                self.skipTest("Won't fix: old model with different cache format")
+                self.skipTest(reason="Won't fix: old model with different cache format")
 
             config, input_ids, attention_mask = self._get_input_ids_and_config()
 
             # NOTE: contrastive search only works with cache on at the moment.
             if not hasattr(config, "use_cache"):
-                self.skipTest("This model doesn't support caching")
+                self.skipTest(reason="This model doesn't support caching")
             config.use_cache = True
             config.is_decoder = True
 
@@ -1005,17 +1011,17 @@ class GenerationTesterMixin:
     def test_contrastive_generate_dict_outputs_use_cache(self):
         for model_class in self.all_generative_model_classes:
             if model_class._is_stateful:
-                self.skipTest("Stateful models don't support contrastive search generation")
+                self.skipTest(reason="Stateful models don't support contrastive search generation")
 
             # won't fix: FSMT and Reformer have a different cache variable type (and format).
             if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
-                self.skipTest("Won't fix: old model with different cache format")
+                self.skipTest(reason="Won't fix: old model with different cache format")
 
             config, input_ids, attention_mask = self._get_input_ids_and_config()
 
             # NOTE: contrastive search only works with cache on at the moment.
             if not hasattr(config, "use_cache"):
-                self.skipTest("This model doesn't support caching")
+                self.skipTest(reason="This model doesn't support caching")
             config.use_cache = True
             config.is_decoder = True
 
@@ -1041,18 +1047,18 @@ class GenerationTesterMixin:
         # Check that choosing 'low_memory' does not change the model output
         for model_class in self.all_generative_model_classes:
             if model_class._is_stateful:
-                self.skipTest("Stateful models don't support contrastive search generation")
+                self.skipTest(reason="Stateful models don't support contrastive search generation")
 
             if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer", "speech2text"]):
-                self.skipTest("Won't fix: old model with different cache format")
+                self.skipTest(reason="Won't fix: old model with different cache format")
             if any(model_name in model_class.__name__.lower() for model_name in ["gptbigcode"]):
-                self.skipTest("TODO: fix me")
+                self.skipTest(reason="TODO: fix me")
 
             config, input_ids, attention_mask = self._get_input_ids_and_config(batch_size=1)
 
             # NOTE: contrastive search only works with cache on at the moment.
             if not hasattr(config, "use_cache"):
-                self.skipTest("This model doesn't support caching")
+                self.skipTest(reason="This model doesn't support caching")
 
             config.use_cache = True
             config.is_decoder = True
@@ -1083,9 +1089,9 @@ class GenerationTesterMixin:
         # Check that choosing 'low_memory' does not change the model output
         for model_class in self.all_generative_model_classes:
             if model_class._is_stateful:
-                self.skipTest("May fix in the future: need custom cache handling")
+                self.skipTest(reason="May fix in the future: need custom cache handling")
             if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
-                self.skipTest("Won't fix: old model with different cache format")
+                self.skipTest(reason="Won't fix: old model with different cache format")
             if any(
                 model_name in model_class.__name__.lower()
                 for model_name in [
@@ -1097,7 +1103,7 @@ class GenerationTesterMixin:
                     "jamba",
                 ]
             ):
-                self.skipTest("May fix in the future: need model-specific fixes")
+                self.skipTest(reason="May fix in the future: need model-specific fixes")
             config, input_ids, _ = self._get_input_ids_and_config(batch_size=2)
             # batch_size=1 is ok, but batch_size>1 will cause non-identical output
 
@@ -1130,9 +1136,9 @@ class GenerationTesterMixin:
 
         for model_class in self.all_generative_model_classes:
             if model_class._is_stateful:
-                self.skipTest("Stateful models don't support assisted generation")
+                self.skipTest(reason="Stateful models don't support assisted generation")
             if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
-                self.skipTest("Won't fix: old model with different cache format")
+                self.skipTest(reason="Won't fix: old model with different cache format")
             if any(
                 model_name in model_class.__name__.lower()
                 for model_name in [
@@ -1146,14 +1152,14 @@ class GenerationTesterMixin:
                     "clvp",
                 ]
             ):
-                self.skipTest("May fix in the future: need model-specific fixes")
+                self.skipTest(reason="May fix in the future: need model-specific fixes")
 
             # enable cache
             config, input_ids, attention_mask = self._get_input_ids_and_config(batch_size=1)
 
             # NOTE: assisted generation only works with cache on at the moment.
             if not hasattr(config, "use_cache"):
-                self.skipTest("This model doesn't support caching")
+                self.skipTest(reason="This model doesn't support caching")
 
             config.use_cache = True
             config.is_decoder = True
@@ -1201,9 +1207,9 @@ class GenerationTesterMixin:
 
         for model_class in self.all_generative_model_classes:
             if model_class._is_stateful:
-                self.skipTest("Stateful models don't support assisted generation")
+                self.skipTest(reason="Stateful models don't support assisted generation")
             if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
-                self.skipTest("Won't fix: old model with different cache format")
+                self.skipTest(reason="Won't fix: old model with different cache format")
             if any(
                 model_name in model_class.__name__.lower()
                 for model_name in [
@@ -1217,14 +1223,14 @@ class GenerationTesterMixin:
                     "clvp",
                 ]
             ):
-                self.skipTest("May fix in the future: need model-specific fixes")
+                self.skipTest(reason="May fix in the future: need model-specific fixes")
 
             # enable cache
             config, input_ids, attention_mask = self._get_input_ids_and_config(batch_size=1)
 
             # NOTE: assisted generation only works with cache on at the moment.
             if not hasattr(config, "use_cache"):
-                self.skipTest("This model doesn't support caching")
+                self.skipTest(reason="This model doesn't support caching")
 
             config.use_cache = True
             config.is_decoder = True
@@ -1257,15 +1263,64 @@ class GenerationTesterMixin:
             for output in (output_greedy, output_prompt_lookup):
                 self._check_outputs(output, input_ids, model.config, use_cache=True)
 
+    def test_dola_decoding_sample(self):
+        # TODO (joao): investigate skips, try to reduce incompatibilities
+        for model_class in self.all_generative_model_classes:
+            if model_class._is_stateful:
+                self.skipTest(reason="Stateful models don't support DoLa decoding")
+
+            if any(model_name in model_class.__name__.lower() for model_name in ["reformer"]):
+                self.skipTest("Skip Reformer as the lm_head input size is 2 * hidden size, adopted from Rev Nets.")
+
+            if any(model_name in model_class.__name__.lower() for model_name in ["marian", "mbart", "pegasus"]):
+                self.skipTest("DoLa is not supported for models that don't return layerwise hidden states")
+
+            # enable cache if the model is not openai-gpt, xlnet, cpm, or xlm
+            config, input_ids, attention_mask = self._get_input_ids_and_config()
+
+            # Some models don't support the cache and returning past_key_values
+            if not hasattr(config, "use_cache"):
+                config.use_cache = False
+            else:
+                config.use_cache = True
+
+            # Encoder-decoder models are not supported
+            if config.is_encoder_decoder:
+                self.skipTest("DoLa is not supported for encoder-decoder models")
+            config.is_decoder = True
+            model = model_class(config).to(torch_device).eval()
+
+            if model.get_output_embeddings() is None:
+                self.skipTest("DoLa is not supported for models that don't have output embeddings")
+            # Sets dola generation arguments such that:
+            # a) no EOS is generated, to ensure generation doesn't break early
+            # b) there are at least two forward passes in the main model, to ensure the input preparation of
+            #    the main model is correct
+            generation_kwargs = {
+                "eos_token_id": -1,  # see a)
+                "max_new_tokens": 4,  # see b)
+                "num_beams": 1,
+                "do_sample": True,
+                "output_scores": True,
+                "output_logits": True,
+                "output_hidden_states": True,
+                "output_attentions": self.has_attentions,
+                "return_dict_in_generate": True,
+            }
+            generation_kwargs.update({"dola_layers": "low"})
+            model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
+            output_dola = model.generate(input_ids, **model_kwargs, **generation_kwargs)
+            self._check_outputs(output_dola, input_ids, model.config, use_cache=config.use_cache)
+
     def test_assisted_decoding_sample(self):
         # In this test we don't check assisted vs non-assisted output -- seeded assisted decoding with sample will not
         # match sample for the same seed, as the forward pass does not return the exact same logits (due to matmul with
         # different shapes, see https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535).
         for model_class in self.all_generative_model_classes:
             if model_class._is_stateful:
-                self.skipTest("Stateful models don't support assisted generation")
+                self.skipTest(reason="Stateful models don't support assisted generation")
             if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
-                self.skipTest("Won't fix: old model with different cache format")
+                self.skipTest(reason="Won't fix: old model with different cache format")
             if any(
                 model_name in model_class.__name__.lower()
                 for model_name in [
@@ -1279,14 +1334,14 @@ class GenerationTesterMixin:
                     "clvp",
                 ]
             ):
-                self.skipTest("May fix in the future: need model-specific fixes")
+                self.skipTest(reason="May fix in the future: need model-specific fixes")
 
             # enable cache
             config, input_ids, attention_mask = self._get_input_ids_and_config(batch_size=1)
 
             # NOTE: assisted generation only works with cache on at the moment.
             if not hasattr(config, "use_cache"):
-                self.skipTest("This model doesn't support caching")
+                self.skipTest(reason="This model doesn't support caching")
 
             config.use_cache = True
             config.is_decoder = True
@@ -1431,7 +1486,7 @@ class GenerationTesterMixin:
 
             # If it doesn't support cache, pass the test
             if not hasattr(config, "use_cache"):
-                self.skipTest("This model doesn't support caching")
+                self.skipTest(reason="This model doesn't support caching")
 
             model = model_class(config).to(torch_device)
             if "use_cache" not in inputs:
@@ -1440,7 +1495,7 @@ class GenerationTesterMixin:
 
             # If "past_key_values" is not returned, pass the test (e.g. RWKV uses a different cache name and format)
             if "past_key_values" not in outputs:
-                self.skipTest("This model doesn't return `past_key_values`")
+                self.skipTest(reason="This model doesn't return `past_key_values`")
 
             num_hidden_layers = (
                 getattr(config, "decoder_layers", None)
@@ -1548,14 +1603,14 @@ class GenerationTesterMixin:
         # Tests that we can continue generating from past key values, returned from a previous `generate` call
         for model_class in self.all_generative_model_classes:
             if any(model_name in model_class.__name__.lower() for model_name in ["imagegpt"]):
-                self.skipTest("Won't fix: old model with unique inputs/caches/other")
+                self.skipTest(reason="Won't fix: old model with unique inputs/caches/other")
             if any(model_name in model_class.__name__.lower() for model_name in ["umt5"]):
-                self.skipTest("TODO: needs modeling or test input preparation fixes for compatibility")
+                self.skipTest(reason="TODO: needs modeling or test input preparation fixes for compatibility")
 
             config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
 
             if not hasattr(config, "use_cache"):
-                self.skipTest("This model doesn't support caching")
+                self.skipTest(reason="This model doesn't support caching")
 
             # Let's make it always:
             # 1. use cache (for obvious reasons)
@@ -1577,7 +1632,7 @@ class GenerationTesterMixin:
             # If "past_key_values" is not returned, skip the test (e.g. RWKV uses a different cache name and format)
             outputs = model(**inputs)
             if "past_key_values" not in outputs:
-                self.skipTest("This model doesn't return `past_key_values`")
+                self.skipTest(reason="This model doesn't return `past_key_values`")
 
             # Traditional way of generating text, with `return_dict_in_generate` to return the past key values
             outputs = model.generate(**inputs, do_sample=False, max_new_tokens=4, return_dict_in_generate=True)
@@ -1627,11 +1682,10 @@ class GenerationTesterMixin:
         # 👉 tests with and without sampling so we can cover the most common use cases.
         for model_class in self.all_generative_model_classes:
             if not model_class._supports_cache_class:
-                self.skipTest("This model does not support the new cache format")
+                self.skipTest(reason="This model does not support the new cache format")
 
             config, input_ids, attention_mask = self._get_input_ids_and_config()
             config.use_cache = True
-            config.is_decoder = True
 
             model = model_class(config).to(torch_device).eval()
             generation_kwargs = {
@@ -1647,15 +1701,21 @@ class GenerationTesterMixin:
             set_seed(seed)
             legacy_results = model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
             set_seed(seed)
+            if config.is_encoder_decoder:
+                cache_cls = EncoderDecoderCache
+                past_key_values = cache_cls(DynamicCache(), DynamicCache())
+            else:
+                cache_cls = DynamicCache
+                past_key_values = cache_cls()
             new_results = model.generate(
-                input_ids, attention_mask=attention_mask, past_key_values=DynamicCache(), **generation_kwargs
+                input_ids, attention_mask=attention_mask, past_key_values=past_key_values, **generation_kwargs
             )
 
             # The two sets of generated sequences must match, despite the cache format between forward passes being
             # different
             self.assertListEqual(legacy_results.sequences.tolist(), new_results.sequences.tolist())
             self.assertTrue(isinstance(legacy_results.past_key_values, tuple))
-            self.assertTrue(isinstance(new_results.past_key_values, DynamicCache))
+            self.assertTrue(isinstance(new_results.past_key_values, cache_cls))
 
             # The contents of the two caches, when converted to the same format (in both directions!), must match
             legacy_cache = legacy_results.past_key_values
@@ -1670,7 +1730,7 @@ class GenerationTesterMixin:
                     )
 
             new_cache = new_results.past_key_values
-            legacy_cache_converted = DynamicCache.from_legacy_cache(legacy_results.past_key_values)
+            legacy_cache_converted = cache_cls.from_legacy_cache(legacy_results.past_key_values)
             for layer_idx in range(len(new_cache)):
                 for kv_idx in range(len(new_cache[layer_idx])):
                     self.assertTrue(
@@ -1684,7 +1744,7 @@ class GenerationTesterMixin:
     def test_generate_with_quant_cache(self):
         for model_class in self.all_generative_model_classes:
             if not model_class._supports_quantized_cache:
-                self.skipTest("This model does not support the quantized cache format")
+                self.skipTest(reason="This model does not support the quantized cache format")
 
             config, input_ids, attention_mask = self._get_input_ids_and_config()
             config.use_cache = True
@@ -2077,6 +2137,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
             [1, 18],
         )
 
+    # TODO (joao): replace `stop_sequence` in the pipeline by the more recent `generate` functionality
     def test_stop_sequence_stopping_criteria(self):
         # PT-only test: TF doesn't have StoppingCriteria
         prompt = """Hello I believe in"""
@@ -2084,17 +2145,11 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         output = generator(prompt)
         self.assertEqual(
             output,
-            [
-                {
-                    "generated_text": (
-                        "Hello I believe in in in number number number number number number number number number"
-                    )
-                }
-            ],
+            [{"generated_text": ("Hello I believe in we we we we we we we we we")}],
         )
 
-        output = generator(prompt, stop_sequence=" number")
-        self.assertEqual(output, [{"generated_text": "Hello I believe in in in number"}])
+        output = generator(prompt, stop_sequence=" we")
+        self.assertEqual(output, [{"generated_text": "Hello I believe in we"}])
 
     def test_generate_non_nlp_input_ids_as_kwarg(self):
         # PT-only test: AFAIK there's no non-NLP model architecture in TF that supports `input_ids` as its only input
@@ -3091,6 +3146,54 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
 
         self.assertTrue(y_prob > 0.001 and n_prob > 0.001)
         self.assertTrue(y_prob <= 1.0 and n_prob <= 1.0)
+
+    @slow
+    @require_torch_multi_gpu
+    def test_assisted_decoding_in_different_gpu(self):
+        # PT-only test: TF doesn't support assisted decoding yet.
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM").to("cuda:0")
+        assistant = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM").to(
+            "cuda:1"
+        )
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
+        model.config.pad_token_id = tokenizer.eos_token_id
+        assistant.config.pad_token_id = tokenizer.eos_token_id
+
+        text = "Hello world"
+        tokenized_inputs = tokenizer([text], return_tensors="pt")
+        input_ids = tokenized_inputs.input_ids.to(torch_device)
+        input_length = input_ids.shape[-1]
+
+        out = model.generate(
+            input_ids,
+            assistant_model=assistant,
+            max_new_tokens=20,
+        )
+        self.assertTrue(input_length <= out.shape[-1] <= input_length + 20)
+
+    @slow
+    @require_torch_gpu
+    def test_assisted_decoding_in_gpu_cpu(self):
+        # PT-only test: TF doesn't support assisted decoding yet.
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM").to("cuda")
+        assistant = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM").to(
+            "cpu"
+        )
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
+        model.config.pad_token_id = tokenizer.eos_token_id
+        assistant.config.pad_token_id = tokenizer.eos_token_id
+
+        text = "Hello world"
+        tokenized_inputs = tokenizer([text], return_tensors="pt")
+        input_ids = tokenized_inputs.input_ids.to(torch_device)
+        input_length = input_ids.shape[-1]
+
+        out = model.generate(
+            input_ids,
+            assistant_model=assistant,
+            max_new_tokens=20,
+        )
+        self.assertTrue(input_length <= out.shape[-1] <= input_length + 20)
 
 
 @require_torch

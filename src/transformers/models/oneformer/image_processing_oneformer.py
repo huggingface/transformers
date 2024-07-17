@@ -772,7 +772,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
             ignore_index,
             do_reduce_labels,
             return_tensors,
-            input_data_format=input_data_format,
+            input_data_format=data_format,
         )
         return encoded_inputs
 
