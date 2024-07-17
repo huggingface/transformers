@@ -632,7 +632,27 @@ class GGUFLlamaConverter(LlamaConverter):
         return decoders.Sequence(sequence)
 
     def converted(self):
-        tokenizer = super().converted()
+        # Copied partly from converted method in SpmConverter class
+        tokenizer = self.tokenizer(self.proto)
+
+        # Tokenizer assemble
+        normalizer = self.normalizer(self.proto)
+        if normalizer is not None:
+            tokenizer.normalizer = normalizer
+
+        replacement = "▁"
+        add_prefix_space = True
+        if hasattr(self.original_tokenizer, "add_prefix_space"):
+            add_prefix_space = self.original_tokenizer.add_prefix_space
+
+        pre_tokenizer = self.pre_tokenizer(replacement, add_prefix_space)
+        if pre_tokenizer is not None:
+            tokenizer.pre_tokenizer = pre_tokenizer
+
+        tokenizer.decoder = self.decoder(replacement, add_prefix_space)
+        post_processor = self.post_processor()
+        if post_processor:
+            tokenizer.post_processor = post_processor
 
         # HACK: patch the llama-3 tokenizer to use the correspinding pre-tokenizer
         # and normalizer

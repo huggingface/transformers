@@ -199,7 +199,8 @@ effect that `add_generation_prompt` has will depend on the template being used.
 
 ## Can I use chat templates in training?
 
-Yes! We recommend that you apply the chat template as a preprocessing step for your dataset. After this, you
+Yes! This is a good way to ensure that the chat template matches the tokens the model sees during training.
+We recommend that you apply the chat template as a preprocessing step for your dataset. After this, you
 can simply continue like any other language model training task. When training, you should usually set 
 `add_generation_prompt=False`, because the added tokens to prompt an assistant response will not be helpful during 
 training. Let's see an example:
@@ -232,6 +233,16 @@ The sun.</s>
 ```
 
 From here, just continue training like you would with a standard language modelling task, using the `formatted_chat` column.
+
+<Tip>
+If you format text with `apply_chat_template(tokenize=False)` and then tokenize it in a separate step, you should set the argument
+`add_special_tokens=False`. If you use `apply_chat_template(tokenize=True)`, you don't need to worry about this!
+
+By default, some tokenizers add special tokens like `<bos>` and `<eos>` to text they tokenize. Chat templates should 
+always include all of the special tokens they need, and so adding extra special tokens with
+the default `add_special_tokens=True` can result in incorrect or duplicated special tokens, which will hurt model
+performance.
+</Tip>
 
 ## Advanced: Extra inputs to chat templates
 

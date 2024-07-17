@@ -60,6 +60,8 @@ from .generic import (
     tensor_size,
     to_numpy,
     to_py_obj,
+    torch_float,
+    torch_int,
     transpose,
     working_or_temp_dir,
 )
@@ -126,6 +128,7 @@ from .import_utils import (
     is_essentia_available,
     is_faiss_available,
     is_flash_attn_2_available,
+    is_flash_attn_greater_or_equal,
     is_flash_attn_greater_or_equal_2_10,
     is_flax_available,
     is_fsdp_available,

@@ -52,8 +52,9 @@ DEFAULT_CODE_SYSTEM_PROMPT = """You will be given a task to solve, your job is t
 To help you, I will give you access to a set of tools that you can use. Each tool is a Python function and has a description explaining the task it performs, the inputs it expects and the outputs it returns.
 You should first explain which tool you will use to perform the task and for what reason, then write the code in Python.
 Each instruction in Python should be a simple assignment. You can print intermediate results if it makes sense to do so.
+In the end, use tool 'final_answer' to return your answer, its argument will be what gets returned.
 You can use imports in your code, but only from the following list of modules: <<authorized_imports>>
-Be sure to provide a 'Code:' token, else the system will be stuck in a loop.
+Be sure to provide a 'Code:' token, else the run will fail.
 
 Tools:
 <<tool_descriptions>>
@@ -68,7 +69,7 @@ Code:
 translated_question = translator(question=question, src_lang="French", tgt_lang="English")
 print(f"The translated question is {translated_question}.")
 answer = image_qa(image=image, question=translated_question)
-print(f"The answer is {answer}")
+final_answer(f"The answer is {answer}")
 ```<end_action>
 
 ---
@@ -80,6 +81,7 @@ Code:
 answer = document_qa(document, question="What is the oldest person?")
 print(f"The answer is {answer}.")
 image = image_generator(answer)
+final_answer(image)
 ```<end_action>
 
 ---
@@ -89,6 +91,7 @@ I will use the following tool: `image_generator` to generate an image.
 Code:
 ```py
 image = image_generator(prompt=caption)
+final_answer(image)
 ```<end_action>
 
 ---
@@ -100,6 +103,7 @@ Code:
 summarized_text = summarizer(text)
 print(f"Summary: {summarized_text}")
 audio_summary = text_reader(summarized_text)
+final_answer(audio_summary)
 ```<end_action>
 
 ---
@@ -111,6 +115,7 @@ Code:
 answer = text_qa(text=text, question=question)
 print(f"The answer is {answer}.")
 image = image_generator(answer)
+final_answer(image)
 ```<end_action>
 
 ---
@@ -120,6 +125,7 @@ I will use the following tool: `image_captioner` to generate a caption for the i
 Code:
 ```py
 caption = image_captioner(image)
+final_answer(caption)
 ```<end_action>
 
 ---
@@ -145,7 +151,7 @@ The $ACTION_JSON_BLOB should only contain a SINGLE action, do NOT return a list 
   "action_input": $INPUT
 }<end_action>
 
-Make sure to have the $INPUT as a dictionnary in the right format for the tool you are using, and do not put variable names as input if you can find the right values.
+Make sure to have the $INPUT as a dictionary in the right format for the tool you are using, and do not put variable names as input if you can find the right values.
 
 You should ALWAYS use the following format:
 
@@ -357,7 +363,9 @@ Here are the rules you should always follow to solve your task:
 4. Take care to not chain too many sequential tool calls in the same code block, especially when the output format is unpredictable. For instance, a call to search has an unpredictable return format, so do not have another tool call that depends on its output in the same block: rather output results with print() to use them in the next block.
 5. Call a tool only when needed, and never re-do a tool call that you previously did with the exact same parameters.
 6. Don't name any new variable with the same name as a tool: for instance don't name a variable 'final_answer'.
-7. You can use imports in your code, but only from the following list of modules: <<authorized_imports>>
+7. Never create any notional variables in our code, as having these in your logs might derail you from the true variables.
+8. You can use imports in your code, but only from the following list of modules: <<authorized_imports>>
+9. Don't give up! You're in charge of solving the task, not providing directions to solve it.
 
 Now Begin! If you solve the task correctly, you will receive a reward of $1,000,000.
 """

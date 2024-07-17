@@ -753,6 +753,30 @@ def infer_framework(model_class):
         raise TypeError(f"Could not infer framework from class {model_class}.")
 
 
+def torch_int(x):
+    """
+    Casts an input to a torch int64 tensor if we are in a tracing context, otherwise to a Python int.
+    """
+    if not is_torch_available():
+        return int(x)
+
+    import torch
+
+    return x.to(torch.int64) if torch.jit.is_tracing() and isinstance(x, torch.Tensor) else int(x)
+
+
+def torch_float(x):
+    """
+    Casts an input to a torch float32 tensor if we are in a tracing context, otherwise to a Python float.
+    """
+    if not is_torch_available():
+        return int(x)
+
+    import torch
+
+    return x.to(torch.float32) if torch.jit.is_tracing() and isinstance(x, torch.Tensor) else int(x)
+
+
 def filter_out_non_signature_kwargs(extra: Optional[list] = None):
     """
     Decorator to filter out named arguments that are not in the function signature.
