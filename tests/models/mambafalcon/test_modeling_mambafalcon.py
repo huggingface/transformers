@@ -41,6 +41,7 @@ else:
     is_torch_greater_or_equal_than_2_0 = False
 
 
+# Copied from transformers.tests.models.mamba.MambaModelTester with Mamba->Sindibad,mamba->sindibad
 class SindibadModelTester:
     def __init__(
         self,
@@ -246,6 +247,7 @@ class SindibadModelTester:
     not is_torch_greater_or_equal_than_2_0, reason="See https://github.com/huggingface/transformers/pull/24204"
 )
 @require_torch
+# Copied from transformers.tests.models.mamba.MambaModelTest with Mamba->SindiBad,mamba->sindibad
 class SindibadModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (SindibadModel, SindibadForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (SindibadForCausalLM,) if is_torch_available() else ()
@@ -360,8 +362,9 @@ class SindibadModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
                         self.assertTrue(torch.allclose(param.data, torch.ones_like(param.data), atol=1e-5, rtol=1e-5))
 
     @slow
+    # Ignore copy
     def test_model_from_pretrained(self):
-        model = SindibadModel.from_pretrained("hf-internal-testing/sindibad-130m")
+        model = SindibadModel.from_pretrained("tiiuae/sindibad-7b")
         self.assertIsNotNone(model)
 
     def test_model_outputs_equivalence(self):
@@ -425,5 +428,5 @@ class SindibadModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 @slow
 class SindibadIntegrationTests(unittest.TestCase):
     def setUp(self):
-        self.model_id = "state-spaces/sindibad-2.8b-hf"
+        self.model_id = "tiiuae/sindibad-7b"
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_id)
