@@ -664,7 +664,7 @@ class ProcessorMixin(PushToHubMixin):
 
         if "chat_template" in processor_dict and processor_dict["chat_template"] is not None:
             logger.warning_once(
-                "Chat templates should be in a 'chat_template.json' file but found key='chat template' "
+                "Chat templates should be in a 'chat_template.json' file but found key='chat_template' "
                 "in the processor's config. Make sure to move your template to its own file."
             )
 
