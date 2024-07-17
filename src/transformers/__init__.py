@@ -537,7 +537,6 @@ _import_structure = {
     ],
     "models.m2m_100": ["M2M100Config"],
     "models.mamba": ["MambaConfig"],
-    "models.sindibad": ["SindibadConfig"],
     "models.marian": ["MarianConfig"],
     "models.markuplm": [
         "MarkupLMConfig",
@@ -692,6 +691,7 @@ _import_structure = {
         "SiglipTextConfig",
         "SiglipVisionConfig",
     ],
+    "models.sindibad": ["SindibadConfig"],
     "models.speech_encoder_decoder": ["SpeechEncoderDecoderConfig"],
     "models.speech_to_text": [
         "Speech2TextConfig",
@@ -2527,13 +2527,6 @@ else:
             "MambaPreTrainedModel",
         ]
     )
-    _import_structure["models.sindibad"].extend(
-        [
-            "SindibadForCausalLM",
-            "SindibadModel",
-            "SindibadPreTrainedModel",
-        ]
-    )
     _import_structure["models.marian"].extend(["MarianForCausalLM", "MarianModel", "MarianMTModel"])
     _import_structure["models.markuplm"].extend(
         [
@@ -3150,6 +3143,13 @@ else:
             "SiglipPreTrainedModel",
             "SiglipTextModel",
             "SiglipVisionModel",
+        ]
+    )
+    _import_structure["models.sindibad"].extend(
+        [
+            "SindibadForCausalLM",
+            "SindibadModel",
+            "SindibadPreTrainedModel",
         ]
     )
     _import_structure["models.speech_encoder_decoder"].extend(["SpeechEncoderDecoderModel"])
@@ -5207,7 +5207,6 @@ if TYPE_CHECKING:
     )
     from .models.m2m_100 import M2M100Config
     from .models.mamba import MambaConfig
-    from .models.sindibad import SindibadConfig
     from .models.marian import MarianConfig
     from .models.markuplm import (
         MarkupLMConfig,
@@ -5388,6 +5387,7 @@ if TYPE_CHECKING:
         SiglipTextConfig,
         SiglipVisionConfig,
     )
+    from .models.sindibad import SindibadConfig
     from .models.speech_encoder_decoder import SpeechEncoderDecoderConfig
     from .models.speech_to_text import (
         Speech2TextConfig,
@@ -6999,11 +6999,6 @@ if TYPE_CHECKING:
             MambaModel,
             MambaPreTrainedModel,
         )
-        from .models.sindibad import (
-            SindibadForCausalLM,
-            SindibadModel,
-            SindibadPreTrainedModel,
-        )
         from .models.marian import MarianForCausalLM, MarianModel, MarianMTModel
         from .models.markuplm import (
             MarkupLMForQuestionAnswering,
@@ -7489,6 +7484,11 @@ if TYPE_CHECKING:
             SiglipPreTrainedModel,
             SiglipTextModel,
             SiglipVisionModel,
+        )
+        from .models.sindibad import (
+            SindibadForCausalLM,
+            SindibadModel,
+            SindibadPreTrainedModel,
         )
         from .models.speech_encoder_decoder import SpeechEncoderDecoderModel
         from .models.speech_to_text import (

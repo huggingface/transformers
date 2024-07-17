@@ -257,9 +257,7 @@ class SindibadModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     test_pruning = False
     test_head_masking = False  # Sindibad does not have attention heads
     pipeline_model_mapping = (
-        {"feature-extraction": SindibadModel, "text-generation": SindibadForCausalLM}
-        if is_torch_available()
-        else {}
+        {"feature-extraction": SindibadModel, "text-generation": SindibadForCausalLM} if is_torch_available() else {}
     )
 
     def setUp(self):

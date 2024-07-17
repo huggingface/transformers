@@ -263,7 +263,6 @@ else:
             ("lxmert", ("LxmertTokenizer", "LxmertTokenizerFast" if is_tokenizers_available() else None)),
             ("m2m_100", ("M2M100Tokenizer" if is_sentencepiece_available() else None, None)),
             ("mamba", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
-            ("sindibad", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
             ("marian", ("MarianTokenizer" if is_sentencepiece_available() else None, None)),
             (
                 "mbart",
@@ -439,6 +438,7 @@ else:
                 ),
             ),
             ("siglip", ("SiglipTokenizer" if is_sentencepiece_available() else None, None)),
+            ("sindibad", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
             ("speech_to_text", ("Speech2TextTokenizer" if is_sentencepiece_available() else None, None)),
             ("speech_to_text_2", ("Speech2Text2Tokenizer", None)),
             ("speecht5", ("SpeechT5Tokenizer" if is_sentencepiece_available() else None, None)),
