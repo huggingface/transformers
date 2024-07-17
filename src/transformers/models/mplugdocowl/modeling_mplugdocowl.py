@@ -574,7 +574,13 @@ class MPLUGDocOwlVisionTransformer(PreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
+
         Returns:
+        Union[Tuple, BaseModelOutputWithPooling]: A `BaseModelOutputWithPooling` or a tuple of (last_hidden_state, pooled_output, hidden_states, attentions), where:
+            - last_hidden_state (torch.FloatTensor of shape (batch_size, sequence_length, hidden_size)): Sequence of hidden states at the output of the last layer of the model.
+            - pooler_output (torch.FloatTensor of shape (batch_size, hidden_size)): The last hidden state after applying the post-layer normalization.
+            - hidden_states (Optional[Tuple[torch.FloatTensor]]): Tuple of torch.FloatTensor (one for the output of each layer) of shape (batch_size, sequence_length, hidden_size).
+            - attentions (Optional[Tuple[torch.FloatTensor]]): Tuple of torch.FloatTensor (one for each attention head) of shape (batch_size, num_heads, sequence_length, sequence_length).
 
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1507,6 +1513,7 @@ class MPLUGDocOwlForCausalLM(MPLUGDocOwlPreTrainedLanguageModel):
         >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
+        ```
         """
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1847,7 +1854,14 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
                 (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
+
         Returns:
+            `Union[Tuple, MPLUGDocOwlCausalLMOutputWithPast]`: A tuple containing the output logits, and optionally the loss if `labels` is provided, or an MPLUGDocOwlCausalLMOutputWithPast object with the following attributes:
+                - loss (optional): `torch.FloatTensor` of shape `(1,)` if `labels` is provided.
+                - logits: `torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`.
+                - past_key_values (optional): list of `torch.FloatTensor` containing pre-computed hidden-states (key and values in the attention blocks) that can be used to speed up sequential decoding.
+                - hidden_states (optional): list of `torch.FloatTensor` (one for the output of each layer + output embedding).
+                - attentions (optional): list of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
 
         Example:
 
