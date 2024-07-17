@@ -579,7 +579,7 @@ class ProcessorMixin(PushToHubMixin):
         elif is_remote_url(pretrained_model_name_or_path):
             processor_file = pretrained_model_name_or_path
             resolved_processor_file = download_url(pretrained_model_name_or_path)
-            # cant't load chat-template when given a file url as pretrained_model_name_or_path
+            # can't load chat-template when given a file url as pretrained_model_name_or_path
             resolved_chat_template_file = None
         else:
             processor_file = PROCESSOR_NAME
