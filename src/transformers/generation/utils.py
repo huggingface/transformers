@@ -1203,7 +1203,10 @@ class GenerationMixin:
         # `kwargs`/`model_kwargs` is often used to handle optional forward pass inputs like `attention_mask`. If
         # `prepare_inputs_for_generation` doesn't accept them, then a stricter check can be made ;)
         if "kwargs" in model_args or "model_kwargs" in model_args:
-            model_args |= set(inspect.signature(self.forward).parameters)
+            if hasattr(self, "_original_forward"):
+                model_args |= set(inspect.signature(self._original_forward).parameters)
+            else:
+                model_args |= set(inspect.signature(self.forward).parameters)
 
         # Encoder-Decoder models may also need Encoder arguments from `model_kwargs`
         if self.config.is_encoder_decoder:
@@ -1671,7 +1674,10 @@ class GenerationMixin:
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
 
-        accepts_attention_mask = "attention_mask" in set(inspect.signature(self.forward).parameters.keys())
+        if hasattr(self, "_original_forward"):
+            accepts_attention_mask = "attention_mask" in set(inspect.signature(self._original_forward).parameters.keys())
+        else:
+            accepts_attention_mask = "attention_mask" in set(inspect.signature(self.forward).parameters.keys())
         requires_attention_mask = "encoder_outputs" not in model_kwargs
         kwargs_has_attention_mask = model_kwargs.get("attention_mask", None) is not None
 
