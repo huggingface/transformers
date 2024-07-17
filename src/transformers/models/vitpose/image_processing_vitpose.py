@@ -247,12 +247,12 @@ def get_warp_matrix(theta: float, size_input: np.ndarray, size_dst: np.ndarray, 
     return matrix
 
 
-def scipy_warp_affine(src, M):
-"""
-This function implements cv2.warpAffine used in the original implementation using scipy.
+def scipy_warp_affine(src, M, size):
+    """
+    This function implements cv2.warpAffine used in the original implementation using scipy.
 
-Note: the original implementation uses cv2.INTER_LINEAR.
-"""
+    Note: the original implementation uses cv2.INTER_LINEAR.
+    """
     channels = [src[..., i] for i in range(src.shape[-1])]
 
     # Convert to a 3x3 matrix used by SciPy
@@ -268,7 +268,7 @@ Note: the original implementation uses cv2.INTER_LINEAR.
         M_inv[0, 2],
     )
 
-    new_src = [affine_transform(channel, M_inv, order=1) for channel in channels]
+    new_src = [affine_transform(channel, M_inv, output_shape=size, order=1) for channel in channels]
     new_src = np.stack(new_src, axis=-1)
     return new_src
 
@@ -361,7 +361,7 @@ class ViTPoseImageProcessor(BaseImageProcessor):
             if input_data_format == ChannelDimension.LAST
             else to_channel_dimension_format(image, ChannelDimension.LAST, input_data_format)
         )
-        image = warp_affine(src=image, M=transformation)
+        image = scipy_warp_affine(src=image, M=transformation, size=(size[1], size[0]))
 
         image = to_channel_dimension_format(image, data_format, ChannelDimension.LAST)
 
