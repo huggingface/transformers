@@ -15,7 +15,6 @@
 """PyTorch MAMBA2 model."""
 
 import math
-from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple, Union
 
 import torch
@@ -438,7 +437,7 @@ class Mamba2Attention(nn.Module):
         hidden_states: torch.FloatTensor,
         attention_mask: torch.FloatTensor,
         position_ids: torch.LongTensor,
-        past_key_values: Optional[HybridMamba2AttentionDynamicCache] = None,
+        cache: Optional[HybridMamba2AttentionDynamicCache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
     ):
@@ -446,7 +445,7 @@ class Mamba2Attention(nn.Module):
 
         # Apply attention-conv1d-specific projections and rope
         query, key, value = self._attn_conv1d_projections_and_rope(
-            hidden_states=hidden_states, position_ids=position_ids, past_key_values=past_key_values, use_cache=use_cache
+            hidden_states=hidden_states, position_ids=position_ids, cache=cache, use_cache=use_cache
         )
 
         # Repeat k/v heads if n_kv_heads < n_heads
@@ -480,7 +479,7 @@ class Mamba2Attention(nn.Module):
         # Init cache with first "real" values
         if cached_start:
             qkv_t = qkv.transpose(1, 2)
-            past_key_values.conv_states[self.layer_idx].copy_(
+            cache.conv_states[self.layer_idx].copy_(
                 nn.functional.pad(qkv_t, (self.conv_kernel_size - qkv_t.shape[-1], 0))
             )
 
@@ -488,7 +487,7 @@ class Mamba2Attention(nn.Module):
             if cached_forward:
                 qkv = causal_conv1d_update(
                     x=qkv.squeeze(1),
-                    conv_state=past_key_values.conv_states[self.layer_idx],
+                    conv_state=cache.conv_states[self.layer_idx],
                     weight=self.conv1d.weight.squeeze(1),
                     bias=self.conv1d.bias,
                 ).unsqueeze(1)
@@ -500,11 +499,11 @@ class Mamba2Attention(nn.Module):
                 ).transpose(1, 2)
         else:
             if cached_forward:
-                past_key_values.conv_states[self.layer_idx].copy_(
-                    torch.roll(past_key_values.conv_states[self.layer_idx], shifts=-1, dims=-1)
+                cache.conv_states[self.layer_idx].copy_(
+                    torch.roll(cache.conv_states[self.layer_idx], shifts=-1, dims=-1)
                 )
-                past_key_values.conv_states[self.layer_idx][:, :, -1] = qkv.squeeze(1)
-                qkv = torch.sum(past_key_values.conv_states[self.layer_idx] * self.conv1d.weight.squeeze(1), dim=-1)
+                cache.conv_states[self.layer_idx][:, :, -1] = qkv.squeeze(1)
+                qkv = torch.sum(cache.conv_states[self.layer_idx] * self.conv1d.weight.squeeze(1), dim=-1)
                 if self.conv1d.bias is not None:
                     qkv = qkv + self.conv1d.bias
                 qkv = qkv.unsqueeze(1)
@@ -542,16 +541,15 @@ class Mamba2Attention(nn.Module):
         self,
         hidden_states: torch.FloatTensor,
         position_ids: torch.LongTensor,
-        past_key_values: Optional[HybridMamba2AttentionDynamicCache] = None,
+        cache: Optional[HybridMamba2AttentionDynamicCache] = None,
         use_cache: Optional[bool] = False,
     ):
         bsz, q_len, _ = hidden_states.shape
 
         # Managing cache state
-        has_layer_past = past_key_values is not None
-
+        has_layer_past = cache is not None
         if has_layer_past:
-            cached_start = not past_key_values.has_previous_state
+            cached_start = not cache.has_previous_state
             cached_forward = not cached_start
         else:
             cached_start = False
@@ -565,7 +563,7 @@ class Mamba2Attention(nn.Module):
         # (Optional) Apply Conv1d, caching is applied in-place
         if self.conv_kernel_size > 0:
             qkv = self._conv1d(
-                qkv, seq_len=qkv.shape[1], past_key_values=past_key_values, cached_start=cached_start, cached_forward=cached_forward
+                qkv, seq_len=qkv.shape[1], cache=cache, cached_start=cached_start, cached_forward=cached_forward
             )
 
         # Get the respective matrices from the parallel projection back
@@ -587,7 +585,7 @@ class Mamba2Attention(nn.Module):
 
         # Cache KV values
         if has_layer_past:
-            key, value = past_key_values.update(key, value, self.layer_idx)
+            key, value = cache.update(key, value, self.layer_idx)
 
         return query, key, value
 
@@ -616,7 +614,7 @@ class Mamba2FlashAttention2(Mamba2Attention):
         hidden_states: torch.FloatTensor,
         attention_mask: torch.FloatTensor,
         position_ids: torch.LongTensor,
-        past_key_values: Optional[HybridMamba2AttentionDynamicCache] = None,
+        cache: Optional[HybridMamba2AttentionDynamicCache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
     ):
@@ -624,7 +622,7 @@ class Mamba2FlashAttention2(Mamba2Attention):
 
         # Apply attention-conv1d-specific projections and rope
         query, key, value = self._attn_conv1d_projections_and_rope(
-            hidden_states=hidden_states, position_ids=position_ids, past_key_values=past_key_values, use_cache=use_cache
+            hidden_states=hidden_states, position_ids=position_ids, cache=cache, use_cache=use_cache
         )
 
         # Repeat k/v heads if n_kv_heads < n_heads
@@ -706,7 +704,7 @@ class Mamba2SdpaAttention(Mamba2Attention):
         hidden_states: torch.FloatTensor,
         attention_mask: torch.FloatTensor,
         position_ids: torch.LongTensor,
-        past_key_values: Optional[HybridMamba2AttentionDynamicCache] = None,
+        cache: Optional[HybridMamba2AttentionDynamicCache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
     ):
@@ -722,7 +720,7 @@ class Mamba2SdpaAttention(Mamba2Attention):
                 attention_mask=attention_mask,
                 position_ids=position_ids,
                 output_attentions=output_attentions,
-                past_key_values=past_key_values,
+                cache=cache,
                 use_cache=use_cache,
             )
 
@@ -730,7 +728,7 @@ class Mamba2SdpaAttention(Mamba2Attention):
 
         # Apply attention-conv1d-specific projections and rope
         query, key, value = self._attn_conv1d_projections_and_rope(
-            hidden_states=hidden_states, position_ids=position_ids, past_key_values=past_key_values, use_cache=use_cache
+            hidden_states=hidden_states, position_ids=position_ids, cache=cache, use_cache=use_cache
         )
 
         # Repeat k/v heads if n_kv_heads < n_heads
@@ -846,10 +844,10 @@ class Mamba2Mixer(nn.Module):
                 " https://github.com/Dao-AILab/causal-conv1d"
             )
 
-    def triton_kernels_forward(self, hidden_states, cache_params):
+    def triton_kernels_forward(self, hidden_states, cache):
         # Managing cache state
-        if cache_params is not None:
-            cached_start = not cache_params.has_previous_state
+        if cache is not None:
+            cached_start = not cache.has_previous_state
             cached_forward = not cached_start
         else:
             cached_start = False
@@ -859,7 +857,7 @@ class Mamba2Mixer(nn.Module):
         zxbcdt = self.in_proj(hidden_states)
 
         # 2-5. Training combined into one triton kernel
-        if self.training and cache_params is None:
+        if self.training and cache is None:
             y = mamba_split_conv1d_scan_combined(
                 zxbcdt=zxbcdt,
                 conv1d_weight=self.conv1d.weight.squeeze(1),
@@ -895,12 +893,12 @@ class Mamba2Mixer(nn.Module):
         # Init cache with first "real" values
         if cached_start:
             xBC_t = xBC.transpose(1, 2)
-            cache_params.conv_states[self.layer_idx].copy_(F.pad(xBC_t, (self.conv_kernel_size - xBC_t.shape[-1], 0)))
+            cache.conv_states[self.layer_idx].copy_(F.pad(xBC_t, (self.conv_kernel_size - xBC_t.shape[-1], 0)))
 
         if cached_forward:
             xBC = causal_conv1d_update(
                 x=xBC,
-                conv_state=cache_params.conv_states[self.layer_idx],
+                conv_state=cache.conv_states[self.layer_idx],
                 weight=self.conv1d.weight.squeeze(1),
                 bias=self.conv1d.bias,
                 activation=self.activation,
@@ -941,7 +939,7 @@ class Mamba2Mixer(nn.Module):
             if cached_start:
                 y, last_state = y
                 if cached_start:
-                    cache_params.ssm_states[self.layer_idx].copy_(last_state)
+                    cache.ssm_states[self.layer_idx].copy_(last_state)
 
             # [bsz, seq_len, num_heads, head_dim] -> [bsz, seq_len, intermediate size]
             y = y.reshape(y.shape[0], y.shape[1], -1)
@@ -965,7 +963,7 @@ class Mamba2Mixer(nn.Module):
 
             # Triton kernel for updating states in-place and returning the hidden state
             y = selective_state_update(
-                state=cache_params.ssm_states[self.layer_idx],
+                state=cache.ssm_states[self.layer_idx],
                 x=x_reshaped,
                 dt=dt,
                 A=A,
@@ -1113,12 +1111,12 @@ class Mamba2Mixer(nn.Module):
         else:
             return y, final_state
 
-    def slow_forward(self, hidden_states, cache_params):
+    def slow_forward(self, hidden_states, cache):
         seq_len = hidden_states.shape[1]
 
-        # Managing cache_params state
-        if cache_params is not None:
-            cached_start = not cache_params.has_previous_state
+        # Managing cache state
+        if cache is not None:
+            cached_start = not cache.has_previous_state
             cached_forward = not cached_start
         else:
             cached_start = False
@@ -1139,12 +1137,12 @@ class Mamba2Mixer(nn.Module):
         # Init cache with first "real" values
         if cached_start:
             xBC_t = xBC.transpose(1, 2)
-            cache_params.conv_states[self.layer_idx].copy_(F.pad(xBC_t, (self.conv_kernel_size - xBC_t.shape[-1], 0)))
+            cache.conv_states[self.layer_idx].copy_(F.pad(xBC_t, (self.conv_kernel_size - xBC_t.shape[-1], 0)))
 
         if cached_forward:
-            cache_params.conv_states[self.layer_idx].copy_(torch.roll(cache_params.conv_states[self.layer_idx], shifts=-1, dims=-1))
-            cache_params.conv_states[self.layer_idx][:, :, -1] = xBC.squeeze(1)
-            xBC = torch.sum(cache_params.conv_states[self.layer_idx] * self.conv1d.weight.squeeze(1), dim=-1)
+            cache.conv_states[self.layer_idx].copy_(torch.roll(cache.conv_states[self.layer_idx], shifts=-1, dims=-1))
+            cache.conv_states[self.layer_idx][:, :, -1] = xBC.squeeze(1)
+            xBC = torch.sum(cache.conv_states[self.layer_idx] * self.conv1d.weight.squeeze(1), dim=-1)
             if self.conv1d.bias is not None:
                 xBC = xBC + self.conv1d.bias
             xBC = self.act(xBC)
@@ -1180,7 +1178,7 @@ class Mamba2Mixer(nn.Module):
             if cached_start:
                 y, last_state = y
                 if cached_start:
-                    cache_params.ssm_states[self.layer_idx].copy_(last_state)
+                    cache.ssm_states[self.layer_idx].copy_(last_state)
 
             # [bsz, seq_len, num_heads, head_dim] -> [bsz, seq_len, intermediate_size]
             y = y.reshape(y.shape[0], y.shape[1], -1)
@@ -1198,8 +1196,8 @@ class Mamba2Mixer(nn.Module):
             dBx = torch.einsum("bh,bn,bhp->bhpn", dt, B, x)
 
             # State calculation
-            cache_params.ssm_states[self.layer_idx].copy_(
-                cache_params.ssm_states[self.layer_idx] * dA.unsqueeze(-1).unsqueeze(-1) + dBx
+            cache.ssm_states[self.layer_idx].copy_(
+                cache.ssm_states[self.layer_idx] * dA.unsqueeze(-1).unsqueeze(-1) + dBx
             )
 
             # Subsequent output
@@ -1221,11 +1219,11 @@ class Mamba2Mixer(nn.Module):
 
         return y
 
-    def forward(self, hidden_states, cache_params: Optional[HybridMamba2AttentionDynamicCache] = None):
+    def forward(self, hidden_states, cache: Optional[HybridMamba2AttentionDynamicCache] = None):
         # TODO: check version for AMD support?
         if is_fast_path_available and "cuda" in self.in_proj.weight.device.type:
-            return self.triton_kernels_forward(hidden_states, cache_params)
-        return self.slow_forward(hidden_states, cache_params)
+            return self.triton_kernels_forward(hidden_states, cache)
+        return self.slow_forward(hidden_states, cache)
 
 
 # Adapted from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Mamba2
@@ -1295,7 +1293,7 @@ class Mamba2Block(nn.Module):
 
         # Mamba2 path
         if not self.attention_layer:
-            hidden_states = self.mixer(hidden_states, cache_params=cache)
+            hidden_states = self.mixer(hidden_states, cache=cache)
             attn_weights = None
         # Attention path
         else:
@@ -1303,7 +1301,7 @@ class Mamba2Block(nn.Module):
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
-                cache_params=cache,
+                cache=cache,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
             )
