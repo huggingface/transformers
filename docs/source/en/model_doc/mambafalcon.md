@@ -16,8 +16,6 @@ rendered properly in your Markdown viewer.
 
 # Sindibad
 
-# Sindibad
-
 ## Overview
 
 The Sindibad model was proposed by TII UAE (Technology Innovation Institute) in their release.
