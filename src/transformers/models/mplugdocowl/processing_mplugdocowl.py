@@ -156,7 +156,6 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
-        # FIXME need to add image processing class name properly
 
         if images is not None:
             pixel_values = self.image_processor(

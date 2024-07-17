@@ -645,6 +645,22 @@ class MPLUGDocOwlVisionModel(PreTrainedModel):
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
         Returns:
+            `BaseModelOutputWithPooling` or `tuple`:
+                If `return_dict` is `True`, a `BaseModelOutputWithPooling` is returned, containing:
+                - **last_hidden_state** (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+                  Sequence of hidden-states at the output of the last layer of the model.
+                - **pooler_output** (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+                  Last layer hidden-state of the first token of the sequence (classification token) further processed
+                  by a linear layer and a Tanh activation function. The linear layer weights are trained from the next
+                  sentence prediction (classification) objective during pretraining. This output is usually not a good
+                  summary of the semantic content of the input, you're often better with averaging or pooling the
+                  sequence of hidden-states for the whole input sequence.
+                - **hidden_states** (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True`):
+                  Tuple of `torch.FloatTensor` (one for the output of each layer + the output of the embedding layer).
+                  Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+                - **attentions** (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True`):
+                  Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`:
+                  Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
 
         Examples:
 
@@ -1498,6 +1514,21 @@ class MPLUGDocOwlForCausalLM(MPLUGDocOwlPreTrainedLanguageModel):
 
         Returns:
 
+            `Union[Tuple, CausalLMOutputWithPast]`: A `Tuple` containing various elements depending on the configuration
+            (`config`) and inputs, or a `CausalLMOutputWithPast` if `return_dict=True` is passed or set in the configuration.
+            The `Tuple` can contain:
+                - `loss` (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+                    Language modeling loss.
+                - `logits` (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+                    Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+                - `past_key_values` (`List[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or set in the configuration):
+                    Contains pre-computed hidden-states (key and values in the attention blocks) as computed in the previous forward pass.
+                    Can be used to speed up sequential decoding.
+                - `hidden_states` (`List[torch.FloatTensor]`, *optional*, returned when `output_hidden_states=True` is passed or set in the configuration):
+                    Contains the hidden-states of the model at the output of each layer plus the initial embedding outputs.
+                - `attentions` (`List[torch.FloatTensor]`, *optional*, returned when `output_attentions=True` is passed or set in the configuration):
+                    Contains the attention weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+
         Example:
 
         ```python
@@ -1646,14 +1677,15 @@ class MPLUGDocOwlHReducer(MPLUGDocOwlPreTrainedModel):
         r"""
         Processes the encoder hidden states to reduce visual feature length and align them with language embeddings.
 
-        encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, `optional`):
-            batch_size is the number of all images (global+crop) in a batch
-            Sequence of hidden-states at the output of the last layer of the encoder.
+        Args:
+            encoder_hidden_states (torch.FloatTensor of shape (batch_size, sequence_length, hidden_size), optional):
+                Batch size is the number of all images (global+crop) in a batch.
+                Sequence of hidden-states at the output of the last layer of the encoder.
 
-            Returns:
-        torch.FloatTensor: The processed sequence output with reduced visual feature length and aligned with language embeddings.
-
+        Returns:
+            torch.FloatTensor: The processed sequence output with reduced visual feature length and aligned with language embeddings.
         """
+
         # B-batch_size, C-hidden_size, H-height, W-Width, W_div_X - width/conv_patch
         encoder_hidden_states = encoder_hidden_states[:, 1:, :]  # remove the first cls token
         # Shape: (batch_size, sequence_length - 1, hidden_size)
