@@ -143,15 +143,6 @@ class Mamba2Mixer(nn.Module):
         self.time_step_rank = int(config.time_step_rank)
         self.layer_idx = layer_idx
         self.use_conv_bias = config.use_conv_bias
-        self.conv1d = nn.Conv1d(
-            in_channels=self.intermediate_size,
-            out_channels=self.intermediate_size,
-            bias=config.use_conv_bias,
-            kernel_size=config.conv_kernel,
-            groups=self.intermediate_size,
-            padding=config.conv_kernel - 1,
-        )
-
         self.activation = config.hidden_act
         self.act = ACT2FN[config.hidden_act]
 
@@ -160,15 +151,29 @@ class Mamba2Mixer(nn.Module):
 
         self.n_groups = config.n_groups
         self.state_size = config.state_size
+        self.head_dim = config.head_dim
+
+        self.chunk_size = config.chunk_size
+        self.conv_dim = self.intermediate_size + 2 * self.n_groups * self.state_size
+        self.conv1d = nn.Conv1d(
+            in_channels=self.conv_dim,
+            out_channels=self.conv_dim,
+            bias=config.use_conv_bias,
+            kernel_size=config.conv_kernel,
+            groups=self.conv_dim,
+            padding=config.conv_kernel - 1,
+        )
+
+
 
         # projection of the input hidden states
-        self.in_proj = nn.Linear(self.hidden_size, self.intermediate_size * 2, bias=config.use_bias)
+        self.in_proj = nn.Linear(self.hidden_size,  2 * self.intermediate_size + 2 * self.n_groups * self.state_size + self.num_heads, bias=config.use_bias)
         # selective projection used to make dt, B and C input dependant
 
         # time step projection (discretization)
         # instantiate once and copy inv_dt in init_weights of PretrainedModel 
         self.dt_bias = nn.Parameter(torch.ones(self.num_heads)) # could also be nn.Parameter(self.inv_dt)
-        self.headdim = 16
+
 
         # S4D real initialization. These are not discretized!
         # The core is to load them, compute the discrete states, then write the updated state. Keeps the memory bounded
@@ -176,7 +181,7 @@ class Mamba2Mixer(nn.Module):
         self.A_log = nn.Parameter(torch.log(A))
         self.A_log._no_weight_decay = True
             
-        self.norm = MambaRMSNormGated(self.hidden_size, eps=self.layer_norm_epsilon, norm_before_gate=self.norm_before_gate)
+        self.norm = MambaRMSNormGated(self.intermediate_size, eps=self.layer_norm_epsilon, norm_before_gate=self.norm_before_gate)
 
 
         self.D = nn.Parameter(torch.ones(self.num_heads))
@@ -234,10 +239,10 @@ class Mamba2Mixer(nn.Module):
                     activation=self.activation,
                 ).transpose(1, 2)
             
-            x, B, C = torch.split(xBC, [self.d_inner, self.ngroups * self.d_state, self.ngroups * self.d_state], dim=-1)
+            x, B, C = torch.split(xBC, [self.d_inner, self.n_groups * self.d_state, self.n_groups * self.d_state], dim=-1)
             A = -torch.exp(self.A_log) 
             y = mamba_chunk_scan_combined(
-                rearrange(x, "b l (h p) -> b l h p", p=self.headdim),
+                rearrange(x, "b l (h p) -> b l h p", p=self.head_dim),
                 time_step,
                 A,
                 rearrange(B, "b l (g n) -> b l g n", g=self.n_groups),

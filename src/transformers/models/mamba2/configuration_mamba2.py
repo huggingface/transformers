@@ -101,9 +101,10 @@ class Mamba2Config(PretrainedConfig):
     def __init__(
         self,
         num_heads=128,
+        head_dim=64,
         vocab_size=32768,
         hidden_size=4096,
-        state_size=64,
+        state_size=128,
         num_hidden_layers=64,
         layer_norm_epsilon=1e-5,
         pad_token_id=0,
@@ -126,6 +127,7 @@ class Mamba2Config(PretrainedConfig):
         rescale_prenorm_residual=False,
         use_cache=True,
         norm_before_gate=True,
+        chunk_size=256,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -154,7 +156,9 @@ class Mamba2Config(PretrainedConfig):
         self.use_cache = use_cache
         self.n_groups = n_groups
         self.num_heads = num_heads
+        self.head_dim = head_dim
         self.norm_before_gate = norm_before_gate
         self.state_size = state_size
+        self.chunk_size = chunk_size
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, pad_token_id=pad_token_id, **kwargs)
