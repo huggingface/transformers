@@ -816,7 +816,7 @@ class OmDetTurboImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Controls whether to resize the image's (height, width) dimensions to the specified `size`. Can be
             overridden by the `do_resize` parameter in the `preprocess` method.
-        size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 800, "longest_edge": 1333}`):
+        size (`Dict[str, int]` *optional*, defaults to `{'width': 640, 'height': 640}`):
             Size of the image's `(height, width)` dimensions after resizing. Can be overridden by the `size` parameter
             in the `preprocess` method. Available options are:
                 - `{"height": int, "width": int}`: The image will be resized to the exact size `(height, width)`.
@@ -829,27 +829,27 @@ class OmDetTurboImageProcessor(BaseImageProcessor):
                     `max_width`.
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
             Resampling filter to use if resizing the image.
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Controls whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the
-            `do_rescale` parameter in the `preprocess` method.
-        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
+        rescale_factor (`int` or `float`, *optional*, defaults to 1):
             Scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter in the
             `preprocess` method. Controls whether to normalize the image. Can be overridden by the `do_normalize`
             parameter in the `preprocess` method.
+        do_rescale (`bool`, *optional*, defaults to `False`):
+            Controls whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the
+            `do_rescale` parameter in the `preprocess` method.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_DEFAULT_MEAN`):
+        image_mean (`float` or `List[float]`, *optional*, defaults to `[123.675, 116.28, 103.53]`):
             Mean values to use when normalizing the image. Can be a single value or a list of values, one for each
             channel. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_DEFAULT_STD`):
+        image_std (`float` or `List[float]`, *optional*, defaults to `[58.395, 57.12, 57.375]`):
             Standard deviation values to use when normalizing the image. Can be a single value or a list of values, one
             for each channel. Can be overridden by the `image_std` parameter in the `preprocess` method.
         do_convert_annotations (`bool`, *optional*, defaults to `True`):
             Controls whether to convert the annotations to the format expected by the DETR model. Converts the
             bounding boxes to the format `(center_x, center_y, width, height)` and in the range `[0, 1]`.
             Can be overridden by the `do_convert_annotations` parameter in the `preprocess` method.
-        do_pad (`bool`, *optional*, defaults to `True`):
+        do_pad (`bool`, *optional*, defaults to `False`):
             Controls whether to pad the image. Can be overridden by the `do_pad` parameter in the `preprocess`
             method. If `True`, padding will be applied to the bottom and right of the image with zeros.
             If `pad_size` is provided, the image will be padded to the specified dimensions.
@@ -866,15 +866,15 @@ class OmDetTurboImageProcessor(BaseImageProcessor):
         self,
         format: Union[str, AnnotationFormat] = AnnotationFormat.COCO_DETECTION,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Dict[str, int] = {"width": 640, "height": 640},
         resample: PILImageResampling = PILImageResampling.BILINEAR,
-        do_rescale: bool = True,
-        rescale_factor: Union[int, float] = 1 / 255,
+        rescale_factor: Union[int, float] = 1,
+        do_rescale: bool = False,
         do_normalize: bool = True,
-        image_mean: Union[float, List[float]] = None,
-        image_std: Union[float, List[float]] = None,
+        image_mean: Union[float, List[float]] = [123.675, 116.28, 103.53],
+        image_std: Union[float, List[float]] = [58.395, 57.12, 57.375],
         do_convert_annotations: Optional[bool] = None,
-        do_pad: bool = True,
+        do_pad: bool = False,
         pad_size: Optional[Dict[str, int]] = None,
         **kwargs,
     ) -> None:

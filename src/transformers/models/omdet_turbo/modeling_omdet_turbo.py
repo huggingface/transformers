@@ -29,10 +29,18 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 from torch.autograd import Function
 from torch.autograd.function import once_differentiable
-from torch.nn.init import uniform_
+from torch.nn.init import xavier_uniform_
 
 from ...activations import ACT2CLS, ACT2FN
-from ...file_utils import ModelOutput, is_timm_available, is_torch_cuda_available, requires_backends
+from ...file_utils import (
+    ModelOutput,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    is_timm_available,
+    is_torch_cuda_available,
+    replace_return_docstrings,
+    requires_backends,
+)
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import is_ninja_available, logging
@@ -44,9 +52,43 @@ from .configuration_omdet_turbo import OmDetTurboConfig
 MultiScaleDeformableAttention = None
 
 logger = logging.get_logger(__name__)
+_CONFIG_FOR_DOC = "OmDetTurboConfig"
 
 if is_timm_available():
     from timm import create_model
+
+OMDET_TURBO_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`OmDetTurboConfig`]):
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+OMDET_TURBO_INPUTS_DOCSTRING = r"""
+    Args:
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Padding will be ignored by default should you provide it.
+
+            Pixel values can be obtained using [`AutoImageProcessor`]. See [`OmDetTurboImageProcessor.__call__`] for
+            details.
+
+        labels (BatchEmbedding):
+            Tokenized labels. Several labels can be provided for each tasks, thus each element of labels is itself a
+            BatchEmbedding corresponding to labels for a task. Each labels has the attributes `input_ids` and
+            `attention_mask`.
+
+        tasks (BatchEmbedding):
+            Tokenized tasks. Each tasks has the attributes `input_ids` and `attention_mask`.
+"""
 
 
 # Copied from models.deformable_detr.load_cuda_kernels
@@ -78,6 +120,219 @@ def load_cuda_kernels():
             "-D__CUDA_NO_HALF2_OPERATORS__",
         ],
     )
+
+
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.multi_scale_deformable_attention
+def multi_scale_deformable_attention(
+    value: Tensor, value_spatial_shapes: Tensor, sampling_locations: Tensor, attention_weights: Tensor
+) -> Tensor:
+    batch_size, _, num_heads, hidden_dim = value.shape
+    _, num_queries, num_heads, num_levels, num_points, _ = sampling_locations.shape
+    value_list = value.split([height.item() * width.item() for height, width in value_spatial_shapes], dim=1)
+    sampling_grids = 2 * sampling_locations - 1
+    sampling_value_list = []
+    for level_id, (height, width) in enumerate(value_spatial_shapes):
+        # batch_size, height*width, num_heads, hidden_dim
+        # -> batch_size, height*width, num_heads*hidden_dim
+        # -> batch_size, num_heads*hidden_dim, height*width
+        # -> batch_size*num_heads, hidden_dim, height, width
+        value_l_ = (
+            value_list[level_id].flatten(2).transpose(1, 2).reshape(batch_size * num_heads, hidden_dim, height, width)
+        )
+        # batch_size, num_queries, num_heads, num_points, 2
+        # -> batch_size, num_heads, num_queries, num_points, 2
+        # -> batch_size*num_heads, num_queries, num_points, 2
+        sampling_grid_l_ = sampling_grids[:, :, :, level_id].transpose(1, 2).flatten(0, 1)
+        # batch_size*num_heads, hidden_dim, num_queries, num_points
+        sampling_value_l_ = nn.functional.grid_sample(
+            value_l_, sampling_grid_l_, mode="bilinear", padding_mode="zeros", align_corners=False
+        )
+        sampling_value_list.append(sampling_value_l_)
+    # (batch_size, num_queries, num_heads, num_levels, num_points)
+    # -> (batch_size, num_heads, num_queries, num_levels, num_points)
+    # -> (batch_size, num_heads, 1, num_queries, num_levels*num_points)
+    attention_weights = attention_weights.transpose(1, 2).reshape(
+        batch_size * num_heads, 1, num_queries, num_levels * num_points
+    )
+    output = (
+        (torch.stack(sampling_value_list, dim=-2).flatten(-2) * attention_weights)
+        .sum(-1)
+        .view(batch_size, num_heads * hidden_dim, num_queries)
+    )
+    return output.transpose(1, 2).contiguous()
+
+
+class OmDetTurboLRUCache:
+    # initialising capacity
+    def __init__(self, capacity: int):
+        self.cache = OrderedDict()
+        self.capacity = capacity
+
+    def has(self, key) -> bool:
+        return key in self.cache
+
+    # we return the value of the key
+    # that is queried in O(1) and return -1 if we
+    # don't find the key in out dict / cache.
+    # And also move the key to the end
+    # to show that it was recently used.
+    def get(self, key):
+        if key not in self.cache:
+            return None
+        else:
+            self.cache.move_to_end(key)
+            return self.cache[key]
+
+    # first, we add / update the key by conventional methods.
+    # And also move the key to the end to show that it was recently used.
+    # But here we will also check whether the length of our
+    # ordered dictionary has exceeded our capacity,
+    # If so we remove the first key (least recently used)
+    def put(self, key, value) -> None:
+        self.cache[key] = value
+        self.cache.move_to_end(key)
+        if len(self.cache) > self.capacity:
+            self.cache.popitem(last=False)
+
+    def pop(self, key, value):
+        self.cache.pop(key, None)
+
+
+class OmDetTurboLanguageBackbone(nn.Module):
+    def __init__(self, config: OmDetTurboConfig):
+        super().__init__()
+        self.model = AutoModel.from_config(config.text_config)
+        self.text_projection = nn.Parameter(
+            torch.empty(config.text_projection_in_features, config.text_projection_out_features)
+        )
+
+    def forward(self, hidden_states, mask=None, encode_type="task", pos_embed=None):
+        text_outputs = self.model(hidden_states)
+        pooled_output = text_outputs[0]
+        if encode_type == "task":
+            if mask is None:
+                raise ValueError("mask is required for task encoding")
+            max_len = (mask != 0).sum(1).max().item()
+            return pooled_output[:, :max_len, :].transpose(0, 1), mask[:, :max_len]
+        else:
+            out = (
+                pooled_output[torch.arange(pooled_output.shape[0]), hidden_states.argmax(dim=-1)]
+                @ self.text_projection
+            )
+            return out.float()
+
+
+class OmDetTurboVisionBackbone(nn.Module):
+    def __init__(self, config: OmDetTurboConfig):
+        super().__init__()
+        self.use_timm_backbone = config.use_timm_backbone
+        if self.use_timm_backbone:
+            requires_backends(self, ["timm"])
+            self.out_indices = config.vision_config.out_indices
+            embed_dim = config.vision_config.embed_dim
+            self.num_features = [int(embed_dim * 2**i) for i in range(len(config.vision_config.depths))]
+            vision_backbone = create_model(
+                config.vision_config.backbone,
+                pretrained=True,
+                features_only=True,
+                embed_dim=embed_dim,
+                out_indices=self.out_indices,
+                qkv_bias=True,
+                img_size=config.image_size,
+            )
+            # add a norm layer for each output
+            for i_layer in self.out_indices:
+                layer = nn.LayerNorm(self.num_features[i_layer])
+                layer_name = f"norm{i_layer}"
+                self.add_module(layer_name, layer)
+
+            if "swin" in config.vision_config.backbone:
+                OmDetTurboVisionBackbone._force_partition_timm_backbone(config.vision_config, vision_backbone)
+        else:
+            vision_backbone = load_backbone(config.vision_config)
+
+        self.vision_backbone = vision_backbone
+
+    # temporary while timm doesn't support always partition for swin
+    @staticmethod
+    def _window_partition(
+        x: torch.Tensor,
+        window_size: Tuple[int, int],
+    ) -> torch.Tensor:
+        """
+        Partition into non-overlapping windows with padding if needed.
+        Args:
+            x (tensor): input tokens with [B, H, W, C].
+            window_size (int): window size.
+
+        Returns:
+            windows: windows after partition with [B * num_windows, window_size, window_size, C].
+            (Hp, Wp): padded height and width before partition
+        """
+        B, H, W, C = x.shape
+        x = x.view(B, H // window_size[0], window_size[0], W // window_size[1], window_size[1], C)
+        windows = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size[0], window_size[1], C)
+        return windows
+
+    # temporary while timm doesn't support always partition for swin
+    @staticmethod
+    def _compute_attention_mask(block_to_fix):
+        H, W = block_to_fix.input_resolution
+        H = math.ceil(H / block_to_fix.window_size[0]) * block_to_fix.window_size[0]
+        W = math.ceil(W / block_to_fix.window_size[1]) * block_to_fix.window_size[1]
+        img_mask = torch.zeros((1, H, W, 1))  # 1 H W 1
+        cnt = 0
+        for h in (
+            slice(0, -block_to_fix.window_size[0]),
+            slice(-block_to_fix.window_size[0], -block_to_fix.shift_size[0]),
+            slice(-block_to_fix.shift_size[0], None),
+        ):
+            for w in (
+                slice(0, -block_to_fix.window_size[1]),
+                slice(-block_to_fix.window_size[1], -block_to_fix.shift_size[1]),
+                slice(-block_to_fix.shift_size[1], None),
+            ):
+                img_mask[:, h, w, :] = cnt
+                cnt += 1
+        mask_windows = OmDetTurboVisionBackbone._window_partition(
+            img_mask, block_to_fix.window_size
+        )  # nW, window_size, window_size, 1
+        mask_windows = mask_windows.view(-1, block_to_fix.window_area)
+        attn_mask = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)
+        attn_mask = attn_mask.masked_fill(attn_mask != 0, float(-100.0)).masked_fill(attn_mask == 0, float(0.0))
+
+        return attn_mask
+
+    # temporary while timm doesn't support always partition for swin
+    @staticmethod
+    def _force_partition_timm_backbone(vision_config, model):
+        window_size = vision_config.window_size
+        target_shift_size = tuple([window_size // 2] * 2)
+        for layer, depth in enumerate(vision_config.depths):
+            for block_num in range(depth):
+                if block_num % 2 != 0:
+                    block = getattr(model, f"layers_{layer}").blocks[block_num]
+                    if block.shift_size != target_shift_size:
+                        block.shift_size = target_shift_size
+                        attention_mask = OmDetTurboVisionBackbone._compute_attention_mask(block)
+                        block.register_buffer("attn_mask", attention_mask, persistent=False)
+
+    def forward(self, pixel_values):
+        if self.use_timm_backbone:
+            out_before_norm = self.vision_backbone(pixel_values)
+            out = []
+            for i_layer in self.out_indices:
+                out.append(
+                    getattr(self, f"norm{i_layer}")(out_before_norm[i_layer - 1]).permute(0, 3, 1, 2).contiguous()
+                )
+        else:
+            out_non_contiguous = self.vision_backbone(pixel_values).feature_maps
+            out = []
+            for i, layer in enumerate(out_non_contiguous):
+                layer_contiguous = layer.contiguous()
+                out.append(layer_contiguous)
+
+        return out
 
 
 # Copied from transformers.models.deformable_detr.modeling_deformable_detr.MultiScaleDeformableAttentionFunction
@@ -127,46 +382,6 @@ class MultiScaleDeformableAttentionFunction(Function):
         )
 
         return grad_value, None, None, grad_sampling_loc, grad_attn_weight, None
-
-
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.multi_scale_deformable_attention
-def multi_scale_deformable_attention(
-    value: Tensor, value_spatial_shapes: Tensor, sampling_locations: Tensor, attention_weights: Tensor
-) -> Tensor:
-    batch_size, _, num_heads, hidden_dim = value.shape
-    _, num_queries, num_heads, num_levels, num_points, _ = sampling_locations.shape
-    value_list = value.split([height.item() * width.item() for height, width in value_spatial_shapes], dim=1)
-    sampling_grids = 2 * sampling_locations - 1
-    sampling_value_list = []
-    for level_id, (height, width) in enumerate(value_spatial_shapes):
-        # batch_size, height*width, num_heads, hidden_dim
-        # -> batch_size, height*width, num_heads*hidden_dim
-        # -> batch_size, num_heads*hidden_dim, height*width
-        # -> batch_size*num_heads, hidden_dim, height, width
-        value_l_ = (
-            value_list[level_id].flatten(2).transpose(1, 2).reshape(batch_size * num_heads, hidden_dim, height, width)
-        )
-        # batch_size, num_queries, num_heads, num_points, 2
-        # -> batch_size, num_heads, num_queries, num_points, 2
-        # -> batch_size*num_heads, num_queries, num_points, 2
-        sampling_grid_l_ = sampling_grids[:, :, :, level_id].transpose(1, 2).flatten(0, 1)
-        # batch_size*num_heads, hidden_dim, num_queries, num_points
-        sampling_value_l_ = nn.functional.grid_sample(
-            value_l_, sampling_grid_l_, mode="bilinear", padding_mode="zeros", align_corners=False
-        )
-        sampling_value_list.append(sampling_value_l_)
-    # (batch_size, num_queries, num_heads, num_levels, num_points)
-    # -> (batch_size, num_heads, num_queries, num_levels, num_points)
-    # -> (batch_size, num_heads, 1, num_queries, num_levels*num_points)
-    attention_weights = attention_weights.transpose(1, 2).reshape(
-        batch_size * num_heads, 1, num_queries, num_levels * num_points
-    )
-    output = (
-        (torch.stack(sampling_value_list, dim=-2).flatten(-2) * attention_weights)
-        .sum(-1)
-        .view(batch_size, num_heads * hidden_dim, num_queries)
-    )
-    return output.transpose(1, 2).contiguous()
 
 
 # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrMultiscaleDeformableAttention with DeformableDetr->OmDetTurbo, Deformable DETR->OmDet-Turbo
@@ -311,331 +526,6 @@ class OmDetTurboMultiscaleDeformableAttention(nn.Module):
         output = self.output_proj(output)
 
         return output, attention_weights
-
-
-class OmDetTurboPreTrainedModel(PreTrainedModel):
-    config_class = OmDetTurboConfig
-    base_model_prefix = "model"
-    main_input_name = "pixel_values"
-
-    # def _init_weights(self, module):
-    #     if isinstance(module, nn.Linear):
-    #         module.weight.data.normal_(mean=0.0, std=self.config.init_std)
-    #         if module.bias is not None:
-    #             module.bias.data.zero_()
-    #     elif isinstance(module, nn.LayerNorm):
-    #         module.bias.data.zero_()
-    #         module.weight.data.fill_(1.0)
-
-
-class OmDetTurboLanguageBackbone(nn.Module):
-    def __init__(self, config: OmDetTurboConfig):
-        super().__init__()
-        self.model = AutoModel.from_config(config.text_config)
-        self.text_projection = nn.Parameter(
-            torch.empty(config.text_projection_in_features, config.text_projection_out_features)
-        )
-
-    def forward(self, hidden_states, encode_type="task", pos_embed=None):
-        text_outputs = self.model(hidden_states)
-        pooled_output = text_outputs[0]
-        if encode_type == "task":
-            mask = (hidden_states != 0).int()
-            max_len = (hidden_states != 0).sum(1).max().item()
-            return pooled_output[:, :max_len, :].transpose(0, 1), mask[:, :max_len]
-        else:
-            out = (
-                pooled_output[torch.arange(pooled_output.shape[0]), hidden_states.argmax(dim=-1)]
-                @ self.text_projection
-            )
-            return out.float()
-
-
-# temporary while timm doesn't support always partition for swin
-def window_partition(
-    x: torch.Tensor,
-    window_size: Tuple[int, int],
-) -> torch.Tensor:
-    """
-    Partition into non-overlapping windows with padding if needed.
-    Args:
-        x (tensor): input tokens with [B, H, W, C].
-        window_size (int): window size.
-
-    Returns:
-        windows: windows after partition with [B * num_windows, window_size, window_size, C].
-        (Hp, Wp): padded height and width before partition
-    """
-    B, H, W, C = x.shape
-    x = x.view(B, H // window_size[0], window_size[0], W // window_size[1], window_size[1], C)
-    windows = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size[0], window_size[1], C)
-    return windows
-
-
-# temporary while timm doesn't support always partition for swin
-def compute_attention_mask(block_to_fix):
-    H, W = block_to_fix.input_resolution
-    H = math.ceil(H / block_to_fix.window_size[0]) * block_to_fix.window_size[0]
-    W = math.ceil(W / block_to_fix.window_size[1]) * block_to_fix.window_size[1]
-    img_mask = torch.zeros((1, H, W, 1))  # 1 H W 1
-    cnt = 0
-    for h in (
-        slice(0, -block_to_fix.window_size[0]),
-        slice(-block_to_fix.window_size[0], -block_to_fix.shift_size[0]),
-        slice(-block_to_fix.shift_size[0], None),
-    ):
-        for w in (
-            slice(0, -block_to_fix.window_size[1]),
-            slice(-block_to_fix.window_size[1], -block_to_fix.shift_size[1]),
-            slice(-block_to_fix.shift_size[1], None),
-        ):
-            img_mask[:, h, w, :] = cnt
-            cnt += 1
-    mask_windows = window_partition(img_mask, block_to_fix.window_size)  # nW, window_size, window_size, 1
-    mask_windows = mask_windows.view(-1, block_to_fix.window_area)
-    attn_mask = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)
-    attn_mask = attn_mask.masked_fill(attn_mask != 0, float(-100.0)).masked_fill(attn_mask == 0, float(0.0))
-
-    return attn_mask
-
-
-# temporary while timm doesn't support always partition for swin
-def force_partition_timm_backbone(vision_config, model):
-    window_size = vision_config.window_size
-    target_shift_size = tuple([window_size // 2] * 2)
-    for layer, depth in enumerate(vision_config.depths):
-        for block_num in range(depth):
-            if block_num % 2 != 0:
-                block = getattr(model, f"layers_{layer}").blocks[block_num]
-                if block.shift_size != target_shift_size:
-                    block.shift_size = target_shift_size
-                    attention_mask = compute_attention_mask(block)
-                    block.register_buffer("attn_mask", attention_mask, persistent=False)
-
-
-class OmDetTurboVisionBackbone(nn.Module):
-    def __init__(self, config: OmDetTurboConfig):
-        super().__init__()
-        self.use_timm_backbone = config.use_timm_backbone
-        if self.use_timm_backbone:
-            requires_backends(self, ["timm"])
-            self.out_indices = (1, 2, 3)
-            embed_dim = 96
-            self.num_features = [int(embed_dim * 2**i) for i in range(len(config.vision_config.depths))]
-            vision_backbone = create_model(
-                config.vision_backbone,
-                pretrained=config.use_pretrained_backbone,
-                features_only=True,
-                embed_dim=embed_dim,
-                out_indices=self.out_indices,
-                qkv_bias=True,
-                img_size=640,
-            )
-            # add a norm layer for each output
-            for i_layer in self.out_indices:
-                layer = nn.LayerNorm(self.num_features[i_layer])
-                layer_name = f"norm{i_layer}"
-                self.add_module(layer_name, layer)
-
-            if "swin" in config.vision_backbone:
-                force_partition_timm_backbone(config.vision_config, vision_backbone)
-        else:
-            vision_backbone = load_backbone(config.vision_config)
-
-        self.vision_backbone = vision_backbone
-
-    def forward(self, pixel_values):
-        if self.use_timm_backbone:
-            out_before_norm = self.vision_backbone(pixel_values)
-            out = []
-            for i_layer in self.out_indices:
-                out.append(
-                    getattr(self, f"norm{i_layer}")(out_before_norm[i_layer - 1]).permute(0, 3, 1, 2).contiguous()
-                )
-        else:
-            out_non_contiguous = self.vision_backbone(pixel_values).feature_maps
-            out = []
-            for i, layer in enumerate(out_non_contiguous):
-                layer_contiguous = layer.contiguous()
-                out.append(layer_contiguous)
-
-        return out
-
-
-class OmDetTurboModel(OmDetTurboPreTrainedModel):
-    def __init__(self, config: OmDetTurboConfig):
-        super().__init__(config)
-        # Create backbone
-        self.backbone = OmDetTurboVisionBackbone(config)
-        self.language_backbone = OmDetTurboLanguageBackbone(config=config)
-        self.encoder = OmDetTurboHybridEncoder(config)
-        self.decoder = OmDetTurboDecoder(config)
-        self.num_queries = config.num_queries
-
-        self.language_cache_label = LRUCache(100)
-        self.language_cache_prompt = LRUCache(100)
-        self.post_init()
-
-    def get_cached_label_emb(self, labels):
-        print("processing labels embeddings for {}".format(labels["text"]))
-        not_cached_index = []
-        not_cached_labels = []
-        total_embs = []
-        for idx, l in enumerate(labels["text"]):
-            if self.language_cache_label.has(l):
-                total_embs.append(self.language_cache_label.get(l))
-            else:
-                total_embs.append(None)
-                not_cached_index.append(idx)
-                not_cached_labels.append(l)
-
-        print(
-            "cached label emb num: {}, not cached num: {}".format(
-                len(total_embs) - len(not_cached_labels), len(not_cached_labels)
-            )
-        )
-
-        if not_cached_labels:
-            not_cached_labels_ids = torch.stack([labels["input_ids"][idx] for idx in not_cached_index])
-            embeddings = self.language_backbone(not_cached_labels_ids, encode_type="label")
-            for idx, emb in enumerate(embeddings):
-                idx_to_put = not_cached_index[idx]
-                total_embs[idx_to_put] = emb
-                self.language_cache_label.put(not_cached_labels[idx], emb)
-
-        total_label_embs = torch.stack(total_embs).to(self.device)
-        return total_label_embs
-
-    def get_cached_prompt_emb(self, batched_tasks):
-        print("processing prompt embeddings for {}".format(batched_tasks["text"]))
-        not_cached_index = []
-        not_cached_tasks = []
-        total_task_features = []
-        total_task_masks = []
-        for idx, task in enumerate(batched_tasks["text"]):
-            if self.language_cache_prompt.has(task):
-                task_feature, task_mask = self.language_cache_prompt.get(task)
-                total_task_features.append(task_feature)
-                total_task_masks.append(task_mask)
-            else:
-                total_task_features.append(None)
-                total_task_masks.append(None)
-                not_cached_index.append(idx)
-                not_cached_tasks.append(task)
-
-        print(
-            "cached prompt emb num: {}, not cached num: {}".format(
-                len(total_task_features) - len(not_cached_tasks), len(not_cached_tasks)
-            )
-        )
-        if not_cached_tasks:
-            not_cached_index_ids = torch.stack([batched_tasks["input_ids"][idx] for idx in not_cached_index])
-            embeddings, masks = self.language_backbone(not_cached_index_ids, encode_type="task")
-            for idx in range(embeddings.shape[1]):
-                emb = embeddings[:, [idx], :]
-                idx_to_put = not_cached_index[idx]
-                cur_mask = torch.unsqueeze(masks[idx], dim=0).to(self.device)
-                total_task_features[idx_to_put] = emb
-                total_task_masks[idx_to_put] = cur_mask
-                self.language_cache_prompt.put(not_cached_tasks[idx], (emb, cur_mask))
-
-        total_prompt_features = torch.cat(total_task_features, dim=1)
-        total_prompt_masks = torch.cat(total_task_masks, dim=0).to(self.device)
-
-        return total_prompt_features, total_prompt_masks
-
-    def get_language_embedding(self, batched_labels, batched_tasks):
-        max_label_size = max([len(label["text"]) for label in batched_labels])
-        label_features = []
-        for i, s_labels in enumerate(batched_labels):
-            pad_size = max_label_size - len(s_labels["text"])
-            label_emb = self.get_cached_label_emb(s_labels)
-            label_features.append(F.pad(label_emb, (0, 0, 0, pad_size)).unsqueeze(1).to(self.device))
-
-        label_features = torch.cat(label_features, dim=1)  # num_label x batch_size x dim_size
-
-        # Task Features
-        # prompt_features: max_task_len x batch_size x dim_size
-        # prompt_mask: batch_size x max_task_len
-        # batched_tasks = ['detect a person', 'detect dog and cat']
-        prompt_features, prompt_mask = self.get_cached_prompt_emb(batched_tasks)
-
-        return label_features, prompt_features, prompt_mask
-
-    # @add_start_docstrings_to_model_forward(GROUNDING_DINO_INPUTS_DOCSTRING)
-    # @replace_return_docstrings(output_type=OmDetTurboModelOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(self, pixel_values: Tensor, labels: Tensor, tasks: Tensor, ground_truths: Optional[Tensor] = None):
-        r"""
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> from transformers import AutoProcessor, AutoModel
-        >>> from PIL import Image
-        >>> import requests
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-        >>> text = "a cat."
-
-        >>> processor = AutoProcessor.from_pretrained("omlab/omdet-turbo-tiny")
-        >>> model = AutoModel.from_pretrained("omlab/omdet-turbo-tiny")
-
-        >>> inputs = processor(images=image, text=text, return_tensors="pt")
-        >>> outputs = model(**inputs)
-
-        >>> last_hidden_states = outputs.last_hidden_state
-        >>> list(last_hidden_states.shape)
-        [1, 900, 256]
-        ```"""
-        loss = None
-        if ground_truths is not None:
-            raise NotImplementedError("Training is not implemented yet")
-
-        body_feats = self.backbone(pixel_values)
-        encoder_feats = self.encoder(body_feats)[0]
-
-        label_features, prompt_features, prompt_mask = self.get_language_embedding(labels, tasks)
-
-        decoder_feats = self.decoder(encoder_feats, label_features, prompt_features, prompt_mask)
-
-        return decoder_feats
-
-
-def linear_init_(module):
-    bound = 1 / math.sqrt(module.weight.shape[0])
-    uniform_(module.weight, -bound, bound)
-    if hasattr(module, "bias") and module.bias is not None:
-        uniform_(module.bias, -bound, bound)
-
-
-class OmDetTurboBaseConv(nn.Module):
-    def __init__(self, in_channels, out_channels, ksize, stride, groups=1, bias=False, act="silu"):
-        super().__init__()
-        self.conv = nn.Conv2d(
-            in_channels,
-            out_channels,
-            kernel_size=ksize,
-            stride=stride,
-            padding=(ksize - 1) // 2,
-            groups=groups,
-            bias=bias,
-        )
-        self.bn = nn.BatchNorm2d(out_channels)
-
-        self.act = ACT2FN[act]
-
-    #     self._init_weights()
-    #
-    # def _init_weights(self):
-    #     conv_init_(self.conv)
-
-    def forward(self, x):
-        x = self.bn(self.conv(x))
-        y = self.act(x)
-
-        return y
 
 
 # Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrConvNormLayer with RTDetr->OmDetTurbo
@@ -872,9 +762,9 @@ class OmDetTurboEncoderLayer(nn.Module):
         if self.normalize_before:
             hidden_states = self.self_attn_layer_norm(hidden_states)
         q = k = self.with_pos_embed(hidden_states, position_embeddings)
-        hidden_states = self.self_attn(q, k, value=hidden_states, attn_mask=attention_mask)[0]
+        attentions = self.self_attn(q, k, value=hidden_states, attn_mask=attention_mask)[0]
 
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(attentions, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
         if not self.normalize_before:
             hidden_states = self.self_attn_layer_norm(hidden_states)
@@ -1159,45 +1049,7 @@ class OmDetTurboResidualMLP(nn.Module):
         return x
 
 
-def _get_clones(module, n):
-    return nn.ModuleList([copy.deepcopy(module) for _ in range(n)])
-
-
-def cls_score(cls_type, cls_feature, class_proj, logit_scale):
-    if cls_type == "cosine":
-        class_logits = _b_cosine(cls_feature, class_proj, logit_scale)  # 4 100 256 4 256 20
-    elif cls_type == "dot":
-        class_logits = torch.bmm(cls_feature, class_proj)  # 4 100 20
-    else:
-        raise Exception("Unknown cls type {}".format(cls_type))
-    return class_logits
-
-
-def _norm(f, dim=-1):
-    return f / f.norm(dim=dim, keepdim=True).clamp_min(1e-12)
-
-
-def _b_cosine(a, b, logit_scale):
-    """
-    a: B x K x H
-    b: B x H x K
-    """
-    a = _norm(a, dim=2)
-    b = _norm(b, dim=1)
-    # Calculating the Loss
-    logit_scale = logit_scale.exp()
-    logits_per_image = logit_scale * torch.bmm(a, b)
-    return logits_per_image
-
-
-def inverse_sigmoid(x, eps=1e-5):
-    x = x.clamp(min=0, max=1)
-    x1 = x.clamp(min=eps)
-    x2 = (1 - x).clamp(min=eps)
-    return torch.log(x1 / x2)
-
-
-class DeformableTransformerDecoderLayer(nn.Module):
+class OmDetTurboDeformableTransformerDecoderLayer(nn.Module):
     """
     https://github.com/PaddlePaddle/PaddleDetection/blob/develop/ppdet/modeling/transformers/deformable_transformer.py
     https://github.com/fundamentalvision/Deformable-DETR/blob/main/models/deformable_transformer.py
@@ -1288,19 +1140,59 @@ class DeformableTransformerDecoderLayer(nn.Module):
         return embed, task_feats
 
 
-class DeformableTransformerDecoderV2(nn.Module):
+class OmDetTurboDeformableTransformerDecoder(nn.Module):
     """
     https://github.com/PaddlePaddle/PaddleDetection/blob/develop/ppdet/modeling/transformers/deformable_transformer.py
     """
 
     def __init__(self, hidden_dim, decoder_layer, num_layers, eval_idx=-1, cls_type="cosine"):
         super().__init__()
-        self.layers = _get_clones(decoder_layer, num_layers)
+        self.layers = self._get_clones(decoder_layer, num_layers)
         self.num_layers = num_layers
         self.hidden_dim = hidden_dim
         self.eval_idx = eval_idx if eval_idx >= 0 else num_layers + eval_idx
         self.cls_type = cls_type
         self.logit_scale = torch.ones([]) * np.log(1 / 0.07)
+
+    @staticmethod
+    def _get_clones(module, n):
+        return nn.ModuleList([copy.deepcopy(module) for _ in range(n)])
+
+    @staticmethod
+    def _norm(f, dim=-1):
+        return f / f.norm(dim=dim, keepdim=True).clamp_min(1e-12)
+
+    @staticmethod
+    def _b_cosine(a, b, logit_scale):
+        """
+        a: B x K x H
+        b: B x H x K
+        """
+        a = OmDetTurboDeformableTransformerDecoder._norm(a, dim=2)
+        b = OmDetTurboDeformableTransformerDecoder._norm(b, dim=1)
+        # Calculating the Loss
+        logit_scale = logit_scale.exp()
+        logits_per_image = logit_scale * torch.bmm(a, b)
+        return logits_per_image
+
+    @staticmethod
+    def cls_score(cls_type, cls_feature, class_proj, logit_scale):
+        if cls_type == "cosine":
+            class_logits = OmDetTurboDeformableTransformerDecoder._b_cosine(
+                cls_feature, class_proj, logit_scale
+            )  # 4 100 256 4 256 20
+        elif cls_type == "dot":
+            class_logits = torch.bmm(cls_feature, class_proj)  # 4 100 20
+        else:
+            raise Exception("Unknown cls type {}".format(cls_type))
+        return class_logits
+
+    @staticmethod
+    def _inverse_sigmoid(x, eps=1e-5):
+        x = x.clamp(min=0, max=1)
+        x1 = x.clamp(min=eps)
+        x2 = (1 - x).clamp(min=eps)
+        return torch.log(x1 / x2)
 
     def forward(
         self,
@@ -1327,18 +1219,18 @@ class DeformableTransformerDecoderV2(nn.Module):
             )
 
             # refine bboxes, (bs, num_queries+num_denoising, 4)
-            refined_bbox = torch.sigmoid(bbox_head[i](output) + inverse_sigmoid(refer_bbox))
+            refined_bbox = torch.sigmoid(bbox_head[i](output) + self._inverse_sigmoid(refer_bbox))
 
             clas_proj = score_head[i](label_feats).permute(1, 2, 0)
 
             if self.training:
-                dec_cls.append(cls_score(self.cls_type, output, clas_proj, self.logit_scale))
+                dec_cls.append(self.cls_score(self.cls_type, output, clas_proj, self.logit_scale))
                 if i == 0:
                     dec_bboxes.append(refined_bbox)
                 else:
-                    dec_bboxes.append(torch.sigmoid(bbox_head[i](output) + inverse_sigmoid(last_refined_bbox)))
+                    dec_bboxes.append(torch.sigmoid(bbox_head[i](output) + self._inverse_sigmoid(last_refined_bbox)))
             elif i == self.eval_idx:
-                dec_cls.append(cls_score(self.cls_type, output, clas_proj, self.logit_scale))
+                dec_cls.append(self.cls_score(self.cls_type, output, clas_proj, self.logit_scale))
                 dec_bboxes.append(refined_bbox)
                 break
 
@@ -1348,21 +1240,54 @@ class DeformableTransformerDecoderV2(nn.Module):
         return torch.stack(dec_bboxes), torch.stack(dec_cls)
 
 
-class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
+class OmDetTurboPreTrainedModel(PreTrainedModel):
+    config_class = OmDetTurboConfig
+    base_model_prefix = "model"
+    main_input_name = "pixel_values"
+
+    def _init_weights(self, module):
+        if isinstance(module, nn.Linear):
+            xavier_uniform_(module.weight.data)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+
+
+@dataclass
+class OmDetTurboDecoderOutput(ModelOutput):
     """
-    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`OmDetTurboDecoderLayer`].
-
-    The decoder updates the query embeddings through multiple self-attention and cross-attention layers.
-
-    Some tweaks for OmDet-Turbo:
-
-    - `position_embeddings`, `reference_points`, `spatial_shapes` and `valid_ratios` are added to the forward pass.
-    - it also returns a stack of intermediate outputs and reference points from all decoding layers.
+    Base class for outputs of the GroundingDinoDecoder. This class adds two attributes to
+    BaseModelOutputWithCrossAttentions, namely:
+    - a stacked tensor of intermediate decoder hidden states (i.e. the output of each decoder layer)
+    - a stacked tensor of intermediate reference points.
 
     Args:
-        config: OmDetTurboConfig
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
+            Stacked intermediate hidden states (output of each layer of the decoder).
+        intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, sequence_length, hidden_size)`):
+            Stacked intermediate reference points (reference points of each layer of the decoder).
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
+            plus the initial embedding outputs.
+        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of tuples of `torch.FloatTensor` (one for attention for each layer) of shape `(batch_size, num_heads,
+            sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
+            weighted average in the self-attention, cross-attention and multi-scale deformable attention heads.
     """
 
+    decoder_bboxes: torch.FloatTensor = None
+    decoder_cls: torch.FloatTensor = None
+    encoder_bboxes: torch.FloatTensor = None
+    encoder_cls: Optional[Tuple[torch.FloatTensor]] = None
+    intermediate_reference_points: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+
+
+class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
     def __init__(self, config: OmDetTurboConfig):
         super().__init__(config)
         self.hidden_dim = config.decoder_hidden_dim
@@ -1386,8 +1311,6 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
             nn.Sequential(nn.Conv2d(x, self.hidden_dim, 1, bias=False), nn.BatchNorm2d(self.hidden_dim))
             for x in config.backbone_feat_channels
         )
-        # NOTE: simplified version but it's not consistent with .pt weights.
-        # self.input_proj = nn.ModuleList(Conv(x, hd, act=False) for x in ch)
 
         self.task_encoder = None
         self.fuse_type = config.fuse_type
@@ -1399,7 +1322,7 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
                 self.task_project = nn.Linear(self.label_dim, self.hidden_dim)
 
         # Transformer module
-        decoder_layer = DeformableTransformerDecoderLayer(
+        decoder_layer = OmDetTurboDeformableTransformerDecoderLayer(
             config,
             self.hidden_dim,
             self.num_head,
@@ -1410,11 +1333,11 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
             num_points,
             self.fuse_type,
         )
-        self.decoder = DeformableTransformerDecoderV2(
+        self.decoder = OmDetTurboDeformableTransformerDecoder(
             self.hidden_dim, decoder_layer, self.num_decoder_layers, eval_idx, cls_type=self.cls_type
         )
 
-        # denoising part
+        # TODO add denoising for training
         # self.denoising_class_embed = nn.Embedding(self.nc, hd)
         # self.num_denoising = nd
         # self.label_noise_ratio = label_noise_ratio
@@ -1447,8 +1370,9 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
     def forward(self, x, label_feats, task_feats, task_mask, batch=None):
         # input projection and embedding
         feats, shapes = self._get_encoder_input(x)
-        num_classes = label_feats.shape[0]
 
+        # TODO add denoising for training
+        # num_classes = label_feats.shape[0]
         # new_batch = {}
         # if self.training:
         #     #new_batch["gt_groups"] = [x["groups"] for x in batch]
@@ -1521,6 +1445,15 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
             self.query_pos_head,
             attn_mask=attn_mask,
         )
+
+        return OmDetTurboDecoderOutput(
+            decoder_bboxes=dec_bboxes[-1],
+            decoder_cls=dec_scores[-1],
+            encoder_bboxes=enc_bboxes,
+            encoder_cls=enc_scores,
+            intermediate_reference_points=refer_bbox,
+        )
+
         x = dec_bboxes, dec_scores, enc_bboxes, enc_scores, dn_meta
         return x
 
@@ -1572,7 +1505,9 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
 
         # enc_outputs_scores = self.enc_score_head(features)  # (bs, h*w, nc)
         clas_proj = self.enc_score_head(label_feats).permute(1, 2, 0)  #
-        enc_outputs_scores = cls_score(self.cls_type, features, clas_proj, self.logit_scale)
+        enc_outputs_scores = OmDetTurboDeformableTransformerDecoder.cls_score(
+            self.cls_type, features, clas_proj, self.logit_scale
+        )
 
         # dynamic anchors + static content
         enc_outputs_bboxes = self.enc_bbox_head(features) + anchors  # (bs, h*w, 4)
@@ -1606,186 +1541,376 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
         return embeddings, refer_bbox, enc_bboxes, enc_scores
 
 
-class LRUCache:
-    # initialising capacity
-    def __init__(self, capacity: int):
-        self.cache = OrderedDict()
-        self.capacity = capacity
-
-    def has(self, key) -> bool:
-        return key in self.cache
-
-    # we return the value of the key
-    # that is queried in O(1) and return -1 if we
-    # don't find the key in out dict / cache.
-    # And also move the key to the end
-    # to show that it was recently used.
-    def get(self, key):
-        if key not in self.cache:
-            return None
-        else:
-            self.cache.move_to_end(key)
-            return self.cache[key]
-
-    # first, we add / update the key by conventional methods.
-    # And also move the key to the end to show that it was recently used.
-    # But here we will also check whether the length of our
-    # ordered dictionary has exceeded our capacity,
-    # If so we remove the first key (least recently used)
-    def put(self, key, value) -> None:
-        self.cache[key] = value
-        self.cache.move_to_end(key)
-        if len(self.cache) > self.capacity:
-            self.cache.popitem(last=False)
-
-    def pop(self, key, value):
-        self.cache.pop(key, None)
-
-
 @dataclass
-class OmDetTurboDecoderOutput(ModelOutput):
+class OmDetTurboModelOutput(ModelOutput):
     """
-    Base class for outputs of the GroundingDinoDecoder. This class adds two attributes to
-    BaseModelOutputWithCrossAttentions, namely:
-    - a stacked tensor of intermediate decoder hidden states (i.e. the output of each decoder layer)
-    - a stacked tensor of intermediate reference points.
+    Base class for outputs of the OmDetTurbo model.
 
     Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
-            Stacked intermediate hidden states (output of each layer of the decoder).
-        intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, sequence_length, hidden_size)`):
-            Stacked intermediate reference points (reference points of each layer of the decoder).
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
-            plus the initial embedding outputs.
-        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of tuples of `torch.FloatTensor` (one for attention for each layer) of shape `(batch_size, num_heads,
-            sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
-            weighted average in the self-attention, cross-attention and multi-scale deformable attention heads.
+        decoder_bboxes (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes, 4)`):
+            The predicted bounding boxes of the objects.
+        decoder_cls (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes)`):
+            The predicted classes of the objects.
+        encoder_bboxes (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes, 4)`):
+            The predicted bounding boxes of the objects from the encoder.
+        encoder_cls (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes)`):
+            The predicted classes of the objects from the encoder.
+        encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
+            The last hidden state of the encoder.
+        intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 2)`:
+            The intermediate reference
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    intermediate_hidden_states: torch.FloatTensor = None
-    intermediate_reference_points: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    decoder_bboxes: torch.FloatTensor = None
+    decoder_cls: torch.FloatTensor = None
+    encoder_bboxes: torch.FloatTensor = None
+    encoder_cls: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
+    intermediate_reference_points: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
 
 
-@dataclass
-class OmDetTurboDecoderOutputEncoderOutput(ModelOutput):
+@add_start_docstrings(
     """
-    Base class for outputs of the GroundingDinoEncoder. This class extends BaseModelOutput, due to:
-    - vision and text last hidden states
-    - vision and text intermediate hidden states
-
-    Args:
-        last_hidden_state_vision (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the vision encoder.
-        last_hidden_state_text (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the text encoder.
-        vision_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the vision embeddings + one for the output of each
-            layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the vision encoder at the
-            output of each layer plus the initial embedding outputs.
-        text_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the text embeddings + one for the output of each layer)
-            of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the text encoder at the output of
-            each layer plus the initial embedding outputs.
-        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of tuples of `torch.FloatTensor` (one for attention for each layer) of shape `(batch_size, num_heads,
-            sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
-            weighted average in the text-vision attention, vision-text attention, text-enhancer (self-attention) and
-            multi-scale deformable attention heads.
-    """
-
-    last_hidden_state_vision: torch.FloatTensor = None
-    last_hidden_state_text: torch.FloatTensor = None
-    vision_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    text_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-
-
-@dataclass
-class OmDetTurboDecoderOutputModelOutput(ModelOutput):
-    """
-    Base class for outputs of the Grounding DINO encoder-decoder model.
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the decoder of the model.
-        init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
-            Initial reference points sent through the Transformer decoder.
-        intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
-            Stacked intermediate hidden states (output of each layer of the decoder).
-        intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
-            Stacked intermediate reference points (reference points of each layer of the decoder).
-        decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, num_queries, hidden_size)`. Hidden-states of the decoder at the output of each layer
-            plus the initial embedding outputs.
-        decoder_attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of tuples of `torch.FloatTensor` (one for attention for each layer) of shape `(batch_size, num_heads,
-            sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
-            weighted average in the self-attention, cross-attention and multi-scale deformable attention heads.
-        encoder_last_hidden_state_vision (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the encoder of the model.
-        encoder_last_hidden_state_text (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the encoder of the model.
-        encoder_vision_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the vision embeddings + one for the output of each
-            layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the vision encoder at the
-            output of each layer plus the initial embedding outputs.
-        encoder_text_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the text embeddings + one for the output of each layer)
-            of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the text encoder at the output of
-            each layer plus the initial embedding outputs.
-        encoder_attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of tuples of `torch.FloatTensor` (one for attention for each layer) of shape `(batch_size, num_heads,
-            sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
-            weighted average in the text-vision attention, vision-text attention, text-enhancer (self-attention) and
-            multi-scale deformable attention heads. attention softmax, used to compute the weighted average in the
-            bi-attention heads.
-        enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.two_stage=True`):
-            Predicted bounding boxes scores where the top `config.num_queries` scoring bounding boxes are picked as
-            region proposals in the first stage. Output of bounding box binary classification (i.e. foreground and
-            background).
-        enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.two_stage=True`):
-            Logits of predicted bounding boxes coordinates in the first stage.
-    """
-
-    last_hidden_state: torch.FloatTensor = None
-    init_reference_points: torch.FloatTensor = None
-    intermediate_hidden_states: torch.FloatTensor = None
-    intermediate_reference_points: torch.FloatTensor = None
-    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    encoder_last_hidden_state_vision: Optional[torch.FloatTensor] = None
-    encoder_last_hidden_state_text: Optional[torch.FloatTensor] = None
-    encoder_vision_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_text_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    enc_outputs_class: Optional[torch.FloatTensor] = None
-    enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
-
-
-class OmDetTurboForObjectDetection(nn.Module):
+    OmDetTurbo Model (consisting of a vision and a text backbone, and encoder-decoder architecture).
+    Same as `OmDetTurboForObjectDetection` as OmDetTurbo's decoder outputs bounding boxes and classes score directly.
+    """,
+    OMDET_TURBO_START_DOCSTRING,
+)
+class OmDetTurboModel(OmDetTurboPreTrainedModel):
     def __init__(self, config: OmDetTurboConfig):
-        super().__init__()
-        self.config = config
-        self.model = OmDetTurboModel(config)
+        super().__init__(config)
+        # Create backbone
+        self.backbone = OmDetTurboVisionBackbone(config)
+        self.language_backbone = OmDetTurboLanguageBackbone(config=config)
+        self.encoder = OmDetTurboHybridEncoder(config)
+        self.decoder = OmDetTurboDecoder(config)
+        self.num_queries = config.num_queries
 
-    def forward(
-        self,
-        x,
-        label_feats,
-        task_feats,
-        task_mask,
-        batch=None,
-    ):
-        pass
+        self.language_cache_label = OmDetTurboLRUCache(100)
+        self.language_cache_prompt = OmDetTurboLRUCache(100)
+        self.post_init()
+
+    @staticmethod
+    def _get_cache_key_at_index(inputs, index):
+        input_id = inputs["input_ids"][index]
+        input_mask = inputs["attention_mask"][index]
+        cache_key = "-".join([str(input_id[i]) for i in range(len(input_id)) if input_mask[i] != 0])
+
+        return cache_key
+
+    def get_cached_label_emb(self, labels):
+        not_cached_index = []
+        not_cached_labels = []
+        total_embs = []
+        for idx, _ in enumerate(labels["input_ids"]):
+            cache_key = OmDetTurboModel._get_cache_key_at_index(labels, idx)
+            if self.language_cache_label.has(cache_key):
+                total_embs.append(self.language_cache_label.get(cache_key))
+            else:
+                total_embs.append(None)
+                not_cached_index.append(idx)
+                not_cached_labels.append(cache_key)
+
+        logger.info(
+            "cached label emb num: {}, not cached num: {}".format(
+                len(total_embs) - len(not_cached_labels), len(not_cached_labels)
+            )
+        )
+
+        if not_cached_labels:
+            not_cached_labels_ids = torch.stack([labels["input_ids"][idx] for idx in not_cached_index])
+            embeddings = self.language_backbone(not_cached_labels_ids, encode_type="label")
+            for idx, emb in enumerate(embeddings):
+                idx_to_put = not_cached_index[idx]
+                total_embs[idx_to_put] = emb
+                self.language_cache_label.put(not_cached_labels[idx], emb)
+
+        total_label_embs = torch.stack(total_embs).to(self.device)
+        return total_label_embs
+
+    def get_cached_prompt_emb(self, batched_tasks):
+        not_cached_index = []
+        not_cached_tasks = []
+        total_task_features = []
+        total_task_masks = []
+        for idx, _ in enumerate(batched_tasks["input_ids"]):
+            cache_key = OmDetTurboModel._get_cache_key_at_index(batched_tasks, idx)
+            if self.language_cache_prompt.has(cache_key):
+                task_feature, task_mask = self.language_cache_prompt.get(cache_key)
+                total_task_features.append(task_feature)
+                total_task_masks.append(task_mask)
+            else:
+                total_task_features.append(None)
+                total_task_masks.append(None)
+                not_cached_index.append(idx)
+                not_cached_tasks.append(cache_key)
+
+        logger.info(
+            "cached prompt emb num: {}, not cached num: {}".format(
+                len(total_task_features) - len(not_cached_tasks), len(not_cached_tasks)
+            )
+        )
+        if not_cached_tasks:
+            not_cached_index_ids = torch.stack([batched_tasks["input_ids"][idx] for idx in not_cached_index])
+            not_cached_mask = torch.stack([batched_tasks["attention_mask"][idx] for idx in not_cached_index])
+            embeddings, masks = self.language_backbone(not_cached_index_ids, mask=not_cached_mask, encode_type="task")
+            for idx in range(embeddings.shape[1]):
+                emb = embeddings[:, [idx], :]
+                idx_to_put = not_cached_index[idx]
+                cur_mask = torch.unsqueeze(masks[idx], dim=0).to(self.device)
+                total_task_features[idx_to_put] = emb
+                total_task_masks[idx_to_put] = cur_mask
+                self.language_cache_prompt.put(not_cached_tasks[idx], (emb, cur_mask))
+
+        total_prompt_features = torch.cat(total_task_features, dim=1)
+        total_prompt_masks = torch.cat(total_task_masks, dim=0).to(self.device)
+
+        return total_prompt_features, total_prompt_masks
+
+    def get_language_embedding(self, batched_labels, batched_tasks):
+        max_label_size = max([len(label["input_ids"]) for label in batched_labels])
+        label_features = []
+        for _, labels in enumerate(batched_labels):
+            pad_size = max_label_size - len(labels["input_ids"])
+            label_emb = self.get_cached_label_emb(labels)
+            label_features.append(F.pad(label_emb, (0, 0, 0, pad_size)).unsqueeze(1).to(self.device))
+
+        label_features = torch.cat(label_features, dim=1)  # num_label x batch_size x dim_size
+
+        # Task Features
+        # prompt_features: max_task_len x batch_size x dim_size
+        # prompt_mask: batch_size x max_task_len
+        # batched_tasks = ['detect a person', 'detect dog and cat']
+        prompt_features, prompt_mask = self.get_cached_prompt_emb(batched_tasks)
+
+        return label_features, prompt_features, prompt_mask
+
+    @add_start_docstrings_to_model_forward(OMDET_TURBO_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=OmDetTurboModelOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(self, pixel_values: Tensor, labels: Tensor, tasks: Tensor, ground_truths: Optional[Tensor] = None):
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import AutoProcessor, AutoModel
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> labels = ["cat", "remote"]
+        >>> task = "Detect {}.".format(",".join(labels))
+
+        >>> processor = AutoProcessor.from_pretrained("omlab/omdet-turbo-tiny")
+        >>> model = AutoModel.from_pretrained("omlab/omdet-turbo-tiny")
+
+        >>> inputs = processor(image, tasks=task, labels=labels, return_tensors="pt")
+        >>> outputs = model(**inputs)
+
+        >>> last_hidden_states = outputs.last_hidden_state
+        >>> list(last_hidden_states.shape)
+        [1, 900, 256]
+        ```"""
+        if ground_truths is not None:
+            raise NotImplementedError("Training is not implemented yet")
+        labels = [labels[str(i)] for i in range(len(labels))]
+
+        image_features = self.backbone(pixel_values)
+        encoder_features = self.encoder(image_features)[0]
+        label_features, prompt_features, prompt_mask = self.get_language_embedding(labels, tasks)
+        decoder_outputs = self.decoder(encoder_features, label_features, prompt_features, prompt_mask)
+
+        return OmDetTurboModelOutput(
+            decoder_bboxes=decoder_outputs.decoder_bboxes,
+            decoder_cls=decoder_outputs.decoder_cls,
+            encoder_bboxes=decoder_outputs.encoder_bboxes,
+            encoder_cls=decoder_outputs.encoder_cls,
+            encoder_last_hidden_state=encoder_features,
+            intermediate_reference_points=decoder_outputs.intermediate_reference_points,
+        )
 
 
-################################################## END NEW ##################################################################
+@dataclass
+class OmDetTurboObjectDetectionOutput(ModelOutput):
+    """
+    Base class for outputs of the OmDetTurbo model.
+
+    Args:
+        decoder_bboxes (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes, 4)`):
+            The predicted bounding boxes of the objects.
+        decoder_cls (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes)`):
+            The predicted classes of the objects.
+        encoder_bboxes (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes, 4)`):
+            The predicted bounding boxes of the objects from the encoder.
+        encoder_cls (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes)`):
+            The predicted classes of the objects from the encoder.
+        encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
+            The last hidden state of the encoder.
+        intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 2)`:
+            The intermediate reference
+    """
+
+    decoder_bboxes: torch.FloatTensor = None
+    decoder_cls: torch.FloatTensor = None
+    encoder_bboxes: torch.FloatTensor = None
+    encoder_cls: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
+    intermediate_reference_points: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+
+
+@add_start_docstrings(
+    """
+    OmDetTurbo Model (consisting of a vision and a text backbone, and encoder-decoder architecture) outputting
+    bounding boxes and classes scores for tasks such as COCO detection.
+    """,
+    OMDET_TURBO_START_DOCSTRING,
+)
+class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
+    def __init__(self, config: OmDetTurboConfig):
+        super().__init__(config)
+        # Create backbone
+        self.backbone = OmDetTurboVisionBackbone(config)
+        self.language_backbone = OmDetTurboLanguageBackbone(config=config)
+        self.encoder = OmDetTurboHybridEncoder(config)
+        self.decoder = OmDetTurboDecoder(config)
+        self.num_queries = config.num_queries
+
+        self.language_cache_label = OmDetTurboLRUCache(100)
+        self.language_cache_prompt = OmDetTurboLRUCache(100)
+        self.post_init()
+
+    def get_cached_label_emb(self, labels):
+        not_cached_index = []
+        not_cached_labels = []
+        total_embs = []
+        for idx, _ in enumerate(labels["input_ids"]):
+            cache_key = OmDetTurboModel._get_cache_key_at_index(labels, idx)
+            if self.language_cache_label.has(cache_key):
+                total_embs.append(self.language_cache_label.get(cache_key))
+            else:
+                total_embs.append(None)
+                not_cached_index.append(idx)
+                not_cached_labels.append(cache_key)
+
+        logger.info(
+            "cached label emb num: {}, not cached num: {}".format(
+                len(total_embs) - len(not_cached_labels), len(not_cached_labels)
+            )
+        )
+
+        if not_cached_labels:
+            not_cached_labels_ids = torch.stack([labels["input_ids"][idx] for idx in not_cached_index])
+            embeddings = self.language_backbone(not_cached_labels_ids, encode_type="label")
+            for idx, emb in enumerate(embeddings):
+                idx_to_put = not_cached_index[idx]
+                total_embs[idx_to_put] = emb
+                self.language_cache_label.put(not_cached_labels[idx], emb)
+
+        total_label_embs = torch.stack(total_embs).to(self.device)
+        return total_label_embs
+
+    def get_cached_prompt_emb(self, batched_tasks):
+        not_cached_index = []
+        not_cached_tasks = []
+        total_task_features = []
+        total_task_masks = []
+        for idx, _ in enumerate(batched_tasks["input_ids"]):
+            cache_key = OmDetTurboModel._get_cache_key_at_index(batched_tasks, idx)
+            if self.language_cache_prompt.has(cache_key):
+                task_feature, task_mask = self.language_cache_prompt.get(cache_key)
+                total_task_features.append(task_feature)
+                total_task_masks.append(task_mask)
+            else:
+                total_task_features.append(None)
+                total_task_masks.append(None)
+                not_cached_index.append(idx)
+                not_cached_tasks.append(cache_key)
+
+        logger.info(
+            "cached prompt emb num: {}, not cached num: {}".format(
+                len(total_task_features) - len(not_cached_tasks), len(not_cached_tasks)
+            )
+        )
+        if not_cached_tasks:
+            not_cached_index_ids = torch.stack([batched_tasks["input_ids"][idx] for idx in not_cached_index])
+            not_cached_mask = torch.stack([batched_tasks["attention_mask"][idx] for idx in not_cached_index])
+            embeddings, masks = self.language_backbone(not_cached_index_ids, mask=not_cached_mask, encode_type="task")
+            for idx in range(embeddings.shape[1]):
+                emb = embeddings[:, [idx], :]
+                idx_to_put = not_cached_index[idx]
+                cur_mask = torch.unsqueeze(masks[idx], dim=0).to(self.device)
+                total_task_features[idx_to_put] = emb
+                total_task_masks[idx_to_put] = cur_mask
+                self.language_cache_prompt.put(not_cached_tasks[idx], (emb, cur_mask))
+
+        total_prompt_features = torch.cat(total_task_features, dim=1)
+        total_prompt_masks = torch.cat(total_task_masks, dim=0).to(self.device)
+
+        return total_prompt_features, total_prompt_masks
+
+    def get_language_embedding(self, batched_labels, batched_tasks):
+        max_label_size = max([len(label["input_ids"]) for label in batched_labels])
+        label_features = []
+        for _, labels in enumerate(batched_labels):
+            pad_size = max_label_size - len(labels["input_ids"])
+            label_emb = self.get_cached_label_emb(labels)
+            label_features.append(F.pad(label_emb, (0, 0, 0, pad_size)).unsqueeze(1).to(self.device))
+
+        label_features = torch.cat(label_features, dim=1)  # num_label x batch_size x dim_size
+
+        # Task Features
+        # prompt_features: max_task_len x batch_size x dim_size
+        # prompt_mask: batch_size x max_task_len
+        # batched_tasks = ['detect a person', 'detect dog and cat']
+        prompt_features, prompt_mask = self.get_cached_prompt_emb(batched_tasks)
+
+        return label_features, prompt_features, prompt_mask
+
+    @add_start_docstrings_to_model_forward(OMDET_TURBO_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=OmDetTurboObjectDetectionOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(self, pixel_values: Tensor, labels: Tensor, tasks: Tensor, ground_truths: Optional[Tensor] = None):
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import AutoProcessor, AutoModel
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> labels = ["cat", "remote"]
+        >>> task = "Detect {}.".format(",".join(labels))
+
+        >>> processor = AutoProcessor.from_pretrained("omlab/omdet-turbo-tiny")
+        >>> model = AutoModel.from_pretrained("omlab/omdet-turbo-tiny")
+
+        >>> inputs = processor(image, tasks=task, labels=labels, return_tensors="pt")
+        >>> outputs = model(**inputs)
+
+        >>> last_hidden_states = outputs.last_hidden_state
+        >>> list(last_hidden_states.shape)
+        [1, 900, 256]
+        ```"""
+        labels = [labels[str(i)] for i in range(len(labels))]
+        if ground_truths is not None:
+            raise NotImplementedError("Training is not implemented yet")
+        image_features = self.backbone(pixel_values)
+        encoder_features = self.encoder(image_features)[0]
+
+        label_features, prompt_features, prompt_mask = self.get_language_embedding(labels, tasks)
+
+        decoder_outputs = self.decoder(encoder_features, label_features, prompt_features, prompt_mask)
+
+        return OmDetTurboObjectDetectionOutput(
+            decoder_bboxes=decoder_outputs.decoder_bboxes,
+            decoder_cls=decoder_outputs.decoder_cls,
+            encoder_bboxes=decoder_outputs.encoder_bboxes,
+            encoder_cls=decoder_outputs.encoder_cls,
+            encoder_last_hidden_state=encoder_features,
+            intermediate_reference_points=decoder_outputs.intermediate_reference_points,
+        )

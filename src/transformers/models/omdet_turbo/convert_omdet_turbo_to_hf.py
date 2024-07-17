@@ -23,15 +23,14 @@ import torch
 from PIL import Image
 
 from transformers import (
+    AutoTokenizer,
     CLIPTextConfig,
     OmDetTurboConfig,
+    OmDetTurboImageProcessor,
     OmDetTurboModel,
+    OmDetTurboProcessor,
     SwinConfig,
 )
-
-
-IMAGENET_MEAN = [0.485, 0.456, 0.406]
-IMAGENET_STD = [0.229, 0.224, 0.225]
 
 
 def get_omdet_turbo_config(model_name, use_timm_backbone):
@@ -40,17 +39,18 @@ def get_omdet_turbo_config(model_name, use_timm_backbone):
         embed_dim = 96
         depths = (2, 2, 6, 2)
         num_heads = (3, 6, 12, 24)
-        image_size = 224
+        image_size = 640
     else:
         raise ValueError("Model not supported, only supports base and large variants")
 
     vision_config = SwinConfig(
+        backbone="swin_tiny_patch4_window7_224" if use_timm_backbone else None,
         window_size=window_size,
         image_size=image_size,
         embed_dim=embed_dim,
         depths=depths,
         num_heads=num_heads,
-        out_indices=[2, 3, 4],
+        out_indices=(1, 2, 3) if use_timm_backbone else (2, 3, 4),
     )
 
     clip_config = CLIPTextConfig()
@@ -59,8 +59,7 @@ def get_omdet_turbo_config(model_name, use_timm_backbone):
         vision_config=vision_config,
         text_config=clip_config,
         use_timm_backbone=use_timm_backbone,
-        vision_backbone="swin_tiny_patch4_window7_224",
-        use_pretrained_backbone=False,
+        use_pretrained_backbone=True,
     )
 
     return config
@@ -299,18 +298,26 @@ def read_in_q_k_v_encoder(state_dict, config):
     state_dict["encoder.encoder.0.layers.0.self_attn.v_proj.bias"] = in_proj_bias[-embed_dim:]
 
 
-# We will verify our results on an image of cute cats
-def prepare_img():
+def run_test(model, processor):
+    # We will verify our results on an image of cute cats
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
-    return image
 
+    labels = ["cat", "remote"]
+    task = "Detect {}.".format(",".join(labels))
+    inputs = processor(image, tasks=task, labels=labels, return_tensors="pt")
 
-def preprocess_caption(caption: str) -> str:
-    result = caption.lower().strip()
-    if result.endswith("."):
-        return result
-    return result + "."
+    # Running forward
+    with torch.no_grad():
+        outputs = model(**inputs)
+
+    predicted_slice = outputs[1][0, :3, :3]
+    print(predicted_slice)
+
+    expected_slice = torch.tensor([[[0.9624, -3.5492], [0.5973, -2.4723], [-3.0351, 1.1316]]])
+
+    assert torch.allclose(predicted_slice, expected_slice, atol=1e-4)
+    print("Looks ok!")
 
 
 @torch.no_grad()
@@ -318,7 +325,6 @@ def convert_omdet_turbo_checkpoint(args):
     model_name = args.model_name
     pytorch_dump_folder_path = args.pytorch_dump_folder_path
     push_to_hub = args.push_to_hub
-    verify_logits = args.verify_logits
     use_timm_backbone = args.use_timm_backbone
 
     checkpoint_mapping = {
@@ -350,7 +356,6 @@ def convert_omdet_turbo_checkpoint(args):
     if not use_timm_backbone:
         read_in_q_k_v_vision(new_state_dict, config)
     read_in_q_k_v_text(new_state_dict, config)
-    # read_in_q_k_v_encoder(new_state_dict, config)
 
     # Load HF model
     model = OmDetTurboModel(config)
@@ -359,41 +364,20 @@ def convert_omdet_turbo_checkpoint(args):
     print("Missing keys:", missing_keys)
     print("Unexpected keys:", unexpected_keys)
 
-    # Load and process test image
-    # image = prepare_img()
-    # transforms = T.Compose([T.Resize(size=800, max_size=1333), T.ToTensor(), T.Normalize(IMAGENET_MEAN, IMAGENET_STD)])
-    # original_pixel_values = transforms(image).unsqueeze(0)
+    image_processor = OmDetTurboImageProcessor()
+    tokenizer = AutoTokenizer.from_pretrained("openai/clip-vit-base-patch32")
+    processor = OmDetTurboProcessor(image_processor=image_processor, tokenizer=tokenizer)
 
-    # image_processor = OmDetTurboImageProcessor()
-    # tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
-    # processor = OmDetTurboProcessor(image_processor=image_processor, tokenizer=tokenizer)
-
-    # text = "a cat"
-    # inputs = processor(images=image, text=preprocess_caption(text), return_tensors="pt")
-
-    # assert torch.allclose(original_pixel_values, inputs.pixel_values, atol=1e-4)
-
-    # if verify_logits:
-    #     # Running forward
-    #     with torch.no_grad():
-    #         outputs = model(**inputs)
-
-    #     print(outputs.logits[0, :3, :3])
-
-    #     expected_slice = torch.tensor(
-    #         [[-4.8913, -0.1900, -0.2161], [-4.9653, -0.3719, -0.3950], [-5.9599, -3.3765, -3.3104]]
-    #     )
-
-    #     assert torch.allclose(outputs.logits[0, :3, :3], expected_slice, atol=1e-4)
-    #     print("Looks ok!")
+    # end-to-end consistency test
+    run_test(model, processor)
 
     if pytorch_dump_folder_path is not None:
         model.save_pretrained(pytorch_dump_folder_path)
-    #     processor.save_pretrained(pytorch_dump_folder_path)
+        processor.save_pretrained(pytorch_dump_folder_path)
 
-    # if push_to_hub:
-    #     model.push_to_hub(f"EduardoPacheco/{model_name}")
-    #     processor.push_to_hub(f"EduardoPacheco/{model_name}")
+    if push_to_hub:
+        model.push_to_hub(f"EduardoPacheco/{model_name}")
+        processor.push_to_hub(f"EduardoPacheco/{model_name}")
 
 
 if __name__ == "__main__":
@@ -411,9 +395,6 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
-    )
-    parser.add_argument(
-        "--verify_logits", action="store_false", help="Whether or not to verify logits after conversion."
     )
     parser.add_argument(
         "--use_timm_backbone", action="store_true", help="Whether or not to use timm backbone for vision backbone."

@@ -33,7 +33,95 @@ class OmDetTurboConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        TODO: Add arguments
+        text_config (`PretrainedConfig`, *optional*):
+            The configuration of the text model.
+        vision_config (`PretrainedConfig`, *optional*):
+            The configuration of the vision model.
+        use_timm_backbone (`bool`, *optional*, defaults to `True`):
+            Whether to use the timm backbone.
+        backbone_kwargs (`dict`, *optional*):
+            Additional kwargs for the backbone.
+        encoder_hidden_dim (`int`, *optional*, defaults to 256):
+            The hidden dimension of the encoder.
+        decoder_hidden_dim (`int`, *optional*, defaults to 256):
+            The hidden dimension of the decoder.
+        backbone_feat_channels (`tuple(int)`, *optional*, defaults to `(256, 256, 256)`):
+            The feature channels of the backbone.
+        num_feature_levels (`int`, *optional*, defaults to 3):
+            The number of feature levels.
+        disable_custom_kernels (`bool`, *optional*, defaults to `False`):
+            Whether to disable custom kernels.
+        text_projection_in_features (`int`, *optional*, defaults to 512):
+            The input features for the text projection.
+        text_projection_out_features (`int`, *optional*, defaults to 512):
+            The output features for the text projection.
+        num_queries (`int`, *optional*, defaults to 900):
+            The number of queries.
+        size_divisibility (`int`, *optional*, defaults to 32):
+            The size divisibility.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
+            The epsilon value for layer normalization.
+        batch_norm_eps (`float`, *optional*, defaults to 1e-05):
+            The epsilon value for batch normalization.
+        activation_function (`str`, *optional*, defaults to `"silu"`):
+            The activation function.
+        encoder_activation (`str`, *optional*, defaults to `"gelu"`):
+            The activation function for the encoder.
+        encoder_activation_function (`str`, *optional*, defaults to `"relu"`):
+            The activation function for the encoder.
+        hidden_expansion (`int`, *optional*, defaults to 1):
+            The hidden expansion.
+        dropout (`float`, *optional*, defaults to 0.0):
+            The dropout rate.
+        activation_dropout (`float`, *optional*, defaults to 0.0):
+            The activation dropout rate.
+        encoder_in_channels (`list(int)`, *optional*, defaults to `[192, 384, 768]`):
+            The input channels for the encoder.
+        encoder_feat_strides (`list(int)`, *optional*, defaults to `[8, 16, 32]`):
+            The feature strides for the encoder.
+        encode_proj_layers (`list(int)`, *optional*, defaults to `[2]`):
+            The projection layers for the encoder.
+        encoder_attention_heads (`int`, *optional*, defaults to 8):
+            The number of attention heads for the encoder.
+        normalize_before (`bool`, *optional*, defaults to `False`):
+            Whether to normalize before in the encoder.
+        eval_size (`int`, *optional*):
+            The evaluation size.
+        encoder_layers (`int`, *optional*, defaults to 1):
+            The number of layers in the encoder.
+        positional_encoding_temperature (`int`, *optional*, defaults to 10000):
+            The positional encoding temperature.
+        encoder_ffn_dim (`int`, *optional*, defaults to 2048):
+            The feedforward dimension for the encoder.
+        decoder_num_heads (`int`, *optional*, defaults to 8):
+            The number of heads for the decoder.
+        decoder_num_layers (`int`, *optional*, defaults to 6):
+            The number of layers for the decoder.
+        label_dim (`int`, *optional*, defaults to 512):
+            The dimension of the label.
+        cls_type (`str`, *optional*, defaults to `"cosine"`):
+            The type of of distance to compare predicted classes to labels.
+        decoder_activation (`str`, *optional*, defaults to `"relu"`):
+            The activation function for the decoder.
+        decoder_dim_feedforward (`int`, *optional*, defaults to 2048):
+            The feedforward dimension for the decoder.
+        decoder_num_points (`int`, *optional*, defaults to 4):
+            The number of points for the decoder.
+        decoder_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout rate for the decoder.
+        decoder_eval_idx (`int`, *optional*, defaults to -1):
+            The evaluation index for the decoder.
+        image_size (`int`, *optional*, defaults to 640):
+            The image size.
+        learnt_init_query (`bool`, *optional*, defaults to `False`):
+            Whether to learn the initial query.
+        fuse_type (`str`, *optional*, defaults to `"merged_attn"`):
+            The type of fusion.
+        is_encoder_decoder (`bool`, *optional*, defaults to `True`):
+            Whether the model is used as an encoder-decoder model or not.
+        kwargs (`Dict[str, Any]`, *optional*):
+            Additional parameters from the architecture. The values in kwargs will be saved as part of the configuration
+            and can be used to control the model outputs.
 
     Examples:
 
@@ -61,8 +149,7 @@ class OmDetTurboConfig(PretrainedConfig):
         self,
         text_config=None,
         vision_config=None,
-        vision_backbone=None,
-        use_timm_backbone=False,
+        use_timm_backbone=True,
         backbone_kwargs=None,
         encoder_hidden_dim=256,
         decoder_hidden_dim=256,
@@ -99,36 +186,36 @@ class OmDetTurboConfig(PretrainedConfig):
         decoder_num_points=4,
         decoder_dropout=0.0,
         decoder_eval_idx=-1,
+        image_size=640,
         learnt_init_query=False,
         fuse_type="merged_attn",
         is_encoder_decoder=True,
         **kwargs,
     ):
-        if vision_config is None and vision_backbone is None:
+        if vision_config is None:
             logger.info("`backbone_config` is `None`. Initializing the config with the default `Swin` backbone.")
-            backbone_config = CONFIG_MAPPING["swin"](
+            vision_config = CONFIG_MAPPING["swin"](
+                backbone="swin_tiny_patch4_window7_224",
                 window_size=7,
                 image_size=224,
                 embed_dim=96,
                 depths=[2, 2, 6, 2],
                 num_heads=[3, 6, 12, 24],
+                out_indices=(1, 2, 3) if use_timm_backbone else (2, 3, 4),
             )
         elif isinstance(vision_config, dict):
-            backbone_model_type = backbone_config.pop("model_type")
+            backbone_model_type = vision_config.pop("model_type")
             config_class = CONFIG_MAPPING[backbone_model_type]
-            vision_config = config_class.from_dict(backbone_config)
+            vision_config = config_class.from_dict(vision_config)
 
-        # verify_backbone_config_arguments(
-        #     use_timm_backbone=use_timm_backbone,
-        #     use_pretrained_backbone=False,
-        #     backbone=vision_backbone,
-        #     backbone_config=vision_config,
-        #     backbone_kwargs=backbone_kwargs,
-        # )
+        if text_config is None:
+            logger.info(
+                "`text_config` is `None`. Initializing the config with the default `clip_text_model` text config."
+            )
+            text_config = CONFIG_MAPPING["clip_text_model"]()
 
         self.text_config = text_config
         self.vision_config = vision_config
-        self.vision_backbone = vision_backbone
         self.use_timm_backbone = use_timm_backbone
         self.backbone_kwargs = backbone_kwargs
         self.encoder_hidden_dim = encoder_hidden_dim
@@ -166,6 +253,7 @@ class OmDetTurboConfig(PretrainedConfig):
         self.decoder_num_points = decoder_num_points
         self.decoder_dropout = decoder_dropout
         self.decoder_eval_idx = decoder_eval_idx
+        self.image_size = image_size
         self.learnt_init_query = learnt_init_query
         self.fuse_type = fuse_type
 
