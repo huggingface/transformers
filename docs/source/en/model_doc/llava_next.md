@@ -80,7 +80,7 @@ text_prompt = processor.apply_chat_template(conversation, add_generation_prompt=
 
 # Note that the template simply formats your prompt, you still have to tokenize it and obtain pixel values for your images
 print(text_prompt)
->>> "[INST] <image>\nWhat's shown in this image? [/INST] This image shows a red stop sign. [INST] Decsribe the image in more details. [/INST]"
+>>> "[INST] <image>\nWhat's shown in this image? [/INST] This image shows a red stop sign. [INST] Describe the image in more details. [/INST]"
 ```
 
 - If you want to construct a chat prompt yourself, below is a list of possible formats
