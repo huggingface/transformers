@@ -568,7 +568,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
             time_precision (`float`, `optional`, defaults to 0.02):
                 The time ratio to convert from token to time.
             segments (List[dict], `optional`):
-                Timestamps obtained using long form generation in Whisper, to be used to replace predicted timestamps in token_ids.   
+                Timestamps obtained using long form generation in Whisper, to be used to replace predicted timestamps in token_ids.
         """
         offsets = []
         # ensure torch tensor of token ids is placed on cpu
@@ -600,13 +600,12 @@ class WhisperTokenizer(PreTrainedTokenizer):
                 text = self._filter_timestamp_ids(text)
 
                 if segments is not None:
-
                     offsets.append(
                         {
                             "text": text,
                             "timestamp": (
-                                segments[0][i]['start'].item(),
-                                segments[0][i]['end'].item(),
+                                segments[0][i]["start"].item(),
+                                segments[0][i]["end"].item(),
                             ),
                         }
                     )
@@ -728,13 +727,12 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
         # retrieve offsets
         if output_offsets:
-
             if "segments" in kwargs:
-                segments = kwargs['segments']
+                segments = kwargs["segments"]
             else:
                 segments = None
 
-            offsets = self._compute_offsets(token_ids, time_precision=time_precision, segments=segments )
+            offsets = self._compute_offsets(token_ids, time_precision=time_precision, segments=segments)
 
             return {"text": text, "offsets": offsets}
         return text
@@ -874,7 +872,6 @@ class WhisperTokenizer(PreTrainedTokenizer):
         return batch_encoding["input_ids"]
 
     def _strip_prompt(self, token_ids: List[int], prompt_token_id: int, decoder_start_token_id: int):
-        
         if not isinstance(token_ids, list):
             token_ids = self._convert_to_list(token_ids)
 

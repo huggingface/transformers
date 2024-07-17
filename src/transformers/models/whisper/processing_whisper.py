@@ -85,12 +85,12 @@ class WhisperProcessor(ProcessorMixin):
         refer to the docstring of this method for more information.
         """
 
-        if isinstance(args[0], dict) and 'segments' in args[0]:
-            segments = args[0].pop('segments')
+        if isinstance(args[0], dict) and "segments" in args[0]:
+            segments = args[0].pop("segments")
 
             kwargs = {"segments": segments, **kwargs}
 
-            args = tuple(args[0]['sequences'].unsqueeze(0))
+            args = tuple(args[0]["sequences"].unsqueeze(0))
 
         return self.tokenizer.batch_decode(*args, **kwargs)
 

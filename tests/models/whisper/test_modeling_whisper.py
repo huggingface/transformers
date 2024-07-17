@@ -2001,7 +2001,6 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True, output_offsets=True)
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
-
     @slow
     def test_tiny_longform_timestamps_generation(self):
         set_seed(0)
@@ -2015,83 +2014,53 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_features = processor(input_speech, return_tensors="pt", truncation=False, sampling_rate=16_000)
         input_features = input_features.to(torch_device)
 
-        generated_ids = model.generate(**input_features, return_timestamps=True, return_segments = True)
+        generated_ids = model.generate(**input_features, return_timestamps=True, return_segments=True)
 
         EXPECTED_TRANSCRIPT = [
             {
-                "text": ' Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.',
+                "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
                 "offsets": [
                     {
                         "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (
-                            0.0,
-                            6.0
-                        )
+                        "timestamp": (0.0, 6.0),
                     },
                     {
                         "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (
-                            6.0,
-                            12.0
-                        )
+                        "timestamp": (6.0, 12.0),
                     },
                     {
                         "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (
-                            12.0,
-                            18.0
-                        )
+                        "timestamp": (12.0, 18.0),
                     },
                     {
                         "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (
-                            18.0,
-                            24.0
-                        )
+                        "timestamp": (18.0, 24.0),
                     },
                     {
                         "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (
-                            24.0,
-                            29.0
-                        )
+                        "timestamp": (24.0, 29.0),
                     },
                     {
                         "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (
-                            29.0,
-                            35.0
-                        )
+                        "timestamp": (29.0, 35.0),
                     },
                     {
                         "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (
-                            35.0,
-                            41.0
-                        )
+                        "timestamp": (35.0, 41.0),
                     },
                     {
                         "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (
-                            41.0,
-                            47.0
-                        )
+                        "timestamp": (41.0, 47.0),
                     },
                     {
                         "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (
-                            47.0,
-                            53.0
-                        )
+                        "timestamp": (47.0, 53.0),
                     },
                     {
                         "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (
-                            53.0,
-                            58.20000076293945
-                        )
-                    }
-                ]
+                        "timestamp": (53.0, 58.20000076293945),
+                    },
+                ],
             }
         ]
 
