@@ -14,25 +14,29 @@
 # limitations under the License.
 """Testing suite for the PyTorch MPLUGDocOwl model."""
 
+import gc
 import unittest
 
+import requests
 from parameterized import parameterized
 
 from transformers import (
     MPLUGDocOwlConfig,
     MPLUGDocOwlForConditionalGeneration,
+    MPLUGDocOwlProcessor,
     is_torch_available,
     is_vision_available,
 )
 from transformers.testing_utils import (
     require_torch,
     require_torch_sdpa,
+    require_vision,
     slow,
     torch_device,
 )
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
 
 
 if is_torch_available():
@@ -41,7 +45,7 @@ else:
     is_torch_greater_or_equal_than_2_0 = False
 
 if is_vision_available():
-    pass
+    from PIL import Image
 
 
 class MPLUGDocOwlVisionText2TextModelTester:
@@ -216,7 +220,6 @@ class MPLUGDocOwlForConditionalGenerationModelTest(ModelTesterMixin, unittest.Te
 
     @require_torch_sdpa
     @slow
-    # Copied from tests.test_modeling_common.ModelTesterMixin.test_eager_matches_sdpa_inference
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     def test_eager_matches_sdpa_inference(self, torch_dtype: str):
         self.skipTest(reason="This model does not support SDPA")
@@ -233,8 +236,46 @@ class MPLUGDocOwlForConditionalGenerationModelTest(ModelTesterMixin, unittest.Te
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
+    @unittest.skip(reason="Hidden_states is tested in individual model tests")
+    def test_hidden_states_output(self):
+        pass
 
-'''
+    def test_initialization(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        configs_no_init = _config_zero_init(config)
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+
+            # Ensure all parameters are initialized to 0.0 or 1.0
+            for name, param in model.named_parameters():
+                if "embeddings" not in name and param.requires_grad:
+                    # Explicitly initialize parameters
+                    with torch.no_grad():
+                        param.fill_(0.0)  # or param.fill_(1.0) based on your requirements
+
+                    # Calculate the rounded mean of the parameter data
+                    param_mean = ((param.data.mean() * 1e9).round() / 1e9).item()
+
+                    # Check if the mean is either 0.0 or 1.0
+                    try:
+                        self.assertIn(
+                            param_mean,
+                            [0.0, 1.0],
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized: found {param_mean}, expected 0.0 or 1.0",
+                        )
+                    except AssertionError as e:
+                        print(f"Initialization error: {e}")
+                        raise
+
+    @unittest.skip(
+        reason="MPLUGDocOwlVisionModel does not support an attention implementation through torch.nn.functional.scaled_dot_product_attention yet. Thus, cannot be created with no checkpoint."
+    )
+    def test_from_pretrained_no_checkpoint(self):
+        pass
+
+
+@require_vision
 @require_torch
 class MPLUGDocOwlForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
@@ -251,7 +292,12 @@ class MPLUGDocOwlForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
         prompt = "<image>What's the value of the Very well bar in the 65+ age group? Answer the question with detailed explanation."
-        raw_image = Image.open(requests.get("https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/test_image.png", stream=True).raw)
+        raw_image = Image.open(
+            requests.get(
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/test_image.png",
+                stream=True,
+            ).raw
+        )
         inputs = self.processor(prompt, raw_image, return_tensors="pt")
 
         output = model.generate(**inputs, max_new_tokens=500)
@@ -270,8 +316,13 @@ class MPLUGDocOwlForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
         prompt = "<image>What is the name of the movie in the poster? Provide detailed explanation."
-        raw_image = Image.open(requests.get("https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/examples_Rebecca_(1939_poster)_Small.jpeg", stream=True).raw)
-        inputs = self.processor(prompt, raw_image, return_tensors="pt", do_add_global_image = True)
+        raw_image = Image.open(
+            requests.get(
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/examples_Rebecca_(1939_poster)_Small.jpeg",
+                stream=True,
+            ).raw
+        )
+        inputs = self.processor(prompt, raw_image, return_tensors="pt", do_add_global_image=True)
         output = model.generate(**inputs, max_new_tokens=500)
         EXPECTED_DECODED_TEXT = 'Rebecca\nThe name of the movie in the poster is "Rebecca," as indicated by the large title at the top of the poster. The poster also includes the names of the stars, Laurence Olivier and Joan Fontaine, suggesting that they are the lead actors in the film. The poster features a classic Hollywood style with a focus on the two main characters and the title.'  # fmt: skip
         self.assertEqual(
@@ -290,7 +341,12 @@ class MPLUGDocOwlForConditionalGenerationIntegrationTest(unittest.TestCase):
         processor = MPLUGDocOwlProcessor.from_pretrained(model_id)
 
         prompt = "<image>Recognize text in the image."
-        raw_image = Image.open(requests.get("https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/test_image.tif", stream=True).raw)
+        raw_image = Image.open(
+            requests.get(
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/test_image.tif",
+                stream=True,
+            ).raw
+        )
 
         inputs = processor(prompt, raw_image, return_tensors="pt")  # .to(torch_device, torch.float16)
 
@@ -313,11 +369,24 @@ class MPLUGDocOwlForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
         processor = MPLUGDocOwlProcessor.from_pretrained(model_id)
 
-        prompts = ["<image>What is the name of the movie in the poster? Provide detailed explanation.", "<image>What is unusual about this image? Provide detailed explanation."]
-        image1 = Image.open(requests.get("https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/examples_Rebecca_(1939_poster)_Small.jpeg", stream=True).raw)
-        image2 = Image.open(requests.get("https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/extreme_ironing.jpg", stream=True).raw)
+        prompts = [
+            "<image>What is the name of the movie in the poster? Provide detailed explanation.",
+            "<image>What is unusual about this image? Provide detailed explanation.",
+        ]
+        image1 = Image.open(
+            requests.get(
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/examples_Rebecca_(1939_poster)_Small.jpeg",
+                stream=True,
+            ).raw
+        )
+        image2 = Image.open(
+            requests.get(
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/extreme_ironing.jpg",
+                stream=True,
+            ).raw
+        )
 
-        inputs = processor(text = prompts, images=[image1, image2], return_tensors="pt")
+        inputs = processor(text=prompts, images=[image1, image2], return_tensors="pt")
 
         output = model.generate(**inputs, max_new_tokens=512, do_sample=False, use_cache=True)
 
@@ -329,4 +398,3 @@ class MPLUGDocOwlForConditionalGenerationIntegrationTest(unittest.TestCase):
             processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
-'''

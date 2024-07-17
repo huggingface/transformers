@@ -53,6 +53,21 @@ The original code can be found [here](https://github.com/X-PLUG/mPLUG-DocOwl/tre
 ## MPLUGDocOwlHReducer
 [[autodoc]] MPLUGDocOwlHReducer
 
+## MPLUGDocOwlForCausalLM
+[[autodoc]] MPLUGDocOwlForCausalLM
+
+## MPLUGDocOwlLanguageModel
+[[autodoc]] MPLUGDocOwlLanguageModel
+
+## MPLUGDocOwlPreTrainedLanguageModel
+[[autodoc]] MPLUGDocOwlPreTrainedLanguageModel
+
+## MPLUGDocOwlVisionModel
+[[autodoc]] MPLUGDocOwlVisionModel
+
+## MPLUGDocOwlVisionTransformer
+[[autodoc]] MPLUGDocOwlVisionTransformer
+
 ## MPLUGDocOwlForConditionalGeneration
 
 [[autodoc]] MPLUGDocOwlForConditionalGeneration

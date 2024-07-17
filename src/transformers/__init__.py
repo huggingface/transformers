@@ -2642,9 +2642,15 @@ else:
     )
     _import_structure["models.mplugdocowl"].extend(
         [
+            "MPLUGDocOwlAttention",
+            "MPLUGDocOwlForCausalLM",
             "MPLUGDocOwlForConditionalGeneration",
             "MPLUGDocOwlHReducer",
+            "MPLUGDocOwlLanguageModel",
+            "MPLUGDocOwlPreTrainedLanguageModel",
             "MPLUGDocOwlPreTrainedModel",
+            "MPLUGDocOwlVisionModel",
+            "MPLUGDocOwlVisionTransformer",
         ]
     )
     _import_structure["models.mpnet"].extend(
@@ -7075,9 +7081,15 @@ if TYPE_CHECKING:
             MobileViTV2PreTrainedModel,
         )
         from .models.mplugdocowl import (
+            MPLUGDocOwlAttention,
+            MPLUGDocOwlForCausalLM,
             MPLUGDocOwlForConditionalGeneration,
             MPLUGDocOwlHReducer,
+            MPLUGDocOwlLanguageModel,
+            MPLUGDocOwlPreTrainedLanguageModel,
             MPLUGDocOwlPreTrainedModel,
+            MPLUGDocOwlVisionModel,
+            MPLUGDocOwlVisionTransformer,
         )
         from .models.mpnet import (
             MPNetForMaskedLM,

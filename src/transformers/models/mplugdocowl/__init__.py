@@ -18,7 +18,17 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 _import_structure = {
     "configuration_mplugdocowl": ["MPLUGDocOwlConfig"],
-    "modeling_mplugdocowl": ["MPLUGDocOwlHReducer"],
+    "modeling_mplugdocowl": [
+        "MPLUGDocOwlAttention",
+        "MPLUGDocOwlForCausalLM",
+        "MPLUGDocOwlForConditionalGeneration",
+        "MPLUGDocOwlHReducer",
+        "MPLUGDocOwlLanguageModel",
+        "MPLUGDocOwlPreTrainedLanguageModel",
+        "MPLUGDocOwlPreTrainedModel",
+        "MPLUGDocOwlVisionModel",
+        "MPLUGDocOwlVisionTransformer",
+    ],
     "processing_mplugdocowl": ["MPLUGDocOwlProcessor"],
 }
 
@@ -37,15 +47,31 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_mplugdocowl"] = [
+        "MPLUGDocOwlAttention",
+        "MPLUGDocOwlForCausalLM",
         "MPLUGDocOwlForConditionalGeneration",
-        "MPLUGDocOwlPreTrainedModel",
         "MPLUGDocOwlHReducer",
+        "MPLUGDocOwlLanguageModel",
+        "MPLUGDocOwlPreTrainedLanguageModel",
+        "MPLUGDocOwlPreTrainedModel",
+        "MPLUGDocOwlVisionModel",
+        "MPLUGDocOwlVisionTransformer",
     ]
 
 
 if TYPE_CHECKING:
     from .configuration_mplugdocowl import MPLUGDocOwlConfig
-    from .modeling_mplugdocowl import MPLUGDocOwlHReducer
+    from .modeling_mplugdocowl import (
+        MPLUGDocOwlAttention,
+        MPLUGDocOwlForCausalLM,
+        MPLUGDocOwlForConditionalGeneration,
+        MPLUGDocOwlHReducer,
+        MPLUGDocOwlLanguageModel,
+        MPLUGDocOwlPreTrainedLanguageModel,
+        MPLUGDocOwlPreTrainedModel,
+        MPLUGDocOwlVisionModel,
+        MPLUGDocOwlVisionTransformer,
+    )
     from .processing_mplugdocowl import MPLUGDocOwlProcessor
 
     try:
@@ -63,9 +89,15 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_mplugdocowl import (
+            MPLUGDocOwlAttention,
+            MPLUGDocOwlForCausalLM,
             MPLUGDocOwlForConditionalGeneration,
             MPLUGDocOwlHReducer,
+            MPLUGDocOwlLanguageModel,
+            MPLUGDocOwlPreTrainedLanguageModel,
             MPLUGDocOwlPreTrainedModel,
+            MPLUGDocOwlVisionModel,
+            MPLUGDocOwlVisionTransformer,
         )
 
 

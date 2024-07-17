@@ -456,7 +456,7 @@ MPLUGDocOwl_INPUTS_DOCSTRING = r"""
 """
 
 
-class MPLUGDocOwlEncoder(nn.Module):
+class MPLUGDocOwlVisionEncoder(MPLUGDocOwlPreTrainedModel):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
     ['MPLUGDocOwlEncoderLayer'].
@@ -466,10 +466,10 @@ class MPLUGDocOwlEncoder(nn.Module):
     """
 
     def __init__(self, config: MPLUGDocOwlConfig):
-        super().__init__()
+        super().__init__(config)
         self.config = config
         self.layers = nn.ModuleList([MPLUGDocOwlEncoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = True
+        self.gradient_checkpointing = False
 
     def forward(
         self,
@@ -523,17 +523,11 @@ class MPLUGDocOwlEncoder(nn.Module):
                 encoder_states = encoder_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(encoder_layer),
+                layer_outputs = self._gradient_checkpointing_func(
+                    encoder_layer.__call__,
                     hidden_states,
                     attention_mask,
+                    output_attentions,
                 )
 
             else:
@@ -566,7 +560,7 @@ class MPLUGDocOwlVisionTransformer(PreTrainedModel):
 
         self.embeddings = MPLUGDocOwlVisionEmbeddings(config)
 
-        self.encoder = MPLUGDocOwlEncoder(config)
+        self.encoder = MPLUGDocOwlVisionEncoder(config)
         self.post_layernorm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.post_init()
 
@@ -706,7 +700,6 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
-# Copied from transformers.models.kosmos2.modeling_kosmos2.Kosmos2TextTransformer._prepare_decoder_attention_mask
 def _prepare_decoder_attention_mask(attention_mask, input_shape, inputs_embeds, past_key_values_length):
     # create causal mask
     # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
@@ -846,6 +839,19 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
     return q_embed, k_embed
 
 
+# Copied from transformers.models.llama.modeling_llama.repeat_kv
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
 class MPLUGDocOwlMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -874,19 +880,6 @@ class MPLUGDocOwlMLP(nn.Module):
             down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
         return down_proj
-
-
-# Copied from transformers.models.llama.modeling_llama.repeat_kv
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
 class MultiwayNetwork(nn.Module):
