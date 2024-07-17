@@ -1014,9 +1014,9 @@ class WhisperEncoder(WhisperPreTrainedModel):
         """
 
         expected_seq_length = self.config.max_source_positions * self.conv1.stride[0] * self.conv2.stride[0]
-        if input_features.shape[-1] != expected_seq_length:
+        if input_features.shape[-1] > expected_seq_length:
             raise ValueError(
-                f"Whisper expects the mel input features to be of length {expected_seq_length}, but found {input_features.shape[-1]}. Make sure to pad the input mel features to {expected_seq_length}."
+                f"Whisper expects the mel input features to be of length {expected_seq_length} or less, but found {input_features.shape[-1]}. Make sure to trim the input mel features to {expected_seq_length}."
             )
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1030,7 +1030,7 @@ class WhisperEncoder(WhisperPreTrainedModel):
         inputs_embeds = inputs_embeds.permute(0, 2, 1)
         embed_pos = self.embed_positions.weight
 
-        hidden_states = inputs_embeds + embed_pos
+        hidden_states = inputs_embeds + embed_pos[: inputs_embeds.size(1)]
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         encoder_states = () if output_hidden_states else None
