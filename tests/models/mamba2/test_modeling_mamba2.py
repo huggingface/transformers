@@ -161,7 +161,7 @@ class Mamba2ModelTester:
         self.parent.assertEqual(len(result.hidden_states), config.num_hidden_layers + 1)
 
     def create_and_check_mamba2_causal_lm(
-        self, config, input_ids, input_mask, token_labels, *args
+        self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = Mamba2ForCausalLM(config)
         model.to(torch_device)
@@ -176,7 +176,7 @@ class Mamba2ModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_mamba2_lm_head_forward_and_backwards(
-        self, config, input_ids, input_mask, token_labels, *args, gradient_checkpointing=False
+        self, config, input_ids, input_mask, sequence_labels, token_labels, choice_label, gradient_checkpointing=False
     ):
         model = Mamba2ForCausalLM(config)
         model.to(torch_device)
@@ -190,7 +190,7 @@ class Mamba2ModelTester:
         result.loss.backward()
     
     def create_and_check_mamba2_sequence_classification(
-        self, config, input_ids, input_mask, sequence_labels, *args
+        self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_labels = self.num_labels
         model = Mamba2ForSequenceClassification(config)
