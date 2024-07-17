@@ -30,7 +30,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
+from ...cache_utils import Cache, DynamicCache, SinkCache, SlidingWindowCache, StaticCache
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
@@ -1040,6 +1040,7 @@ class MistralModel(MistralPreTrainedModel):
         past_seen_tokens = cache_position[0] if past_key_values is not None else 0
         using_static_cache = isinstance(past_key_values, StaticCache)
         using_sliding_window_cache = isinstance(past_key_values, SlidingWindowCache)
+        using_sink_cache = isinstance(past_key_values, SinkCache)
 
         if (
             self.config._attn_implementation == "sdpa"
@@ -1071,6 +1072,10 @@ class MistralModel(MistralPreTrainedModel):
                 if isinstance(attention_mask, torch.Tensor)
                 else past_seen_tokens + sequence_length + 1
             )
+
+        if using_sink_cache and sequence_length >= past_key_values.get_max_length():
+            max_cache_len = past_key_values.get_max_length()
+            cache_position = torch.arange(max_cache_len - sequence_length, max_cache_len, device=cache_position.device)
 
         if attention_mask is not None and attention_mask.dim() == 4:
             # in this case we assume that the mask comes already in inverted form and requires no inversion or slicing
