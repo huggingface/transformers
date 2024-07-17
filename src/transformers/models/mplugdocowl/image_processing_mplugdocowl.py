@@ -135,11 +135,11 @@ def box_area(boxes):
 
     Args:
         boxes (np.ndarray): An array of shape (N, 4) containing N bounding boxes,
+        boxes (`np.ndarray`): An array of shape (N, 4) containing N bounding boxes,
                             each represented by the coordinates [x_min, y_min, x_max, y_max].
 
     Returns:
-        np.ndarray: An array of shape (N,) containing the area of each bounding box.
-    """
+        `np.ndarray`: An array of shape (N,) containing the area of each bounding box.
     return (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
 
 
