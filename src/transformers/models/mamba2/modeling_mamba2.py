@@ -200,11 +200,11 @@ class Mamba2Mixer(nn.Module):
     def cuda_kernels_forward(self, hidden_states: torch.Tensor, cache_params: Optional[Mamba2Cache] = None):
         # 1. Gated MLP's linear projection
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
-
         if self.training and cache_params is None:  # Doesn't support outputting the states -> used for training
             # TODO (molbap) update mamba_inner_fn for mamba2
             # not supported for now
-            contextualized_states = mamba_inner_fn(
+            pass
+            """contextualized_states = mamba_inner_fn(
                 projected_states,
                 self.conv1d.weight,
                 self.conv1d.bias if self.use_conv_bias else None,
@@ -218,11 +218,11 @@ class Mamba2Mixer(nn.Module):
                 self.D.float(),
                 delta_bias=self.dt_proj.bias.float(),
                 delta_softplus=True,
-            )
+            )"""
 
         else:
             gate, xBC, time_step = torch.split(
-                hidden_states, [self.hidden_size, self.hidden_size + 2 * self.n_groups * self.state_size, self.num_heads], dim=-1
+                hidden_states, [self.intermediate_size, self.intermediate_size + 2 * self.n_groups * self.state_size, self.num_heads], dim=-1
             )
             time_step = nn.functional.softplus(time_step + self.dt_bias)
             
@@ -329,7 +329,7 @@ class Mamba2Mixer(nn.Module):
     # fmt: on
 
     def forward(self, hidden_states, cache_params: Optional[Mamba2Cache] = None):
-        if is_fast_path_available and "cuda" in self.x_proj.weight.device.type:
+        if is_fast_path_available :# and "cuda" in self.x_proj.weight.device.type:
             return self.cuda_kernels_forward(hidden_states, cache_params)
         return self.slow_forward(hidden_states, cache_params)
 
