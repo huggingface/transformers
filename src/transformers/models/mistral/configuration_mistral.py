@@ -104,6 +104,7 @@ class MistralConfig(PretrainedConfig):
         num_hidden_layers=32,
         num_attention_heads=32,
         num_key_value_heads=8,
+        head_dim=None,
         hidden_act="silu",
         max_position_embeddings=4096 * 32,
         initializer_range=0.02,
@@ -125,6 +126,7 @@ class MistralConfig(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.sliding_window = sliding_window
+        self.head_dim = head_dim or hidden_size // num_attention_heads
 
         # for backward compatibility
         if num_key_value_heads is None:
