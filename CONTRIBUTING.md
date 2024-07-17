@@ -61,7 +61,10 @@ feedback.
 The 🤗 Transformers library is robust and reliable thanks to users who report the problems they encounter.
 
 Before you report an issue, we would really appreciate it if you could **make sure the bug was not
-already reported** (use the search bar on GitHub under Issues). Your issue should also be related to bugs in the library itself, and not your code. If you're unsure whether the bug is in your code or the library, please ask in the [forum](https://discuss.huggingface.co/) first. This helps us respond quicker to fixing issues related to the library versus general questions.
+already reported** (use the search bar on GitHub under Issues). Your issue should also be related to bugs in the library itself, and not your code. If you're unsure whether the bug is in your code or the library, please ask in the [forum](https://discuss.huggingface.co/) or on our [discord](https://discord.com/invite/hugging-face-879548962464493619) first. This helps us respond quicker to fixing issues related to the library versus general questions.
+
+> [!TIP]
+> We have a [docs bot](https://huggingface.co/spaces/huggingchat/hf-docs-chat), and we highly encourage you to ask all your questions there. There is always a chance your bug can be fixed with a simple flag 👾🔫
 
 Once you've confirmed the bug hasn't already been reported, please include the following information in your issue so we can quickly resolve it:
 
@@ -160,7 +163,7 @@ You'll need **[Python 3.8](https://github.com/huggingface/transformers/blob/main
    If 🤗 Transformers was already installed in the virtual environment, remove
    it with `pip uninstall transformers` before reinstalling it in editable
    mode with the `-e` flag.
-   
+
    Depending on your OS, and since the number of optional dependencies of Transformers is growing, you might get a
    failure with this command. If that's the case make sure to install the Deep Learning framework you are working with
    (PyTorch, TensorFlow and/or Flax) then do:
@@ -219,7 +222,7 @@ You'll need **[Python 3.8](https://github.com/huggingface/transformers/blob/main
 
    If you're modifying documents under the `docs/source` directory, make sure the documentation can still be built. This check will also run in the CI when you open a pull request. To run a local check
    make sure you install the documentation builder:
-   
+
    ```bash
    pip install ".[docs]"
    ```

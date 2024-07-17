@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, Iterable, List, Optional, Tuple, Union
 
 
 if TYPE_CHECKING:
-    from .configuration_utils import PretrainedConfig
+    from ..configuration_utils import PretrainedConfig
 
 
 class BackboneType(enum.Enum):
@@ -313,7 +313,6 @@ def load_backbone(config):
     use_pretrained_backbone = getattr(config, "use_pretrained_backbone", None)
     backbone_checkpoint = getattr(config, "backbone", None)
     backbone_kwargs = getattr(config, "backbone_kwargs", None)
-
     backbone_kwargs = {} if backbone_kwargs is None else backbone_kwargs
 
     if backbone_kwargs and backbone_config is not None:
