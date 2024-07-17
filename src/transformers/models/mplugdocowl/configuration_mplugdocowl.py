@@ -13,8 +13,6 @@
 # limitations under the License.
 """MPLUGDocOwl model configuration"""
 
-import warnings
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING
@@ -85,12 +83,6 @@ class MPLUGDocOwlConfig(PretrainedConfig):
         self.ignore_index = ignore_index
         self.image_token_index = image_token_index
 
-        if "vocab_size" in kwargs:
-            warnings.warn(
-                "The `vocab_size` argument is deprecated and will be removed in v4.42, since it can be inferred from the `text_config`. Passing this argument has no effect",
-                FutureWarning,
-            )
-
         if isinstance(vision_config, dict):
             vision_config["model_type"] = (
                 vision_config["model_type"] if "model_type" in vision_config else "clip_vision_model"
@@ -127,20 +119,3 @@ class MPLUGDocOwlConfig(PretrainedConfig):
         self.hreducer_layer_norm = hreducer_layer_norm
         self.hreducer_conv_shape = hreducer_conv_shape
         super().__init__(**kwargs)
-
-    @property
-    def vocab_size(self):
-        warnings.warn(
-            "The `vocab_size` attribute is deprecated and will be removed in v4.42, Please use `text_config.vocab_size` instead.",
-            FutureWarning,
-        )
-        return self._vocab_size
-
-    @vocab_size.setter
-    def vocab_size(self, value):
-        self._vocab_size = value
-
-    def to_dict(self):
-        output = super().to_dict()
-        output.pop("_vocab_size", None)
-        return output

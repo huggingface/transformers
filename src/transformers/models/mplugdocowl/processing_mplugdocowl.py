@@ -18,9 +18,6 @@ Processor class for MPLUGDocOwl.
 
 from typing import Dict, List, Optional, Union
 
-# FIXME need to add image processing class name
-# from transformers.models.mplugdocowl.image_processing_mplugdocowl import MPLUGDocOwlImageProcessor
-# FIXME change the import from transformers to import from ...
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
@@ -139,6 +136,9 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
                 Maximum length of the returned list and optionally padding length (see above).
             truncation (`bool`, *optional*):
                 Activates truncation to cut input sequences longer than `max_length` to `max_length`.
+            do_shape_adaptive_cropping (`bool`, *optional*, defaults to `True`): Whether to do a shape adaptive cropping of the input image. Should be only called if the do_anchor_resize is called.
+            do_anchor_resize (`bool`, *optional*, defaults to `True`): Whether to resize the image based on the specified anchor. Should be called before do_shape_adaptive_cropping.
+            do_add_global_image (`bool`, *optional*, defaults to `True`): Whether to add the global image to the image input.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
