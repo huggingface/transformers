@@ -1764,7 +1764,9 @@ class GenerationMixin:
                     )
                 model_kwargs["past_key_values"] = self._get_cache(
                     generation_config.cache_implementation,
-                    getattr(generation_config, "num_beams", 1) * getattr(generation_config, "num_return_sequences", 1) * batch_size ,
+                    getattr(generation_config, "num_beams", 1)
+                    * getattr(generation_config, "num_return_sequences", 1)
+                    * batch_size,
                     generation_config.max_length,
                     model_kwargs,
                 )
