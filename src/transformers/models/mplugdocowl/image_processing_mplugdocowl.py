@@ -152,12 +152,15 @@ def box_iou(boxes1, area1, boxes2, eps=1e-5):
         area1 (np.ndarray): An array of shape (N,) containing the area of each bounding box in boxes1.
         boxes2 (np.ndarray): An array of shape (M, 4) containing M bounding boxes.
         eps (float, optional): A small value to avoid division by zero. Defaults to 1e-5.
+        boxes1 (`np.ndarray`): An array of shape (N, 4) containing N bounding boxes.
+        area1 (`np.ndarray`): An array of shape (N,) containing the area of each bounding box in boxes1.
+        boxes2 (`np.ndarray`): An array of shape (M, 4) containing M bounding boxes.
+        eps (`float`, *optional*): A small value to avoid division by zero. Defaults to 1e-5.
 
     Returns:
-        tuple: A tuple containing:
-            - np.ndarray: An array of shape (N, M) containing the IoU between each pair of boxes from boxes1 and boxes2.
-            - np.ndarray: An array of shape (N, M) containing the union areas of each pair of boxes.
-    """
+        `tuple`: A tuple containing:
+            - `np.ndarray`: An array of shape (N, M) containing the IoU between each pair of boxes from boxes1 and boxes2.
+            - `np.ndarray`: An array of shape (N, M) containing the union areas of each pair of boxes.
     area2 = box_area(boxes2)
 
     top_left = np.maximum(boxes1[:, None, :2], boxes2[:, :2])  # [N,M,2]
