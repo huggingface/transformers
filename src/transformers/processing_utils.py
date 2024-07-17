@@ -495,7 +495,7 @@ class ProcessorMixin(PushToHubMixin):
                     del attribute.init_kwargs["auto_map"]
 
         # If we save using the predefined names, we can load using `from_pretrained`
-        # plus we save chat_template in itw own file
+        # plus we save chat_template in its own file
         output_processor_file = os.path.join(save_directory, PROCESSOR_NAME)
         output_chat_template_file = os.path.join(save_directory, CHAT_TEMPLATE_NAME)
 
