@@ -24,6 +24,7 @@ from ...test_image_processing_common import (
 
 if is_torch_available():
     import numpy as np
+    import torch
 
 if is_vision_available():
     from transformers import SuperGlueImageProcessor
@@ -108,6 +109,86 @@ class SuperGlueImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     @unittest.skip(reason="SuperPointImageProcessor is always supposed to return a grayscaled image")
     def test_call_numpy_4_channels(self):
         pass
+
+    def test_input_images_conformity(self):
+        image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
+
+        working_image_formats = [
+            {"pairs": False, "batch_size": 2},
+            {"pairs": True, "batch_size": 2},
+            {"pairs": True, "batch_size": 4},
+            {"pairs": True, "batch_size": 6},
+        ]
+
+        not_working_formats = [
+            {"pairs": False, "batch_size": 4},
+            {"pairs": False, "batch_size": 3},
+            {"pairs": True, "batch_size": 3},
+        ]
+
+        working_image_inputs = [
+            self.image_processor_tester.prepare_image_inputs(**image_format) for image_format in working_image_formats
+        ]
+
+        not_working_image_inputs = [
+            self.image_processor_tester.prepare_image_inputs(**image_format) for image_format in not_working_formats
+        ]
+
+        working_image_inputs.extend(
+            [
+                [
+                    np.random.randint(255, size=(3, 640, 480)),
+                    np.random.randint(255, size=(3, 640, 480)),
+                ],
+                np.random.randint(255, size=(2, 3, 640, 480)),
+                [
+                    [
+                        np.random.randint(255, size=(3, 640, 480)),
+                        np.random.randint(255, size=(3, 640, 480)),
+                    ],
+                ],
+                [
+                    np.random.randint(255, size=(2, 3, 640, 480)),
+                ],
+                [
+                    np.random.randint(255, size=(2, 3, 640, 480)),
+                    np.random.randint(255, size=(2, 3, 640, 480)),
+                    np.random.randint(255, size=(2, 3, 640, 480)),
+                ],
+                np.random.randint(255, size=(1, 2, 3, 640, 480)),
+                np.random.randint(255, size=(3, 2, 3, 640, 480)),
+                [
+                    torch.rand((3, 640, 480)),
+                    torch.rand((3, 640, 480)),
+                ],
+                torch.rand((2, 3, 640, 480)),
+                torch.rand((1, 2, 3, 640, 480)),
+                torch.rand((2, 2, 3, 640, 480)),
+            ]
+        )
+
+        not_working_image_inputs.extend(
+            [
+                np.random.randint(255, size=(3, 640, 480)),
+                [np.random.randint(255, size=(3, 640, 480))],
+                np.random.randint(255, size=(1, 3, 640, 480)),
+                [[np.random.randint(255, size=(3, 640, 480))]],
+                [
+                    np.random.randint(255, size=(1, 3, 640, 480)),
+                    np.random.randint(255, size=(1, 3, 640, 480)),
+                ],
+                np.random.randint(255, size=(1, 1, 3, 640, 480)),
+                torch.rand((3, 640, 480)),
+                torch.rand((1, 3, 640, 480)),
+            ]
+        )
+
+        for image_input in working_image_inputs:
+            image_processor.preprocess(image_input, return_tensors="pt")
+
+        for image_input in not_working_image_inputs:
+            with self.assertRaises(ValueError):
+                image_processor.preprocess(image_input)
 
     def test_input_images_properly_paired(self):
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict)

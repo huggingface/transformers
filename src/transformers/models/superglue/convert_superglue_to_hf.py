@@ -177,6 +177,7 @@ def rename_key(dct, old, new):
     val = dct.pop(old)
     dct[new] = val
 
+
 def convert_conv1ds_to_linears(state_dict):
     for key, value in state_dict.items():
         if isinstance(value, torch.Tensor):
