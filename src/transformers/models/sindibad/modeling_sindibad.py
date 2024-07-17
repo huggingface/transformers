@@ -93,11 +93,7 @@ class SindibadCache:
     """
 
     def __init__(
-        self,
-        config: SindibadConfig,
-        batch_size: int,
-        dtype: torch.dtype = torch.float16,
-        device: Optional[str] = None,
+        self, config: SindibadConfig, batch_size: int, dtype: torch.dtype = torch.float16, device: Optional[str] = None
     ):
         self.seqlen_offset = 0
         self.dtype = dtype
