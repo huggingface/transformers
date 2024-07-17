@@ -140,6 +140,7 @@ def box_area(boxes):
 
     Returns:
         `np.ndarray`: An array of shape (N,) containing the area of each bounding box.
+    """
     return (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
 
 
@@ -161,6 +162,7 @@ def box_iou(boxes1, area1, boxes2, eps=1e-5):
         `tuple`: A tuple containing:
             - `np.ndarray`: An array of shape (N, M) containing the IoU between each pair of boxes from boxes1 and boxes2.
             - `np.ndarray`: An array of shape (N, M) containing the union areas of each pair of boxes.
+    """
     area2 = box_area(boxes2)
 
     top_left = np.maximum(boxes1[:, None, :2], boxes2[:, :2])  # [N,M,2]
@@ -192,6 +194,8 @@ def anchor_rank(anchors, anchors_areas, input_image_size, eps=1e-5):
 
     Returns:
         `int`: The index of the selected anchor with the highest rank.
+
+    """
     input_image_bbox = np.array([[0, 0, input_image_size[1], input_image_size[0]]])
 
     boxes1 = anchors
@@ -234,6 +238,7 @@ def anchor_resize(
             - int: The index of the selected anchor.
             - `List[np.ndarray]`: A list containing the resized image.
             - `int`: The index of the selected anchor.
+    """
     # Convert anchors to xyxy format
     anchors = [tuple(_) for _ in grid_dict[anchors]]
     size = size["width"]
@@ -563,7 +568,7 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+            sizeexi (`Dict[str, int]`, *optional*, defaults to `self.size`):
                 Size of the image after resizing. Shortest edge of the image is resized to size["shortest_edge"], with
                 the longest edge resized to keep the input aspect ratio.
             resample (`int`, *optional*, defaults to `self.resample`):
