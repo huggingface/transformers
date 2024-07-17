@@ -131,7 +131,6 @@ def convert_mplugdocowl_llama_to_hf(
 
 def main():
     parser = argparse.ArgumentParser(
-        epilog=EPILOG_TXT,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
