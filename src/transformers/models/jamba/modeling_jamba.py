@@ -49,8 +49,8 @@ from ...utils.import_utils import (
     is_causal_conv1d_available,
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
-    is_torchdynamo_compiling,
     is_mamba_ssm_available,
+    is_torchdynamo_compiling,
 )
 from .configuration_jamba import JambaConfig
 
