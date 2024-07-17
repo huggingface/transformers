@@ -1077,7 +1077,7 @@ class CohereForCausalLM(CoherePreTrainedModel):
         )
 
         hidden_states = outputs[0]
-        if labels is None:
+        if labels is None and not torch.compiler.is_compiling():
             logger.warning_once(
                 "Starting from v4.44, the `logits` model output will have the same type as the model (except at train time, where it will always be FP32)"
             )
