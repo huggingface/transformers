@@ -134,6 +134,7 @@ from . import (
     lxmert,
     m2m_100,
     mamba,
+    mambafalcon,
     marian,
     markuplm,
     mask2former,
