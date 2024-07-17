@@ -128,6 +128,8 @@ class Mamba2Config(PretrainedConfig):
             Whether or not to tie the lm head to the input embeddings.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the cache should be used.
+        classifier_dropout (`float`, *optional*, defaults to 0.1):
+            The dropout ratio for the classification head in [`Mamba2ForSequenceClassification`] model.
 
     Example:
 
@@ -190,6 +192,7 @@ class Mamba2Config(PretrainedConfig):
         max_position_embeddings=2048,
         tie_embedding_weights=True,
         use_cache=True,
+        classifier_dropout=0.1,
         **kwargs,
     ):
         # Avoid mutable default args
@@ -242,6 +245,7 @@ class Mamba2Config(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.tie_embedding_weights = tie_embedding_weights
         self.use_cache = use_cache
+        self.classifier_dropout = classifier_dropout
 
         super().__init__(
             bos_token_id=bos_token_id,

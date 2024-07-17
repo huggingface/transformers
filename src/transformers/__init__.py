@@ -2545,6 +2545,7 @@ else:
     _import_structure["models.mamba2"].extend(
         [
             "Mamba2ForCausalLM",
+            "Mamba2ForSequenceClassification",
             "Mamba2Model",
             "Mamba2PreTrainedModel",
         ]
@@ -7027,7 +7028,12 @@ if TYPE_CHECKING:
             MambaModel,
             MambaPreTrainedModel,
         )
-        from .models.mamba2 import Mamba2ForCausalLM, Mamba2Model, Mamba2PreTrainedModel
+        from .models.mamba2 import (
+            Mamba2ForCausalLM,
+            Mamba2ForSequenceClassification,
+            Mamba2Model,
+            Mamba2PreTrainedModel
+        )
         from .models.marian import MarianForCausalLM, MarianModel, MarianMTModel
         from .models.markuplm import (
             MarkupLMForQuestionAnswering,

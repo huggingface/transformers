@@ -75,3 +75,8 @@ print(tokenizer.batch_decode(out))
 
 [[autodoc]] Mamba2ForCausalLM
 - forward
+
+## Mamba2ForSequenceClassification
+
+[[autodoc]] Mamba2ForSequenceClassification
+- forward
