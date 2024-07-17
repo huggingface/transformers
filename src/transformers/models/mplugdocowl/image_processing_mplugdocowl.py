@@ -226,7 +226,8 @@ def anchor_resize(
         tuple: A tuple containing:
             - List[np.ndarray]: A list containing the resized image.
             - int: The index of the selected anchor.
-    """
+            - `List[np.ndarray]`: A list containing the resized image.
+            - `int`: The index of the selected anchor.
     # Convert anchors to xyxy format
     anchors = [tuple(_) for _ in grid_dict[anchors]]
     size = size["width"]
