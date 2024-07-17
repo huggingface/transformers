@@ -1494,27 +1494,6 @@ class TikTokenConverter:
         tokenizer = Tokenizer(BPE(vocab_scores, merges, fuse_unk=False))
         if hasattr(tokenizer.model, "ignore_merges"):
             tokenizer.model.ignore_merges = True
-        return tokenizer
-
-    def converted(self) -> Tokenizer:
-        tokenizer = self.tokenizer()
-        tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
-            [
-                pre_tokenizers.Split(Regex(self.pattern), behavior="isolated", invert=False),
-                pre_tokenizers.ByteLevel(add_prefix_space=self.add_prefix_space, use_regex=False),
-            ]
-        )
-        tokenizer.decoder = decoders.ByteLevel()
-        tokenizer.post_processor = processors.ByteLevel(trim_offsets=False)
-        return tokenizer
-
-
-class LlamaTikTokenConverter(TikTokenConverter):
-    def tokenizer(self):
-        vocab_scores, merges = self.extract_vocab_merges_from_model(self.vocab_file)
-        tokenizer = Tokenizer(BPE(vocab_scores, merges, fuse_unk=False))
-        if hasattr(tokenizer.model, "ignore_merges"):
-            tokenizer.model.ignore_merges = True
         num_reserved_special_tokens = 256
         special_tokens = [
             "<|begin_of_text|>",
@@ -1532,9 +1511,21 @@ class LlamaTikTokenConverter(TikTokenConverter):
         tokenizer.add_special_tokens(special_tokens)
         return tokenizer
 
+    def converted(self) -> Tokenizer:
+        tokenizer = self.tokenizer()
+        tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
+            [
+                pre_tokenizers.Split(Regex(self.pattern), behavior="isolated", invert=False),
+                pre_tokenizers.ByteLevel(add_prefix_space=self.add_prefix_space, use_regex=False),
+            ]
+        )
+        tokenizer.decoder = decoders.ByteLevel()
+        tokenizer.post_processor = processors.ByteLevel(trim_offsets=False)
+        return tokenizer
+
 
 TIKTOKEN_CONVERTERS = {
-    "LlamaTokenizerFast": LlamaTikTokenConverter,
+    "LlamaTokenizerFast": TikTokenConverter,
     "PreTrainedTokenizerFast": TikTokenConverter,
 }
 
