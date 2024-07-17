@@ -182,10 +182,13 @@ def anchor_rank(anchors, anchors_areas, input_image_size, eps=1e-5):
         anchors_areas (np.ndarray): An array of shape (N,) containing the area of each anchor.
         input_image_size (tuple): A tuple (height, width) representing the size of the input image.
         eps (float, optional): A small value to avoid division by zero. Defaults to 1e-5.
+        anchors (`np.ndarray`): An array of shape (N, 4) containing N anchors.
+        anchors_areas (`np.ndarray`): An array of shape (N,) containing the area of each anchor.
+        input_image_size (`tuple`): A tuple (height, width) representing the size of the input image.
+        eps (`float`, *optional*, defaults to 1e-05): A small value to avoid division by zero. Defaults to 1e-5.
 
     Returns:
-        int: The index of the selected anchor with the highest rank.
-    """
+        `int`: The index of the selected anchor with the highest rank.
     input_image_bbox = np.array([[0, 0, input_image_size[1], input_image_size[0]]])
 
     boxes1 = anchors
