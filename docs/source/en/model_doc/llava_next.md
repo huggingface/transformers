@@ -71,7 +71,7 @@ conversation = [
 
         "role": "user",
         "content": [
-            {"type": "text", "text": "Decsribe the image in more details."},
+            {"type": "text", "text": "Describe the image in more details."},
         ],
     },
 ]
