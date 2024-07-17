@@ -2805,15 +2805,18 @@ class WhisperModelIntegrationTests(unittest.TestCase):
     @slow
     def test_whisper_shortform_single_batch_prev_cond(self):
         # fmt: off
-        EXPECTED_TEXT = [' Mr. Quilter is the apostle of the middle classes and we are glad to welcome his Gospel.']
+        EXPECTED_TEXT = [" Folks, I spend a lot of time right over there, night after night, actually. Carefully selecting for you the day's newsiest, most aerodynamic headlines, stress testing and the most topical antilock breaks and power steering pain, Stakingly stitching, leather seating so soft, it would make JD power and her associate blush. If you were to create the luxury sedan that is my nightly model, but sometimes— you're sometimes, folks— I lurched the consciousness and the back of an abandoned school bus"]
+        EXPECTED_TEXT1 = [" Folks, I spend a lot of time right over there night after night after, actually. Carefully selecting for you the day's noisiest, most aerodynamic headlines, stress testing, and the most topical, anti-lock breaks and power steering, painstakingly stitching, leather seating, so soft, it would make JD power and her associates blush to create the luxury sedan that is my nightly monologue. But sometimes, you sometimes, folks. I lurched a consciousness in the back of an abandoned school"]
         # fmt: on
 
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
         model = model.to(torch_device)
 
-        dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        one_audio = dataset[0]["audio"]["array"]
+        ds = load_dataset("distil-whisper/meanwhile", "default")["test"]
+        dataset = ds.cast_column("audio", Audio(sampling_rate=16000))
+
+        one_audio = dataset[1]["audio"]["array"]
 
         input_features = processor(one_audio, return_tensors="pt", sampling_rate=16_000)["input_features"]
         input_features = input_features.to(device=torch_device)
@@ -2832,6 +2835,21 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         decoded = processor.batch_decode(result.sequences, skip_special_tokens=True)
 
         assert decoded == EXPECTED_TEXT
+
+        gen_kwargs = {
+            "return_timestamps": True,
+            "no_speech_threshold": 0.3,
+            "temperature": (0.0, 0.2),
+            "compression_ratio_threshold": 1,
+            "condition_on_prev_tokens": False,
+            "logprob_threshold": -1.0,
+        }
+
+        torch.manual_seed(0)
+        result = model.generate(input_features, **gen_kwargs)
+        decoded = processor.batch_decode(result.sequences, skip_special_tokens=True)
+
+        assert decoded == EXPECTED_TEXT1
 
     @slow
     def test_whisper_longform_single_batch_beam(self):
