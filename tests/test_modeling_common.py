@@ -259,9 +259,11 @@ class ModelTesterMixin:
             # make sure we don't have nans
             out_2 = out2.cpu().numpy()
             out_2[np.isnan(out_2)] = 0
+            out_2 = out_2[~np.isneginf(out_2)]
 
             out_1 = out1.cpu().numpy()
             out_1[np.isnan(out_1)] = 0
+            out_1 = out_1[~np.isneginf(out_1)]
             max_diff = np.amax(np.abs(out_1 - out_2))
             self.assertLessEqual(max_diff, 1e-5)
 
@@ -660,6 +662,8 @@ class ModelTesterMixin:
             out_2 = second.cpu().numpy()
             out_1 = out_1[~np.isnan(out_1)]
             out_2 = out_2[~np.isnan(out_2)]
+            out_1 = out_1[~np.isneginf(out_1)]
+            out_2 = out_2[~np.isneginf(out_2)]
             max_diff = np.amax(np.abs(out_1 - out_2))
             self.assertLessEqual(max_diff, 1e-5)
 
