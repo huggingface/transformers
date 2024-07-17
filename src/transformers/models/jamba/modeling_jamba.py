@@ -49,6 +49,7 @@ from ...utils.import_utils import (
     is_causal_conv1d_available,
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
+    is_torchdynamo_compiling,
     is_mamba_ssm_available,
 )
 from .configuration_jamba import JambaConfig
@@ -1497,7 +1498,7 @@ class JambaForCausalLM(JambaPreTrainedModel):
             logits = self.lm_head(hidden_states)
         else:
             logits = self.lm_head(hidden_states[..., -num_logits_to_keep:, :])
-        if labels is None and not torch.compiler.is_compiling():
+        if labels is None and not is_torchdynamo_compiling:
             logger.warning_once(
                 "Starting from v4.44, the `logits` model output will have the same type as the model (except at train time, where it will always be FP32)"
             )
