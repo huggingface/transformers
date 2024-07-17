@@ -22,10 +22,8 @@ from parameterized import parameterized
 
 from transformers import Mamba2Config, is_torch_available, set_seed
 from transformers.testing_utils import (
-    require_torch,
-    require_torch_multi_gpu,
-    slow,
     require_einops,
+    require_torch,
     torch_device,
 )
 
@@ -105,8 +103,6 @@ class Mamba2ModelTester:
         self.tie_word_embeddings = tie_word_embeddings
         self.classifier_dropout = classifier_dropout
 
-    # TODO: Add get_large_model_config test
-
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
@@ -155,7 +151,7 @@ class Mamba2ModelTester:
         model.eval()
 
         result = model(input_ids)
-        result = model(input_ids, attention_mask=input_mask)
+        result = model(input_ids, attention_mask=input_mask, output_hidden_states=True)
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(len(result.hidden_states), config.num_hidden_layers + 1)
@@ -188,7 +184,7 @@ class Mamba2ModelTester:
         self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
         result.loss.backward()
-    
+
     def create_and_check_mamba2_sequence_classification(
         self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
@@ -279,12 +275,11 @@ class Mamba2ModelTester:
         return config, inputs_dict
 
 
-@unittest.skipIf(
-    not is_torch_greater_or_equal_than_2_0, reason="See https://github.com/huggingface/transformers/pull/24204"
-)
 @require_torch
 class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (Mamba2Model, Mamba2ForCausalLM, Mamba2ForSequenceClassification) if is_torch_available() else ()
+    all_model_classes = (
+        (Mamba2Model, Mamba2ForCausalLM, Mamba2ForSequenceClassification) if is_torch_available() else ()
+    )
     all_generative_model_classes = (Mamba2ForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
@@ -313,8 +308,9 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
     def test_config(self):
         self.config_tester.run_common_tests()
-    
-    # TODO: add test_multi_gpu_data_parallel_forward test
+
+    # TODO: add test_model_from_pretrained test
+    # TODO: add test_model_from_pretrained test
 
     def test_mamba2_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -327,7 +323,7 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_mamba2_lm_head_forward_and_backwards(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mamba2_lm_head_forward_and_backwards(*config_and_inputs)
-    
+
     def test_mamba2_sequence_classification_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mamba2_sequence_classification(*config_and_inputs)
@@ -371,6 +367,13 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
                     if param.requires_grad:
                         # check if it's a ones like
                         self.assertTrue(torch.allclose(param.data, torch.ones_like(param.data), atol=1e-5, rtol=1e-5))
+
+    def test_mismatched_shapes_have_properly_initialized_weights(self):
+        r"""
+        Overriding the test_mismatched_shapes_have_properly_initialized_weights test because A_log, D, and dt_bias params of the
+        Mamba2 block are initialized differently and we tested that in test_initialization
+        """
+        self.skipTest("Cumbersome and redundant for Mamba2")
 
     def test_attention_outputs(self):
         r"""
@@ -434,8 +437,6 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
                 list(self_attentions[0].shape[-3:]),
                 [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
             )
-    
-    # TODO: add test_model_from_pretrained test
 
     def test_left_padding_compatibility(self):
         r"""
