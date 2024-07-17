@@ -39,7 +39,7 @@ from ...image_utils import (
     validate_kwargs,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, is_vision_available, logging
+from ...utils import TensorType, is_vision_available, logging, filter_out_non_signature_kwargs
 
 
 if is_vision_available():
@@ -173,27 +173,6 @@ class TvpImageProcessor(BaseImageProcessor):
         self.do_flip_channel_order = do_flip_channel_order
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
-        self._valid_processor_keys = [
-            "videos",
-            "do_resize",
-            "size",
-            "resample",
-            "do_center_crop",
-            "crop_size",
-            "do_rescale",
-            "rescale_factor",
-            "do_pad",
-            "pad_size",
-            "constant_values",
-            "pad_mode",
-            "do_normalize",
-            "do_flip_channel_order",
-            "image_mean",
-            "image_std",
-            "return_tensors",
-            "data_format",
-            "input_data_format",
-        ]
 
     def resize(
         self,
@@ -358,6 +337,7 @@ class TvpImageProcessor(BaseImageProcessor):
 
         return image
 
+    @filter_out_non_signature_kwargs()
     def preprocess(
         self,
         videos: Union[ImageInput, List[ImageInput], List[List[ImageInput]]],
@@ -379,7 +359,6 @@ class TvpImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.
@@ -458,8 +437,6 @@ class TvpImageProcessor(BaseImageProcessor):
         size = get_size_dict(size, default_to_square=False)
         crop_size = crop_size if crop_size is not None else self.crop_size
         crop_size = get_size_dict(crop_size, param_name="crop_size")
-
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
         if not valid_images(videos):
             raise ValueError(
