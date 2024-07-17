@@ -651,6 +651,12 @@ class ProcessorMixin(PushToHubMixin):
         else:
             logger.info(f"loading configuration file {processor_file} from cache at {resolved_processor_file}")
 
+        if "chat_template" in processor_dict and processor_dict["chat_template"] is not None:
+            logger.warning_once(
+                "Chat templates should be in a 'chat_template.json' file but found key='chat template' "
+                "in the processor's config. Make sure to move your template to its own file."
+            )
+
         if not is_local:
             if "auto_map" in processor_dict:
                 processor_dict["auto_map"] = add_model_info_to_auto_map(
