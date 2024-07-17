@@ -148,23 +148,6 @@ class Mamba2ModelTester:
         config = self.get_config()
         config.vocab_size = 300
         return config
-    
-    def prepare_config_and_inputs_for_decoder(self):
-        (
-            config,
-            input_ids,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = self.prepare_config_and_inputs()
-
-        return (
-            config,
-            input_ids,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        )
 
     def create_and_check_mamba2_model(self, config, input_ids, input_mask, *args):
         model = Mamba2Model(config=config)
