@@ -20,7 +20,7 @@ from typing import Dict, List, Tuple
 
 from parameterized import parameterized
 
-from transformers import Mamba2Config, is_torch_available
+from transformers import Mamba2Config, is_torch_available, set_seed
 from transformers.testing_utils import (
     require_einops,
     require_torch,
@@ -40,7 +40,12 @@ if is_torch_available():
         Mamba2ForCausalLM,
         Mamba2Model,
     )
-    from transformers.models.mamba2.modeling_mamba2 import HybridMamba2AttentionDynamicCache
+    from transformers.models.mamba2.modeling_mamba2 import (
+        HybridMamba2AttentionDynamicCache,
+        Mamba2DynamicNTKScalingRotaryEmbedding,
+        Mamba2LinearScalingRotaryEmbedding,
+        Mamba2RotaryEmbedding,
+    )
 
 
 class Mamba2ModelTester:
@@ -138,7 +143,7 @@ class Mamba2ModelTester:
         return config
 
     def create_and_check_mamba2_model(
-        self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, input_mask, *args
     ):
         model = Mamba2Model(config=config)
         model.to(torch_device)
@@ -179,7 +184,7 @@ class Mamba2ModelTester:
         result.loss.backward()
 
     def create_and_check_state_equivalency(
-        self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, input_mask, *args
     ):
         model = Mamba2Model(config=config)
         model.to(torch_device)
@@ -197,7 +202,6 @@ class Mamba2ModelTester:
 
         self.parent.assertTrue(torch.allclose(torch.cat([output_one, output_two], dim=1), output_whole, atol=1e-5))
 
-    # TODO: is this necessary, was initially used to test it
     def create_and_check_einops_torch_equivalence(self):
         from einops import rearrange, repeat
 
@@ -214,30 +218,30 @@ class Mamba2ModelTester:
             d.unsqueeze(-1).unsqueeze(-1).expand(d.shape[0], 2, 3).equal(repeat(d, "h -> h p n", p=2, n=3))
         )
 
-        self.parent.assertTrue(v.view(v.shape[0], -1, 2).equal(rearrange(v, "b (h p) -> b h p", p=2)))
+        self.parent.assertTrue(v.reshape(v.shape[0], -1, 2).equal(rearrange(v, "b (h p) -> b h p", p=2)))
         self.parent.assertTrue(v.unsqueeze(-1).unsqueeze(-1).equal(rearrange(v, "b h -> b h 1 1")))
 
         self.parent.assertTrue(
-            w.view(w.shape[0], -1, w.shape[-2], w.shape[-1]).equal(rearrange(w, "b c l h p -> b (c l) h p"))
+            w.reshape(w.shape[0], -1, w.shape[-2], w.shape[-1]).equal(rearrange(w, "b c l h p -> b (c l) h p"))
         )
 
         self.parent.assertTrue(x.transpose(1, 2).equal(rearrange(x, "b l d -> b d l")))
         self.parent.assertTrue(x.unsqueeze(-1).expand(*x.size(), 5).equal(repeat(x, "... d -> ... d e", e=5)))
         self.parent.assertTrue(
-            x.view(x.shape[0], -1, 3, x.shape[2]).equal(rearrange(x, "b (c l) ... -> b c l ...", l=3))
+            x.reshape(x.shape[0], -1, 3, x.shape[2]).equal(rearrange(x, "b (c l) ... -> b c l ...", l=3))
         )
         self.parent.assertTrue(x.unsqueeze(-2).equal(rearrange(x, pattern="b l n -> b l 1 n")))
         self.parent.assertTrue(
-            x.view(x.shape[0], x.shape[1], -1, 2).equal(rearrange(x, pattern="b l (h p) -> b l h p", p=2))
+            x.reshape(x.shape[0], x.shape[1], -1, 2).equal(rearrange(x, pattern="b l (h p) -> b l h p", p=2))
         )
-        self.parent.assertTrue(x.view(x.shape[0], -1).unsqueeze(1).equal((rearrange(x, "b h p -> b 1 (h p)"))))
+        self.parent.assertTrue(x.reshape(x.shape[0], -1).unsqueeze(1).equal((rearrange(x, "b h p -> b 1 (h p)"))))
 
         self.parent.assertTrue(y.permute(0, 3, 1, 2).equal(rearrange(y, "b c l h -> b h c l")))
         self.parent.assertTrue(y.unsqueeze(-1).expand(*y.size(), 5).equal(repeat(y, "... d -> ... d e", e=5)))
         self.parent.assertTrue(
-            y.view(y.shape[0], -1, 3, y.shape[2], y.shape[3]).equal(rearrange(y, "b (c l) ... -> b c l ...", l=3))
+            y.reshape(y.shape[0], -1, 3, y.shape[2], y.shape[3]).equal(rearrange(y, "b (c l) ... -> b c l ...", l=3))
         )
-        self.parent.assertTrue(y.view(y.shape[0], y.shape[1], -1).equal(rearrange(y, "b l h p -> b l (h p)")))
+        self.parent.assertTrue(y.reshape(y.shape[0], y.shape[1], -1).equal(rearrange(y, "b l h p -> b l (h p)")))
 
         self.parent.assertTrue(z.squeeze(1).equal(rearrange(z, "d 1 w -> d w")))
         self.parent.assertTrue(
@@ -301,6 +305,7 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         self.model_tester.create_and_check_state_equivalency(*config_and_inputs)
 
     @require_einops
+    # TODO: is this necessary, was initially used to test it internally
     def test_einops_torch_equivalence(self):
         self.model_tester.create_and_check_einops_torch_equivalence()
 
@@ -495,6 +500,100 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
+
+    @parameterized.expand([("linear",), ("dynamic",)])
+    def test_model_rope_scaling_from_config(self, scaling_type):
+        config, *_ = self.model_tester.prepare_config_and_inputs()
+        short_input = ids_tensor([1, 10], config.vocab_size)
+        long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
+
+        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
+        original_model = Mamba2Model(config)
+        original_model.to(torch_device)
+        original_model.eval()
+        original_short_output = original_model(short_input).last_hidden_state
+        original_long_output = original_model(long_input).last_hidden_state
+
+        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
+        config.rope_scaling = {"type": scaling_type, "factor": 10.0}
+        scaled_model = Mamba2Model(config)
+        scaled_model.to(torch_device)
+        scaled_model.eval()
+        scaled_short_output = scaled_model(short_input).last_hidden_state
+        scaled_long_output = scaled_model(long_input).last_hidden_state
+
+        # Dynamic scaling does not change the RoPE embeddings until it receives an input longer than the original
+        # maximum sequence length, so the outputs for the short input should match.
+        if scaling_type == "dynamic":
+            self.assertTrue(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
+        else:
+            self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
+
+        # The output should be different for long inputs
+        self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
+
+    def test_model_rope_scaling(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        hidden_size = config.hidden_size
+        num_heads = config.num_attention_heads
+        head_dim = hidden_size // num_heads
+        scaling_factor = 10
+        short_input_length = 10
+        long_input_length = int(config.max_position_embeddings * 1.5)
+
+        # Inputs
+        x = torch.randn(1, dtype=torch.float32, device=torch_device)  # used exlusively to get the dtype and the device
+        position_ids_short = torch.arange(short_input_length, dtype=torch.long, device=torch_device)
+        position_ids_short = position_ids_short.unsqueeze(0)
+        position_ids_long = torch.arange(long_input_length, dtype=torch.long, device=torch_device)
+        position_ids_long = position_ids_long.unsqueeze(0)
+
+        # Sanity check original RoPE
+        original_rope = Mamba2RotaryEmbedding(
+            head_dim,
+            max_position_embeddings=config.max_position_embeddings,
+            base=config.rope_theta,
+        ).to(torch_device)
+        original_cos_short, original_sin_short = original_rope(x, position_ids_short)
+        original_cos_long, original_sin_long = original_rope(x, position_ids_long)
+        torch.testing.assert_close(original_cos_short, original_cos_long[:, :short_input_length, :])
+        torch.testing.assert_close(original_sin_short, original_sin_long[:, :short_input_length, :])
+
+        # Sanity check linear RoPE scaling
+        # New position "x" should match original position with index "x/scaling_factor"
+        linear_scaling_rope = Mamba2LinearScalingRotaryEmbedding(
+            head_dim,
+            max_position_embeddings=config.max_position_embeddings,
+            base=config.rope_theta,
+            scaling_factor=scaling_factor,
+        ).to(torch_device)
+        linear_cos_short, linear_sin_short = linear_scaling_rope(x, position_ids_short)
+        linear_cos_long, linear_sin_long = linear_scaling_rope(x, position_ids_long)
+        torch.testing.assert_close(linear_cos_short, linear_cos_long[:, :short_input_length, :])
+        torch.testing.assert_close(linear_sin_short, linear_sin_long[:, :short_input_length, :])
+        for new_position in range(0, long_input_length, scaling_factor):
+            original_position = int(new_position // scaling_factor)
+            torch.testing.assert_close(linear_cos_long[:, new_position, :], original_cos_long[:, original_position, :])
+            torch.testing.assert_close(linear_sin_long[:, new_position, :], original_sin_long[:, original_position, :])
+
+        # Sanity check Dynamic NTK RoPE scaling
+        # Scaling should only be observed after a long input is fed. We can observe that the frequencies increase
+        # with scaling_factor (or that `inv_freq` decreases)
+        ntk_scaling_rope = Mamba2DynamicNTKScalingRotaryEmbedding(
+            head_dim,
+            max_position_embeddings=config.max_position_embeddings,
+            base=config.rope_theta,
+            scaling_factor=scaling_factor,
+        ).to(torch_device)
+        ntk_cos_short, ntk_sin_short = ntk_scaling_rope(x, position_ids_short)
+        ntk_cos_long, ntk_sin_long = ntk_scaling_rope(x, position_ids_long)
+        torch.testing.assert_close(ntk_cos_short, original_cos_short)
+        torch.testing.assert_close(ntk_sin_short, original_sin_short)
+        with self.assertRaises(AssertionError):
+            torch.testing.assert_close(ntk_cos_long, original_cos_long)
+        with self.assertRaises(AssertionError):
+            torch.testing.assert_close(ntk_sin_long, original_sin_long)
+        self.assertTrue((ntk_scaling_rope.inv_freq <= original_rope.inv_freq).all())
 
     @unittest.skip(reason="Mamba2 has its own special cache type")
     @parameterized.expand([(1, False), (1, True), (4, False)])
