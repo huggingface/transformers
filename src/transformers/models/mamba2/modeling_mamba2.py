@@ -91,7 +91,7 @@ class Mamba2Cache:
             for i in range(config.num_hidden_layers)
         }
         self.ssm_states = {
-            i: torch.zeros(batch_size, intermediate_size, ssm_state_size, device=device, dtype=dtype)
+            i: torch.zeros(batch_size, config.n_groups * config.state_size, config.head_dim, device=device, dtype=dtype)
             for i in range(config.num_hidden_layers)
         }
 
@@ -299,32 +299,37 @@ class Mamba2Mixer(nn.Module):
                     (self.conv_kernel_size - hidden_states.shape[-1], 0)
                 )
                 cache_params.conv_states[self.layer_idx].copy_(conv_state)
-                hidden_states = self.act(self.conv1d(hidden_states).transpose(1,2))[:, -(self.conv_kernel_size - 1):]     # [batch, intermediate_size, seq_len]
+                hidden_states = self.act(self.conv1d(hidden_states).transpose(1,2))[:, (self.conv_kernel_size - 1):, :]     # [batch, intermediate_size, seq_len]
         else:
             ssm_state = torch.zeros(
                 (batch_size, self.intermediate_size, self.ssm_state_size),
                 device=hidden_states.device, dtype=dtype
             )
-            hidden_states = self.act(self.conv1d(hidden_states.transpose(1,2)).transpose(1,2))[:, -(self.conv_kernel_size - 1):]
+            hidden_states = self.act(self.conv1d(hidden_states.transpose(1,2)).transpose(1,2))[:, -(self.conv_kernel_size - 1):, :]
 
         # 3. State Space Model sequence transformation
         # 3.a. Selection:  [batch, seq_len, self.time_step_rank + self.ssm_state_size * 2]
         hidden_states, B, C = torch.split(hidden_states, [self.intermediate_size, self.n_groups * self.ssm_state_size, self.n_groups * self.ssm_state_size], dim=-1)
         # 3.b. Discretization: B and C to [batch, seq_len, intermediate_size, ssm_state_size] (SRAM)
-        A = -torch.exp(self.A_log.float())                                              # [intermediate_size, ssm_state_size]
-        discrete_A = torch.exp(A[None, :, None, :] * dt[:, :, :, None]) # [batch, intermediate_size, seq_len, ssm_state_size]
-        discrete_B = dt[:, :, :, None] * B[:, None, :, :].float()       # [batch, intermediate_size, seq_len, ssm_state_size]
-        deltaB_u = discrete_B * hidden_states[:, :, :, None].float()
-
+        A = -torch.exp(self.A_log.float())                                  # [num_heads]
+        discrete_A = torch.exp(dt * A)                                      # [batch, seq_len, num_heads]
+        # torch.einsum("blh,bln,blhp->blhpn", dt, B, hidden_states.reshape(1,11,128,-1)).shape
+        # torch.Size([1, 11, 128, 64, 1024])
+        discrete_B = (dt[:,:,:,None] * B.reshape(batch_size,seq_len, 1 , self.n_groups * self.ssm_state_size).float())          # [batch, seq_len, self.n_groups * self.ssm_state_size,  num_heads]
+        deltaB_u = hidden_states.reshape(batch_size,seq_len,self.num_heads,-1,1).float() * discrete_B[:,:, :, None, :]     # [batch, seq_len, self.n_groups * self.ssm_state_size,  num_heads]
+        deltaB_u = deltaB_u.reshape(batch_size, seq_len, self.num_heads, -1, self.head_dim)
+        # torch.Size([1, 128,       8192,           64])
+        #               numheads,   intermediate,    (head_dim?)
+        #                   h,      
         # 3.c perform the recurrence y ← SSM(A, B, C)(x)
         scan_outputs = []
         for i in range(seq_len):
-            ssm_state = discrete_A[:, :, i, :] * ssm_state + deltaB_u[:, :, i, :]      # [batch, intermediate_size, ssm_state]
-            scan_output = torch.matmul(ssm_state.to(dtype), C[:, i, :].unsqueeze(-1))  # [batch, intermediate_size, 1]
-            scan_outputs.append(scan_output[:, :, 0])
-        scan_output = torch.stack(scan_outputs, dim=-1)                                # [batch, intermediate_size, seq_len]
-        scan_output = scan_output + (hidden_states * self.D[None, :, None])
-        scan_output = (scan_output * self.act(gate))
+            ssm_state = ssm_state * discrete_A[:, i, :, None, None] + deltaB_u[:, i, :, :]      # [batch, intermediate_size, ssm_state]
+            scan_output = torch.matmul(C[:,i, :].float(), ssm_state)  # [batch, intermediate_size, 1]
+            scan_outputs.append(scan_output[:,:, 0,: ])
+        scan_output = torch.stack(scan_outputs, dim=1)                                # [batch, intermediate_size, seq_len]
+        scan_output = scan_output + (hidden_states.reshape(batch_size,seq_len,self.num_heads,-1) * self.D[None,:,None])
+        scan_output = (scan_output * self.act(gate).reshape(batch_size,seq_len,self.num_heads,-1))
         if d_mlp > 0:
             scan_output = torch.cat([nn.functional.silu(z0) * x0, scan_output], dim=-1)
         if cache_params is not None:
