@@ -13,8 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """BEiT model configuration"""
-import warnings
 
+import warnings
 from collections import OrderedDict
 from typing import Mapping
 
@@ -22,7 +22,6 @@ from packaging import version
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
-from ...utils import logging
 from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
 
