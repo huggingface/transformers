@@ -49,12 +49,14 @@ The original code can be found [here](https://github.com/X-PLUG/mPLUG-DocOwl/tre
 
 ## MPLUGDocOwlProcessor
 [[autodoc]] MPLUGDocOwlProcessor
-
+    - forward
 ## MPLUGDocOwlHReducer
 [[autodoc]] MPLUGDocOwlHReducer
+    - forward
 
 ## MPLUGDocOwlForCausalLM
 [[autodoc]] MPLUGDocOwlForCausalLM
+    - forward
 
 ## MPLUGDocOwlLanguageModel
 [[autodoc]] MPLUGDocOwlLanguageModel
