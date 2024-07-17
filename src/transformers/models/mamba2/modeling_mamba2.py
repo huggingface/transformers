@@ -27,7 +27,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...cache_utils import DynamicCache
-from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask, _prepare_4d_causal_attention_mask_for_sdpa
+from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -92,8 +92,8 @@ class HybridMamba2AttentionDynamicCache(DynamicCache):
     This cache has two sets of lists of tensors: `key_cache`, `value_cache`, and 'conv_states' for attention cache and
     `conv_states` and `ssm_states` for mamba2 cache. Each of these lists has `num_layers` tensors.
 
-    For attention layers, `key_cache` and `value_cache` have a shape of `(batch_size, attention_num_key_value_heads, seq_len, attention_head_dim)`,
-    while `conv_states` has a shape of `(batch_size, attention_head_dim * (attention_num_heads + 2 * attention_num_key_value_heads), attention_conv_kernel)`
+    For attention layers, `key_cache` and `value_cache` have a shape of `(batch_size, num_key_value_heads, seq_len, attention_head_dim)`,
+    while `conv_states` has a shape of `(batch_size, attention_head_dim * (num_attention_heads + 2 * num_key_value_heads), attention_conv_kernel)`
     or `(batch_size, 0)` (empty tensors) and `ssm_states` have a shape of `(batch_size, 0)` (empty tensors).
 
     For mamba2 layers, `key_cache` and `value_cache` have a shape of `(batch_size, 0)` (empty tensors),
@@ -112,8 +112,8 @@ class HybridMamba2AttentionDynamicCache(DynamicCache):
         mamba2_num_heads = config.mamba2_num_heads
         mamba2_head_dim = config.mamba2_head_dim
         attention_head_dim = config.attention_head_dim
-        attention_num_heads = config.attention_num_heads
-        attention_num_heads_kv = config.attention_num_key_value_heads
+        attention_num_heads = config.num_attention_heads
+        attention_num_heads_kv = config.num_key_value_heads
         attention_qkv_dim = attention_head_dim * (attention_num_heads + 2 * attention_num_heads_kv)
 
         self.conv_states = []
@@ -178,7 +178,7 @@ class HybridMamba2AttentionDynamicCache(DynamicCache):
             self.ssm_states[layer_idx] = self.ssm_states[layer_idx].index_select(0, beam_idx.to(device))
 
     # Adapted from transformers.models.jamba.modeling_jamba.HybridMambaAttentionDynamicCache.get_seq_length
-    # Fixes issues when accessing on empty cache
+    # Fixes issues when accessing on empty cache and allow mamba2 pure architectures
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         # Mamba2 layers don't need the seq_len either way
@@ -343,7 +343,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-# Adapted from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXAttention with GPTNeoX->Mamba2
+# Adapted from transformers.models.llama.modeling_llama.LlamaAttention with Llama->Mamba2
 class Mamba2Attention(nn.Module):
     """
     Multi-headed attention from 'Attention Is All You Need' paper. Possible switch to MQA when num_heads_kv < num_heads_q.
@@ -356,17 +356,13 @@ class Mamba2Attention(nn.Module):
         self.hidden_size = config.hidden_size
         self.conv_kernel_size = config.attention_conv_kernel
         self.head_dim = config.attention_head_dim
-        self.num_heads = config.attention_num_heads
-        self.num_heads_kv = config.attention_num_key_value_heads
+        self.num_heads = config.num_attention_heads
+        self.num_heads_kv = config.num_key_value_heads
         self.num_groups_kv = self.num_heads // self.num_heads_kv
         # See https://github.com/state-spaces/mamba/issues/457#issuecomment-2221116217
         # hidden_size % num_heads == 0 is not necessary due to this custom head projection dim
         self.qkv_dim = self.head_dim * (self.num_heads + 2 * self.num_heads_kv)
         self.out_dim = self.head_dim * self.num_heads
-
-        # Only used for causal mask creation
-        self._init_bias(config.max_position_embeddings)
-        self.register_buffer("masked_bias", torch.tensor(-1e9), persistent=False)
 
         # Optional RoPE
         self.rotary_emb_dim = config.rope_emb_dim
@@ -388,18 +384,6 @@ class Mamba2Attention(nn.Module):
                     "Convolution implementation in Mamba2 attention is falling back to naive implementation because `(causal_conv1d_fn, causal_conv1d_update)`"
                     "is None. To install follow https://github.com/Dao-AILab/causal-conv1d."
                 )
-
-    # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXAttention._init_bias
-    def _init_bias(self, max_positions, device=None):
-        self.register_buffer(
-            "bias",
-            torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)).view(
-                1, 1, max_positions, max_positions
-            ),
-            persistent=False,
-        )
-        if device is not None:
-            self.bias = self.bias.to(device)
 
     # Adapted from transformers.models.llama.modeling_llama.LlamaAttention._init_rope
     # Rope is optional and can be ignored if rope_emb_dim <= 0
@@ -447,8 +431,8 @@ class Mamba2Attention(nn.Module):
             groups=self.qkv_dim,
         )
 
-    # Adapted from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXAttention.forward
-    # Allowing MQA, involves causal-conv-1d, and uses Llama RoPE
+    # Adapted from transformers.models.llama.modeling_llama.LlamaAttention.forward
+    # Custom projections involving optional causal-conv-1d and optional (partial) RoPE
     def forward(
         self,
         hidden_states: torch.FloatTensor,
@@ -458,6 +442,8 @@ class Mamba2Attention(nn.Module):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
     ):
+        bsz, q_len, _ = hidden_states.shape
+
         # Apply attention-conv1d-specific projections and rope
         query, key, value = self._attn_conv1d_projections_and_rope(
             hidden_states=hidden_states, position_ids=position_ids, past_key_values=past_key_values, use_cache=use_cache
@@ -467,11 +453,22 @@ class Mamba2Attention(nn.Module):
         key = repeat_kv(key, self.num_groups_kv)
         value = repeat_kv(value, self.num_groups_kv)
 
-        # Compute attention
-        attn_output, attn_weights = self._attn(query, key, value, attention_mask)
+        attn_weights = torch.matmul(query, key.transpose(2, 3)) / math.sqrt(self.head_dim)
 
-        # Reshape outputs
-        attn_output = self._merge_heads(attn_output, self.num_heads, self.head_dim)
+        if attention_mask is not None:  # no matter the length, we just slice it
+            causal_mask = attention_mask[:, :, :, : key.shape[-2]]
+            attn_weights = attn_weights + causal_mask
+
+        # upcast attention to fp32
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+        attn_weights = nn.functional.dropout(attn_weights, p=0.0, training=self.training)
+        attn_output = torch.matmul(attn_weights, value)
+
+        # Reshape output
+        attn_output = attn_output.transpose(1, 2).contiguous()
+        attn_output = attn_output.reshape(bsz, q_len, -1)
+
+        # Final projection
         attn_output = self.out_proj(attn_output)
 
         if not output_attentions:
@@ -479,34 +476,7 @@ class Mamba2Attention(nn.Module):
 
         return attn_output, attn_weights
 
-    @classmethod
-    # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXAttention._split_heads
-    def _split_heads(cls, tensor, num_attention_heads, attn_head_size):
-        """
-        Splits hidden dim into attn_head_size and num_attention_heads
-        """
-        # tensor: [bs, seq_len, hidden_size]
-        new_shape = tensor.size()[:-1] + (num_attention_heads, attn_head_size)
-        # -> [bs, seq_len, num_attention_heads, attn_head_size]
-        tensor = tensor.view(new_shape)
-        # -> [bs, num_attention_heads, seq_len, attn_head_size]
-        tensor = tensor.permute(0, 2, 1, 3)
-        return tensor
-
-    @classmethod
-    # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXAttention._merge_heads
-    def _merge_heads(cls, tensor, num_attention_heads, attn_head_size):
-        """
-        Merges attn_head_size dim and num_attn_heads dim into hidden dim
-        """
-        # tensor [bs, num_attention_heads, seq_len, attn_head_size]
-        tensor = tensor.permute(0, 2, 1, 3).contiguous()
-        # -> [bs, seq_len, num_attention_heads, attn_head_size]
-        tensor = tensor.view(tensor.size(0), tensor.size(1), num_attention_heads * attn_head_size)
-        # -> [bs, seq_len, hidden_size]
-        return tensor
-
-    def _conv1d(self, qkv, seq_len, past_key_values, cached_start, cached_forward):
+    def _conv1d(self, qkv, seq_len, cache, cached_start, cached_forward):
         # Init cache with first "real" values
         if cached_start:
             qkv_t = qkv.transpose(1, 2)
@@ -575,6 +545,8 @@ class Mamba2Attention(nn.Module):
         past_key_values: Optional[HybridMamba2AttentionDynamicCache] = None,
         use_cache: Optional[bool] = False,
     ):
+        bsz, q_len, _ = hidden_states.shape
+
         # Managing cache state
         has_layer_past = past_key_values is not None
 
@@ -587,7 +559,7 @@ class Mamba2Attention(nn.Module):
 
         # Compute QKV
         # Attention heads [batch, seq_len, hidden_size]
-        #   --> [batch, seq_len, (num_heads(_q) * head_dim + 2 * num_heads_kv * head_dim)]
+        #   --> [batch, seq_len, (head_dim * (num_heads(_q) + 2 * num_heads_kv)]
         qkv = self.in_proj(hidden_states)
 
         # (Optional) Apply Conv1d, caching is applied in-place
@@ -603,11 +575,12 @@ class Mamba2Attention(nn.Module):
         )
 
         # Split combined hidden dims back into respective attention heads
-        # [batch, seq_len, hidden_size] --> [batch, num_heads, seq_len, head_dim]
-        query = self._split_heads(q, num_attention_heads=self.num_heads, attn_head_size=self.head_dim)
-        key = self._split_heads(k, num_attention_heads=self.num_heads_kv, attn_head_size=self.head_dim)
-        value = self._split_heads(v, num_attention_heads=self.num_heads_kv, attn_head_size=self.head_dim)
+        # [batch, seq_len, hidden_size] --> [batch, seq_len, num_heads, head_dim]
+        query = q.reshape(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key = k.reshape(bsz, q_len, self.num_heads_kv, self.head_dim).transpose(1, 2)
+        value = v.reshape(bsz, q_len, self.num_heads_kv, self.head_dim).transpose(1, 2)
 
+        # (Optional) RoPE
         if self.rotary_emb_dim > 0:
             # TODO do we need to cache sin and cos for RoPE, llama doesn't seem to cache it (except when using sink cache)?
             query, key = self._apply_rope(query, key, value, position_ids)
@@ -618,54 +591,8 @@ class Mamba2Attention(nn.Module):
 
         return query, key, value
 
-    # Adapted from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXAttention._attn
-    # No dropout or head mask
-    def _attn(self, query, key, value, attention_mask=None):
-        # q, k, v: [bs, num_attention_heads, seq_len, attn_head_size]
-        # compute causal mask from causal mask buffer
-        batch_size, num_attention_heads, query_length, attn_head_size = query.size()
-        key_length = key.size(-2)
 
-        # dynamically increase the causal mask with the key length, if needed.
-        if key_length > self.bias.shape[-1]:
-            self._init_bias(key_length, device=key.device)
-        causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
-
-        query = query.view(batch_size * num_attention_heads, query_length, attn_head_size)
-        key = key.view(batch_size * num_attention_heads, key_length, attn_head_size)
-        attn_scores = torch.zeros(
-            batch_size * num_attention_heads,
-            query_length,
-            key_length,
-            dtype=query.dtype,
-            device=key.device,
-        )
-        attn_scores = torch.baddbmm(
-            attn_scores,
-            query,
-            key.transpose(1, 2),
-            beta=1.0,
-        )
-        attn_scores = attn_scores.view(batch_size, num_attention_heads, query_length, key_length)
-
-        mask_value = torch.finfo(attn_scores.dtype).min
-        # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
-        # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
-        mask_value = torch.tensor(mask_value, dtype=attn_scores.dtype).to(attn_scores.device)
-        attn_scores = torch.where(causal_mask, attn_scores, mask_value)
-
-        if attention_mask is not None:
-            # Apply the attention mask
-            attn_scores = attn_scores + attention_mask
-
-        attn_weights = nn.functional.softmax(attn_scores, dim=-1)
-        attn_weights = attn_weights.to(value.dtype)
-
-        attn_output = torch.matmul(attn_weights, value)
-        return attn_output, attn_weights
-
-
-# Adapted from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXFlashAttention2 with GPTNeoX->Mamba2
+# Adapted from transformers.models.llama.modeling_llama.LlamaFlashAttention2 with Llama->Mamba2
 class Mamba2FlashAttention2(Mamba2Attention):
     """
     Mamba2 flash attention module. This module inherits from `Mamba2Attention` as the weights of the module stays
@@ -673,7 +600,7 @@ class Mamba2FlashAttention2(Mamba2Attention):
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-    # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXFlashAttention2.__init__
+    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -682,8 +609,8 @@ class Mamba2FlashAttention2(Mamba2Attention):
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
 
-    # Adapted from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXFlashAttention2.forward
-    # Allowing MQA, involves causal-conv-1d, and uses Llama RoPE
+    # Adapted from transformers.models.llama.modeling_llama.LlamaFlashAttention2.forward
+    # Custom projections involving optional causal-conv-1d and optional (partial) RoPE
     def forward(
         self,
         hidden_states: torch.FloatTensor,
@@ -693,6 +620,8 @@ class Mamba2FlashAttention2(Mamba2Attention):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
     ):
+        bsz, q_len, _ = hidden_states.shape
+
         # Apply attention-conv1d-specific projections and rope
         query, key, value = self._attn_conv1d_projections_and_rope(
             hidden_states=hidden_states, position_ids=position_ids, past_key_values=past_key_values, use_cache=use_cache
@@ -701,8 +630,6 @@ class Mamba2FlashAttention2(Mamba2Attention):
         # Repeat k/v heads if n_kv_heads < n_heads
         key = repeat_kv(key, self.num_groups_kv)
         value = repeat_kv(value, self.num_groups_kv)
-
-        query_length = query.shape[-2]
 
         # Permute to get the expected shape for Flash Attention
         query = query.transpose(1, 2)
@@ -739,15 +666,15 @@ class Mamba2FlashAttention2(Mamba2Attention):
             key,
             value,
             attention_mask,
-            query_length,
+            q_len,
             dropout=0.0,
             softmax_scale=None,
-            is_causal=self.is_causal,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
+            is_causal=self.is_causal,
         )
 
         # Reshape outputs
-        attn_output = attn_weights.reshape(attn_weights.shape[0], attn_weights.shape[1], self.out_dim)
+        attn_output = attn_weights.reshape(bsz, q_len, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
         if not output_attentions:
@@ -756,7 +683,7 @@ class Mamba2FlashAttention2(Mamba2Attention):
         return attn_output, attn_weights
 
 
-# Adapted from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXSdpaAttention with GPTNeoX->Mamba2
+# Adapted from transformers.models.llama.modeling_llama.LlamaSdpaAttention with Llama->Mamba2
 class Mamba2SdpaAttention(Mamba2Attention):
     """
     Mamba2 attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
@@ -764,8 +691,6 @@ class Mamba2SdpaAttention(Mamba2Attention):
     to adapt to the SDPA API.
     """
 
-    # Adapted from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXSdpaAttention.__init__
-    # Changed to *arg, **kwarg based style
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -774,8 +699,8 @@ class Mamba2SdpaAttention(Mamba2Attention):
         # Reference: https://github.com/pytorch/pytorch/issues/112577
         self.require_contiguous_qkv = version.parse(get_torch_version()) < version.parse("2.2.0")
 
-    # Adapted from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXSdpaAttention.forward
-    # Allowing MQA, involves causal-conv-1d, and uses Llama RoPE
+    # Adapted from transformers.models.llama.modeling_llama.LlamaSdpaAttention.forward
+    # Custom projections involving optional causal-conv-1d and optional (partial) RoPE
     def forward(
         self,
         hidden_states: torch.FloatTensor,
@@ -812,6 +737,10 @@ class Mamba2SdpaAttention(Mamba2Attention):
         key = repeat_kv(key, self.num_groups_kv)
         value = repeat_kv(value, self.num_groups_kv)
 
+        causal_mask = attention_mask
+        if attention_mask is not None:
+            causal_mask = causal_mask[:, :, :, : key.shape[-2]]
+
         # Avoid torch==2.1.2 specific bug for the memory-efficient backend in SDPA
         if self.require_contiguous_qkv and query.device.type == "cuda" and attention_mask is not None:
             query = query.contiguous()
@@ -826,14 +755,14 @@ class Mamba2SdpaAttention(Mamba2Attention):
             query=query,
             key=key,
             value=value,
-            attn_mask=attention_mask,
+            attn_mask=causal_mask,
             dropout_p=0.0,
             is_causal=is_causal,
         )
 
         # Reshape outputs
         attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.view(bsz, q_len, self.out_dim)
+        attn_output = attn_output.view(bsz, q_len, -1)
 
         attn_output = self.out_proj(attn_output)
 
@@ -993,7 +922,7 @@ class Mamba2Mixer(nn.Module):
 
         if not cached_forward:
             y = mamba_chunk_scan_combined(
-                x=x.view(x.shape[0], x.shape[1], -1, self.head_dim),
+                x=x.reshape(x.shape[0], x.shape[1], -1, self.head_dim),
                 dt=dt,
                 A=A,
                 B=B.unsqueeze(-2),
@@ -1015,7 +944,7 @@ class Mamba2Mixer(nn.Module):
                     cache_params.ssm_states[self.layer_idx].copy_(last_state)
 
             # [bsz, seq_len, num_heads, head_dim] -> [bsz, seq_len, intermediate size]
-            y = y.view(y.shape[0], y.shape[1], -1)
+            y = y.reshape(y.shape[0], y.shape[1], -1)
         else:
             # Preparing values for single step
             # [num_heads] -> [num_heads, head_dim, state_size]
@@ -1032,7 +961,7 @@ class Mamba2Mixer(nn.Module):
             # [num_heads] -> [num_heads, head_dim]
             D = self.D.unsqueeze(-1).expand(self.D.shape[0], self.head_dim)
             # [bsz, intermediate_size] -> [bsz, num_heads, head_dim]
-            x_reshaped = x.view(x.shape[0], -1, self.head_dim)
+            x_reshaped = x.reshape(x.shape[0], -1, self.head_dim)
 
             # Triton kernel for updating states in-place and returning the hidden state
             y = selective_state_update(
@@ -1049,7 +978,7 @@ class Mamba2Mixer(nn.Module):
             )
 
             # [bsz, num_heads, head_dim] -> [bsz, 1, intermediate_size]
-            y = y.view(y.shape[0], -1).unsqueeze(1)
+            y = y.reshape(y.shape[0], -1).unsqueeze(1)
 
         # 4. Gate normalization introduced for instability, see section 7 of the paper
         y = self.norm(y, residual=z)
@@ -1103,11 +1032,11 @@ class Mamba2Mixer(nn.Module):
             if len(x.shape) == 3:
                 # b (l c) h -> b l c h with c=chunk_size
                 # [bsz, seq_len multiple of chunk_size, num_heads] -> [bsz, -1, chunk_size, num_heads]
-                return x.view(x.shape[0], -1, chunk_size, x.shape[2])
+                return x.reshape(x.shape[0], -1, chunk_size, x.shape[2])
             else:
                 # b (l c) h p -> b l c h p with c=chunk_size
                 # [bsz, seq_len multiple of chunk_size, num_heads, head_dim or state_size] -> [bsz, -1, chunk_size, num_heads, head_dim or state_size]
-                return x.view(x.shape[0], -1, chunk_size, x.shape[2], x.shape[3])
+                return x.reshape(x.shape[0], -1, chunk_size, x.shape[2], x.shape[3])
 
         def segsum(x):
             """
@@ -1170,7 +1099,7 @@ class Mamba2Mixer(nn.Module):
         # Add output of intra-chunk and inter-chunk terms (diagonal and off-diagonal blocks)
         y = Y_diag + Y_off
         # [bsz, -1, chunk_size, num_heads, head_dim] -> [bsz, (padded) seq_len, num_heads, head_dim]
-        y = y.view(y.shape[0], -1, y.shape[-2], y.shape[-1])
+        y = y.reshape(y.shape[0], -1, y.shape[-2], y.shape[-1])
 
         # Add D residual to final output
         y = y + D_residual
@@ -1232,7 +1161,7 @@ class Mamba2Mixer(nn.Module):
         if not cached_forward:
             y = self._ssd_naive(
                 # [bsz, seq_len, intermediate_size] -> [bsz, seq_len, num_heads, head_dim]
-                x=x.view(x.shape[0], x.shape[1], -1, self.head_dim),
+                x=x.reshape(x.shape[0], x.shape[1], -1, self.head_dim),
                 dt=dt,
                 A=A,
                 # [bsz, seq_len, state_size] -> [bsz, seq_len, num_groups=1, state_size]
@@ -1254,7 +1183,7 @@ class Mamba2Mixer(nn.Module):
                     cache_params.ssm_states[self.layer_idx].copy_(last_state)
 
             # [bsz, seq_len, num_heads, head_dim] -> [bsz, seq_len, intermediate_size]
-            y = y.view(y.shape[0], y.shape[1], -1)
+            y = y.reshape(y.shape[0], y.shape[1], -1)
         else:
             # Get time step with softplus and bias
             dt = F.softplus(dt + self.dt_bias.to(dtype=dt.dtype))
@@ -1265,7 +1194,7 @@ class Mamba2Mixer(nn.Module):
 
             # Discretize B and x
             # [bsz, intermediate_size] -> [bsz, num_heads, head_dim]
-            x = x.view(x.shape[0], -1, self.head_dim)
+            x = x.reshape(x.shape[0], -1, self.head_dim)
             dBx = torch.einsum("bh,bn,bhp->bhpn", dt, B, x)
 
             # State calculation
@@ -1274,13 +1203,13 @@ class Mamba2Mixer(nn.Module):
             )
 
             # Subsequent output
-            y = torch.einsum("bhpn,bn->bhp", cache_params.ssm_states[self.layer_idx], C)
+            y = torch.einsum("bhpn,bn->bhp", cache.ssm_states[self.layer_idx].to(C.dtype), C)
 
             # D skip connection
             y = y + self.D.unsqueeze(-1) * x
 
             # [bsz, num_heads, head_dim] -> [bsz, 1, intermediate_size]
-            y = y.view(y.shape[0], -1).unsqueeze(1)
+            y = y.reshape(y.shape[0], -1).unsqueeze(1)
 
         # 4. Gate normalization introduced for instability, see section 7 of the paper
         y = self.norm(y, residual=z)
@@ -1520,11 +1449,11 @@ MAMBA2_INPUTS_DOCSTRING = r"""
             A HybridMamba2AttentionDynamicCache object containing pre-computed hidden-states (keys, values, and, if used, the convolution in the
             self-attention blocks and convolution and ssm states in the mamba2 blocks) that can be used (see `past_key_values` input)
             to speed up sequential decoding.
-            Key and value cache tensors have shape `(batch_size, attention_num_key_value_heads, seq_len, attention_head_dim)`.
+            Key and value cache tensors have shape `(batch_size, num_key_value_heads, seq_len, attention_head_dim)`.
             Convolution and ssm states tensors have shape `(batch_size, intermediate_size + 2 * state_size, mamba2_conv_kernel)` if used in the mamba2 block
-            else it has shape `(batch_size, attention_head_dim * (attention_num_heads + 2 * attention_num_key_value_heads), attention_conv_kernel)`
+            else it has shape `(batch_size, attention_head_dim * (num_attention_heads + 2 * num_key_value_heads), attention_conv_kernel)`
             and `(batch_size, mamba2_num_heads, mamba2_head_dim, state_size)` respectively.
-            See the `HybridMamba3AttentionDynamicCache` class for more details.
+            See the `HybridMamba2AttentionDynamicCache` class for more details.
 
             If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
@@ -1626,10 +1555,8 @@ class Mamba2Model(Mamba2PreTrainedModel):
             inputs_embeds = self.embeddings(input_ids)
         hidden_states = inputs_embeds
 
-        # Force cache to be our custom hybrid one, something in the generation module incorrectly overwrites it...
-        if (past_key_values is None and use_cache) or not isinstance(
-            past_key_values, HybridMamba2AttentionDynamicCache
-        ):
+        # We allow empty caches on initial forward
+        if past_key_values is None and use_cache:
             past_key_values = HybridMamba2AttentionDynamicCache(
                 config=self.config,
                 batch_size=inputs_embeds.shape[0],
@@ -1646,7 +1573,9 @@ class Mamba2Model(Mamba2PreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, past_key_values, output_attentions)
+        causal_mask = self._update_causal_mask(
+            attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
+        )
 
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
@@ -1703,34 +1632,80 @@ class Mamba2Model(Mamba2PreTrainedModel):
             attentions=all_self_attns,
         )
 
-    def _update_causal_mask(self, attention_mask, inputs_embeds, past_key_values, output_attentions):
+    # Adapted from transformers.models.llama.modeling_llama.LlamaModel._update_causal_mask
+    # Custom hybrid cache instead
+    def _update_causal_mask(
+        self,
+        attention_mask: torch.Tensor,
+        input_tensor: torch.Tensor,
+        cache_position: torch.Tensor,
+        past_key_values: HybridMamba2AttentionDynamicCache,
+        output_attentions: bool,
+    ):
         if not self._uses_attention_layers:
             return None
 
-        batch_size, seq_len, _ = inputs_embeds.shape
-        past_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-
-        # Follows GPTNeoX based creation of masks
-        attention_mask = attention_mask.view(batch_size, -1) if attention_mask is not None else None
         if self._attn_implementation == "flash_attention_2":
-            return attention_mask if (attention_mask is not None and 0 in attention_mask) else None
-        elif self._attn_implementation == "sdpa" and not output_attentions:
-            return _prepare_4d_causal_attention_mask_for_sdpa(
-                attention_mask=attention_mask,
-                input_shape=(batch_size, seq_len),
-                inputs_embeds=inputs_embeds,
-                past_key_values_length=past_length,
-            )
-        else:
-            return _prepare_4d_causal_attention_mask(
-                attention_mask=attention_mask,
-                input_shape=(batch_size, seq_len),
-                inputs_embeds=inputs_embeds,
-                past_key_values_length=past_length,
-            )
+            if attention_mask is not None and 0.0 in attention_mask:
+                return attention_mask
+            return None
 
-        # This should not happen as we covered all options
-        return None
+        # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
+        # order to dispatch on Flash Attention 2.
+        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+
+        # TODO: check if this is compatible with this custom cache format
+        if self._attn_implementation == "sdpa" and not output_attentions:
+            if AttentionMaskConverter._ignore_causal_mask_sdpa(
+                attention_mask,
+                inputs_embeds=input_tensor,
+                past_key_values_length=past_seen_tokens,
+                is_training=self.training,
+            ):
+                return None
+
+        dtype, device = input_tensor.dtype, input_tensor.device
+        min_dtype = torch.finfo(dtype).min
+        sequence_length = input_tensor.shape[1]
+        target_length = (
+            attention_mask.shape[-1]
+            if isinstance(attention_mask, torch.Tensor)
+            else past_seen_tokens + sequence_length
+        )
+
+        if attention_mask is not None and attention_mask.dim() == 4:
+            # in this case we assume that the mask comes already in inverted form and requires no inversion or slicing
+            if attention_mask.max() != 0:
+                raise ValueError("Custom 4D attention mask should be passed in inverted form with max==0`")
+            causal_mask = attention_mask
+        else:
+            causal_mask = torch.full(
+                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
+            )
+            if sequence_length != 1:
+                causal_mask = torch.triu(causal_mask, diagonal=1)
+            causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+            causal_mask = causal_mask[None, None, :, :].expand(input_tensor.shape[0], 1, -1, -1)
+            if attention_mask is not None:
+                causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
+                mask_length = attention_mask.shape[-1]
+                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
+                padding_mask = padding_mask == 0
+                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
+                    padding_mask, min_dtype
+                )
+        if (
+            self._attn_implementation == "sdpa"
+            and attention_mask is not None
+            and attention_mask.device.type == "cuda"
+            and not output_attentions
+        ):
+            # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
+            # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
+            # Details: https://github.com/pytorch/pytorch/issues/110213
+            causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
+
+        return causal_mask
 
 
 @add_start_docstrings(
@@ -1740,22 +1715,15 @@ class Mamba2Model(Mamba2PreTrainedModel):
     MAMBA2_START_DOCSTRING,
 )
 class Mamba2ForCausalLM(Mamba2PreTrainedModel):
-    _tied_weights_keys = ["lm_head.weight", "backbone.embeddings.weight"]
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
         self.backbone = Mamba2Model(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        self._tie_weights()
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    # TODO: is this necessary?
-    def _tie_weights(self):
-        # probably overwritten by `_tied_weights_keys` but just to be sure
-        if self.config.tie_word_embeddings:
-            self.lm_head.weight = self.backbone.embeddings.weight
 
     def get_output_embeddings(self):
         return self.lm_head
@@ -1770,7 +1738,7 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel):
         return self.backbone.set_input_embeddings(new_embeddings)
 
     # Adapted from transformers.models.jamba.modeling_jamba.JambaForCausalLM.prepare_inputs_for_generation
-    # We omit sliding window and MoE logic, additional logic taken from Llama for correct position_ids
+    # We omit some args Mamba2 doesn't use such as output_router_logits and num_logits_to_keep; additional optional reinit of the cache
     def prepare_inputs_for_generation(
         self,
         input_ids,
@@ -1778,34 +1746,32 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel):
         attention_mask=None,
         inputs_embeds=None,
         cache_position=None,
+        position_ids=None,
         use_cache=True,
         **kwargs,
     ):
         empty_past_kv = past_key_values is None
 
-        # Omit tokens covered by past_key_values
+        # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
+        # Exception 1: when passing input_embeds, input_ids may be missing entries
+        # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
         if not empty_past_kv:
-            past_length = cache_position[0] if cache_position is not None else past_key_values.get_seq_length()
-            # Keep only the unprocessed tokens:
-            # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
-            # some of the inputs are exclusively passed as part of the cache (e.g. when passing input_embeds as
-            # input)
-            if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
-                input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
-            # 2 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
-            # input_ids based on the past_length.
-            elif past_length < input_ids.shape[1]:
-                input_ids = input_ids[:, past_length:]
+            if inputs_embeds is not None:  # Exception 1
+                input_ids = input_ids[:, -cache_position.shape[0] :]
+            elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
+                input_ids = input_ids[:, cache_position]
 
-            # TODO: skipping the usual 3. as we do not use a sliding window or use a define a max_cache_len
-        else:
+        # Initialize cache, if necessary
+        if empty_past_kv:
             past_key_values = HybridMamba2AttentionDynamicCache(
-                self.config, input_ids.shape[0], self.dtype, device=self.device
+                config=self.config,
+                batch_size=input_ids.shape[0],
+                device=self.device,
+                dtype=self.dtype,
             )
 
-        position_ids = kwargs.get("position_ids", None)
         if attention_mask is not None and position_ids is None:
-            # Create position_ids on the fly for batch generation
+            # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
             if not empty_past_kv:
@@ -1815,20 +1781,13 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel):
         if inputs_embeds is not None and empty_past_kv:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
-            model_inputs = {"input_ids": input_ids}
-
-        # Taken from Llama as we are dependent on the position_ids for RoPE
-        input_length = position_ids.shape[-1] if position_ids is not None else input_ids.shape[-1]
-        if cache_position is None:
-            cache_position = torch.arange(past_length, past_length + input_length, device=input_ids.device)
-        elif use_cache:
-            cache_position = cache_position[-input_length:]
+            model_inputs = {"input_ids": input_ids.contiguous()}  # `contiguous()` needed for compilation use cases
 
         model_inputs.update(
             {
                 "position_ids": position_ids,
                 "past_key_values": past_key_values,
-                "use_cache": kwargs.get("use_cache"),
+                "use_cache": use_cache,
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
             }
