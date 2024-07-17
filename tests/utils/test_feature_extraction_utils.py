@@ -85,8 +85,11 @@ class FeatureExtractorPushToHubTester(unittest.TestCase):
         for k, v in feature_extractor.__dict__.items():
             self.assertEqual(v, getattr(new_feature_extractor, k))
 
-        # Reset repo
-        delete_repo(token=self._token, repo_id="test-feature-extractor")
+        try:
+            # Reset repo
+            delete_repo(token=self._token, repo_id="test-feature-extractor")
+        except:  # noqa E722
+            pass
 
         # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -106,8 +109,11 @@ class FeatureExtractorPushToHubTester(unittest.TestCase):
         for k, v in feature_extractor.__dict__.items():
             self.assertEqual(v, getattr(new_feature_extractor, k))
 
-        # Reset repo
-        delete_repo(token=self._token, repo_id="valid_org/test-feature-extractor")
+        try:
+            # Reset repo
+            delete_repo(token=self._token, repo_id="valid_org/test-feature-extractor")
+        except:  # noqa E722
+            pass
 
         # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
