@@ -84,14 +84,14 @@ class WhisperProcessor(ProcessorMixin):
         This method forwards all its arguments to WhisperTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
         refer to the docstring of this method for more information.
         """
-        
-        if isinstance(args[0], dict) and 'segments' in args[0]: 
+
+        if isinstance(args[0], dict) and 'segments' in args[0]:
             segments = args[0].pop('segments')
-            
+
             kwargs = {"segments": segments, **kwargs}
-            
+
             args = tuple(args[0]['sequences'].unsqueeze(0))
-        
+
         return self.tokenizer.batch_decode(*args, **kwargs)
 
     def decode(self, *args, **kwargs):
