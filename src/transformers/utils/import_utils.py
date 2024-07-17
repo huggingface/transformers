@@ -677,6 +677,10 @@ def is_torch_musa_available(check_device=False):
     import torch
     import torch_musa  # noqa: F401
 
+    from ..dependency_versions_table import deps
+
+    deps["accelerate"] = "accelerate>=0.33.0"
+
     if check_device:
         try:
             # Will raise a RuntimeError if no MUSA is found
