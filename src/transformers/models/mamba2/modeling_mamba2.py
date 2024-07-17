@@ -199,7 +199,7 @@ class Mamba2Mixer(nn.Module):
 
     def cuda_kernels_forward(self, hidden_states: torch.Tensor, cache_params: Optional[Mamba2Cache] = None):
         # 1. Gated MLP's linear projection
-        projected_states = self.in_proj(hidden_states).transpose(1, 2)
+        projected_states = self.in_proj(hidden_states) #.transpose(1, 2)
         if self.training and cache_params is None:  # Doesn't support outputting the states -> used for training
             # TODO (molbap) update mamba_inner_fn for mamba2
             # not supported for now
@@ -222,7 +222,7 @@ class Mamba2Mixer(nn.Module):
 
         else:
             gate, xBC, time_step = torch.split(
-                hidden_states, [self.intermediate_size, self.intermediate_size + 2 * self.n_groups * self.state_size, self.num_heads], dim=-1
+                projected_states, [self.intermediate_size, self.intermediate_size + 2 * self.n_groups * self.state_size, self.num_heads], dim=-1
             )
             time_step = nn.functional.softplus(time_step + self.dt_bias)
             
@@ -239,7 +239,7 @@ class Mamba2Mixer(nn.Module):
                     activation=self.activation,
                 ).transpose(1, 2)
             
-            x, B, C = torch.split(xBC, [self.d_inner, self.n_groups * self.d_state, self.n_groups * self.d_state], dim=-1)
+            x, B, C = torch.split(xBC, [self.intermediate_size, self.n_groups * self.state_size, self.n_groups * self.state_size], dim=-1)
             A = -torch.exp(self.A_log) 
             y = mamba_chunk_scan_combined(
                 rearrange(x, "b l (h p) -> b l h p", p=self.head_dim),
@@ -258,9 +258,9 @@ class Mamba2Mixer(nn.Module):
 
             # Multiply "gate" branch and apply extra normalization layer
 
-            contextualized_states = self.norm(contextualized_states, gate)
+            y = self.norm(y, gate)
             out = self.out_proj(y)
-        return contextualized_states
+        return out
 
     # fmt: off
     # TODO as well
