@@ -55,7 +55,6 @@ is_fast_path_available = all(
     (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
 )
 
-from einops import rearrange  # TODO remove einops dependencies
 
 
 _CHECKPOINT_FOR_DOC = "mistralai/mamba-codestral-7B-v0.1"
@@ -83,12 +82,12 @@ class Mamba2Cache:
     ):
         self.seqlen_offset = 0
         self.dtype = dtype
-        intermediate_size = config.intermediate_size
+        intermediate_size = config.intermediate_size 
         ssm_state_size = config.state_size
         conv_kernel_size = config.conv_kernel
 
         self.conv_states = {
-            i: torch.zeros(batch_size, intermediate_size, conv_kernel_size, device=device, dtype=dtype)
+            i: torch.zeros(batch_size, config.intermediate_size + 2 * config.n_groups * config.state_size, conv_kernel_size, device=device, dtype=dtype)
             for i in range(config.num_hidden_layers)
         }
         self.ssm_states = {
@@ -151,7 +150,6 @@ class Mamba2Mixer(nn.Module):
         self.n_groups = config.n_groups
         self.state_size = config.state_size
         self.head_dim = config.head_dim
-
         self.chunk_size = config.chunk_size
         self.conv_dim = self.intermediate_size + 2 * self.n_groups * self.state_size
         self.conv1d = nn.Conv1d(
@@ -273,11 +271,13 @@ class Mamba2Mixer(nn.Module):
         dtype = input_states.dtype
         # 1. Gated MLP's linear projection
         projected_states =  self.in_proj(input_states)
-        d_mlp = (projected_states.shape[-1] - 2 * self.d_ssm - 2 * self.ngroups * self.d_state - self.nheads) // 2
-        z0, x0, gate, hidden_states, dt = projected_states.in_proj(input_states).split(
-                [d_mlp, d_mlp, self.intermediate_size, self.intermediate_size + 2 * self.n_groups * self.state_size, self.nheads], dim=-1
+        d_mlp = (projected_states.shape[-1] - 2 * self.ssm_state_size - 2 * self.n_groups * self.state_size - self.num_heads) // 2
+        if seq_len != 1:
+            d_mlp = 0
+        z0, x0, gate, hidden_states, dt = projected_states.split(
+                [d_mlp, d_mlp, self.intermediate_size, self.intermediate_size + 2 * self.n_groups * self.state_size, self.num_heads], dim=-1
         )
-        dt = nn.functinal.softplus(dt + self.dt_bias)
+        dt = nn.functional.softplus(dt + self.dt_bias)
 
         # 2. Convolution sequence transformation
         if cache_params is not None:
@@ -293,22 +293,23 @@ class Mamba2Mixer(nn.Module):
                     hidden_states += self.conv1d.bias
                 hidden_states = self.act(hidden_states).to(dtype).unsqueeze(-1)         # [batch, intermediate_size, 1] : decoding
             else:
+                hidden_states = hidden_states.transpose(1,2)
                 conv_state = nn.functional.pad(
                     hidden_states,
                     (self.conv_kernel_size - hidden_states.shape[-1], 0)
                 )
                 cache_params.conv_states[self.layer_idx].copy_(conv_state)
-                hidden_states = self.act(self.conv1d(hidden_states.transpose(1,2)).transpose(1,2))[:, -(self.dconv - 1):]     # [batch, intermediate_size, seq_len]
+                hidden_states = self.act(self.conv1d(hidden_states).transpose(1,2))[:, -(self.conv_kernel_size - 1):]     # [batch, intermediate_size, seq_len]
         else:
             ssm_state = torch.zeros(
                 (batch_size, self.intermediate_size, self.ssm_state_size),
                 device=hidden_states.device, dtype=dtype
             )
-            hidden_states = self.act(self.conv1d(hidden_states.transpose(1,2)).transpose(1,2))[:, -(self.dconv - 1):]
+            hidden_states = self.act(self.conv1d(hidden_states.transpose(1,2)).transpose(1,2))[:, -(self.conv_kernel_size - 1):]
 
         # 3. State Space Model sequence transformation
         # 3.a. Selection:  [batch, seq_len, self.time_step_rank + self.ssm_state_size * 2]
-        hidden_states, B, C = torch.split(hidden_states, [self.d_ssm, self.ngroups * self.d_state, self.ngroups * self.d_state], dim=-1)
+        hidden_states, B, C = torch.split(hidden_states, [self.intermediate_size, self.n_groups * self.ssm_state_size, self.n_groups * self.ssm_state_size], dim=-1)
         # 3.b. Discretization: B and C to [batch, seq_len, intermediate_size, ssm_state_size] (SRAM)
         A = -torch.exp(self.A_log.float())                                              # [intermediate_size, ssm_state_size]
         discrete_A = torch.exp(A[None, :, None, :] * dt[:, :, :, None]) # [batch, intermediate_size, seq_len, ssm_state_size]
