@@ -20,8 +20,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The MambaFalcon model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+The MambaFalcon model was proposed by TII UAE (Technology Innovation Institute) in their release.
 
 The abstract from the paper is the following:
 
@@ -29,10 +28,28 @@ The abstract from the paper is the following:
 
 Tips:
 
-<INSERT TIPS ABOUT MODEL HERE>
+- MambaFalcon is mostly based on Mamba architecutre, the same [tips and best practices](./mamba) would be relevant here.
 
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+The model has been trained on approximtely 6T tokens consisting a mixture of many data sources such as RefineWeb, Cosmopedia and Math data.
+
+For more details about the training procedure and the architecture, have a look at [the technical paper of MambaFalcon]() (coming soon).
+
+# Usage
+
+### A simple generation example: 
+
+```python 
+from transformers import MambaFalconConfig, MambaFalconForCausalLM, AutoTokenizer
+import torch
+
+tokenizer = AutoTokenizer.from_pretrained("tiiuae/mambafalcon-7b")
+model = MambaForCausalLM.from_pretrained("tiiuae/mambafalcon-7b")
+
+input_ids = tokenizer("Hey how are you doing?", return_tensors= "pt")["input_ids"]
+
+out = model.generate(input_ids, max_new_tokens=10)
+print(tokenizer.batch_decode(out))
+```
 
 
 ## MambaFalconConfig

@@ -74,7 +74,10 @@ def convert_mambafalcon_ssm_checkpoint_to_huggingface_model(
 
 
 def validate_converted_model(
-    original_state_dict: dict, original_ssm_config_dict: dict, hf_model: MambaFalconForCausalLM, tokenizer: AutoTokenizer
+    original_state_dict: dict,
+    original_ssm_config_dict: dict,
+    hf_model: MambaFalconForCausalLM,
+    tokenizer: AutoTokenizer,
 ) -> None:
     """Validate the converted model returns the same output as the original model."""
     torch_device = "cuda"

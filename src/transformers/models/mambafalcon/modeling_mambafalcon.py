@@ -56,6 +56,7 @@ is_fast_path_available = all(
 _CHECKPOINT_FOR_DOC = "tiiuae/mambafalcon-7b"
 _CONFIG_FOR_DOC = "MambaFalconConfig"
 
+
 def rms_forward(hidden_states, variance_epsilon=1e-6):
     """
     Calculates simple RMSNorm with no learnable weights. `MambaRMSNorm` will
@@ -92,7 +93,11 @@ class MambaFalconCache:
     """
 
     def __init__(
-        self, config: MambaFalconConfig, batch_size: int, dtype: torch.dtype = torch.float16, device: Optional[str] = None
+        self,
+        config: MambaFalconConfig,
+        batch_size: int,
+        dtype: torch.dtype = torch.float16,
+        device: Optional[str] = None,
     ):
         self.seqlen_offset = 0
         self.dtype = dtype
@@ -110,7 +115,6 @@ class MambaFalconCache:
         }
 
 
-# Copied from transformers.models.mamba.modeling_mamba.MambaMixer with Mamba->MambaFalcon,mamba->mambafalcon
 class MambaFalconMixer(nn.Module):
     """
     Compute ∆, A, B, C, and D the state space parameters and compute the `contextualized_states`.
@@ -119,6 +123,7 @@ class MambaFalconMixer(nn.Module):
     and is why MambaFalcon is called **selective** state spaces)
     """
 
+    # Copied from transformers.models.mamba.modeling_mamba.MambaMixer.__init__ with Mamba->MambaFalcon,mamba->mambafalcon
     def __init__(self, config: MambaFalconConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -164,7 +169,6 @@ class MambaFalconMixer(nn.Module):
                 " https://github.com/Dao-AILab/causal-conv1d"
             )
 
-    # Ignore copy
     def cuda_kernels_forward(self, hidden_states: torch.Tensor, cache_params: Optional[MambaFalconCache] = None):
         # 1. Gated MLP's linear projection
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
@@ -259,13 +263,11 @@ class MambaFalconMixer(nn.Module):
             contextualized_states = self.out_proj(scan_outputs.transpose(1, 2))
         return contextualized_states
 
-    # fmt: off
-    # Ignore copy
-    def slow_forward(self, input_states, cache_params: Optional[MambaFalconCache]=None):
+    def slow_forward(self, input_states, cache_params: Optional[MambaFalconCache] = None):
         batch_size, seq_len, _ = input_states.shape
         dtype = input_states.dtype
         # 1. Gated MLP's linear projection
-        projected_states = self.in_proj(input_states).transpose(1, 2)                   # [batch, 2 * intermediate_size, seq_len]
+        projected_states = self.in_proj(input_states).transpose(1, 2)  # [batch, 2 * intermediate_size, seq_len]
         hidden_states, gate = projected_states.chunk(2, dim=1)
 
         # 2. Convolution sequence transformation
@@ -273,27 +275,27 @@ class MambaFalconMixer(nn.Module):
             ssm_state = cache_params.ssm_states[self.layer_idx].clone()
             ssm_state = ssm_state.to(hidden_states.device)
             if cache_params.seqlen_offset > 0:
-                conv_state = cache_params.conv_states[self.layer_idx]                   # [batch, intermediate_size, conv_kernel_size]
+                conv_state = cache_params.conv_states[self.layer_idx]  # [batch, intermediate_size, conv_kernel_size]
                 conv_state = torch.roll(conv_state, shifts=-1, dims=-1)
                 conv_state[:, :, -1] = hidden_states[:, :, 0]
                 cache_params.conv_states[self.layer_idx].copy_(conv_state)
                 hidden_states = torch.sum(conv_state * self.conv1d.weight[:, 0, :], dim=-1)
                 if self.use_conv_bias:
                     hidden_states += self.conv1d.bias
-                hidden_states = self.act(hidden_states).to(dtype).unsqueeze(-1)         # [batch, intermediate_size, 1] : decoding
+                hidden_states = (
+                    self.act(hidden_states).to(dtype).unsqueeze(-1)
+                )  # [batch, intermediate_size, 1] : decoding
             else:
-                conv_state = nn.functional.pad(
-                    hidden_states,
-                    (self.conv_kernel_size - hidden_states.shape[-1], 0)
-                )
+                conv_state = nn.functional.pad(hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0))
                 cache_params.conv_states[self.layer_idx].copy_(conv_state)
-                hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])     # [batch, intermediate_size, seq_len]
+                hidden_states = self.act(
+                    self.conv1d(hidden_states)[..., :seq_len]
+                )  # [batch, intermediate_size, seq_len]
         else:
             ssm_state = torch.zeros(
-                (batch_size, self.intermediate_size, self.ssm_state_size),
-                device=hidden_states.device, dtype=dtype
+                (batch_size, self.intermediate_size, self.ssm_state_size), device=hidden_states.device, dtype=dtype
             )
-            hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])         # [batch, intermediate_size, seq_len]
+            hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])  # [batch, intermediate_size, seq_len]
 
         # 3. State Space Model sequence transformation
         # 3.a. Selection:  [batch, seq_len, self.time_step_rank + self.ssm_state_size * 2]
@@ -306,24 +308,32 @@ class MambaFalconMixer(nn.Module):
         C = rms_forward(C)
         time_step = rms_forward(time_step)
 
-        discrete_time_step = self.dt_proj(time_step)                                    # [batch, seq_len, intermediate_size]
-        discrete_time_step = nn.functional.softplus(discrete_time_step).transpose(1, 2) # [batch, intermediate_size, seq_len]
+        discrete_time_step = self.dt_proj(time_step)  # [batch, seq_len, intermediate_size]
+        discrete_time_step = nn.functional.softplus(discrete_time_step).transpose(
+            1, 2
+        )  # [batch, intermediate_size, seq_len]
 
         # 3.b. Discretization: B and C to [batch, seq_len, intermediate_size, ssm_state_size] (SRAM)
-        A = -torch.exp(self.A_log.float())                                              # [intermediate_size, ssm_state_size]
-        discrete_A = torch.exp(A[None, :, None, :] * discrete_time_step[:, :, :, None]) # [batch, intermediate_size, seq_len, ssm_state_size]
-        discrete_B = discrete_time_step[:, :, :, None] * B[:, None, :, :].float()       # [batch, intermediate_size, seq_len, ssm_state_size]
+        A = -torch.exp(self.A_log.float())  # [intermediate_size, ssm_state_size]
+        discrete_A = torch.exp(
+            A[None, :, None, :] * discrete_time_step[:, :, :, None]
+        )  # [batch, intermediate_size, seq_len, ssm_state_size]
+        discrete_B = (
+            discrete_time_step[:, :, :, None] * B[:, None, :, :].float()
+        )  # [batch, intermediate_size, seq_len, ssm_state_size]
         deltaB_u = discrete_B * hidden_states[:, :, :, None].float()
 
         # 3.c perform the recurrence y ← SSM(A, B, C)(x)
         scan_outputs = []
         for i in range(seq_len):
-            ssm_state = discrete_A[:, :, i, :] * ssm_state + deltaB_u[:, :, i, :]      # [batch, intermediate_size, ssm_state]
+            ssm_state = (
+                discrete_A[:, :, i, :] * ssm_state + deltaB_u[:, :, i, :]
+            )  # [batch, intermediate_size, ssm_state]
             scan_output = torch.matmul(ssm_state.to(dtype), C[:, i, :].unsqueeze(-1))  # [batch, intermediate_size, 1]
             scan_outputs.append(scan_output[:, :, 0])
-        scan_output = torch.stack(scan_outputs, dim=-1)                                # [batch, intermediate_size, seq_len]
+        scan_output = torch.stack(scan_outputs, dim=-1)  # [batch, intermediate_size, seq_len]
         scan_output = scan_output + (hidden_states * self.D[None, :, None])
-        scan_output = (scan_output * self.act(gate))
+        scan_output = scan_output * self.act(gate)
 
         if cache_params is not None:
             cache_params.ssm_states[self.layer_idx].copy_(ssm_state)
@@ -331,8 +341,8 @@ class MambaFalconMixer(nn.Module):
         # 4. Final linear projection
         contextualized_states = self.out_proj(scan_output.transpose(1, 2))  # [batch, seq_len, hidden_size]
         return contextualized_states
-    # fmt: on
 
+    # Copied from transformers.models.mamba.modeling_mamba.MambaMixer.forward with Mamba->MambaFalcon
     def forward(self, hidden_states, cache_params: Optional[MambaFalconCache] = None):
         if is_fast_path_available and "cuda" in self.x_proj.weight.device.type:
             return self.cuda_kernels_forward(hidden_states, cache_params)
@@ -548,7 +558,9 @@ class MambaFalconModel(MambaFalconPreTrainedModel):
         super().__init__(config)
 
         self.embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
-        self.layers = nn.ModuleList([MambaFalconBlock(config, layer_idx=idx) for idx in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList(
+            [MambaFalconBlock(config, layer_idx=idx) for idx in range(config.num_hidden_layers)]
+        )
 
         self.gradient_checkpointing = False
         self.norm_f = MambaFalconRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
@@ -568,17 +580,17 @@ class MambaFalconModel(MambaFalconPreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.embeddings = new_embeddings
 
-    # Ignore copy
     @add_start_docstrings_to_model_forward(MAMBAFALCON_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MambaFalconOutput,
         config_class=_CONFIG_FOR_DOC,
     )
+    # Ignore copy
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None, # Igno
+        attention_mask: Optional[torch.LongTensor] = None,  # Igno
         inputs_embeds: Optional[torch.LongTensor] = None,
         cache_params: Optional[MambaFalconCache] = None,
         use_cache: Optional[bool] = None,
@@ -698,17 +710,17 @@ class MambaFalconForCausalLM(MambaFalconPreTrainedModel):
         )
         return model_inputs
 
-    # Ignore copy
     @add_start_docstrings_to_model_forward(MAMBAFALCON_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MambaFalconCausalLMOutput,
         config_class=_CONFIG_FOR_DOC,
     )
+    # Ignore copy
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None, # Ignored copy
+        attention_mask: Optional[torch.LongTensor] = None,  # Ignored copy
         inputs_embeds: Optional[torch.FloatTensor] = None,
         cache_params: Optional[MambaFalconCache] = None,
         labels: Optional[torch.LongTensor] = None,

@@ -19,8 +19,6 @@ import unittest
 from typing import Dict, List, Tuple
 from unittest.util import safe_repr
 
-from parameterized import parameterized
-
 from transformers import AutoTokenizer, MambaFalconConfig, is_torch_available
 from transformers.testing_utils import require_torch, require_torch_multi_gpu, slow, torch_device
 
@@ -259,7 +257,9 @@ class MambaFalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
     test_pruning = False
     test_head_masking = False  # MambaFalcon does not have attention heads
     pipeline_model_mapping = (
-        {"feature-extraction": MambaFalconModel, "text-generation": MambaFalconForCausalLM} if is_torch_available() else {}
+        {"feature-extraction": MambaFalconModel, "text-generation": MambaFalconForCausalLM}
+        if is_torch_available()
+        else {}
     )
 
     def setUp(self):
