@@ -77,6 +77,7 @@ image1_matching_scores = outputs.matching_scores[0, 1][image1_indices]
 ```
 
 You can then print the matched keypoints on a side-by-side image to visualize the result :
+
 ```python
 import cv2
 import numpy as np
