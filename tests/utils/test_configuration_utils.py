@@ -101,11 +101,6 @@ class ConfigPushToHubTester(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         try:
-            delete_repo(token=cls._token, repo_id="test-config")
-        except HTTPError:
-            pass
-
-        try:
             delete_repo(token=cls._token, repo_id="valid_org/test-config-org")
         except HTTPError:
             pass
@@ -116,30 +111,42 @@ class ConfigPushToHubTester(unittest.TestCase):
             pass
 
     def test_push_to_hub(self):
-        config = BertConfig(
-            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
-        )
-        config.push_to_hub("test-config", token=self._token)
 
-        new_config = BertConfig.from_pretrained(f"{USER}/test-config")
-        for k, v in config.to_dict().items():
-            if k != "transformers_version":
-                self.assertEqual(v, getattr(new_config, k))
-
-        try:
-            # Reset repo
-            delete_repo(token=self._token, repo_id="test-config")
-        except:  # noqa E722
-            pass
-
-        # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
-            config.save_pretrained(tmp_dir, repo_id="test-config", push_to_hub=True, token=self._token)
+            try:
+                tmp_repo = f"{USER}/test-config-{Path(tmp_dir).name}"
 
-        new_config = BertConfig.from_pretrained(f"{USER}/test-config")
-        for k, v in config.to_dict().items():
-            if k != "transformers_version":
-                self.assertEqual(v, getattr(new_config, k))
+                config = BertConfig(
+                    vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+                )
+                config.push_to_hub(tmp_repo, token=self._token)
+
+                new_config = BertConfig.from_pretrained(tmp_repo)
+                for k, v in config.to_dict().items():
+                    if k != "transformers_version":
+                        self.assertEqual(v, getattr(new_config, k))
+
+                try:
+                    # Reset repo
+                    delete_repo(token=self._token, repo_id=tmp_repo)
+                except:  # noqa E722
+                    pass
+
+                # Push to hub via save_pretrained
+                config.save_pretrained(tmp_dir, repo_id=tmp_repo, push_to_hub=True, token=self._token)
+
+                new_config = BertConfig.from_pretrained(tmp_repo)
+                for k, v in config.to_dict().items():
+                    if k != "transformers_version":
+                        self.assertEqual(v, getattr(new_config, k))
+            finally:
+                # Always try to delete
+                try:
+                    # Reset repo
+                    delete_repo(token=self._token, repo_id=tmp_repo)
+                except:  # noqa E722
+                    pass
+
 
     def test_push_to_hub_in_organization(self):
         config = BertConfig(
