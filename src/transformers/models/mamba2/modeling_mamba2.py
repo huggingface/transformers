@@ -26,7 +26,7 @@ from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...cache_utils import DynamicCache
-from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask, _prepare_4d_causal_attention_mask_for_sdpa
+from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -1268,7 +1268,7 @@ class Mamba2Mixer(nn.Module):
             )
 
             # Subsequent output
-            y = torch.einsum("bhpn,bn->bhp", cache.ssm_states[self.layer_idx], C)
+            y = torch.einsum("bhpn,bn->bhp", cache.ssm_states[self.layer_idx].to(C.dtype), C)
 
             # D skip connection
             y = y + self.D.unsqueeze(-1) * x
@@ -1619,10 +1619,8 @@ class Mamba2Model(Mamba2PreTrainedModel):
             inputs_embeds = self.embeddings(input_ids)
         hidden_states = inputs_embeds
 
-        # Force cache to be our custom hybrid one, something in the generation module incorrectly overwrites it...
-        if (past_key_values is None and use_cache) or not isinstance(
-            past_key_values, HybridMamba2AttentionDynamicCache
-        ):
+        # We allow empty caches on initial forward
+        if past_key_values is None and use_cache:
             past_key_values = HybridMamba2AttentionDynamicCache(
                 config=self.config,
                 batch_size=inputs_embeds.shape[0],
@@ -1639,7 +1637,9 @@ class Mamba2Model(Mamba2PreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, past_key_values, output_attentions)
+        causal_mask = self._update_causal_mask(
+            attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
+        )
 
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
@@ -1696,34 +1696,80 @@ class Mamba2Model(Mamba2PreTrainedModel):
             attentions=all_self_attns,
         )
 
-    def _update_causal_mask(self, attention_mask, inputs_embeds, past_key_values, output_attentions):
+    # Adapted from transformers.models.llama.modeling_llama.LlamaModel._update_causal_mask
+    # Custom hybrid cache instead
+    def _update_causal_mask(
+        self,
+        attention_mask: torch.Tensor,
+        input_tensor: torch.Tensor,
+        cache_position: torch.Tensor,
+        past_key_values: HybridMamba2AttentionDynamicCache,
+        output_attentions: bool,
+    ):
         if not self._uses_attention_layers:
             return None
 
-        batch_size, seq_len, _ = inputs_embeds.shape
-        past_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-
-        # Follows GPTNeoX based creation of masks
-        attention_mask = attention_mask.view(batch_size, -1) if attention_mask is not None else None
         if self._attn_implementation == "flash_attention_2":
-            return attention_mask if (attention_mask is not None and 0 in attention_mask) else None
-        elif self._attn_implementation == "sdpa" and not output_attentions:
-            return _prepare_4d_causal_attention_mask_for_sdpa(
-                attention_mask=attention_mask,
-                input_shape=(batch_size, seq_len),
-                inputs_embeds=inputs_embeds,
-                past_key_values_length=past_length,
-            )
-        else:
-            return _prepare_4d_causal_attention_mask(
-                attention_mask=attention_mask,
-                input_shape=(batch_size, seq_len),
-                inputs_embeds=inputs_embeds,
-                past_key_values_length=past_length,
-            )
+            if attention_mask is not None and 0.0 in attention_mask:
+                return attention_mask
+            return None
 
-        # This should not happen as we covered all options
-        return None
+        # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
+        # order to dispatch on Flash Attention 2.
+        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+
+        # TODO: check if this is compatible with this custom cache format
+        if self._attn_implementation == "sdpa" and not output_attentions:
+            if AttentionMaskConverter._ignore_causal_mask_sdpa(
+                attention_mask,
+                inputs_embeds=input_tensor,
+                past_key_values_length=past_seen_tokens,
+                is_training=self.training,
+            ):
+                return None
+
+        dtype, device = input_tensor.dtype, input_tensor.device
+        min_dtype = torch.finfo(dtype).min
+        sequence_length = input_tensor.shape[1]
+        target_length = (
+            attention_mask.shape[-1]
+            if isinstance(attention_mask, torch.Tensor)
+            else past_seen_tokens + sequence_length
+        )
+
+        if attention_mask is not None and attention_mask.dim() == 4:
+            # in this case we assume that the mask comes already in inverted form and requires no inversion or slicing
+            if attention_mask.max() != 0:
+                raise ValueError("Custom 4D attention mask should be passed in inverted form with max==0`")
+            causal_mask = attention_mask
+        else:
+            causal_mask = torch.full(
+                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
+            )
+            if sequence_length != 1:
+                causal_mask = torch.triu(causal_mask, diagonal=1)
+            causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+            causal_mask = causal_mask[None, None, :, :].expand(input_tensor.shape[0], 1, -1, -1)
+            if attention_mask is not None:
+                causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
+                mask_length = attention_mask.shape[-1]
+                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
+                padding_mask = padding_mask == 0
+                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
+                    padding_mask, min_dtype
+                )
+        if (
+            self._attn_implementation == "sdpa"
+            and attention_mask is not None
+            and attention_mask.device.type == "cuda"
+            and not output_attentions
+        ):
+            # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
+            # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
+            # Details: https://github.com/pytorch/pytorch/issues/110213
+            causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
+
+        return causal_mask
 
 
 @add_start_docstrings(
@@ -1763,7 +1809,7 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel):
         return self.backbone.set_input_embeddings(new_embeddings)
 
     # Adapted from transformers.models.jamba.modeling_jamba.JambaForCausalLM.prepare_inputs_for_generation
-    # We omit sliding window and MoE logic, additional logic taken from Llama for correct position_ids
+    # We omit some args Mamba2 doesn't use such as output_router_logits and num_logits_to_keep; additional optional reinit of the cache
     def prepare_inputs_for_generation(
         self,
         input_ids,
@@ -1771,57 +1817,48 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel):
         attention_mask=None,
         inputs_embeds=None,
         cache_position=None,
+        position_ids=None,
         use_cache=True,
         **kwargs,
     ):
         empty_past_kv = past_key_values is None
 
-        # Omit tokens covered by past_key_values
+        # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
+        # Exception 1: when passing input_embeds, input_ids may be missing entries
+        # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
         if not empty_past_kv:
-            past_length = cache_position[0] if cache_position is not None else past_key_values.get_seq_length()
-            # Keep only the unprocessed tokens:
-            # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
-            # some of the inputs are exclusively passed as part of the cache (e.g. when passing input_embeds as
-            # input)
-            if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
-                input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
-            # 2 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
-            # input_ids based on the past_length.
-            elif past_length < input_ids.shape[1]:
-                input_ids = input_ids[:, past_length:]
+            if inputs_embeds is not None:  # Exception 1
+                input_ids = input_ids[:, -cache_position.shape[0] :]
+            elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
+                input_ids = input_ids[:, cache_position]
 
-            # TODO: skipping the usual 3. as we do not use a sliding window or use a define a max_cache_len
-        else:
+        # Force cache to be our custom hybrid one, something in the generation module incorrectly overwrites it...
+        if empty_past_kv or (not empty_past_kv and not isinstance(past_key_values, HybridMamba2AttentionDynamicCache)):
             past_key_values = HybridMamba2AttentionDynamicCache(
-                self.config, input_ids.shape[0], self.dtype, device=self.device
+                config=self.config,
+                batch_size=input_ids.shape[0],
+                device=input_ids.device,
+                dtype=input_ids.dtype,
             )
 
-        position_ids = kwargs.get("position_ids", None)
         if attention_mask is not None and position_ids is None:
-            # Create position_ids on the fly for batch generation
+            # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
             if not empty_past_kv:
                 position_ids = position_ids[:, -input_ids.shape[1] :]
 
-        # If `inputs_embeds` are passed, we only want to use them in the 1st generation step
+        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and empty_past_kv:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
-            model_inputs = {"input_ids": input_ids}
-
-        # Taken from Llama as we are dependent on the position_ids for RoPE
-        input_length = position_ids.shape[-1] if position_ids is not None else input_ids.shape[-1]
-        if cache_position is None:
-            cache_position = torch.arange(past_length, past_length + input_length, device=input_ids.device)
-        elif use_cache:
-            cache_position = cache_position[-input_length:]
+            model_inputs = {"input_ids": input_ids.contiguous()}  # `contiguous()` needed for compilation use cases
 
         model_inputs.update(
             {
                 "position_ids": position_ids,
                 "past_key_values": past_key_values,
-                "use_cache": kwargs.get("use_cache"),
+                "use_cache": use_cache,
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
             }
