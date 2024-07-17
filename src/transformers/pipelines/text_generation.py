@@ -147,7 +147,8 @@ class TextGenerationPipeline(Pipeline):
 
         if max_length is not None:
             preprocess_params["max_length"] = max_length
-            generate_kwargs["max_length"] = max_length
+            if "max_new_tokens" not in generate_kwargs:
+                generate_kwargs["max_length"] = max_length
 
         if prefix is not None:
             preprocess_params["prefix"] = prefix
