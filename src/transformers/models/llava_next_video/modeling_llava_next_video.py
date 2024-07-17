@@ -862,17 +862,21 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel):
                     image_newline=self.image_newline,
                 )
                 inputs_embeds = inputs_embeds.to(image_features.dtype)
-                inputs_embeds, attention_mask, position_ids, labels, input_ids = (
-                    self._merge_input_ids_with_image_features(
-                        image_features,
-                        feature_lens,
-                        inputs_embeds,
-                        input_ids,
-                        attention_mask,
-                        position_ids,
-                        labels=labels,
-                        image_token_index=self.config.image_token_index,
-                    )
+                (
+                    inputs_embeds,
+                    attention_mask,
+                    position_ids,
+                    labels,
+                    input_ids,
+                ) = self._merge_input_ids_with_image_features(
+                    image_features,
+                    feature_lens,
+                    inputs_embeds,
+                    input_ids,
+                    attention_mask,
+                    position_ids,
+                    labels=labels,
+                    image_token_index=self.config.image_token_index,
                 )
             # Then merge video tokens if there are any
             if pixel_values_videos is not None and pixel_values_videos.size(0) > 0:
@@ -881,17 +885,21 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel):
                 feature_lens = [feature.size(0) for feature in video_features]
                 video_features = torch.cat(video_features, dim=0)
                 feature_lens = torch.tensor(feature_lens, dtype=torch.long, device=video_features.device)
-                inputs_embeds, attention_mask, position_ids, labels, input_ids = (
-                    self._merge_input_ids_with_image_features(
-                        video_features,
-                        feature_lens,
-                        inputs_embeds,
-                        input_ids,
-                        attention_mask,
-                        position_ids,
-                        labels=labels,
-                        image_token_index=self.config.video_token_index,
-                    )
+                (
+                    inputs_embeds,
+                    attention_mask,
+                    position_ids,
+                    labels,
+                    input_ids,
+                ) = self._merge_input_ids_with_image_features(
+                    video_features,
+                    feature_lens,
+                    inputs_embeds,
+                    input_ids,
+                    attention_mask,
+                    position_ids,
+                    labels=labels,
+                    image_token_index=self.config.video_token_index,
                 )
 
         # pixel_values is not None but is empty ---> text only cases

@@ -329,6 +329,9 @@ def is_torch_sdpa_available():
     # NOTE: We require torch>=2.1 (and not torch>=2.0) to use SDPA in Transformers for two reasons:
     # - Allow the global use of the `scale` argument introduced in https://github.com/pytorch/pytorch/pull/95259
     # - Memory-efficient attention supports arbitrary attention_mask: https://github.com/pytorch/pytorch/pull/104310
+    # NOTE: MLU is OK with non-contiguous inputs.
+    if is_torch_mlu_available():
+        return version.parse(_torch_version) >= version.parse("2.1.0")
     # NOTE: We require torch>=2.1.1 to avoid a numerical issue in SDPA with non-contiguous inputs: https://github.com/pytorch/pytorch/issues/112577
     return version.parse(_torch_version) >= version.parse("2.1.1")
 
@@ -642,12 +645,8 @@ def is_torch_mlu_available(check_device=False):
 def is_torchdynamo_available():
     if not is_torch_available():
         return False
-    try:
-        import torch._dynamo as dynamo  # noqa: F401
 
-        return True
-    except Exception:
-        return False
+    return version.parse(_torch_version) >= version.parse("2.0.0")
 
 
 def is_torch_compile_available():
@@ -665,9 +664,15 @@ def is_torchdynamo_compiling():
     if not is_torch_available():
         return False
     try:
-        import torch._dynamo as dynamo  # noqa: F401
+        # Importing torch._dynamo causes issues with PyTorch profiler (https://github.com/pytorch/pytorch/issues/130622) hence rather relying on `torch.compiler.is_compiling()` when possible.
+        if version.parse(_torch_version) >= version.parse("2.3.0"):
+            import torch
 
-        return dynamo.is_compiling()
+            return torch.compiler.is_compiling()
+        else:
+            import torch._dynamo as dynamo  # noqa: F401
+
+            return dynamo.is_compiling()
     except Exception:
         return False
 
@@ -793,7 +798,7 @@ def is_flash_attn_2_available():
     # Let's add an extra check to see if cuda is available
     import torch
 
-    if not torch.cuda.is_available():
+    if not (torch.cuda.is_available() or is_torch_mlu_available()):
         return False
 
     if torch.version.cuda:
@@ -801,6 +806,8 @@ def is_flash_attn_2_available():
     elif torch.version.hip:
         # TODO: Bump the requirement to 2.1.0 once released in https://github.com/ROCmSoftwarePlatform/flash-attention
         return version.parse(importlib.metadata.version("flash_attn")) >= version.parse("2.0.4")
+    elif is_torch_mlu_available():
+        return version.parse(importlib.metadata.version("flash_attn")) >= version.parse("2.3.3")
     else:
         return False
 
@@ -810,6 +817,13 @@ def is_flash_attn_greater_or_equal_2_10():
         return False
 
     return version.parse(importlib.metadata.version("flash_attn")) >= version.parse("2.1.0")
+
+
+def is_flash_attn_greater_or_equal(library_version: str):
+    if not _is_package_available("flash_attn"):
+        return False
+
+    return version.parse(importlib.metadata.version("flash_attn")) >= version.parse(library_version)
 
 
 def is_torchdistx_available():

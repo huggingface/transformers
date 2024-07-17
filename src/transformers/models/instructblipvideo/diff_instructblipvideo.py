@@ -158,7 +158,8 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         >>> from transformers import InstructBlipVideoProcessor, InstructBlipVideoForConditionalGeneration
         >>> import torch
         >>> from huggingface_hub import hf_hub_download
-        >>> from av
+        >>> import av
+        >>> import numpy as np
 
         >>> def read_video_pyav(container, indices):
         ...     '''
@@ -180,20 +181,21 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         ...             frames.append(frame)
         ...     return np.stack([x.to_ndarray(format="rgb24") for x in frames])
 
-        >>> model = InstructBlipVideoProcessor.from_pretrained("Salesforce/instructblip-vicuna-7b", device_map="auto")
-        >>> processor = InstructBlipVideoForConditionalGeneration.from_pretrained("Salesforce/instructblip-vicuna-7b")
+        >>> model = InstructBlipVideoForConditionalGeneration.from_pretrained("Salesforce/instructblip-vicuna-7b", device_map="auto")
+        >>> processor = InstructBlipVideoProcessor.from_pretrained("Salesforce/instructblip-vicuna-7b")
 
         >>> file_path = hf_hub_download(
-                repo_id="nielsr/video-demo", filename="eating_spaghetti.mp4", repo_type="dataset"
-            )
-        >>> container = av.open(video_path)
+        ...       repo_id="nielsr/video-demo", filename="eating_spaghetti.mp4", repo_type="dataset"
+        ... )
+        >>> container = av.open(file_path)
+
         >>> # sample uniformly 4 frames from the videWhy is this video funny?o
         >>> total_frames = container.streams.video[0].frames
         >>> indices = np.arange(0, total_frames, total_frames / 4).astype(int)
         >>> clip = read_video_pyav(container, indices)
 
         >>> prompt = "What is happening in the video?"
-        >>> inputs = processor(videos=clip, text=prompt, return_tensors="pt").to(device)
+        >>> inputs = processor(text=prompt, images=clip, return_tensors="pt").to(model.device)
 
         >>> outputs = model.generate(
         ...     **inputs,

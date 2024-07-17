@@ -320,6 +320,7 @@ class ProcessorMixin(PushToHubMixin):
     feature_extractor_class = None
     tokenizer_class = None
     _auto_class = None
+    valid_kwargs: List[str] = []
 
     # args have to match the attributes class attribute
     def __init__(self, *args, **kwargs):
@@ -648,14 +649,15 @@ class ProcessorMixin(PushToHubMixin):
         processor_dict = processor_dict.copy()
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
 
-        # Unlike image processors or feature extractors whose `__init__` accept `kwargs`, processor don't have `kwargs`.
-        # We have to pop up some unused (but specific) arguments to make it work.
+        # We have to pop up some unused (but specific) kwargs and then validate that it doesn't contain unused kwargs
+        # If we don't pop, some specific kwargs will raise a warning
         if "processor_class" in processor_dict:
             del processor_dict["processor_class"]
 
         if "auto_map" in processor_dict:
             del processor_dict["auto_map"]
 
+        unused_kwargs = cls.validate_init_kwargs(processor_config=processor_dict, valid_kwargs=cls.valid_kwargs)
         processor = cls(*args, **processor_dict)
 
         # Update processor with kwargs if needed
@@ -663,6 +665,7 @@ class ProcessorMixin(PushToHubMixin):
             if hasattr(processor, key):
                 setattr(processor, key, kwargs.pop(key))
 
+        kwargs.update(unused_kwargs)
         logger.info(f"Processor {processor}")
         if return_unused_kwargs:
             return processor, kwargs
@@ -886,6 +889,19 @@ class ProcessorMixin(PushToHubMixin):
     def model_input_names(self):
         first_attribute = getattr(self, self.attributes[0])
         return getattr(first_attribute, "model_input_names", None)
+
+    @staticmethod
+    def validate_init_kwargs(processor_config, valid_kwargs):
+        kwargs_from_config = processor_config.keys()
+        unused_kwargs = {}
+        unused_keys = set(kwargs_from_config) - set(valid_kwargs)
+        if unused_keys:
+            unused_key_str = ", ".join(unused_keys)
+            logger.warning(
+                f"Some kwargs in processor config are unused and will not have any effect: {unused_key_str}. "
+            )
+            unused_kwargs = {k: processor_config[k] for k in unused_keys}
+        return unused_kwargs
 
     def apply_chat_template(
         self,
