@@ -53,14 +53,14 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
         Generates a text string with placeholders for images and optional textual crop indicators.
 
         Parameters:
-        - text (str): The input text containing <image> tokens where image placeholders should be inserted.
-        - patch_positions (numpy.ndarray): Array of patch positions indicating the location of cropped images.
-        - anchor_max (int): The maximum anchor value used to identify global images.
-        - num_patches (int): The number of patches (or cropped images) to be represented in the text.
-        - add_textual_crop_indicator (bool): Flag indicating whether to add textual crop indicators in the output.
+            - text (str): The input text containing <image> tokens where image placeholders should be inserted.
+            - patch_positions (numpy.ndarray): Array of patch positions indicating the location of cropped images.
+            - anchor_max (int): The maximum anchor value used to identify global images.
+            - num_patches (int): The number of patches (or cropped images) to be represented in the text.
+            - add_textual_crop_indicator (bool): Flag indicating whether to add textual crop indicators in the output.
 
         Returns:
-        - str: The generated text with appropriate image placeholders and optional crop indicators.
+            - str: The generated text with appropriate image placeholders and optional crop indicators.
         """
         media_token = "<image>"
         if media_token not in text:
