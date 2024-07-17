@@ -495,11 +495,22 @@ class ProcessorMixin(PushToHubMixin):
                     del attribute.init_kwargs["auto_map"]
 
         # If we save using the predefined names, we can load using `from_pretrained`
+        # plus we save chat_template in itw own file
         output_processor_file = os.path.join(save_directory, PROCESSOR_NAME)
+        output_chat_template_file = os.path.join(save_directory, CHAT_TEMPLATE_NAME)
+
+        processor_dict = self.to_dict()
+        if processor_dict.get("chat_template", None) is not None:
+            chat_template_dictionary = {"chat_template": processor_dict["chat_template"]}
+            chat_template_json_string = json.dumps(chat_template_dictionary, indent=2, sort_keys=True) + "\n"
+            with open(output_chat_template_file, "w", encoding="utf-8") as writer:
+                writer.write(chat_template_json_string)
+            logger.info(f"chat template saved in {output_chat_template_file}")
 
         # For now, let's not save to `processor_config.json` if the processor doesn't have extra attributes and
         # `auto_map` is not specified.
-        if set(self.to_dict().keys()) != {"processor_class"}:
+        processor_dict_keys = set(processor_dict.keys()) - {"chat_template"}
+        if processor_dict_keys != {"processor_class"}:
             self.to_json_file(output_processor_file)
             logger.info(f"processor saved in {output_processor_file}")
 
