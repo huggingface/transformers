@@ -44,6 +44,10 @@ else:
 
 
 class Mamba2ModelTester:
+    config_classs = Mamba2Config
+    model_class = Mamba2Model
+    for_causal_lm = Mamba2ForCausalLM
+
     def __init__(
         self,
         parent,
@@ -87,162 +91,6 @@ class Mamba2ModelTester:
         self.pad_token_id = vocab_size - 1
         self.tie_word_embeddings = tie_word_embeddings
 
-    def get_large_model_config(self):
-        return Mamba2Config.from_pretrained("hf-internal-testing/mamba2-2.8b")
-
-    def prepare_config_and_inputs(
-        self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
-    ):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-
-        sequence_labels = None
-        token_labels = None
-        choice_labels = None
-        if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
-            choice_labels = ids_tensor([self.batch_size], self.num_choices)
-
-        config = self.get_config(
-            gradient_checkpointing=gradient_checkpointing,
-            scale_attn_by_inverse_layer_idx=scale_attn_by_inverse_layer_idx,
-            reorder_and_upcast_attn=reorder_and_upcast_attn,
-        )
-
-        return (
-            config,
-            input_ids,
-            None,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        )
-
-    def get_config(
-        self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
-    ):
-        return Mamba2Config(
-            vocab_size=self.vocab_size,
-            hidden_size=self.hidden_size,
-            num_hidden_layers=self.num_hidden_layers,
-            intermediate_size=self.intermediate_size,
-            activation_function=self.hidden_act,
-            n_positions=self.max_position_embeddings,
-            type_vocab_size=self.type_vocab_size,
-            use_cache=True,
-            bos_token_id=self.bos_token_id,
-            eos_token_id=self.eos_token_id,
-            pad_token_id=self.pad_token_id,
-            gradient_checkpointing=gradient_checkpointing,
-            tie_word_embeddings=self.tie_word_embeddings,
-        )
-
-    def get_pipeline_config(self):
-        config = self.get_config()
-        config.vocab_size = 300
-        return config
-
-    def prepare_config_and_inputs_for_decoder(self):
-        (
-            config,
-            input_ids,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = self.prepare_config_and_inputs()
-
-        return (
-            config,
-            input_ids,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        )
-
-    def create_and_check_mamba2_model(self, config, input_ids, *args):
-        config.output_hidden_states = True
-        model = Mamba2Model(config=config)
-        model.to(torch_device)
-        model.eval()
-
-        result = model(input_ids)
-
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(len(result.hidden_states), config.num_hidden_layers + 1)
-
-    def create_and_check_causal_lm(self, config, input_ids, *args):
-        model = Mamba2ForCausalLM(config)
-        model.to(torch_device)
-        model.eval()
-
-        result = model(input_ids, labels=input_ids)
-        self.parent.assertEqual(result.loss.shape, ())
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-
-    def create_and_check_state_equivalency(self, config, input_ids, *args):
-        model = Mamba2Model(config=config)
-        model.to(torch_device)
-        model.eval()
-
-        outputs = model(input_ids)
-        output_whole = outputs.last_hidden_state
-
-        outputs = model(input_ids[:, :-1], use_cache=True)
-        output_one = outputs.last_hidden_state
-
-        # Using the state computed on the first inputs, we will get the same output
-        outputs = model(input_ids[:, -1:], cache_params=outputs.cache_params)
-        output_two = outputs.last_hidden_state
-
-        self.parent.assertTrue(torch.allclose(torch.cat([output_one, output_two], dim=1), output_whole, atol=1e-5))
-        # TODO the orignal mamba2 does not support decoding more than 1 token neither do we
-
-    def create_and_check_mamba2_cached_slow_forward_and_backwards(
-        self, config, input_ids, *args, gradient_checkpointing=False
-    ):
-        model = Mamba2Model(config)
-        model.to(torch_device)
-        if gradient_checkpointing:
-            model.gradient_checkpointing_enable()
-
-        # create cache
-        cache = model(input_ids, use_cache=True).cache_params
-        cache.seqlen_offset = 0
-
-        # use cache
-        token_emb = model.embeddings(input_ids)
-        outputs = model.layers[0].mixer.slow_forward(token_emb, cache)
-
-        loss = torch.log(1 + torch.abs(outputs.sum()))
-        self.parent.assertEqual(loss.shape, ())
-        self.parent.assertEqual(outputs.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        loss.backward()
-
-    def create_and_check_mamba2_lm_head_forward_and_backwards(
-        self, config, input_ids, *args, gradient_checkpointing=False
-    ):
-        model = Mamba2ForCausalLM(config)
-        model.to(torch_device)
-        if gradient_checkpointing:
-            model.gradient_checkpointing_enable()
-
-        result = model(input_ids, labels=input_ids)
-        self.parent.assertEqual(result.loss.shape, ())
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-        result.loss.backward()
-
-    def prepare_config_and_inputs_for_common(self):
-        (
-            config,
-            input_ids,
-            _,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = self.prepare_config_and_inputs()
-        inputs_dict = {"input_ids": input_ids}
-        return config, inputs_dict
-
 
 @unittest.skipIf(
     not is_torch_greater_or_equal_than_2_0, reason="See https://github.com/huggingface/transformers/pull/24204"
@@ -251,89 +99,12 @@ class Mamba2ModelTester:
 class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Mamba2Model, Mamba2ForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (Mamba2ForCausalLM,) if is_torch_available() else ()
-    has_attentions = False  # Mamba2 does not support attentions
-    fx_compatible = False  # FIXME let's try to support this @ArthurZucker
-    test_torchscript = False  # FIXME let's try to support this @ArthurZucker
-    test_missing_keys = False
-    test_model_parallel = False
-    test_pruning = False
-    test_head_masking = False  # Mamba2 does not have attention heads
 
     def setUp(self):
         self.model_tester = Mamba2ModelTester(self)
         self.config_tester = ConfigTester(
             self, config_class=Mamba2Config, n_embd=37, common_properties=["hidden_size", "num_hidden_layers"]
         )
-
-    def assertInterval(self, member, container, msg=None):
-        r"""
-        Simple utility function to check if a member is inside an interval.
-        """
-        if isinstance(member, torch.Tensor):
-            max_value, min_value = member.max().item(), member.min().item()
-        elif isinstance(member, list) or isinstance(member, tuple):
-            max_value, min_value = max(member), min(member)
-
-        if not isinstance(container, list):
-            raise TypeError("container should be a list or tuple")
-        elif len(container) != 2:
-            raise ValueError("container should have 2 elements")
-
-        expected_min, expected_max = container
-
-        is_inside_interval = (min_value >= expected_min) and (max_value <= expected_max)
-
-        if not is_inside_interval:
-            standardMsg = "%s not found in %s" % (safe_repr(member), safe_repr(container))
-            self.fail(self._formatMessage(msg, standardMsg))
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    @require_torch_multi_gpu
-    def test_multi_gpu_data_parallel_forward(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        # some params shouldn't be scattered by nn.DataParallel
-        # so just remove them if they are present.
-        blacklist_non_batched_params = ["cache_params"]
-        for k in blacklist_non_batched_params:
-            inputs_dict.pop(k, None)
-
-        # move input tensors to cuda:O
-        for k, v in inputs_dict.items():
-            if torch.is_tensor(v):
-                inputs_dict[k] = v.to(0)
-
-        for model_class in self.all_model_classes:
-            model = model_class(config=config)
-            model.to(0)
-            model.eval()
-
-            # Wrap model in nn.DataParallel
-            model = torch.nn.DataParallel(model)
-            with torch.no_grad():
-                _ = model(**self._prepare_for_class(inputs_dict, model_class))
-
-    def test_mamba2_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_mamba2_model(*config_and_inputs)
-
-    def test_mamba2_lm_head_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_causal_lm(*config_and_inputs)
-
-    def test_state_equivalency(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_state_equivalency(*config_and_inputs)
-
-    def test_mamba2_cached_slow_forward_and_backwards(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_mamba2_cached_slow_forward_and_backwards(*config_and_inputs)
-
-    def test_mamba2_lm_head_forward_and_backwards(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_mamba2_lm_head_forward_and_backwards(*config_and_inputs)
 
     def test_initialization(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -357,67 +128,6 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
                     if param.requires_grad:
                         # check if it's a ones like
                         self.assertTrue(torch.allclose(param.data, torch.ones_like(param.data), atol=1e-5, rtol=1e-5))
-
-    @slow
-    def test_model_from_pretrained(self):
-        model = Mamba2Model.from_pretrained("hf-internal-testing/mamba2-130m")
-        self.assertIsNotNone(model)
-
-    def test_model_outputs_equivalence(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        def check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs={}):
-            with torch.no_grad():
-                tuple_output = model(**tuple_inputs, return_dict=False, **additional_kwargs)
-                dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
-
-                def recursive_check(tuple_object, dict_object):
-                    if isinstance(tuple_object, Mamba2Cache):  # MODIFIED PART START
-                        recursive_check(tuple_object.conv_states, dict_object.conv_states)
-                        recursive_check(tuple_object.ssm_states, dict_object.ssm_states)
-                    elif isinstance(tuple_object, (List, Tuple)):  # MODIFIED PART END
-                        for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
-                            recursive_check(tuple_iterable_value, dict_iterable_value)
-                    elif isinstance(tuple_object, Dict):
-                        for tuple_iterable_value, dict_iterable_value in zip(
-                            tuple_object.values(), dict_object.values()
-                        ):
-                            recursive_check(tuple_iterable_value, dict_iterable_value)
-                    elif tuple_object is None:
-                        return
-                    else:
-                        self.assertTrue(
-                            torch.allclose(tuple_object, dict_object, atol=1e-5),
-                            msg=(
-                                "Tuple and dict output are not equal. Difference:"
-                                f" {torch.max(torch.abs(tuple_object - dict_object))}. Tuple has `nan`:"
-                                f" {torch.isnan(tuple_object).any()} and `inf`: {torch.isinf(tuple_object)}. Dict has"
-                                f" `nan`: {torch.isnan(dict_object).any()} and `inf`: {torch.isinf(dict_object)}."
-                            ),
-                        )
-
-                recursive_check(tuple_output, dict_output)
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class)
-            check_equivalence(model, tuple_inputs, dict_inputs)
-
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            check_equivalence(model, tuple_inputs, dict_inputs)
-
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class)
-            check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
-
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
 
 
 @require_torch
@@ -460,7 +170,9 @@ class Mamba2IntegrationTests(unittest.TestCase):
         expected_output = "Hello my name is John and I am a newbie to the world"
 
         input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(device)
-        model = Mamba2ForCausalLM.from_pretrained("mistralai/mamba-codestral-7B-v0.1", torch_dtype=torch.float16).to(device)
+        model = Mamba2ForCausalLM.from_pretrained("mistralai/mamba-codestral-7B-v0.1", torch_dtype=torch.float16).to(
+            device
+        )
 
         output = model.generate(input_ids, max_new_tokens=10)
         output_sentence = self.tokenizer.decode(output[0].tolist())
