@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """BEiT model configuration"""
+import warnings
 
 from collections import OrderedDict
 from typing import Mapping
@@ -23,9 +24,6 @@ from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
 from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
-
-
-logger = logging.get_logger(__name__)
 
 
 class BeitConfig(BackboneConfigMixin, PretrainedConfig):
@@ -197,7 +195,7 @@ class BeitConfig(BackboneConfigMixin, PretrainedConfig):
 
         # handle backwards compatibility
         if "segmentation_indices" in kwargs:
-            logger.warning(
+            warnings.warn(
                 "The `segmentation_indices` argument is deprecated and will be removed in a future version, use `out_indices` instead.",
                 FutureWarning,
             )
