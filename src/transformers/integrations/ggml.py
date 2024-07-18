@@ -37,6 +37,7 @@ logger = logging.get_logger(__name__)
 GGML_TYPES = {
     "F32": 0,
     "Q4_0": 2,
+    "Q4_1": 3,
     "Q8_0": 8,
     "Q2_K": 10,
     "Q3_K": 11,
