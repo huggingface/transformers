@@ -15,7 +15,7 @@
 """PyTorch MAMBA2 model."""
 
 import math
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
@@ -25,7 +25,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...cache_utils import DynamicCache
+from ...cache_utils import Cache, DynamicCache
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
@@ -77,7 +77,6 @@ is_fast_path_available = all(
 )
 
 
-# TODO: checkpoint for doc
 _CONFIG_FOR_DOC = "MambaConfig"
 
 
@@ -1285,6 +1284,8 @@ class Mamba2Block(nn.Module):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
     ):
+        dtype = hidden_states.dtype
+
         residual = hidden_states
         hidden_states = self.norm(hidden_states.to(dtype=self.norm.weight.dtype))
         if self.residual_in_fp32:
@@ -1304,7 +1305,7 @@ class Mamba2Block(nn.Module):
                 output_attentions=output_attentions,
                 use_cache=use_cache,
             )
-        hidden_states = residual + hidden_states
+        hidden_states = (residual + hidden_states).to(dtype)
 
         if self.mlp_layer:
             residual = hidden_states
@@ -1313,7 +1314,7 @@ class Mamba2Block(nn.Module):
                 residual = residual.to(torch.float32)
 
             hidden_states = self.mlp(hidden_states)
-            hidden_states = hidden_states + residual
+            hidden_states = (hidden_states + residual).to(dtype)
 
         return hidden_states, attn_weights
 
@@ -1899,10 +1900,10 @@ class Mamba2ClassificationHead(nn.Module):
     MAMBA2_START_DOCSTRING,
 )
 class Mamba2ForSequenceClassification(Mamba2PreTrainedModel):
-    # Copied from transformers.models.bart.modeling_bart.BartForSequenceClassification.__init__ with Bart->Mamba2, d_model->hidden_size
+    # Copied from transformers.models.bart.modeling_bart.BartForSequenceClassification.__init__ with Bart->Mamba2,d_model->hidden_size,model->backbone
     def __init__(self, config: Mamba2Config, **kwargs):
         super().__init__(config, **kwargs)
-        self.model = Mamba2Model(config)
+        self.backbone = Mamba2Model(config)
         self.classification_head = Mamba2ClassificationHead(
             config.hidden_size,
             config.hidden_size,
@@ -1914,10 +1915,10 @@ class Mamba2ForSequenceClassification(Mamba2PreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.model.embeddings
+        return self.backbone.embeddings
 
     def set_input_embeddings(self, value):
-        self.model.embeddings = value
+        self.backbone.embeddings = value
 
     @add_start_docstrings_to_model_forward(MAMBA2_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=SequenceClassifierOutputWithPast, config_class=_CONFIG_FOR_DOC)
@@ -1925,52 +1926,49 @@ class Mamba2ForSequenceClassification(Mamba2PreTrainedModel):
         output_type=SequenceClassifierOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
     )
+    # Copied from transformers.models.mixtral.modeling_mixtral.MixtralForSequenceClassification.forward with self.num_labels->self.config.num_labels,self.score->self.classification_head,self.model->self.backbone
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[HybridMamba2AttentionDynamicCache] = None,
+        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-    ) -> Union[SequenceClassifierOutputWithPast, Tuple[torch.FloatTensor]]:
+    ) -> Union[Tuple, SequenceClassifierOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss.
-            Indices should be in `[0, ..., config.num_labels - 1]`.
-            If `config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.model(
-            input_ids=input_ids,
+        transformer_outputs = self.backbone(
+            input_ids,
             attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
             position_ids=position_ids,
             past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
-
-        last_hidden_states = outputs[0]
+        hidden_states = transformer_outputs[0]
+        logits = self.classification_head(hidden_states)
 
         if input_ids is not None:
-            batch_size, _ = input_ids.shape[:2]
+            batch_size = input_ids.shape[0]
         else:
-            batch_size, _ = inputs_embeds.shape[:2]
+            batch_size = inputs_embeds.shape[0]
 
-        if self.config.pad_token_id is None and batch_size > 1:
+        if self.config.pad_token_id is None and batch_size != 1:
             raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
-
         if self.config.pad_token_id is None:
             sequence_lengths = -1
         else:
@@ -1978,25 +1976,19 @@ class Mamba2ForSequenceClassification(Mamba2PreTrainedModel):
                 # if no pad token found, use modulo instead of reverse indexing for ONNX compatibility
                 sequence_lengths = torch.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1
                 sequence_lengths = sequence_lengths % input_ids.shape[-1]
-                sequence_lengths = sequence_lengths.to(last_hidden_states.device)
+                sequence_lengths = sequence_lengths.to(logits.device)
             else:
                 sequence_lengths = -1
-                logger.warning(
-                    f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
-                    "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
-                )
 
-        pooled_last_hidden_states = last_hidden_states[
-            torch.arange(batch_size, device=last_hidden_states.device), sequence_lengths
-        ]
-        pooled_logits = self.classification_head(pooled_last_hidden_states)
+        pooled_logits = logits[torch.arange(batch_size, device=logits.device), sequence_lengths]
 
         loss = None
         if labels is not None:
+            labels = labels.to(logits.device)
             if self.config.problem_type is None:
                 if self.config.num_labels == 1:
                     self.config.problem_type = "regression"
-                elif self.config.num_labels > 1 and (labels.dtype in [torch.long, torch.int]):
+                elif self.config.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"
@@ -2013,15 +2005,14 @@ class Mamba2ForSequenceClassification(Mamba2PreTrainedModel):
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(pooled_logits, labels)
-
         if not return_dict:
-            output = (pooled_logits,) + outputs[1:]
+            output = (pooled_logits,) + transformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutputWithPast(
             loss=loss,
             logits=pooled_logits,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            past_key_values=transformer_outputs.past_key_values,
+            hidden_states=transformer_outputs.hidden_states,
+            attentions=transformer_outputs.attentions,
         )
