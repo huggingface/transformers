@@ -738,7 +738,7 @@ class WhisperGenerationMixin:
                 outputs = sequences
 
             if generation_config.return_dict_in_generate:
-                dict_outputs = self._stack_split_outputs(seek_outputs, model_output_type, device=sequences.device)
+                dict_outputs = self._stack_split_outputs(seek_outputs, model_output_type, sequences.device, kwargs)
 
                 if num_return_sequences > 1:
                     if hasattr(dict_outputs, "encoder_attentions") and dict_outputs.encoder_attentions is not None:
@@ -941,7 +941,7 @@ class WhisperGenerationMixin:
 
         return sequence_tokens, seek_outputs
 
-    def _stack_split_outputs(self, seek_outputs, model_output_type, device):
+    def _stack_split_outputs(self, seek_outputs, model_output_type, device, kwargs):
         # Stack back seek_outputs tensors after splitting them with the split_by_batch_index method
         outputs = {}
         for key in seek_outputs[0].keys():
@@ -960,6 +960,7 @@ class WhisperGenerationMixin:
                     for i in range(len(seek_outputs[0][key]))
                 )
             if key == "past_key_values":
+                past_key_value_type = kwargs.get("past_key_values")
                 if seek_outputs[0][key] is not None:
                     outputs[key] = tuple(
                         tuple(
@@ -968,6 +969,8 @@ class WhisperGenerationMixin:
                         )
                         for i in range(len(seek_outputs[0][key]))
                     )
+                    if past_key_value_type is not None:
+                        outputs[key] = past_key_value_type.from_legacy_cache(outputs[key])
                 else:
                     outputs[key] = None
 
