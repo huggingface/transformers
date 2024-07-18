@@ -132,7 +132,7 @@ You will need basic `git` proficiency to contribute to
 manual. Type `git --help` in a shell and enjoy! If you prefer books, [Pro
 Git](https://git-scm.com/book/en/v2) is a very good reference.
 
-You'll need **[Python 3.8](https://github.com/huggingface/transformers/blob/4c040aba02b0283619a06bdc40ecf868508b9e52/setup.py#L449)** or above to contribute to 🤗 Transformers. Follow the steps below to start contributing:
+You'll need **[Python 3.8](https://github.com/huggingface/transformers/blob/main/setup.py#L449)** or above to contribute to 🤗 Transformers. Follow the steps below to start contributing:
 
 1. Fork the [repository](https://github.com/huggingface/transformers) by
    clicking on the **[Fork](https://github.com/huggingface/transformers/fork)** button on the repository's page. This creates a copy of the code
@@ -248,7 +248,7 @@ You'll need **[Python 3.8](https://github.com/huggingface/transformers/blob/4c04
    messages](https://chris.beams.io/posts/git-commit/) to clearly communicate the changes you made!
 
    To keep your copy of the code up to date with the original
-   repository, rebase your branch on `upstream/main` *before* you open a pull request or if requested by a maintainer:
+   repository, rebase your branch on `upstream/branch` *before* you open a pull request or if requested by a maintainer:
 
    ```bash
    git fetch upstream
