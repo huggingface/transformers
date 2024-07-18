@@ -88,7 +88,7 @@ class WhisperProcessor(ProcessorMixin):
         # If segments are present in args, we are performing long-form generation and need to return long form timestamps.
         # The long-form timestamps are already present in segments and should be passed as kwargs to batch_decode.
         if isinstance(args[0], dict) and "segments" in args[0]:
-            kwargs["segments"] = args[0].pop("segments")
+            kwargs["longform_timestamps"] = args[0].pop("segments")
             args = tuple(args[0]["sequences"].unsqueeze(0))
 
         return self.tokenizer.batch_decode(*args, **kwargs)
