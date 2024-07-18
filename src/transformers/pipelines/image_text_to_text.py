@@ -28,8 +28,6 @@ from .base import Pipeline, build_pipeline_init_args
 if is_vision_available():
     from PIL import Image
 
-    from ..image_utils import load_image
-
 
 if is_torch_available():
     from ..models.auto.modeling_auto import MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES

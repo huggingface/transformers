@@ -134,7 +134,7 @@ class ImageToTextPipeline(Pipeline):
                 " of 🤗 Transformers. Use the `image-text-to-text` pipeline instead",
                 FutureWarning,
             )
-            
+
             if not isinstance(prompt, str):
                 raise ValueError(
                     f"Received an invalid text input, got - {type(prompt)} - but expected a single string. "

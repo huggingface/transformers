@@ -726,16 +726,16 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("fuyu", "FuyuForCausalLM"),
         ("git", "GitForCausalLM"),
         ("idefics", "IdeficsForVisionText2Text"),
+        ("idefics2", "Idefics2ForConditionalGeneration"),
         ("instructblip", "InstructBlipForConditionalGeneration"),
         ("kosmos-2", "Kosmos2ForConditionalGeneration"),
         ("llava", "LlavaForConditionalGeneration"),
+        ("llava_next", "LlavaNextForConditionalGeneration"),
+        ("paligemma", "PaliGemmaForConditionalGeneration"),
         ("pix2struct", "Pix2StructForConditionalGeneration"),
         ("udop", "UdopForConditionalGeneration"),
         ("vipllava", "VipLlavaForConditionalGeneration"),
         ("vision-encoder-decoder", "VisionEncoderDecoderModel"),
-        ("idefics2", "Idefics2ForConditionalGeneration"),
-        ("llava_next", "LlavaNextForConditionalGeneration"),
-        ("paligemma", "PaliGemmaForConditionalGeneration"),
     ]
 )
 
