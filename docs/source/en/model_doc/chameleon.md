@@ -69,8 +69,8 @@ import torch
 from PIL import Image
 import requests
 
-processor = ChameleonProcessor.from_pretrained("meta-chameleon")
-model = ChameleonForCausalLM.from_pretrained("meta-chameleon", torch_dtype=torch.float16, device_map="auto") 
+processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
+model = ChameleonForCausalLM.from_pretrained("facebook/chameleon-7b", torch_dtype=torch.float16, device_map="auto") 
 
 # prepare image and text prompt
 url = "https://bjiujitsu.com/wp-content/uploads/2021/01/jiu_jitsu_belt_white_1.jpg"
@@ -94,8 +94,8 @@ import torch
 from PIL import Image
 import requests
 
-processor = ChameleonProcessor.from_pretrained("meta-chameleon")
-model = ChameleonForCausalLM.from_pretrained("meta-chameleon", torch_dtype=torch.float16, device_map="auto") 
+processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
+model = ChameleonForCausalLM.from_pretrained("facebook/chameleon-7b", torch_dtype=torch.float16, device_map="auto") 
 
 # Get three different images
 url = "https://www.ilankelman.org/stopsigns/australia.jpg"
@@ -138,7 +138,7 @@ quantization_config = BitsAndBytesConfig(
     bnb_4bit_compute_dtype=torch.float16,
 )
 
-model = ChameleonForCausalLM.from_pretrained("meta-chameleon", quantization_config=quantization_config, device_map="auto")
+model = ChameleonForCausalLM.from_pretrained("facebook/chameleon-7b", quantization_config=quantization_config, device_map="auto")
 ```
 
 ### Use Flash-Attention 2 and SDPA to further speed-up generation
