@@ -310,10 +310,10 @@ class Mamba2Mixer(nn.Module):
                 hidden_states = self.act(self.conv1d(hidden_states).transpose(1,2))[:, (self.conv_kernel_size - 1):, :]     # [batch, intermediate_size, seq_len]
         else:
             ssm_state = torch.zeros(
-                (batch_size, self.intermediate_size, self.ssm_state_size),
+                (batch_size, self.num_heads, self.head_dim, self.ssm_state_size),
                 device=hidden_states.device, dtype=dtype
             )
-            hidden_states = self.act(self.conv1d(hidden_states.transpose(1,2)).transpose(1,2))[:, -(self.conv_kernel_size - 1):, :]
+            hidden_states = self.act(self.conv1d(hidden_states.transpose(1,2)).transpose(1,2))[:, (self.conv_kernel_size - 1):, :]
 
         # 3. State Space Model sequence transformation
         # 3.a. Selection:  [batch, seq_len, self.time_step_rank + self.ssm_state_size * 2]
