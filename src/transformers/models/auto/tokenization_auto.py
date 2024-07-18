@@ -213,7 +213,6 @@ else:
             ("gptj", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
             ("gptsan-japanese", ("GPTSanJapaneseTokenizer", None)),
             ("grounding-dino", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
-            ("omdet-turbo", ("OmDetTurboTokenizer", "OmDetTurboTokenizerFast" if is_tokenizers_available() else None)),
             ("groupvit", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
             ("herbert", ("HerbertTokenizer", "HerbertTokenizerFast" if is_tokenizers_available() else None)),
             ("hubert", ("Wav2Vec2CTCTokenizer", None)),
@@ -345,6 +344,10 @@ else:
             ),
             ("olmo", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
             ("olmoe", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
+            (
+                "omdet-turbo",
+                ("CLIPTokenizerTokenizer", "CLIPTokenizerTokenizerFast" if is_tokenizers_available() else None),
+            ),
             ("oneformer", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "openai-gpt",

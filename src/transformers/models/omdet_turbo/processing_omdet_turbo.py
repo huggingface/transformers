@@ -18,17 +18,22 @@ Processor class for OmDet-Turbo.
 
 from typing import List, Optional, Tuple, Union
 
-from torchvision.ops.boxes import batched_nms
-
 from ...image_transforms import center_to_corners_format
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
-from ...utils import TensorType, is_torch_available
+from ...utils import (
+    TensorType,
+    is_torch_available,
+    is_torchvision_available,
+)
 
 
 if is_torch_available():
     import torch
+
+if is_torchvision_available():
+    from torchvision.ops.boxes import batched_nms
 
 
 class OmDetTurboProcessor(ProcessorMixin):
@@ -79,7 +84,7 @@ class OmDetTurboProcessor(ProcessorMixin):
     ) -> BatchEncoding:
         """
         This method uses [`OmDetTurboImageProcessor.__call__`] method to prepare image(s) for the model, and
-        [`OmDetTurboTokenizerFast.__call__`] to prepare text for the model.
+        [`CLIPTokenizerFast.__call__`] to prepare text for the model.
 
         Please refer to the docstring of the above two methods for more information.
         """
