@@ -132,7 +132,7 @@ You will need basic `git` proficiency to contribute to
 manual. Type `git --help` in a shell and enjoy! If you prefer books, [Pro
 Git](https://git-scm.com/book/en/v2) is a very good reference.
 
-You'll need **[Python 3.8](https://github.com/huggingface/transformers/blob/main/setup.py#L426)** or above to contribute to 🤗 Transformers. Follow the steps below to start contributing:
+You'll need **[Python 3.8](https://github.com/huggingface/transformers/blob/4c040aba02b0283619a06bdc40ecf868508b9e52/setup.py#L449)** or above to contribute to 🤗 Transformers. Follow the steps below to start contributing:
 
 1. Fork the [repository](https://github.com/huggingface/transformers) by
    clicking on the **[Fork](https://github.com/huggingface/transformers/fork)** button on the repository's page. This creates a copy of the code
@@ -248,7 +248,7 @@ You'll need **[Python 3.8](https://github.com/huggingface/transformers/blob/main
    messages](https://chris.beams.io/posts/git-commit/) to clearly communicate the changes you made!
 
    To keep your copy of the code up to date with the original
-   repository, rebase your branch on `upstream/branch` *before* you open a pull request or if requested by a maintainer:
+   repository, rebase your branch on `upstream/main` *before* you open a pull request or if requested by a maintainer:
 
    ```bash
    git fetch upstream
@@ -341,12 +341,12 @@ RUN_SLOW=yes python -m pytest -n auto --dist=loadfile -s -v ./tests/models/my_ne
 RUN_SLOW=yes python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/text-classification
 ```
 
-Like the slow tests, there are other environment variables available which not enabled by default during testing:
+Like the slow tests, there are other environment variables available which are not enabled by default during testing:
 - `RUN_CUSTOM_TOKENIZERS`: Enables tests for custom tokenizers.
 - `RUN_PT_FLAX_CROSS_TESTS`: Enables tests for PyTorch + Flax integration.
 - `RUN_PT_TF_CROSS_TESTS`: Enables tests for TensorFlow + PyTorch integration.
 
-More environment variables and additional information can be found in the [testing_utils.py](src/transformers/testing_utils.py).
+More environment variables and additional information can be found in the [testing_utils.py](https://github.com/huggingface/transformers/blob/main/src/transformers/testing_utils.py).
 
 🤗 Transformers uses `pytest` as a test runner only. It doesn't use any
 `pytest`-specific features in the test suite itself.
