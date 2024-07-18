@@ -2422,7 +2422,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             obj.pop("__type")
             return AddedToken(**obj)
         if isinstance(obj, AddedToken) and save:
-            obj = obj.__getstate__()
+            obj = obj.__getstate__().copy() # We need to copy this since `pop` modifies internal state.
             if add_type_field:
                 obj["__type"] = "AddedToken"
             else:
