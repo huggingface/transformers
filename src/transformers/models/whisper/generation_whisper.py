@@ -928,7 +928,7 @@ class WhisperGenerationMixin:
                     # we don't save `past_key_values` as this is too costly for longform
                     return None
                 else:
-                    return tuple(tuple(w[batch_idx][None].cpu() for w in v) for v in values)
+                    return tuple(tuple(w[batch_idx][None].cpu() for w in values[v]) for v in range(len(values)))
 
             return values[batch_idx].cpu()
 
