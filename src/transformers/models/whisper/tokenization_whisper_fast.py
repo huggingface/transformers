@@ -374,8 +374,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         # retrieve offsets
         if output_offsets:
             segments = kwargs.get("segments")
-
-            offsets = self._compute_offsets(token_ids, time_precision=time_precision, segments=segments)
+            offsets = self._compute_offsets(token_ids, time_precision=time_precision, longform_timestamps=segments)
 
             return {"text": text, "offsets": offsets}
         return text
