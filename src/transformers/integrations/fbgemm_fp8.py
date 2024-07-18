@@ -46,17 +46,21 @@ class FbgemmFp8Linear(torch.nn.Module):
 
     def forward(self, x):
         num_tokens = None
-        # need to move the device afterwards because after quantization, it returns the result not on the same deice :
+        # x_quantized and x_scale are not necessarily on the same device as x, this is an issue.
         # https://github.com/pytorch/FBGEMM/blob/e08af8539c391437f447173863df0f3f6f6f1855/fbgemm_gpu/experimental/gen_ai/src/quantize/quantize.cu#L1237C3-L1237C45
         x_quantized, x_scale = torch.ops.fbgemm.quantize_fp8_per_row(
             x.view(-1, x.shape[-1]), num_tokens, self.input_scale_ub
         )
-        x_quantized, x_scale = x_quantized.to(x.device), x_scale.to(x.device)
+        # moving x_quantized, x_scale here creates glibberish output ... However, if we move the output, it works
+        # x_quantized, x_scale = x_quantized.to(x.device), x_scale.to(x.device)
+
+        # The computation still happens on the device where self.weight is even if x_quantized is not on the same device as self.weight
         output = torch.ops.fbgemm.f8f8bf16_rowwise(
             x_quantized, self.weight, x_scale, self.weight_scale, use_fast_accum=True
         )
-        print(output)
         output = output + self.bias if self.bias is not None else output
+        # Hacky for now, we have the output to the device of x
+        output = output.to(x.device)
         del x_quantized, x_scale
         return output
 

@@ -126,7 +126,7 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
         Quantizes weights into weight and weight_scale
         """
         new_value, weight_scale = torch.ops.fbgemm.quantize_fp8_per_row(param_value)
-        
+
         module, tensor_name = get_module_from_name(model, param_name)
         module._buffers[tensor_name] = new_value.to(target_device)
         # to have the right output shape -> (out_features, 1)
