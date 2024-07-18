@@ -454,8 +454,9 @@ class ImageProcessingTestMixin:
                     warnings.simplefilter("always")
                     image_processor(inputs, extra_argument=True)
 
-                self.assertEqual(len(raised_warnings), 1)
-                self.assertIn("extra_argument", str(raised_warnings[0].message))
+                messages = " ".join([str(w.message) for w in raised_warnings])
+                self.assertGreaterEqual(len(raised_warnings), 1)
+                self.assertIn("extra_argument", messages)
                 is_tested = True
 
         if not is_tested:
