@@ -3791,6 +3791,7 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
         max_steps = math.ceil(trainer.args.num_train_epochs * len(trainer.get_train_dataloader()))
         nb_expected_commits = len(range(5, max_steps, 5))
 
+        # '>=' since final commit might be an empty commit as well (not deterministic)
         self.assertGreaterEqual(nb_empty_commits + nb_epoch_commits, nb_expected_commits)
 
     @require_tensorboard
