@@ -453,3 +453,31 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
             self.processor.decode(output_batched[0], skip_special_tokens=True),
             self.processor.decode(output_single[0], skip_special_tokens=True),
         )
+
+    @slow
+    @require_bitsandbytes
+    def test_expansion_in_processing(self):
+        model_id = "llava-hf/LLaVA-NeXT-Video-7B-hf"
+        model = LlavaNextVideoForConditionalGeneration.from_pretrained(
+            "llava-hf/LLaVA-NeXT-Video-7B-hf", load_in_4bit=True
+        )
+        processor = AutoProcessor.from_pretrained(model_id)
+
+        # check processing with expansion of inputs
+        processor.vision_feature_select_strategy = "default"
+        processor.patch_size = 14
+        inputs_expanded = processor(self.prompt_video, videos=[self.video], return_tensors="pt").to(torch_device)
+        self.assertTrue(inputs_expanded.input_ids.shape[-1] == 1170)
+
+        # check processing without expansion of inputs (legacy behavior)
+        processor.vision_feature_select_strategy = None
+        processor.patch_size = None
+        inputs = processor(self.prompt_video, videos=[self.video], return_tensors="pt").to(torch_device)
+        self.assertTrue(inputs.input_ids.shape[-1] == 19)
+
+        # generate exactly 20 tokens
+        output = model.generate(**inputs, min_new_tokens=20, max_new_tokens=20)
+        output_expanded = model.generate(**inputs_expanded, min_new_tokens=20, max_new_tokens=20)
+
+        # check that both inputs are handled correctly and generate the same output
+        self.assertListEqual(output_expanded[:, -20:].tolist(), output[:, -20:].tolist())
