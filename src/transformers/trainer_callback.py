@@ -619,7 +619,7 @@ class ProgressCallback(TrainerCallback):
             # make a shallow copy of logs so we can mutate the fields copied
             # but avoid doing any value pickling.
             shallow_logs = {}
-            for k,v in logs.items():
+            for k, v in logs.items():
                 shallow_logs[k] = v
             _ = shallow_logs.pop("total_flos", None)
             # round numbers so that it looks better in console
