@@ -45,10 +45,10 @@ class LlavaProcessor(ProcessorMixin):
         vision_feature_select_strategy (`str`, *optional*):
             The feature selection strategy used to select the vision feature from the vision backbone.
             Shoudl be same as in model's config
-        image_token (`str`, *optional*, defaults to `"<image>"`):
-            Special token used to denote image location.
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
+        image_token (`str`, *optional*, defaults to `"<image>"`):
+            Special token used to denote image location.
     """
 
     attributes = ["image_processor", "tokenizer"]

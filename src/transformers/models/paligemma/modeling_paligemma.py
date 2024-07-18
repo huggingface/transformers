@@ -414,7 +414,8 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
                     f"Got {image_tokens_in_text} image tokens in the text but {image_features.shape[0] * image_features.shape[1]} "
                     "tokens from image embeddings."
                 )
-            inputs_embeds[special_image_mask] = image_features.flatten()
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         causal_mask = self._update_causal_mask(
             attention_mask, token_type_ids, inputs_embeds, cache_position, is_training
