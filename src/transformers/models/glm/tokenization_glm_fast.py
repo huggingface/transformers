@@ -22,21 +22,18 @@ from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
 from .tokenization_glm import GLMTokenizer
 
-
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {
-    "vocab_file": "tokenizer.model",
-    "tokenizer_file": "tokenizer_config.json",
+    "vocab_file": "vocab.json",
+    "merges_file": "merges.txt",
+    "tokenizer_file": "tokenizer.json",
 }
-
-
-MAX_MODEL_INPUT_SIZES = {"THUDM/glm-tokenizer": 128000}
 
 
 class GLMTokenizerFast(PreTrainedTokenizerFast):
     """
-    Construct a "fast" GLM tokenizer (backed by HuggingFace's *tokenizers* library). Based on byte-level
+    Construct a "fast" Qwen2 tokenizer (backed by HuggingFace's *tokenizers* library). Based on byte-level
     Byte-Pair-Encoding.
 
     Same with GPT2Tokenizer, this tokenizer has been trained to treat spaces like parts of the tokens so a word will
@@ -45,7 +42,7 @@ class GLMTokenizerFast(PreTrainedTokenizerFast):
     ```python
     >>> from transformers import GLMTokenizerFast
 
-    >>> tokenizer = GLMTokenizerFast.from_pretrained("THUDM/glm-4-9b-chat")
+    >>> tokenizer = GLMTokenizer.from_pretrained("THUDM/GLM-tokenizer")
     >>> tokenizer("Hello world")["input_ids"]
     [9703, 1879]
 
@@ -81,15 +78,15 @@ class GLMTokenizerFast(PreTrainedTokenizerFast):
     slow_tokenizer_class = GLMTokenizer
 
     def __init__(
-        self,
-        vocab_file=None,
-        merges_file=None,
-        tokenizer_file=None,
-        unk_token="<|endoftext|>",
-        bos_token=None,
-        eos_token="<|endoftext|>",
-        pad_token="<|endoftext|>",
-        **kwargs,
+            self,
+            vocab_file=None,
+            merges_file=None,
+            tokenizer_file=None,
+            unk_token="<|endoftext|>",
+            bos_token=None,
+            eos_token="<|endoftext|>",
+            pad_token="<|endoftext|>",
+            **kwargs,
     ):
         # We need to at least pass vocab_file and merges_file to base class
         # in case a slow tokenizer needs to be initialized; other can be

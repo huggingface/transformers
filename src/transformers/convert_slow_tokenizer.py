@@ -371,57 +371,45 @@ class GPT2Converter(Converter):
 
 
 class GLMConverter(Converter):
+    def converted(self, vocab: Dict[str, int] = None, merges: List[Tuple[str, str]] = None) -> Tokenizer:
+        if not vocab:
+            vocab = self.original_tokenizer.encoder
+        if not merges:
+            merges = list(self.original_tokenizer.bpe_ranks.keys())
 
-    def extract_vocab_merges_from_model(self, tiktoken_url: str):
-        try:
-            from tiktoken.load import load_tiktoken_bpe
-        except Exception:
-            raise ValueError(
-                "`tiktoken` is required to read a `tiktoken` file. Install it with " "`pip install tiktoken`."
+        tokenizer = Tokenizer(
+            BPE(
+                vocab=vocab,
+                merges=merges,
+                dropout=None,
+                unk_token=None,
+                continuing_subword_prefix="",
+                end_of_word_suffix="",
+                fuse_unk=False,
+                byte_fallback=False,
             )
+        )
 
-        bpe_ranks = load_tiktoken_bpe(tiktoken_url)
-        byte_encoder = bytes_to_unicode()
-
-        def token_bytes_to_string(b):
-            return "".join([byte_encoder[ord(char)] for char in b.decode("latin-1")])
-
-        merges = []
-        vocab = {}
-        for token, rank in bpe_ranks.items():
-            vocab[token_bytes_to_string(token)] = rank
-            if len(token) == 1:
-                continue
-            local = []
-            for index in range(1, len(token)):
-                piece_l, piece_r = token[:index], token[index:]
-                if piece_l in bpe_ranks and piece_r in bpe_ranks and (piece_l + piece_r) in bpe_ranks:
-                    local.append((piece_l, piece_r, rank))
-            local = sorted(local, key=lambda x: (bpe_ranks[x[0]], bpe_ranks[x[1]]), reverse=False)
-            merges.extend(local)
-        merges = sorted(merges, key=lambda val: val[2], reverse=False)
-        merges = [(token_bytes_to_string(val[0]), token_bytes_to_string(val[1])) for val in merges]
-        return vocab, merges
-
-    def tokenizer(self):
-        self.vocab_file = self.original_tokenizer.vocab_file
-        vocab_scores, merges = self.extract_vocab_merges_from_model(self.vocab_file)
-        tokenizer = Tokenizer(BPE(vocab_scores, merges, fuse_unk=False))
-        if hasattr(tokenizer.model, "ignore_merges"):
-            tokenizer.model.ignore_merges = True
-        return tokenizer
-
-    def converted(self) -> Tokenizer:
-        tokenizer = self.tokenizer()
-        self.pattern = "(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\\r\\n\\p{L}\\p{N}]?\\p{L}+|\\p{N}{1,3}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+"
+        tokenizer.normalizer = normalizers.NFC()
         tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
             [
-                pre_tokenizers.Split(Regex(self.pattern), behavior="isolated", invert=False),
-                pre_tokenizers.ByteLevel(add_prefix_space=False, use_regex=False),
+                pre_tokenizers.Split(
+                    Regex(
+                        r"""(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\\r\\n\\p{L}\\p{N}]?\\p{L}+|\\p{N}{1,3}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+"""
+                    ),
+                    behavior="isolated",
+                    invert=False,
+                ),
+                pre_tokenizers.ByteLevel(
+                    add_prefix_space=getattr(self.original_tokenizer, "add_prefix_space", False),
+                    use_regex=False,
+                ),
             ]
         )
+
         tokenizer.decoder = decoders.ByteLevel()
         tokenizer.post_processor = processors.ByteLevel(trim_offsets=False)
+
         return tokenizer
 
 
