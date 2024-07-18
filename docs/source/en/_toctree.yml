@@ -326,6 +326,8 @@
         title: CamemBERT
       - local: model_doc/canine
         title: CANINE
+      - local: model_doc/chameleon
+        title: chameleon
       - local: model_doc/codegen
         title: CodeGen
       - local: model_doc/code_llama
@@ -382,6 +384,8 @@
         title: Fuyu
       - local: model_doc/gemma
         title: Gemma
+      - local: model_doc/gemma2
+        title: Gemma2
       - local: model_doc/openai-gpt
         title: GPT
       - local: model_doc/gpt_neo
@@ -579,6 +583,8 @@
         title: DeiT
       - local: model_doc/depth_anything
         title: Depth Anything
+      - local: model_doc/depth_anything_v2
+        title: Depth Anything V2
       - local: model_doc/deta
         title: DETA
       - local: model_doc/detr
@@ -599,6 +605,8 @@
         title: FocalNet
       - local: model_doc/glpn
         title: GLPN
+      - local: model_doc/hiera
+        title: Hiera
       - local: model_doc/imagegpt
         title: ImageGPT
       - local: model_doc/levit
@@ -663,6 +671,8 @@
         title: ViTMSN
       - local: model_doc/yolos
         title: YOLOS
+      - local: model_doc/zoedepth
+        title: ZoeDepth
       title: Vision models
     - isExpanded: false
       sections:
@@ -674,6 +684,8 @@
         title: CLAP
       - local: model_doc/encodec
         title: EnCodec
+      - local: model_doc/hiera
+        title: Hiera
       - local: model_doc/hubert
         title: Hubert
       - local: model_doc/mctct
@@ -776,6 +788,8 @@
         title: Idefics2
       - local: model_doc/instructblip
         title: InstructBLIP
+      - local: model_doc/instructblipvideo
+        title: InstructBlipVideo
       - local: model_doc/kosmos-2
         title: KOSMOS-2
       - local: model_doc/layoutlm
@@ -792,6 +806,8 @@
         title: Llava
       - local: model_doc/llava_next
         title: LLaVA-NeXT
+      - local: model_doc/llava-next-video
+        title: LLaVa-NeXT-Video
       - local: model_doc/lxmert
         title: LXMERT
       - local: model_doc/matcha

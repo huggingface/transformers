@@ -18,6 +18,7 @@ import json
 import pathlib
 import unittest
 
+import numpy as np
 from parameterized import parameterized
 
 from transformers.testing_utils import require_torch, require_vision, slow
@@ -89,6 +90,8 @@ class YolosImageProcessingTester(unittest.TestCase):
             image = image_inputs[0]
             if isinstance(image, Image.Image):
                 width, height = image.size
+            elif isinstance(image, np.ndarray):
+                height, width = image.shape[0], image.shape[1]
             else:
                 height, width = image.shape[1], image.shape[2]
 

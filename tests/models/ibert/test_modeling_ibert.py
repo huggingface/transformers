@@ -379,7 +379,7 @@ class IBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 model(**inputs)[0]
 
-    @unittest.skip("ibert overrides scaling to None if inputs_embeds")
+    @unittest.skip(reason="ibert overrides scaling to None if inputs_embeds")
     def test_inputs_embeds_matches_input_ids(self):
         pass
 

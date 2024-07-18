@@ -79,11 +79,11 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertListEqual(rust_tokens, tokens_target)
 
-    @unittest.skip("There is an inconsistency between slow and fast tokenizer due to a bug in the fast one.")
+    @unittest.skip(reason="There is an inconsistency between slow and fast tokenizer due to a bug in the fast one.")
     def test_sentencepiece_tokenize_and_convert_tokens_to_string(self):
         pass
 
-    @unittest.skip("There is an inconsistency between slow and fast tokenizer due to a bug in the fast one.")
+    @unittest.skip(reason="There is an inconsistency between slow and fast tokenizer due to a bug in the fast one.")
     def test_sentencepiece_tokenize_and_decode(self):
         pass
 
