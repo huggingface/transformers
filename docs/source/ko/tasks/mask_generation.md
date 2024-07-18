@@ -14,39 +14,37 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Mask Generation
+# 마스크 생성[[mask-generation]]
 
-Mask generation is the task of generating semantically meaningful masks for an image. 
-This task is very similar to [image segmentation](semantic_segmentation), but many differences exist. Image segmentation models are trained on labeled datasets and are limited to the classes they have seen during training; they return a set of masks and corresponding classes, given an image. 
+마스크 생성(Mask generation)은 이미지에 대해 의미 있는 마스크를 생성하는 작업입니다. 
+이 작업은 [이미지 분할](semantic_segmentation)과 매우 유사하지만, 많은 차이점이 있습니다. 이미지 분할 모델은 라벨이 달린 데이터셋으로 학습되며, 학습 중에 본 클래스들로만 제한됩니다. 이미지가 주어지면, 해당 모델은 여러 마스크와 그에 대응하는 클래스를 반환합니다. 
 
-Mask generation models are trained on large amounts of data and operate in two modes. 
-- Prompting mode: In this mode, the model takes in an image and a prompt, where a prompt can be a 2D point location (XY coordinates) in the image within an object or a bounding box surrounding an object. In prompting mode, the model only returns the mask over the object 
-that the prompt is pointing out. 
-- Segment Everything mode: In segment everything, given an image, the model generates every mask in the image. To do so, a grid of points is generated and overlaid on the image for inference. 
+반면, 마스크 생성 모델은 대량의 데이터로 학습되며 두 가지 모드로 작동합니다.
+- 프롬프트 모드(Prompting mode): 이 모드에서는 모델이 이미지와 프롬프트를 입력받습니다. 프롬프트는 이미지 내 객체의 2D 위치(XY 좌표)나 객체를 둘러싼 경계 상자(bounding box)가 될 수 있습니다. 프롬프트 모드에서는 모델이 프롬프트가 가리키는 객체의 마스크만 반환합니다.
+- 모든 것 분할 모드(Segment Everything mode): 이 모드에서는 주어진 이미지 내 모든 마스크를 생성합니다. 이를 위해 그리드 형태의 점들을 생성하고 이를 이미지에 오버레이하여 추론합니다.
 
-Mask generation task is supported by [Segment Anything Model (SAM)](model_doc/sam). It's a powerful model that consists of a Vision Transformer-based image encoder, a prompt encoder, and a two-way transformer mask decoder. Images and prompts are encoded, and the decoder takes these embeddings and generates valid masks. 
+마스크 생성 작업은 [Segment Anything Model (SAM)](model_doc/sam)에 의해 지원됩니다. SAM은 Vision Transformer 기반 이미지 인코더, 프롬프트 인코더, 그리고 양방향 트랜스포머 마스크 디코더로 구성된 강력한 모델입니다. 이미지와 프롬프트는 인코딩되고, 디코더는 이러한 임베딩을 받아 유효한 마스크를 생성합니다.
 
 <div class="flex justify-center">
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/sam.png" alt="SAM Architecture"/>
 </div>
 
-SAM serves as a powerful foundation model for segmentation as it has large data coverage. It is trained on 
-[SA-1B](https://ai.meta.com/datasets/segment-anything/), a dataset with 1 million images and 1.1 billion masks. 
+SAM은 대규모 데이터 커버리지를 가지고 있어 분할(segmentation)의 강력한 기초 모델로 작동합니다. 1백만 개의 이미지와 11억 개의 마스크를 포함한 [SA-1B](https://ai.meta.com/datasets/segment-anything/) 데이터셋으로 학습되었습니다.
 
-In this guide, you will learn how to:
-- Infer in segment everything mode with batching,
-- Infer in point prompting mode,
-- Infer in box prompting mode.
+이 가이드에서는 다음과 같은 내용을 배우게 됩니다:
+- 배칭(batch)과 함께 모두 분할 모드에서 추론하는 방법
+- 포인트 프롬프트 모드에서 추론하는 방법
+- 박스 프롬프트 모드에서 추론하는 방법
 
-First, let's install `transformers`:
+먼저, `transformers`를 설치해 봅시다! :
 
 ```bash
 pip install -q transformers
 ```
 
-## Mask Generation Pipeline
+## 마스크 생성 파이프라인[[mask-generation-pipeline]]
 
-The easiest way to infer mask generation models is to use the `mask-generation` pipeline.
+마스크 생성 모델로 추론하는 가장 쉬운 방법은 `mask-generation` 파이프라인을 사용하는 것입니다.
 
 ```python
 >>> from transformers import pipeline
@@ -55,7 +53,7 @@ The easiest way to infer mask generation models is to use the `mask-generation` 
 >>> mask_generator = pipeline(model=checkpoint, task="mask-generation")
 ```
 
-Let's see the image.
+한 이미지를 예시로 볼까요?
 
 ```python
 from PIL import Image
@@ -69,13 +67,13 @@ image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg" alt="Example Image"/>
 </div>
 
-Let's segment everything. `points-per-batch` enables parallel inference of points in segment everything mode. This enables faster inference, but consumes more memory. Moreover, SAM only enables batching over points and not the images. `pred_iou_thresh` is the IoU confidence threshold where only the masks above that certain threshold are returned.
+모든 것을 분할 해봅시다. `points-per-batch`는 모든 것 분할 모드에서 점들의 병렬 추론을 가능하게 합니다. 이를 통해 추론 속도가 빨라지지만, 더 많은 메모리를 소모하게 됩니다. 또한, SAM은 이미지가 아닌 점들에 대해서만 배칭을 지원합니다. `pred_iou_thresh`는 IoU 신뢰도 임계값으로, 이 임계값을 초과하는 마스크만 반환됩니다.
 
 ```python
 masks = mask_generator(image, points_per_batch=128, pred_iou_thresh=0.88)
 ```
 
-The `masks` looks like the following:
+`masks` 는 다음과 같이 생겼습니다.:
 
 ```bash
 {'masks': [array([[False, False, False, ...,  True,  True,  True],
@@ -94,7 +92,7 @@ The `masks` looks like the following:
 }
 ```
 
-We can visualize them like this:
+우리는 위 내용을 다음과 같이 시각화 할 수 있습니다.:
 
 ```python
 import matplotlib.pyplot as plt
@@ -108,19 +106,17 @@ plt.axis('off')
 plt.show()
 ```
 
-Below is the original image in grayscale with colorful maps overlaid. Very impressive.
+아래는 회색조(grayscale) 원본 이미지에 보라빛 맵이 오버레이된 모습입니다. 매우 인상적이지 않나요?
 
 <div class="flex justify-center">
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee_segmented.png" alt="Visualized"/>
 </div>
 
+## 모델 추론[[model-inference]]
 
-## Model Inference
+### 포인트 프롬프팅[[point-prompting]]
 
-### Point Prompting
-
-You can also use the model without the pipeline. To do so, initialize the model and
-the processor.
+당신은 모델을 파이프라인 없이도 사용할 수 있습니다. 이를 위해 모델과 프로세서를 초기화하세요.
 
 ```python
 from transformers import SamModel, SamProcessor
@@ -132,10 +128,7 @@ model = SamModel.from_pretrained("facebook/sam-vit-base").to(device)
 processor = SamProcessor.from_pretrained("facebook/sam-vit-base")
 ```
 
-To do point prompting, pass the input point to the processor, then take the processor output
-and pass it to the model for inference. To post-process the model output, pass the outputs and
-`original_sizes` and `reshaped_input_sizes` we take from the processor's initial output. We need to pass these 
-since the processor resizes the image, and the output needs to be extrapolated.
+포인트 프롬프트를 수행하려면, 입력 포인트를 프로세서에 전달한 다음, 프로세서 출력을 받아 모델에 추론을 위해 전달합니다. 모델 출력을 후처리(post-process)하려면, 출력과 함께 프로세서의 초기 출력에서 가져온 `original_sizes`와 r`reshaped_input_sizes`를 전달해야 합니다. 왜냐하면 프로세서가 이미지 크기를 리사이즈하고 출력을 추정해야 하기 때문입니다.
 
 ```python
 input_points = [[[2592, 1728]]] # point location of the bee
@@ -145,7 +138,8 @@ with torch.no_grad():
     outputs = model(**inputs)
 masks = processor.image_processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"].cpu(), inputs["reshaped_input_sizes"].cpu())
 ```
-We can visualize the three masks in the `masks` output.
+
+우리는 `masks` 출력에서 세 가지 마스크를 시각화할 수 있습니다.
 
 ```python
 import matplotlib.pyplot as plt
@@ -163,7 +157,7 @@ for i, mask in enumerate(mask_list, start=1):
     overlayed_image[:,:,0] = np.where(mask == 1, 255, overlayed_image[:,:,0])
     overlayed_image[:,:,1] = np.where(mask == 1, 0, overlayed_image[:,:,1])
     overlayed_image[:,:,2] = np.where(mask == 1, 0, overlayed_image[:,:,2])
-    
+
     axes[i].imshow(overlayed_image)
     axes[i].set_title(f'Mask {i}')
 for ax in axes:
@@ -176,12 +170,9 @@ plt.show()
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/masks.png" alt="Visualized"/>
 </div>
 
-### Box Prompting
+### 박스 프롬프팅[[box-prompting]]
 
-You can also do box prompting in a similar fashion to point prompting. You can simply pass the input box in the format of a list
-`[x_min, y_min, x_max, y_max]` format along with the image to the `processor`. Take the processor output and directly pass it 
-to the model, then post-process the output again.
-
+박스 프롬프트도 포인트 프롬프트와 유사한 방식으로 사용할 수 있습니다. 입력 박스를 `[x_min, y_min, x_max, y_max]` 형식의 리스트로 작성하여 이미지와 함께 `processor`에 전달할 수 있습니다. 프로세서 출력을 받아 모델에 직접 전달한 후, 다시 출력을 후처리(post-process)하세요.
 
 ```python
 # bounding box around the bee
@@ -203,7 +194,7 @@ mask = processor.image_processor.post_process_masks(
 )[0][0][0].numpy()
 ```
 
-You can visualize the bounding box around the bee as shown below.
+당신은 아래와 같이, 벌 주위에 경계 상자를 시각화할 수 있습니다.
 
 ```python
 import matplotlib.patches as patches
@@ -221,7 +212,7 @@ plt.show()
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/bbox.png" alt="Visualized Bbox"/>
 </div>
 
-You can see the inference output below. 
+이제 당신은 추론 결과를 확인할 수 있습니다.
 
 ```python
 fig, ax = plt.subplots()
@@ -235,4 +226,3 @@ plt.show()
 <div class="flex justify-center">
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/box_inference.png" alt="Visualized Inference"/>
 </div>
-
