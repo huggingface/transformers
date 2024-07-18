@@ -7032,7 +7032,7 @@ if TYPE_CHECKING:
             Mamba2ForCausalLM,
             Mamba2ForSequenceClassification,
             Mamba2Model,
-            Mamba2PreTrainedModel
+            Mamba2PreTrainedModel,
         )
         from .models.marian import MarianForCausalLM, MarianModel, MarianMTModel
         from .models.markuplm import (

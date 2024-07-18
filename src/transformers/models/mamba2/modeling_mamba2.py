@@ -34,7 +34,6 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
-    ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -78,7 +77,7 @@ is_fast_path_available = all(
 )
 
 
-_CHECKPOINT_FOR_DOC = "state-spaces/mamba2-130m"
+# TODO: checkpoint for doc
 _CONFIG_FOR_DOC = "MambaConfig"
 
 
@@ -1511,7 +1510,6 @@ class Mamba2Model(Mamba2PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(MAMBA2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1794,7 +1792,6 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(MAMBA2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1860,28 +1857,29 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel):
         )
 
 
+# Copied from transformers.models.bart.modeling_bart.BartClassificationHead with Bart->Mamba2, torch.tanh->F.silu
 class Mamba2ClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 
-    def __init__(self, config):
-        """Initialize the head."""
+    def __init__(
+        self,
+        input_dim: int,
+        inner_dim: int,
+        num_classes: int,
+        pooler_dropout: float,
+    ):
         super().__init__()
-        self.activation = ACT2FN[config.hidden_act]
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.dropout = nn.Dropout(config.classifier_dropout)
-        self.out_proj = nn.Linear(config.hidden_size, config.num_labels)
+        self.dense = nn.Linear(input_dim, inner_dim)
+        self.dropout = nn.Dropout(p=pooler_dropout)
+        self.out_proj = nn.Linear(inner_dim, num_classes)
 
-        self.config = config
-
-    def forward(self, inputs, **kwargs):
-        """Forward pass."""
-        # Pooling is done by the forward pass in `Mamba2ForSequenceClassification`
-        hidden_states = self.dropout(inputs)
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.activation(hidden_states)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dropout(hidden_states)
-
-        return self.out_proj(hidden_states)
+        hidden_states = self.dense(hidden_states)
+        hidden_states = F.silu(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.out_proj(hidden_states)
+        return hidden_states
 
 
 @add_start_docstrings(
@@ -1901,20 +1899,29 @@ class Mamba2ClassificationHead(nn.Module):
     MAMBA2_START_DOCSTRING,
 )
 class Mamba2ForSequenceClassification(Mamba2PreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-        self.num_labels = config.num_labels
-        self.config = config
-        self.backbone = Mamba2Model(config)
-        self.classifier = Mamba2ClassificationHead(config)
+    # Copied from transformers.models.bart.modeling_bart.BartForSequenceClassification.__init__ with Bart->Mamba2, d_model->hidden_size
+    def __init__(self, config: Mamba2Config, **kwargs):
+        super().__init__(config, **kwargs)
+        self.model = Mamba2Model(config)
+        self.classification_head = Mamba2ClassificationHead(
+            config.hidden_size,
+            config.hidden_size,
+            config.num_labels,
+            config.classifier_dropout,
+        )
 
         # Initialize weights and apply final processing
         self.post_init()
 
+    def get_input_embeddings(self):
+        return self.model.embeddings
+
+    def set_input_embeddings(self, value):
+        self.model.embeddings = value
+
     @add_start_docstrings_to_model_forward(MAMBA2_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=SequenceClassifierOutputWithPast, config_class=_CONFIG_FOR_DOC)
     @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1941,7 +1948,7 @@ class Mamba2ForSequenceClassification(Mamba2PreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.backbone(
+        outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
@@ -1982,27 +1989,27 @@ class Mamba2ForSequenceClassification(Mamba2PreTrainedModel):
         pooled_last_hidden_states = last_hidden_states[
             torch.arange(batch_size, device=last_hidden_states.device), sequence_lengths
         ]
-        pooled_logits = self.classifier(pooled_last_hidden_states)
+        pooled_logits = self.classification_head(pooled_last_hidden_states)
 
         loss = None
         if labels is not None:
             if self.config.problem_type is None:
-                if self.num_labels == 1:
+                if self.config.num_labels == 1:
                     self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype in [torch.long, torch.int]):
+                elif self.config.num_labels > 1 and (labels.dtype in [torch.long, torch.int]):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"
 
             if self.config.problem_type == "regression":
                 loss_fct = MSELoss()
-                if self.num_labels == 1:
+                if self.config.num_labels == 1:
                     loss = loss_fct(pooled_logits.squeeze(), labels.squeeze())
                 else:
                     loss = loss_fct(pooled_logits, labels)
             elif self.config.problem_type == "single_label_classification":
                 loss_fct = CrossEntropyLoss()
-                loss = loss_fct(pooled_logits.view(-1, self.num_labels), labels.view(-1))
+                loss = loss_fct(pooled_logits.view(-1, self.config.num_labels), labels.view(-1))
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(pooled_logits, labels)
