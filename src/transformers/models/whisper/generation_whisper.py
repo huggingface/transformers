@@ -936,10 +936,9 @@ class WhisperGenerationMixin:
 
         sequence_tokens = seek_outputs["sequences"]
 
-        if hasattr(seek_outputs, "past_key_values") and isinstance(
-            seek_outputs["past_key_values"], EncoderDecoderCache
-        ):
-            seek_outputs["past_key_values"] = seek_outputs["past_key_values"].to_legacy_cache()
+        if hasattr(seek_outputs, "past_key_values") and seek_outputs.past_key_values is not None:
+            if isinstance(seek_outputs["past_key_values"], EncoderDecoderCache):
+                seek_outputs.past_key_values = seek_outputs.past_key_values.to_legacy_cache()
 
         seek_outputs = [
             {k: split_by_batch_index(v, k, i, is_shortform) for k, v in seek_outputs.items()}
