@@ -863,7 +863,7 @@ def _load_state_dict_into_meta_model(
 
         # We convert floating dtypes to the `dtype` passed. We want to keep the buffers/params
         # in int/uint/bool and not cast them.
-        if dtype is not None and torch.is_floating_point(param):
+        if dtype is not None and torch.is_floating_point(param) and param.dtype != torch.float8_e4m3fn:
             if (
                 keep_in_fp32_modules is not None
                 and any(
@@ -889,7 +889,6 @@ def _load_state_dict_into_meta_model(
             old_param = getattr(old_param, split)
             if old_param is None:
                 break
-
         if old_param is not None:
             if dtype is None:
                 param = param.to(old_param.dtype)
@@ -4097,7 +4096,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if cls._keys_to_ignore_on_load_unexpected is not None:
             for pat in cls._keys_to_ignore_on_load_unexpected:
                 unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
-
         if hf_quantizer is not None:
             missing_keys = hf_quantizer.update_missing_keys(model, missing_keys, prefix)
 

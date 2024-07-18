@@ -20,6 +20,7 @@ from ..utils.quantization_config import (
     AwqConfig,
     BitsAndBytesConfig,
     EetqConfig,
+    FbgemmFp8Config,
     GPTQConfig,
     HqqConfig,
     QuantizationConfigMixin,
@@ -31,6 +32,7 @@ from .quantizer_awq import AwqQuantizer
 from .quantizer_bnb_4bit import Bnb4BitHfQuantizer
 from .quantizer_bnb_8bit import Bnb8BitHfQuantizer
 from .quantizer_eetq import EetqHfQuantizer
+from .quantizer_fbgemm_fp8 import FbgemmFp8HfQuantizer
 from .quantizer_gptq import GptqHfQuantizer
 from .quantizer_hqq import HqqHfQuantizer
 from .quantizer_quanto import QuantoHfQuantizer
@@ -45,6 +47,7 @@ AUTO_QUANTIZER_MAPPING = {
     "quanto": QuantoHfQuantizer,
     "eetq": EetqHfQuantizer,
     "hqq": HqqHfQuantizer,
+    "fbgemm_fp8": FbgemmFp8HfQuantizer,
 }
 
 AUTO_QUANTIZATION_CONFIG_MAPPING = {
@@ -56,6 +59,7 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "aqlm": AqlmConfig,
     "quanto": QuantoConfig,
     "hqq": HqqConfig,
+    "fbgemm_fp8": FbgemmFp8Config,
 }
 
 
