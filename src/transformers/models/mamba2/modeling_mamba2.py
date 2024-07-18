@@ -307,48 +307,44 @@ class Mamba2Mixer(nn.Module):
                     (self.conv_kernel_size - hidden_states.shape[-1], 0)
                 )
                 cache_params.conv_states[self.layer_idx].copy_(conv_state)
-                hidden_states = self.act(self.conv1d(hidden_states).transpose(1,2))[:, (self.conv_kernel_size - 1):, :]     # [batch, intermediate_size, seq_len]
+                hidden_states = self.act(self.conv1d(hidden_states).transpose(1,2))[:, :seq_len, :]     # [batch, intermediate_size, seq_len]
         else:
             ssm_state = torch.zeros(
                 (batch_size, self.num_heads, self.head_dim, self.ssm_state_size),
                 device=hidden_states.device, dtype=dtype
             )
-            hidden_states = self.act(self.conv1d(hidden_states.transpose(1,2)).transpose(1,2))[:, (self.conv_kernel_size - 1):, :]
+            hidden_states = self.act(self.conv1d(hidden_states.transpose(1,2)).transpose(1,2))[:, :seq_len, :]
 
         # 3. State Space Model sequence transformation
         # 3.a. Selection:  [batch, seq_len, self.time_step_rank + self.ssm_state_size * 2]
         hidden_states, B, C = torch.split(hidden_states, [self.intermediate_size, self.n_groups * self.ssm_state_size, self.n_groups * self.ssm_state_size], dim=-1)
         # 3.b. Discretization: B and C to [batch, seq_len, intermediate_size, ssm_state_size] (SRAM)
-        A = -torch.exp(self.A_log.float())                            # [num_heads]
 
-        # TODO REPEAT TO GET TO THE  intermediate_size
-        A = A[:,None,None].expand(self.num_heads, self.head_dim, self.ssm_state_size)
-        discrete_time_step = dt[:,:,:, None].expand(batch_size, seq_len, self.ssm_state_size, self.head_dim)
-        D = self.D[:,None].expand(-1, self.head_dim)
-        B = B.reshape(batch_size,seq_len,  -1, self.ssm_state_size)
-        C = C.reshape(batch_size, seq_len, -1, self.ssm_state_size)
-        hidden_states = hidden_states.reshape(batch_size, seq_len, -1, self.head_dim)
+        A = -torch.exp(self.A_log.float())                            # [num_heads]
+        B = B.reshape(batch_size,seq_len,  -1, self.ssm_state_size).float()
+        C = C.reshape(batch_size, seq_len, -1, self.ssm_state_size).float()
+        hidden_states = hidden_states.reshape(batch_size, seq_len, -1, self.head_dim).float()
 
         # 3.c perform the recurrence y ← SSM(A, B, C)(x)
-        discrete_A = torch.exp(discrete_time_step[:,:,:,:,None] * A[None,None, :, :, :])                                   # [batch, seq_len, num_heads]
-        discrete_B = discrete_time_step[:, :, :, :,  None] * B[:, :, None, :, :].repeat((1,1,1,self.n_groups, 1)).float()       # [batch, intermediate_size, seq_len, ssm_state_size]
+        discrete_A =  torch.exp( A * dt)                                        # [batch, seq_len, num_heads]
+        discrete_B = dt[:, :, :, None, None] * B[:, :, None, :, :].repeat((1,1,1,self.n_groups, 1)).float()       # [batch, intermediate_size, seq_len, ssm_state_size]
         deltaB_u = discrete_B * hidden_states[:, :, :, :, None].float()
 
 
         # 3.c perform the recurrence y ← SSM(A, B, C)(x)
         scan_outputs = []
         for i in range(seq_len):
-            ssm_state = discrete_A[:, i, :, :, :] * ssm_state + deltaB_u[:, i, :, : , :]      # [batch, intermediate_size, ssm_state]
+            ssm_state = discrete_A[:, i, :] * ssm_state + deltaB_u[:, i, :, ]      # [batch, intermediate_size, ssm_state]
             scan_output = torch.einsum("bhn,bnhn->bnh",C[:, i, :, :].repeat((1,self.n_groups,1)), ssm_state)# [batch, intermediate_size, 1]
             scan_outputs.append(scan_output)
         scan_output = torch.stack(scan_outputs, dim=1)                                # [batch, intermediate_size, seq_len]
-        scan_output = scan_output + (hidden_states * D)
+        scan_output = scan_output + (hidden_states * self.D[:,None])
         scan_output = self.norm(scan_output.view(batch_size, seq_len, -1), gate)
         if cache_params is not None:
             cache_params.ssm_states[self.layer_idx].copy_(ssm_state)
 
         # 4. Final linear projection
-        contextualized_states = self.out_proj(scan_output.to(hidden_states))  # [batch, seq_len, hidden_size]
+        contextualized_states = self.out_proj(scan_output.to(dtype))  # [batch, seq_len, hidden_size]
         return contextualized_states
     # fmt: on
 
