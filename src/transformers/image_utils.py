@@ -64,7 +64,6 @@ if is_vision_available():
             PILImageResampling.HAMMING: InterpolationMode.HAMMING,
             PILImageResampling.BICUBIC: InterpolationMode.BICUBIC,
             PILImageResampling.LANCZOS: InterpolationMode.LANCZOS,
-            PILImageResampling.NEAREST: InterpolationMode.NEAREST,
         }
 
 
