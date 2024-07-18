@@ -34,6 +34,7 @@ from ..cache_utils import (
     HybridCache,
     QuantizedCacheConfig,
     QuantoQuantizedCache,
+    SinkCache,
     SlidingWindowCache,
     StaticCache,
 )
@@ -1401,6 +1402,13 @@ class GenerationMixin:
                 past_length = cache[0][0].shape[2]
             elif hasattr(cache, "get_seq_length") and cache.get_seq_length() is not None:
                 past_length = cache.get_seq_length()
+
+            # If it's a full sinkcache, we set past length to 0 otherwise cache_position is empty
+            # At the same time we expect users to cut off inputs to the max length in this case
+            # instead of having the whole history which is longer than max-length
+            # Applies only to cases when calling generate iteratively
+            if isinstance(cache, SinkCache) and cache.get_max_length() == past_length:
+                past_length = 0
 
         if "inputs_embeds" in model_kwargs:
             cur_len = model_kwargs["inputs_embeds"].shape[1]

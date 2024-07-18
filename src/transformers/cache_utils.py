@@ -747,18 +747,24 @@ class SinkCache(Cache):
             self.key_cache.append(key_states)
             self.value_cache.append(value_states)
 
-        elif key_states.shape[-2] + self.get_seq_length(layer_idx) < self.window_length:
+        elif key_states.shape[-2] + self.get_seq_length(layer_idx) < self.num_sink_tokens:
             # Growing cache
             self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
             self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
 
         elif key_states.shape[-2] >= self.window_length - self.num_sink_tokens:
-            # Renew cache but keep sink tokens
+            # Renew cache but keep sink tokens if they are full. Otherwise fill-up sink tokens first
+            num_new_sink_tokens = max(0, self.num_sink_tokens - self.get_seq_length(layer_idx))
+
             sink_keys = self.key_cache[layer_idx][:, :, : self.num_sink_tokens]
             remain_length = self.window_length - self.num_sink_tokens
+            if num_new_sink_tokens > 0:
+                sink_keys = torch.cat([sink_keys, key_states[:, :, :num_new_sink_tokens]], dim=-2)
             self.key_cache[layer_idx] = torch.cat([sink_keys, key_states[:, :, -remain_length:]], dim=-2)
 
             sink_values = self.value_cache[layer_idx][:, :, : self.num_sink_tokens]
+            if num_new_sink_tokens > 0:
+                sink_values = torch.cat([sink_values, value_states[:, :, :num_new_sink_tokens]], dim=-2)
             self.value_cache[layer_idx] = torch.cat([sink_values, value_states[:, :, -remain_length:]], dim=-2)
 
         else:

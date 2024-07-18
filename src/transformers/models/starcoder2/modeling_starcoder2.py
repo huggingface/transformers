@@ -906,7 +906,7 @@ class Starcoder2Model(Starcoder2PreTrainedModel):
         dtype, device = input_tensor.dtype, input_tensor.device
         min_dtype = torch.finfo(dtype).min
         sequence_length = input_tensor.shape[1]
-        if using_static_cache:
+        if using_static_cache or using_sink_cache:
             target_length = past_key_values.get_max_length()
         else:
             target_length = (

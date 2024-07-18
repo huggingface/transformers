@@ -24,7 +24,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache, StaticCache
+from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache, SinkCache, StaticCache
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -1390,6 +1390,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
         # to infer the attention mask.
         past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
         using_static_cache = isinstance(past_key_values, StaticCache)
+        using_sink_cache = isinstance(past_key_values, SinkCache)
 
         # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
         if self.config._attn_implementation == "sdpa" and not using_static_cache and not output_attentions:
@@ -1404,7 +1405,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
         dtype, device = input_tensor.dtype, input_tensor.device
         min_dtype = torch.finfo(dtype).min
         sequence_length = input_tensor.shape[1]
-        if using_static_cache:
+        if using_static_cache or using_sink_cache:
             target_length = past_key_values.get_max_length()
         else:
             target_length = (
@@ -1412,6 +1413,10 @@ class WhisperDecoder(WhisperPreTrainedModel):
                 if isinstance(attention_mask, torch.Tensor)
                 else past_seen_tokens + sequence_length + 1
             )
+
+        if using_sink_cache and sequence_length >= past_key_values.get_max_length():
+            max_cache_len = past_key_values.get_max_length()
+            cache_position = torch.arange(max_cache_len - sequence_length, max_cache_len, device=cache_position.device)
 
         if attention_mask is not None and attention_mask.dim() == 4:
             # in this case we assume that the mask comes already in inverted form and requires no inversion or slicing
