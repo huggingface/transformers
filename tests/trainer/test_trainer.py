@@ -3782,7 +3782,9 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
 
         # Some commits are skipped if nothing has changed
         # We expect 1 commit per 5 epochs + 1 commit at the end
-        nb_empty_commits = len([record for record in logs.records if "Skipping to prevent empty commit." in record.message])
+        nb_empty_commits = len(
+            [record for record in logs.records if "Skipping to prevent empty commit." in record.message]
+        )
         nb_epoch_commits = len([commit for commit in commits if "Training in progress, step" in commit])
 
         # max_steps depend on the number of available GPUs
