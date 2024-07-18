@@ -727,11 +727,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
         # retrieve offsets
         if output_offsets:
-            if "segments" in kwargs:
-                segments = kwargs["segments"]
-            else:
-                segments = None
-
+            segments = kwargs.get("segments")
             offsets = self._compute_offsets(token_ids, time_precision=time_precision, segments=segments)
 
             return {"text": text, "offsets": offsets}
