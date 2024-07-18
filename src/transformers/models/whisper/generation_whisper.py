@@ -23,6 +23,8 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from transformers.cache_utils import EncoderDecoderCache
+
 from ...generation.configuration_utils import GenerationConfig
 from ...generation.logits_process import (
     LogitsProcessorList,
@@ -934,6 +936,11 @@ class WhisperGenerationMixin:
 
         sequence_tokens = seek_outputs["sequences"]
 
+        if hasattr(seek_outputs, "past_key_values") and isinstance(
+            seek_outputs["past_key_values"], EncoderDecoderCache
+        ):
+            seek_outputs["past_key_values"] = seek_outputs["past_key_values"].to_legacy_cache()
+
         seek_outputs = [
             {k: split_by_batch_index(v, k, i, is_shortform) for k, v in seek_outputs.items()}
             for i in range(sequence_tokens.shape[0])
@@ -969,7 +976,7 @@ class WhisperGenerationMixin:
                         )
                         for i in range(len(seek_outputs[0][key]))
                     )
-                    if past_key_value_type is not None:
+                    if past_key_value_type is not None and isinstance(past_key_value_type, EncoderDecoderCache):
                         outputs[key] = past_key_value_type.from_legacy_cache(outputs[key])
                 else:
                     outputs[key] = None
