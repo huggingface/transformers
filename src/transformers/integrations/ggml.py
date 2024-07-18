@@ -525,6 +525,8 @@ def load_dequant_gguf_tensor(shape, ggml_type, data):
         values = dequantize_q8_0(data)
     elif ggml_type == GGML_TYPES["Q4_0"]:
         values = dequantize_q4_0(data)
+    elif ggml_type == GGML_TYPES["Q4_1"]:
+        values = dequantize_q4_1(data)
     elif ggml_type == GGML_TYPES["Q4_K"]:
         values = dequantize_q4_k(data)
     elif ggml_type == GGML_TYPES["Q6_K"]:
