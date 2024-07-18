@@ -50,6 +50,8 @@ SPECIAL_CASES_TO_ALLOW = {
     "RecurrentGemmaConfig": ["block_types"],
     # used as in the config to define `intermediate_size`
     "MambaConfig": ["expand"],
+    # used as in the config to define `intermediate_size`
+    "FalconMambaConfig": ["expand"],
     # used as `self.bert_model = BertModel(config, ...)`
     "DPRConfig": True,
     "FuyuConfig": True,

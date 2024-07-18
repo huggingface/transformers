@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 state-spaces/sindibad org and HuggingFace Inc. team.
+# Copyright 2024 state-spaces/falcon_mamba org and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch SINDIBAD model."""
+"""PyTorch FALCONMAMBA model."""
 
 import math
 from dataclasses import dataclass
@@ -33,7 +33,7 @@ from ...utils import (
     logging,
 )
 from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available
-from .configuration_sindibad import SindibadConfig
+from .configuration_falcon_mamba import FalconMambaConfig
 
 
 logger = logging.get_logger(__name__)
@@ -53,8 +53,8 @@ is_fast_path_available = all(
     (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
 )
 
-_CHECKPOINT_FOR_DOC = "tiiuae/sindibad-7b"
-_CONFIG_FOR_DOC = "SindibadConfig"
+_CHECKPOINT_FOR_DOC = "tiiuae/falcon_mamba-7b"
+_CONFIG_FOR_DOC = "FalconMambaConfig"
 
 
 def rms_forward(hidden_states, variance_epsilon=1e-6):
@@ -76,11 +76,11 @@ def rms_forward(hidden_states, variance_epsilon=1e-6):
     return hidden_states.to(input_dtype)
 
 
-# Copied from transformers.models.mamba.modeling_mamba.MambaCache with Mamba->Sindibad
-class SindibadCache:
+# Copied from transformers.models.mamba.modeling_mamba.MambaCache with Mamba->FalconMamba
+class FalconMambaCache:
     """
     Arguments:
-        config: SindibadConfig
+        config: FalconMambaConfig
         batch_size: int
         dtype: torch.dtype
         device: torch.device
@@ -93,7 +93,11 @@ class SindibadCache:
     """
 
     def __init__(
-        self, config: SindibadConfig, batch_size: int, dtype: torch.dtype = torch.float16, device: Optional[str] = None
+        self,
+        config: FalconMambaConfig,
+        batch_size: int,
+        dtype: torch.dtype = torch.float16,
+        device: Optional[str] = None,
     ):
         self.seqlen_offset = 0
         self.dtype = dtype
@@ -111,16 +115,16 @@ class SindibadCache:
         }
 
 
-class SindibadMixer(nn.Module):
+class FalconMambaMixer(nn.Module):
     """
     Compute ∆, A, B, C, and D the state space parameters and compute the `contextualized_states`.
-    A, D are input independent (see Sindibad paper [1] Section 3.5.2 "Interpretation of A" for why A isn't selective)
-    ∆, B, C are input-dependent (this is a key difference between Sindibad and the linear time invariant S4,
-    and is why Sindibad is called **selective** state spaces)
+    A, D are input independent (see FalconMamba paper [1] Section 3.5.2 "Interpretation of A" for why A isn't selective)
+    ∆, B, C are input-dependent (this is a key difference between FalconMamba and the linear time invariant S4,
+    and is why FalconMamba is called **selective** state spaces)
     """
 
-    # Copied from transformers.models.mamba.modeling_mamba.MambaMixer.__init__ with Mamba->Sindibad,mamba->sindibad
-    def __init__(self, config: SindibadConfig, layer_idx: int):
+    # Copied from transformers.models.mamba.modeling_mamba.MambaMixer.__init__ with Mamba->FalconMamba,mamba->falcon_mamba
+    def __init__(self, config: FalconMambaConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.ssm_state_size = config.state_size
@@ -160,12 +164,12 @@ class SindibadMixer(nn.Module):
 
         if not is_fast_path_available:
             logger.warning_once(
-                "The fast path is not available because on of `(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, sindibad_inner_fn)`"
-                " is None. Falling back to the naive implementation. To install follow https://github.com/state-spaces/sindibad/#installation and"
+                "The fast path is not available because on of `(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, falcon_mamba_inner_fn)`"
+                " is None. Falling back to the naive implementation. To install follow https://github.com/state-spaces/falcon_mamba/#installation and"
                 " https://github.com/Dao-AILab/causal-conv1d"
             )
 
-    def cuda_kernels_forward(self, hidden_states: torch.Tensor, cache_params: Optional[SindibadCache] = None):
+    def cuda_kernels_forward(self, hidden_states: torch.Tensor, cache_params: Optional[FalconMambaCache] = None):
         # 1. Gated MLP's linear projection
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
 
@@ -259,7 +263,7 @@ class SindibadMixer(nn.Module):
             contextualized_states = self.out_proj(scan_outputs.transpose(1, 2))
         return contextualized_states
 
-    def slow_forward(self, input_states, cache_params: Optional[SindibadCache] = None):
+    def slow_forward(self, input_states, cache_params: Optional[FalconMambaCache] = None):
         batch_size, seq_len, _ = input_states.shape
         dtype = input_states.dtype
         # 1. Gated MLP's linear projection
@@ -338,18 +342,18 @@ class SindibadMixer(nn.Module):
         contextualized_states = self.out_proj(scan_output.transpose(1, 2))  # [batch, seq_len, hidden_size]
         return contextualized_states
 
-    # Copied from transformers.models.mamba.modeling_mamba.MambaMixer.forward with Mamba->Sindibad
-    def forward(self, hidden_states, cache_params: Optional[SindibadCache] = None):
+    # Copied from transformers.models.mamba.modeling_mamba.MambaMixer.forward with Mamba->FalconMamba
+    def forward(self, hidden_states, cache_params: Optional[FalconMambaCache] = None):
         if is_fast_path_available and "cuda" in self.x_proj.weight.device.type:
             return self.cuda_kernels_forward(hidden_states, cache_params)
         return self.slow_forward(hidden_states, cache_params)
 
 
-# Copied from transformers.models.mamba.modeling_mamba.MambaRMSNorm with Mamba->Sindibad
-class SindibadRMSNorm(nn.Module):
+# Copied from transformers.models.mamba.modeling_mamba.MambaRMSNorm with Mamba->FalconMamba
+class FalconMambaRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
-        SindibadRMSNorm is equivalent to T5LayerNorm and LlamaRMSNorm
+        FalconMambaRMSNorm is equivalent to T5LayerNorm and LlamaRMSNorm
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -362,17 +366,17 @@ class SindibadRMSNorm(nn.Module):
         )
 
 
-# Copied from transformers.models.mamba.modeling_mamba.MambaBlock with Mamba->Sindibad
-class SindibadBlock(nn.Module):
+# Copied from transformers.models.mamba.modeling_mamba.MambaBlock with Mamba->FalconMamba
+class FalconMambaBlock(nn.Module):
     def __init__(self, config, layer_idx):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
         self.residual_in_fp32 = config.residual_in_fp32
-        self.norm = SindibadRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
-        self.mixer = SindibadMixer(config, layer_idx=layer_idx)
+        self.norm = FalconMambaRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
+        self.mixer = FalconMambaMixer(config, layer_idx=layer_idx)
 
-    def forward(self, hidden_states, cache_params: Optional[SindibadCache] = None):
+    def forward(self, hidden_states, cache_params: Optional[FalconMambaCache] = None):
         residual = hidden_states
         hidden_states = self.norm(hidden_states.to(dtype=self.norm.weight.dtype))
         if self.residual_in_fp32:
@@ -383,22 +387,22 @@ class SindibadBlock(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.mamba.modeling_mamba.MambaPreTrainedModel with Mamba->Sindibad
-class SindibadPreTrainedModel(PreTrainedModel):
+# Copied from transformers.models.mamba.modeling_mamba.MambaPreTrainedModel with Mamba->FalconMamba
+class FalconMambaPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = SindibadConfig
+    config_class = FalconMambaConfig
     base_model_prefix = "backbone"
-    _no_split_modules = ["SindibadBlock"]
+    _no_split_modules = ["FalconMambaBlock"]
     supports_gradient_checkpointing = True
     _is_stateful = True
 
     def _init_weights(self, module):
         """Initialize the weights."""
-        if isinstance(module, SindibadMixer):
+        if isinstance(module, FalconMambaMixer):
             module.A_log._no_weight_decay = True
             module.D._no_weight_decay = True
 
@@ -445,15 +449,15 @@ class SindibadPreTrainedModel(PreTrainedModel):
 
 
 @dataclass
-# Copied from transformers.models.mamba.modeling_mamba.MambaOutput with MAMBA->SINDIBAD,Mamba->Sindibad
-class SindibadOutput(ModelOutput):
+# Copied from transformers.models.mamba.modeling_mamba.MambaOutput with MAMBA->FALCONMAMBA,Mamba->FalconMamba
+class FalconMambaOutput(ModelOutput):
     """
-    Class for the SINDIBAD model outputs.
+    Class for the FALCONMAMBA model outputs.
 
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        cache_params (`SindibadCache`):
+        cache_params (`FalconMambaCache`):
             The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
             avoid providing the old `input_ids`.
 
@@ -466,13 +470,13 @@ class SindibadOutput(ModelOutput):
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None
-    cache_params: Optional[SindibadCache] = None
+    cache_params: Optional[FalconMambaCache] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
 @dataclass
-# Copied from transformers.models.mamba.modeling_mamba.MambaCausalLMOutput with Mamba->Sindibad
-class SindibadCausalLMOutput(ModelOutput):
+# Copied from transformers.models.mamba.modeling_mamba.MambaCausalLMOutput with Mamba->FalconMamba
+class FalconMambaCausalLMOutput(ModelOutput):
     """
     Base class for causal language model (or autoregressive) outputs.
 
@@ -481,7 +485,7 @@ class SindibadCausalLMOutput(ModelOutput):
             Language modeling loss (for next-token prediction).
         logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        cache_params (`SindibadCache`):
+        cache_params (`FalconMambaCache`):
             The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
             avoid providing the old `input_ids`.
 
@@ -495,11 +499,11 @@ class SindibadCausalLMOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    cache_params: Optional[SindibadCache] = None
+    cache_params: Optional[FalconMambaCache] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
-SINDIBAD_START_DOCSTRING = r"""
+FALCONMAMBA_START_DOCSTRING = r"""
 
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -510,12 +514,12 @@ SINDIBAD_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`SindibadConfig`]): Model configuration class with all the parameters of the model.
+        config ([`FalconMambaConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-SINDIBAD_INPUTS_DOCSTRING = r"""
+FALCONMAMBA_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
             Indices of input sequence tokens in the vocabulary.
@@ -531,7 +535,7 @@ SINDIBAD_INPUTS_DOCSTRING = r"""
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
-        cache_params (`SindibadCache`, *optional*):
+        cache_params (`FalconMambaCache`, *optional*):
             If passed along, the model uses the previous state in all the blocks (which will give the output for the
             `input_ids` provided as if the model add `state_input_ids + input_ids` as context).
         use_cache (`bool`, *optional*):
@@ -545,19 +549,21 @@ SINDIBAD_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare SINDIBAD Model transformer outputting raw hidden-states without any specific head on top.",
-    SINDIBAD_START_DOCSTRING,
+    "The bare FALCONMAMBA Model transformer outputting raw hidden-states without any specific head on top.",
+    FALCONMAMBA_START_DOCSTRING,
 )
-# Copied from transformers.models.mamba.modeling_mamba.MambaModel with MAMBA->SINDIBAD,Mamba->Sindibad
-class SindibadModel(SindibadPreTrainedModel):
+# Copied from transformers.models.mamba.modeling_mamba.MambaModel with MAMBA->FALCONMAMBA,Mamba->FalconMamba
+class FalconMambaModel(FalconMambaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
         self.embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
-        self.layers = nn.ModuleList([SindibadBlock(config, layer_idx=idx) for idx in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList(
+            [FalconMambaBlock(config, layer_idx=idx) for idx in range(config.num_hidden_layers)]
+        )
 
         self.gradient_checkpointing = False
-        self.norm_f = SindibadRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
+        self.norm_f = FalconMambaRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
         # Initialize weights and apply final processing
         self._register_load_state_dict_pre_hook(self.load_hook)
         self.post_init()
@@ -574,10 +580,10 @@ class SindibadModel(SindibadPreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.embeddings = new_embeddings
 
-    @add_start_docstrings_to_model_forward(SINDIBAD_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(FALCONMAMBA_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=SindibadOutput,
+        output_type=FalconMambaOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     # Ignore copy
@@ -586,12 +592,12 @@ class SindibadModel(SindibadPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,  # Igno
         inputs_embeds: Optional[torch.LongTensor] = None,
-        cache_params: Optional[SindibadCache] = None,
+        cache_params: Optional[FalconMambaCache] = None,
         use_cache: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,
-    ) -> Union[Tuple, SindibadOutput]:
+    ) -> Union[Tuple, FalconMambaOutput]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -610,7 +616,7 @@ class SindibadModel(SindibadPreTrainedModel):
             use_cache = False
 
         if cache_params is None and use_cache:
-            cache_params = SindibadCache(
+            cache_params = FalconMambaCache(
                 self.config, inputs_embeds.size(0), device=inputs_embeds.device, dtype=inputs_embeds.dtype
             )
 
@@ -636,7 +642,7 @@ class SindibadModel(SindibadPreTrainedModel):
         if not return_dict:
             return tuple(v for v in [hidden_states, cache_params, all_hidden_states] if v is not None)
 
-        return SindibadOutput(
+        return FalconMambaOutput(
             last_hidden_state=hidden_states,
             cache_params=cache_params if use_cache else None,
             hidden_states=all_hidden_states,
@@ -645,18 +651,18 @@ class SindibadModel(SindibadPreTrainedModel):
 
 @add_start_docstrings(
     """
-    The SINDIBAD Model transformer with a language modeling head on top (linear layer with weights tied to the input
+    The FALCONMAMBA Model transformer with a language modeling head on top (linear layer with weights tied to the input
     embeddings).
     """,
-    SINDIBAD_START_DOCSTRING,
+    FALCONMAMBA_START_DOCSTRING,
 )
-# Copied from transformers.models.mamba.modeling_mamba.MambaForCausalLM with MAMBA->SINDIBAD,Mamba->Sindibad,mamba->sindibad
-class SindibadForCausalLM(SindibadPreTrainedModel):
+# Copied from transformers.models.mamba.modeling_mamba.MambaForCausalLM with MAMBA->FALCONMAMBA,Mamba->FalconMamba,mamba->falcon_mamba
+class FalconMambaForCausalLM(FalconMambaPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
-        self.backbone = SindibadModel(config)
+        self.backbone = FalconMambaModel(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         # Initialize weights and apply final processing
         self.post_init()
@@ -684,7 +690,7 @@ class SindibadForCausalLM(SindibadPreTrainedModel):
         input_ids,
         inputs_embeds=None,
         use_cache=None,
-        cache_params: Optional[SindibadCache] = None,
+        cache_params: Optional[FalconMambaCache] = None,
         **kwargs,
     ):
         # only last token for inputs_ids if the state is passed along.
@@ -704,10 +710,10 @@ class SindibadForCausalLM(SindibadPreTrainedModel):
         )
         return model_inputs
 
-    @add_start_docstrings_to_model_forward(SINDIBAD_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(FALCONMAMBA_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=SindibadCausalLMOutput,
+        output_type=FalconMambaCausalLMOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     # Ignore copy
@@ -716,13 +722,13 @@ class SindibadForCausalLM(SindibadPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,  # Ignored copy
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        cache_params: Optional[SindibadCache] = None,
+        cache_params: Optional[FalconMambaCache] = None,
         labels: Optional[torch.LongTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         use_cache: Optional[bool] = None,
         **kwargs,
-    ) -> Union[Tuple, SindibadCausalLMOutput]:
+    ) -> Union[Tuple, FalconMambaCausalLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
@@ -731,7 +737,7 @@ class SindibadForCausalLM(SindibadPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        sindibad_outputs = self.backbone(
+        falcon_mamba_outputs = self.backbone(
             input_ids,
             cache_params=cache_params,
             inputs_embeds=inputs_embeds,
@@ -739,7 +745,7 @@ class SindibadForCausalLM(SindibadPreTrainedModel):
             return_dict=return_dict,
             use_cache=use_cache,
         )
-        hidden_states = sindibad_outputs[0]
+        hidden_states = falcon_mamba_outputs[0]
 
         logits = self.lm_head(hidden_states.to(self.lm_head.weight.dtype)).float()
 
@@ -755,12 +761,12 @@ class SindibadForCausalLM(SindibadPreTrainedModel):
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
 
         if not return_dict:
-            output = (logits,) + sindibad_outputs[1:]
+            output = (logits,) + falcon_mamba_outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
-        return SindibadCausalLMOutput(
+        return FalconMambaCausalLMOutput(
             loss=loss,
             logits=logits,
-            cache_params=sindibad_outputs.cache_params,
-            hidden_states=sindibad_outputs.hidden_states,
+            cache_params=falcon_mamba_outputs.cache_params,
+            hidden_states=falcon_mamba_outputs.hidden_states,
         )

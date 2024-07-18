@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""SINDIBAD configuration"""
+"""FALCONMAMBA configuration"""
 
 import math
 
@@ -23,12 +23,12 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class SindibadConfig(PretrainedConfig):
+class FalconMambaConfig(PretrainedConfig):
     """
-    This is the configuration class to store the configuration of a [`SindibadModel`]. It is used to instantiate a SINDIBAD
+    This is the configuration class to store the configuration of a [`FalconMambaModel`]. It is used to instantiate a FALCONMAMBA
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the SINDIBAD
-    [state-spaces/sindibad-2.8b](https://huggingface.co/state-spaces/sindibad-2.8b) architecture.
+    defaults will yield a similar configuration to that of the FALCONMAMBA
+    [state-spaces/falcon_mamba-2.8b](https://huggingface.co/state-spaces/falcon_mamba-2.8b) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -36,8 +36,8 @@ class SindibadConfig(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 50280):
-            Vocabulary size of the SINDIBAD model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`SindibadModel`].
+            Vocabulary size of the FALCONMAMBA model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`FalconMambaModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the embeddings and hidden states.
         state_size (`int`, *optional*, defaults to 16): shape of the state space latents.
@@ -84,19 +84,19 @@ class SindibadConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import SindibadConfig, SindibadModel
+    >>> from transformers import FalconMambaConfig, FalconMambaModel
 
-    >>> # Initializing a Sindibad configuration
-    >>> configuration = SindibadConfig()
+    >>> # Initializing a FalconMamba configuration
+    >>> configuration = FalconMambaConfig()
 
     >>> # Initializing a model (with random weights) from the configuration
-    >>> model = SindibadModel(configuration)
+    >>> model = FalconMambaModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
 
-    model_type = "sindibad"
+    model_type = "falcon_mamba"
 
     def __init__(
         self,
@@ -132,7 +132,7 @@ class SindibadConfig(PretrainedConfig):
         self.layer_norm_epsilon = layer_norm_epsilon
         self.conv_kernel = conv_kernel
         self.expand = expand
-        self.intermediate_size = int(expand * self.hidden_size)
+        self.intermediate_size = int(self.expand * self.hidden_size)
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id

@@ -135,6 +135,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                           [ESM](model_doc/esm)                           |       ✅        |         ✅         |      ❌      |
 |              [FairSeq Machine-Translation](model_doc/fsmt)               |       ✅        |         ❌         |      ❌      |
 |                        [Falcon](model_doc/falcon)                        |       ✅        |         ❌         |      ❌      |
+|                  [FalconMamba](model_doc/falcon_mamba)                   |       ✅        |         ❌         |      ❌      |
 |         [FastSpeech2Conformer](model_doc/fastspeech2_conformer)          |       ✅        |         ❌         |      ❌      |
 |                       [FLAN-T5](model_doc/flan-t5)                       |       ✅        |         ✅         |      ✅      |
 |                      [FLAN-UL2](model_doc/flan-ul2)                      |       ✅        |         ✅         |      ✅      |
@@ -277,7 +278,6 @@ Flax), PyTorch, and/or TensorFlow.
 |                           [SEW](model_doc/sew)                           |       ✅        |         ❌         |      ❌      |
 |                         [SEW-D](model_doc/sew-d)                         |       ✅        |         ❌         |      ❌      |
 |                        [SigLIP](model_doc/siglip)                        |       ✅        |         ❌         |      ❌      |
-|                      [Sindibad](model_doc/sindibad)                      |       ✅        |         ❌         |      ❌      |
 |        [Speech Encoder decoder](model_doc/speech-encoder-decoder)        |       ✅        |         ❌         |      ✅      |
 |                 [Speech2Text](model_doc/speech_to_text)                  |       ✅        |         ✅         |      ❌      |
 |                      [SpeechT5](model_doc/speecht5)                      |       ✅        |         ❌         |      ❌      |

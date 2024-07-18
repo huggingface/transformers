@@ -409,6 +409,7 @@ _import_structure = {
     "models.ernie": ["ErnieConfig"],
     "models.esm": ["EsmConfig", "EsmTokenizer"],
     "models.falcon": ["FalconConfig"],
+    "models.falcon_mamba": ["FalconMambaConfig"],
     "models.fastspeech2_conformer": [
         "FastSpeech2ConformerConfig",
         "FastSpeech2ConformerHifiGanConfig",
@@ -691,7 +692,6 @@ _import_structure = {
         "SiglipTextConfig",
         "SiglipVisionConfig",
     ],
-    "models.sindibad": ["SindibadConfig"],
     "models.speech_encoder_decoder": ["SpeechEncoderDecoderConfig"],
     "models.speech_to_text": [
         "Speech2TextConfig",
@@ -2109,6 +2109,13 @@ else:
             "FalconPreTrainedModel",
         ]
     )
+    _import_structure["models.falcon_mamba"].extend(
+        [
+            "FalconMambaForCausalLM",
+            "FalconMambaModel",
+            "FalconMambaPreTrainedModel",
+        ]
+    )
     _import_structure["models.fastspeech2_conformer"].extend(
         [
             "FastSpeech2ConformerHifiGan",
@@ -3143,13 +3150,6 @@ else:
             "SiglipPreTrainedModel",
             "SiglipTextModel",
             "SiglipVisionModel",
-        ]
-    )
-    _import_structure["models.sindibad"].extend(
-        [
-            "SindibadForCausalLM",
-            "SindibadModel",
-            "SindibadPreTrainedModel",
         ]
     )
     _import_structure["models.speech_encoder_decoder"].extend(["SpeechEncoderDecoderModel"])
@@ -5074,6 +5074,7 @@ if TYPE_CHECKING:
     from .models.ernie import ErnieConfig
     from .models.esm import EsmConfig, EsmTokenizer
     from .models.falcon import FalconConfig
+    from .models.falcon_mamba import FalconMambaConfig
     from .models.fastspeech2_conformer import (
         FastSpeech2ConformerConfig,
         FastSpeech2ConformerHifiGanConfig,
@@ -5387,7 +5388,6 @@ if TYPE_CHECKING:
         SiglipTextConfig,
         SiglipVisionConfig,
     )
-    from .models.sindibad import SindibadConfig
     from .models.speech_encoder_decoder import SpeechEncoderDecoderConfig
     from .models.speech_to_text import (
         Speech2TextConfig,
@@ -6666,6 +6666,11 @@ if TYPE_CHECKING:
             FalconModel,
             FalconPreTrainedModel,
         )
+        from .models.falcon_mamba import (
+            FalconMambaForCausalLM,
+            FalconMambaModel,
+            FalconMambaPreTrainedModel,
+        )
         from .models.fastspeech2_conformer import (
             FastSpeech2ConformerHifiGan,
             FastSpeech2ConformerModel,
@@ -7484,11 +7489,6 @@ if TYPE_CHECKING:
             SiglipPreTrainedModel,
             SiglipTextModel,
             SiglipVisionModel,
-        )
-        from .models.sindibad import (
-            SindibadForCausalLM,
-            SindibadModel,
-            SindibadPreTrainedModel,
         )
         from .models.speech_encoder_decoder import SpeechEncoderDecoderModel
         from .models.speech_to_text import (

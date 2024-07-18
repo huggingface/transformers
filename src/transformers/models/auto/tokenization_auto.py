@@ -173,6 +173,7 @@ else:
             ("ernie_m", ("ErnieMTokenizer" if is_sentencepiece_available() else None, None)),
             ("esm", ("EsmTokenizer", None)),
             ("falcon", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
+            ("falcon_mamba", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "fastspeech2_conformer",
                 ("FastSpeech2ConformerTokenizer" if is_g2p_en_available() else None, None),
@@ -438,7 +439,6 @@ else:
                 ),
             ),
             ("siglip", ("SiglipTokenizer" if is_sentencepiece_available() else None, None)),
-            ("sindibad", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
             ("speech_to_text", ("Speech2TextTokenizer" if is_sentencepiece_available() else None, None)),
             ("speech_to_text_2", ("Speech2Text2Tokenizer", None)),
             ("speecht5", ("SpeechT5Tokenizer" if is_sentencepiece_available() else None, None)),
