@@ -500,17 +500,16 @@ class ProcessorMixin(PushToHubMixin):
         output_chat_template_file = os.path.join(save_directory, CHAT_TEMPLATE_NAME)
 
         processor_dict = self.to_dict()
-        if processor_dict.get("chat_template", None) is not None:
-            chat_template_dictionary = {"chat_template": processor_dict["chat_template"]}
-            chat_template_json_string = json.dumps(chat_template_dictionary, indent=2, sort_keys=True) + "\n"
+        chat_template = processor_dict.pop("chat_template", None)
+        if chat_template is not None:
+            chat_template_json_string = json.dumps({"chat_template": chat_template}, indent=2, sort_keys=True) + "\n"
             with open(output_chat_template_file, "w", encoding="utf-8") as writer:
                 writer.write(chat_template_json_string)
             logger.info(f"chat template saved in {output_chat_template_file}")
 
         # For now, let's not save to `processor_config.json` if the processor doesn't have extra attributes and
         # `auto_map` is not specified.
-        processor_dict_keys = set(processor_dict.keys()) - {"chat_template"}
-        if processor_dict_keys != {"processor_class"}:
+        if set(processor_dict.keys()) != {"processor_class"}:
             self.to_json_file(output_processor_file)
             logger.info(f"processor saved in {output_processor_file}")
 
