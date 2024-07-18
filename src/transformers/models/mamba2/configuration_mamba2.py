@@ -107,9 +107,9 @@ class Mamba2Config(PretrainedConfig):
         state_size=128,
         num_hidden_layers=64,
         layer_norm_epsilon=1e-5,
-        pad_token_id=0,
+        pad_token_id=1,
         bos_token_id=0,
-        eos_token_id=0,
+        eos_token_id=2,
         expand=2,
         conv_kernel=4,
         n_groups=8,
@@ -124,10 +124,12 @@ class Mamba2Config(PretrainedConfig):
         time_step_max=0.1,
         time_step_init_scheme="random",
         time_step_floor=1e-4,
+        time_step_limit=(0.0, float("inf")),
         rescale_prenorm_residual=False,
         use_cache=True,
         norm_before_gate=True,
         chunk_size=256,
+        tie_word_embeddings=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -160,5 +162,7 @@ class Mamba2Config(PretrainedConfig):
         self.norm_before_gate = norm_before_gate
         self.state_size = state_size
         self.chunk_size = chunk_size
+        self.time_step_limit = time_step_limit
+        self.tie_word_embeddings = tie_word_embeddings
 
-        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, pad_token_id=pad_token_id, **kwargs)
+        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, pad_token_id=pad_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs)
