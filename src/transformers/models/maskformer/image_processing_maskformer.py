@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Set, Tupl
 
 import numpy as np
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
+from ...image_processing_utils import INIT_SERVICE_KWARGS, BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
     PaddingMode,
     get_resize_output_image_size,
@@ -39,17 +39,18 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
-    validate_kwargs,
     validate_preprocess_arguments,
 )
 from ...utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
     TensorType,
+    filter_out_non_signature_kwargs,
     is_torch_available,
     is_torch_tensor,
     logging,
 )
+from ...utils.deprecation import deprecate_kwarg
 
 
 logger = logging.get_logger(__name__)
@@ -269,12 +270,12 @@ def convert_segmentation_map_to_binary_masks(
     segmentation_map: "np.ndarray",
     instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
     ignore_index: Optional[int] = None,
-    reduce_labels: bool = False,
+    do_reduce_labels: bool = False,
 ):
-    if reduce_labels and ignore_index is None:
-        raise ValueError("If `reduce_labels` is True, `ignore_index` must be provided.")
+    if do_reduce_labels and ignore_index is None:
+        raise ValueError("If `do_reduce_labels` is True, `ignore_index` must be provided.")
 
-    if reduce_labels:
+    if do_reduce_labels:
         segmentation_map = np.where(segmentation_map == 0, ignore_index, segmentation_map - 1)
 
     # Get unique ids (class or instance ids based on input)
@@ -298,8 +299,8 @@ def convert_segmentation_map_to_binary_masks(
         labels = np.zeros(all_labels.shape[0])
 
         for label in all_labels:
-            class_id = instance_id_to_semantic_id[label + 1 if reduce_labels else label]
-            labels[all_labels == label] = class_id - 1 if reduce_labels else class_id
+            class_id = instance_id_to_semantic_id[label + 1 if do_reduce_labels else label]
+            labels[all_labels == label] = class_id - 1 if do_reduce_labels else class_id
     else:
         labels = all_labels
 
@@ -393,11 +394,17 @@ class MaskFormerImageProcessor(BaseImageProcessor):
             Whether or not to decrement all label values of segmentation maps by 1. Usually used for datasets where 0
             is used for background, and background itself is not included in all classes of a dataset (e.g. ADE20k).
             The background label will be replaced by `ignore_index`.
+        num_labels (`int`, *optional*):
+            The number of labels in the segmentation map.
 
     """
 
     model_input_names = ["pixel_values", "pixel_mask"]
 
+    @deprecate_kwarg("reduce_labels", new_name="do_reduce_labels", version="4.44.0")
+    @deprecate_kwarg("size_divisibility", new_name="size_divisor", version="4.41.0")
+    @deprecate_kwarg("max_size", version="4.27.0", warn_if_greater_or_equal_version=True)
+    @filter_out_non_signature_kwargs(extra=["max_size", *INIT_SERVICE_KWARGS])
     def __init__(
         self,
         do_resize: bool = True,
@@ -411,38 +418,18 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         image_std: Union[float, List[float]] = None,
         ignore_index: Optional[int] = None,
         do_reduce_labels: bool = False,
+        num_labels: Optional[int] = None,
         **kwargs,
     ):
-        if "size_divisibility" in kwargs:
-            warnings.warn(
-                "The `size_divisibility` argument is deprecated and will be removed in v4.27. Please use "
-                "`size_divisor` instead.",
-                FutureWarning,
-            )
-            size_divisor = kwargs.pop("size_divisibility")
-        if "max_size" in kwargs:
-            warnings.warn(
-                "The `max_size` argument is deprecated and will be removed in v4.27. Please use size['longest_edge']"
-                " instead.",
-                FutureWarning,
-            )
-            # We make max_size a private attribute so we can pass it as a default value in the preprocess method whilst
-            # `size` can still be pass in as an int
-            self._max_size = kwargs.pop("max_size")
-        else:
-            self._max_size = 1333
-        if "reduce_labels" in kwargs:
-            warnings.warn(
-                "The `reduce_labels` argument is deprecated and will be removed in v4.27. Please use "
-                "`do_reduce_labels` instead.",
-                FutureWarning,
-            )
-            do_reduce_labels = kwargs.pop("reduce_labels")
+        super().__init__(**kwargs)
+
+        # We make max_size a private attribute so we can pass it as a default value in the preprocess method whilst
+        # `size` can still be pass in as an int
+        self._max_size = kwargs.pop("max_size", 1333)
 
         size = size if size is not None else {"shortest_edge": 800, "longest_edge": self._max_size}
         size = get_size_dict(size, max_size=self._max_size, default_to_square=False)
 
-        super().__init__(**kwargs)
         self.do_resize = do_resize
         self.size = size
         self.resample = resample
@@ -454,25 +441,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.ignore_index = ignore_index
         self.do_reduce_labels = do_reduce_labels
-        self._valid_processor_keys = [
-            "images",
-            "segmentation_maps",
-            "instance_id_to_semantic_id",
-            "do_resize",
-            "size",
-            "size_divisor",
-            "resample",
-            "do_rescale",
-            "rescale_factor",
-            "do_normalize",
-            "image_mean",
-            "image_std",
-            "ignore_index",
-            "do_reduce_labels",
-            "return_tensors",
-            "data_format",
-            "input_data_format",
-        ]
+        self.num_labels = num_labels
 
     @classmethod
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
@@ -484,9 +453,21 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         if "max_size" in kwargs:
             image_processor_dict["max_size"] = kwargs.pop("max_size")
         if "size_divisibility" in kwargs:
-            image_processor_dict["size_divisibility"] = kwargs.pop("size_divisibility")
+            image_processor_dict["size_divisor"] = kwargs.pop("size_divisibility")
+        if "reduce_labels" in image_processor_dict:
+            image_processor_dict["do_reduce_labels"] = image_processor_dict.pop("reduce_labels")
         return super().from_dict(image_processor_dict, **kwargs)
 
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Serializes this instance to a Python dictionary. This method calls the superclass method and then removes the
+        `_max_size` attribute from the dictionary.
+        """
+        image_processor_dict = super().to_dict()
+        image_processor_dict.pop("_max_size", None)
+        return image_processor_dict
+
+    @deprecate_kwarg("max_size", version="4.27.0", warn_if_greater_or_equal_version=True)
     def resize(
         self,
         image: np.ndarray,
@@ -516,15 +497,10 @@ class MaskFormerImageProcessor(BaseImageProcessor):
             input_data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format of the input image. If not provided, it will be inferred.
         """
-        if "max_size" in kwargs:
-            warnings.warn(
-                "The `max_size` parameter is deprecated and will be removed in v4.27. "
-                "Please specify in `size['longest_edge'] instead`.",
-                FutureWarning,
-            )
-            max_size = kwargs.pop("max_size")
-        else:
-            max_size = None
+
+        # Deprecated, backward compatibility
+        max_size = kwargs.pop("max_size", None)
+
         size = get_size_dict(size, max_size=max_size, default_to_square=False)
         if "shortest_edge" in size and "longest_edge" in size:
             size, max_size = size["shortest_edge"], size["longest_edge"]
@@ -583,15 +559,15 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         segmentation_map: "np.ndarray",
         instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
         ignore_index: Optional[int] = None,
-        reduce_labels: bool = False,
+        do_reduce_labels: bool = False,
     ):
-        reduce_labels = reduce_labels if reduce_labels is not None else self.reduce_labels
+        do_reduce_labels = do_reduce_labels if do_reduce_labels is not None else self.do_reduce_labels
         ignore_index = ignore_index if ignore_index is not None else self.ignore_index
         return convert_segmentation_map_to_binary_masks(
             segmentation_map=segmentation_map,
             instance_id_to_semantic_id=instance_id_to_semantic_id,
             ignore_index=ignore_index,
-            reduce_labels=reduce_labels,
+            do_reduce_labels=do_reduce_labels,
         )
 
     def __call__(self, images, segmentation_maps=None, **kwargs) -> BatchFeature:
@@ -700,6 +676,8 @@ class MaskFormerImageProcessor(BaseImageProcessor):
             segmentation_map = segmentation_map.squeeze(0)
         return segmentation_map
 
+    @deprecate_kwarg("reduce_labels", new_name="do_reduce_labels", version="4.44.0")
+    @filter_out_non_signature_kwargs()
     def preprocess(
         self,
         images: ImageInput,
@@ -719,24 +697,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
     ) -> BatchFeature:
-        if "pad_and_return_pixel_mask" in kwargs:
-            warnings.warn(
-                "The `pad_and_return_pixel_mask` argument is deprecated and will be removed in v4.27",
-                FutureWarning,
-            )
-        if "reduce_labels" in kwargs:
-            warnings.warn(
-                "The `reduce_labels` argument is deprecated and will be removed in v4.27. Please use"
-                " `do_reduce_labels` instead.",
-                FutureWarning,
-            )
-            if do_reduce_labels is not None:
-                raise ValueError(
-                    "Cannot use both `reduce_labels` and `do_reduce_labels`. Please use `do_reduce_labels` instead."
-                )
-
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
         size = get_size_dict(size, default_to_square=False, max_size=self._max_size)
@@ -755,7 +716,6 @@ class MaskFormerImageProcessor(BaseImageProcessor):
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
         validate_preprocess_arguments(
             do_rescale=do_rescale,
@@ -813,7 +773,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
             ignore_index,
             do_reduce_labels,
             return_tensors,
-            input_data_format=input_data_format,
+            input_data_format=data_format,
         )
         return encoded_inputs
 
@@ -907,7 +867,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         segmentation_maps: ImageInput = None,
         instance_id_to_semantic_id: Optional[Union[List[Dict[int, int]], Dict[int, int]]] = None,
         ignore_index: Optional[int] = None,
-        reduce_labels: bool = False,
+        do_reduce_labels: bool = False,
         return_tensors: Optional[Union[str, TensorType]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ):
@@ -959,7 +919,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
               `mask_labels[i][j]` if `class_labels[i][j]`.
         """
         ignore_index = self.ignore_index if ignore_index is None else ignore_index
-        reduce_labels = self.do_reduce_labels if reduce_labels is None else reduce_labels
+        do_reduce_labels = self.do_reduce_labels if do_reduce_labels is None else do_reduce_labels
 
         pixel_values_list = [to_numpy_array(pixel_values) for pixel_values in pixel_values_list]
 
@@ -983,7 +943,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
                     instance_id = instance_id_to_semantic_id
                 # Use instance2class_id mapping per image
                 masks, classes = self.convert_segmentation_map_to_binary_masks(
-                    segmentation_map, instance_id, ignore_index=ignore_index, reduce_labels=reduce_labels
+                    segmentation_map, instance_id, ignore_index=ignore_index, do_reduce_labels=do_reduce_labels
                 )
                 # We add an axis to make them compatible with the transformations library
                 # this will be removed in the future
@@ -1028,7 +988,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
             `torch.Tensor`:
                 A tensor of shape (`batch_size, num_class_labels, height, width`).
         """
-        logger.warning(
+        warnings.warn(
             "`post_process_segmentation` is deprecated and will be removed in v5 of Transformers, please use"
             " `post_process_instance_segmentation`",
             FutureWarning,

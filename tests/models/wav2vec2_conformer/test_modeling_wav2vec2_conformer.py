@@ -512,32 +512,29 @@ class Wav2Vec2ConformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
 
-    # Wav2Vec2Conformer has no inputs_embeds
+    @unittest.skip(reason="Wav2Vec2Conformer has not inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    # `input_ids` is renamed to `input_values`
+    @unittest.skip(reason="Wav2Vec2Conformer has input_values instead of input_ids")
     def test_forward_signature(self):
         pass
 
-    # Wav2Vec2Conformer cannot resize token embeddings
-    # since it has no tokens embeddings
+    @unittest.skip(reason="Wav2Vec2Conformer has not token embeddings")
     def test_resize_tokens_embeddings(self):
         pass
 
-    # Wav2Vec2Conformer has no inputs_embeds
-    # and thus the `get_input_embeddings` fn
-    # is not implemented
-    def test_model_common_attributes(self):
+    @unittest.skip(reason="Wav2Vec2Conformer has not inputs_embeds")
+    def test_model_get_set_embeddings(self):
         pass
 
     @is_pt_flax_cross_test
-    # non-robust architecture does not exist in Flax
+    @unittest.skip(reason="Non-robust architecture does not exist in Flax")
     def test_equivalence_flax_to_pt(self):
         pass
 
     @is_pt_flax_cross_test
-    # non-robust architecture does not exist in Flax
+    @unittest.skip(reason="Non-robust architecture does not exist in Flax")
     def test_equivalence_pt_to_flax(self):
         pass
 
@@ -866,7 +863,9 @@ class Wav2Vec2ConformerUtilsTest(unittest.TestCase):
 @slow
 class Wav2Vec2ConformerModelIntegrationTest(unittest.TestCase):
     def _load_datasamples(self, num_samples):
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        ds = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
+        )
         # automatic decoding with librispeech
         speech_samples = ds.sort("id").filter(lambda x: x["id"] in [f"1272-141231-000{i}" for i in range(num_samples)])
         speech_samples = speech_samples[:num_samples]["audio"]

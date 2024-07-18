@@ -132,6 +132,7 @@ if is_torch_available():
 
 # for version specific tests in TrainerIntegrationTest
 require_accelerate_version_min_0_28 = partial(require_accelerate, min_version="0.28")
+require_accelerate_version_min_0_30 = partial(require_accelerate, min_version="0.30")
 GRAD_ACCUM_KWARGS_VERSION_AVAILABLE = is_accelerate_available("0.28")
 if is_accelerate_available():
     from accelerate import Accelerator
@@ -1231,6 +1232,97 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             trainer.train()
             trainer.evaluate()
 
+    def test_get_eval_dataloader_without_persistent_workers(self):
+        train_dataset = RegressionDataset()
+        config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)
+        tiny_gpt2 = GPT2LMHeadModel(config)
+        args = TrainingArguments("./test", report_to="none", dataloader_persistent_workers=False)
+
+        # Single evaluation dataset
+        eval_dataset = RegressionDataset()
+        trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset, eval_dataset=eval_dataset)
+        # Mocking the prepare method to avoid the dataloader changing with each call to get_eval_dataloader
+        trainer.accelerator.prepare = lambda x: x
+
+        default_dataloader = trainer.get_eval_dataloader()
+        dataloader_with_dataset = trainer.get_eval_dataloader(eval_dataset)
+
+        self.assertEqual(default_dataloader.dataset, eval_dataset)
+        self.assertEqual(dataloader_with_dataset.dataset, eval_dataset)
+        self.assertNotEqual(default_dataloader, dataloader_with_dataset)
+
+        # Multiple evaluation datasets
+        first_dataset = RegressionDataset()
+        second_dataset = RegressionDataset()
+        trainer = Trainer(
+            tiny_gpt2,
+            args,
+            train_dataset=train_dataset,
+            eval_dataset={"first": first_dataset, "second": second_dataset},
+        )
+        # Mocking the prepare method to avoid the dataloader changing with each call to get_eval_dataloader
+        trainer.accelerator.prepare = lambda x: x
+
+        first_dataloader = trainer.get_eval_dataloader("first")
+        first_dataloader_repeated = trainer.get_eval_dataloader("first")
+        second_dataloader = trainer.get_eval_dataloader("second")
+        second_dataloader_repeated = trainer.get_eval_dataloader("second")
+
+        self.assertEqual(first_dataset, first_dataloader.dataset)
+        self.assertEqual(first_dataloader.dataset, first_dataloader_repeated.dataset)
+        self.assertEqual(second_dataset, second_dataloader.dataset)
+        self.assertEqual(second_dataloader.dataset, second_dataloader_repeated.dataset)
+        self.assertNotEqual(first_dataloader, first_dataloader_repeated)
+        self.assertNotEqual(second_dataloader, second_dataloader_repeated)
+
+    def test_get_eval_dataloader_with_persistent_workers(self):
+        train_dataset = RegressionDataset()
+        config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)
+        tiny_gpt2 = GPT2LMHeadModel(config)
+        args = TrainingArguments(
+            "./test",
+            report_to="none",
+            dataloader_persistent_workers=True,
+            dataloader_num_workers=2,
+        )
+
+        # Single evaluation dataset
+        eval_dataset = RegressionDataset()
+        trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset, eval_dataset=eval_dataset)
+        # Mocking the prepare method to avoid the dataloader changing with each call to get_eval_dataloader
+        trainer.accelerator.prepare = lambda x: x
+
+        default_dataloader = trainer.get_eval_dataloader()
+        dataloader_with_dataset = trainer.get_eval_dataloader(eval_dataset)
+
+        self.assertEqual(default_dataloader.dataset, eval_dataset)
+        self.assertEqual(dataloader_with_dataset.dataset, eval_dataset)
+        self.assertEqual(default_dataloader, dataloader_with_dataset)
+
+        # Multiple evaluation datasets
+        first_dataset = RegressionDataset()
+        second_dataset = RegressionDataset()
+        trainer = Trainer(
+            tiny_gpt2,
+            args,
+            train_dataset=train_dataset,
+            eval_dataset={"first": first_dataset, "second": second_dataset},
+        )
+        # Mocking the prepare method to avoid the dataloader changing with each call to get_eval_dataloader
+        trainer.accelerator.prepare = lambda x: x
+
+        first_dataloader = trainer.get_eval_dataloader("first")
+        first_dataloader_repeated = trainer.get_eval_dataloader("first")
+        second_dataloader = trainer.get_eval_dataloader("second")
+        second_dataloader_repeated = trainer.get_eval_dataloader("second")
+
+        self.assertEqual(first_dataset, first_dataloader.dataset)
+        self.assertEqual(first_dataloader.dataset, first_dataloader_repeated.dataset)
+        self.assertEqual(second_dataset, second_dataloader.dataset)
+        self.assertEqual(second_dataloader.dataset, second_dataloader_repeated.dataset)
+        self.assertEqual(first_dataloader, first_dataloader_repeated)
+        self.assertEqual(second_dataloader, second_dataloader_repeated)
+
     @require_lomo
     @require_torch_gpu
     def test_lomo(self):
@@ -1560,6 +1652,84 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         galore_peak_memory = tracemalloc.peaked + bytes2megabytes(tracemalloc.begin)
         self.assertTrue(galore_peak_memory < upper_bound_pm)
         self.assertTrue(lower_bound_pm < galore_peak_memory)
+
+    @require_galore_torch
+    @require_torch_gpu
+    def test_galore_lr_display_without_scheduler(self):
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            learning_rate = 1e-9
+            num_steps = 10
+
+            # Trainer without inf/nan filter
+            args = TrainingArguments(
+                tmpdir,
+                learning_rate=learning_rate,
+                logging_steps=5,
+                optim="galore_adamw",
+                optim_target_modules=[r".*attn.*", r".*mlp.*"],
+            )
+            trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
+            trainer.create_optimizer_and_scheduler(num_training_steps=num_steps)
+
+            # reflects displayed lr in trainer
+            self.assertEqual(trainer.get_learning_rates(), [learning_rate, learning_rate])
+
+    @require_galore_torch
+    @require_torch_gpu
+    def test_galore_lr_display_with_scheduler(self):
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            learning_rate = 2e-4
+            num_train_epochs = 2
+            num_warmup_steps = 5
+
+            # Trainer without inf/nan filter
+            args = TrainingArguments(
+                tmpdir,
+                num_train_epochs=num_train_epochs,
+                learning_rate=learning_rate,
+                warmup_steps=num_warmup_steps,
+                lr_scheduler_type="cosine",
+                logging_steps=1,
+                optim="galore_adamw",
+                optim_target_modules=[r".*attn.*", r".*mlp.*"],
+            )
+            trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
+
+            # creating log history of trainer, results don't matter
+            trainer.train()
+            logs = trainer.state.log_history[1:][:-1]
+
+            # reach given learning rate peak and end with 0 lr
+            self.assertTrue(logs[num_warmup_steps - 2]["learning_rate"] == learning_rate)
+            self.assertTrue(logs[-1]["learning_rate"] == 0)
+
+            # increasing and decreasing pattern of lrs
+            increasing_lrs = [
+                logs[i]["learning_rate"] < logs[i + 1]["learning_rate"]
+                for i in range(len(logs))
+                if i < num_warmup_steps - 2
+            ]
+            decreasing_lrs = [
+                logs[i]["learning_rate"] > logs[i + 1]["learning_rate"]
+                for i in range(len(logs) - 1)
+                if i >= num_warmup_steps - 2
+            ]
+
+            self.assertTrue(all(increasing_lrs))
+            self.assertTrue(all(decreasing_lrs))
+
+            # warm up steps << total steps
+            self.assertTrue(len(decreasing_lrs) > len(increasing_lrs))
 
     @require_torch_multi_accelerator
     def test_data_is_not_parallelized_when_model_is_parallel(self):
@@ -2975,7 +3145,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertAlmostEqual(metrics["eval_loss"], original_eval_loss)
         torchdynamo.reset()
 
-    @unittest.skip("torch 2.0.0 gives `ModuleNotFoundError: No module named 'torchdynamo'`.")
+    @unittest.skip(reason="torch 2.0.0 gives `ModuleNotFoundError: No module named 'torchdynamo'`.")
     @require_torch_non_multi_gpu
     @require_torchdynamo
     def test_torchdynamo_memory(self):
@@ -3445,6 +3615,46 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 )
             self.assertTrue("Tried passing in a callable to `accelerator_config`" in str(context.exception))
 
+    def test_torch_dtype_to_json(self):
+        @dataclasses.dataclass
+        class TorchDtypeTrainingArguments(TrainingArguments):
+            torch_dtype: torch.dtype = dataclasses.field(
+                default=torch.float32,
+            )
+
+        for dtype in [
+            "float32",
+            "float64",
+            "complex64",
+            "complex128",
+            "float16",
+            "bfloat16",
+            "uint8",
+            "int8",
+            "int16",
+            "int32",
+            "int64",
+            "bool",
+        ]:
+            torch_dtype = getattr(torch, dtype)
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                args = TorchDtypeTrainingArguments(output_dir=tmp_dir, torch_dtype=torch_dtype)
+
+                args_dict = args.to_dict()
+                self.assertIn("torch_dtype", args_dict)
+                self.assertEqual(args_dict["torch_dtype"], dtype)
+
+    @require_accelerate_version_min_0_30
+    def test_eval_use_gather_object(self):
+        train_dataset = RegressionDataset()
+        eval_dataset = RegressionDataset()
+        model = RegressionDictModel()
+        args = TrainingArguments("./regression", report_to="none", eval_use_gather_object=True)
+        trainer = Trainer(model, args, train_dataset=train_dataset, eval_dataset=eval_dataset)
+        trainer.train()
+        _ = trainer.evaluate()
+        _ = trainer.predict(eval_dataset)
+
 
 @require_torch
 @is_staging_test
@@ -3548,7 +3758,7 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
     def test_push_to_hub_with_saves_each_n_steps(self):
         num_gpus = max(1, backend_device_count(torch_device))
         if num_gpus > 2:
-            return
+            self.skipTest(reason="More than 2 GPUs available")
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             trainer = get_regression_trainer(

@@ -221,7 +221,7 @@ class ConversationalPipelineTests(unittest.TestCase):
             inputs["input_ids"].tolist(), [[31373, 50256, 17250, 612, 0, 50256, 4919, 389, 345, 5633, 50256]]
         )
 
-    @unittest.skip("Model is curently gated")
+    @unittest.skip(reason="Model is curently gated")
     @require_torch
     @slow
     def test_integration_torch_conversation_llama2_input_ids(self):

@@ -496,7 +496,7 @@ class Bnb4BitTestTraining(Base4bitTest):
 
     def test_training(self):
         if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.37.0"):
-            return
+            self.skipTest(reason="This test requires bitsandbytes >= 0.37.0")
 
         # Step 1: freeze all parameters
         model = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_4bit=True)
