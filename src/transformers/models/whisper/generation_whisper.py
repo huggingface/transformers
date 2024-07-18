@@ -722,15 +722,9 @@ class WhisperGenerationMixin:
         if is_shortform:
             # add eos token:
             if generation_config.max_new_tokens is None and generation_config.max_length is None:
-                # fmt: off
-                sequences = torch.cat(
-                    [
-                        sequences,
-                        torch.full((sequences.shape[0], 1,), generation_config.eos_token_id).to(sequences.device),
-                    ],
-                    dim=-1,
-                )
-                #fmt= on
+
+                eos_tokens = torch.full((sequences.shape[0], 1,), generation_config.eos_token_id).to(sequences.device)
+                sequences = torch.cat([sequences, eos_tokens], dim=-1)
 
             if return_token_timestamps:
                 outputs = {}

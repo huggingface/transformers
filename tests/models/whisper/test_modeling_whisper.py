@@ -1996,7 +1996,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         EXPECTED_TRANSCRIPT = (
             "<|startoftranscript|><|notimestamps|> Mr. Quilter is the apostle of the middle"
-            " classes, and we are glad to<|endoftext|>"
+            " classes, and we are glad to"
         )
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
@@ -2017,7 +2017,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         EXPECTED_TRANSCRIPT = (
             "<|startoftranscript|><|en|><|transcribe|><|notimestamps|> Mr. Quilter is the apostle of the middle"
-            " classes and we are glad<|endoftext|>"
+            " classes and we are glad"
         )
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
@@ -2159,10 +2159,10 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         # fmt: off
         EXPECTED_LOGITS = torch.tensor(
             [
-                [50257, 50362, 1770, 13, 2264, 346, 353, 318, 262, 46329, 286, 262, 3504, 6097, 11, 290, 356, 389, 9675, 284, 50256],
-                [50257, 50362, 5414, 318, 1770, 13, 2264, 346, 353, 338, 5642, 1342, 3499, 621, 465, 2300, 13, 50256, 50256, 50256, 50256],
-                [50257, 50362, 679, 4952, 514, 326, 379, 428, 43856, 1622, 286, 262, 614, 11, 351, 6786, 290, 32595, 12023, 28236, 50256],
-                [50257, 50362, 679, 468, 12296, 17188, 1771, 7361, 26113, 18881, 1122, 338, 670, 318, 1107, 8312, 706, 477, 290, 460, 50256]
+                [50257, 50362, 1770, 13, 2264, 346, 353, 318, 262, 46329, 286, 262, 3504, 6097, 11, 290, 356, 389, 9675, 284],
+                [50257, 50362, 5414, 318, 1770, 13, 2264, 346, 353, 338, 5642, 1342, 3499, 621, 465, 2300, 13, 50256, 50256, 50256],
+                [50257, 50362, 679, 4952, 514, 326, 379, 428, 43856, 1622, 286, 262, 614, 11, 351, 6786, 290, 32595, 12023, 28236],
+                [50257, 50362, 679, 468, 12296, 17188, 1771, 7361, 26113, 18881, 1122, 338, 670, 318, 1107, 8312, 706, 477, 290, 460]
             ]
 
         )
