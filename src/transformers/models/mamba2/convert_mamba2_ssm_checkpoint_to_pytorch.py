@@ -15,29 +15,23 @@
 """This script can be used to convert checkpoints provided in the `mamba2_ssm` library into the format provided in HuggingFace `transformers`. It depends on the `mamba2_ssm` package to be installed."""
 
 import argparse
-import json
-import math
-from typing import Tuple
 
 import torch
-
-from transformers import AutoTokenizer, Mamba2Config, Mamba2ForCausalLM, LlamaTokenizerFast
-from transformers.utils import logging
 from safetensors import safe_open
+
+from transformers import LlamaTokenizerFast, Mamba2Config, Mamba2ForCausalLM
 
 
 def convert_mamba2_checkpoint_file_to_huggingface_model_file(
     mamba2_checkpoint_path: str, tokenizer_model_path: str, output_dir: str
 ) -> None:
-    
     hf_config = Mamba2Config()
-    #hf_config.tie_word_embeddings = False
     hf_model = Mamba2ForCausalLM(hf_config)
     # Load weights and config from paths
     original_state_dict = {}
     with safe_open(mamba2_checkpoint_path, framework="pt") as f:
         for k in f.keys():
-            newk = k.removeprefix('model.')
+            newk = k.removeprefix("model.")
             original_state_dict[newk] = f.get_tensor(k).clone()
 
     hf_model.load_state_dict(original_state_dict)

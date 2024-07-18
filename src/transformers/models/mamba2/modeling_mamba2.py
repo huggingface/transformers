@@ -20,6 +20,7 @@ from typing import Any, Dict, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
+from einops import rearrange
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
@@ -34,15 +35,14 @@ from ...utils import (
 )
 from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available
 from .configuration_mamba2 import Mamba2Config
-from einops import rearrange
+
 
 logger = logging.get_logger(__name__)
 
 if is_mamba_ssm_available():
     from mamba_ssm.ops.selective_scan_interface import mamba_inner_fn, selective_scan_fn
     from mamba_ssm.ops.triton.selective_state_update import selective_state_update
-    from mamba_ssm.ops.triton.ssd_combined import mamba_chunk_scan_combined
-    from mamba_ssm.ops.triton.ssd_combined import mamba_split_conv1d_scan_combined
+    from mamba_ssm.ops.triton.ssd_combined import mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined
 else:
     selective_state_update, selective_scan_fn, mamba_inner_fn = None, None, None
 
@@ -54,7 +54,6 @@ else:
 is_fast_path_available = all(
     (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
 )
-
 
 
 _CHECKPOINT_FOR_DOC = "mistralai/mamba-codestral-7B-v0.1"
@@ -82,16 +81,22 @@ class Mamba2Cache:
     ):
         self.seqlen_offset = 0
         self.dtype = dtype
-        intermediate_size = config.intermediate_size 
-        ssm_state_size = config.state_size
         conv_kernel_size = config.conv_kernel
 
         self.conv_states = {
-            i: torch.zeros(batch_size, config.intermediate_size + 2 * config.n_groups * config.state_size, conv_kernel_size, device=device, dtype=dtype)
+            i: torch.zeros(
+                batch_size,
+                config.intermediate_size + 2 * config.n_groups * config.state_size,
+                conv_kernel_size,
+                device=device,
+                dtype=dtype,
+            )
             for i in range(config.num_hidden_layers)
         }
         self.ssm_states = {
-            i: torch.zeros(batch_size, config.num_heads, config.head_dim , config.state_size, device=device, dtype=dtype)
+            i: torch.zeros(
+                batch_size, config.num_heads, config.head_dim, config.state_size, device=device, dtype=dtype
+            )
             for i in range(config.num_hidden_layers)
         }
         self.activation = config.hidden_act
@@ -199,14 +204,12 @@ class Mamba2Mixer(nn.Module):
             )
 
     def cuda_kernels_forward(self, hidden_states: torch.Tensor, cache_params: Optional[Mamba2Cache] = None):
-        batch_size, seq_len, _, = hidden_states.shape
+        seq_len = hidden_states.shape[1]
         seqlen_og = seq_len
         # 1. Gated MLP's linear projection
-        projected_states = self.in_proj(hidden_states) #.transpose(1, 2)
+        projected_states = self.in_proj(hidden_states)  # .transpose(1, 2)
         A = -torch.exp(self.A_log.float())  # (nheads) or (d_inner, d_state)
-        dt_limit_kwargs = {} if self.time_step_limit == (0.0, float("inf")) else dict(dt_limit=self.time_step_limit)
-        #if seqlen_og is not None:
-        #    projected_states = rearrange(projected_states, "(b l) d -> b l d", l=seq_len)
+        dt_limit_kwargs = {} if self.time_step_limit == (0.0, float("inf")) else {"dt_limit": self.time_step_limit}
         if self.training and cache_params is None:  # Doesn't support outputting the states -> used for training
             out = mamba_split_conv1d_scan_combined(
                 projected_states,
@@ -216,7 +219,7 @@ class Mamba2Mixer(nn.Module):
                 A,
                 D=rearrange(self.D, "(h p) -> h p", p=self.head_dim) if self.D_has_hdim else self.D,
                 chunk_size=self.chunk_size,
-                seq_idx=None, # was seq_idx
+                seq_idx=None,  # was seq_idx
                 activation=self.activation,
                 rmsnorm_weight=self.norm.weight,
                 rmsnorm_eps=self.norm.variance_epsilon,
@@ -236,11 +239,10 @@ class Mamba2Mixer(nn.Module):
                 dim=-1,
             )
             time_step = nn.functional.softplus(time_step + self.dt_bias)
-
             # 1D Convolution
             if causal_conv1d_fn is None or self.activation not in ["silu", "swish"]:
                 xBC = self.act(
-                    self.conv1d(xBC.transpose(1, 2)).transpose(1, 2)
+                    self.conv1d(xBC.transpose(1, 2)).transpose(1, 2)[:, :seq_len]
                 )  # (B, L, self.d_inner + 2 * ngroups * d_state)
             else:
                 xBC = causal_conv1d_fn(
@@ -248,8 +250,7 @@ class Mamba2Mixer(nn.Module):
                     weight=rearrange(self.conv1d.weight, "d 1 w -> d w"),  # TODO remove einops
                     bias=self.conv1d.bias,
                     activation=self.activation,
-                ).transpose(1, 2)
-
+                ).transpose(1, 2)[:, :seq_len]
             x, B, C = torch.split(
                 xBC, [self.intermediate_size, self.n_groups * self.state_size, self.n_groups * self.state_size], dim=-1
             )
@@ -286,7 +287,6 @@ class Mamba2Mixer(nn.Module):
                 [d_mlp, d_mlp, self.intermediate_size,  self.conv_dim, self.num_heads], dim=-1
         )
         dt = nn.functional.softplus(dt + self.dt_bias)
-
         # 2. Convolution sequence transformation
         if cache_params is not None:
             ssm_state = cache_params.ssm_states[self.layer_idx].clone()
@@ -314,7 +314,6 @@ class Mamba2Mixer(nn.Module):
                 device=hidden_states.device, dtype=dtype
             )
             hidden_states = self.act(self.conv1d(hidden_states.transpose(1,2)).transpose(1,2))[:, (self.conv_kernel_size - 1):, :]
-
         # 3. State Space Model sequence transformation
         # 3.a. Selection:  [batch, seq_len, self.time_step_rank + self.ssm_state_size * 2]
         hidden_states, B, C = torch.split(hidden_states, [self.intermediate_size, self.n_groups * self.ssm_state_size, self.n_groups * self.ssm_state_size], dim=-1)
@@ -353,7 +352,7 @@ class Mamba2Mixer(nn.Module):
     # fmt: on
 
     def forward(self, hidden_states, cache_params: Optional[Mamba2Cache] = None):
-        if is_fast_path_available:  # and "cuda" in self.x_proj.weight.device.type:
+        if is_fast_path_available:
             return self.cuda_kernels_forward(hidden_states, cache_params)
         return self.slow_forward(hidden_states, cache_params)
 
@@ -415,8 +414,6 @@ class Mamba2PreTrainedModel(PreTrainedModel):
         if isinstance(module, Mamba2Mixer):
             module.A_log._no_weight_decay = True
             module.D._no_weight_decay = True
-
-            dt_init_std = self.config.time_step_rank**-0.5 * self.config.time_step_scale
 
             dt = torch.exp(
                 torch.rand(self.config.num_heads)
@@ -658,7 +655,6 @@ class Mamba2Model(Mamba2PreTrainedModel):
     """,
     MAMBA2_START_DOCSTRING,
 )
-# Copied from transformers.models.mamba.modeling_mamba.MambaForCausalLM with MAMBA->MAMBA2,Mamba->Mamba2,mamba->mamba2
 class Mamba2ForCausalLM(Mamba2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

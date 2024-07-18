@@ -16,17 +16,15 @@
 
 import math
 import unittest
-from typing import Dict, List, Tuple
-from unittest.util import safe_repr
 
 from parameterized import parameterized
 
 from transformers import AutoTokenizer, Mamba2Config, is_torch_available
-from transformers.testing_utils import require_torch, require_torch_multi_gpu, slow, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_modeling_common import ModelTesterMixin
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -37,7 +35,6 @@ if is_torch_available():
         Mamba2ForCausalLM,
         Mamba2Model,
     )
-    from transformers.models.mamba2.modeling_mamba2 import Mamba2Cache
     from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_0
 else:
     is_torch_greater_or_equal_than_2_0 = False
