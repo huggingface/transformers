@@ -332,7 +332,7 @@ class Mamba2Mixer(nn.Module):
             scan_output = torch.einsum("bhn,bnhn->bnh",C[:, i, :, :].repeat((1,self.n_groups,1)), ssm_state)# [batch, intermediate_size, 1]
             scan_outputs.append(scan_output)
         scan_output = torch.stack(scan_outputs, dim=1)                                # [batch, intermediate_size, seq_len]
-        scan_output = scan_output + (hidden_states * D)[:,:,:,:]
+        scan_output = scan_output + (hidden_states * D)
         scan_output = self.norm(scan_output.view(batch_size, seq_len, -1), gate)
         if cache_params is not None:
             cache_params.ssm_states[self.layer_idx].copy_(ssm_state)
