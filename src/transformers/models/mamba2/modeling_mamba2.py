@@ -203,7 +203,7 @@ class Mamba2Mixer(nn.Module):
         seqlen_og = seq_len
         # 1. Gated MLP's linear projection
         projected_states = self.in_proj(hidden_states) #.transpose(1, 2)
-        A = -torch.exp(self.A_log.float())  # (nheads) or (d_inner, d_state)
+        A = -torch.exp(self.A_log.float())  # (self.num_heads) or (d_inner, d_state)
         dt_limit_kwargs = {} if self.time_step_limit == (0.0, float("inf")) else dict(dt_limit=self.time_step_limit)
         #if seqlen_og is not None:
         #    projected_states = rearrange(projected_states, "(b l) d -> b l d", l=seq_len)
@@ -326,16 +326,24 @@ class Mamba2Mixer(nn.Module):
         hidden_states = hidden_states.reshape(batch_size, seq_len, -1, self.head_dim).float()
 
         # 3.c perform the recurrence y ← SSM(A, B, C)(x)
-        discrete_A =  torch.exp( A * dt)                                        # [batch, seq_len, num_heads]
-        discrete_B = dt[:, :, :, None, None] * B[:, :, None, :, :].repeat((1,1,1,self.n_groups, 1)).float()       # [batch, intermediate_size, seq_len, ssm_state_size]
-        deltaB_u = discrete_B * hidden_states[:, :, :, :, None].float()
-
-
+        # discrete_A =  torch.exp( A * dt)                                        # [batch, seq_len, num_heads]
+        # discrete_B = dt[:, :, :, None, None] * B[:, :, None, :, :].repeat((1,1,1,self.n_groups, 1)).float()       # [batch, intermediate_size, seq_len, ssm_state_size]
+        # deltaB_u = discrete_B * hidden_states[:, :, :, :, None].float()
+        dt = dt[:, :, :, None].expand(batch_size, seq_len, self.num_heads, self.head_dim)
+        from einops import repeat
+        dA = torch.exp(rearrange(dt, "b l h d -> b l h d 1") * A)  # (batch, self.num_heads, dim, dstate)
+        B = repeat(B, "b l g n -> b l (g h) n", h=self.num_heads // self.n_groups)  # (batch, self.num_heads, dstate)
+        C = repeat(C, "b l g n -> b l (g h) n", h=self.num_heads // self.n_groups)  # (batch, self.num_heads, dstate)
+        dB = rearrange(dt, "b l h d -> b l h d 1") * rearrange(B, "b l h n -> b l h 1 n")  # (batch, self.num_heads, dim, dstate)
+        discrete_b =  dB * rearrange(hidden_states, "b l h d -> b l h d 1")
         # 3.c perform the recurrence y ← SSM(A, B, C)(x)
         scan_outputs = []
         for i in range(seq_len):
-            ssm_state = discrete_A[:, i, :] * ssm_state + deltaB_u[:, i, :, ]      # [batch, intermediate_size, ssm_state]
-            scan_output = torch.einsum("bhn,bnhn->bnh",C[:, i, :, :].repeat((1,self.n_groups,1)), ssm_state)# [batch, intermediate_size, 1]
+            ssm_state = ssm_state * dA[:,i,:,:] + discrete_b[:, i, :, :] # (batch, dim, dstate
+            scan_output = torch.einsum("bhdn,bhn->bhd", ssm_state.to(C.dtype), C[:,i,:,:])
+
+            # ssm_state = discrete_A[:, i, :] * ssm_state + deltaB_u[:, i, :, ]      # [batch, intermediate_size, ssm_state]
+            # scan_output = torch.einsum("bhn,bnhn->bnh",C[:, i, :, :].repeat((1,self.n_groups,1)), ssm_state)# [batch, intermediate_size, 1]
             scan_outputs.append(scan_output)
         scan_output = torch.stack(scan_outputs, dim=1)                                # [batch, intermediate_size, seq_len]
         scan_output = scan_output + (hidden_states * self.D[:,None])
