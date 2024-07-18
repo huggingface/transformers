@@ -91,7 +91,7 @@ class Mamba2Cache:
             for i in range(config.num_hidden_layers)
         }
         self.ssm_states = {
-            i: torch.zeros(batch_size, config.num_heads * config.state_size, config.head_dim, device=device, dtype=dtype)
+            i: torch.zeros(batch_size, config.num_heads, config.head_dim , config.state_size, device=device, dtype=dtype)
             for i in range(config.num_hidden_layers)
         }
         self.activation = config.hidden_act
@@ -232,7 +232,7 @@ class Mamba2Mixer(nn.Module):
         else:
             gate, xBC, time_step = torch.split(
                 projected_states,
-                [self.intermediate_size, self.intermediate_size + 2 * self.n_groups * self.state_size, self.num_heads],
+                [self.intermediate_size, self.conv_dim, self.num_heads],
                 dim=-1,
             )
             time_step = nn.functional.softplus(time_step + self.dt_bias)
@@ -281,11 +281,9 @@ class Mamba2Mixer(nn.Module):
         dtype = input_states.dtype
         # 1. Gated MLP's linear projection
         projected_states =  self.in_proj(input_states)
-        d_mlp = (projected_states.shape[-1] - 2 * self.ssm_state_size - 2 * self.n_groups * self.state_size - self.num_heads) // 2
-        if seq_len != 1:
-            d_mlp = 0
+        d_mlp = (projected_states.shape[-1] - 2 * self.intermediate_size -  2 * self.n_groups * self.state_size- self.num_heads) // 2
         z0, x0, gate, hidden_states, dt = projected_states.split(
-                [d_mlp, d_mlp, self.intermediate_size, self.intermediate_size + 2 * self.n_groups * self.state_size, self.num_heads], dim=-1
+                [d_mlp, d_mlp, self.intermediate_size,  self.conv_dim, self.num_heads], dim=-1
         )
         dt = nn.functional.softplus(dt + self.dt_bias)
 
@@ -298,10 +296,10 @@ class Mamba2Mixer(nn.Module):
                 conv_state = torch.roll(conv_state, shifts=-1, dims=-1)
                 conv_state[:, :, -1] = hidden_states
                 cache_params.conv_states[self.layer_idx].copy_(conv_state)
-                hidden_states = torch.sum(conv_state * self.conv1d.weight[:, 0, :], dim=-1)
+                hidden_states = torch.sum(conv_state.to(projected_states.device) * self.conv1d.weight[:, 0, :], dim=-1)
                 if self.use_conv_bias:
                     hidden_states += self.conv1d.bias
-                hidden_states = self.act(hidden_states).to(dtype).unsqueeze(-1)         # [batch, intermediate_size, 1] : decoding
+                hidden_states = self.act(hidden_states).to(dtype).unsqueeze(1)         # [batch, 1, intermediate_size] : decoding
             else:
                 hidden_states = hidden_states.transpose(1,2)
                 conv_state = nn.functional.pad(
@@ -321,32 +319,36 @@ class Mamba2Mixer(nn.Module):
         # 3.a. Selection:  [batch, seq_len, self.time_step_rank + self.ssm_state_size * 2]
         hidden_states, B, C = torch.split(hidden_states, [self.intermediate_size, self.n_groups * self.ssm_state_size, self.n_groups * self.ssm_state_size], dim=-1)
         # 3.b. Discretization: B and C to [batch, seq_len, intermediate_size, ssm_state_size] (SRAM)
-        A = -torch.exp(self.A_log.float())                                  # [num_heads]
-        discrete_A = torch.exp(dt * A)                                      # [batch, seq_len, num_heads]
-        # torch.einsum("blh,bln,blhp->blhpn", dt, B, hidden_states.reshape(1,11,128,-1)).shape
-        # torch.Size([1, 11, 128, 64, 1024])
-        discrete_B = (dt[:,:,:,None] * B.reshape(batch_size,seq_len, 1 , self.n_groups * self.ssm_state_size).float())          # [batch, seq_len, self.n_groups * self.ssm_state_size,  num_heads]
-        deltaB_u = hidden_states.reshape(batch_size,seq_len,self.num_heads,-1,1).float() * discrete_B[:,:, :, None, :]     # [batch, seq_len, self.n_groups * self.ssm_state_size,  num_heads]
-        deltaB_u = deltaB_u.reshape(batch_size, seq_len, self.num_heads, -1, self.head_dim)
-        # torch.Size([1, 128,       8192,           64])
-        #               numheads,   intermediate,    (head_dim?)
-        #                   h,      
+        A = -torch.exp(self.A_log.float())                            # [num_heads]
+
+        # TODO REPEAT TO GET TO THE  intermediate_size
+        A = A[:,None,None].expand(self.num_heads, self.head_dim, self.ssm_state_size)
+        discrete_time_step = dt[:,:,:, None].expand(batch_size, seq_len, self.ssm_state_size, self.head_dim)
+        D = self.D[:,None].expand(-1, self.head_dim)
+        B = B.reshape(batch_size,seq_len,  -1, self.ssm_state_size)
+        C = C.reshape(batch_size, seq_len, -1, self.ssm_state_size)
+        hidden_states = hidden_states.reshape(batch_size, seq_len, -1, self.head_dim)
+
+        # 3.c perform the recurrence y ← SSM(A, B, C)(x)
+        discrete_A = torch.exp(discrete_time_step[:,:,:,:,None] * A[None,None, :, :, :])                                   # [batch, seq_len, num_heads]
+        discrete_B = discrete_time_step[:, :, :, :,  None] * B[:, :, None, :, :].repeat((1,1,1,self.n_groups, 1)).float()       # [batch, intermediate_size, seq_len, ssm_state_size]
+        deltaB_u = discrete_B * hidden_states[:, :, :, :, None].float()
+
+
         # 3.c perform the recurrence y ← SSM(A, B, C)(x)
         scan_outputs = []
         for i in range(seq_len):
-            ssm_state = ssm_state * discrete_A[:, i, :, None, None] + deltaB_u[:, i, :, :]      # [batch, intermediate_size, ssm_state]
-            scan_output = torch.matmul(C[:,i, :].float(), ssm_state)  # [batch, intermediate_size, 1]
-            scan_outputs.append(scan_output[:,:, 0,: ])
+            ssm_state = discrete_A[:, i, :, :, :] * ssm_state + deltaB_u[:, i, :, : , :]      # [batch, intermediate_size, ssm_state]
+            scan_output = torch.einsum("bhn,bnhn->bnh",C[:, i, :, :].repeat((1,self.n_groups,1)), ssm_state)# [batch, intermediate_size, 1]
+            scan_outputs.append(scan_output)
         scan_output = torch.stack(scan_outputs, dim=1)                                # [batch, intermediate_size, seq_len]
-        scan_output = scan_output + (hidden_states.reshape(batch_size,seq_len,self.num_heads,-1) * self.D[None,:,None])
-        scan_output = (scan_output * self.act(gate).reshape(batch_size,seq_len,self.num_heads,-1))
-        if d_mlp > 0:
-            scan_output = torch.cat([nn.functional.silu(z0) * x0, scan_output], dim=-1)
+        scan_output = scan_output + (hidden_states * D)
+        scan_output = self.norm(scan_output.view(batch_size, seq_len, -1), gate)
         if cache_params is not None:
             cache_params.ssm_states[self.layer_idx].copy_(ssm_state)
 
         # 4. Final linear projection
-        contextualized_states = self.out_proj(scan_output.transpose(1, 2))  # [batch, seq_len, hidden_size]
+        contextualized_states = self.out_proj(scan_output.to(hidden_states))  # [batch, seq_len, hidden_size]
         return contextualized_states
     # fmt: on
 
