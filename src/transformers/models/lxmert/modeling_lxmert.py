@@ -700,6 +700,15 @@ class LxmertLMPredictionHead(nn.Module):
         self.decoder.weight = lxmert_model_embedding_weights
         self.bias = nn.Parameter(torch.zeros(lxmert_model_embedding_weights.size(0)))
 
+    def _resize_bias(self, new_num_tokens: int) -> None:
+        old_num_tokens = self.bias.shape[0]
+        if new_num_tokens <= old_num_tokens:
+            new_bias = self.bias[:new_num_tokens]
+        else:
+            extra_bias = torch.zeros(new_num_tokens - old_num_tokens, device=self.bias.device)
+            new_bias = torch.cat([self.bias, extra_bias])
+        self.bias = nn.Parameter(new_bias)
+
     def forward(self, hidden_states):
         hidden_states = self.transform(hidden_states)
         hidden_states = self.decoder(hidden_states) + self.bias
@@ -1071,6 +1080,12 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
                 "loss": "l2",
             }
         self.visual_losses = visual_losses
+
+    def resize_token_embeddings(self, new_num_tokens: int, pad_to_multiple_of: Optional[int] = None) -> nn.Embedding:
+        # Adding the following steps to resize bias term while resizing embeddings
+        new_embeddings = super().resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
+        self.cls.predictions._resize_bias(new_num_tokens)
+        return new_embeddings
 
     def resize_num_qa_labels(self, num_labels):
         """

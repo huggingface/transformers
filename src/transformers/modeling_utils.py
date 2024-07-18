@@ -2129,7 +2129,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             new_embeddings.weight.data[:n, :] = old_embeddings.weight.data[:n, :]
 
+        # Replace weights in old_embeddings and return to maintain the same embedding type.
+        # This ensures correct functionality when a Custom Embedding class is passed as input.
+        # The input and output embedding types remain consistent. (c.f. https://github.com/huggingface/transformers/pull/31979)
         old_embeddings.weight.data = new_embeddings.weight.data
+        old_embeddings.num_embeddings = new_embeddings.weight.data.shape[0]
+
+        if old_embeddings.padding_idx is not None:
+            if (new_num_tokens - 1) < old_embeddings.padding_idx:
+                old_embeddings.padding_idx = None
+
         return old_embeddings
 
     def _get_resized_lm_head(
