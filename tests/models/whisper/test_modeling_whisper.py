@@ -1548,7 +1548,6 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_longform_generate_multi_batch_cond_prev(self):
         self._check_longform_generate_multi_batch(condition_on_prev_tokens=True)
 
-
     def test_beam_sample_generate_dict_output(self):
         # We overwrite test_beam_sample_generate_dict_output in test_utils as
         # we can only perform beam search if the temperature is set to 0 in Whisper.
@@ -1820,7 +1819,6 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         normalized_0 = torch.nn.functional.softmax(out_last_tokens)
         normalized_1 = torch.nn.functional.softmax(out_shared_prefix_last_tokens)
         torch.testing.assert_close(normalized_0, normalized_1, rtol=1e-3, atol=1e-4)
-
 
 
 @require_torch
