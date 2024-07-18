@@ -278,7 +278,7 @@ class Mamba2Mixer(nn.Module):
         dt = nn.functional.softplus(dt + self.dt_bias)
 
         # 2. Convolution sequence transformation
-        if not cache_params is not None:
+        if cache_params is not None:
             ssm_state = cache_params.ssm_states[self.layer_idx].clone()
             ssm_state = ssm_state.to(x0.device)
             if cache_params.seqlen_offset > 0:
@@ -300,7 +300,7 @@ class Mamba2Mixer(nn.Module):
                 hidden_states = self.act(self.conv1d(hidden_states).transpose(1,2))[:, (self.conv_kernel_size - 1):, :]     # [batch, intermediate_size, seq_len]
         else:
             ssm_state = torch.zeros(
-                (batch_size, self.intermediate_size, self.ssm_state_size),
+                (batch_size, self.num_heads, self.head_dim, self.ssm_state_size),
                 device=hidden_states.device, dtype=dtype
             )
             hidden_states = self.act(self.conv1d(hidden_states.transpose(1,2)).transpose(1,2))[:, (self.conv_kernel_size - 1):, :]
