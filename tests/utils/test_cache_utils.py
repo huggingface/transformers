@@ -355,7 +355,6 @@ class CacheIntegrationTest(unittest.TestCase):
         with self.subTest(f"{attn_implementation}, dynamic"):
             self.assertListEqual(decoded, EXPECTED_GENERATION)
 
-
         set_seed(0)
         model.generation_config.cache_implementation = "static"
         gen_out = model.generate(**inputs, do_sample=False, max_new_tokens=10)
