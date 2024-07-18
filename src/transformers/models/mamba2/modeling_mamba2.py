@@ -329,13 +329,12 @@ class Mamba2Mixer(nn.Module):
         # discrete_A =  torch.exp( A * dt)                                        # [batch, seq_len, num_heads]
         # discrete_B = dt[:, :, :, None, None] * B[:, :, None, :, :].repeat((1,1,1,self.n_groups, 1)).float()       # [batch, intermediate_size, seq_len, ssm_state_size]
         # deltaB_u = discrete_B * hidden_states[:, :, :, :, None].float()
-        dt = dt[:, :, :, None].expand(batch_size, seq_len, self.num_heads, self.head_dim)
-        from einops import repeat
-        dA = torch.exp(rearrange(dt, "b l h d -> b l h d 1") * A)  # (batch, self.num_heads, dim, dstate)
-        B = repeat(B, "b l g n -> b l (g h) n", h=self.num_heads // self.n_groups)  # (batch, self.num_heads, dstate)
-        C = repeat(C, "b l g n -> b l (g h) n", h=self.num_heads // self.n_groups)  # (batch, self.num_heads, dstate)
-        dB = rearrange(dt, "b l h d -> b l h d 1") * rearrange(B, "b l h n -> b l h 1 n")  # (batch, self.num_heads, dim, dstate)
-        discrete_b =  dB * rearrange(hidden_states, "b l h d -> b l h d 1")
+        dt = dt[:, :, :, None, None].expand(batch_size, seq_len, self.num_heads, self.head_dim,1)
+        dA = torch.exp(dt * A)  # (batch, self.num_heads, dim, dstate)
+        B = B.repeat(1,1, self.num_heads // self.n_groups,1)  # (batch, self.num_heads, dstate)
+        C = C.repeat(1,1, self.num_heads // self.n_groups,1)   # (batch, self.num_heads, dstate)
+        dB = dt * B[:,:,:,None,:]
+        discrete_b =  dB * hidden_states[:,:,:,:,None]
         # 3.c perform the recurrence y ← SSM(A, B, C)(x)
         scan_outputs = []
         for i in range(seq_len):
