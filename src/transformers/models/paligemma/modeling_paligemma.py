@@ -240,7 +240,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config=config.vision_config)
         self.multi_modal_projector = PaliGemmaMultiModalProjector(config)
-        self.vocab_size = config.vocab_size
+        self.vocab_size = config.text_config.vocab_size
         self._attn_implementation = config._attn_implementation
 
         language_model = AutoModelForCausalLM.from_config(
@@ -283,8 +283,9 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
         return self.language_model.tie_weights()
 
     def resize_token_embeddings(self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None) -> nn.Embedding:
+        # TODO: config.vocab_size is deprecated and will be removed in v4.43.
+        # `resize_token_embeddings` should work from `modeling_utils.py``
         model_embeds = self.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
-        # update vocab size
         self.config.text_config.vocab_size = model_embeds.num_embeddings
         self.config.vocab_size = model_embeds.num_embeddings
         self.vocab_size = model_embeds.num_embeddings
@@ -469,9 +470,11 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
         past_key_values=None,
         inputs_embeds=None,
         cache_position=None,
+        position_ids=None,
         pixel_values=None,
         attention_mask=None,
         token_type_ids=None,
+        use_cache=True,
         **kwargs,
     ):
         model_inputs = self.language_model.prepare_inputs_for_generation(
@@ -494,6 +497,3 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
             model_inputs["pixel_values"] = pixel_values
 
         return model_inputs
-
-    def _reorder_cache(self, *args, **kwargs):
-        return self.language_model._reorder_cache(*args, **kwargs)

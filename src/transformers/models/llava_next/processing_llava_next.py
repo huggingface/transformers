@@ -53,6 +53,7 @@ class LlavaNextProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
+    valid_kwargs = ["chat_template"]
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
@@ -64,6 +65,7 @@ class LlavaNextProcessor(ProcessorMixin):
         vision_feature_select_strategy=None,
         chat_template=None,
         image_token="<image>",  # set the default and let users change if they have peculiar special tokens in rare cases
+        **kwargs,
     ):
         self.patch_size = patch_size
         self.vision_feature_select_strategy = vision_feature_select_strategy

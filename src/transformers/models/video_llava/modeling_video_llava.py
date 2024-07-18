@@ -125,12 +125,8 @@ class VideoLlavaPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["VideoLlavaVisionAttention"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
-    _no_split_modules = ["VideoLlavaVisionAttention"]
 
     def _init_weights(self, module):
-        # important: this ported version of VideoLlava isn't meant for training from scratch - only
-        # inference and fine-tuning - so the proper init weights code has been removed - the original codebase
-        # https://github.com/haotian-liu/LLaVA/tree/main/video_llava should serve for that purpose
         std = (
             self.config.initializer_range
             if hasattr(self.config, "initializer_range")

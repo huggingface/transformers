@@ -688,7 +688,7 @@ class GroupViTAttention(nn.Module):
         return attn_output, attn_weights_reshaped
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->GroupViT
+# Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoderLayer with AltCLIP->GroupViT
 class GroupViTEncoderLayer(nn.Module):
     def __init__(self, config: GroupViTConfig):
         super().__init__()
@@ -1034,7 +1034,6 @@ class GroupViTTextEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPTextTransformer with CLIPText->GroupViTText, CLIPEncoder->GroupViTTextEncoder, CLIP_TEXT->GROUPVIT_TEXT
 class GroupViTTextTransformer(nn.Module):
     def __init__(self, config: GroupViTTextConfig):
         super().__init__()
@@ -1081,6 +1080,7 @@ class GroupViTTextTransformer(nn.Module):
         causal_attention_mask = _create_4d_causal_attention_mask(
             input_shape, hidden_states.dtype, device=hidden_states.device
         )
+
         # expand attention_mask
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]

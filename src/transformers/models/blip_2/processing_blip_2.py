@@ -52,10 +52,13 @@ class Blip2Processor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
+    valid_kwargs = []
     image_processor_class = "BlipImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
-    def __init__(self, image_processor, tokenizer, num_query_tokens=None):
+
+    # Copied from transformers.models.blip.processing_blip.BlipProcessor.__init__
+    def __init__(self, image_processor, tokenizer, num_query_tokens=None, **kwargs):
         tokenizer.return_token_type_ids = False
         self.current_processor = image_processor
         self.image_token = AddedToken("<image>", normalized=False, special=True)
