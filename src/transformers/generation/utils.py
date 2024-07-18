@@ -32,6 +32,7 @@ from ..cache_utils import (
     EncoderDecoderCache,
     HQQQuantizedCache,
     HybridCache,
+    MambaCache,
     QuantizedCacheConfig,
     QuantoQuantizedCache,
     SlidingWindowCache,
@@ -116,7 +117,12 @@ logger = logging.get_logger(__name__)
 if is_accelerate_available():
     from accelerate.hooks import AlignDevicesHook, add_hook_to_module
 
-NEED_SETUP_CACHE_CLASSES_MAPPING = {"static": StaticCache, "sliding_window": SlidingWindowCache, "hybrid": HybridCache}
+NEED_SETUP_CACHE_CLASSES_MAPPING = {
+    "static": StaticCache,
+    "sliding_window": SlidingWindowCache,
+    "hybrid": HybridCache,
+    "mamba": MambaCache,
+}
 QUANT_BACKEND_CLASSES_MAPPING = {"quanto": QuantoQuantizedCache, "HQQ": HQQQuantizedCache}
 
 
@@ -1431,8 +1437,9 @@ class GenerationMixin:
             not hasattr(self, "_cache")
             or (not isinstance(cache_to_check, cache_cls))
             or cache_to_check.max_batch_size != max_batch_size
-            or cache_to_check.max_cache_len < max_cache_len
         )
+        if cache_implementation != "mamba":
+            need_new_cache = need_new_cache or cache_to_check.max_cache_len < max_cache_len
 
         if requires_cross_attention_cache and hasattr(self, "_cache"):
             need_new_cache = (
@@ -1750,9 +1757,13 @@ class GenerationMixin:
         )
 
         use_dynamic_cache_by_default = False
-        if generation_config.cache_implementation is not None and model_kwargs.get("past_key_values") is not None:
+        if "mamba" in self.__class__.__name__.lower():
+            cache_name = "cache_params"
+        else:
+            cache_name = "past_key_values"
+        if generation_config.cache_implementation is not None and (model_kwargs.get(cache_name) is not None):
             raise ValueError(
-                "Passing both `cache_implementation` (used to initialize certain caches) and `past_key_values` (a "
+                f"Passing both `cache_implementation` (used to initialize certain caches) and `{cache_name}` (a "
                 "Cache object) is unsupported. Please use only one of the two."
             )
         elif generation_config.cache_implementation is not None:
@@ -1762,7 +1773,7 @@ class GenerationMixin:
                         "This model does not support `cache_implementation='static'`. Please check the following "
                         "issue: https://github.com/huggingface/transformers/issues/28981"
                     )
-                model_kwargs["past_key_values"] = self._get_cache(
+                model_kwargs[cache_name] = self._get_cache(
                     generation_config.cache_implementation,
                     getattr(generation_config, "num_beams", 1) * batch_size,
                     generation_config.max_length,
@@ -1793,23 +1804,23 @@ class GenerationMixin:
                         "Please install it via  with `pip install hqq`"
                     )
 
-                model_kwargs["past_key_values"] = cache_class(cache_config)
+                model_kwargs[cache_name] = cache_class(cache_config)
         # Use DynamicCache() instance by default. This will avoid back and forth from legacy format that
         # keeps copying the cache thus using much more memory
         elif generation_config.cache_implementation is None and self._supports_default_dynamic_cache():
-            past = model_kwargs.get("past_key_values", None)
+            past = model_kwargs.get(cache_name, None)
             requires_cross_attention_cache = (
                 self.config.is_encoder_decoder or model_kwargs.get("encoder_outputs") is not None
             )
             if past is None:
-                model_kwargs["past_key_values"] = (
+                model_kwargs[cache_name] = (
                     DynamicCache()
                     if not requires_cross_attention_cache
                     else EncoderDecoderCache(DynamicCache(), DynamicCache())
                 )
                 use_dynamic_cache_by_default = True
             elif isinstance(past, tuple):
-                model_kwargs["past_key_values"] = (
+                model_kwargs[cache_name] = (
                     DynamicCache.from_legacy_cache(past)
                     if not requires_cross_attention_cache
                     else EncoderDecoderCache.from_legacy_cache(past)
