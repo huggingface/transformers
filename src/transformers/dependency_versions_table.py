@@ -38,7 +38,7 @@ deps = {
     "librosa": "librosa",
     "nltk": "nltk",
     "natten": "natten>=0.14.6,<0.15.0",
-    "numpy": "numpy>=1.17,<2.0",
+    "numpy": "numpy>=1.17",
     "onnxconverter-common": "onnxconverter-common",
     "onnxruntime-tools": "onnxruntime-tools>=1.4.2",
     "onnxruntime": "onnxruntime>=1.4.0",
