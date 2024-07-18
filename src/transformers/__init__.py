@@ -1616,7 +1616,7 @@ else:
     )
     _import_structure["models.chameleon"].extend(
         [
-            "ChameleonForCausalLM",
+            "ChameleonForConditionalGeneration",
             "ChameleonModel",
             "ChameleonPreTrainedModel",
             "ChameleonProcessor",
@@ -6277,7 +6277,7 @@ if TYPE_CHECKING:
             load_tf_weights_in_canine,
         )
         from .models.chameleon import (
-            ChameleonForCausalLM,
+            ChameleonForConditionalGeneration,
             ChameleonModel,
             ChameleonPreTrainedModel,
             ChameleonProcessor,

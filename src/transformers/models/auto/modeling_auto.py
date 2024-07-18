@@ -446,7 +446,6 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("blenderbot-small", "BlenderbotSmallForCausalLM"),
         ("bloom", "BloomForCausalLM"),
         ("camembert", "CamembertForCausalLM"),
-        ("chameleon", "ChameleonForCausalLM"),
         ("code_llama", "LlamaForCausalLM"),
         ("codegen", "CodeGenForCausalLM"),
         ("cohere", "CohereForCausalLM"),
@@ -703,6 +702,7 @@ MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES = OrderedDict(
     [
         ("blip", "BlipForConditionalGeneration"),
         ("blip-2", "Blip2ForConditionalGeneration"),
+        ("chameleon", "ChameleonForConditionalGeneration"),
         ("git", "GitForCausalLM"),
         ("idefics2", "Idefics2ForConditionalGeneration"),
         ("instructblip", "InstructBlipForConditionalGeneration"),
