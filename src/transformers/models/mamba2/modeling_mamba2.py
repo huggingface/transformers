@@ -336,7 +336,7 @@ class Mamba2Mixer(nn.Module):
         scan_outputs = []
         for i in range(seq_len):
             ssm_state = ssm_state * dA[:,i,:,:] + discrete_b[:, i, :, :] # (batch, dim, dstate
-            scan_output = torch.einsum("bhdn,bhn->bhd", ssm_state.to(C.dtype), C[:,i,:,:]) # TODO left as a challeng for @molbap
+            scan_output = ssm_state.to(C.dtype) *C[:,i,:,None, :]
             scan_outputs.append(scan_output)
         scan_output = torch.stack(scan_outputs, dim=1)                                # [batch, intermediate_size, seq_len]
         scan_output = scan_output + (hidden_states * self.D[:,None])
