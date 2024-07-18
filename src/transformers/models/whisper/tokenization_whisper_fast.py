@@ -200,7 +200,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         return "".join(outputs)
 
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._compute_offsets
-    def _compute_offsets(self, token_ids, time_precision=0.02, segments=None):
+    def _compute_offsets(self, token_ids, time_precision=0.02, longform_timestamps=None):
         """
         Compute offsets for a given tokenized input
 
@@ -209,7 +209,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
             time_precision (`float`, `optional`, defaults to 0.02):
                 The time ratio to convert from token to time.
-            segments (List[dict], `optional`):
+            longform_timestamps (List[dict], *optional*):
                 Timestamps obtained using long form generation in Whisper, to be used to replace predicted timestamps in token_ids.
         """
         offsets = []
@@ -241,13 +241,13 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
                 text = self._decode(sliced_tokens)
                 text = self._filter_timestamp_ids(text)
 
-                if segments is not None:
+                if longform_timestamps is not None:
                     offsets.append(
                         {
                             "text": text,
                             "timestamp": (
-                                segments[0][i]["start"].item(),
-                                segments[0][i]["end"].item(),
+                                longform_timestamps[0][i]["start"].item(),
+                                longform_timestamps[0][i]["end"].item(),
                             ),
                         }
                     )
