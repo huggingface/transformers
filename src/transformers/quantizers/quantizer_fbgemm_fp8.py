@@ -84,8 +84,8 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
             )
         elif torch_dtype == torch.float16:
             raise ValueError(
-                "You need to either pass torch_dtype=torch.bloat32 "
-                "or torch_dtype=torch.float16 to use FP8 quantization"
+                "You cannot use FP8 with torch_dtype=torch.float16."
+                "We recommend you passing torch_dtype=torch.bfloat16"
             )
         return torch_dtype
 
@@ -123,22 +123,24 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
         unexpected_keys: Optional[List[str]] = None,
     ):
         """
-        Quantizes weights into qweight and weight_scale
+        Quantizes weights into weight and weight_scale
         """
         new_value, weight_scale = torch.ops.fbgemm.quantize_fp8_per_row(param_value)
+        
         module, tensor_name = get_module_from_name(model, param_name)
         module._buffers[tensor_name] = new_value.to(target_device)
-        module._buffers["weight_scale"] = weight_scale.to(target_device)
-
+        # to have the right output shape -> (out_features, 1)
+        module._buffers["weight_scale"] = weight_scale.view(weight_scale.shape[0], 1).to(target_device)
         input_scale_ub = torch.tensor(
             [self.quantization_config.activation_scale_ub],
             dtype=torch.float,
-            device="cuda",
+            device=target_device,
         )
-        module._buffers["input_scale"] = input_scale_ub.to(target_device)
+        module._buffers["input_scale_ub"] = input_scale_ub
 
         if unexpected_keys is not None and param_name in unexpected_keys:
             unexpected_keys.remove(param_name)
+        del param_name
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         return model

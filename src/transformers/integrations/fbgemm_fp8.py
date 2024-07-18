@@ -24,39 +24,40 @@ if is_accelerate_available():
     from accelerate import init_empty_weights
 
 if is_fbgemm_gpu_available():
-    pass
+    import fbgemm_gpu.experimental.gen_ai  # noqa: F401
 
 logger = logging.get_logger(__name__)
 
 
 class FbgemmFp8Linear(torch.nn.Module):
-    def __init__(self, in_features, out_features, bias, device="cuda:0", weight_dtype=torch.float32):
+    def __init__(self, in_features, out_features, bias, weight_dtype=torch.float32):
         super().__init__()
         self.in_features = in_features
         self.out_features = out_features
 
-        # TODO: check if we need to initialize the scale to bf16
-
-        self.register_buffer(
-            "weight", torch.zeros((out_features, in_features), dtype=torch.float8_e4m3fn, device=device)
-        )
-        self.register_buffer("weight_scale", torch.zeros((out_features), dtype=weight_dtype, device=device))
-        self.register_buffer("input_scale", torch.zeros((1), dtype=weight_dtype, device=device))
+        self.register_buffer("weight", torch.zeros((out_features, in_features), dtype=torch.float8_e4m3fn))
+        self.register_buffer("weight_scale", torch.zeros((out_features, 1), dtype=weight_dtype))
+        self.register_buffer("input_scale_ub", torch.zeros((1), dtype=weight_dtype))
 
         if bias:
-            self.register_buffer("bias", torch.zeros((self.out_features), dtype=weight_dtype, device=device))
+            self.register_buffer("bias", torch.zeros((self.out_features), dtype=weight_dtype))
         else:
             self.bias = None
 
     def forward(self, x):
         num_tokens = None
+        # need to move the device afterwards because after quantization, it returns the result not on the same deice :
+        # https://github.com/pytorch/FBGEMM/blob/e08af8539c391437f447173863df0f3f6f6f1855/fbgemm_gpu/experimental/gen_ai/src/quantize/quantize.cu#L1237C3-L1237C45
         x_quantized, x_scale = torch.ops.fbgemm.quantize_fp8_per_row(
-            x.view(-1, x.shape[-1]), num_tokens, self.input_scale
+            x.view(-1, x.shape[-1]), num_tokens, self.input_scale_ub
         )
+        x_quantized, x_scale = x_quantized.to(x.device), x_scale.to(x.device)
         output = torch.ops.fbgemm.f8f8bf16_rowwise(
             x_quantized, self.weight, x_scale, self.weight_scale, use_fast_accum=True
         )
+        print(output)
         output = output + self.bias if self.bias is not None else output
+        del x_quantized, x_scale
         return output
 
 
@@ -88,9 +89,7 @@ def _replace_with_fbgemm_fp8_linear(
                 with init_empty_weights():
                     in_features = module.in_features
                     out_features = module.out_features
-                    model._modules[name] = FbgemmFp8Linear(
-                        in_features, out_features, module.bias is not None, module.weight.device
-                    )
+                    model._modules[name] = FbgemmFp8Linear(in_features, out_features, module.bias is not None)
                     has_been_replaced = True
 
                     # Force requires grad to False to avoid unexpected errors
