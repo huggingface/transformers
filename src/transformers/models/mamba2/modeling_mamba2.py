@@ -34,7 +34,7 @@ from ...utils import (
 )
 from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available
 from .configuration_mamba2 import Mamba2Config
-
+from einops import rearrange
 
 logger = logging.get_logger(__name__)
 
@@ -91,10 +91,9 @@ class Mamba2Cache:
             for i in range(config.num_hidden_layers)
         }
         self.ssm_states = {
-            i: torch.zeros(batch_size, config.n_groups * config.state_size, config.head_dim, device=device, dtype=dtype)
+            i: torch.zeros(batch_size, config.num_heads * config.state_size, config.head_dim, device=device, dtype=dtype)
             for i in range(config.num_hidden_layers)
         }
-
         self.activation = config.hidden_act
         self.act = ACT2FN[config.hidden_act]
 
@@ -151,6 +150,9 @@ class Mamba2Mixer(nn.Module):
         self.state_size = config.state_size
         self.head_dim = config.head_dim
         self.chunk_size = config.chunk_size
+
+        self.time_step_limit = config.time_step_limit
+
         self.conv_dim = self.intermediate_size + 2 * self.n_groups * self.state_size
         self.conv1d = nn.Conv1d(
             in_channels=self.conv_dim,
@@ -184,6 +186,7 @@ class Mamba2Mixer(nn.Module):
 
         self.D = nn.Parameter(torch.ones(self.num_heads))
         self.D._no_weight_decay = True
+        self.D_has_hdim = False
 
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
         self.use_bias = config.use_bias
@@ -196,28 +199,36 @@ class Mamba2Mixer(nn.Module):
             )
 
     def cuda_kernels_forward(self, hidden_states: torch.Tensor, cache_params: Optional[Mamba2Cache] = None):
+        batch_size, seq_len, _, = hidden_states.shape
+        seqlen_og = seq_len
         # 1. Gated MLP's linear projection
-        projected_states = self.in_proj(hidden_states)  # .transpose(1, 2)
+        projected_states = self.in_proj(hidden_states) #.transpose(1, 2)
+        A = -torch.exp(self.A_log.float())  # (nheads) or (d_inner, d_state)
+        dt_limit_kwargs = {} if self.time_step_limit == (0.0, float("inf")) else dict(dt_limit=self.time_step_limit)
+        #if seqlen_og is not None:
+        #    projected_states = rearrange(projected_states, "(b l) d -> b l d", l=seq_len)
         if self.training and cache_params is None:  # Doesn't support outputting the states -> used for training
-            # TODO (molbap) update mamba_inner_fn for mamba2
-            # not supported for now
-            pass
-            """contextualized_states = mamba_inner_fn(
+            out = mamba_split_conv1d_scan_combined(
                 projected_states,
-                self.conv1d.weight,
-                self.conv1d.bias if self.use_conv_bias else None,
-                self.x_proj.weight,
-                self.dt_proj.weight,
-                self.out_proj.weight,
-                self.out_proj.bias.float() if self.use_bias else None,
-                -torch.exp(self.A_log.float()),
-                None,  # input-dependent B
-                None,  # input-dependent C
-                self.D.float(),
-                delta_bias=self.dt_proj.bias.float(),
-                delta_softplus=True,
-            )"""
-
+                rearrange(self.conv1d.weight, "d 1 w -> d w"),
+                self.conv1d.bias,
+                self.dt_bias,
+                A,
+                D=rearrange(self.D, "(h p) -> h p", p=self.head_dim) if self.D_has_hdim else self.D,
+                chunk_size=self.chunk_size,
+                seq_idx=None, # was seq_idx
+                activation=self.activation,
+                rmsnorm_weight=self.norm.weight,
+                rmsnorm_eps=self.norm.variance_epsilon,
+                outproj_weight=self.out_proj.weight,
+                outproj_bias=self.out_proj.bias,
+                headdim=None if self.D_has_hdim else self.head_dim,
+                ngroups=self.n_groups,
+                norm_before_gate=self.norm_before_gate,
+                **dt_limit_kwargs,
+            )
+            if seqlen_og is not None:
+                out = rearrange(out, "b l d -> (b l) d")
         else:
             gate, xBC, time_step = torch.split(
                 projected_states,
@@ -242,7 +253,6 @@ class Mamba2Mixer(nn.Module):
             x, B, C = torch.split(
                 xBC, [self.intermediate_size, self.n_groups * self.state_size, self.n_groups * self.state_size], dim=-1
             )
-            A = -torch.exp(self.A_log)
             y = mamba_chunk_scan_combined(
                 rearrange(x, "b l (h p) -> b l h p", p=self.head_dim),
                 time_step,
@@ -411,6 +421,7 @@ class Mamba2PreTrainedModel(PreTrainedModel):
                 * (math.log(self.config.time_step_max) - math.log(self.config.time_step_min))
                 + math.log(self.config.time_step_min)
             ).clamp(min=self.config.time_step_floor)
+
             # # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
             inv_dt = dt + torch.log(-torch.expm1(-dt))
             with torch.no_grad():
@@ -647,8 +658,6 @@ class Mamba2Model(Mamba2PreTrainedModel):
 )
 # Copied from transformers.models.mamba.modeling_mamba.MambaForCausalLM with MAMBA->MAMBA2,Mamba->Mamba2,mamba->mamba2
 class Mamba2ForCausalLM(Mamba2PreTrainedModel):
-    _tied_weights_keys = ["lm_head.weight"]
-
     def __init__(self, config):
         super().__init__(config)
         self.backbone = Mamba2Model(config)
