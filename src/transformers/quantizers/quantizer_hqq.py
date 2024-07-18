@@ -91,6 +91,14 @@ class HqqHfQuantizer(HfQuantizer):
             else:
                 self.using_multi_gpu = len(set(device_map.values())) > 1
 
+    def update_missing_keys(
+        self, model: "PreTrainedModel", missing_keys: List[str], prefix: str, **kwargs
+    ) -> List[str]:
+        if self.pre_quantized:
+            return [key for key in missing_keys if ("weight" not in key)]
+        else:
+            return missing_keys
+
     def check_quantized_param(
         self,
         model: "PreTrainedModel",
@@ -100,8 +108,11 @@ class HqqHfQuantizer(HfQuantizer):
         **kwargs,
     ) -> bool:
         module, tensor_name = get_module_from_name(model, param_name)
+        layer_name = ".".join(param_name.split(".")[:-1])
+        if "lm_head" in layer_name:
+            return False  # TODO @mobicham: get 'lm_head' from skip_modules in the quantization config
 
-        return isinstance(module, torch.nn.Linear) and (tensor_name == "weight")
+        return isinstance(module, torch.nn.Linear) and (True if self.pre_quantized else tensor_name == "weight")
 
     def create_quantized_param(
         self,
@@ -122,13 +133,40 @@ class HqqHfQuantizer(HfQuantizer):
             from hqq.core.quantize import HQQLinear
 
         module, tensor_name = get_module_from_name(model, param_name)
-
-        layer_name = param_name.replace(".weight", "").replace(".bias", "")
+        layer_name = ".".join(param_name.split(".")[:-1])
         parent_module = find_parent(model, layer_name)
         node = layer_name.split(".")[-1]
 
-        # Step 0: set module state_dict
+        # print("create_quantized_param | ", 'layer_name', layer_name, type(module), hasattr(module, "quant_config")) #model.layers.0.mlp.down_proj
+
+        # set module state_dict
         module_state_dict = {key.split(".")[-1]: state_dict[key] for key in state_dict if layer_name in key}
+
+        if self.pre_quantized:
+            hqq_layer = HQQLinear(
+                linear_layer=None,
+                quant_config=None,  # module.quant_config
+                compute_dtype=self.torch_dtype,
+                device=target_device,
+            )
+
+            try:
+                hqq_layer.load_state_dict(module_state_dict)
+            except Exception:
+                # TODO @mobicham: Llama3 break with model.layers.28.mlp.down_proj because its parameters are split across 2 safetensors. How to fix this?
+                # Currently setting a fake layer so that loading doesn't break
+                print("Error loading, setting a fake layer for", layer_name, module_state_dict.keys())
+                hqq_layer = HQQLinear(
+                    torch.nn.Linear(in_features=module.in_features, out_features=module.out_features, bias=False),
+                    module.quant_config,
+                    compute_dtype=self.torch_dtype,
+                    device=target_device,
+                    del_orig=True,
+                )
+
+            setattr(parent_module, node, hqq_layer)
+            torch.cuda.empty_cache()
+            return
 
         # Step 1: populate module with weight/bias from module state dict
         for key in module_state_dict:
@@ -136,7 +174,6 @@ class HqqHfQuantizer(HfQuantizer):
 
         # Step 2: Replace module with either HQQLinear or move it to device. We do this via setattr on the parent as doing on it on the module
         # directly doesn't work.
-
         if hasattr(module, "quant_config"):
             hqq_layer = HQQLinear(
                 module,
@@ -193,7 +230,7 @@ class HqqHfQuantizer(HfQuantizer):
 
     @property
     def is_serializable(self):
-        return False
+        return True
 
     @property
     def is_trainable(self) -> bool:
