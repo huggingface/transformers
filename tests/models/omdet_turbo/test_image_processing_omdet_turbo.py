@@ -124,8 +124,8 @@ class OmDetTurboImageProcessingTester(unittest.TestCase):
     def get_fake_omdet_turbo_output(self):
         torch.manual_seed(42)
         return OmDetTurboObjectDetectionOutput(
-            pred_boxes=torch.rand(self.batch_size, self.num_queries, 4),
-            logits=torch.rand(self.batch_size, self.num_queries, self.embed_dim),
+            decoder_bboxes=torch.rand(self.batch_size, self.num_queries, 4),
+            decoder_cls=torch.rand(self.batch_size, self.num_queries, self.embed_dim),
         )
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):

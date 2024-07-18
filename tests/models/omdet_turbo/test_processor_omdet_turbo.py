@@ -21,7 +21,7 @@ import unittest
 import numpy as np
 import pytest
 
-from transformers import OmDetTurboTokenizer, OmDetTurboTokenizerFast, OmDetTurboProcessor
+from transformers import CLIPTokenizer, CLIPTokenizerFast, OmDetTurboProcessor
 from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import IMAGE_PROCESSOR_NAME, is_torch_available, is_vision_available
@@ -69,10 +69,10 @@ class OmDetTurboProcessorTest(unittest.TestCase):
         self.seq_length = 5
 
     def get_tokenizer(self, **kwargs):
-        return OmDetTurboTokenizer.from_pretrained(self.tmpdirname, **kwargs)
+        return CLIPTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_rust_tokenizer(self, **kwargs):
-        return OmDetTurboTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
+        return CLIPTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_image_processor(self, **kwargs):
         return OmDetTurboImageProcessor.from_pretrained(self.tmpdirname, **kwargs)
@@ -111,9 +111,7 @@ class OmDetTurboProcessorTest(unittest.TestCase):
         omdet_turbo_output = self.get_fake_omdet_turbo_output()
         omdet_turbo_input_ids = self.get_fake_omdet_turbo_input_ids()
 
-        post_processed = processor.post_process_grounded_object_detection(
-            omdet_turbo_output, omdet_turbo_input_ids
-        )
+        post_processed = processor.post_process_grounded_object_detection(omdet_turbo_output, omdet_turbo_input_ids)
 
         self.assertEqual(len(post_processed), self.batch_size)
         self.assertEqual(list(post_processed[0].keys()), ["scores", "labels", "boxes"])
@@ -142,8 +140,8 @@ class OmDetTurboProcessorTest(unittest.TestCase):
         self.assertEqual(processor_slow.tokenizer.get_vocab(), tokenizer_slow.get_vocab())
         self.assertEqual(processor_fast.tokenizer.get_vocab(), tokenizer_fast.get_vocab())
         self.assertEqual(tokenizer_slow.get_vocab(), tokenizer_fast.get_vocab())
-        self.assertIsInstance(processor_slow.tokenizer, OmDetTurboTokenizer)
-        self.assertIsInstance(processor_fast.tokenizer, OmDetTurboTokenizerFast)
+        self.assertIsInstance(processor_slow.tokenizer, CLIPTokenizer)
+        self.assertIsInstance(processor_fast.tokenizer, CLIPTokenizerFast)
 
         self.assertEqual(processor_slow.image_processor.to_json_string(), image_processor.to_json_string())
         self.assertEqual(processor_fast.image_processor.to_json_string(), image_processor.to_json_string())
@@ -162,7 +160,7 @@ class OmDetTurboProcessorTest(unittest.TestCase):
         )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
-        self.assertIsInstance(processor.tokenizer, OmDetTurboTokenizerFast)
+        self.assertIsInstance(processor.tokenizer, CLIPTokenizerFast)
 
         self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
         self.assertIsInstance(processor.image_processor, OmDetTurboImageProcessor)
