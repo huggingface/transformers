@@ -2619,9 +2619,9 @@ def sigmoid_focal_loss(
             The number of query boxes per image.
         reduction (`str`, *optional*, defaults to `'mean'`):
             Specifies the redction to apply to the loss. Can be either `'mean'`, or `'sum'`.
-        alpha (`float`, *optional*, defaults to `0.25`):
+        alpha (`float`, *optional*, defaults to 0.25):
             Optional weighting factor in the range (0,1) to balance positive vs. negative examples.
-        gamma (`int`, *optional*, defaults to `2`):
+        gamma (`int`, *optional*, defaults to 2):
             Exponent of the modulating factor (1 - p_t) to balance easy vs hard examples.
 
     Returns:
