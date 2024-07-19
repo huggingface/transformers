@@ -133,6 +133,9 @@ class GenerationConfig(PushToHubMixin):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should use the past last key/values attentions (if applicable to the model) to
             speed up decoding.
+        beam_search_scorer_class: (`class`, *optional*, defaults to `None`):
+            Which class to use as a beam search scorer. If `None`, it will use the default `BeamSearchScorer` class.
+            The type must inherit from `BeamSearchScorer`.
 
         > Parameters for manipulation of the model output logits
 
@@ -353,6 +356,7 @@ class GenerationConfig(PushToHubMixin):
         self.num_beam_groups = kwargs.pop("num_beam_groups", 1)
         self.penalty_alpha = kwargs.pop("penalty_alpha", None)
         self.use_cache = kwargs.pop("use_cache", True)
+        self.beam_search_scorer_class = kwargs.pop("beam_search_scorer_class", None)
 
         # Parameters for manipulation of the model output logits
         self.temperature = kwargs.pop("temperature", 1.0)
@@ -640,6 +644,13 @@ class GenerationConfig(PushToHubMixin):
                     single_beam_wrong_parameter_msg.format(flag_name="constraints", flag_value=self.constraints),
                     UserWarning,
                 )
+            if self.beam_search_scorer_class is not None:
+                warnings.warn(
+                    single_beam_wrong_parameter_msg.format(
+                        flag_name="beam_search_scorer_class", flag_value=self.beam_search_scorer_class
+                    ),
+                    UserWarning,
+                )
 
         # 3. detect incorrect paramaterization specific to advanced beam modes
         else:
@@ -658,6 +669,12 @@ class GenerationConfig(PushToHubMixin):
                     raise ValueError(
                         constrained_wrong_parameter_msg.format(
                             flag_name="num_beam_groups", flag_value=self.num_beam_groups
+                        )
+                    )
+                if self.beam_search_scorer_class is not None:
+                    raise ValueError(
+                        constrained_wrong_parameter_msg.format(
+                            flag_name="beam_search_scorer_class", flag_value=self.beam_search_scorer_class
                         )
                     )
             # group beam search
