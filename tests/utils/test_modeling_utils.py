@@ -848,7 +848,7 @@ class ModelUtilsTest(TestCasePlus):
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
             self.assertTrue(torch.allclose(p1, p2))
 
-    def test_checkpoint_pytorch_bin(self):
+    def test_checkpoint_loading_only_pytorch_bin_available(self):
         # Test that the loading behaviour is as expected when only pytorch checkpoints are available
         # - We can load the model with use_safetensors=False
         # - We can load the model without specifying use_safetensors i.e. we search for the available checkpoint,
