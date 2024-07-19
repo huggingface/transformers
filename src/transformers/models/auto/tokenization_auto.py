@@ -107,6 +107,13 @@ else:
                 ),
             ),
             ("canine", ("CanineTokenizer", None)),
+            (
+                "chameleon",
+                (
+                    "LlamaTokenizer" if is_sentencepiece_available() else None,
+                    "LlamaTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
             ("chinese_clip", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "clap",
@@ -188,6 +195,13 @@ else:
                     "GemmaTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            (
+                "gemma2",
+                (
+                    "GemmaTokenizer" if is_sentencepiece_available() else None,
+                    "GemmaTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
             ("git", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("gpt-sw3", ("GPTSw3Tokenizer" if is_sentencepiece_available() else None, None)),
             ("gpt2", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
@@ -205,6 +219,7 @@ else:
             ("idefics", (None, "LlamaTokenizerFast" if is_tokenizers_available() else None)),
             ("idefics2", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
             ("instructblip", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
+            ("instructblipvideo", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
             (
                 "jamba",
                 (
@@ -241,6 +256,7 @@ else:
                 ),
             ),
             ("llava", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
+            ("llava-next-video", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
             ("llava_next", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
             ("longformer", ("LongformerTokenizer", "LongformerTokenizerFast" if is_tokenizers_available() else None)),
             (

@@ -34,11 +34,16 @@ def custom_print(*args):
 
 BASE_PYTHON_TOOLS = {
     "print": custom_print,
+    "isinstance": isinstance,
     "range": range,
     "float": float,
     "int": int,
     "bool": bool,
     "str": str,
+    "set": set,
+    "list": list,
+    "dict": dict,
+    "tuple": tuple,
     "round": round,
     "ceil": math.ceil,
     "floor": math.floor,
@@ -60,10 +65,6 @@ BASE_PYTHON_TOOLS = {
     "max": max,
     "min": min,
     "abs": abs,
-    "list": list,
-    "dict": dict,
-    "tuple": tuple,
-    "set": set,
     "enumerate": enumerate,
     "zip": zip,
     "reversed": reversed,
@@ -74,6 +75,15 @@ BASE_PYTHON_TOOLS = {
     "filter": filter,
     "ord": ord,
     "chr": chr,
+    "next": next,
+    "iter": iter,
+    "divmod": divmod,
+    "callable": callable,
+    "getattr": getattr,
+    "hasattr": hasattr,
+    "setattr": setattr,
+    "issubclass": issubclass,
+    "type": type,
 }
 
 
@@ -147,9 +157,9 @@ class PythonInterpreterTool(Tool):
 
     def __init__(self, *args, authorized_imports=None, **kwargs):
         if authorized_imports is None:
-            authorized_imports = list(set(LIST_SAFE_MODULES))
+            self.authorized_imports = list(set(LIST_SAFE_MODULES))
         else:
-            authorized_imports = list(set(LIST_SAFE_MODULES) | set(authorized_imports))
+            self.authorized_imports = list(set(LIST_SAFE_MODULES) | set(authorized_imports))
         self.inputs = {
             "code": {
                 "type": "text",
@@ -162,13 +172,15 @@ class PythonInterpreterTool(Tool):
         super().__init__(*args, **kwargs)
 
     def forward(self, code):
-        output = str(evaluate_python_code(code, tools=self.available_tools))
+        output = str(
+            evaluate_python_code(code, tools=self.available_tools, authorized_imports=self.authorized_imports)
+        )
         return output
 
 
 class FinalAnswerTool(Tool):
     name = "final_answer"
-    description = "Provides a final answer to the given problem"
+    description = "Provides a final answer to the given problem."
     inputs = {"answer": {"type": "text", "description": "The final answer to the problem"}}
     output_type = "any"
 

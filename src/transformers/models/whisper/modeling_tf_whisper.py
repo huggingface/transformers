@@ -1147,7 +1147,7 @@ class TFWhisperMainLayer(keras.layers.Layer):
 
          >>> model = TFWhisperModel.from_pretrained("openai/whisper-base")
          >>> feature_extractor = AutoFeatureExtractor.from_pretrained("openai/whisper-base")
-         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True)
          >>> inputs = feature_extractor(ds[0]["audio"]["array"], return_tensors="tf")
          >>> input_features = inputs.input_features
          >>> decoder_input_ids = tf.convert_to_tensor([[1, 1]]) * model.config.decoder_start_token_id
@@ -1283,7 +1283,7 @@ class TFWhisperModel(TFWhisperPreTrainedModel):
 
          >>> model = TFWhisperModel.from_pretrained("openai/whisper-base")
          >>> feature_extractor = AutoFeatureExtractor.from_pretrained("openai/whisper-base")
-         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True)
          >>> inputs = feature_extractor(ds[0]["audio"]["array"], return_tensors="tf")
          >>> input_features = inputs.input_features
          >>> decoder_input_ids = tf.convert_to_tensor([[1, 1]]) * model.config.decoder_start_token_id
@@ -1413,7 +1413,7 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
         >>> processor = AutoProcessor.from_pretrained("openai/whisper-tiny.en")
         >>> model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
 
-        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True)
 
         >>> inputs = processor(ds[0]["audio"]["array"], return_tensors="tf")
         >>> input_features = inputs.input_features

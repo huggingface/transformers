@@ -429,7 +429,7 @@ class DeiTRobertaModelTest(VisionTextDualEncoderMixin, unittest.TestCase):
             "text_choice_labels": choice_labels,
         }
 
-    # skip as DeiT is not available in Flax
+    @unittest.skip(reason="DeiT is not available in Flax")
     def test_pt_flax_equivalence(self):
         pass
 

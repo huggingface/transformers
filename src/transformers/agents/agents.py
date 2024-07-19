@@ -337,6 +337,7 @@ class Agent:
                 self._toolbox.add_base_tools(add_python_interpreter=(self.__class__ == ReactJsonAgent))
         else:
             self._toolbox = Toolbox(tools, add_base_tools=add_base_tools)
+        self._toolbox.add_tool(FinalAnswerTool())
 
         self.system_prompt = format_prompt_with_tools(
             self._toolbox, self.system_prompt_template, self.tool_description_template
@@ -631,8 +632,6 @@ class ReactAgent(Agent):
             tool_description_template=tool_description_template,
             **kwargs,
         )
-        if "final_answer" not in self._toolbox.tools:
-            self._toolbox.add_tool(FinalAnswerTool())
 
     def provide_final_answer(self, task) -> str:
         """
@@ -857,6 +856,10 @@ class ReactCodeAgent(ReactAgent):
         self.additional_authorized_imports = additional_authorized_imports if additional_authorized_imports else []
         self.authorized_imports = list(set(LIST_SAFE_MODULES) | set(self.additional_authorized_imports))
         self.system_prompt = self.system_prompt.replace("<<authorized_imports>>", str(self.authorized_imports))
+        self.available_tools = {
+            **BASE_PYTHON_TOOLS.copy(),
+            **self.toolbox.tools,
+        }  # This list can be augmented by the code agent creating some new functions
 
     def step(self):
         """
@@ -906,10 +909,9 @@ class ReactCodeAgent(ReactAgent):
         # Execute
         self.log_code_action(code_action)
         try:
-            available_tools = {**BASE_PYTHON_TOOLS.copy(), **self.toolbox.tools}
             result = self.python_evaluator(
                 code_action,
-                available_tools,
+                tools=self.available_tools,
                 state=self.state,
                 authorized_imports=self.authorized_imports,
             )
