@@ -506,6 +506,12 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
+    @unittest.skip(
+        reason="This architecure has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
+    )
+    def test_load_save_without_tied_weights(self):
+        pass
+
     def test_attention_outputs(self):
         # expected length is subsampled so need to change a bit this test
         if not self.has_attentions:
@@ -612,11 +618,11 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
                 [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
             )
 
-    @unittest.skip(
-        reason="In training model, the first speech encoder layer is sometimes skipped. Training is not supported yet, so the test is ignored."
-    )
     def test_retain_grad_hidden_states_attentions(self):
-        pass
+        # When training the model, the first speech encoder layer is sometimes skipped.
+        # Setting the seed to always have the first layer.
+        set_seed(0)
+        super().test_retain_grad_hidden_states_attentions()
 
 
 @require_torch
@@ -645,7 +651,6 @@ class SeamlessM4TModelWithTextInputTest(
     pipeline_model_mapping = (
         {
             "automatic-speech-recognition": SeamlessM4TForSpeechToText,
-            "conversational": SeamlessM4TForTextToText,
             "feature-extraction": SeamlessM4TModel,
             "summarization": SeamlessM4TForTextToText,
             "text-to-audio": SeamlessM4TForTextToSpeech,
@@ -757,6 +762,12 @@ class SeamlessM4TModelWithTextInputTest(
         reason="In training model, the first encoder layer is sometimes skipped. Training is not supported yet, so the test is ignored."
     )
     def test_retain_grad_hidden_states_attentions(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
+    )
+    def test_load_save_without_tied_weights(self):
         pass
 
 

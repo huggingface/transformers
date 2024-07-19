@@ -391,6 +391,12 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
     - get_seq_length
     - reset
 
+[[autodoc]] EncoderDecoderCache
+    - get_seq_length
+    - to_legacy_cache
+    - from_legacy_cache
+    - reset
+    - reorder_cache
 
 ## Watermark Utils
 

@@ -50,8 +50,10 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
         if config.backbone is None:
             raise ValueError("backbone is not set in the config. Please set it to a timm model name.")
 
-        if config.backbone not in timm.list_models():
-            raise ValueError(f"backbone {config.backbone} is not supported by timm.")
+        # Certain timm models have the structure `model_name.version` e.g. vit_large_patch14_dinov2.lvd142m
+        base_backbone_model = config.backbone.split(".")[0]
+        if base_backbone_model not in timm.list_models():
+            raise ValueError(f"backbone {base_backbone_model} is not supported by timm.")
 
         if hasattr(config, "out_features") and config.out_features is not None:
             raise ValueError("out_features is not supported by TimmBackbone. Please use out_indices instead.")
@@ -111,10 +113,10 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
         return super()._from_config(config, **kwargs)
 
     def freeze_batch_norm_2d(self):
-        timm.layers.freeze_batch_norm_2d(self._backbone)
+        timm.utils.model.freeze_batch_norm_2d(self._backbone)
 
     def unfreeze_batch_norm_2d(self):
-        timm.layers.unfreeze_batch_norm_2d(self._backbone)
+        timm.utils.model.unfreeze_batch_norm_2d(self._backbone)
 
     def _init_weights(self, module):
         """

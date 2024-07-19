@@ -17,7 +17,7 @@
 import json
 import logging
 import re
-from typing import Any, Callable, Dict, List, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from .. import is_torch_available
 from ..utils import logging as transformers_logging
@@ -256,15 +256,6 @@ class Toolbox:
         return toolbox_description
 
 
-def format_prompt_with_tools(toolbox: Toolbox, prompt_template: str, tool_description_template: str) -> str:
-    tool_descriptions = toolbox.show_tool_descriptions(tool_description_template)
-    prompt = prompt_template.replace("<<tool_descriptions>>", tool_descriptions)
-    if "<<tool_names>>" in prompt:
-        tool_names = [f"'{tool_name}'" for tool_name in toolbox.tools.keys()]
-        prompt = prompt.replace("<<tool_names>>", ", ".join(tool_names))
-    return prompt
-
-
 class AgentError(Exception):
     """Base class for other agent-related exceptions"""
 
@@ -295,6 +286,21 @@ class AgentGenerationError(AgentError):
     """Exception raised for errors in generation in the agent"""
 
     pass
+
+
+def format_prompt_with_tools(toolbox: Toolbox, prompt_template: str, tool_description_template: str) -> str:
+    tool_descriptions = toolbox.show_tool_descriptions(tool_description_template)
+    prompt = prompt_template.replace("<<tool_descriptions>>", tool_descriptions)
+    if "<<tool_names>>" in prompt:
+        tool_names = [f"'{tool_name}'" for tool_name in toolbox.tools.keys()]
+        prompt = prompt.replace("<<tool_names>>", ", ".join(tool_names))
+    return prompt
+
+
+def format_prompt_with_imports(prompt_template: str, authorized_imports: List[str]) -> str:
+    if "<<authorized_imports>>" not in prompt_template:
+        raise AgentError("Tag '<<authorized_imports>>' should be provided in the prompt.")
+    return prompt_template.replace("<<authorized_imports>>", str(authorized_imports))
 
 
 class Agent:
@@ -331,6 +337,7 @@ class Agent:
                 self._toolbox.add_base_tools(add_python_interpreter=(self.__class__ == ReactJsonAgent))
         else:
             self._toolbox = Toolbox(tools, add_base_tools=add_base_tools)
+        self._toolbox.add_tool(FinalAnswerTool())
 
         self.system_prompt = format_prompt_with_tools(
             self._toolbox, self.system_prompt_template, self.tool_description_template
@@ -359,8 +366,14 @@ class Agent:
             self.task += f"\nYou have been provided with these initial arguments: {str(kwargs)}."
         self.state = kwargs.copy()
         self.system_prompt = format_prompt_with_tools(
-            self._toolbox, self.system_prompt_template, self.tool_description_template
+            self._toolbox,
+            self.system_prompt_template,
+            self.tool_description_template,
         )
+        if hasattr(self, "authorized_imports"):
+            self.system_prompt = format_prompt_with_imports(
+                self.system_prompt, list(set(LIST_SAFE_MODULES) | set(self.authorized_imports))
+            )
         self.logs = [{"system_prompt": self.system_prompt, "task": self.task}]
         self.logger.warn("======== New task ========")
         self.logger.log(33, self.task)
@@ -496,7 +509,7 @@ class CodeAgent(Agent):
         llm_engine: Callable = HfEngine(),
         system_prompt: str = DEFAULT_CODE_SYSTEM_PROMPT,
         tool_description_template: str = DEFAULT_TOOL_DESCRIPTION_TEMPLATE,
-        additional_authorized_imports: List[str] = [],
+        additional_authorized_imports: Optional[List[str]] = None,
         **kwargs,
     ):
         super().__init__(
@@ -515,7 +528,9 @@ class CodeAgent(Agent):
             )
 
         self.python_evaluator = evaluate_python_code
-        self.additional_authorized_imports = additional_authorized_imports
+        self.additional_authorized_imports = additional_authorized_imports if additional_authorized_imports else []
+        self.authorized_imports = list(set(LIST_SAFE_MODULES) | set(self.additional_authorized_imports))
+        self.system_prompt = self.system_prompt.replace("<<authorized_imports>>", str(self.authorized_imports))
 
     def parse_code_blob(self, result: str) -> str:
         """
@@ -562,7 +577,13 @@ class CodeAgent(Agent):
             return llm_output
 
         # Parse
-        _, code_action = self.extract_action(llm_output=llm_output, split_token="Code:")
+        try:
+            _, code_action = self.extract_action(llm_output=llm_output, split_token="Code:")
+        except Exception as e:
+            self.logger.debug(
+                f"Error in extracting action, trying to parse the whole output as code. Error trace: {e}"
+            )
+            code_action = llm_output
 
         try:
             code_action = self.parse_code_blob(code_action)
@@ -579,7 +600,7 @@ class CodeAgent(Agent):
                 code_action,
                 available_tools,
                 state=self.state,
-                authorized_imports=LIST_SAFE_MODULES + self.additional_authorized_imports,
+                authorized_imports=self.authorized_imports,
             )
             self.logger.info(self.state["print_outputs"])
             return output
@@ -611,8 +632,6 @@ class ReactAgent(Agent):
             tool_description_template=tool_description_template,
             **kwargs,
         )
-        if "final_answer" not in self._toolbox.tools:
-            self._toolbox.add_tool(FinalAnswerTool())
 
     def provide_final_answer(self, task) -> str:
         """
@@ -639,17 +658,12 @@ class ReactAgent(Agent):
     def run(self, task: str, stream: bool = False, **kwargs):
         """
         Runs the agent for the given task.
-
         Args:
             task (`str`): The task to perform
-
         Example:
-
         ```py
-        from transformers.agents import ReactJsonAgent, PythonInterpreterTool
-
-        python_interpreter = PythonInterpreterTool()
-        agent = ReactJsonAgent(tools=[python_interpreter])
+        from transformers.agents import ReactCodeAgent
+        agent = ReactCodeAgent(tools=[])
         agent.run("What is the result of 2 power 3.7384?")
         ```
         """
@@ -820,7 +834,7 @@ class ReactCodeAgent(ReactAgent):
         llm_engine: Callable = HfEngine(),
         system_prompt: str = DEFAULT_REACT_CODE_SYSTEM_PROMPT,
         tool_description_template: str = DEFAULT_TOOL_DESCRIPTION_TEMPLATE,
-        additional_authorized_imports: List[str] = [],
+        additional_authorized_imports: Optional[List[str]] = None,
         **kwargs,
     ):
         super().__init__(
@@ -839,7 +853,13 @@ class ReactCodeAgent(ReactAgent):
             )
 
         self.python_evaluator = evaluate_python_code
-        self.additional_authorized_imports = additional_authorized_imports
+        self.additional_authorized_imports = additional_authorized_imports if additional_authorized_imports else []
+        self.authorized_imports = list(set(LIST_SAFE_MODULES) | set(self.additional_authorized_imports))
+        self.system_prompt = self.system_prompt.replace("<<authorized_imports>>", str(self.authorized_imports))
+        self.available_tools = {
+            **BASE_PYTHON_TOOLS.copy(),
+            **self.toolbox.tools,
+        }  # This list can be augmented by the code agent creating some new functions
 
     def step(self):
         """
@@ -871,7 +891,11 @@ class ReactCodeAgent(ReactAgent):
 
         # Parse
         self.logger.debug("===== Extracting action =====")
-        rationale, raw_code_action = self.extract_action(llm_output=llm_output, split_token="Code:")
+        try:
+            rationale, raw_code_action = self.extract_action(llm_output=llm_output, split_token="Code:")
+        except Exception as e:
+            self.logger.debug(f"Error in extracting action, trying to parse the whole output. Error trace: {e}")
+            rationale, raw_code_action = llm_output, llm_output
 
         try:
             code_action = parse_code_blob(raw_code_action)
@@ -885,12 +909,11 @@ class ReactCodeAgent(ReactAgent):
         # Execute
         self.log_code_action(code_action)
         try:
-            available_tools = {**BASE_PYTHON_TOOLS.copy(), **self.toolbox.tools}
             result = self.python_evaluator(
                 code_action,
-                available_tools,
+                tools=self.available_tools,
                 state=self.state,
-                authorized_imports=LIST_SAFE_MODULES + self.additional_authorized_imports,
+                authorized_imports=self.authorized_imports,
             )
             information = self.state["print_outputs"]
             self.logger.warning("Print outputs:")

@@ -237,7 +237,6 @@ class BlenderbotModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     all_generative_model_classes = (BlenderbotForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "conversational": BlenderbotForConditionalGeneration,
             "feature-extraction": BlenderbotModel,
             "summarization": BlenderbotForConditionalGeneration,
             "text-generation": BlenderbotForCausalLM,
@@ -566,6 +565,6 @@ class BlenderbotStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMix
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_attention_mask_past(*config_and_inputs)
 
+    @unittest.skip(reason="decoder cannot keep gradients")
     def test_retain_grad_hidden_states_attentions(self):
-        # decoder cannot keep gradients
         return
