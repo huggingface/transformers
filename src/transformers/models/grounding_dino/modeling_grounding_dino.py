@@ -347,7 +347,7 @@ class GroundingDinoObjectDetectionOutput(ModelOutput):
         init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
             Initial reference points sent through the Transformer decoder.
         enc_topk_proposals (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*, returned when `config.two_stage=True`):
-            Top `config.num_queries` scoring bounding boxes indicies picked as region proposals in the first stage.
+            Top `config.num_queries` scoring bounding boxes indices picked as region proposals in the first stage.
         enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.two_stage=True`):
             Predicted bounding boxes scores where the top `config.num_queries` scoring bounding boxes are picked as
             region proposals in the first stage. Output of bounding box binary classification (i.e. foreground and
