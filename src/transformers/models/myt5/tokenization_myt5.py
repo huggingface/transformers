@@ -31,6 +31,15 @@ VOCAB_FILES_NAMES = {"vocab_file": "byte_maps.json"}
 
 
 class ByteRewriter:
+    """
+    Byte rewriter class for MyT5 tokenizer.
+    This class is used to rewrite bytes using a hash tree. The hash tree is constructed from a set of rewriting rules.
+
+    Args:
+        rewriting_rules (`str` or `Dict[str, str]`):
+            A path to a json file containing the rewriting rules or a dictionary containing the rewriting rules.
+
+    """
     LEAF = "[LEAF]"
 
     def __init__(self, rewriting_rules: Union[str, Dict[str, str]]):
@@ -46,7 +55,10 @@ class ByteRewriter:
         reverse_rewriting_rules = {v: k for k, v in rewriting_rules.items()}
         self.reverse_hash_tree = self.construct_hash_tree(reverse_rewriting_rules)
 
-    def add_leaf(self, hash_tree, byte_in_sequence, byte_out_sequence):
+    def add_leaf(self, hash_tree: Dict[str, Union[dict, List[str]]], byte_in_sequence: str, byte_out_sequence: str):
+        """
+        Add a leaf with the output byte sequence to the hash tree.
+        """
         byte_in_list = byte_in_sequence.split(" ")
         byte_out_list = byte_out_sequence.split(" ")
 
@@ -58,7 +70,10 @@ class ByteRewriter:
 
         tree_pointer[self.LEAF] = byte_out_list
 
-    def construct_hash_tree(self, rewriting_rules):
+    def construct_hash_tree(self, rewriting_rules: Dict[str, str]) -> Dict[str, Union[dict, List[str]]]:
+        """
+        Construct a hash tree for rewritten byte sequences.
+        """
         hash_tree = defaultdict(dict)
         for b in (f"{x:02x}" for x in range(256)):
             hash_tree[b][self.LEAF] = [b]
@@ -68,7 +83,10 @@ class ByteRewriter:
 
         return hash_tree
 
-    def search_hash_tree(self, byte_sequence):
+    def search_hash_tree(self, byte_sequence: List[str]) -> Union[None, List[str]]:
+        """
+        Search the hash tree and return the rewritten byte sequence if found.
+        """
         tree_pointer = self.hash_tree
         for b in byte_sequence:
             if b in tree_pointer:
@@ -78,7 +96,16 @@ class ByteRewriter:
 
         return tree_pointer[self.LEAF]
 
-    def rewrite_bytes(self, in_bytes, reverse=False):
+    def rewrite_bytes(self, in_bytes: List[str], reverse=False) -> List[str]:
+        """
+        Rewrite a sequence of bytes using the hash tree.
+
+        Args:
+            in_bytes (`List[str]`): A list of bytes to be rewritten.
+            reverse (`bool`): If True, decoding is performed with the reverse hash tree.
+        Returns:
+            `List[str]`: The rewritten byte sequence.
+        """
         out_bytes = []
         b_start = 0
         b_end = 0
@@ -90,7 +117,6 @@ class ByteRewriter:
                 if b in tree_pointer:
                     tree_pointer = tree_pointer[b]
                 elif j == b_start:
-                    # logging.warning(f"Unrecognized byte {b} in {in_bytes}, Skipping!")
                     cur_leaf = [b]
                     b_end = j
                     break
@@ -334,7 +360,6 @@ class MyT5Tokenizer(PreTrainedTokenizer):
         string = bstring.decode("utf-8", errors="ignore")
         return string
 
-    # MyT5Tokenizer has no vocab file
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if os.path.isdir(save_directory):
             vocab_file = os.path.join(
