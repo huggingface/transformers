@@ -125,14 +125,22 @@ class OlmoRotaryEmbedding(nn.Module):
         inv_freq, self.attention_scaling = self.rope_parameter_fn(config, device)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
 
     def dynamic_frequency_update(self, position_ids, device):
-        """dynamic RoPE layers need to recompute `inv_freq` when going beyond the original maximum sequence length"""
+        """
+        dynamic RoPE layers should recompute `inv_freq` in the following situations:
+        1 - growing beyond the cached sequence length (allow scaling)
+        2 - the current sequence length is in the original scale (avoid losing precision with small sequences)
+        """
         seq_len = torch.max(position_ids) + 1
-        if seq_len > self.max_seq_len_cached:
-            inv_freq, self.attention_scaling = self.rope_parameter_fn(self.config, device, seq_len=seq_len)
+        needs_growth = seq_len > self.max_seq_len_cached
+        needs_reset = seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len
+        if needs_growth or needs_reset:
+            target_seq_len = max(seq_len, self.original_max_seq_len)
+            inv_freq, self.attention_scaling = self.rope_parameter_fn(self.config, device, seq_len=target_seq_len)
             self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
-            self.max_seq_len_cached = seq_len
+            self.max_seq_len_cached = target_seq_len
 
     @torch.no_grad()
     def forward(self, x, position_ids):
@@ -167,6 +175,7 @@ class OlmoLinearScalingRotaryEmbedding(OlmoRotaryEmbedding):
             "`OlmoLinearScalingRotaryEmbedding` is deprecated an will be removed in v4.45. Please use "
             "`OlmoRotaryEmbedding`, which now also does linear scaling (simply pass the model config to __init__)."
         )
+        kwargs["type"] = "linear"
         super().__init__(*args, **kwargs)
 
 
