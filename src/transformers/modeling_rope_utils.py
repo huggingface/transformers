@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import math
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict
 
 import torch
 
@@ -38,61 +38,6 @@ ROPE_CONFIG_DOCSTRING = r"""
             `beta_slow` (`float`, *optional*):
                 Parameter to set the boundary for interpolation (only) in the linear ramp function.
 """
-
-
-class RopeModelMixin:
-    """
-    Provides utilities for a model to set and retrieve RoPE embeddings.
-    """
-
-    def get_rope_embeddings(
-        self, maximum_position_embeddings: Optional[int] = None
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        Returns the RoPE embeddings for the model, i.e. the cos and sin values for all positions up to
-        `maximum_position_embeddings`.
-
-        Args:
-            maximum_position_embeddings (`int`, *optional*):
-                The maximum number of positions to generate RoPE embeddings for. If not provided, defaults to the
-                model's `config.max_position_embeddings`.
-
-        Returns:
-            Tuple of `torch.Tensor`: The RoPE embeddings for the model, i.e. the cos and sin values for all positions
-            up to `maximum_position_embeddings`.
-        """
-        # Assumption: all layers hold the same RoPE embeddings
-        layers = self.layers if hasattr(self, "layers") else getattr(self, self.base_model_prefix).layers
-        rope_layer = layers[0].self_attn.rotary_emb
-        all_position_ids = torch.arange(
-            maximum_position_embeddings or self.config.max_position_embeddings,
-            dtype=torch.long,
-            device=self.rope_layer.device,
-        )
-        dummy_hidden_states = torch.zeros((1,), device=self.rope_layer.device, dtype=self.dtype)
-        cos, sin = rope_layer(dummy_hidden_states, all_position_ids)
-        return cos, sin
-
-    def set_rope_embeddings(
-        self, frequencies: torch.Tensor, scaling_factor: float = 1.0, attention_factor: Optional[float] = None
-    ):
-        """
-        Sets the RoPE embeddings, parameterized by the frequencies and scaling factor.
-
-        Args:
-            frequencies (`torch.Tensor`):
-                The **inverse** frequencies of the RoPE embeddings.
-            scaling_factor (`float`, *optional*, defaults to 1.0):
-                A scaling factor to be applied to `position_ids` before computing the RoPE embeddings.
-            attention_factor (`float`, *optional*):
-                A scaling factor to be applied to `cos` and `sin` after they are computed. Used in advaced RoPE types,
-                like YaRN.
-        """
-        layers = self.layers if hasattr(self, "layers") else getattr(self, self.base_model_prefix).layers
-        for layer in layers:
-            layer.self_attn.rotary_emb.inv_freq = frequencies
-            layer.self_attn.rotary_emb.rope_config["scaling_factor"] = scaling_factor
-            layer.self_attn.rotary_emb.rope_config["attention_factor"] = attention_factor
 
 
 def rope_config_validation(rope_scaling):

@@ -36,7 +36,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
     TokenClassifierOutput,
 )
-from ...modeling_rope_utils import RopeModelMixin, compute_frequencies
+from ...modeling_rope_utils import compute_frequencies
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
@@ -146,7 +146,7 @@ class LlamaRotaryEmbedding(nn.Module):
             sin = emb.sin()
 
         # Advanced RoPE types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling attention
-        if self.rope_config["attention_factor"] is not None:
+        if self.rope_config.get("attention_factor") is not None:
             cos = cos * self.rope_config["attention_factor"]
             sin = sin * self.rope_config["attention_factor"]
 
@@ -294,6 +294,7 @@ class LlamaAttention(nn.Module):
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=config.attention_bias)
 
+        # TODO (joao): remove in v4.45 (RoPE is computed in the model, not in the decoder layers)
         rope_config = {
             "dim": self.head_dim,
             "max_position_embeddings": self.max_position_embeddings,
@@ -318,11 +319,11 @@ class LlamaAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.45
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
         output_attentions: bool = False,
-        use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
@@ -354,7 +355,16 @@ class LlamaAttention(nn.Module):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        cos, sin = self.rotary_emb(value_states, position_ids)
+        if position_embeddings is None:
+            logger.warning_once(
+                "The attention layers in Llama are transitioning from using `position_ids` (2D tensor with the "
+                "indexes of the tokens) and computing the RoPE embeddings internally, to using `position_embeddings` "
+                "(Tuple of tensors, containing cos and sin) and relying on an external computation of the embeddings. "
+                "`position_ids` will be removed in v4.45."
+            )
+            cos, sin = self.rotary_emb(value_states, position_ids)
+        else:
+            cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
@@ -417,11 +427,11 @@ class LlamaFlashAttention2(LlamaAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.45
         attention_mask: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
         output_attentions: bool = False,
-        use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         if isinstance(past_key_value, StaticCache):
@@ -445,7 +455,16 @@ class LlamaFlashAttention2(LlamaAttention):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        cos, sin = self.rotary_emb(value_states, position_ids)
+        if position_embeddings is None:
+            logger.warning_once(
+                "The attention layers in Llama are transitioning from using `position_ids` (2D tensor with the "
+                "indexes of the tokens) and computing the RoPE embeddings internally, to using `position_embeddings` "
+                "(Tuple of tensors, containing cos and sin) and relying on an external computation of the embeddings. "
+                "`position_ids` will be removed in v4.45."
+            )
+            cos, sin = self.rotary_emb(value_states, position_ids)
+        else:
+            cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
@@ -608,11 +627,11 @@ class LlamaSdpaAttention(LlamaAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.45
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
         output_attentions: bool = False,
-        use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
@@ -628,7 +647,6 @@ class LlamaSdpaAttention(LlamaAttention):
                 position_ids=position_ids,
                 past_key_value=past_key_value,
                 output_attentions=output_attentions,
-                use_cache=use_cache,
                 cache_position=cache_position,
             )
 
@@ -642,7 +660,16 @@ class LlamaSdpaAttention(LlamaAttention):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        cos, sin = self.rotary_emb(value_states, position_ids)
+        if position_embeddings is None:
+            logger.warning_once(
+                "The attention layers in Llama are transitioning from using `position_ids` (2D tensor with the "
+                "indexes of the tokens) and computing the RoPE embeddings internally, to using `position_embeddings` "
+                "(Tuple of tensors, containing cos and sin) and relying on an external computation of the embeddings. "
+                "`position_ids` will be removed in v4.45."
+            )
+            cos, sin = self.rotary_emb(value_states, position_ids)
+        else:
+            cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
@@ -706,6 +733,7 @@ class LlamaDecoderLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.45
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
@@ -717,6 +745,9 @@ class LlamaDecoderLayer(nn.Module):
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            position_embeddings (`Tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
+                Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
+                with `head_dim` being the embedding dimension of each attention head.
             attention_mask (`torch.FloatTensor`, *optional*):
                 attention mask of size `(batch_size, sequence_length)` if flash attention is used or `(batch_size, 1,
                 query_sequence_length, key_sequence_length)` if default attention is used.
@@ -740,6 +771,7 @@ class LlamaDecoderLayer(nn.Module):
         # Self Attention
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
+            position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_value=past_key_value,
@@ -787,7 +819,7 @@ LLAMA_START_DOCSTRING = r"""
     "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
     LLAMA_START_DOCSTRING,
 )
-class LlamaPreTrainedModel(PreTrainedModel, RopeModelMixin):
+class LlamaPreTrainedModel(PreTrainedModel):
     config_class = LlamaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
@@ -846,6 +878,10 @@ LLAMA_INPUTS_DOCSTRING = r"""
             config.n_positions - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
+        position_embeddings (`Tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
+            Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
+            with `head_dim` being the embedding dimension of each attention head. This input is used to overwrite
+            the default positional embeddings.
         past_key_values (`Cache` or `tuple(tuple(torch.FloatTensor))`, *optional*):
             Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
             blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
@@ -909,6 +945,28 @@ class LlamaModel(LlamaPreTrainedModel):
         self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
 
+        # TODO (joao): create RoPE config class?
+        rope_config = {
+            "dim": self.config.hidden_size // self.config.num_attention_heads,
+            "max_position_embeddings": self.config.max_position_embeddings,
+            "base": self.config.rope_theta,
+            "rope_type": "default",
+        }
+
+        if self.config.rope_scaling is not None:
+            rope_config["rope_type"] = self.config.rope_scaling["type"]  # overwrites '"rope_type": "default"'
+            rope_config["scaling_factor"] = self.config.rope_scaling["factor"]
+            if "yarn" in rope_config["rope_type"]:
+                for yarn_parameter in [
+                    "original_max_position_embeddings",
+                    "attention_factor",
+                    "beta_fast",
+                    "beta_slow",
+                ]:
+                    rope_config[yarn_parameter] = self.config.rope_scaling.get(yarn_parameter)
+
+        self.rotary_emb = LlamaRotaryEmbedding(**rope_config)
+
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -924,6 +982,7 @@ class LlamaModel(LlamaPreTrainedModel):
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
@@ -977,6 +1036,9 @@ class LlamaModel(LlamaPreTrainedModel):
         # embed positions
         hidden_states = inputs_embeds
 
+        # create position embeddings to be shared across the decoder layers
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
@@ -990,6 +1052,7 @@ class LlamaModel(LlamaPreTrainedModel):
                 layer_outputs = self._gradient_checkpointing_func(
                     decoder_layer.__call__,
                     hidden_states,
+                    position_embeddings,
                     causal_mask,
                     position_ids,
                     past_key_values,
@@ -1000,6 +1063,7 @@ class LlamaModel(LlamaPreTrainedModel):
             else:
                 layer_outputs = decoder_layer(
                     hidden_states,
+                    position_embeddings=position_embeddings,
                     attention_mask=causal_mask,
                     position_ids=position_ids,
                     past_key_value=past_key_values,
@@ -1153,6 +1217,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -1198,6 +1263,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
+            position_embeddings=position_embeddings,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
@@ -1362,6 +1428,7 @@ class LlamaForSequenceClassification(LlamaPreTrainedModel):
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -1382,6 +1449,7 @@ class LlamaForSequenceClassification(LlamaPreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
+            position_embeddings=position_embeddings,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
@@ -1479,6 +1547,7 @@ class LlamaForQuestionAnswering(LlamaPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         start_positions: Optional[torch.LongTensor] = None,
@@ -1503,6 +1572,7 @@ class LlamaForQuestionAnswering(LlamaPreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
+            position_embeddings=position_embeddings,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
@@ -1583,6 +1653,7 @@ class LlamaForTokenClassification(LlamaPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -1603,6 +1674,7 @@ class LlamaForTokenClassification(LlamaPreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
+            position_embeddings=position_embeddings,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,

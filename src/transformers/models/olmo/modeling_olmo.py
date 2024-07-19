@@ -35,7 +35,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
 )
-from ...modeling_rope_utils import RopeModelMixin, compute_frequencies
+from ...modeling_rope_utils import compute_frequencies
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
@@ -144,7 +144,7 @@ class OlmoRotaryEmbedding(nn.Module):
             sin = emb.sin()
 
         # Advanced RoPE types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling attention
-        if self.rope_config["attention_factor"] is not None:
+        if self.rope_config.get("attention_factor") is not None:
             cos = cos * self.rope_config["attention_factor"]
             sin = sin * self.rope_config["attention_factor"]
 
@@ -279,6 +279,7 @@ class OlmoAttention(nn.Module):
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=config.attention_bias)
 
+        # TODO (joao): remove in v4.45 (RoPE is computed in the model, not in the decoder layers)
         rope_config = {
             "dim": self.head_dim,
             "max_position_embeddings": self.max_position_embeddings,
@@ -709,6 +710,7 @@ class OlmoDecoderLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.45
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
@@ -720,6 +722,9 @@ class OlmoDecoderLayer(nn.Module):
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            position_embeddings (`Tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
+                Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
+                with `head_dim` being the embedding dimension of each attention head.
             attention_mask (`torch.FloatTensor`, *optional*):
                 attention mask of size `(batch_size, sequence_length)` if flash attention is used or `(batch_size, 1,
                 query_sequence_length, key_sequence_length)` if default attention is used.
@@ -743,6 +748,7 @@ class OlmoDecoderLayer(nn.Module):
         # Self Attention
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
+            position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_value=past_key_value,
@@ -791,7 +797,7 @@ OLMO_START_DOCSTRING = r"""
     OLMO_START_DOCSTRING,
 )
 # Copied from transformers.models.llama.modeling_llama.LlamaPreTrainedModel with Llama->Olmo
-class OlmoPreTrainedModel(PreTrainedModel, RopeModelMixin):
+class OlmoPreTrainedModel(PreTrainedModel):
     config_class = OlmoConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
@@ -929,6 +935,7 @@ class OlmoModel(OlmoPreTrainedModel):
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
@@ -982,6 +989,9 @@ class OlmoModel(OlmoPreTrainedModel):
         # embed positions
         hidden_states = inputs_embeds
 
+        # create position embeddings to be shared across the decoder layers
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
@@ -995,6 +1005,7 @@ class OlmoModel(OlmoPreTrainedModel):
                 layer_outputs = self._gradient_checkpointing_func(
                     decoder_layer.__call__,
                     hidden_states,
+                    position_embeddings,
                     causal_mask,
                     position_ids,
                     past_key_values,
@@ -1005,6 +1016,7 @@ class OlmoModel(OlmoPreTrainedModel):
             else:
                 layer_outputs = decoder_layer(
                     hidden_states,
+                    position_embeddings=position_embeddings,
                     attention_mask=causal_mask,
                     position_ids=position_ids,
                     past_key_value=past_key_values,

@@ -38,7 +38,6 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
     TokenClassifierOutput,
 )
-from ...modeling_rope_utils import RopeModelMixin
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
@@ -125,7 +124,7 @@ class MistralRotaryEmbedding(nn.Module):
             sin = emb.sin()
 
         # Advanced RoPE types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling attention
-        if self.rope_config["attention_factor"] is not None:
+        if self.rope_config.get("attention_factor") is not None:
             cos = cos * self.rope_config["attention_factor"]
             sin = sin * self.rope_config["attention_factor"]
 
@@ -595,11 +594,11 @@ class MistralSdpaAttention(MistralAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.45
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
         output_attentions: bool = False,
-        use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
@@ -615,7 +614,6 @@ class MistralSdpaAttention(MistralAttention):
                 position_ids=position_ids,
                 past_key_value=past_key_value,
                 output_attentions=output_attentions,
-                use_cache=use_cache,
                 cache_position=cache_position,
             )
 
@@ -629,7 +627,16 @@ class MistralSdpaAttention(MistralAttention):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        cos, sin = self.rotary_emb(value_states, position_ids)
+        if position_embeddings is None:
+            logger.warning_once(
+                "The attention layers in Mistral are transitioning from using `position_ids` (2D tensor with the "
+                "indexes of the tokens) and computing the RoPE embeddings internally, to using `position_embeddings` "
+                "(Tuple of tensors, containing cos and sin) and relying on an external computation of the embeddings. "
+                "`position_ids` will be removed in v4.45."
+            )
+            cos, sin = self.rotary_emb(value_states, position_ids)
+        else:
+            cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
@@ -694,6 +701,7 @@ class MistralDecoderLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.45
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
@@ -705,6 +713,9 @@ class MistralDecoderLayer(nn.Module):
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            position_embeddings (`Tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
+                Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
+                with `head_dim` being the embedding dimension of each attention head.
             attention_mask (`torch.FloatTensor`, *optional*):
                 attention mask of size `(batch_size, sequence_length)` if flash attention is used or `(batch_size, 1,
                 query_sequence_length, key_sequence_length)` if default attention is used.
@@ -728,6 +739,7 @@ class MistralDecoderLayer(nn.Module):
         # Self Attention
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
+            position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_value=past_key_value,
@@ -775,7 +787,7 @@ MISTRAL_START_DOCSTRING = r"""
     "The bare Mistral Model outputting raw hidden-states without any specific head on top.",
     MISTRAL_START_DOCSTRING,
 )
-class MistralPreTrainedModel(PreTrainedModel, RopeModelMixin):
+class MistralPreTrainedModel(PreTrainedModel):
     config_class = MistralConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
@@ -1381,6 +1393,7 @@ class MistralForSequenceClassification(MistralPreTrainedModel):
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -1401,6 +1414,7 @@ class MistralForSequenceClassification(MistralPreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
+            position_embeddings=position_embeddings,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
@@ -1504,6 +1518,7 @@ class MistralForTokenClassification(MistralPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -1524,6 +1539,7 @@ class MistralForTokenClassification(MistralPreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
+            position_embeddings=position_embeddings,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,

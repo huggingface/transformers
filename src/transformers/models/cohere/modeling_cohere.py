@@ -38,7 +38,6 @@ from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
 )
-from ...modeling_rope_utils import RopeModelMixin
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
@@ -705,7 +704,7 @@ COHERE_START_DOCSTRING = r"""
     COHERE_START_DOCSTRING,
 )
 # Copied from transformers.models.llama.modeling_llama.LlamaPreTrainedModel with Llama->Cohere
-class CoherePreTrainedModel(PreTrainedModel, RopeModelMixin):
+class CoherePreTrainedModel(PreTrainedModel):
     config_class = CohereConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
