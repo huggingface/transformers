@@ -1279,7 +1279,8 @@ class ChameleonModel(ChameleonPreTrainedModel):
         if pixel_values is not None:
             image_tokens = self.get_image_tokens(pixel_values)
             special_image_mask = input_ids == self.vocabulary_mapping.image_token_id
-            input_ids[special_image_mask] = image_tokens.flatten().to(input_ids.device, input_ids.dtype)
+            image_tokens = image_tokens.to(input_ids.device, input_ids.dtype)
+            input_ids = input_ids.masked_scatter(special_image_mask, image_tokens)
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
@@ -1445,7 +1446,7 @@ class ChameleonModel(ChameleonPreTrainedModel):
     "Chameleon Model with a head on top used for outputting logits for next token prediction.",
     CHAMELEON_START_DOCSTRING,
 )
-class ChameleonForCausalLM(ChameleonPreTrainedModel):
+class ChameleonForConditionalGeneration(ChameleonPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
@@ -1504,12 +1505,12 @@ class ChameleonForCausalLM(ChameleonPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import ChameleonProcessor, ChameleonForCausalLM
+        >>> from transformers import ChameleonProcessor, ChameleonForConditionalGeneration
         >>> import torch
         >>> import requests
         >>> from PIL import Image
 
-        >>> model = ChameleonForCausalLM.from_pretrained("facebook/chameleon-7b", torch_dtype=torch.bfloat16)
+        >>> model = ChameleonForConditionalGeneration.from_pretrained("facebook/chameleon-7b", torch_dtype=torch.bfloat16)
         >>> processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
 
         >>> prompt = "I used to know a lot about constellations when I was younger, but as I grew older, I forgot most of what I knew. These are the only two constellations that I really remember now.<image><image>I would like for you to tell me about 3 more constellations and give me a little bit of history about the constellation."
