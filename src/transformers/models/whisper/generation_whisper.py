@@ -722,13 +722,7 @@ class WhisperGenerationMixin:
         if is_shortform:
             # add eos token:
             if generation_config.max_new_tokens is None and generation_config.max_length is None:
-                eos_tokens = torch.full(
-                    (
-                        sequences.shape[0],
-                        1,
-                    ),
-                    generation_config.eos_token_id,
-                ).to(sequences.device)
+                eos_tokens = torch.full((sequences.shape[0], 1), generation_config.eos_token_id)
                 sequences = torch.cat([sequences, eos_tokens], dim=-1)
 
             if return_token_timestamps:
@@ -747,11 +741,14 @@ class WhisperGenerationMixin:
                             dict_outputs.encoder_attentions[i][::num_return_sequences]
                             for i in range(len(dict_outputs.encoder_attentions))
                         )
-                if hasattr(dict_outputs, "encoder_hidden_states") and dict_outputs.encoder_hidden_states is not None:
-                    dict_outputs.encoder_hidden_states = tuple(
-                        dict_outputs.encoder_hidden_states[i][::num_return_sequences]
-                        for i in range(len(dict_outputs.encoder_hidden_states))
-                    )
+                    if (
+                        hasattr(dict_outputs, "encoder_hidden_states")
+                        and dict_outputs.encoder_hidden_states is not None
+                    ):
+                        dict_outputs.encoder_hidden_states = tuple(
+                            dict_outputs.encoder_hidden_states[i][::num_return_sequences]
+                            for i in range(len(dict_outputs.encoder_hidden_states))
+                        )
                 if return_token_timestamps:
                     dict_outputs["token_timestamps"] = outputs["token_timestamps"]
                 return dict_outputs
