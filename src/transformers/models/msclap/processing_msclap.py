@@ -19,6 +19,7 @@ Audio/Text processor class for MSCLAP
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
 
+
 # Copied from transformers.models.clap.processing_clap.ClapProcessor with Clap->MSClap
 class MSClapProcessor(ProcessorMixin):
     r"""
@@ -39,7 +40,6 @@ class MSClapProcessor(ProcessorMixin):
 
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
-        
 
     def __call__(self, text=None, audios=None, return_tensors=None, **kwargs):
         """

@@ -54,7 +54,7 @@ class MSClapTextConfig(PretrainedConfig):
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         projection_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout rate for the projection layer. 
+            The dropout rate for the projection layer.
         max_position_embeddings (`int`, *optional*, defaults to 512):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
@@ -98,19 +98,17 @@ class MSClapTextConfig(PretrainedConfig):
 
     def __init__(
         self,
-       
-        text_model = 'gpt2', 
-        projection_dim = 768, 
+        text_model="gpt2",
+        projection_dim=768,
         hidden_size=768,
-        projection_dropout_prob = 0, 
+        projection_dropout_prob=0,
         **kwargs,
     ):
-        super().__init__( **kwargs)
+        super().__init__(**kwargs)
         self.text_model = text_model
         self.projection_dim = projection_dim
         self.hidden_size = hidden_size
         self.projection_dropout_prob = projection_dropout_prob
-
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
@@ -188,7 +186,7 @@ class MSClapAudioConfig(PretrainedConfig):
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         projection_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout rate for the projection layer. 
+            The dropout rate for the projection layer.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether or not to add a bias to the query, key, value projections.
         mlp_ratio (`float`, *optional*, defaults to 4.0):

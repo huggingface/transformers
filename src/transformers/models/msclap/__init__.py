@@ -58,13 +58,12 @@ if TYPE_CHECKING:
         from .feature_extraction_msclap import MSClapFeatureExtractor
         from .modeling_msclap import (
             MSClapAudioModel,
-            MSClapModel, 
             MSClapAudioModelWithProjection,
+            MSClapModel,
             MSClapPreTrainedModel,
             MSClapTextModel,
             MSClapTextModelWithProjection,
         )
-
 
 
 else:

@@ -28,6 +28,7 @@ from ...utils import TensorType, logging
 
 logger = logging.get_logger(__name__)
 
+
 # Copied from transformers.models.clap.feature_extractor_clap.ClapProcessor with Clap->MSClap
 class MSClapFeatureExtractor(SequenceFeatureExtractor):
     r"""
@@ -360,6 +361,3 @@ class MSClapFeatureExtractor(SequenceFeatureExtractor):
             input_features = input_features.convert_to_tensors(return_tensors)
 
         return input_features
-
-    
-    

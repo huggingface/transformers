@@ -17,7 +17,7 @@
 import collections
 import math
 from dataclasses import dataclass
-from typing import Any, List, Optional, Tuple, Union
+from typing import Any, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
@@ -27,8 +27,6 @@ from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
 )
-from ..auto.modeling_auto import AutoModel
-
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
 from ...utils import (
@@ -39,6 +37,7 @@ from ...utils import (
     replace_return_docstrings,
     torch_int,
 )
+from ..auto.modeling_auto import AutoModel
 from .configuration_msclap import MSClapAudioConfig, MSClapConfig, MSClapTextConfig
 
 
@@ -815,6 +814,7 @@ class MSClapAudioPatchMerging(nn.Module):
 
         return input_feature
 
+
 # Adpated from transformers.models.clap.modeling_clap.ClapAudioEncoder with Clap->MSClap
 class MSClapAudioEncoder(nn.Module):
     def __init__(self, config):
@@ -859,11 +859,8 @@ class MSClapAudioEncoder(nn.Module):
 
         SF = self.spec_size // (2 ** (len(self.depths) - 1)) // self.patch_stride[0] // self.freq_ratio
         self.tscam_conv = nn.Conv2d(
-                in_channels = self.num_features,
-                out_channels = config.num_classes,
-                kernel_size = (SF,3),
-                padding = (0,1)
-            )
+            in_channels=self.num_features, out_channels=config.num_classes, kernel_size=(SF, 3), padding=(0, 1)
+        )
 
     def reshape_mel2img(self, normalized_input_features):
         """
@@ -1134,6 +1131,7 @@ MSCLAP_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
+
 # Adapted from https://github.com/microsoft/CLAP/blob/59bc8446e3e9426bf4158810e572b0798a30cf4d/msclap/models/clap.py#L8
 class MSClapProjectionLayer(nn.Module):
     def __init__(self, config: Union[MSClapAudioConfig, MSClapTextConfig]):
@@ -1242,31 +1240,30 @@ class MSClapAudioModel(MSClapPreTrainedModel):
             return_dict=return_dict,
         )
 
+
 # Adapted from transformers.models.clap.modeling_clap.ClapTextModel with Clap->MSClap
-class MSClapTextModel(MSClapPreTrainedModel): 
+class MSClapTextModel(MSClapPreTrainedModel):
     def __init__(self, config: MSClapTextConfig) -> None:
         super().__init__(config)
 
         self.base = AutoModel.from_pretrained(config.text_model)
 
-
-    def forward(self, 
-        input_ids, 
+    def forward(
+        self,
+        input_ids,
         attention_mask=None,
         position_ids=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
     ):
-       
         batch_size = input_ids.shape[0]
-        hidden_states = self.base(input_ids)[0] 
+        hidden_states = self.base(input_ids)[0]
 
         sequence_lengths = torch.ne(input_ids, 0).sum(-1) - 1
-        output = hidden_states[torch.arange(batch_size, device=hidden_states.device), sequence_lengths] 
-       
-        return output
+        output = hidden_states[torch.arange(batch_size, device=hidden_states.device), sequence_lengths]
 
+        return output
 
 
 @add_start_docstrings(MSCLAP_START_DOCSTRING)
@@ -1304,7 +1301,6 @@ class MSClapModel(MSClapPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
 
     @add_start_docstrings_to_model_forward(MSCLAP_TEXT_INPUTS_DOCSTRING)
     def get_text_features(
@@ -1652,5 +1648,3 @@ class MSClapAudioModelWithProjection(MSClapPreTrainedModel):
             attentions=audio_outputs.attentions,
             hidden_states=audio_outputs.hidden_states,
         )
-
-

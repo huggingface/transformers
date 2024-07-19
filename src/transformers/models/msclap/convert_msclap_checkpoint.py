@@ -16,16 +16,16 @@
 import argparse
 import re
 
-
-from transformers import MSClapConfig, MSClapModel, MSClapFeatureExtractor, AutoTokenizer, MSClapProcessor
-
 from msclap import CLAP
+
+from transformers import AutoTokenizer, MSClapConfig, MSClapFeatureExtractor, MSClapModel, MSClapProcessor
+
 
 KEYS_TO_MODIFY_MAPPING = {
     "caption_encoder": "text_model",
-    "text_model.projection": "text_projection", 
+    "text_model.projection": "text_projection",
     "audio_encoder.base.htsat": "audio_model.audio_encoder",
-    "audio_encoder.projection": "audio_projection", 
+    "audio_encoder.projection": "audio_projection",
     "attn": "attention.self",
     "self.proj": "output.dense",
     "attention.self_mask": "attn_mask",
@@ -38,31 +38,32 @@ KEYS_TO_MODIFY_MAPPING = {
 
 
 IGNORE_WEIGHTS = [
-    "spectrogram_extractor", 
-    "logmel_extractor", 
-    "attn_mask", 
-    "head", 
+    "spectrogram_extractor",
+    "logmel_extractor",
+    "attn_mask",
+    "head",
 ]
 
 GPT2_WEIGHTS = "caption_encoder.base"
 
-def get_unused_weights(model, converted_state_dict, condition = "audio_model"): 
 
+def get_unused_weights(model, converted_state_dict, condition="audio_model"):
     audio_model_state_dict = [layer for layer in model.state_dict().keys() if re.search(condition, layer)]
-    audio_layers_converted_checkpoints = [layer for layer in  converted_state_dict if re.search(condition, layer)]
+    audio_layers_converted_checkpoints = [layer for layer in converted_state_dict if re.search(condition, layer)]
 
     unused_audio_weights = set(audio_layers_converted_checkpoints) ^ set(audio_model_state_dict)
     unused_audio_weights = unused_audio_weights.intersection(set(audio_layers_converted_checkpoints))
     unused_audio_weights = [
-        element for element in unused_audio_weights 
+        element
+        for element in unused_audio_weights
         if not any(re.search(pattern, element) for pattern in IGNORE_WEIGHTS)
     ]
 
     return unused_audio_weights
 
-def init_msclap(version):
 
-    clap_model = CLAP(version = version, use_cuda=False)
+def init_msclap(version):
+    clap_model = CLAP(version=version, use_cuda=False)
 
     return clap_model
 
@@ -76,8 +77,8 @@ def get_config_from_original(clap_model):
     }
 
     text_config = {
-        "hidden_size": clap_model.clap.caption_encoder.projection.linear1.in_features, 
-        "projection_dim": clap_model.clap.audio_encoder.projection.linear1.out_features
+        "hidden_size": clap_model.clap.caption_encoder.projection.linear1.in_features,
+        "projection_dim": clap_model.clap.audio_encoder.projection.linear1.out_features,
     }
 
     projection_dim = clap_model.clap.audio_encoder.projection.linear1.out_features
@@ -92,13 +93,10 @@ def rename_state_dict(state_dict):
     text_projection_pattern = r".*_projection.(\d+).*"
 
     for key, value in state_dict.items():
-        # check if any key needs to be modified
-        is_used = False
-
-        if re.search(GPT2_WEIGHTS, key): 
-            # Avoid all the other mapping transformations applied to the Audio Model and Projection Layers: 
+        if re.search(GPT2_WEIGHTS, key):
+            # Avoid all the other mapping transformations applied to the Audio Model and Projection Layers:
             key = key.replace("caption_encoder", "text_model")
-        else: 
+        else:
             for key_to_modify, new_key in KEYS_TO_MODIFY_MAPPING.items():
                 if key_to_modify in key:
                     key = key.replace(key_to_modify, new_key)
@@ -134,7 +132,7 @@ def rename_state_dict(state_dict):
     return model_state_dict
 
 
-def convert_msclap_checkpoint(version, pytorch_dump_folder_path, repo_id,  enable_fusion=False):
+def convert_msclap_checkpoint(version, pytorch_dump_folder_path, repo_id, enable_fusion=False):
     clap_model = init_msclap(version)
 
     clap_model.clap.eval()
@@ -152,7 +150,7 @@ def convert_msclap_checkpoint(version, pytorch_dump_folder_path, repo_id,  enabl
     unused_audio_projection_weights = get_unused_weights(model, state_dict, "audio_projection")
     unused_text_encoder_weights = get_unused_weights(model, state_dict, "text_model")
     unused_text_projection_weights = get_unused_weights(model, state_dict, "text_projection")
-   
+
     print(unused_audio_encoder_weights)
     print(unused_audio_projection_weights)
     print(unused_text_encoder_weights)
@@ -160,25 +158,21 @@ def convert_msclap_checkpoint(version, pytorch_dump_folder_path, repo_id,  enabl
 
     model.save_pretrained(pytorch_dump_folder_path)
     transformers_config.save_pretrained(pytorch_dump_folder_path)
-    
-        
-    tokenizer = AutoTokenizer.from_pretrained('gpt2')
-    tokenizer.add_special_tokens({'pad_token': '!'})
+
+    tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    tokenizer.add_special_tokens({"pad_token": "!"})
 
     feature_extractor = MSClapFeatureExtractor()
 
     processor = MSClapProcessor(feature_extractor, tokenizer)
     processor.save_pretrained(pytorch_dump_folder_path)
-    
-    if repo_id: 
+
+    if repo_id:
         print("Pushing to the hub...")
         feature_extractor.push_to_hub(repo_id)
         processor.push_to_hub(repo_id)
         tokenizer.push_to_hub(repo_id)
         model.push_to_hub(repo_id)
-
-
-
 
 
 if __name__ == "__main__":
@@ -188,8 +182,5 @@ if __name__ == "__main__":
     parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
     args = parser.parse_args()
 
-
     pytorch_dump_folder_path = "/home/kamil/cache/msclap/"
-    convert_msclap_checkpoint(
-        '2023', pytorch_dump_folder_path, repo_id='kamilakesbi/ms_clap'
-    )
+    convert_msclap_checkpoint("2023", pytorch_dump_folder_path, repo_id="kamilakesbi/ms_clap")
