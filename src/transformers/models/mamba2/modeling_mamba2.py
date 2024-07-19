@@ -254,7 +254,7 @@ class Mamba2Mixer(nn.Module):
             x, B, C = torch.split(
                 xBC, [self.intermediate_size, self.n_groups * self.state_size, self.n_groups * self.state_size], dim=-1
             )
-            y = mamba_chunk_scan_combined(
+            scan_output = mamba_chunk_scan_combined(
                 x.view(x.shape[0], x.shape[1], -1, self.head_dim),
                 time_step,
                 A,
@@ -266,11 +266,10 @@ class Mamba2Mixer(nn.Module):
                 seq_idx=None,
                 **dt_limit_kwargs,
             )
-            y = y.view(y.shape[0], y.shape[1], -1)
+            scan_output = scan_output.view(scan_output.shape[0], scan_output.shape[1], -1)
             # Multiply "gate" branch and apply extra normalization layer
-
-            y = self.norm(y, gate)
-            out = self.out_proj(y)
+            scan_output = self.norm(scan_output, gate)
+            out = self.out_proj(scan_output)
         return out
 
     # fmt: off
@@ -281,6 +280,7 @@ class Mamba2Mixer(nn.Module):
         # 1. Gated MLP's linear projection
         projected_states =  self.in_proj(input_states)
         d_mlp = (projected_states.shape[-1] - 2 * self.intermediate_size -  2 * self.n_groups * self.state_size- self.num_heads) // 2
+        # z0 and x0 are empty tensors
         z0, x0, gate, hidden_states, dt = projected_states.split(
                 [d_mlp, d_mlp, self.intermediate_size,  self.conv_dim, self.num_heads], dim=-1
         )
@@ -338,6 +338,7 @@ class Mamba2Mixer(nn.Module):
             scan_outputs.append(scan_output[:,:,:,0])
         scan_output = torch.stack(scan_outputs, dim=1)                                # [batch, intermediate_size, seq_len]
         scan_output = scan_output + (hidden_states * self.D[:,None])
+        # FIXME at this stage, scan_output is close to the cuda forward but not exactly similar --> logits differ
         scan_output = self.norm(scan_output.view(batch_size, seq_len, -1), gate)
         scan_output = torch.cat([nn.functional.silu(z0) * x0, scan_output], dim=-1)
         if cache_params is not None:
