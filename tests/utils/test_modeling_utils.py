@@ -816,6 +816,11 @@ class ModelUtilsTest(TestCasePlus):
             self.assertTrue(torch.allclose(p1, p2))
 
     def test_checkpoint_safetensors(self):
+        # Test that the loading behaviour is as expected when only safetensor checkpoints are available
+        # - We can load the model with use_safetensors=True
+        # - We can load the model without specifying use_safetensors i.e. we search for the available checkpoint,
+        #   preferring safetensors
+        # - We cannot load the model with use_safetensors=False
         model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
 
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -844,6 +849,11 @@ class ModelUtilsTest(TestCasePlus):
             self.assertTrue(torch.allclose(p1, p2))
 
     def test_checkpoint_pytorch_bin(self):
+        # Test that the loading behaviour is as expected when only pytorch checkpoints are available
+        # - We can load the model with use_safetensors=False
+        # - We can load the model without specifying use_safetensors i.e. we search for the available checkpoint,
+        #   preferring safetensors but falling back to pytorch
+        # - We cannot load the model with use_safetensors=True
         model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
 
         with tempfile.TemporaryDirectory() as tmp_dir:
