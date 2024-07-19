@@ -16,12 +16,30 @@ rendered properly in your Markdown viewer.
 
 # FBGEMM FP8
 
+With FBGEMM FP8 quantization method, you can quantize your model in FP8 (W8A8):
+- the weights will be quantized in 8bit (FP8) per channel
+- the activation will be quantized in 8bit (FP8) per token
+
+It relies on the [FBGEMM](https://github.com/pytorch/FBGEMM) library which provides efficient low-precision general matrix multiplication for small batch sizes and support for accuracy-loss minimizing techniques such as row-wise quantization and outlier-aware quantization. 
+
+> [!TIP]
+> You need a GPU with compute capability>=9 (e.g. H100) 
+
+Before you begin, make sure the following libraries are installed with their latest version:
+
+```bash
+pip install --upgrade accelerate fbgemm-gpu torch
+```
+
+If you are having issues with fbgemm-gpu and torch library, you might need to install the nighlty release. You can follow the instruction [here](https://pytorch.org/FBGEMM/fbgemm_gpu-development/InstallationInstructions.html#fbgemm-gpu-install-libraries:~:text=found%20here.-,Install%20the%20FBGEMM_GPU%20Package,-Install%20through%20PyTorch)
+
+
 ```py
 from transformers import FbgemmFp8Config, AutoModelForCausalLM, AutoTokenizer
 
 model_name = "meta-llama/Meta-Llama-3-8B"
 quantization_config = FbgemmFp8Config()
-quantized_model = AutoModelForCausalLM.from_pretrained("llama_fp8", device_map="auto", quantization_config=quantization_config)
+quantized_model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", quantization_config=quantization_config)
 
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 input_text = "What are we having for dinner?"
@@ -29,7 +47,6 @@ input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
 
 output = quantized_model.generate(**input_ids, max_new_tokens=10)
 print(tokenizer.decode(output[0], skip_special_tokens=True))
-
 ```
 
 A quantized model can be saved via "saved_pretrained" and be reused again via the "from_pretrained".
