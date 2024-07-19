@@ -34,13 +34,13 @@ being competitive with models such as Mixtral 8x7B and Gemini-Pro, and performs 
 generation, all in a single model. It also matches or exceeds the performance of much larger models,
 including Gemini Pro and GPT-4V, according to human judgments on a new long-form mixed-modal
 generation evaluation, where either the prompt or outputs contain mixed sequences of both images and
-text. Chameleon marks a significant step forward in a unified modeling of full multimodal documents*
+text. Chameleon marks a significant step forward in unified modeling of full multimodal documents*
 
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/chameleon_arch.png"
 alt="drawing" width="600"/>
 
-<small> Chameleon incorporates a vector quantizer module to transform images into discrete tokens. That also enables image geenration using an auto-regressive transformer. Taken from the <a href="https://arxiv.org/abs/2405.09818v1">original paper.</a> </small>
+<small> Chameleon incorporates a vector quantizer module to transform images into discrete tokens. That also enables image generation using an auto-regressive transformer. Taken from the <a href="https://arxiv.org/abs/2405.09818v1">original paper.</a> </small>
 
 This model was contributed by [joaogante](https://huggingface.co/joaogante) and [RaushanTurganbay](https://huggingface.co/RaushanTurganbay).
 The original code can be found [here](https://github.com/facebookresearch/chameleon).
@@ -61,6 +61,7 @@ The original code can be found [here](https://github.com/facebookresearch/chamel
 
 ### Single image inference
 
+Chameleon is a gated model so make sure to have access and login to Hugging Face Hub using a token. 
 Here's how to load the model and perform inference in half-precision (`torch.float16`):
 
 ```python
@@ -69,8 +70,8 @@ import torch
 from PIL import Image
 import requests
 
-processor = ChameleonProcessor.from_pretrained("meta-chameleon")
-model = ChameleonForConditionalGeneration.from_pretrained("meta-chameleon", torch_dtype=torch.float16, device_map="auto") 
+processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
+model = ChameleonForConditionalGeneration.from_pretrained("facebook/chameleon-7b", torch_dtype=torch.float16, device_map="auto") 
 
 # prepare image and text prompt
 url = "https://bjiujitsu.com/wp-content/uploads/2021/01/jiu_jitsu_belt_white_1.jpg"
@@ -94,8 +95,8 @@ import torch
 from PIL import Image
 import requests
 
-processor = ChameleonProcessor.from_pretrained("meta-chameleon")
-model = ChameleonForConditionalGeneration.from_pretrained("meta-chameleon", torch_dtype=torch.float16, device_map="auto") 
+processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
+model = ChameleonForConditionalGeneration.from_pretrained("facebook/chameleon-7b", torch_dtype=torch.float16, device_map="auto") 
 
 # Get three different images
 url = "https://www.ilankelman.org/stopsigns/australia.jpg"
@@ -138,7 +139,7 @@ quantization_config = BitsAndBytesConfig(
     bnb_4bit_compute_dtype=torch.float16,
 )
 
-model = ChameleonForConditionalGeneration.from_pretrained("meta-chameleon", quantization_config=quantization_config, device_map="auto")
+model = ChameleonForConditionalGeneration.from_pretrained("facebook/chameleon-7b", quantization_config=quantization_config, device_map="auto")
 ```
 
 ### Use Flash-Attention 2 and SDPA to further speed-up generation
@@ -148,6 +149,7 @@ The models supports both, Flash-Attention 2 and PyTorch's [`torch.nn.functional.
 ```python
 from transformers import ChameleonForConditionalGeneration
 
+model_id = "facebook/chameleon-7b"
 model = ChameleonForConditionalGeneration.from_pretrained(
     model_id, 
     torch_dtype=torch.float16, 
