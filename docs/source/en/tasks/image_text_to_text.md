@@ -51,7 +51,7 @@ model = Idefics2ForConditionalGeneration.from_pretrained(
 processor = AutoProcessor.from_pretrained("HuggingFaceM4/idefics2-8b")
 ```
 
-This model has a [chat template](./chat_templating) format that's required for the input. Moreover, the model can also accept multiple images as input in a single conversation or message. We will now prepare the inputs. 
+This model has a [chat template](./chat_templating) that helps user parse chat outputs. Moreover, the model can also accept multiple images as input in a single conversation or message. We will now prepare the inputs. 
 
 The image inputs look like the following.
 
