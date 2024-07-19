@@ -2955,7 +2955,7 @@ class GroundingDinoLoss(nn.Module):
 
 def build_label_maps(logits, input_ids):
     """
-    Computes a mapping between the tokens associated with the prompt labels in the logit space with shape (batch_size, num_labels, hidden_size)
+    Computes a mapping between the tokens associated with the prompt labels in the logit space with shape `(batch_size, num_labels, hidden_size)`
     where `num_labels` is defined by the number of classes in the input prompt.
 
     For instance if the prompt "fish. shark." we get input_ids = [  101,  3869,  1012, 11420,  1012,   102]
