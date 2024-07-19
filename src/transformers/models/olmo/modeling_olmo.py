@@ -35,7 +35,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
 )
-from ...modeling_rope_utils import compute_frequencies
+from ...modeling_rope_utils import ROPE_PARAMETER_FUNCTIONS
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
@@ -120,27 +120,17 @@ class OlmoRotaryEmbedding(nn.Module):
 
         self.config = config
         self.rope_type = config.rope_scaling["type"] if config.rope_scaling is not None else "default"
-        self.scaling_factor = config.rope_scaling["factor"] if config.rope_scaling is not None else 1.0
+        self.rope_parameter_fn = ROPE_PARAMETER_FUNCTIONS[self.rope_type]
 
-        inv_freq = compute_frequencies(config, device)
+        inv_freq, self.attention_scaling = self.rope_parameter_fn(config, device)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.max_seq_len_cached = config.max_position_embeddings
-
-        # Special case: on yarn, `attention_factor` has a default suggested by the paper
-        if "yarn" in self.rope_type:
-            attention_scale_default = 0.1 * math.log(self.scaling_factor) + 1.0
-            self.attention_scaling = config.rope_scaling.get("attention_factor", attention_scale_default)
-        else:
-            self.attention_scaling = 1.0
-        # BC: dynamic NTK and yarn used `scaling_factor` as a frequency parameter, not for position_ids scaling
-        if "dynamic" in self.rope_type or "yarn" in self.rope_type:
-            self.scaling_factor = 1.0
 
     def dynamic_frequency_update(self, position_ids, device):
         """dynamic RoPE layers need to recompute `inv_freq` when going beyond the original maximum sequence length"""
         seq_len = torch.max(position_ids) + 1
         if seq_len > self.max_seq_len_cached:
-            inv_freq = compute_frequencies(self.config, device, seq_len=seq_len)
+            inv_freq, self.attention_scaling = self.rope_parameter_fn(self.config, device, seq_len=seq_len)
             self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
             self.max_seq_len_cached = seq_len
 
@@ -150,7 +140,6 @@ class OlmoRotaryEmbedding(nn.Module):
             self.dynamic_frequency_update(position_ids, device=x.device)
 
         # Core RoPE block
-        position_ids = position_ids.float() / self.scaling_factor
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
         # Force float32 (see https://github.com/huggingface/transformers/pull/29285)

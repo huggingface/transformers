@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import math
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 import torch
 
@@ -40,25 +40,83 @@ ROPE_CONFIG_DOCSTRING = r"""
 """
 
 
-def _compute_default_frequencies(
-    config: PretrainedConfig, device: torch.device, seq_len: Optional[int]
-) -> torch.Tensor:
-    """Computes the inverse frequencies according to the original RoPE implementation"""
+def _compute_default_rope_parameters(
+    config: PretrainedConfig, device: torch.device, seq_len: Optional[int] = None
+) -> Tuple[torch.Tensor, float]:
+    """
+    Computes the inverse frequencies according to the original RoPE implementation
+
+    Args:
+        config ([`~transformers.PretrainedConfig`]):
+            The model configuration.
+        device (`torch.device`):
+            The device to use for initialization of the inverse frequencies.
+        seq_len (`int`, *optional*):
+            The current sequence length. Unused for this type of RoPE.
+
+    Returns:
+        Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+        post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+    """
     base = config.rope_theta
     if hasattr(config, "head_dim"):  # TODO (joao): BC -- remove `if` in v4.45, keep `else`
         dim = config.head_dim
     else:
         dim = config.hidden_size // config.num_attention_heads
+    attention_factor = 1.0  # Unused in this type of RoPE
 
     # Compute the inverse frequencies
     inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).float().to(device) / dim))
-    return inv_freq
+    return inv_freq, attention_factor
 
 
-def _compute_dynamic_ntk_frequencies(
-    config: PretrainedConfig, device: torch.device, seq_len: Optional[int]
-) -> torch.Tensor:
-    """Computes the inverse frequencies with NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
+def _compute_linear_scaling_rope_parameters(
+    config: PretrainedConfig, device: torch.device, seq_len: Optional[int] = None
+) -> Tuple[torch.Tensor, float]:
+    """
+    Computes the inverse frequencies with linear scaling. Credits to the Reddit user /u/kaiokendev
+
+    Args:
+        config ([`~transformers.PretrainedConfig`]):
+            The model configuration.
+        device (`torch.device`):
+            The device to use for initialization of the inverse frequencies.
+        seq_len (`int`, *optional*):
+            The current sequence length. Unused for this type of RoPE.
+
+    Returns:
+        Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+        post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+    """
+    # Gets the default RoPE parameters
+    inv_freq, attention_factor = _compute_default_rope_parameters(config, device, seq_len)
+
+    # Then applies linear scaling to the frequencies.
+    # NOTE: originally, scaling was applied to the position_ids. However, we get `embs = inv_freq @ position_ids`, so
+    # applying scaling to the inverse frequencies is equivalent.
+    scaling_factor = config.rope_scaling["factor"]
+    inv_freq /= scaling_factor
+    return inv_freq, attention_factor
+
+
+def _compute_dynamic_ntk_parameters(
+    config: PretrainedConfig, device: torch.device, seq_len: Optional[int] = None
+) -> Tuple[torch.Tensor, float]:
+    """
+    Computes the inverse frequencies with NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla
+
+    Args:
+        config ([`~transformers.PretrainedConfig`]):
+            The model configuration.
+        device (`torch.device`):
+            The device to use for initialization of the inverse frequencies.
+        seq_len (`int`, *optional*):
+            The current sequence length, used to update the dynamic RoPE at inference time.
+
+    Returns:
+        Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+        post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+    """
     base = config.rope_theta
     if hasattr(config, "head_dim"):  # TODO (joao): BC -- remove `if` in v4.45, keep `else`
         dim = config.head_dim
@@ -66,6 +124,7 @@ def _compute_dynamic_ntk_frequencies(
         dim = config.hidden_size // config.num_attention_heads
     scaling_factor = config.rope_scaling["factor"]
     max_position_embeddings = config.max_position_embeddings
+    attention_factor = 1.0  # Unused in this type of RoPE
 
     # seq_len: default to max_position_embeddings, e.g. at init time
     seq_len = seq_len if seq_len is not None else max_position_embeddings
@@ -73,13 +132,27 @@ def _compute_dynamic_ntk_frequencies(
     # Compute the inverse frequencies
     base = base * ((scaling_factor * seq_len / max_position_embeddings) - (scaling_factor - 1)) ** (dim / (dim - 2))
     inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).float().to(device) / dim))
-    return inv_freq
+    return inv_freq, attention_factor
 
 
-def _compute_yarn_frequencies(config: PretrainedConfig, device: torch.device, seq_len: Optional[int]) -> torch.Tensor:
+def _compute_yarn_parameters(
+    config: PretrainedConfig, device: torch.device, seq_len: Optional[int] = None
+) -> Tuple[torch.Tensor, float]:
     """
     Computes the inverse frequencies with NTK scaling. Please refer to the
     [original paper](https://arxiv.org/abs/2309.00071)
+
+    Args:
+        config ([`~transformers.PretrainedConfig`]):
+            The model configuration.
+        device (`torch.device`):
+            The device to use for initialization of the inverse frequencies.
+        seq_len (`int`, *optional*):
+            The current sequence length. Unused for this type of RoPE.
+
+    Returns:
+        Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+        post-processing scaling factor applied to the computed cos/sin.
     """
     base = config.rope_theta
     if hasattr(config, "head_dim"):  # TODO (joao): BC -- remove `if` in v4.45, keep `else`
@@ -88,6 +161,11 @@ def _compute_yarn_frequencies(config: PretrainedConfig, device: torch.device, se
         dim = config.hidden_size // config.num_attention_heads
     scaling_factor = config.rope_scaling["factor"]
     max_position_embeddings = config.max_position_embeddings
+
+    # Sets the attention factor as suggested in the paper
+    attention_factor = config.rope_scaling.get("attention_factor")
+    if attention_factor is None:
+        attention_factor = 0.1 * math.log(scaling_factor) + 1.0
 
     # Optional config options
     # beta_fast/beta_slow: as suggested in the paper, default to 32/1 (correspondingly)
@@ -123,35 +201,18 @@ def _compute_yarn_frequencies(config: PretrainedConfig, device: torch.device, se
     inv_freq_mask = 1 - linear_ramp_mask(low, high, dim // 2).float().to(device)
     inv_freq = inv_freq_interpolation * (1 - inv_freq_mask) + inv_freq_extrapolation * inv_freq_mask
 
-    return inv_freq
+    return inv_freq, attention_factor
 
 
-# This maps the "type" string in rope config to the corresponding config. Can be expanded externally to support
-# new RoPE types
-ROPE_TYPE_TO_FUNCTION = {
-    "default": _compute_default_frequencies,
-    "linear": _compute_default_frequencies,  # linear is the same as default, scaling is applied in `position_ids`
-    "dynamic": _compute_dynamic_ntk_frequencies,
-    "yarn": _compute_yarn_frequencies,
+# This maps the "type" string field in rope config to the corresponding function to compute the RoPE parameters from
+# the model config. You can append new {'type': callable} pairs to this dictionary to enable custom RoPE
+# parameterizations, as long as the callable has the same signature.
+ROPE_PARAMETER_FUNCTIONS = {
+    "default": _compute_default_rope_parameters,
+    "linear": _compute_linear_scaling_rope_parameters,
+    "dynamic": _compute_dynamic_ntk_parameters,
+    "yarn": _compute_yarn_parameters,
 }
-
-
-def compute_frequencies(config: PretrainedConfig, device: torch.device, seq_len: Optional[int] = None) -> torch.Tensor:
-    """
-    Computes RoPE's inverse frequencies, given the model config. Depending on the parameterization, different
-    RoPE initialization or scaling strategies are used.
-    """
-    rope_type = config.rope_scaling["type"] if config.rope_scaling is not None else "default"
-    rope_fn = ROPE_TYPE_TO_FUNCTION.get(rope_type)
-    if rope_fn is None:
-        raise ValueError(
-            f"Unrecognized RoPE type: {rope_type}.\n\nIf you want to use custom RoPE frequencies, there are two "
-            "options:\n- 1 Compute RoPE (cos, sin) externally, passing it through `position_embeddings` to the model's "
-            "forward method\n- 2: Update the inverse frequencies in RoPE, updating `ROPE_TYPE_TO_FUNCTION` with "
-            "{'your_rope_type': your_callable}. your_callable should take `config`, `device`, and `seq_len` and "
-            "return the inverse frequencies (tensor)."
-        )
-    return rope_fn(config, device, seq_len)
 
 
 def rope_config_validation(rope_scaling: Optional[Dict[str, Any]]):
@@ -169,7 +230,7 @@ def rope_config_validation(rope_scaling: Optional[Dict[str, Any]]):
         raise ValueError(f"Missing required keys in `rope_scaling`: {missing_keys}")
 
     rope_type = rope_scaling["type"]
-    possible_rope_types = set(ROPE_TYPE_TO_FUNCTION.keys())
+    possible_rope_types = set(ROPE_PARAMETER_FUNCTIONS.keys())
     if rope_type is None or rope_type not in possible_rope_types:
         raise ValueError(f"`rope_scaling`'s 'type' field must be one of {possible_rope_types}, got {rope_type}")
 
@@ -177,11 +238,11 @@ def rope_config_validation(rope_scaling: Optional[Dict[str, Any]]):
     if scaling_factor is None or not isinstance(scaling_factor, float) or scaling_factor < 1.0:
         raise ValueError(f"`rope_scaling`'s factor field must be a float >= 1, got {scaling_factor}")
 
-    if rope_type in ("linear", "dynamic", "llama3"):
+    if rope_type in ("linear", "dynamic"):
         unused_keys = received_keys - received_keys
         if unused_keys:
             raise ValueError(f"Unrecognized keys in `rope_scaling` for 'type'='{rope_type}': {unused_keys}")
-    else:  # yarn
+    elif rope_type in ("yarn"):
         optional_keys = {"attention_factor", "beta_fast", "beta_slow"}
         unused_keys = received_keys - required_keys - optional_keys
         if unused_keys:
@@ -204,3 +265,4 @@ def rope_config_validation(rope_scaling: Optional[Dict[str, Any]]):
                 f"`rope_scaling`'s beta_fast field must be greater than beta_slow, got beta_fast={beta_fast} "
                 f"(defaults to 32 if None) and beta_slow={beta_slow} (defaults to 1 if None)"
             )
+    # else: no validation, it is a registered custom RoPE type

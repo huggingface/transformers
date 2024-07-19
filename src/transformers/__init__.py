@@ -1286,7 +1286,7 @@ else:
         ]
     )
     _import_structure["modeling_outputs"] = []
-    _import_structure["modeling_rope_utils"] = []
+    _import_structure["modeling_rope_utils"] = ["ROPE_PARAMETER_FUNCTIONS"]
     _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
     # PyTorch models structure
@@ -5976,6 +5976,7 @@ if TYPE_CHECKING:
             WatermarkLogitsProcessor,
             WhisperTimeStampLogitsProcessor,
         )
+        from .modeling_rope_utils import ROPE_PARAMETER_FUNCTIONS
         from .modeling_utils import PreTrainedModel
         from .models.albert import (
             AlbertForMaskedLM,
