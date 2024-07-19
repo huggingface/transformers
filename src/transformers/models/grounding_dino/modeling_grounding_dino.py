@@ -2959,7 +2959,7 @@ def build_label_maps(logits, input_ids):
     where `num_labels` is defined by the number of classes in the input prompt.
 
     For instance, given the prompt "fish. shark." we get input_ids = [  101,  3869,  1012, 11420,  1012,   102].
-    this function will then return a mapping for each of the prompt tokens (i.e. tokens associated with "fish" and "shark")
+    This function will return a mapping for each of the prompt tokens (i.e. tokens associated with "fish" and "shark")
     indicating their position in the logit space.
 
     This is used in `loss_labels` and in the `GroundingDinoHungarianMatcher`.)
