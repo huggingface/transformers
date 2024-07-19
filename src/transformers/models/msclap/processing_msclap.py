@@ -20,10 +20,10 @@ from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
 
 
-# Copied from transformers.models.clap.processing_clap.ClapProcessor with Clap->MSClap
+# Copied from transformers.models.clap.processing_clap.ClapProcessor with Clap->MSClap, CLAP->MSCLAP, RoBerta->GPT2
 class MSClapProcessor(ProcessorMixin):
     r"""
-    Constructs a MSCLAP processor which wraps a MSCLAP feature extractor and a GPT2 tokenizer into a single processor.
+    Constructs a CLAP processor which wraps a CLAP feature extractor and a GPT2 tokenizer into a single processor.
 
     [`MSClapProcessor`] offers all the functionalities of [`MSClapFeatureExtractor`] and [`GPT2TokenizerFast`]. See the
     [`~MSClapProcessor.__call__`] and [`~MSClapProcessor.decode`] for more information.

@@ -251,7 +251,7 @@ class MSClapDropPath(nn.Module):
         return output
 
 
-# Copied from transformers.models.clap.modeling_clap.ClapAudioAFFBlock with Clap->MSClap
+# Copied from transformers.models.clap.modeling_clap.ClapAudioAFFBlock with Clap->MSClap, CLAP->MSCLAP
 class MSClapAudioAFFBlock(nn.Module):
     r"""
     ATTENTIONAL FEATURE FUSION Block from MSCLAP, since in MSCLAP we are always in 2D mode, it is not needed to implement
@@ -463,7 +463,7 @@ class MSClapAudioSelfAttention(nn.Module):
         attention_scores = attention_scores + relative_position_bias.unsqueeze(0)
 
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in ClapAudioModel forward() function)
+            # Apply the attention mask is (precomputed for all layers in MSClapAudioModel forward() function)
             mask_shape = attention_mask.shape[0]
             attention_scores = attention_scores.view(
                 batch_size // mask_shape, mask_shape, self.num_attention_heads, dim, dim
@@ -492,7 +492,7 @@ class MSClapAudioSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.clap.modeling_clap.ClapAudioSelfOutput with Clap->MSClap
+# Adapted from transformers.models.clap.modeling_clap.ClapAudioSelfOutput with Clap->MSClap
 class MSClapAudioSelfOutput(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
@@ -1499,7 +1499,7 @@ class MSClapModel(MSClapPreTrainedModel):
     """,
     MSCLAP_START_DOCSTRING,
 )
-# Copied from transformers.models.clap.modeling_clap.ClapTextModelWithProjection with Clap->MSClap
+# Adapted from transformers.models.clap.modeling_clap.ClapTextModelWithProjection with Clap->MSClap, CLAP->MSCLAP
 class MSClapTextModelWithProjection(MSClapPreTrainedModel):
     config_class = MSClapTextConfig
 
@@ -1535,8 +1535,8 @@ class MSClapTextModelWithProjection(MSClapPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, MSClapTextModelWithProjection
 
-        >>> model = MSClapTextModelWithProjection.from_pretrained("microsoft/msclap")
-        >>> tokenizer = AutoTokenizer.from_pretrained("microsoft/msclap")
+        >>> model = MSClapTextModelWithProjection.from_pretrained("microsoft/ms_clap")
+        >>> tokenizer = AutoTokenizer.from_pretrained("microsoft/ms_clap")
 
         >>> inputs = tokenizer(["a sound of a cat", "a sound of a dog"], padding=True, return_tensors="pt")
 
@@ -1576,7 +1576,7 @@ class MSClapTextModelWithProjection(MSClapPreTrainedModel):
     """,
     MSCLAP_START_DOCSTRING,
 )
-# Copied from transformers.models.clap.modeling_clap.ClapAudioModelWithProjection with Clap->MSClap
+# Adaped from transformers.models.clap.modeling_clap.ClapAudioModelWithProjection with Clap->MSClap
 class MSClapAudioModelWithProjection(MSClapPreTrainedModel):
     config_class = MSClapAudioConfig
     main_input_name = "input_features"
@@ -1610,8 +1610,8 @@ class MSClapAudioModelWithProjection(MSClapPreTrainedModel):
         >>> from datasets import load_dataset
         >>> from transformers import MSClapAudioModelWithProjection, MSClapProcessor
 
-        >>> model = MSClapAudioModelWithProjection.from_pretrained("microsoft/msclap")
-        >>> processor = MSClapProcessor.from_pretrained("microsoft/msclap")
+        >>> model = MSClapAudioModelWithProjection.from_pretrained("microsoft/ms_clap")
+        >>> processor = MSClapProcessor.from_pretrained("microsoft/ms_clap")
 
         >>> dataset = load_dataset("hf-internal-testing/ashraq-esc50-1-dog-example")
         >>> audio_sample = dataset["train"]["audio"][0]["array"]
