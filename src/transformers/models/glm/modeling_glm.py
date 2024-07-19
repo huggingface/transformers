@@ -636,7 +636,7 @@ GLM_START_DOCSTRING = r"""
 )
 class GLMPreTrainedModel(PreTrainedModel):
     config_class = GLMConfig
-    base_model_prefix = "model"
+    base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
     _no_split_modules = ["GLMDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
@@ -833,7 +833,8 @@ class GLMTransformer(torch.nn.Module):
 
             layer = self._get_layer(index)
             if self.gradient_checkpointing and self.training:
-                layer_ret = torch.utils.checkpoint.checkpoint(
+                # layer_ret = torch.utils.checkpoint.checkpoint(
+                layer_ret = self._gradient_checkpointing_func(
                     layer,
                     hidden_states,
                     attention_mask,
@@ -978,7 +979,7 @@ class GLMModel(GLMPreTrainedModel):
             dtype=config.torch_dtype
         )
         self.encoder = init_method(GLMTransformer, config, **init_kwargs)
-        self.output_layer = init_method(nn.Linear, config.hidden_size, config.padded_vocab_size, bias=False,
+        self.output_layer = init_method(nn.Linear, config.hidden_size, config.vocab_size, bias=False,
                                         dtype=config.torch_dtype, **init_kwargs)
 
     def get_input_embeddings(self):
@@ -986,6 +987,7 @@ class GLMModel(GLMPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.embedding.word_embeddings = value
+
 
     def forward(
             self,
@@ -1021,9 +1023,9 @@ class GLMModel(GLMPreTrainedModel):
             inputs_embeds = self.embedding(input_ids)
 
         if full_attention_mask is None:
+
             if (attention_mask is not None and not attention_mask.all()) or (past_key_values and seq_length != 1):
                 full_attention_mask = self.get_masks(input_ids, past_key_values, padding_mask=attention_mask)
-
         # Rotary positional embeddings
         rotary_pos_emb = self.rotary_pos_emb(self.seq_length)
         if position_ids is not None:
@@ -1062,7 +1064,7 @@ class GLMModel(GLMPreTrainedModel):
     GLM_START_DOCSTRING,
 )
 class GLMForCausalLM(GLMPreTrainedModel):
-    _tied_weights_keys = ["output_layer.weight"]
+    # _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: GLMConfig, empty_init=True, device=None):
         super().__init__(config)
@@ -1070,12 +1072,27 @@ class GLMForCausalLM(GLMPreTrainedModel):
         self.max_sequence_length = config.max_length
         self.transformer = GLMModel(config, empty_init=empty_init, device=device)
         self.config = config
+        # self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False,dtype=config.torch_dtype)
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_input_embeddings(self):
-        return self.transformer.model.embed_tokens
+        return self.transformer.embedding.word_embeddings
 
     def set_input_embeddings(self, value):
-        self.transformer.model.embed_tokens = value
+        self.transformer.embedding.word_embeddings = value
+
+    def get_output_embeddings(self):
+        return self.transformer.output_layer
+
+    def set_output_embeddings(self, new_embeddings):
+        self.transformer.output_layer = new_embeddings
+
+    def set_decoder(self, decoder):
+        self.transformer = decoder
+
+    def get_decoder(self):
+        return self.transformer
 
     def _update_model_kwargs_for_generation(
             self, outputs: ModelOutput, model_kwargs: Dict[str, Any], standardize_cache_format: bool = False, **kwargs
@@ -1125,67 +1142,96 @@ class GLMForCausalLM(GLMPreTrainedModel):
             "past_key_values": past_key_values,
             "position_ids": position_ids,
             "attention_mask": attention_mask,
-            "return_last_logit": True,
             "use_cache": use_cache,
         }
 
+    @add_start_docstrings_to_model_forward(GLM_INPUTS_DOCSTRING)
     def forward(
             self,
-            input_ids: Optional[torch.Tensor] = None,
-            position_ids: Optional[torch.Tensor] = None,
+            input_ids: torch.LongTensor = None,
             attention_mask: Optional[torch.Tensor] = None,
-            past_key_values: Optional[Tuple[torch.FloatTensor]] = None,
-            inputs_embeds: Optional[torch.Tensor] = None,
-            labels: Optional[torch.Tensor] = None,
+            position_ids: Optional[torch.LongTensor] = None,
+            past_key_values: Optional[List[torch.FloatTensor]] = None,
+            inputs_embeds: Optional[torch.FloatTensor] = None,
+            labels: Optional[torch.LongTensor] = None,
             use_cache: Optional[bool] = None,
             output_attentions: Optional[bool] = None,
             output_hidden_states: Optional[bool] = None,
             return_dict: Optional[bool] = None,
-            return_last_logit: Optional[bool] = False,
-    ):
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
+            cache_position: Optional[torch.LongTensor] = None,
+    ) -> Union[Tuple, CausalLMOutputWithPast]:
+        r"""
+        Args:
+            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+        Returns:
+
+        Example:
+
+        ```python
+        >>> from transformers import GLMTokenizer, GLMForCausalLM
+
+        >>> model = GLMForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
+        >>> tokenizer = GLMTokenizer.from_pretrained(PATH_TO_CONVERTED_TOKENIZER)
+
+        >>> prompt = "Hey, are you conscious? Can you talk to me?"
+        >>> inputs = tokenizer(prompt, return_tensors="pt")
+
+        >>> # Generate
+        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
+        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
+        ```"""
+
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        transformer_outputs = self.transformer(
+        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
+        outputs = self.transformer(
             input_ids=input_ids,
-            position_ids=position_ids,
             attention_mask=attention_mask,
+            position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
 
-        hidden_states = transformer_outputs[0]
-        if return_last_logit:
-            hidden_states = hidden_states[:, -1:]
-        lm_logits = self.transformer.output_layer(hidden_states)
+        hidden_states = outputs[0]
+        logits = self.transformer.output_layer(hidden_states)
+        logits = logits.float()
 
         loss = None
         if labels is not None:
-            lm_logits = lm_logits.to(torch.float32)
-
             # Shift so that tokens < n predict n
-            shift_logits = lm_logits[..., :-1, :].contiguous()
+            shift_logits = logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
-            loss_fct = CrossEntropyLoss(ignore_index=-100)
-            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
-
-            lm_logits = lm_logits.to(hidden_states.dtype)
-            loss = loss.to(hidden_states.dtype)
+            loss_fct = CrossEntropyLoss()
+            shift_logits = shift_logits.view(-1, self.config.vocab_size)
+            shift_labels = shift_labels.view(-1)
+            # Enable model parallelism
+            shift_labels = shift_labels.to(shift_logits.device)
+            loss = loss_fct(shift_logits, shift_labels)
 
         if not return_dict:
-            output = (lm_logits,) + transformer_outputs[1:]
-            return ((loss,) + output) if loss is not None else output
+            output = (logits,) + outputs[1:]
+            return (loss,) + output if loss is not None else output
 
         return CausalLMOutputWithPast(
             loss=loss,
-            logits=lm_logits,
-            past_key_values=transformer_outputs.past_key_values,
-            hidden_states=transformer_outputs.hidden_states,
-            attentions=transformer_outputs.attentions,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
     @staticmethod
@@ -1224,26 +1270,31 @@ class GLMForCausalLM(GLMPreTrainedModel):
     GLM_START_DOCSTRING,
 )
 class GLMForSequenceClassification(GLMPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GLMConfig, empty_init=True):
         super().__init__(config)
+
         self.num_labels = config.num_labels
-        self.model = GLMModel(config)
+        self.transformer = GLMModel(config, empty_init=empty_init)
         self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.model.embed_tokens
+        return self.transformer.embedding.word_embeddings
 
     def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
+        self.transformer.embedding.word_embeddings = value
 
+
+
+    @add_start_docstrings_to_model_forward(GLM_INPUTS_DOCSTRING)
     def forward(
             self,
             input_ids: torch.LongTensor = None,
-            attention_mask: Optional[torch.Tensor] = None,
             position_ids: Optional[torch.LongTensor] = None,
+            attention_mask: Optional[torch.Tensor] = None,
+            full_attention_mask: Optional[torch.Tensor] = None,
             past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
             inputs_embeds: Optional[torch.FloatTensor] = None,
             labels: Optional[torch.LongTensor] = None,
@@ -1260,10 +1311,11 @@ class GLMForSequenceClassification(GLMPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        model_outputs = self.model(
-            input_ids,
-            attention_mask=attention_mask,
+        model_outputs = self.transformer(
+            input_ids=input_ids,
             position_ids=position_ids,
+            attention_mask=attention_mask,
+            full_attention_mask=full_attention_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
@@ -1273,7 +1325,6 @@ class GLMForSequenceClassification(GLMPreTrainedModel):
         )
         hidden_states = model_outputs[0]
         logits = self.score(hidden_states)
-
         if input_ids is not None:
             batch_size = input_ids.shape[0]
         else:
@@ -1296,7 +1347,6 @@ class GLMForSequenceClassification(GLMPreTrainedModel):
 
         loss = None
         if labels is not None:
-            labels = labels.to(logits.device)
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
@@ -1342,7 +1392,7 @@ class GLMForTokenClassification(GLMPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.model = GLMModel(config)
+        self.transformer = GLMModel(config)
         if hasattr(config, "classifier_dropout") and config.classifier_dropout is not None:
             classifier_dropout = config.classifier_dropout
         elif hasattr(config, "hidden_dropout") and config.hidden_dropout is not None:
@@ -1354,6 +1404,12 @@ class GLMForTokenClassification(GLMPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def get_input_embeddings(self):
+        return self.transformer.embedding.word_embeddings
+
+    def set_input_embeddings(self, value):
+        self.transformer.embedding.word_embeddings = value
 
     @add_start_docstrings_to_model_forward(GLM_START_DOCSTRING)
     def forward(
@@ -1377,7 +1433,7 @@ class GLMForTokenClassification(GLMPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        model_outputs = self.model(
+        model_outputs = self.transformer(
             input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,

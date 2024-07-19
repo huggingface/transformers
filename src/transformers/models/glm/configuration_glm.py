@@ -105,7 +105,6 @@ class GLMConfig(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
-        self.padded_vocab_size = vocab_size
         self.initializer_range = initializer_range
         self.hidden_size = hidden_size
         self.ffn_hidden_size = ffn_hidden_size
