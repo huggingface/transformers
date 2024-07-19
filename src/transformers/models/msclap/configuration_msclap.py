@@ -222,7 +222,7 @@ class MSClapAudioConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "clap_audio_model"
+    model_type = "msclap_audio_model"
 
     def __init__(
         self,

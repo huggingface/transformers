@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 The LAION-AI Team and The HuggingFace Team. All rights reserved.
+# Copyright 2024 The Microsoft Team and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -25,9 +25,7 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
-    BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPooling,
-    BaseModelOutputWithPoolingAndCrossAttentions,
 )
 from ..auto.modeling_auto import AutoModel
 
@@ -49,7 +47,7 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "laion/MSclap-htsat-fused"
 
 
-# Adapted from: https://github.com/LAION-AI/MSCLAP/blob/6ad05a971ba0622f6acee8c41993e0d02bbed639/src/open_clip/utils.py#L191
+# Copied from transformers.models.clap.modeling_clap.interpolate
 def interpolate(hidden_states, ratio):
     """
     Interpolate data in time domain. This is used to compensate the resolution reduction in downsampling of a CNN.
@@ -66,7 +64,7 @@ def interpolate(hidden_states, ratio):
     return upsampled
 
 
-# Adapted from https://github.com/LAION-AI/MSCLAP/blob/6ad05a971ba0622f6acee8c41993e0d02bbed639/src/open_clip/htsat.py#L249
+# Copied from transformers.models.clap.modeling_clap.window_partition
 def window_partition(hidden_states, window_size):
     """
     Returns the resized hidden states. The output shape should be `(batch_size * num_windows, window_size, window_size,
@@ -87,7 +85,7 @@ def window_partition(hidden_states, window_size):
     return windows
 
 
-# Adapted from https://github.com/LAION-AI/MSCLAP/blob/6ad05a971ba0622f6acee8c41993e0d02bbed639/src/open_clip/htsat.py#L263
+# Copied from transformers.models.clap.modeling_clap.window_reverse
 def window_reverse(windows, window_size, height, width):
     """
     Merges windows to produce higher resolution features.
@@ -107,7 +105,7 @@ def window_reverse(windows, window_size, height, width):
     return windows
 
 
-# Copied from transformers.models.roberta.modeling_roberta.create_position_ids_from_input_ids
+# Copied from transformers.models.clap.modeling_clap.create_position_ids_from_input_ids
 def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_length=0):
     """
     Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding symbols
@@ -132,7 +130,7 @@ def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
 
 
 @dataclass
-# Copied from transformers.models.clip.modeling_clip.CLIPTextModelOutput with CLIP->MSClap
+# Copied from transformers.models.clap.modeling_clap.ClapTextModelOutput with Clap->MSClap
 class MSClapTextModelOutput(ModelOutput):
     """
     Base class for text model's outputs that also contains a pooling of the last hidden states.
@@ -162,6 +160,7 @@ class MSClapTextModelOutput(ModelOutput):
 
 
 @dataclass
+# Copied from transformers.models.clap.modeling_clap.ClapAudioModelOutput with Clap->MSClap
 class MSClapAudioModelOutput(ModelOutput):
     """
     MSClapAudio model output to mimic the output of the original implementation.
@@ -191,7 +190,7 @@ class MSClapAudioModelOutput(ModelOutput):
 
 
 @dataclass
-# Copied from transformers.models.clip.modeling_clip.CLIPOutput with CLIP->MSClap, vision->audio, Vision->Audio, image->audio
+# Copied from transformers.models.clap.modeling_clap.ClapOutput with Clap->MSClap
 class MSClapOutput(ModelOutput):
     """
     Args:
@@ -228,7 +227,7 @@ class MSClapOutput(ModelOutput):
         )
 
 
-# Adapted from transformers.models.swin.modeling_swin.SwinDropPath
+# Copied from transformers.models.clap.modeling_clap.ClapDropPath with Clap->MSClap
 class MSClapDropPath(nn.Module):
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks). This is a slightly
@@ -253,7 +252,7 @@ class MSClapDropPath(nn.Module):
         return output
 
 
-# Adapted from https://github.com/LAION-AI/MSCLAP/blob/6ad05a971ba0622f6acee8c41993e0d02bbed639/src/open_clip/feature_fusion.py#L133
+# Copied from transformers.models.clap.modeling_clap.ClapAudioAFFBlock with Clap->MSClap
 class MSClapAudioAFFBlock(nn.Module):
     r"""
     ATTENTIONAL FEATURE FUSION Block from MSCLAP, since in MSCLAP we are always in 2D mode, it is not needed to implement
@@ -294,6 +293,7 @@ class MSClapAudioAFFBlock(nn.Module):
         return output
 
 
+# Copied from transformers.models.clap.modeling_clap.ClapAudioPatchEmbed with Clap->MSClap
 class MSClapAudioPatchEmbed(nn.Module):
     """
     This module converts the hidden states reshaped as an image to patch embeddings ready to be passed to the
@@ -392,7 +392,7 @@ class MSClapAudioPatchEmbed(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinSelfAttention with Swin->MSClapAudio
+# Copied from transformers.models.clap.modeling_clap.ClapAudioSelfAttention with Clap->MSClap
 class MSClapAudioSelfAttention(nn.Module):
     def __init__(self, config, dim, num_heads, window_size):
         super().__init__()
@@ -464,7 +464,7 @@ class MSClapAudioSelfAttention(nn.Module):
         attention_scores = attention_scores + relative_position_bias.unsqueeze(0)
 
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in MSClapAudioModel forward() function)
+            # Apply the attention mask is (precomputed for all layers in ClapAudioModel forward() function)
             mask_shape = attention_mask.shape[0]
             attention_scores = attention_scores.view(
                 batch_size // mask_shape, mask_shape, self.num_attention_heads, dim, dim
@@ -493,7 +493,7 @@ class MSClapAudioSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinSelfOutput with Swin->MSClapAudio
+# Copied from transformers.models.clap.modeling_clap.ClapAudioSelfOutput with Clap->MSClap
 class MSClapAudioSelfOutput(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
@@ -507,7 +507,7 @@ class MSClapAudioSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinAttention with Swin->MSClapAudio
+# Adapted from transformers.models.clap.modeling_clap.ClapAudioAttention with Clap->MSClap
 class MSClapAudioAttention(nn.Module):
     def __init__(self, config, dim, num_heads, window_size):
         super().__init__()
@@ -541,12 +541,12 @@ class MSClapAudioAttention(nn.Module):
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
         self_outputs = self.self(hidden_states, attention_mask, head_mask, output_attentions)
-        attention_output = self.output(self_outputs[0], )
+        attention_output = self.output(self_outputs[0])
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinIntermediate with Swin->MSClapAudio
+# Copied from transformers.models.clap.modeling_clap.ClapAudioIntermediate with Clap->MSClap
 class MSClapAudioIntermediate(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
@@ -555,14 +555,14 @@ class MSClapAudioIntermediate(nn.Module):
             self.intermediate_act_fn = ACT2FN[config.hidden_act]
         else:
             self.intermediate_act_fn = config.hidden_act
-    
+
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
         return hidden_states
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinOutput with Swin->MSClapAudio
+# Copied from transformers.models.clap.modeling_clap.ClapAudioOutput with Clap->MSClap
 class MSClapAudioOutput(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
@@ -575,7 +575,7 @@ class MSClapAudioOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinLayer with SwinDropPath->MSClapDropPath, Swin->MSClapAudio
+# Copied from transformers.models.clap.modeling_clap.ClapAudioLayer with Clap->MSClap
 class MSClapAudioLayer(nn.Module):
     def __init__(self, config, dim, input_resolution, num_heads, shift_size=0):
         super().__init__()
@@ -701,7 +701,7 @@ class MSClapAudioLayer(nn.Module):
         return layer_outputs
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinStage with Swin->MSClapAudio
+# Copied from transformers.models.clap.modeling_clap.ClapAudioStage with Clap->MSClap
 class MSClapAudioStage(nn.Module):
     def __init__(self, config, dim, input_resolution, depth, num_heads, drop_path, downsample):
         super().__init__()
@@ -761,7 +761,7 @@ class MSClapAudioStage(nn.Module):
         return stage_outputs
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinPatchMerging with Swin->MSClapAudio
+# Copied from transformers.models.clap.modeling_clap.ClapAudioPatchMerging with Clap->MSClap
 class MSClapAudioPatchMerging(nn.Module):
     """
     Patch Merging Layer.
@@ -815,7 +815,7 @@ class MSClapAudioPatchMerging(nn.Module):
 
         return input_feature
 
-
+# Adpated from transformers.models.clap.modeling_clap.ClapAudioEncoder with Clap->MSClap
 class MSClapAudioEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -1134,6 +1134,7 @@ MSCLAP_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
+# Adapted from https://github.com/microsoft/CLAP/blob/59bc8446e3e9426bf4158810e572b0798a30cf4d/msclap/models/clap.py#L8
 class MSClapProjectionLayer(nn.Module):
     def __init__(self, config: Union[MSClapAudioConfig, MSClapTextConfig]):
         super().__init__()
@@ -1153,7 +1154,7 @@ class MSClapProjectionLayer(nn.Module):
         return hidden_states
 
 
-
+# Adapted from transformers.models.clap.modeling_clap.ClapPreTrainedModel with Clap->MSClap
 class MSClapPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1184,6 +1185,7 @@ class MSClapPreTrainedModel(PreTrainedModel):
                 module.bias.data.zero_()
 
 
+# Adapted from transformers.models.clap.modeling_clap.ClapPreTrainedModel with Clap->MSClap
 class MSClapAudioModel(MSClapPreTrainedModel):
     config_class = MSClapAudioConfig
     main_input_name = "input_features"
@@ -1219,8 +1221,8 @@ class MSClapAudioModel(MSClapPreTrainedModel):
         >>> dataset = load_dataset("hf-internal-testing/ashraq-esc50-1-dog-example")
         >>> audio_sample = dataset["train"]["audio"][0]["array"]
 
-        >>> model = MSClapAudioModel.from_pretrained("laion/MSclap-htsat-fused")
-        >>> processor = AutoProcessor.from_pretrained("laion/MSclap-htsat-fused")
+        >>> model = MSClapAudioModel.from_pretrained("microsoft/msclap")
+        >>> processor = AutoProcessor.from_pretrained("microsoft/msclap")
 
         >>> inputs = processor(audios=audio_sample, return_tensors="pt")
 
@@ -1241,7 +1243,7 @@ class MSClapAudioModel(MSClapPreTrainedModel):
             return_dict=return_dict,
         )
 
-
+# Adapted from transformers.models.clap.modeling_clap.ClapTextModel with Clap->MSClap
 class MSClapTextModel(MSClapPreTrainedModel): 
     def __init__(self, config: MSClapTextConfig) -> None:
         super().__init__(config)
@@ -1269,6 +1271,7 @@ class MSClapTextModel(MSClapPreTrainedModel):
 
 
 @add_start_docstrings(MSCLAP_START_DOCSTRING)
+# Adapted from transformers.models.clap.modeling_clap.ClapModel with Clap->MSClap
 class MSClapModel(MSClapPreTrainedModel):
     config_class = MSClapConfig
 
@@ -1301,6 +1304,7 @@ class MSClapModel(MSClapPreTrainedModel):
         self.audio_model = MSClapAudioModel(audio_config)
         self.audio_projection = MSClapProjectionLayer(audio_config)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
 
@@ -1324,8 +1328,8 @@ class MSClapModel(MSClapPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, MSClapModel
 
-        >>> model = MSClapModel.from_pretrained("laion/MSclap-htsat-unfused")
-        >>> tokenizer = AutoTokenizer.from_pretrained("laion/MSclap-htsat-unfused")
+        >>> model = MSClapModel.from_pretrained("microsoft/msclap")
+        >>> tokenizer = AutoTokenizer.from_pretrained("microsoft/msclap")
 
         >>> inputs = tokenizer(["the sound of a cat", "the sound of a dog"], padding=True, return_tensors="pt")
         >>> text_features = model.get_text_features(**inputs)
@@ -1372,8 +1376,8 @@ class MSClapModel(MSClapPreTrainedModel):
         >>> from transformers import AutoFeatureExtractor, MSClapModel
         >>> import torch
 
-        >>> model = MSClapModel.from_pretrained("laion/MSclap-htsat-unfused")
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("laion/MSclap-htsat-unfused")
+        >>> model = MSClapModel.from_pretrained("microsoft/msclap")
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/msclap")
         >>> random_audio = torch.rand((16_000))
         >>> inputs = feature_extractor(random_audio, return_tensors="pt")
         >>> audio_features = model.get_audio_features(**inputs)
@@ -1423,8 +1427,8 @@ class MSClapModel(MSClapPreTrainedModel):
         >>> dataset = load_dataset("hf-internal-testing/ashraq-esc50-1-dog-example")
         >>> audio_sample = dataset["train"]["audio"][0]["array"]
 
-        >>> model = MSClapModel.from_pretrained("")
-        >>> processor = AutoProcessor.from_pretrained("")
+        >>> model = MSClapModel.from_pretrained("microsoft/msclap")
+        >>> processor = AutoProcessor.from_pretrained("microsoft/msclap")
 
         >>> input_text = ["Sound of a dog", "Sound of vaccum cleaner"]
 
@@ -1501,6 +1505,7 @@ class MSClapModel(MSClapPreTrainedModel):
     """,
     MSCLAP_START_DOCSTRING,
 )
+# Copied from transformers.models.clap.modeling_clap.ClapTextModelWithProjection with Clap->MSClap
 class MSClapTextModelWithProjection(MSClapPreTrainedModel):
     config_class = MSClapTextConfig
 
@@ -1511,11 +1516,11 @@ class MSClapTextModelWithProjection(MSClapPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    # def get_input_embeddings(self) -> nn.Module:
-    #     return self.text_model.embeddings.word_embeddings
+    def get_input_embeddings(self) -> nn.Module:
+        return self.text_model.embeddings.word_embeddings
 
-    # def set_input_embeddings(self, value):
-    #     self.text_model.embeddings.word_embeddings = value
+    def set_input_embeddings(self, value):
+        self.text_model.embeddings.word_embeddings = value
 
     @add_start_docstrings_to_model_forward(MSCLAP_TEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=MSClapTextModelOutput, config_class=MSClapTextConfig)
@@ -1536,8 +1541,8 @@ class MSClapTextModelWithProjection(MSClapPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, MSClapTextModelWithProjection
 
-        >>> model = MSClapTextModelWithProjection.from_pretrained("laion/MSclap-htsat-unfused")
-        >>> tokenizer = AutoTokenizer.from_pretrained("laion/MSclap-htsat-unfused")
+        >>> model = MSClapTextModelWithProjection.from_pretrained("microsoft/msclap")
+        >>> tokenizer = AutoTokenizer.from_pretrained("microsoft/msclap")
 
         >>> inputs = tokenizer(["a sound of a cat", "a sound of a dog"], padding=True, return_tensors="pt")
 
@@ -1577,6 +1582,7 @@ class MSClapTextModelWithProjection(MSClapPreTrainedModel):
     """,
     MSCLAP_START_DOCSTRING,
 )
+# Copied from transformers.models.clap.modeling_clap.ClapAudioModelWithProjection with Clap->MSClap
 class MSClapAudioModelWithProjection(MSClapPreTrainedModel):
     config_class = MSClapAudioConfig
     main_input_name = "input_features"
@@ -1610,8 +1616,8 @@ class MSClapAudioModelWithProjection(MSClapPreTrainedModel):
         >>> from datasets import load_dataset
         >>> from transformers import MSClapAudioModelWithProjection, MSClapProcessor
 
-        >>> model = MSClapAudioModelWithProjection.from_pretrained("laion/MSclap-htsat-fused")
-        >>> processor = MSClapProcessor.from_pretrained("laion/MSclap-htsat-fused")
+        >>> model = MSClapAudioModelWithProjection.from_pretrained("microsoft/msclap")
+        >>> processor = MSClapProcessor.from_pretrained("microsoft/msclap")
 
         >>> dataset = load_dataset("hf-internal-testing/ashraq-esc50-1-dog-example")
         >>> audio_sample = dataset["train"]["audio"][0]["array"]

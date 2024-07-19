@@ -17,7 +17,7 @@ import argparse
 import re
 
 
-from transformers import MSClapConfig, MSClapModel, MSClapFeatureExtractor
+from transformers import MSClapConfig, MSClapModel, MSClapFeatureExtractor, AutoTokenizer, MSClapProcessor
 
 from msclap import CLAP
 
@@ -134,7 +134,7 @@ def rename_state_dict(state_dict):
     return model_state_dict
 
 
-def convert_msclap_checkpoint(version, pytorch_dump_folder_path, enable_fusion=False):
+def convert_msclap_checkpoint(version, pytorch_dump_folder_path, repo_id,  enable_fusion=False):
     clap_model = init_msclap(version)
 
     clap_model.clap.eval()
@@ -146,7 +146,6 @@ def convert_msclap_checkpoint(version, pytorch_dump_folder_path, enable_fusion=F
     transformers_config.audio_config.enable_fusion = enable_fusion
     model = MSClapModel(transformers_config)
 
-    # ignore the spectrogram embedding layer
     model.load_state_dict(state_dict, strict=False)
 
     unused_audio_encoder_weights = get_unused_weights(model, state_dict, "audio_model")
@@ -162,35 +161,35 @@ def convert_msclap_checkpoint(version, pytorch_dump_folder_path, enable_fusion=F
     model.save_pretrained(pytorch_dump_folder_path)
     transformers_config.save_pretrained(pytorch_dump_folder_path)
     
+        
+    tokenizer = AutoTokenizer.from_pretrained('gpt2')
+    tokenizer.add_special_tokens({'pad_token': '!'})
 
-def convert_feature_extractor_checkpoints(version ): 
-    clap_model = init_msclap(version)
-    
-    clap_model.clap.eval()
-    
-    
     feature_extractor = MSClapFeatureExtractor()
+
+    processor = MSClapProcessor(feature_extractor, tokenizer)
+    processor.save_pretrained(pytorch_dump_folder_path)
     
-    print('ok')
-    
-    
-    pass
+    if repo_id: 
+        print("Pushing to the hub...")
+        feature_extractor.push_to_hub(repo_id)
+        processor.push_to_hub(repo_id)
+        tokenizer.push_to_hub(repo_id)
+        model.push_to_hub(repo_id)
 
 
 
-# check that both models share the same state dict: 
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    # parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
-    # parser.add_argument("--checkpoint_path", default=None, type=str, help="Path to fairseq checkpoint")
-    # parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
-    # args = parser.parse_args()
+    parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
+    parser.add_argument("--checkpoint_path", default=None, type=str, help="Path to fairseq checkpoint")
+    parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
+    args = parser.parse_args()
 
-    convert_feature_extractor_checkpoints("2023")
 
     pytorch_dump_folder_path = "/home/kamil/cache/msclap/"
     convert_msclap_checkpoint(
-        '2023', pytorch_dump_folder_path
+        '2023', pytorch_dump_folder_path, repo_id='kamilakesbi/ms_clap'
     )
