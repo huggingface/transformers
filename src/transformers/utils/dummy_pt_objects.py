@@ -485,7 +485,7 @@ class WhisperTimeStampLogitsProcessor(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-ROPE_PARAMETER_FUNCTIONS = None
+ROPE_INIT_FUNCTIONS = None
 
 
 class PreTrainedModel(metaclass=DummyObject):

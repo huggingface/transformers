@@ -36,7 +36,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
     TokenClassifierOutput,
 )
-from ...modeling_rope_utils import ROPE_PARAMETER_FUNCTIONS
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
@@ -122,9 +122,9 @@ class LlamaRotaryEmbedding(nn.Module):
 
         self.config = config
         self.rope_type = config.rope_scaling["type"] if config.rope_scaling is not None else "default"
-        self.rope_parameter_fn = ROPE_PARAMETER_FUNCTIONS[self.rope_type]
+        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
-        inv_freq, self.attention_scaling = self.rope_parameter_fn(config, device)
+        inv_freq, self.attention_scaling = self.rope_init_fn(config, device)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -140,7 +140,7 @@ class LlamaRotaryEmbedding(nn.Module):
         needs_reset = seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len
         if needs_growth or needs_reset:
             target_seq_len = max(seq_len, self.original_max_seq_len)
-            inv_freq, self.attention_scaling = self.rope_parameter_fn(self.config, device, seq_len=target_seq_len)
+            inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, seq_len=target_seq_len)
             self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
             self.max_seq_len_cached = target_seq_len
 

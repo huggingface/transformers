@@ -207,7 +207,7 @@ def _compute_yarn_parameters(
 # This maps the "type" string field in rope config to the corresponding function to compute the RoPE parameters from
 # the model config. You can append new {'type': callable} pairs to this dictionary to enable custom RoPE
 # parameterizations, as long as the callable has the same signature.
-ROPE_PARAMETER_FUNCTIONS = {
+ROPE_INIT_FUNCTIONS = {
     "default": _compute_default_rope_parameters,
     "linear": _compute_linear_scaling_rope_parameters,
     "dynamic": _compute_dynamic_ntk_parameters,
@@ -230,7 +230,7 @@ def rope_config_validation(rope_scaling: Optional[Dict[str, Any]]):
         raise ValueError(f"Missing required keys in `rope_scaling`: {missing_keys}")
 
     rope_type = rope_scaling["type"]
-    possible_rope_types = set(ROPE_PARAMETER_FUNCTIONS.keys())
+    possible_rope_types = set(ROPE_INIT_FUNCTIONS.keys())
     if rope_type is None or rope_type not in possible_rope_types:
         raise ValueError(f"`rope_scaling`'s 'type' field must be one of {possible_rope_types}, got {rope_type}")
 
