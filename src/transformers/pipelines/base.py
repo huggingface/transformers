@@ -191,7 +191,8 @@ def pad_collate_fn(tokenizer, feature_extractor):
             else:
                 # This is likely another random key maybe even user provided
                 _padding_value = 0
-            padded[key] = _pad(items, key, _padding_value, padding_side)
+            if key not in {"num_frames"}:
+                padded[key] = _pad(items, key, _padding_value, padding_side)
         return padded
 
     return inner
