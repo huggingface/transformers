@@ -71,7 +71,7 @@ from PIL import Image
 import requests
 
 processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
-model = ChameleonForConditionalGeneration.from_pretrained("facebook/chameleon-7b", torch_dtype=torch.float16, device_map="auto")
+model = ChameleonForConditionalGeneration.from_pretrained("facebook/chameleon-7b", torch_dtype=torch.float16, device_map="cuda")
 
 # prepare image and text prompt
 url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
@@ -97,7 +97,7 @@ import requests
 
 processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
 
-model = ChameleonForConditionalGeneration.from_pretrained("facebook/chameleon-7b", torch_dtype=torch.float16, device_map="auto")
+model = ChameleonForConditionalGeneration.from_pretrained("facebook/chameleon-7b", torch_dtype=torch.float16, device_map="cuda")
 
 # Get three different images
 url = "https://www.ilankelman.org/stopsigns/australia.jpg"
@@ -140,7 +140,7 @@ quantization_config = BitsAndBytesConfig(
     bnb_4bit_compute_dtype=torch.float16,
 )
 
-model = ChameleonForConditionalGeneration.from_pretrained("facebook/chameleon-7b", quantization_config=quantization_config, device_map="auto")
+model = ChameleonForConditionalGeneration.from_pretrained("facebook/chameleon-7b", quantization_config=quantization_config, device_map="cuda")
 ```
 
 ### Use Flash-Attention 2 and SDPA to further speed-up generation
