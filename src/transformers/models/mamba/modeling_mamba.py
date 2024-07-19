@@ -38,6 +38,11 @@ from .configuration_mamba import MambaConfig
 
 logger = logging.get_logger(__name__)
 
+if is_mambapy_available():
+    from mambapy.pscan import pscan
+else:
+    pscan = None
+
 if is_mamba_ssm_available():
     from mamba_ssm.ops.selective_scan_interface import mamba_inner_fn, selective_scan_fn
     from mamba_ssm.ops.triton.selective_state_update import selective_state_update
@@ -52,11 +57,6 @@ else:
 is_fast_path_available = all(
     (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
 )
-
-if is_mambapy_available():
-    from mambapy.pscan import pscan
-else:
-    pscan = None
 
 _CHECKPOINT_FOR_DOC = "state-spaces/mamba-130m-hf"
 _CONFIG_FOR_DOC = "MambaConfig"

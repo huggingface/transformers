@@ -395,7 +395,7 @@ def is_causal_conv1d_available():
 
 
 def is_mambapy_available():
-    if is_torch_available():       
+    if is_torch_available():
         return _is_package_available("mambapy")
     return False
 
