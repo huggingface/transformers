@@ -2958,7 +2958,7 @@ def build_label_maps(logits, input_ids):
     Computes a mapping between the tokens associated with the prompt labels in the logit space with shape `(batch_size, num_labels, hidden_size)`
     where `num_labels` is defined by the number of classes in the input prompt.
 
-    For instance if the prompt "fish. shark." we get input_ids = [  101,  3869,  1012, 11420,  1012,   102]
+    For instance, given the prompt "fish. shark." we get input_ids = [  101,  3869,  1012, 11420,  1012,   102].
     this function will then return a mapping for each of the prompt tokens (i.e. tokens associated with "fish" and "shark")
     indicating their position in the logit space.
 
