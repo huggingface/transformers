@@ -91,7 +91,7 @@ class MSClapFeatureExtractor(SequenceFeatureExtractor):
         padding_value=0.0,
         return_attention_mask=False,  # pad inputs to max length with silence token (zero) and no attention mask
         frequency_min: float = 50,
-        frequency_max: float = 8000,
+        frequency_max: float = 14000,
         top_db: int = None,
         truncation: str = "rand_trunc",
         padding: str = "repeat",

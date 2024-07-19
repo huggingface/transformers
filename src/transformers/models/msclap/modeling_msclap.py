@@ -1463,7 +1463,8 @@ class MSClapModel(MSClapPreTrainedModel):
         audio_embeds = audio_outputs[1] if not return_dict else audio_outputs.pooler_output
         audio_embeds = self.audio_projection(audio_embeds)
 
-        text_embeds = text_outputs[1] if not return_dict else text_outputs.pooler_output
+        text_embeds = text_outputs
+        # text_embeds = text_outputs[1] if not return_dict else text_outputs.pooler_output
         text_embeds = self.text_projection(text_embeds)
 
         # normalized features
