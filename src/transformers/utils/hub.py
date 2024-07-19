@@ -49,6 +49,7 @@ from huggingface_hub.file_download import REGEX_COMMIT_HASH, http_get
 from huggingface_hub.utils import (
     EntryNotFoundError,
     GatedRepoError,
+    HfHubHTTPError,
     HFValidationError,
     LocalEntryNotFoundError,
     OfflineModeIsEnabled,
@@ -793,7 +794,16 @@ class PushToHubMixin:
                 )
 
         if revision is not None:
-            create_branch(repo_id=repo_id, branch=revision, token=token, exist_ok=True)
+            try:
+                create_branch(repo_id=repo_id, branch=revision, token=token, exist_ok=True)
+            except HfHubHTTPError as e:
+                if e.response.status_code == 403 and create_pr:
+                    # If we are creating a PR on a repo we don't have access to, we can't create the branch.
+                    # so let's assume the branch already exists. If it's not the case, an error will be raised when
+                    # calling `create_commit` below.
+                    pass
+                else:
+                    raise
 
         logger.info(f"Uploading the following files to {repo_id}: {','.join(modified_files)}")
         return create_commit(
