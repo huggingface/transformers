@@ -2598,15 +2598,17 @@ else:
             "MgpstrPreTrainedModel",
         ]
     )
-    _import_structure["models.mistral"].extend(
-        [
-            "MistralForCausalLM",
-            "MistralForSequenceClassification",
-            "MistralForTokenClassification",
-            "MistralModel",
-            "MistralPreTrainedModel",
-        ]
-    ),
+    (
+        _import_structure["models.mistral"].extend(
+            [
+                "MistralForCausalLM",
+                "MistralForSequenceClassification",
+                "MistralForTokenClassification",
+                "MistralModel",
+                "MistralPreTrainedModel",
+            ]
+        ),
+    )
     _import_structure["models.mixtral"].extend(
         [
             "MixtralForCausalLM",
@@ -5250,7 +5252,6 @@ if TYPE_CHECKING:
         MgpstrTokenizer,
     )
     from .models.mistral import MistralConfig
-    from .models.solo import SoloConfig
     from .models.mixtral import MixtralConfig
     from .models.mobilebert import (
         MobileBertConfig,
@@ -5407,6 +5408,7 @@ if TYPE_CHECKING:
         SiglipTextConfig,
         SiglipVisionConfig,
     )
+    from .models.solo import SoloConfig
     from .models.speech_encoder_decoder import SpeechEncoderDecoderConfig
     from .models.speech_to_text import (
         Speech2TextConfig,
@@ -7077,10 +7079,6 @@ if TYPE_CHECKING:
             MistralModel,
             MistralPreTrainedModel,
         )
-        from .models.solo import (
-            SoloForCausalLM,
-            SoloModel
-        )
         from .models.mixtral import (
             MixtralForCausalLM,
             MixtralForSequenceClassification,
@@ -7516,6 +7514,7 @@ if TYPE_CHECKING:
             SiglipTextModel,
             SiglipVisionModel,
         )
+        from .models.solo import SoloForCausalLM, SoloModel
         from .models.speech_encoder_decoder import SpeechEncoderDecoderModel
         from .models.speech_to_text import (
             Speech2TextForConditionalGeneration,

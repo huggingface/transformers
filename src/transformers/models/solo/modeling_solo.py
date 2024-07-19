@@ -17,7 +17,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Mistral model."""
+"""PyTorch Mistral model."""
+
 import inspect
 import math
 import warnings
@@ -44,6 +45,7 @@ from ...utils import (
 )
 from ..mistral.configuration_mistral import MistralConfig
 from .configuration_solo import SoloConfig
+
 
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
@@ -1370,14 +1372,9 @@ class SoloModel(MistralModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
-        self.embed_tokens = nn.Embedding(
-            config.vocab_size, config.hidden_size, self.padding_idx
-        )
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
-            [
-                MistralDecoderLayer(config, layer_idx)
-                for layer_idx in range(config.num_hidden_layers)
-            ]
+            [MistralDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self._attn_implementation = config._attn_implementation
         self.norm = MistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -1411,35 +1408,23 @@ class SoloModel(MistralModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
-        output_attentions = (
-            output_attentions
-            if output_attentions is not None
-            else self.config.output_attentions
-        )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
-            output_hidden_states
-            if output_hidden_states is not None
-            else self.config.output_hidden_states
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
 
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # retrieve input_ids and inputs_embeds
         if input_ids is not None and inputs_embeds is not None:
-            raise ValueError(
-                "You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time"
-            )
+            raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
         elif input_ids is not None:
             batch_size, seq_length = input_ids.shape
         elif inputs_embeds is not None:
             batch_size, seq_length, _ = inputs_embeds.shape
         else:
-            raise ValueError(
-                "You have to specify either decoder_input_ids or decoder_inputs_embeds"
-            )
+            raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
@@ -1476,9 +1461,7 @@ class SoloModel(MistralModel):
 
             # === Handle vision patches ===
             if vision_patches is not None and vision_patches.size(0) > 0:
-                vision_embeds = self.embed_vision_patch(
-                    vision_patches
-                )  # (n_patches, hidden_size)
+                vision_embeds = self.embed_vision_patch(vision_patches)  # (n_patches, hidden_size)
                 vision_embeds = torch.cat(
                     [
                         vision_embeds,
@@ -1490,17 +1473,11 @@ class SoloModel(MistralModel):
                 # arrange embeddings according to vision_patch_indices
                 # - text tokens are -1 (map to the dummy zero tensor)
                 # - vision tokens are 0~n_patches (map to the corresponding vision_embeds)
-                vision_embeds = vision_embeds[
-                    vision_patch_indices
-                ]  # (batch_size, seq_length, hidden_size)
+                vision_embeds = vision_embeds[vision_patch_indices]  # (batch_size, seq_length, hidden_size)
 
                 # merge vision_embeds with inputs_embeds
                 inputs_embeds += vision_embeds
-        if (
-            attention_mask is not None
-            and self._attn_implementation == "flash_attention_2"
-            and use_cache
-        ):
+        if attention_mask is not None and self._attn_implementation == "flash_attention_2" and use_cache:
             is_padding_right = attention_mask[:, -1].sum().item() != batch_size
             if is_padding_right:
                 raise ValueError(
@@ -1511,11 +1488,7 @@ class SoloModel(MistralModel):
 
         if self._attn_implementation == "flash_attention_2":
             # 2d mask is passed through the layers
-            attention_mask = (
-                attention_mask
-                if (attention_mask is not None and 0 in attention_mask)
-                else None
-            )
+            attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
         elif self._attn_implementation == "sdpa" and not output_attentions:
             # output_attentions=True can not be supported when using SDPA, and we fall back on
             # the manual implementation that requires a 4D causal mask in all cases.
@@ -1582,18 +1555,10 @@ class SoloModel(MistralModel):
 
         next_cache = None
         if use_cache:
-            next_cache = (
-                next_decoder_cache.to_legacy_cache()
-                if use_legacy_cache
-                else next_decoder_cache
-            )
+            next_cache = next_decoder_cache.to_legacy_cache() if use_legacy_cache else next_decoder_cache
 
         if not return_dict:
-            return tuple(
-                v
-                for v in [hidden_states, next_cache, all_hidden_states, all_self_attns]
-                if v is not None
-            )
+            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=next_cache,
@@ -1648,19 +1613,11 @@ class SoloForCausalLM(MistralForCausalLM):
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
 
-        output_attentions = (
-            output_attentions
-            if output_attentions is not None
-            else self.config.output_attentions
-        )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
-            output_hidden_states
-            if output_hidden_states is not None
-            else self.config.output_hidden_states
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model(
@@ -1709,14 +1666,12 @@ class SoloForCausalLM(MistralForCausalLM):
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
     ):
-
         vision_patches = kwargs.get("vision_patches")
         vision_patch_indices = kwargs.get("vision_patch_indices")
         # make vision_patch_indices to be the same shape as input_ids by padding -1
         _padding = torch.full_like(input_ids, -1, dtype=vision_patch_indices.dtype)
         _padding[:, : vision_patch_indices.shape[1]] = vision_patch_indices
         vision_patch_indices = _padding
-
 
         # Omit tokens covered by past_key_values
         if past_key_values is not None:
