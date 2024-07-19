@@ -178,15 +178,6 @@ def rename_key(dct, old, new):
     dct[new] = val
 
 
-def convert_conv1ds_to_linears(state_dict):
-    for key, value in state_dict.items():
-        if isinstance(value, torch.Tensor):
-            if value.ndim == 3:
-                value = value.squeeze(2)
-                state_dict[key] = value
-    return state_dict
-
-
 def add_keypoint_detector_state_dict(superglue_state_dict, keypoint_detector_state_dict):
     for k, v in keypoint_detector_state_dict.items():
         superglue_state_dict[f"keypoint_detector.{k}"] = v
@@ -232,7 +223,6 @@ def convert_superglue_checkpoint(checkpoint_url, pytorch_dump_folder_path, save_
     new_superglue_state_dict = original_superglue_state_dict.copy()
     for src, dest in rename_keys:
         rename_key(new_superglue_state_dict, src, dest)
-    new_superglue_state_dict = convert_conv1ds_to_linears(new_superglue_state_dict)
     new_superglue_state_dict = add_keypoint_detector_state_dict(new_superglue_state_dict, keypoint_detector_state_dict)
 
     model = SuperGlueForKeypointMatching(superglue_config)
@@ -284,7 +274,7 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--checkpoint_url",
-        default="https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/master/models/weights/superglue_outdoor.pth",
+        default="https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/master/models/weights/superglue_indoor.pth",
         type=str,
         help="URL of the original SuperGlue checkpoint you'd like to convert.",
     )
