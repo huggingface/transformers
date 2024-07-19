@@ -209,7 +209,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
             time_precision (`float`, `optional`, defaults to 0.02):
                 The time ratio to convert from token to time.
-            longform_timestamps (List[dict], *optional*):
+            longform_timestamps (`List[dict]`, *optional*):
                 Timestamps obtained using long form generation in Whisper, to be used to replace predicted timestamps in token_ids.
         """
         offsets = []
