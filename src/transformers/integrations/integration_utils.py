@@ -839,6 +839,7 @@ class WandbCallback(TrainerCallback):
                     if (args.run_name is None or args.run_name == args.output_dir)
                     else f"model-{self._wandb.run.name}"
                 )
+                model_name = model_name.replace("/", "-")
                 model_artifact = self._wandb.Artifact(
                     name=model_name,
                     type="model",
