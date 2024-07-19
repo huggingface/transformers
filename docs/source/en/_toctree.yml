@@ -92,6 +92,8 @@
       title: Visual Question Answering
     - local: tasks/text-to-speech
       title: Text to speech
+    - local: tasks/image_text_to_text
+      title: Image-text-to-text
     title: Multimodal
   - isExpanded: false
     sections:
