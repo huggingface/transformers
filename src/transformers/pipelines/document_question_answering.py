@@ -477,7 +477,7 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
             starts, ends, scores, min_null_score = select_starts_ends(
                 start=output["start_logits"],
                 end=output["end_logits"],
-                p_mask=np.numpy(output["p_mask"]),
+                p_mask=np.array(output["p_mask"]),
                 attention_mask=output["attention_mask"].numpy()
                 if output.get("attention_mask", None) is not None
                 else None,
