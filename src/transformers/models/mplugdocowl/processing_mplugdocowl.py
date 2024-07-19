@@ -43,7 +43,7 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
     image_processor_class = "MPLUGDocOwlImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
-    def __init__(self, image_processor=None, tokenizer=None):
+    def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         super().__init__(image_processor, tokenizer)
 
     def generate_text_with_placeholders(

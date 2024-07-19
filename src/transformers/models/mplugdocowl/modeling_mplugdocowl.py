@@ -127,7 +127,7 @@ class MPLUGDocOwlPreTrainedModel(PreTrainedModel):
     config_class = MPLUGDocOwlConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["MPLUGDocOwlAttention"]
+    _no_split_modules = ["MPLUGDocOwlEncoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = False
 
@@ -323,7 +323,7 @@ class MPLUGDocOwlAttention(MPLUGDocOwlPreTrainedModel):
 
         return outputs
 
-
+# Copied from transformers.models.clip.modeling_clip.LIPMLP with CLIP->MPLUGDocOwlVision
 class MPLUGDocOwlVisionMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -499,7 +499,7 @@ class MPLUGDocOwlVisionEncoder(MPLUGDocOwlPreTrainedModel):
         )
 
 
-class MPLUGDocOwlVisionTransformer(PreTrainedModel):
+class MPLUGDocOwlVisionTransformer(MPLUGDocOwlPreTrainedModel):
     def __init__(self, config: MPLUGDocOwlConfig):
         super().__init__(config)
         self.config = config
@@ -1115,16 +1115,16 @@ class MPLUGDocOwlDecoderLayer(nn.Module):
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            modality_indicators (torch.Tensor): A tensor of 1s and 0s indicating which module to apply to each part of hidden_states. 1 - image, 0 - text embeddings.
             attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
+            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states    
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
                 (see `past_key_values`).
-            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
-            modality_indicators (torch.Tensor): A tensor of 1s and 0s indicating which module to apply to each part of hidden_states. 1 - image, 0 - text embeddings.
         """
 
         residual = hidden_states
