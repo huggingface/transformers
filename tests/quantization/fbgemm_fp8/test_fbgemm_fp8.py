@@ -72,6 +72,45 @@ class FbgemmFp8Test(unittest.TestCase):
     EXPECTED_OUTPUT = "What are we having for dinner?\nI'm having a steak and a salad"
 
     device_map = "cuda"
+    
+    
+    offload_device_map = {
+            "model.embed_tokens": 0,
+            "model.layers.0": 0,
+            "model.layers.1": 0,
+            "model.layers.2": 0,
+            "model.layers.3": 0,
+            "model.layers.4": 0,
+            "model.layers.5": 0,
+            "model.layers.6": 0,
+            "model.layers.7": 0,
+            "model.layers.8": 0,
+            "model.layers.9": 0,
+            "model.layers.10": 0,
+            "model.layers.11": 0,
+            "model.layers.12": 0,
+            "model.layers.13": 0,
+            "model.layers.14": 0,
+            "model.layers.15": 0,
+            "model.layers.16": "cpu",
+            "model.layers.17": "cpu",
+            "model.layers.18": "cpu",
+            "model.layers.19": "cpu",
+            "model.layers.20": "disk",
+            "model.layers.21": "disk",
+            "model.layers.22": "disk",
+            "model.layers.23": "disk",
+            "model.layers.24": "disk",
+            "model.layers.25": "disk",
+            "model.layers.26": "disk",
+            "model.layers.27": "disk",
+            "model.layers.28": "disk",
+            "model.layers.29": "disk",
+            "model.layers.30": "disk",
+            "model.layers.31": "disk",
+            "model.norm": "disk",
+            "lm_head": "disk",
+        }
 
     # called only once for all test in this class
     @classmethod
@@ -167,6 +206,32 @@ class FbgemmFp8Test(unittest.TestCase):
 
         output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
         self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+
+    def test_quantized_model_offload(self):
+        """
+        Simple test that checks if the quantized model returns an error when loading with cpu/disk offloaded 
+        """
+
+        input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
+        quantization_config = FbgemmFp8Config()
+        
+        with self.assertRaisesRegex(ValueError, "You are attempting to load an FP8 model with a device_map that contains a CPU or disk device."):
+            quantized_model = AutoModelForCausalLM.from_pretrained(
+                self.model_name, device_map=self.offload_device_map, quantization_config=quantization_config
+            )
+        
+    def test_save_pretrained_offload(self):
+        """
+        Simple test that checks if the saved quantized model is working properly cpu/disk offload
+        """
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            self.quantized_model.save_pretrained(tmpdirname)
+
+            input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
+
+            quantized_model = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=self.offload_device_map)
+            output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
+            self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
     @require_torch_multi_gpu
     def test_save_pretrained_multi_gpu(self):

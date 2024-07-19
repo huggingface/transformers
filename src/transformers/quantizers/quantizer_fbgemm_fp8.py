@@ -51,25 +51,37 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
                 "Please install the latest version of fbgemm-gpu library by following : https://pytorch.org/FBGEMM/fbgemm_gpu-development/InstallationInstructions.html#fbgemm-gpu-install-libraries"
             )
 
-        if not is_accelerate_available():
-            raise ImportError("Loading an FP8 quantized model requires accelerate (`pip install accelerate`)")
+        if not is_accelerate_available("0.32.2"):
+            raise ImportError(
+                "Loading an FP8 quantized model requires accelerate > 0.32.1 (`pip install --upgrade accelerate`)"
+            )
 
         if not torch.cuda.is_available():
-            raise RuntimeError(
-                "Using FP8 quantized models with fbgemm kernels requires a GPU with compute capabilities >= 9 (e.g. H100)"
+            raise RuntimeError("Using FP8 quantized models with fbgemm kernels requires a GPU")
+
+        compute_capability = torch.cuda.get_device_capability()
+        major, minor = compute_capability
+        if major < 9:
+            raise ValueError(
+                "FP8 quantized models is only supported on GPUs with compute capability >= 9.0 (e.g H100)"
             )
 
         device_map = kwargs.get("device_map", None)
         if device_map is None:
             logger.warning_once(
                 "You have loaded an FP8 model on CPU and have a CUDA device available, make sure to set "
-                "your model on a GPU device in order to run your model."
+                "your model on a GPU device in order to run your model. To remove this warning, pass device_map = 'cuda'. "
             )
         elif device_map is not None:
-            if isinstance(device_map, dict) and ("cpu" in device_map.values() or "disk" in device_map.values()):
+            if (
+                not self.pre_quantized
+                and isinstance(device_map, dict)
+                and ("cpu" in device_map.values() or "disk" in device_map.values())
+            ):
                 raise ValueError(
                     "You are attempting to load an FP8 model with a device_map that contains a CPU or disk device."
-                    " This is not supported. Please remove the CPU or disk device from the device_map."
+                    "This is not supported when the model is quantized on the fly. "
+                    "Please use a quantized checkpoint or remove the CPU or disk device from the device_map."
                 )
 
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
