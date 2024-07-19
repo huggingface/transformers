@@ -22,7 +22,7 @@ _import_structure = {
         "MSClapConfig",
         "MSClapTextConfig",
     ],
-    "processing_clap": ["MSClapProcessor"],
+    "processing_msclap": ["MSClapProcessor"],
 }
 
 try:
@@ -34,10 +34,10 @@ else:
     _import_structure["modeling_msclap"] = [
         "MSClapModel",
         "MSClapPreTrainedModel",
-        # "ClapTextModel",
-        # "ClapTextModelWithProjection",
-        # "MSClapAudioModel",
-        # "ClapAudioModelWithProjection",
+        "ClapTextModel",
+        "ClapTextModelWithProjection",
+        "MSClapAudioModel",
+        "ClapAudioModelWithProjection",
     ]
     _import_structure["feature_extraction_msclap"] = ["MSClapFeatureExtractor"]
 
@@ -57,21 +57,14 @@ if TYPE_CHECKING:
     else:
         from .feature_extraction_msclap import MSClapFeatureExtractor
         from .modeling_msclap import (
-            # MSClapAudioModel,
+            MSClapAudioModel,
             MSClapModel, 
-            # ClapAudioModelWithProjection,
+            MSClapAudioModelWithProjection,
             MSClapPreTrainedModel,
-            # ClapTextModel,
-            # ClapTextModelWithProjection,
+            MSClapTextModel,
+            MSClapTextModelWithProjection,
         )
-        # from .modeling_msclap_original import (
-        #     MSClapModel,
-        #     # ClapAudioModelWithProjection,
-        #     # ClapModel,
-        #     MSClapPreTrainedModel,
-        #     # ClapTextModel,
-        #     # ClapTextModelWithProjection,
-        # )
+
 
 
 else:

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 The HuggingFace Inc. team.
+# Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Audio/Text processor class for CLAP
+Audio/Text processor class for MSCLAP
 """
 
 from ...processing_utils import ProcessorMixin
@@ -22,30 +22,31 @@ from ...tokenization_utils_base import BatchEncoding
 
 class MSClapProcessor(ProcessorMixin):
     r"""
-    Constructs a CLAP processor which wraps a CLAP feature extractor and a RoBerta tokenizer into a single processor.
+    Constructs a MSCLAP processor which wraps a MSCLAP feature extractor and a GPT2 tokenizer into a single processor.
 
-    [`ClapProcessor`] offers all the functionalities of [`ClapFeatureExtractor`] and [`RobertaTokenizerFast`]. See the
-    [`~ClapProcessor.__call__`] and [`~ClapProcessor.decode`] for more information.
+    [`MSClapProcessor`] offers all the functionalities of [`MSClapFeatureExtractor`] and [`GPT2TokenizerFast`]. See the
+    [`~MSClapProcessor.__call__`] and [`~MSClapProcessor.decode`] for more information.
 
     Args:
-        feature_extractor ([`ClapFeatureExtractor`]):
+        feature_extractor ([`MSClapFeatureExtractor`]):
             The audio processor is a required input.
-        tokenizer ([`RobertaTokenizerFast`]):
+        tokenizer ([`GPT2TokenizerFast`]):
             The tokenizer is a required input.
     """
 
-    feature_extractor_class = "ClapFeatureExtractor"
-    tokenizer_class = ("RobertaTokenizer", "RobertaTokenizerFast")
+    feature_extractor_class = "MSClapFeatureExtractor"
+    tokenizer_class = ("GPT2Tokenizer", "GPT2TokenizerFast")
 
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
+        
 
     def __call__(self, text=None, audios=None, return_tensors=None, **kwargs):
         """
         Main method to prepare for the model one or several sequences(s) and audio(s). This method forwards the `text`
-        and `kwargs` arguments to RobertaTokenizerFast's [`~RobertaTokenizerFast.__call__`] if `text` is not `None` to
+        and `kwargs` arguments to GPT2TokenizerFast's [`~GPT2TokenizerFast.__call__`] if `text` is not `None` to
         encode the text. To prepare the audio(s), this method forwards the `audios` and `kwrags` arguments to
-        ClapFeatureExtractor's [`~ClapFeatureExtractor.__call__`] if `audios` is not `None`. Please refer to the
+        MSClapFeatureExtractor's [`~MSClapFeatureExtractor.__call__`] if `audios` is not `None`. Please refer to the
         doctsring of the above two methods for more information.
 
         Args:
@@ -98,14 +99,14 @@ class MSClapProcessor(ProcessorMixin):
 
     def batch_decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to RobertaTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
+        This method forwards all its arguments to GPT2TokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
         refer to the docstring of this method for more information.
         """
         return self.tokenizer.batch_decode(*args, **kwargs)
 
     def decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to RobertaTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer
+        This method forwards all its arguments to GPT2TokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer
         to the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
