@@ -1170,8 +1170,7 @@ class MSClapPreTrainedModel(PreTrainedModel):
         factor = self.config.initializer_factor
 
         if isinstance(module, MSClapModel):
-            nn.init.normal_(module.logit_scale_a, std=factor * 0.02)
-            nn.init.normal_(module.logit_scale_t, std=factor * 0.02)
+            nn.init.normal_(module.logit_scale, std=factor * 0.02)
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=factor * 0.02)
 
@@ -1293,8 +1292,7 @@ class MSClapModel(MSClapPreTrainedModel):
         text_config = config.text_config
         audio_config = config.audio_config
 
-        self.logit_scale_a = nn.Parameter(torch.tensor(math.log(config.logit_scale_init_value)))
-        self.logit_scale_t = nn.Parameter(torch.tensor(math.log(config.logit_scale_init_value)))
+        self.logit_scale = nn.Parameter(torch.tensor(math.log(config.logit_scale_init_value)))
 
         self.projection_dim = config.projection_dim
 
@@ -1473,10 +1471,9 @@ class MSClapModel(MSClapPreTrainedModel):
         text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
 
         # cosine similarity as logits
-        logit_scale_text = self.logit_scale_t.exp()
-        logit_scale_audio = self.logit_scale_a.exp()
-        logits_per_text = torch.matmul(text_embeds, audio_embeds.t()) * logit_scale_text
-        logits_per_audio = torch.matmul(audio_embeds, text_embeds.t()) * logit_scale_audio
+        logit_scale = self.logit_scale.exp()
+        logits_per_text = torch.matmul(text_embeds, audio_embeds.t()) * logit_scale
+        logits_per_audio = torch.matmul(audio_embeds, text_embeds.t()) * logit_scale
 
         loss = None
         if return_loss:

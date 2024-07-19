@@ -19,7 +19,7 @@ Audio/Text processor class for MSCLAP
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
 
-
+# Copied from transformers.models.clap.processing_clap.ClapProcessor with Clap->MSClap
 class MSClapProcessor(ProcessorMixin):
     r"""
     Constructs a MSCLAP processor which wraps a MSCLAP feature extractor and a GPT2 tokenizer into a single processor.

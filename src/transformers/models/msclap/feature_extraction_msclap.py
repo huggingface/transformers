@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Feature extractor class for CLAP."""
+"""Feature extractor class for MSCLAP."""
 
 import copy
 from typing import Any, Dict, List, Optional, Union
@@ -28,7 +28,7 @@ from ...utils import TensorType, logging
 
 logger = logging.get_logger(__name__)
 
-
+# Copied from transformers.models.clap.feature_extractor_clap.ClapProcessor with Clap->MSClap
 class MSClapFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a MSCLAP feature extractor.
@@ -43,13 +43,13 @@ class MSClapFeatureExtractor(SequenceFeatureExtractor):
         feature_size (`int`, *optional*, defaults to 64):
             The feature dimension of the extracted Mel spectrograms. This corresponds to the number of mel filters
             (`n_mels`).
-        sampling_rate (`int`, *optional*, defaults to 48000):
+        sampling_rate (`int`, *optional*, defaults to 44100):
             The sampling rate at which the audio files should be digitalized expressed in hertz (Hz). This only serves
             to warn users if the audio fed to the feature extractor does not have the same sampling rate.
-        hop_length (`int`,*optional*, defaults to 480):
+        hop_length (`int`,*optional*, defaults to 320):
             Length of the overlaping windows for the STFT used to obtain the Mel Spectrogram. The audio will be split
             in smaller `frames` with a step of `hop_length` between each frame.
-        max_length_s (`int`, *optional*, defaults to 10):
+        max_length_s (`int`, *optional*, defaults to 7):
             The maximum input length of the model in seconds. This is used to pad the audio.
         fft_window_size (`int`, *optional*, defaults to 1024):
             Size of the window (in samples) on which the Fourier transform is applied. This controls the frequency
@@ -58,21 +58,21 @@ class MSClapFeatureExtractor(SequenceFeatureExtractor):
             Padding value used to pad the audio. Should correspond to silences.
         return_attention_mask (`bool`, *optional*, defaults to `False`):
             Whether or not the model should return the attention masks coresponding to the input.
-        frequency_min (`float`, *optional*, defaults to 0):
+        frequency_min (`float`, *optional*, defaults to 50):
             The lowest frequency of interest. The STFT will not be computed for values below this.
         frequency_max (`float`, *optional*, defaults to 14000):
             The highest frequency of interest. The STFT will not be computed for values above this.
         top_db (`float`, *optional*):
             The highest decibel value used to convert the mel spectrogram to the log scale. For more details see the
             `audio_utils.power_to_db` function
-        truncation (`str`, *optional*, defaults to `"fusion"`):
+        truncation (`str`, *optional*, defaults to `"rand_trunc"`):
             Truncation pattern for long audio inputs. Two patterns are available:
                 - `fusion` will use `_random_mel_fusion`, which stacks 3 random crops from the mel spectrogram and a
                   downsampled version of the entire mel spectrogram.
             If `config.fusion` is set to True, shorter audios also need to to return 4 mels, which will just be a copy
             of the original mel obtained from the padded audio.
                 - `rand_trunc` will select a random crop of the mel spectrogram.
-        padding (`str`, *optional*, defaults to `"repeatpad"`):
+        padding (`str`, *optional*, defaults to `"repeat"`):
                Padding pattern for shorter audio inputs. Three patterns were originally implemented:
                 - `repeatpad`: the audio is repeated, and then padded to fit the `max_length`.
                 - `repeat`: the audio is repeated and then cut to fit the `max_length`
@@ -152,7 +152,7 @@ class MSClapFeatureExtractor(SequenceFeatureExtractor):
 
     def _np_extract_fbank_features(self, waveform: np.array, mel_filters: Optional[np.array] = None) -> np.ndarray:
         """
-        Compute the log-mel spectrogram of the provided `waveform` using the Hann window. In CLAP, two different filter
+        Compute the log-mel spectrogram of the provided `waveform` using the Hann window. In MSCLAP, two different filter
         banks are used depending on the truncation pattern:
             - `self.mel_filters`: they correspond to the default parameters of `torchaudio` which can be obtained from
               calling `torchaudio.transforms.MelSpectrogram().mel_scale.fb`. These filters are used when `truncation`

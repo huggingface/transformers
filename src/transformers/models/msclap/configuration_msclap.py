@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""CLAP model configuration"""
+"""MSCLAP model configuration"""
 
 import os
 from typing import Union
@@ -26,18 +26,17 @@ logger = logging.get_logger(__name__)
 
 class MSClapTextConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ClapTextModel`]. It is used to instantiate a CLAP
+    This is the configuration class to store the configuration of a [`MSClapTextModel`]. It is used to instantiate a CLAP
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the CLAP
-    [calp-hsat-fused](https://huggingface.co/laion/clap-hsat-fused) architecture.
+    defaults will yield a similar configuration to that of the MSCLAP
+    [ms_clapt](https://huggingface.co/microsoft/ms_clap) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
-
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
-            Vocabulary size of the CLAP model. Defines the number of different tokens that can be represented by the
+            Vocabulary size of the MSCLAP model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`ClapTextModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
@@ -83,19 +82,19 @@ class MSClapTextConfig(PretrainedConfig):
     Examples:
 
     ```python
-    >>> from transformers import ClapTextConfig, ClapTextModel
+    >>> from transformers import MSClapTextConfig, MSClapTextModel
 
-    >>> # Initializing a CLAP text configuration
-    >>> configuration = ClapTextConfig()
+    >>> # Initializing a MSCLAP text configuration
+    >>> configuration = MSClapTextConfig()
 
     >>> # Initializing a model (with random weights) from the configuration
-    >>> model = ClapTextModel(configuration)
+    >>> model = MSClapTextModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
 
-    model_type = "clap_text_model"
+    model_type = "msclap_text_model"
 
     def __init__(
         self,
@@ -119,8 +118,8 @@ class MSClapTextConfig(PretrainedConfig):
 
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
-        # get the text config dict if we are loading from ClapConfig
-        if config_dict.get("model_type") == "clap":
+        # get the text config dict if we are loading from MSClapConfig
+        if config_dict.get("model_type") == "msclap":
             config_dict = config_dict["text_config"]
 
         if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
@@ -134,10 +133,10 @@ class MSClapTextConfig(PretrainedConfig):
 
 class MSClapAudioConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ClapAudioModel`]. It is used to instantiate a
-    CLAP audio encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the audio encoder of the CLAP
-    [laion/clap-htsat-fused](https://huggingface.co/laion/clap-htsat-fused) architecture.
+    This is the configuration class to store the configuration of a [`MSClapAudioModel`]. It is used to instantiate a
+    MSCLAP audio encoder according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the audio encoder of the MSCLAP
+    [microsoft/ms_clap](https://huggingface.co/microsoft/ms_clap) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -163,7 +162,7 @@ class MSClapAudioConfig(PretrainedConfig):
         hidden_size (`int`, *optional*, defaults to 768):
             Hidden size of the output of the audio encoder. Correspond to the dimension of the penultimate layer's
             output,which is sent to the projection MLP layer.
-        projection_dim (`int`, *optional*, defaults to 512):
+        projection_dim (`int`, *optional*, defaults to 1024):
             Hidden size of the projection layer.
         depths (`list`, *optional*, defaults to `[2, 2, 6, 2]`):
             Depths used for the Swin Layers of the audio model
@@ -210,13 +209,13 @@ class MSClapAudioConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import ClapAudioConfig, ClapAudioModel
+    >>> from transformers import MSClapAudioConfig, MSClapAudioModel
 
-    >>> # Initializing a ClapAudioConfig with laion/clap-htsat-fused style configuration
-    >>> configuration = ClapAudioConfig()
+    >>> # Initializing a MSClapAudioConfig with microsoft/ms_clap style configuration
+    >>> configuration = MSClapAudioConfig()
 
-    >>> # Initializing a ClapAudioModel (with random weights) from the laion/clap-htsat-fused style configuration
-    >>> model = ClapAudioModel(configuration)
+    >>> # Initializing a MSClapAudioModel (with random weights) from the microsoft/ms_clap style configuration
+    >>> model = MSClapAudioModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -294,7 +293,7 @@ class MSClapAudioConfig(PretrainedConfig):
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the audio config dict if we are loading from ClapConfig
-        if config_dict.get("model_type") == "clap":
+        if config_dict.get("model_type") == "msclap":
             config_dict = config_dict["audio_config"]
 
         if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
@@ -308,10 +307,10 @@ class MSClapAudioConfig(PretrainedConfig):
 
 class MSClapConfig(PretrainedConfig):
     r"""
-    [`ClapConfig`] is the configuration class to store the configuration of a [`ClapModel`]. It is used to instantiate
-    a CLAP model according to the specified arguments, defining the text model and audio model configs. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the CLAP
-    [laion/clap-htsat-fused](https://huggingface.co/laion/clap-htsat-fused) architecture.
+    [`MSClapConfig`] is the configuration class to store the configuration of a [`MSClapModel`]. It is used to instantiate
+    a MSCLAP model according to the specified arguments, defining the text model and audio model configs. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the MS
+    [microsoft/ms_clap](https://huggingface.co/microsoft/ms_clap) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -323,7 +322,7 @@ class MSClapConfig(PretrainedConfig):
             Dictionary of configuration options used to initialize [`ClapAudioConfig`].
         logit_scale_init_value (`float`, *optional*, defaults to 14.29):
             The initial value of the *logit_scale* parameter. Default is used as per the original CLAP implementation.
-        projection_dim (`int`, *optional*, defaults to 512):
+        projection_dim (`int`, *optional*, defaults to 1024):
             Dimensionality of text and audio projection layers.
         projection_hidden_act (`str`, *optional*, defaults to `"relu"`):
             Activation function for the projection layers.
@@ -392,11 +391,11 @@ class MSClapConfig(PretrainedConfig):
     @classmethod
     def from_text_audio_configs(cls, text_config: MSClapTextConfig, audio_config: MSClapAudioConfig, **kwargs):
         r"""
-        Instantiate a [`ClapConfig`] (or a derived class) from clap text model configuration and clap audio model
+        Instantiate a [`MSClapConfig`] (or a derived class) from clap text model configuration and clap audio model
         configuration.
 
         Returns:
-            [`ClapConfig`]: An instance of a configuration object
+            [`MSClapConfig`]: An instance of a configuration object
         """
 
         return cls(text_config=text_config.to_dict(), audio_config=audio_config.to_dict(), **kwargs)
