@@ -71,10 +71,8 @@ def generate_fake_bounding_boxes(n_boxes):
         cx, cy, w, h = bounding_boxes[i]
 
         # Ensure width and height do not exceed bounds
-        if w > 1.0:
-            w = 1.0
-        if h > 1.0:
-            h = 1.0
+        w = min(w, 1.0)
+        h = min(h, 1.0)
 
         # Ensure the bounding box stays within the normalized space
         if cx - w / 2 < 0:
