@@ -1380,21 +1380,8 @@ class GenerationMixin:
                     self.generation_config = new_generation_config
             generation_config = self.generation_config
 
-        # `torch.compile` can't compile `copy.deepcopy`, arguments in `kwargs` that are part of `generation_config`
-        # will mutate the object with `.update`. As such, passing these arguments through `kwargs` is disabled.
-        if is_torchdynamo_compiling():
-            model_kwargs = kwargs
-            generate_attributes_in_kwargs = [
-                key for key, value in kwargs.items() if getattr(generation_config, key, None) != value
-            ]
-            if len(generate_attributes_in_kwargs) > 0:
-                raise ValueError(
-                    "`torch.compile` exception: all generation configuration attributes must be passed within a "
-                    f"`generation_config` instance passed to `generate` (found: {generate_attributes_in_kwargs})."
-                )
-        else:
-            generation_config = copy.deepcopy(generation_config)
-            model_kwargs = generation_config.update(**kwargs)
+        generation_config = copy.deepcopy(generation_config)
+        model_kwargs = generation_config.update(**kwargs)
 
         return generation_config, model_kwargs
 
@@ -1535,7 +1522,8 @@ class GenerationMixin:
                     "unexpected behavior. Please pass your input's `attention_mask` to obtain reliable results."
                 )
             pad_token_id = eos_token_id[0]
-            logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{pad_token_id} for open-end generation.")
+            if not is_torchdynamo_compiling():
+                logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{pad_token_id} for open-end generation.")
 
         # we can't infer attn mask if pad token is set to be eos token in model's generation config
         if eos_token_id is not None and torch.isin(elements=eos_token_id, test_elements=pad_token_id).any():

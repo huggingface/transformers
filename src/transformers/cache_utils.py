@@ -824,8 +824,8 @@ class StaticCache(Cache):
             # breaks when updating the cache.
             new_layer_key_cache = torch.zeros(cache_shape, dtype=self.dtype, device=device)
             new_layer_value_cache = torch.zeros(cache_shape, dtype=self.dtype, device=device)
-            torch._dynamo.mark_static_address(new_layer_key_cache)
-            torch._dynamo.mark_static_address(new_layer_value_cache)
+            # torch._dynamo.mark_static_address(new_layer_key_cache)
+            # torch._dynamo.mark_static_address(new_layer_value_cache)
             self.key_cache.append(new_layer_key_cache)
             self.value_cache.append(new_layer_value_cache)
 
@@ -1166,8 +1166,8 @@ class HybridCache(Cache):
             cache_shape = global_cache_shape if not self.is_sliding[i] else sliding_cache_shape
             new_layer_key_cache = torch.zeros(cache_shape, dtype=self.dtype, device=device)
             new_layer_value_cache = torch.zeros(cache_shape, dtype=self.dtype, device=device)
-            torch._dynamo.mark_static_address(new_layer_key_cache)
-            torch._dynamo.mark_static_address(new_layer_value_cache)
+            # torch._dynamo.mark_static_address(new_layer_key_cache)
+            # torch._dynamo.mark_static_address(new_layer_value_cache)
             self.key_cache.append(new_layer_key_cache)
             self.value_cache.append(new_layer_value_cache)
 
@@ -1301,8 +1301,8 @@ class MambaCache:
             dtype=dtype,
         )
 
-        torch._dynamo.mark_static_address(self.conv_states)
-        torch._dynamo.mark_static_address(self.ssm_states)
+        # torch._dynamo.mark_static_address(self.conv_states)
+        # torch._dynamo.mark_static_address(self.ssm_states)
 
     def update_conv_state(
         self, layer_idx: int, new_conv_state: torch.Tensor, cache_position: torch.LongTensor
