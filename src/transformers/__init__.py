@@ -558,7 +558,6 @@ _import_structure = {
         "MgpstrTokenizer",
     ],
     "models.mistral": ["MistralConfig"],
-    "models.solo": ["SoloConfig"],
     "models.mixtral": ["MixtralConfig"],
     "models.mluke": [],
     "models.mobilebert": [
@@ -691,6 +690,7 @@ _import_structure = {
         "SiglipTextConfig",
         "SiglipVisionConfig",
     ],
+    "models.solo": ["SoloConfig"],
     "models.speech_encoder_decoder": ["SpeechEncoderDecoderConfig"],
     "models.speech_to_text": [
         "Speech2TextConfig",
@@ -2581,12 +2581,6 @@ else:
             "MistralPreTrainedModel",
         ]
     ),
-    _import_structure["models.solo"].extend(
-        [
-            "SoloForCausalLM",
-            "SoloModel",
-        ]
-    )
     _import_structure["models.mixtral"].extend(
         [
             "MixtralForCausalLM",
@@ -3138,6 +3132,12 @@ else:
             "SiglipPreTrainedModel",
             "SiglipTextModel",
             "SiglipVisionModel",
+        ]
+    )
+    _import_structure["models.solo"].extend(
+        [
+            "SoloForCausalLM",
+            "SoloModel",
         ]
     )
     _import_structure["models.speech_encoder_decoder"].extend(["SpeechEncoderDecoderModel"])
