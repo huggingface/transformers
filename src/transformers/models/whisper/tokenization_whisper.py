@@ -558,7 +558,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         ]
         return "".join(outputs)
 
-    def _compute_offsets(self, token_ids, time_precision=0.02):
+    def _compute_offsets(self, token_ids, time_precision=0.02, longform_timestamps=None):
         """
         Compute offsets for a given tokenized input
 
@@ -567,6 +567,8 @@ class WhisperTokenizer(PreTrainedTokenizer):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
             time_precision (`float`, `optional`, defaults to 0.02):
                 The time ratio to convert from token to time.
+            longform_timestamps (List[dict], *optional*):
+                Timestamps obtained using long form generation in Whisper, to be used to replace predicted timestamps in token_ids.
         """
         offsets = []
         # ensure torch tensor of token ids is placed on cpu
@@ -587,7 +589,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
             consecutive = np.append(consecutive, np.where(timestamp_tokens)[0][-1] + 1)
 
         last_slice = np.where(timestamp_tokens)[0][0]
-        for current_slice in consecutive:
+        for i, current_slice in enumerate(consecutive):
             sliced_tokens = token_ids[last_slice:current_slice]
             if len(sliced_tokens) > 1:
                 start_timestamp_position = sliced_tokens[0].item() - timestamp_begin
@@ -596,15 +598,27 @@ class WhisperTokenizer(PreTrainedTokenizer):
                 sliced_tokens = self._preprocess_token_ids(sliced_tokens)
                 text = self._decode(sliced_tokens)
                 text = self._filter_timestamp_ids(text)
-                offsets.append(
-                    {
-                        "text": text,
-                        "timestamp": (
-                            start_timestamp_position * time_precision,
-                            end_timestamp_position * time_precision,
-                        ),
-                    }
-                )
+
+                if longform_timestamps is not None:
+                    offsets.append(
+                        {
+                            "text": text,
+                            "timestamp": (
+                                longform_timestamps[0][i]["start"].item(),
+                                longform_timestamps[0][i]["end"].item(),
+                            ),
+                        }
+                    )
+                else:
+                    offsets.append(
+                        {
+                            "text": text,
+                            "timestamp": (
+                                start_timestamp_position * time_precision,
+                                end_timestamp_position * time_precision,
+                            ),
+                        }
+                    )
             last_slice = current_slice
 
         return offsets
@@ -713,7 +727,11 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
         # retrieve offsets
         if output_offsets:
-            offsets = self._compute_offsets(token_ids, time_precision=time_precision)
+            longform_timestamps = kwargs.get("longform_timestamps")
+            offsets = self._compute_offsets(
+                token_ids, time_precision=time_precision, longform_timestamps=longform_timestamps
+            )
+
             return {"text": text, "offsets": offsets}
         return text
 
@@ -1033,7 +1051,7 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
                         chunk["text"] = resolved_text
                         if return_timestamps == "word":
                             chunk["words"] = _collate_word_timestamps(
-                                tokenizer, resolved_tokens, resolved_token_timestamps, last_language
+                                tokenizer, resolved_tokens, resolved_token_timestamps, last_language, return_language
                             )
                         chunks.append(chunk)
 
@@ -1085,7 +1103,7 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
         chunk["text"] = resolved_text
         if return_timestamps == "word":
             chunk["words"] = _collate_word_timestamps(
-                tokenizer, resolved_tokens, resolved_token_timestamps, last_language
+                tokenizer, resolved_tokens, resolved_token_timestamps, last_language, return_language
             )
         chunks.append(chunk)
 
@@ -1217,12 +1235,16 @@ def _find_longest_common_sequence(sequences, token_timestamp_sequences=None):
         return total_sequence, []
 
 
-def _collate_word_timestamps(tokenizer, tokens, token_timestamps, language):
+def _collate_word_timestamps(tokenizer, tokens, token_timestamps, language, return_language):
     words, _, token_indices = _combine_tokens_into_words(tokenizer, tokens, language)
+
+    optional_language_field = {"language": language} if return_language else {}
+
     timings = [
         {
             "text": word,
             "timestamp": (token_timestamps[indices[0]][0], token_timestamps[indices[-1]][1]),
+            **optional_language_field,
         }
         for word, indices in zip(words, token_indices)
     ]
