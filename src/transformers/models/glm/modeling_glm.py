@@ -120,17 +120,14 @@ class GLMRotaryEmbedding(nn.Module):
         # Calculate the product of position index and $\theta_i$
         idx_theta = torch.outer(seq_idx, theta).float()
 
-        cache = torch.stack([torch.cos(idx_theta), torch.sin(idx_theta)], dim=-1)
-
-        # this is to mimic the behaviour of complex32, else we will get different results
-        if dtype in (torch.float16, torch.bfloat16, torch.int8):
-            cache = cache.bfloat16() if dtype == torch.bfloat16 else cache.half()
+        cache = torch.stack([torch.cos(idx_theta), torch.sin(idx_theta)], dim=-1).to(dtype=dtype)
         return cache
 
     def forward(self, max_seq_len, offset=0):
         return self.forward_impl(
             max_seq_len, self.dim, dtype=self.inv_freq.dtype, device=self.inv_freq.device
         )
+
 
 
 def split_tensor_along_last_dim(
@@ -213,7 +210,12 @@ class SelfAttention(torch.nn.Module):
         )
 
     def forward(
-            self, hidden_states, attention_mask, rotary_pos_emb, past_key_value=None, use_cache=True
+            self,
+            hidden_states,
+            attention_mask,
+            rotary_pos_emb,
+            past_key_value=None,
+            use_cache=True
     ):
         # hidden_states: [b, sq, h]
 
@@ -706,7 +708,6 @@ class Embedding(torch.nn.Module):
         self.fp32_residual_connection = config.fp32_residual_connection
 
     def forward(self, input_ids):
-        # Embeddings.
         words_embeddings = self.word_embeddings(input_ids)
         embeddings = words_embeddings
         # If the input flag for fp32 residual connection is set, convert for float.
@@ -739,7 +740,12 @@ class GLMBlock(torch.nn.Module):
         self.mlp = GLMMLP(config, device=device)
 
     def forward(
-            self, hidden_states, attention_mask, rotary_pos_emb, past_key_value=None, use_cache=True,
+            self,
+            hidden_states,
+            attention_mask,
+            rotary_pos_emb,
+            past_key_value=None,
+            use_cache=True,
     ):
         # hidden_states: [s, b, h]
 
@@ -816,6 +822,7 @@ class GLMTransformer(torch.nn.Module):
             attention_mask,
             rotary_pos_emb,
             past_key_values,
+            output_attentions: bool = False,
             use_cache: Optional[bool] = True,
             output_hidden_states: Optional[bool] = False,
     ):
@@ -824,18 +831,17 @@ class GLMTransformer(torch.nn.Module):
             logger.warning("`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`...")
             use_cache = False
 
-        all_self_attentions = None
+        all_self_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
         next_decoder_cache = None
         for index in range(self.num_hidden_layers):
             if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
+                all_hidden_states += (hidden_states,)
 
             layer = self._get_layer(index)
             if self.gradient_checkpointing and self.training:
-                # layer_ret = torch.utils.checkpoint.checkpoint(
                 layer_ret = self._gradient_checkpointing_func(
-                    layer,
+                    layer.__call__,
                     hidden_states,
                     attention_mask,
                     rotary_pos_emb,
@@ -846,20 +852,22 @@ class GLMTransformer(torch.nn.Module):
             else:
                 layer_ret = layer(
                     hidden_states,
-                    attention_mask,
-                    rotary_pos_emb,
+                    attention_mask=attention_mask,
+                    rotary_pos_emb=rotary_pos_emb,
                     past_key_value=past_key_values,
                     use_cache=use_cache
+
                 )
 
             hidden_states, next_decoder_cache = layer_ret
 
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
+        if output_attentions:
+            all_self_attentions += (hidden_states,)
 
-        # Final layer norm.
-        if self.post_layer_norm:
-            hidden_states = self.final_layernorm(hidden_states)
+        hidden_states = self.final_layernorm(hidden_states)
+
+        if output_hidden_states:
+            all_hidden_states += (hidden_states,)
 
         return hidden_states, next_decoder_cache, all_hidden_states, all_self_attentions
 
@@ -950,7 +958,7 @@ class GLMModel(GLMPreTrainedModel):
         config: GLMConfig
     """
 
-    def __init__(self, config: GLMConfig, device=None, empty_init=True):
+    def __init__(self, config: GLMConfig, device=None):
         super().__init__(config)
 
         def default_init(cls, *args, **kwargs):
@@ -988,12 +996,11 @@ class GLMModel(GLMPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embedding.word_embeddings = value
 
-
     def forward(
             self,
-            input_ids,
-            position_ids: Optional[torch.Tensor] = None,
-            attention_mask: Optional[torch.BoolTensor] = None,
+            input_ids: Optional[torch.LongTensor] = None,
+            attention_mask: Optional[torch.Tensor] = None,
+            position_ids: Optional[torch.LongTensor] = None,
             full_attention_mask: Optional[torch.BoolTensor] = None,
             past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
             inputs_embeds: Optional[torch.Tensor] = None,
@@ -1002,15 +1009,24 @@ class GLMModel(GLMPreTrainedModel):
             output_hidden_states: Optional[bool] = None,
             return_dict: Optional[bool] = None,
     ):
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+
         use_cache = use_cache if use_cache is not None else self.config.use_cache
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         batch_size, seq_length = input_ids.shape
 
         return_legacy_cache = False
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError(
+                "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
+            )
+
         if use_cache and not isinstance(past_key_values, Cache):  # kept for BC (non `Cache` `past_key_values` inputs)
             return_legacy_cache = True
             past_key_values = DynamicCache.from_legacy_cache(past_key_values)
@@ -1023,9 +1039,9 @@ class GLMModel(GLMPreTrainedModel):
             inputs_embeds = self.embedding(input_ids)
 
         if full_attention_mask is None:
-
             if (attention_mask is not None and not attention_mask.all()) or (past_key_values and seq_length != 1):
                 full_attention_mask = self.get_masks(input_ids, past_key_values, padding_mask=attention_mask)
+
         # Rotary positional embeddings
         rotary_pos_emb = self.rotary_pos_emb(self.seq_length)
         if position_ids is not None:
@@ -1035,13 +1051,17 @@ class GLMModel(GLMPreTrainedModel):
 
         # Run encoder.
         hidden_states, presents, all_hidden_states, all_self_attentions = self.encoder(
-            inputs_embeds,
-            full_attention_mask,
+            hidden_states=inputs_embeds,
+            attention_mask=full_attention_mask,
             rotary_pos_emb=rotary_pos_emb,
             past_key_values=past_key_values,
             use_cache=use_cache,
+            output_attentions=output_attentions,
             output_hidden_states=output_hidden_states
         )
+
+        if output_hidden_states:
+            all_hidden_states += (hidden_states,)
 
         if return_legacy_cache:
             presents = presents.to_legacy_cache()
@@ -1064,15 +1084,14 @@ class GLMModel(GLMPreTrainedModel):
     GLM_START_DOCSTRING,
 )
 class GLMForCausalLM(GLMPreTrainedModel):
-    # _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = ["transformer.output_layer.weight"]
 
-    def __init__(self, config: GLMConfig, empty_init=True, device=None):
+    def __init__(self, config: GLMConfig, device=None):
         super().__init__(config)
 
         self.max_sequence_length = config.max_length
-        self.transformer = GLMModel(config, empty_init=empty_init, device=device)
+        self.transformer = GLMModel(config, device=device)
         self.config = config
-        # self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False,dtype=config.torch_dtype)
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1120,31 +1139,6 @@ class GLMForCausalLM(GLMPreTrainedModel):
         model_kwargs["is_first_forward"] = False
         return model_kwargs
 
-    def prepare_inputs_for_generation(
-            self,
-            input_ids: torch.LongTensor,
-            past_key_values: Optional[torch.Tensor] = None,
-            attention_mask: Optional[torch.Tensor] = None,
-            position_ids: Optional[torch.Tensor] = None,
-            use_cache: Optional[bool] = None,
-            is_first_forward: bool = True,
-            **kwargs,
-    ) -> dict:
-        # only last token for input_ids if past is not None
-        if position_ids is None:
-            position_ids = self.get_position_ids(input_ids, device=input_ids.device)
-        if not is_first_forward:
-            if past_key_values is not None:
-                position_ids = position_ids[..., -1:]
-                input_ids = input_ids[:, -1:]
-        return {
-            "input_ids": input_ids,
-            "past_key_values": past_key_values,
-            "position_ids": position_ids,
-            "attention_mask": attention_mask,
-            "use_cache": use_cache,
-        }
-
     @add_start_docstrings_to_model_forward(GLM_INPUTS_DOCSTRING)
     def forward(
             self,
@@ -1155,10 +1149,9 @@ class GLMForCausalLM(GLMPreTrainedModel):
             inputs_embeds: Optional[torch.FloatTensor] = None,
             labels: Optional[torch.LongTensor] = None,
             use_cache: Optional[bool] = None,
-            output_attentions: Optional[bool] = None,
+            output_attentions: bool = False,
             output_hidden_states: Optional[bool] = None,
             return_dict: Optional[bool] = None,
-            cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         Args:
@@ -1207,7 +1200,12 @@ class GLMForCausalLM(GLMPreTrainedModel):
 
         hidden_states = outputs[0]
         logits = self.transformer.output_layer(hidden_states)
-        logits = logits.float()
+        # logits = logits.float()
+
+        if input_ids is not None:
+            batch_size = input_ids.shape[0]
+        else:
+            batch_size = inputs_embeds.shape[0]
 
         loss = None
         if labels is not None:
@@ -1233,6 +1231,42 @@ class GLMForCausalLM(GLMPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.prepare_inputs_for_generation
+    def prepare_inputs_for_generation(
+            self,
+            input_ids: torch.LongTensor,
+            past_key_values: Optional[torch.Tensor] = None,
+            attention_mask: Optional[torch.Tensor] = None,
+            inputs_embeds=None,
+            position_ids: Optional[torch.Tensor] = None,
+            use_cache: Optional[bool] = None,
+            is_first_forward: bool = True,
+            **kwargs,
+    ) -> dict:
+        # only last token for input_ids if past is not None
+        if position_ids is None:
+            position_ids = self.get_position_ids(input_ids, device=input_ids.device)
+        if not is_first_forward:
+            if past_key_values is not None:
+                position_ids = position_ids[..., -1:]
+                input_ids = input_ids[:, -1:]
+
+        if inputs_embeds is not None:
+            model_inputs = {"inputs_embeds": inputs_embeds}
+        else:
+            model_inputs = {"input_ids": input_ids.contiguous()}  # `contiguous()` needed for compilation use cases
+
+        model_inputs.update(
+            {
+                "past_key_values": past_key_values,
+                "position_ids": position_ids,
+                "attention_mask": attention_mask,
+                "use_cache": use_cache,
+            }
+        )
+
+        return model_inputs
 
     @staticmethod
     def _reorder_cache(
@@ -1270,12 +1304,12 @@ class GLMForCausalLM(GLMPreTrainedModel):
     GLM_START_DOCSTRING,
 )
 class GLMForSequenceClassification(GLMPreTrainedModel):
-    def __init__(self, config: GLMConfig, empty_init=True):
+    def __init__(self, config: GLMConfig):
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        self.transformer = GLMModel(config, empty_init=empty_init)
-        self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
+        self.transformer = GLMModel(config)
+        self.classifier_head = nn.Linear(config.hidden_size, config.num_labels, bias=True, dtype=config.torch_dtype)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1285,8 +1319,6 @@ class GLMForSequenceClassification(GLMPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.transformer.embedding.word_embeddings = value
-
-
 
     @add_start_docstrings_to_model_forward(GLM_INPUTS_DOCSTRING)
     def forward(
@@ -1324,7 +1356,7 @@ class GLMForSequenceClassification(GLMPreTrainedModel):
             return_dict=return_dict,
         )
         hidden_states = model_outputs[0]
-        logits = self.score(hidden_states)
+        logits = self.classifier_head(hidden_states)
         if input_ids is not None:
             batch_size = input_ids.shape[0]
         else:
@@ -1420,7 +1452,7 @@ class GLMForTokenClassification(GLMPreTrainedModel):
             inputs_embeds: Optional[torch.Tensor] = None,
             labels: Optional[torch.Tensor] = None,
             use_cache: Optional[bool] = None,
-            output_attentions: Optional[bool] = None,
+            output_attentions: bool = False,
             output_hidden_states: Optional[bool] = None,
             return_dict: Optional[bool] = None,
             **deprecated_arguments,
