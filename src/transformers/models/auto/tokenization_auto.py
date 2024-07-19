@@ -346,7 +346,7 @@ else:
             ("olmoe", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "omdet-turbo",
-                ("CLIPTokenizerTokenizer", "CLIPTokenizerTokenizerFast" if is_tokenizers_available() else None),
+                ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None),
             ),
             ("oneformer", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
             (

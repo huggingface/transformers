@@ -57,24 +57,22 @@ class OmDetTurboConfig(PretrainedConfig):
             The output features for the text projection.
         num_queries (`int`, *optional*, defaults to 900):
             The number of queries.
-        size_divisibility (`int`, *optional*, defaults to 32):
-            The size divisibility.
         layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon value for layer normalization.
         batch_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon value for batch normalization.
-        activation_function (`str`, *optional*, defaults to `"silu"`):
-            The activation function.
-        encoder_activation (`str`, *optional*, defaults to `"gelu"`):
-            The activation function for the encoder.
-        encoder_activation_function (`str`, *optional*, defaults to `"relu"`):
-            The activation function for the encoder.
+        csp_activation (`str`, *optional*, defaults to `"silu"`):
+            The activation function of the Cross Stage Partial (CSP) networks of the encoder.
+        conv_norm_activation (`str`, *optional*, defaults to `"gelu"`):
+            The activation function of the ConvNormLayer layers of the encoder.
+        ffn_encoder_activation (`str`, *optional*, defaults to `"relu"`):
+            The activation function for the feedforward network of the encoder.
         hidden_expansion (`int`, *optional*, defaults to 1):
-            The hidden expansion.
+            The hidden expansion of the CSP networks.
         dropout (`float`, *optional*, defaults to 0.0):
-            The dropout rate.
+            The dropout rate of the encoder.
         activation_dropout (`float`, *optional*, defaults to 0.0):
-            The activation dropout rate.
+            The activation dropout rate of the encoder ffn.
         encoder_in_channels (`list(int)`, *optional*, defaults to `[192, 384, 768]`):
             The input channels for the encoder.
         encoder_feat_strides (`list(int)`, *optional*, defaults to `[8, 16, 32]`):
@@ -91,7 +89,7 @@ class OmDetTurboConfig(PretrainedConfig):
             The number of layers in the encoder.
         positional_encoding_temperature (`int`, *optional*, defaults to 10000):
             The positional encoding temperature.
-        encoder_ffn_dim (`int`, *optional*, defaults to 2048):
+        encoder_dim_feedforward (`int`, *optional*, defaults to 2048):
             The feedforward dimension for the encoder.
         decoder_num_heads (`int`, *optional*, defaults to 8):
             The number of heads for the decoder.
@@ -99,7 +97,7 @@ class OmDetTurboConfig(PretrainedConfig):
             The number of layers for the decoder.
         label_dim (`int`, *optional*, defaults to 512):
             The dimension of the label.
-        cls_type (`str`, *optional*, defaults to `"cosine"`):
+        class_distance_type (`str`, *optional*, defaults to `"cosine"`):
             The type of of distance to compare predicted classes to labels.
         decoder_activation (`str`, *optional*, defaults to `"relu"`):
             The activation function for the decoder.
@@ -113,7 +111,7 @@ class OmDetTurboConfig(PretrainedConfig):
             The evaluation index for the decoder.
         image_size (`int`, *optional*, defaults to 640):
             The image size.
-        learnt_init_query (`bool`, *optional*, defaults to `False`):
+        learn_init_query (`bool`, *optional*, defaults to `False`):
             Whether to learn the initial query.
         fuse_type (`str`, *optional*, defaults to `"merged_attn"`):
             The type of fusion.
@@ -150,21 +148,30 @@ class OmDetTurboConfig(PretrainedConfig):
         text_config=None,
         vision_config=None,
         use_timm_backbone=True,
+        backbone="swin_tiny_patch4_window7_224",
         backbone_kwargs=None,
+        backbone_out_indices=[1, 2, 3],
+        backbone_embed_dim=96,
+        backbone_qkv_bias=True,
+        backbone_depths=[2, 2, 6, 2],
+        backbone_num_heads=[3, 6, 12, 24],
+        backbone_window_size=7,
+        backbone_features_only=True,
+        use_pretrained_backbone=True,
+        backbone_image_size=640,
         encoder_hidden_dim=256,
         decoder_hidden_dim=256,
-        backbone_feat_channels=(256, 256, 256),
+        backbone_feat_channels=[256, 256, 256],
         num_feature_levels=3,
         disable_custom_kernels=False,
         text_projection_in_features=512,
         text_projection_out_features=512,
         num_queries=900,
-        size_divisibility=32,
         layer_norm_eps=1e-5,
         batch_norm_eps=1e-5,
-        activation_function="silu",
-        encoder_activation="gelu",
-        encoder_activation_function="relu",
+        csp_activation="silu",
+        conv_norm_activation="gelu",
+        ffn_encoder_activation="relu",
         hidden_expansion=1,
         dropout=0.0,
         activation_dropout=0.0,
@@ -176,32 +183,41 @@ class OmDetTurboConfig(PretrainedConfig):
         eval_size=None,
         encoder_layers=1,
         positional_encoding_temperature=10000,
-        encoder_ffn_dim=2048,
+        encoder_dim_feedforward=2048,
         decoder_num_heads=8,
         decoder_num_layers=6,
         label_dim=512,
-        cls_type="cosine",
+        class_distance_type="cosine",
         decoder_activation="relu",
+        decoder_encoder_dim_feedforward=1024,
         decoder_dim_feedforward=2048,
         decoder_num_points=4,
         decoder_dropout=0.0,
         decoder_eval_idx=-1,
-        image_size=640,
-        learnt_init_query=False,
+        learn_init_query=False,
         fuse_type="merged_attn",
+        cache_size=100,
         is_encoder_decoder=True,
         **kwargs,
     ):
-        if vision_config is None:
-            logger.info("`backbone_config` is `None`. Initializing the config with the default `Swin` backbone.")
+        if use_timm_backbone and backbone_kwargs is None:
+            backbone_kwargs = {
+                "features_only": backbone_features_only,
+                "out_indices": backbone_out_indices,
+                "qkv_bias": backbone_qkv_bias,
+                "img_size": backbone_image_size,
+            }
+        elif vision_config is None:
+            logger.info("`vision_config` is `None`. Initializing the config with the default `swin` vision config.")
             vision_config = CONFIG_MAPPING["swin"](
-                backbone="swin_tiny_patch4_window7_224",
-                window_size=7,
-                image_size=224,
-                embed_dim=96,
-                depths=[2, 2, 6, 2],
-                num_heads=[3, 6, 12, 24],
-                out_indices=(1, 2, 3) if use_timm_backbone else (2, 3, 4),
+                window_size=backbone_window_size,
+                image_size=backbone_image_size,
+                embed_dim=backbone_embed_dim,
+                depths=backbone_depths,
+                num_heads=backbone_num_heads,
+                qkv_bias=backbone_qkv_bias,
+                output_hidden_states=True,
+                out_indices=[],
             )
         elif isinstance(vision_config, dict):
             backbone_model_type = vision_config.pop("model_type")
@@ -213,11 +229,23 @@ class OmDetTurboConfig(PretrainedConfig):
                 "`text_config` is `None`. Initializing the config with the default `clip_text_model` text config."
             )
             text_config = CONFIG_MAPPING["clip_text_model"]()
+        elif isinstance(text_config, dict):
+            text_model_type = text_config.pop("model_type")
+            config_class = CONFIG_MAPPING[text_model_type]
+            text_config = config_class.from_dict(text_config)
 
         self.text_config = text_config
         self.vision_config = vision_config
         self.use_timm_backbone = use_timm_backbone
+        self.backbone = backbone
         self.backbone_kwargs = backbone_kwargs
+        self.backbone_out_indices = backbone_out_indices
+        self.backbone_embed_dim = backbone_embed_dim
+        self.backbone_depths = backbone_depths
+        self.backbone_num_heads = backbone_num_heads
+        self.backbone_window_size = backbone_window_size
+        self.backbone_image_size = backbone_image_size
+        self.use_pretrained_backbone = use_pretrained_backbone
         self.encoder_hidden_dim = encoder_hidden_dim
         self.decoder_hidden_dim = decoder_hidden_dim
         self.backbone_feat_channels = backbone_feat_channels
@@ -226,12 +254,11 @@ class OmDetTurboConfig(PretrainedConfig):
         self.text_projection_in_features = text_projection_in_features
         self.text_projection_out_features = text_projection_out_features
         self.num_queries = num_queries
-        self.size_divisibility = size_divisibility
         self.layer_norm_eps = layer_norm_eps
         self.batch_norm_eps = batch_norm_eps
-        self.activation_function = activation_function
-        self.encoder_activation = encoder_activation
-        self.encoder_activation_function = encoder_activation_function
+        self.csp_activation = csp_activation
+        self.conv_norm_activation = conv_norm_activation
+        self.ffn_encoder_activation = ffn_encoder_activation
         self.hidden_expansion = hidden_expansion
         self.dropout = dropout
         self.activation_dropout = activation_dropout
@@ -243,18 +270,19 @@ class OmDetTurboConfig(PretrainedConfig):
         self.eval_size = eval_size
         self.encoder_layers = encoder_layers
         self.positional_encoding_temperature = positional_encoding_temperature
-        self.encoder_ffn_dim = encoder_ffn_dim
+        self.encoder_dim_feedforward = encoder_dim_feedforward
         self.decoder_num_heads = decoder_num_heads
         self.decoder_num_layers = decoder_num_layers
         self.label_dim = label_dim
-        self.cls_type = cls_type
+        self.class_distance_type = class_distance_type
         self.decoder_activation = decoder_activation
+        self.decoder_encoder_dim_feedforward = decoder_encoder_dim_feedforward
         self.decoder_dim_feedforward = decoder_dim_feedforward
         self.decoder_num_points = decoder_num_points
         self.decoder_dropout = decoder_dropout
         self.decoder_eval_idx = decoder_eval_idx
-        self.image_size = image_size
-        self.learnt_init_query = learnt_init_query
+        self.learn_init_query = learn_init_query
         self.fuse_type = fuse_type
+        self.cache_size = cache_size
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)

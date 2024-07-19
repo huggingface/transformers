@@ -173,7 +173,13 @@ MODEL_NAMES_WITH_SAME_CONFIG = {
     "XLS-R": "Wav2Vec2",
     "XLSR-Wav2Vec2": "Wav2Vec2",
 }
-MODEL_NAMES_TO_IGNORE = ["CLIPVisionModel", "SiglipVisionModel", "ChineseCLIPVisionModel", "Qwen2AudioEncoder"]
+MODEL_NAMES_TO_IGNORE = [
+    "CLIPVisionModel",
+    "SiglipVisionModel",
+    "ChineseCLIPVisionModel",
+    "Qwen2AudioEncoder",
+    "CLIPTextModel",
+]
 
 
 def get_model_table_from_auto_modules() -> str:

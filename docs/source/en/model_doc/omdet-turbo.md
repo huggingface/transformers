@@ -16,8 +16,6 @@ rendered properly in your Markdown viewer.
 
 # OmDet-Turbo
 
-# OmDet-Turbo
-
 ## Overview
 
 The OmDet-Turbo model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
