@@ -72,8 +72,8 @@ class FbgemmFp8Test(unittest.TestCase):
     EXPECTED_OUTPUT = "What are we having for dinner?\nI'm having a steak and a salad"
 
     device_map = "cuda"
-    
-    
+
+
     offload_device_map = {
             "model.embed_tokens": 0,
             "model.layers.0": 0,
@@ -211,15 +211,11 @@ class FbgemmFp8Test(unittest.TestCase):
         """
         Simple test that checks if the quantized model returns an error when loading with cpu/disk offloaded 
         """
-
-        input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
         quantization_config = FbgemmFp8Config()
-        
+
         with self.assertRaisesRegex(ValueError, "You are attempting to load an FP8 model with a device_map that contains a CPU or disk device."):
-            quantized_model = AutoModelForCausalLM.from_pretrained(
-                self.model_name, device_map=self.offload_device_map, quantization_config=quantization_config
-            )
-        
+            AutoModelForCausalLM.from_pretrained(self.model_name, device_map=self.offload_device_map, quantization_config=quantization_config)
+
     def test_save_pretrained_offload(self):
         """
         Simple test that checks if the saved quantized model is working properly cpu/disk offload
