@@ -1057,7 +1057,7 @@ class FbgemmFp8Config(QuantizationConfigMixin):
     loaded using fbgemm fp8 quantization.
 
     Args:
-        activation_scale_ub(`float`, *optional*, default to `1200.0`):
+        activation_scale_ub (`float`, *optional*, defaults to 1200.0):
             The activation scale upper bound. This is used when quantizing the input activation.
         modules_to_not_convert (`list`, *optional*, default to `None`):
             The list of modules to not quantize, useful for quantizing models that explicitly require to have
