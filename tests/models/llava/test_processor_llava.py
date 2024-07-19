@@ -28,3 +28,20 @@ class LlavaProcessorTest(unittest.TestCase):
             processor = LlavaProcessor.from_pretrained(checkpoint)
             tokenizer = AutoTokenizer.from_pretrained(checkpoint)
             self.assertEqual(processor.tokenizer.__class__, tokenizer.__class__)
+
+    def test_chat_template(self):
+        processor = LlavaProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf")
+        expected_prompt = "USER: <image>\nWhat is shown in this image? ASSISTANT:"
+
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image"},
+                    {"type": "text", "text": "What is shown in this image?"},
+                ],
+            },
+        ]
+
+        formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
+        self.assertEquals(expected_prompt, formatted_prompt)

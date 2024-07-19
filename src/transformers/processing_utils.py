@@ -39,6 +39,7 @@ from .tokenization_utils_base import (
     TruncationStrategy,
 )
 from .utils import (
+    CHAT_TEMPLATE_NAME,
     PROCESSOR_NAME,
     PushToHubMixin,
     TensorType,
@@ -320,6 +321,7 @@ class ProcessorMixin(PushToHubMixin):
     feature_extractor_class = None
     tokenizer_class = None
     _auto_class = None
+    valid_kwargs: List[str] = []
 
     # args have to match the attributes class attribute
     def __init__(self, *args, **kwargs):
@@ -493,11 +495,21 @@ class ProcessorMixin(PushToHubMixin):
                     del attribute.init_kwargs["auto_map"]
 
         # If we save using the predefined names, we can load using `from_pretrained`
+        # plus we save chat_template in its own file
         output_processor_file = os.path.join(save_directory, PROCESSOR_NAME)
+        output_chat_template_file = os.path.join(save_directory, CHAT_TEMPLATE_NAME)
+
+        processor_dict = self.to_dict()
+        chat_template = processor_dict.pop("chat_template", None)
+        if chat_template is not None:
+            chat_template_json_string = json.dumps({"chat_template": chat_template}, indent=2, sort_keys=True) + "\n"
+            with open(output_chat_template_file, "w", encoding="utf-8") as writer:
+                writer.write(chat_template_json_string)
+            logger.info(f"chat template saved in {output_chat_template_file}")
 
         # For now, let's not save to `processor_config.json` if the processor doesn't have extra attributes and
         # `auto_map` is not specified.
-        if set(self.to_dict().keys()) != {"processor_class"}:
+        if set(processor_dict.keys()) != {"processor_class"}:
             self.to_json_file(output_processor_file)
             logger.info(f"processor saved in {output_processor_file}")
 
@@ -556,19 +568,44 @@ class ProcessorMixin(PushToHubMixin):
         is_local = os.path.isdir(pretrained_model_name_or_path)
         if os.path.isdir(pretrained_model_name_or_path):
             processor_file = os.path.join(pretrained_model_name_or_path, PROCESSOR_NAME)
+            chat_template_file = os.path.join(pretrained_model_name_or_path, "chat_template.json")
+
         if os.path.isfile(pretrained_model_name_or_path):
             resolved_processor_file = pretrained_model_name_or_path
+            # cant't load chat-template when given a file as pretrained_model_name_or_path
+            resolved_chat_template_file = None
             is_local = True
         elif is_remote_url(pretrained_model_name_or_path):
             processor_file = pretrained_model_name_or_path
             resolved_processor_file = download_url(pretrained_model_name_or_path)
+            # can't load chat-template when given a file url as pretrained_model_name_or_path
+            resolved_chat_template_file = None
         else:
             processor_file = PROCESSOR_NAME
+            chat_template_file = CHAT_TEMPLATE_NAME
             try:
                 # Load from local folder or from cache or download from model Hub and cache
                 resolved_processor_file = cached_file(
                     pretrained_model_name_or_path,
                     processor_file,
+                    cache_dir=cache_dir,
+                    force_download=force_download,
+                    proxies=proxies,
+                    resume_download=resume_download,
+                    local_files_only=local_files_only,
+                    token=token,
+                    user_agent=user_agent,
+                    revision=revision,
+                    subfolder=subfolder,
+                    _raise_exceptions_for_missing_entries=False,
+                )
+
+                # Load chat template from a separate json if exists
+                # because making it part of processor-config break BC.
+                # Processors in older version do not accept any kwargs
+                resolved_chat_template_file = cached_file(
+                    pretrained_model_name_or_path,
+                    chat_template_file,
                     cache_dir=cache_dir,
                     force_download=force_download,
                     proxies=proxies,
@@ -593,6 +630,14 @@ class ProcessorMixin(PushToHubMixin):
                     f" directory containing a {PROCESSOR_NAME} file"
                 )
 
+        # Add chat template as kwarg before returning because most models don't have processor config
+        chat_template = None
+        if resolved_chat_template_file is not None:
+            with open(resolved_chat_template_file, "r", encoding="utf-8") as reader:
+                text = reader.read()
+            chat_template = json.loads(text)["chat_template"]
+            kwargs["chat_template"] = chat_template
+
         # Existing processors on the Hub created before #27761 being merged don't have `processor_config.json` (if not
         # updated afterward), and we need to keep `from_pretrained` work. So here it fallbacks to the empty dict.
         # (`cached_file` called using `_raise_exceptions_for_missing_entries=False` to avoid exception)
@@ -615,6 +660,12 @@ class ProcessorMixin(PushToHubMixin):
             logger.info(f"loading configuration file {resolved_processor_file}")
         else:
             logger.info(f"loading configuration file {processor_file} from cache at {resolved_processor_file}")
+
+        if "chat_template" in processor_dict and processor_dict["chat_template"] is not None:
+            logger.warning_once(
+                "Chat templates should be in a 'chat_template.json' file but found key='chat_template' "
+                "in the processor's config. Make sure to move your template to its own file."
+            )
 
         if not is_local:
             if "auto_map" in processor_dict:
@@ -647,22 +698,27 @@ class ProcessorMixin(PushToHubMixin):
         """
         processor_dict = processor_dict.copy()
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
+        chat_template = kwargs.pop("chat_template", None)
 
-        # Unlike image processors or feature extractors whose `__init__` accept `kwargs`, processor don't have `kwargs`.
-        # We have to pop up some unused (but specific) arguments to make it work.
+        # We have to pop up some unused (but specific) kwargs and then validate that it doesn't contain unused kwargs
+        # If we don't pop, some specific kwargs will raise a warning
         if "processor_class" in processor_dict:
             del processor_dict["processor_class"]
 
         if "auto_map" in processor_dict:
             del processor_dict["auto_map"]
 
+        unused_kwargs = cls.validate_init_kwargs(processor_config=processor_dict, valid_kwargs=cls.valid_kwargs)
         processor = cls(*args, **processor_dict)
+        if chat_template is not None:
+            setattr(processor, "chat_template", chat_template)
 
         # Update processor with kwargs if needed
         for key in set(kwargs.keys()):
             if hasattr(processor, key):
                 setattr(processor, key, kwargs.pop(key))
 
+        kwargs.update(unused_kwargs)
         logger.info(f"Processor {processor}")
         if return_unused_kwargs:
             return processor, kwargs
@@ -886,6 +942,19 @@ class ProcessorMixin(PushToHubMixin):
     def model_input_names(self):
         first_attribute = getattr(self, self.attributes[0])
         return getattr(first_attribute, "model_input_names", None)
+
+    @staticmethod
+    def validate_init_kwargs(processor_config, valid_kwargs):
+        kwargs_from_config = processor_config.keys()
+        unused_kwargs = {}
+        unused_keys = set(kwargs_from_config) - set(valid_kwargs)
+        if unused_keys:
+            unused_key_str = ", ".join(unused_keys)
+            logger.warning(
+                f"Some kwargs in processor config are unused and will not have any effect: {unused_key_str}. "
+            )
+            unused_kwargs = {k: processor_config[k] for k in unused_keys}
+        return unused_kwargs
 
     def apply_chat_template(
         self,

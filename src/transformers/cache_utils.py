@@ -971,13 +971,14 @@ class SlidingWindowCache(StaticCache):
         return k_out, v_out
 
     def get_max_length(self) -> Optional[int]:
-        # in theory there is no limit because the sliding window size is fixed
-        # no matter how long the sentence is
+        # in theory there is no limit because the sliding window size is fixed no matter how long the sentence is
         return None
 
     def reset(self):
-        self.key_cache.zero_()
-        self.value_cache.zero_()
+        for layer_idx in range(len(self.key_cache)):
+            # In-place ops prevent breaking the static address
+            self.key_cache[layer_idx].zero_()
+            self.value_cache[layer_idx].zero_()
 
 
 class EncoderDecoderCache(Cache):
@@ -1148,7 +1149,7 @@ class HybridCache(Cache):
             config.num_attention_heads if config.num_key_value_heads is None else config.num_key_value_heads
         )
         self.is_sliding = torch.tensor(
-            [i % 2 for i in range(config.num_hidden_layers)], dtype=torch.bool, device=device
+            [not bool(i % 2) for i in range(config.num_hidden_layers)], dtype=torch.bool, device=device
         )
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
@@ -1212,9 +1213,9 @@ class HybridCache(Cache):
         value_states: torch.Tensor,
         layer_idx: int,
         cache_kwargs: Optional[Dict[str, Any]] = None,
-        sliding_window: Optional[int] = None,
     ) -> Tuple[torch.Tensor]:
         cache_position = cache_kwargs.get("cache_position")
+        sliding_window = cache_kwargs.get("sliding_window")
         self.key_cache[layer_idx] = self.key_cache[layer_idx].to(device=key_states.device)
         self.value_cache[layer_idx] = self.value_cache[layer_idx].to(device=value_states.device)
         k_out = self.key_cache[layer_idx]
@@ -1248,3 +1249,77 @@ class HybridCache(Cache):
             # In-place ops prevent breaking the static address
             self.key_cache[layer_idx].zero_()
             self.value_cache[layer_idx].zero_()
+
+
+class MambaCache:
+    """
+    Cache for mamba model which does not have attention mechanism and key value states.
+
+    Arguments:
+        config: MambaConfig
+        max_batch_size: int
+        dtype: torch.dtype
+        device: torch.device
+
+    Attributes:
+        dtype: torch.dtype
+        intermediate_size: int
+        ssm_state_size: int
+        conv_kernel_size: int
+        conv_states: torch.Tensor [layer_idx, batch_size, intermediate_size, conv_kernel_size]
+        ssm_states: torch.Tensor [layer_idx, batch_size, intermediate_size, ssm_state_size]
+    """
+
+    def __init__(
+        self,
+        config: PretrainedConfig,
+        max_batch_size: int,
+        dtype: torch.dtype = torch.float16,
+        device: Optional[str] = None,
+        **kwargs,
+    ):
+        self.dtype = dtype
+        self.max_batch_size = max_batch_size
+        self.intermediate_size = config.intermediate_size
+        self.ssm_state_size = config.state_size
+        self.conv_kernel_size = config.conv_kernel
+
+        self.conv_states: torch.Tensor = torch.zeros(
+            config.num_hidden_layers,
+            self.max_batch_size,
+            self.intermediate_size,
+            self.conv_kernel_size,
+            device=device,
+            dtype=dtype,
+        )
+        self.ssm_states: torch.Tensor = torch.zeros(
+            config.num_hidden_layers,
+            self.max_batch_size,
+            self.intermediate_size,
+            self.ssm_state_size,
+            device=device,
+            dtype=dtype,
+        )
+
+        torch._dynamo.mark_static_address(self.conv_states)
+        torch._dynamo.mark_static_address(self.ssm_states)
+
+    def update_conv_state(
+        self, layer_idx: int, new_conv_state: torch.Tensor, cache_position: torch.LongTensor
+    ) -> torch.Tensor:
+        conv_state = self.conv_states[layer_idx]
+        cache_position = cache_position.clamp(0, self.conv_kernel_size - 1)
+
+        conv_state = conv_state.roll(shifts=-1, dims=-1)
+        conv_state[:, :, cache_position] = new_conv_state.to(conv_state.device)
+        self.conv_states[layer_idx].zero_()
+        self.conv_states[layer_idx] += conv_state
+        return self.conv_states[layer_idx]
+
+    def update_ssm_state(self, layer_idx: int, new_ssm_state: torch.Tensor):
+        self.ssm_states[layer_idx] = new_ssm_state.to(self.ssm_states.device)
+        return self.ssm_states[layer_idx]
+
+    def reset(self):
+        self.conv_states.zero_()
+        self.ssm_states.zero_()

@@ -894,32 +894,29 @@ class ModelUtilsTest(TestCasePlus):
     @require_usr_bin_time
     @require_accelerate
     @mark.accelerate_tests
-    def test_from_pretrained_low_cpu_mem_usage_measured(self):
-        # test that `from_pretrained(..., low_cpu_mem_usage=True)` uses less cpu memory than default
+    def test_from_pretrained_low_cpu_mem_usage_equal(self):
+        # Before this would test that `from_pretrained(..., low_cpu_mem_usage=True)` uses less cpu memory than default
+        # Now though these should be around the same.
+        # TODO: Look for good bounds to check that their timings are near the same
 
-        mname = "google-bert/bert-base-cased"
+        mname = "hf-internal-testing/tiny-random-bert"
 
         preamble = "from transformers import AutoModel"
         one_liner_str = f'{preamble}; AutoModel.from_pretrained("{mname}", low_cpu_mem_usage=False)'
+        # Save this output as `max_rss_normal` if testing memory results
         max_rss_normal = self.python_one_liner_max_rss(one_liner_str)
         # print(f"{max_rss_normal=}")
 
         one_liner_str = f'{preamble};  AutoModel.from_pretrained("{mname}", low_cpu_mem_usage=True)'
+        # Save this output as `max_rss_low_mem` if testing memory results
         max_rss_low_mem = self.python_one_liner_max_rss(one_liner_str)
-        # print(f"{max_rss_low_mem=}")
 
-        diff_bytes = max_rss_normal - max_rss_low_mem
-        diff_percent = diff_bytes / max_rss_low_mem
-        # print(f"{diff_bytes=}, {diff_percent=}")
-        # ideally we would compare that the diff is close to ~1x checkpoint size in bytes, but
-        # measuring cpu memory on linux is very tricky and inconsistent, so instead let's check that
-        # it's at least 15% less cpu memory consumed
-
-        self.assertGreater(
-            diff_percent,
-            0.15,
-            "should use less CPU memory for low_cpu_mem_usage=True, "
-            f"but got max_rss_normal={max_rss_normal} and max_rss_low_mem={max_rss_low_mem}",
+        # Should be within 2MBs of each other (overhead)
+        self.assertAlmostEqual(
+            max_rss_normal / 1024 / 1024,
+            max_rss_low_mem / 1024 / 1024,
+            delta=2,
+            msg="using `low_cpu_mem_usage` should incur the same memory usage in both cases.",
         )
 
         # if you want to compare things manually, let's first look at the size of the model in bytes
@@ -1511,6 +1508,57 @@ class ModelUtilsTest(TestCasePlus):
             outputs_from_saved = new_model(input_ids)
             self.assertTrue(torch.allclose(outputs_from_saved["logits"], outputs["logits"]))
 
+    def test_warning_for_beta_gamma_parameters(self):
+        class TestModelGamma(PreTrainedModel):
+            def __init__(self, config):
+                super().__init__(config)
+                self.gamma_param = nn.Parameter(torch.ones(10))
+                self.post_init()
+
+            def forward(self):
+                return self.gamma_param.sum()
+
+        logger = logging.get_logger("transformers.modeling_utils")
+        config = PretrainedConfig()
+        warning_msg_gamma = "A parameter name that contains `gamma` will be renamed internally"
+        model = TestModelGamma(config)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            with LoggingLevel(logging.WARNING):
+                with CaptureLogger(logger) as cl1:
+                    _, loading_info = TestModelGamma.from_pretrained(tmp_dir, config=config, output_loading_info=True)
+
+        missing_keys = loading_info["missing_keys"]
+        unexpected_keys = loading_info["unexpected_keys"]
+        self.assertIn(warning_msg_gamma, cl1.out)
+        self.assertIn("gamma_param", missing_keys)
+        self.assertIn("weight_param", unexpected_keys)
+
+        class TestModelBeta(PreTrainedModel):
+            def __init__(self, config):
+                super().__init__(config)
+                self.beta_param = nn.Parameter(torch.ones(10))
+                self.post_init()
+
+            def forward(self):
+                return self.beta_param.sum()
+
+        warning_msg_beta = "A parameter name that contains `beta` will be renamed internally"
+        model = TestModelBeta(config)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            with LoggingLevel(logging.WARNING):
+                with CaptureLogger(logger) as cl2:
+                    _, loading_info = TestModelBeta.from_pretrained(tmp_dir, config=config, output_loading_info=True)
+
+        missing_keys = loading_info["missing_keys"]
+        unexpected_keys = loading_info["unexpected_keys"]
+        self.assertIn(warning_msg_beta, cl2.out)
+        self.assertIn("beta_param", missing_keys)
+        self.assertIn("bias_param", unexpected_keys)
+
 
 @slow
 @require_torch
@@ -1796,8 +1844,11 @@ class ModelPushToHubTester(unittest.TestCase):
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
             self.assertTrue(torch.equal(p1, p2))
 
-        # Reset repo
-        delete_repo(token=self._token, repo_id="test-model")
+        try:
+            # Reset repo
+            delete_repo(token=self._token, repo_id="test-model")
+        except:  # noqa E722
+            pass
 
         # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -1836,8 +1887,11 @@ The commit description supports markdown synthax see:
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
             self.assertTrue(torch.equal(p1, p2))
 
-        # Reset repo
-        delete_repo(token=self._token, repo_id="valid_org/test-model-org")
+        try:
+            # Reset repo
+            delete_repo(token=self._token, repo_id="valid_org/test-model-org")
+        except:  # noqa E722
+            pass
 
         # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
