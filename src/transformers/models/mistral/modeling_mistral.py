@@ -106,12 +106,11 @@ class MistralRotaryEmbedding(nn.Module):
     @torch.no_grad()
     # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding.forward
     def forward(self, x, position_ids):
-        if "dynamic" in self.rope_config["rope_type"]:
+        if "dynamic" in self.rope_type:
             self.dynamic_frequency_update(position_ids, device=x.device)
 
         # Core RoPE block
-        if self.rope_config["scaling_factor"] != 1.0:
-            position_ids = position_ids.float() / self.rope_config["scaling_factor"]
+        position_ids = position_ids.float() / self.scaling_factor
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
         # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
@@ -124,9 +123,8 @@ class MistralRotaryEmbedding(nn.Module):
             sin = emb.sin()
 
         # Advanced RoPE types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling attention
-        if self.rope_config.get("attention_factor") is not None:
-            cos = cos * self.rope_config["attention_factor"]
-            sin = sin * self.rope_config["attention_factor"]
+        cos = cos * self.attention_scaling
+        sin = sin * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 

@@ -93,47 +93,66 @@ ALL_LAYERNORM_LAYERS.append(LlamaRMSNorm)
 
 
 class LlamaRotaryEmbedding(nn.Module):
-    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0, **kwargs):
+    def __init__(
+        self,
+        dim=None,
+        max_position_embeddings=2048,
+        base=10000,
+        device=None,
+        scaling_factor=1.0,
+        config: Optional[LlamaConfig] = None,
+        **kwargs,
+    ):
         super().__init__()
-        self.rope_config = {
-            "base": base,
-            "dim": dim,
-            "max_position_embeddings": max_position_embeddings,
-            "scaling_factor": scaling_factor,
-        }
-        self.rope_config.update(kwargs)
-        # BC: in absence of "rope_type" in kwargs, set it to "default"
-        self.rope_config["rope_type"] = self.rope_config.get("rope_type", "default")
-
-        inv_freq = compute_frequencies(self.rope_config, device)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.max_seq_len_cached = max_position_embeddings
-
-        # BC: dynamic NTK and yarn used `scaling_factor` as a frequency parameter, not for position_ids scaling
-        if "dynamic" in self.rope_config["rope_type"] or "yarn" in self.rope_config["rope_type"]:
-            self.rope_config["scaling_factor"] = 1.0
-        # Special case: on yarn, `attention_factor` has a default suggested by the paper
-        if "yarn" in self.rope_config["rope_type"]:
-            self.rope_config["attention_factor"] = self.rope_config.get(
-                "attention_factor", 0.1 * math.log(scaling_factor) + 1.0
+        # TODO (joao): remove this `if` in v4.45; the legacy args rebuild a config to power the rest of the class;
+        if config is None:
+            logger.warning_once(
+                "`LlamaRotaryEmbedding` can now be fully parameterized by passing the model config through the "
+                "`config` argument. All other arguments will be deprecated in v4.45"
             )
+            config = LlamaConfig(**kwargs)
+            config.rope_theta = base
+            config.max_position_embeddings = max_position_embeddings
+            config.head_dim = dim  # this one doesn't actually exist, will only be used in the deprecation transition
+            if scaling_factor == 1.0 and len(kwargs) == 0:
+                config.rope_scaling = None
+            else:
+                config.rope_scaling = {"type": "default", "factor": scaling_factor}
+                config.rope_scaling |= kwargs  # may overwrite "type"
+
+        self.config = config
+        self.rope_type = config.rope_scaling["type"] if config.rope_scaling is not None else "default"
+        self.scaling_factor = config.rope_scaling["factor"] if config.rope_scaling is not None else 1.0
+
+        inv_freq = compute_frequencies(config, device)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.max_seq_len_cached = config.max_position_embeddings
+
+        # Special case: on yarn, `attention_factor` has a default suggested by the paper
+        if "yarn" in self.rope_type:
+            attention_scale_default = 0.1 * math.log(self.scaling_factor) + 1.0
+            self.attention_scaling = config.rope_scaling.get("attention_factor", attention_scale_default)
+        else:
+            self.attention_scaling = 1.0
+        # BC: dynamic NTK and yarn used `scaling_factor` as a frequency parameter, not for position_ids scaling
+        if "dynamic" in self.rope_type or "yarn" in self.rope_type:
+            self.scaling_factor = 1.0
 
     def dynamic_frequency_update(self, position_ids, device):
         """dynamic RoPE layers need to recompute `inv_freq` when going beyond the original maximum sequence length"""
         seq_len = torch.max(position_ids) + 1
         if seq_len > self.max_seq_len_cached:
-            inv_freq = compute_frequencies(self.rope_config | {"seq_len": seq_len}, device)
+            inv_freq = compute_frequencies(self.config, device, seq_len=seq_len)
             self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
             self.max_seq_len_cached = seq_len
 
     @torch.no_grad()
     def forward(self, x, position_ids):
-        if "dynamic" in self.rope_config["rope_type"]:
+        if "dynamic" in self.rope_type:
             self.dynamic_frequency_update(position_ids, device=x.device)
 
         # Core RoPE block
-        if self.rope_config["scaling_factor"] != 1.0:
-            position_ids = position_ids.float() / self.rope_config["scaling_factor"]
+        position_ids = position_ids.float() / self.scaling_factor
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
         # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
@@ -146,9 +165,8 @@ class LlamaRotaryEmbedding(nn.Module):
             sin = emb.sin()
 
         # Advanced RoPE types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling attention
-        if self.rope_config.get("attention_factor") is not None:
-            cos = cos * self.rope_config["attention_factor"]
-            sin = sin * self.rope_config["attention_factor"]
+        cos = cos * self.attention_scaling
+        sin = sin * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -156,27 +174,25 @@ class LlamaRotaryEmbedding(nn.Module):
 class LlamaLinearScalingRotaryEmbedding(LlamaRotaryEmbedding):
     """LlamaRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
 
-    def __init__(self, **kwargs):
+    def __init__(self, *args, **kwargs):
         logger.warning_once(
             "`LlamaLinearScalingRotaryEmbedding` is deprecated an will be removed in v4.45. Please use "
-            "`LlamaRotaryEmbedding`, which now also does linear scaling (pass in the same kwargs plus "
-            "`rope_type='default'`)."
+            "`LlamaRotaryEmbedding`, which now also does linear scaling (simply pass the model config to __init__)."
         )
-        kwargs["rope_type"] = "default"
-        super().__init__(**kwargs)
+        super().__init__(*args, **kwargs)
 
 
 class LlamaDynamicNTKScalingRotaryEmbedding(LlamaRotaryEmbedding):
     """LlamaRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
 
-    def __init__(self, **kwargs):
+    def __init__(self, *args, **kwargs):
         logger.warning_once(
             "`LlamaDynamicNTKScalingRotaryEmbedding` is deprecated an will be removed in v4.45. Please use "
-            "`LlamaRotaryEmbedding`, which now also does dynamic ntk scaling (pass in the same kwargs plus "
-            "`rope_type='dynamic'`)."
+            "`LlamaRotaryEmbedding`, which now also does dynamic ntk scaling (simply pass the model config to "
+            "__init__)."
         )
-        kwargs["rope_type"] = "dynamic"
-        super().__init__(**kwargs)
+        kwargs["type"] = "dynamic"
+        super().__init__(*args, **kwargs)
 
 
 def rotate_half(x):
@@ -295,13 +311,7 @@ class LlamaAttention(nn.Module):
         self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=config.attention_bias)
 
         # TODO (joao): remove in v4.45 (RoPE is computed in the model, not in the decoder layers)
-        rope_config = self.config.get("rope_scaling", {"type": "default"}).copy()
-        rope_config |= {
-            "dim": self.head_dim,
-            "max_position_embeddings": self.max_position_embeddings,
-            "base": self.rope_theta,
-        }
-        self.rotary_emb = LlamaRotaryEmbedding(**rope_config)
+        self.rotary_emb = LlamaRotaryEmbedding(config=self.config)
 
     def forward(
         self,
@@ -930,15 +940,8 @@ class LlamaModel(LlamaPreTrainedModel):
             [LlamaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = LlamaRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
-
-        rope_config = self.config.get("rope_scaling", {"type": "default"}).copy()
-        rope_config |= {
-            "dim": self.config.hidden_size // self.config.num_attention_heads,
-            "max_position_embeddings": self.config.max_position_embeddings,
-            "base": self.config.rope_theta,
-        }
-        self.rotary_emb = LlamaRotaryEmbedding(**rope_config)
 
         # Initialize weights and apply final processing
         self.post_init()

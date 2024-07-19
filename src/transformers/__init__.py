@@ -1286,6 +1286,7 @@ else:
         ]
     )
     _import_structure["modeling_outputs"] = []
+    _import_structure["modeling_rope_utils"] = []
     _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
     # PyTorch models structure
