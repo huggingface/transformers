@@ -15,9 +15,12 @@
 import math
 from typing import Any, Dict, Optional, Tuple
 
-import torch
-
 from .configuration_utils import PretrainedConfig
+from .utils import is_torch_available
+
+
+if is_torch_available():
+    import torch
 
 
 ROPE_CONFIG_DOCSTRING = r"""
