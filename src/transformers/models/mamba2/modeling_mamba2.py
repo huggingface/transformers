@@ -331,13 +331,13 @@ class Mamba2Mixer(nn.Module):
         B = B.repeat(1,1, self.num_heads // self.n_groups,1)  # (batch, self.num_heads, dstate)
         C = C.repeat(1,1, self.num_heads // self.n_groups,1)   # (batch, self.num_heads, dstate)
         dB = dt * B[:,:,:,None,:]
-        discrete_b =  dB * hidden_states[:,:,:,:,None]
+        discrete_B =  dB * hidden_states[:,:,:,:,None]
         # 3.c perform the recurrence y ← SSM(A, B, C)(x)
         scan_outputs = []
         for i in range(seq_len):
-            ssm_state = ssm_state * dA[:,i,:,:] + discrete_b[:, i, :, :] # (batch, dim, dstate
-            scan_output = ssm_state.to(C.dtype) *C[:,i,:,None, :]
-            scan_outputs.append(scan_output)
+            ssm_state = ssm_state * dA[:,i,:,:] + discrete_B[:, i, :, :] # (batch, dim, dstate
+            scan_output = torch.matmul(ssm_state.to(C.dtype) , C[:,i,:].unsqueeze(-1))
+            scan_outputs.append(scan_output[:,:,:,0])
         scan_output = torch.stack(scan_outputs, dim=1)                                # [batch, intermediate_size, seq_len]
         scan_output = scan_output + (hidden_states * self.D[:,None])
         scan_output = self.norm(scan_output.view(batch_size, seq_len, -1), gate)
