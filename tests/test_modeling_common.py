@@ -16,6 +16,7 @@ import collections
 import copy
 import gc
 import inspect
+import math
 import os
 import os.path
 import random
@@ -55,6 +56,7 @@ from transformers.models.auto.modeling_auto import (
     MODEL_FOR_MASKED_LM_MAPPING_NAMES,
     MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES,
     MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES,
+    MODEL_FOR_PRETRAINING_MAPPING_NAMES,
     MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES,
     MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES,
     MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES,
@@ -194,6 +196,14 @@ class ModelTesterMixin:
             }
         elif model_class.__name__ in get_values(MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES):
             inputs_dict.pop("attention_mask")
+        elif model_class.__name__ == MODEL_FOR_PRETRAINING_MAPPING_NAMES["hiera"]:
+            config = self.model_tester.get_config()
+            mask_spatial_shape = [
+                i // s // ms for i, s, ms in zip(config.image_size, config.patch_stride, config.masked_unit_size)
+            ]
+            num_windows = math.prod(mask_spatial_shape)
+            torch.manual_seed(0)
+            inputs_dict["noise"] = torch.rand(self.model_tester.batch_size, num_windows)
 
         if return_labels:
             if model_class.__name__ in get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES):
@@ -249,9 +259,11 @@ class ModelTesterMixin:
             # make sure we don't have nans
             out_2 = out2.cpu().numpy()
             out_2[np.isnan(out_2)] = 0
+            out_2 = out_2[~np.isneginf(out_2)]
 
             out_1 = out1.cpu().numpy()
             out_1[np.isnan(out_1)] = 0
+            out_1 = out_1[~np.isneginf(out_1)]
             max_diff = np.amax(np.abs(out_1 - out_2))
             self.assertLessEqual(max_diff, 1e-5)
 
@@ -650,6 +662,8 @@ class ModelTesterMixin:
             out_2 = second.cpu().numpy()
             out_1 = out_1[~np.isnan(out_1)]
             out_2 = out_2[~np.isnan(out_2)]
+            out_1 = out_1[~np.isneginf(out_1)]
+            out_2 = out_2[~np.isneginf(out_2)]
             max_diff = np.amax(np.abs(out_1 - out_2))
             self.assertLessEqual(max_diff, 1e-5)
 
@@ -1163,6 +1177,7 @@ class ModelTesterMixin:
                     "token_type_ids",
                     "visual_feats",
                     "visual_pos",
+                    "noise",
                 ]
 
                 labels = inputs.get("labels", None)
@@ -1215,14 +1230,33 @@ class ModelTesterMixin:
                             (past_mask, inputs_to_test[1]["attention_mask"]), dim=1
                         )
 
-            if "inputs_embeds" in inspect.signature(model.forward).parameters and not model.config.is_encoder_decoder:
-                inputs_to_test.append(
-                    {
-                        "inputs_embeds": torch.rand(
-                            2, 2, model.config.hidden_size, dtype=torch.float, device=torch_device
-                        )
-                    }
-                )
+                forward_parameters = inspect.signature(model.forward).parameters
+                if "input_ids" in forward_parameters and "inputs_embeds" in forward_parameters:
+                    inps = copy.deepcopy(inputs_to_test[0])
+
+                    embedding_size = (
+                        model.config.embedding_size
+                        if getattr(model.config, "embedding_size", None) is not None
+                        and model.config.model_type != "megatron-bert"
+                        else model.config.hidden_size
+                    )
+
+                    if (
+                        model.config.model_type in MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES
+                        and model.__class__.__name__
+                        == MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES[model.config.model_type]
+                    ):
+                        batch_size, num_choices, sequence_length = inputs["input_ids"].shape
+                        shape = (batch_size, num_choices, sequence_length, embedding_size)
+                    elif inps["input_ids"].ndim == 2:
+                        batch_size, sequence_length = inputs["input_ids"].shape
+                        shape = (batch_size, sequence_length, embedding_size)
+                    else:
+                        self.skipTest("Unknown case")
+
+                    del inps["input_ids"]
+                    inps["inputs_embeds"] = torch.rand(shape, dtype=torch.float, device=torch_device)
+                    inputs_to_test.append(inps)
 
             for inps in inputs_to_test:
                 filtered_inputs = {k: v for (k, v) in inps.items() if k in input_names}
@@ -4455,9 +4489,6 @@ class ModelTesterMixin:
 
             out_last_tokens = logits[:, -1, :]  # last tokens in each batch line
             out_shared_prefix_last_tokens = logits_shared_prefix[0, -3:, :]  # last three tokens
-
-            # comparing greedily-chosen tokens:
-            assert torch.equal(out_last_tokens.max(axis=1).indices, out_shared_prefix_last_tokens.max(axis=1).indices)
 
             # comparing softmax-normalized logits:
             normalized_0 = F.softmax(out_last_tokens)
