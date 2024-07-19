@@ -20,7 +20,6 @@ from typing import Any, Dict, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
-from einops import rearrange
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
@@ -210,14 +209,15 @@ class Mamba2Mixer(nn.Module):
         projected_states = self.in_proj(hidden_states)  # .transpose(1, 2)
         A = -torch.exp(self.A_log.float())  # (nheads) or (d_inner, d_state)
         dt_limit_kwargs = {} if self.time_step_limit == (0.0, float("inf")) else {"dt_limit": self.time_step_limit}
+
         if self.training and cache_params is None:  # Doesn't support outputting the states -> used for training
             out = mamba_split_conv1d_scan_combined(
                 projected_states,
-                rearrange(self.conv1d.weight, "d 1 w -> d w"),
+                self.conv1d.weight.squeeze(1),
                 self.conv1d.bias,
                 self.dt_bias,
                 A,
-                D=rearrange(self.D, "(h p) -> h p", p=self.head_dim) if self.D_has_hdim else self.D,
+                D=self.D.view(-1, self.head_dim) if self.D_has_hdim else self.D,
                 chunk_size=self.chunk_size,
                 seq_idx=None,  # was seq_idx
                 activation=self.activation,
@@ -231,7 +231,7 @@ class Mamba2Mixer(nn.Module):
                 **dt_limit_kwargs,
             )
             if seqlen_og is not None:
-                out = rearrange(out, "b l d -> (b l) d")
+                out = out.view(-1, out.shape[2])
         else:
             gate, xBC, time_step = torch.split(
                 projected_states,
@@ -247,7 +247,7 @@ class Mamba2Mixer(nn.Module):
             else:
                 xBC = causal_conv1d_fn(
                     x=xBC.transpose(1, 2),
-                    weight=rearrange(self.conv1d.weight, "d 1 w -> d w"),  # TODO remove einops
+                    weight=self.conv1d.weight.squeeze(1),
                     bias=self.conv1d.bias,
                     activation=self.activation,
                 ).transpose(1, 2)[:, :seq_len]
@@ -255,20 +255,18 @@ class Mamba2Mixer(nn.Module):
                 xBC, [self.intermediate_size, self.n_groups * self.state_size, self.n_groups * self.state_size], dim=-1
             )
             y = mamba_chunk_scan_combined(
-                rearrange(x, "b l (h p) -> b l h p", p=self.head_dim),
+                x.view(x.shape[0], x.shape[1], -1, self.head_dim),
                 time_step,
                 A,
-                rearrange(B, "b l (g n) -> b l g n", g=self.n_groups),
-                rearrange(C, "b l (g n) -> b l g n", g=self.n_groups),
+                B.view(B.shape[0], B.shape[1], self.n_groups, -1),
+                C.view(B.shape[0], C.shape[1], self.n_groups, -1),
                 chunk_size=self.chunk_size,
                 D=self.D,
                 z=None,
-                seq_idx=None,  # could be seq_idx, looks like None
-                # initial_states=initial_states,
-                # **dt_limit_kwargs,
+                seq_idx=None,
+                **dt_limit_kwargs,
             )
-            y = rearrange(y, "b l h p -> b l (h p)")  # TODO move out this einop too
-
+            y = y.view(y.shape[0], y.shape[1], -1)
             # Multiply "gate" branch and apply extra normalization layer
 
             y = self.norm(y, gate)
@@ -276,7 +274,7 @@ class Mamba2Mixer(nn.Module):
         return out
 
     # fmt: off
-    # TODO as well
+    # FIXME slow generations are lower quality
     def slow_forward(self, input_states, cache_params: Optional[Mamba2Cache]=None):
         batch_size, seq_len, _ = input_states.shape
         dtype = input_states.dtype
@@ -341,6 +339,7 @@ class Mamba2Mixer(nn.Module):
         scan_output = torch.stack(scan_outputs, dim=1)                                # [batch, intermediate_size, seq_len]
         scan_output = scan_output + (hidden_states * self.D[:,None])
         scan_output = self.norm(scan_output.view(batch_size, seq_len, -1), gate)
+        scan_output = torch.cat([nn.functional.silu(z0) * x0, scan_output], dim=-1)
         if cache_params is not None:
             cache_params.ssm_states[self.layer_idx].copy_(ssm_state)
 
