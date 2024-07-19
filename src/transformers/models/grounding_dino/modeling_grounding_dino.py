@@ -2639,7 +2639,10 @@ def sigmoid_focal_loss(
 
     if reduction == "mean":
         return loss.sum() / num_queries / num_boxes
-    return loss.sum() / num_boxes
+    elif reduction == "sum":
+        return loss.sum() / num_boxes
+    else:
+        raise ValueError(f"{reduction=} is not a valid reduction method")
 
 
 # Copied from transformers.models.detr.modeling_detr.NestedTensor
