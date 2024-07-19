@@ -39,13 +39,23 @@ class OmDetTurboConfig(PretrainedConfig):
             The configuration of the vision model.
         use_timm_backbone (`bool`, *optional*, defaults to `True`):
             Whether to use the timm backbone.
+        backbone (`<fill_type>`, *optional*, defaults to `"swin_tiny_patch4_window7_224"`): <fill_docstring>
         backbone_kwargs (`dict`, *optional*):
             Additional kwargs for the backbone.
+        backbone_out_indices (`<fill_type>`, *optional*, defaults to `[1, 2, 3]`): <fill_docstring>
+        backbone_embed_dim (`<fill_type>`, *optional*, defaults to 96): <fill_docstring>
+        backbone_qkv_bias (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+        backbone_depths (`<fill_type>`, *optional*, defaults to `[2, 2, 6, 2]`): <fill_docstring>
+        backbone_num_heads (`<fill_type>`, *optional*, defaults to `[3, 6, 12, 24]`): <fill_docstring>
+        backbone_window_size (`<fill_type>`, *optional*, defaults to 7): <fill_docstring>
+        backbone_features_only (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+        use_pretrained_backbone (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+        backbone_image_size (`<fill_type>`, *optional*, defaults to 640): <fill_docstring>
         encoder_hidden_dim (`int`, *optional*, defaults to 256):
             The hidden dimension of the encoder.
         decoder_hidden_dim (`int`, *optional*, defaults to 256):
             The hidden dimension of the decoder.
-        backbone_feat_channels (`tuple(int)`, *optional*, defaults to `(256, 256, 256)`):
+        backbone_feat_channels (`tuple(int)`, *optional*, defaults to `[256, 256, 256]`):
             The feature channels of the backbone.
         num_feature_levels (`int`, *optional*, defaults to 3):
             The number of feature levels.
@@ -101,6 +111,7 @@ class OmDetTurboConfig(PretrainedConfig):
             The type of of distance to compare predicted classes to labels.
         decoder_activation (`str`, *optional*, defaults to `"relu"`):
             The activation function for the decoder.
+        decoder_encoder_dim_feedforward (`<fill_type>`, *optional*, defaults to 1024): <fill_docstring>
         decoder_dim_feedforward (`int`, *optional*, defaults to 2048):
             The feedforward dimension for the decoder.
         decoder_num_points (`int`, *optional*, defaults to 4):
@@ -109,12 +120,11 @@ class OmDetTurboConfig(PretrainedConfig):
             The dropout rate for the decoder.
         decoder_eval_idx (`int`, *optional*, defaults to -1):
             The evaluation index for the decoder.
-        image_size (`int`, *optional*, defaults to 640):
-            The image size.
         learn_init_query (`bool`, *optional*, defaults to `False`):
             Whether to learn the initial query.
         fuse_type (`str`, *optional*, defaults to `"merged_attn"`):
             The type of fusion.
+        cache_size (`<fill_type>`, *optional*, defaults to 100): <fill_docstring>
         is_encoder_decoder (`bool`, *optional*, defaults to `True`):
             Whether the model is used as an encoder-decoder model or not.
         kwargs (`Dict[str, Any]`, *optional*):

@@ -514,6 +514,7 @@ class OmDetTurboRepVggBlock(nn.Module):
     RepVGG architecture block introduced by the work "RepVGG: Making VGG-style ConvNets Great Again".
     """
 
+    # Ignore copy
     def __init__(self, config: OmDetTurboConfig):
         super().__init__()
 
@@ -540,7 +541,7 @@ class OmDetTurboCSPRepLayer(nn.Module):
         in_channels = config.encoder_hidden_dim * 2
         out_channels = config.encoder_hidden_dim
         num_blocks = 3
-        activation = config.csp_activation
+        activation = config.activation_function
 
         hidden_channels = int(out_channels * config.hidden_expansion)
         self.conv1 = OmDetTurboConvNormLayer(config, in_channels, hidden_channels, 1, 1, activation=activation)
@@ -1470,7 +1471,7 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
         #                   self.box_noise_scale,
         #                   self.training,
         #                   self.amp)
-        dn_embed, dn_bbox, attn_mask, dn_meta = None, None, None, None
+        dn_embed, dn_bbox, attn_mask, _ = None, None, None, None
         bs = task_mask.shape[0]
 
         # compose attn_mask for vision_emb and task_emb fusion

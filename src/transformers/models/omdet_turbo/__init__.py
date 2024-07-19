@@ -34,15 +34,6 @@ else:
         "OmDetTurboPreTrainedModel",
     ]
 
-try:
-    if not is_vision_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["image_processing_omdet_turbo"] = ["OmDetTurboImageProcessor"]
-
-
 if TYPE_CHECKING:
     from .configuration_omdet_turbo import (
         OmDetTurboConfig,
@@ -60,14 +51,6 @@ if TYPE_CHECKING:
             OmDetTurboModel,
             OmDetTurboPreTrainedModel,
         )
-
-    try:
-        if not is_vision_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .image_processing_omdet_turbo import OmDetTurboImageProcessor
 
 else:
     import sys

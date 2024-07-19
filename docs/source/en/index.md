@@ -93,7 +93,6 @@ Flax), PyTorch, and/or TensorFlow.
 |                          [CLAP](model_doc/clap)                          |       ✅        |         ❌         |      ❌      |
 |                          [CLIP](model_doc/clip)                          |       ✅        |         ✅         |      ✅      |
 |                       [CLIPSeg](model_doc/clipseg)                       |       ✅        |         ❌         |      ❌      |
-|                [CLIPTextModel](model_doc/clip_text_model)                |       ✅        |         ✅         |      ✅      |
 |                          [CLVP](model_doc/clvp)                          |       ✅        |         ❌         |      ❌      |
 |                       [CodeGen](model_doc/codegen)                       |       ✅        |         ❌         |      ❌      |
 |                    [CodeLlama](model_doc/code_llama)                     |       ✅        |         ❌         |      ✅      |
