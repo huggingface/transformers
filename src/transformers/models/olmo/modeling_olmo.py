@@ -280,25 +280,12 @@ class OlmoAttention(nn.Module):
         self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=config.attention_bias)
 
         # TODO (joao): remove in v4.45 (RoPE is computed in the model, not in the decoder layers)
-        rope_config = {
+        rope_config = self.config.get("rope_scaling", {"type": "default"}).copy()
+        rope_config |= {
             "dim": self.head_dim,
             "max_position_embeddings": self.max_position_embeddings,
             "base": self.rope_theta,
-            "rope_type": "default",
         }
-
-        if self.config.rope_scaling is not None:
-            rope_config["rope_type"] = self.config.rope_scaling["type"]  # overwrites '"rope_type": "default"'
-            rope_config["scaling_factor"] = self.config.rope_scaling["factor"]
-            if "yarn" in rope_config["rope_type"]:
-                for yarn_parameter in [
-                    "original_max_position_embeddings",
-                    "attention_factor",
-                    "beta_fast",
-                    "beta_slow",
-                ]:
-                    rope_config[yarn_parameter] = self.config.rope_scaling.get(yarn_parameter)
-
         self.rotary_emb = OlmoRotaryEmbedding(**rope_config)
 
     def _init_rope(self):

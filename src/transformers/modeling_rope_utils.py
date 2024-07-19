@@ -13,30 +13,28 @@
 # limitations under the License.
 
 import math
-from typing import Any, Dict
+from typing import Any, Dict, Set
 
 import torch
 
 
 ROPE_CONFIG_DOCSTRING = r"""
     rope_scaling (`Dict`, *optional*):
-        Dictionary containing the scaling configuration for the RoPE embeddings. Currently supports three scaling
-        strategies: linear, dynamic and yarn. Their scaling factor must be a float greater than 1. The expected format is
-        `{"type": strategy name, "factor": scaling factor}`. When using this flag, don't update
-        `max_position_embeddings` to the expected new maximum. See the following thread for more information on how
-        these scaling strategies behave:
-        https://www.reddit.com/r/LocalLLaMA/comments/14mrgpr/dynamically_scaled_rope_further_increases/. This is an
-        experimental feature, subject to breaking API changes in future versions.
-        For the `yarn` strategy, the dictionary may also contain the following fields:
-            `original_max_position_embeddings` (`int`, *optional*):
-                The original maximum sequence length. This is used to scale the RoPE embeddings.
+        Dictionary containing the scaling configuration for the RoPE embeddings. When using this flag, don't update
+        `max_position_embeddings` to the expected new maximum. Expected contents:
+            `type` (`str`):
+                The scaling strategy to use. Can be one of ['linear', 'dynamic', 'yarn'].
+            `factor` (`float`):
+                The scaling factor to apply to the RoPE embeddings. Must be a float greater than 1.
             `attention_factor` (`float`, *optional*):
-                The attention scaling factor. If unspecified, it defaults to `0.1 ln(s) + 1`, where `s` is the
-                `original_max_position_embeddings/max_position_embeddings` ratio.
+                Optional, only used with 'yarn'. The attention scaling factor. If unspecified, it defaults to
+                `0.1 ln(factor) + 1`.
             `beta_fast` (`float`, *optional*):
-                Parameter to set the boundary for extrapolation (only) in the linear ramp function.
+                Optional, only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear
+                ramp function. If unspecified, it defaults to 32.
             `beta_slow` (`float`, *optional*):
-                Parameter to set the boundary for interpolation (only) in the linear ramp function.
+                Optional, only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
+                ramp function. If unspecified, it defaults to 1.
 """
 
 
@@ -79,7 +77,8 @@ def rope_config_validation(rope_scaling):
 
     if original_max_position_embeddings is not None and not isinstance(original_max_position_embeddings, int):
         raise ValueError(
-            f"`rope_scaling`'s original_max_position_embeddings field must be an int, got {original_max_position_embeddings}"
+            "`rope_scaling`'s original_max_position_embeddings field must be an int, got "
+            f"{original_max_position_embeddings}"
         )
     if attention_factor is not None and not isinstance(attention_factor, float) or attention_factor < 0:
         raise ValueError(
@@ -94,31 +93,30 @@ def rope_config_validation(rope_scaling):
     b_slow = beta_slow if beta_slow is not None else 1
     if b_fast < b_slow:
         raise ValueError(
-            f"`rope_scaling`'s beta_fast field must be greater than beta_slow, got beta_fast={b_fast} and beta_slow={b_slow}"
+            f"`rope_scaling`'s beta_fast field must be greater than beta_slow, got beta_fast={b_fast} and "
+            f"beta_slow={b_slow}"
         )
 
 
-def compute_frequencies(rope_config: Dict[str, Any], device: torch.device) -> torch.Tensor:
-    rope_type = rope_config.get("rope_type", "default")
-    if rope_type == "default":
-        return _compute_default_frequencies(rope_config, device)
-    elif rope_type == "dynamic":
-        return _compute_dynamic_ntk_frequencies(rope_config, device)
-    elif rope_type == "yarn":
-        return _compute_yarn_frequencies(rope_config, device)
-    else:
+def _check_rope_config_keys(rope_config: Dict[str, Any], required_keys: Set, permitted_keys: Set):
+    """Check if the keys in the RoPE config are valid"""
+    keys_in_rope_config = set(rope_config.keys())
+    required_keys_not_in_config = required_keys - keys_in_rope_config
+    if len(required_keys_not_in_config) > 0:
         raise ValueError(
-            f"Unrecognized RoPE type: {rope_type}. If you want to use custom RoPE frequencies, use "
-            "`model.set_rope_embeddings()`"
+            f"Missing required keys '{required_keys_not_in_config}' in the (internally prepared) RoPE config."
         )
+    all_permitted_keys = permitted_keys + required_keys
+    keys_not_permitted = keys_in_rope_config - all_permitted_keys
+    if len(keys_not_permitted) > 0:
+        raise ValueError(f"Unrecognized keys '{keys_not_permitted}' in the (internally prepared) RoPE config.")
 
 
 def _compute_default_frequencies(rope_config: Dict[str, Any], device: torch.device) -> torch.Tensor:
-    # Mandatory config options
-    required_keys = ["base", "dim"]
-    for key in required_keys:
-        if key not in rope_config:
-            raise ValueError(f"Missing required key '{key}' in RoPE config.")
+    """Computes the inverse frequencies according to the original RoPE implementation"""
+    required_keys = {"base", "dim"}
+    permitted_keys = {"type", "max_position_embeddings"}
+    _check_rope_config_keys(rope_config, required_keys, permitted_keys)
 
     base = rope_config["base"]
     dim = rope_config["dim"]
@@ -129,12 +127,10 @@ def _compute_default_frequencies(rope_config: Dict[str, Any], device: torch.devi
 
 
 def _compute_dynamic_ntk_frequencies(rope_config: Dict[str, Any], device: torch.device) -> torch.Tensor:
-    """Credits to the Reddit users /u/bloc97 and /u/emozilla"""
-    # Mandatory config options
-    required_keys = ["base", "dim", "scaling_factor", "max_position_embeddings"]
-    for key in required_keys:
-        if key not in rope_config:
-            raise ValueError(f"Missing required key '{key}' in RoPE config for RoPE type = 'dynamic'.")
+    """Computes he inverse frequencies with NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
+    required_keys = {"base", "dim", "scaling_factor", "max_position_embeddings"}
+    permitted_keys = {"type"}
+    _check_rope_config_keys(rope_config, required_keys, permitted_keys)
 
     base = rope_config["base"]
     dim = rope_config["dim"]
@@ -152,11 +148,13 @@ def _compute_dynamic_ntk_frequencies(rope_config: Dict[str, Any], device: torch.
 
 
 def _compute_yarn_frequencies(rope_config: Dict[str, Any], device: torch.device) -> torch.Tensor:
-    # Mandatory config options
-    required_keys = ["base", "dim", "scaling_factor", "max_position_embeddings"]
-    for key in required_keys:
-        if key not in rope_config:
-            raise ValueError(f"Missing required key '{key}' in RoPE config for RoPE type = 'dynamic'.")
+    """
+    Computes he inverse frequencies with NTK scaling. Please refer to the
+    [original paper](https://arxiv.org/abs/2309.00071)
+    """
+    required_keys = {"base", "dim", "scaling_factor", "max_position_embeddings"}
+    permitted_keys = {"type", "beta_fast", "beta_slow", "attention_factor"}
+    _check_rope_config_keys(rope_config, required_keys, permitted_keys)
 
     base = rope_config["base"]
     dim = rope_config["dim"]
@@ -199,3 +197,25 @@ def _compute_yarn_frequencies(rope_config: Dict[str, Any], device: torch.device)
     inv_freq = inv_freq_interpolation * (1 - inv_freq_mask) + inv_freq_extrapolation * inv_freq_mask
 
     return inv_freq
+
+
+# This maps the "type" string in rope config to the corresponding config. Can be expanded externally to support
+# new RoPE types
+ROPE_TYPE_TO_FUNCTION = {
+    "default": _compute_default_frequencies,
+    "dynamic": _compute_dynamic_ntk_frequencies,
+    "yarn": _compute_yarn_frequencies,
+}
+
+
+def compute_frequencies(rope_config: Dict[str, Any], device: torch.device) -> torch.Tensor:
+    rope_type = rope_config.get("type", "default")
+    rope_fn = ROPE_TYPE_TO_FUNCTION.get(rope_type)
+    if rope_fn is None:
+        raise ValueError(
+            f"Unrecognized RoPE type: {rope_type}.\n\nIf you want to use custom RoPE frequencies, there are two "
+            "options: 1: Compute RoPE (cos, sin) externally, passing it through `position_embeddings` to the model's "
+            "forward method. 2: Update the inverse frequencies in RoPE, updating `ROPE_TYPE_TO_FUNCTION` with "
+            "{'your_rope_type': Callable[rope_config, device] -> torch.Tensor}."
+        )
+    return rope_fn(rope_config, device)
