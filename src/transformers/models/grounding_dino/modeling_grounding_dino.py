@@ -2965,7 +2965,6 @@ def build_label_maps(logits, input_ids):
     This function will return a mapping for each of the prompt tokens (i.e. tokens associated with "fish" and "shark")
     indicating their position in the logit space.
 
-    This is used in `loss_labels` and in the `GroundingDinoHungarianMatcher`.)
     """
     hidden_size = logits.shape[-1]
     # Add [PAD] token to the list of special tokens
