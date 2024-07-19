@@ -24,6 +24,7 @@ Note: logits are tested with torch==2.1.2.
 """
 
 import argparse
+import gc
 import glob
 import json
 from pathlib import Path
@@ -186,15 +187,22 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
             dim=0,
         )
 
-    if model_id in ["lmms-lab/llava-next-72b", "lmms-lab/llava-next-110b"]:
-        # For these big models need to do multi-gpu inference, so reload the model with device_map="auto" in order to use accelerate
-        # Is there a way to do this without saving and reloading the model?
-        model.save_pretrained("/tmp/llava_qwen")
-        model = LlavaNextForConditionalGeneration.from_pretrained("/tmp/llava_qwen", device_map="auto")
-        device = "cuda"
-    else:
-        device = "cuda:2"
-        model.to(device)
+    print(f"Saving model and processor for {model_id} to {pytorch_dump_folder_path}")
+    Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
+    model.save_pretrained(pytorch_dump_folder_path)
+    processor.save_pretrained(pytorch_dump_folder_path)
+
+    # Make space so we can load the model properly now.
+    del state_dict
+    gc.collect()
+
+    # Load everything back for inference tests in float23 because prev script was written as that
+    # Though it's mostly loaded in fp16 as original weights are in fp16
+    model = LlavaNextForConditionalGeneration.from_pretrained(
+        pytorch_dump_folder_path, torch_dtype=torch.float32, device_map="auto"
+    )
+    processor = LlavaNextProcessor.from_pretrained(pytorch_dump_folder_path)
+    device = model.device
 
     # prepare inputs
     image = load_image()
@@ -221,8 +229,6 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
         original_input_ids = torch.load(filepath, map_location="cpu")
         # replace -200 by image_token_index (since we use token ID = 32000 for the image token)
         original_input_ids[original_input_ids == -200] = image_token_index
-        print(tokenizer.decode([id for id in original_input_ids.tolist()[0] if id != -200]))
-
         assert original_input_ids[0].tolist() == inputs.input_ids[0].tolist()
 
     elif model_id == "liuhaotian/llava-v1.6-34b":
@@ -332,15 +338,9 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     cats_image = Image.open(requests.get(url, stream=True).raw)
 
-    if model_id == "lmms-lab/llama3-llava-next-8b":
-        cats_prompt = "<|start_header_id|>system<|end_header_id|>\n\nYou are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.<|eot_id|><|start_header_id|><|start_header_id|>user<|end_header_id|>\n\n<image>\nHow many cats are there?<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n"
-        processor.tokenizer.padding_side = "left"
-    else:
-        cats_prompt = "[INST] <image>\nHow many cats are there? [/INST]"
-
     inputs = processor(
         images=[image, cats_image],
-        text=[prompt, cats_prompt],
+        text=[prompt, prompt],
         padding=True,
         return_tensors="pt",
     ).to(device)
@@ -364,16 +364,27 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
     print(outputs)
 
-    if pytorch_dump_folder_path is not None:
-        print(f"Saving model and processor for {model_id} to {pytorch_dump_folder_path}")
-        Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-        model.save_pretrained(pytorch_dump_folder_path)
-        processor.save_pretrained(pytorch_dump_folder_path)
+    import os
 
-    if push_to_hub:
-        repo_id = model_id.split("/")[-1]
-        model.push_to_hub(f"llava-hf/{repo_id}-hf")
-        processor.push_to_hub(f"llava-hf/{repo_id}-hf")
+    from huggingface_hub import HfApi
+
+    repo_id = model_id.split("/")[-1]
+    print(f"Pushing to repo llava-hf/{repo_id}-hf")
+
+    api = HfApi()
+    for file in os.listdir(pytorch_dump_folder_path):
+        api.upload_file(
+            path_or_fileobj=f"{pytorch_dump_folder_path}/{file}",
+            path_in_repo=file,
+            repo_id=f"llava-hf/{repo_id}-hf",
+            repo_type="model",
+        )
+
+    # if push_to_hub:
+    #     repo_id = model_id.split("/")[-1]
+    #     print(f"Pushing to repo llava-hf/{repo_id}-hf")
+    #     model.push_to_hub(f"llava-hf/{repo_id}-hf")
+    #     processor.push_to_hub(f"llava-hf/{repo_id}-hf")
 
 
 if __name__ == "__main__":
@@ -394,7 +405,7 @@ if __name__ == "__main__":
         required=False,
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
+        "--pytorch_dump_folder_path", type=str, required=True, help="Path to the output PyTorch model directory."
     )
     parser.add_argument(
         "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
