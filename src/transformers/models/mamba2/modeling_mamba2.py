@@ -895,7 +895,7 @@ class Mamba2Mixer(nn.Module):
 
         if cached_forward:
             xBC = causal_conv1d_update(
-                x=xBC,
+                x=xBC.squeeze(1),
                 conv_state=cache.conv_states[self.layer_idx],
                 weight=self.conv1d.weight.squeeze(1),
                 bias=self.conv1d.bias,
