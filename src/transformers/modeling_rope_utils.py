@@ -44,8 +44,8 @@ ROPE_CONFIG_DOCSTRING = r"""
 
 
 def _compute_default_rope_parameters(
-    config: PretrainedConfig, device: torch.device, seq_len: Optional[int] = None
-) -> Tuple[torch.Tensor, float]:
+    config: PretrainedConfig, device: "torch.device", seq_len: Optional[int] = None
+) -> Tuple["torch.Tensor", float]:
     """
     Computes the inverse frequencies according to the original RoPE implementation
 
@@ -74,8 +74,8 @@ def _compute_default_rope_parameters(
 
 
 def _compute_linear_scaling_rope_parameters(
-    config: PretrainedConfig, device: torch.device, seq_len: Optional[int] = None
-) -> Tuple[torch.Tensor, float]:
+    config: PretrainedConfig, device: "torch.device", seq_len: Optional[int] = None
+) -> Tuple["torch.Tensor", float]:
     """
     Computes the inverse frequencies with linear scaling. Credits to the Reddit user /u/kaiokendev
 
@@ -103,7 +103,7 @@ def _compute_linear_scaling_rope_parameters(
 
 
 def _compute_dynamic_ntk_parameters(
-    config: PretrainedConfig, device: torch.device, seq_len: Optional[int] = None
+    config: PretrainedConfig, device: "torch.device", seq_len: Optional[int] = None
 ) -> Tuple[torch.Tensor, float]:
     """
     Computes the inverse frequencies with NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla
@@ -139,8 +139,8 @@ def _compute_dynamic_ntk_parameters(
 
 
 def _compute_yarn_parameters(
-    config: PretrainedConfig, device: torch.device, seq_len: Optional[int] = None
-) -> Tuple[torch.Tensor, float]:
+    config: PretrainedConfig, device: "torch.device", seq_len: Optional[int] = None
+) -> Tuple["torch.Tensor", float]:
     """
     Computes the inverse frequencies with NTK scaling. Please refer to the
     [original paper](https://arxiv.org/abs/2309.00071)
