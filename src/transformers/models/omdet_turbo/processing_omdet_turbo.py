@@ -16,7 +16,8 @@
 Processor class for OmDet-Turbo.
 """
 
-from typing import List, Optional, Tuple, Union
+from typing import List, Tuple, Union
+
 
 try:
     from typing import Unpack
@@ -25,8 +26,8 @@ except ImportError:
 
 from ...image_transforms import center_to_corners_format
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessorMixin, ProcessingKwargs
-from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
+from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
 from ...utils import (
     TensorType,
     is_torch_available,
@@ -60,7 +61,10 @@ def clip_boxes(box: torch.Tensor, box_size: Tuple[int, int]) -> torch.Tensor:
 
     return box
 
-def handle_text(text: Union[str, List[str], List[List[str]], TextInput, PreTokenizedInput]) -> Tuple[List[str], List[List[str]]]:
+
+def handle_text(
+    text: Union[str, List[str], List[List[str]], TextInput, PreTokenizedInput],
+) -> Tuple[List[str], List[List[str]]]:
     if isinstance(text, str):
         # Text needs to be in this format: "Detect cat, dog, bird"
         tasks = [text]
@@ -70,10 +74,10 @@ def handle_text(text: Union[str, List[str], List[List[str]], TextInput, PreToken
         else:
             labels = labels.split(",")
     elif isinstance(text, list):
-        if isinstance(text[0], str) and len(text) == 2  and isinstance(text[1], list):
+        if isinstance(text[0], str) and len(text) == 2 and isinstance(text[1], list):
             tasks = [text[0]]
             labels = [text[1]]
-        elif isinstance(text[0], str) and len(text) > 2 :
+        elif isinstance(text[0], str) and len(text) > 2:
             tasks = ["Detect {}.".format(",".join(text))]
             labels = text
         elif isinstance(text[0], list) and len(text) == 2 and isinstance(text[1][0], list):
@@ -87,20 +91,19 @@ def handle_text(text: Union[str, List[str], List[List[str]], TextInput, PreToken
     return tasks, labels
 
 
-
 class OmDetTurboProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "add_special_tokens": True,
             "padding": "max_length",
-            "truncation":  True,
-            "max_length":  77,
-            "stride":  0,
-            "return_overflowing_tokens":  False,
-            "return_special_tokens_mask":  False,
+            "truncation": True,
+            "max_length": 77,
+            "stride": 0,
+            "return_overflowing_tokens": False,
+            "return_special_tokens_mask": False,
             "return_offsets_mapping": False,
-            "return_token_type_ids":  False,
-            "return_length":  False,
+            "return_token_type_ids": False,
+            "return_length": False,
             "verbose": True,
         },
         "images_kwargs": {},
@@ -163,10 +166,7 @@ class OmDetTurboProcessor(ProcessorMixin):
             label_encoding = self.tokenizer(text=label, **output_kwargs["text_kwargs"])
             labels_encoding.append(label_encoding)
         # workaround to group the labels encoding by task in a BatchEncoding
-        labels_encoding = BatchEncoding(
-            {str(i): label_encoding for i, label_encoding in enumerate(labels_encoding)}
-        )
-
+        labels_encoding = BatchEncoding({str(i): label_encoding for i, label_encoding in enumerate(labels_encoding)})
 
         encoding = BatchEncoding({"tasks": tasks_encoding, "labels": labels_encoding})
         encoding.update(encoding_image_processor)
