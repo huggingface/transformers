@@ -1093,7 +1093,7 @@ class BertModel(BertPreTrainedModel):
         )
 
         # Expand the attention mask
-        if use_sdpa_attention_masks:
+        if use_sdpa_attention_masks and attention_mask.dim() == 2:
             # Expand the attention mask for SDPA.
             # [bsz, seq_len] -> [bsz, 1, seq_len, seq_len]
             if self.config.is_decoder:
@@ -1120,7 +1120,7 @@ class BertModel(BertPreTrainedModel):
             if encoder_attention_mask is None:
                 encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
 
-            if use_sdpa_attention_masks:
+            if use_sdpa_attention_masks and encoder_attention_mask.dim() == 2:
                 # Expand the attention mask for SDPA.
                 # [bsz, seq_len] -> [bsz, 1, seq_len, seq_len]
                 encoder_extended_attention_mask = _prepare_4d_attention_mask_for_sdpa(
