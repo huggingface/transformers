@@ -47,24 +47,66 @@ _CONFIG_FOR_DOC = "DbrxConfig"
 
 # Copied from transformers.models.gemma.modeling_gemma.GemmaRotaryEmbedding with Gemma->Dbrx
 class DbrxRotaryEmbedding(nn.Module):
-    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
+    def __init__(
+        self,
+        dim=None,
+        max_position_embeddings=2048,
+        base=10000,
+        device=None,
+        scaling_factor=1.0,
+        config: Optional[DbrxConfig] = None,
+        **kwargs,
+    ):
         super().__init__()
+        # TODO (joao): remove this `if` in v4.45; the legacy args rebuild a config to power the rest of the class;
+        if config is None:
+            logger.warning_once(
+                "`DbrxRotaryEmbedding` can now be fully parameterized by passing the model config through the "
+                "`config` argument. All other arguments will be deprecated in v4.45"
+            )
+            config = DbrxConfig(**kwargs)
+            config.rope_theta = base
+            config.max_position_embeddings = max_position_embeddings
+            config.head_dim = dim  # this one doesn't actually exist, will only be used in the deprecation transition
+            if scaling_factor == 1.0 and len(kwargs) == 0:
+                config.rope_scaling = None
+            else:
+                config.rope_scaling = {"type": "default", "factor": scaling_factor}
+                config.rope_scaling |= kwargs  # may overwrite "type"
 
-        self.dim = dim
-        self.max_position_embeddings = max_position_embeddings
-        self.base = base
+        self.config = config
+        self.rope_type = config.rope_scaling["type"] if config.rope_scaling is not None else "default"
+        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
-        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float() / self.dim))
-        self.register_buffer("inv_freq", tensor=inv_freq, persistent=False)
+        inv_freq, self.attention_scaling = self.rope_init_fn(config, device)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+
+    def dynamic_frequency_update(self, position_ids, device):
+        """
+        dynamic RoPE layers should recompute `inv_freq` in the following situations:
+        1 - growing beyond the cached sequence length (allow scaling)
+        2 - the current sequence length is in the original scale (avoid losing precision with small sequences)
+        """
+        seq_len = torch.max(position_ids) + 1
+        needs_growth = seq_len > self.max_seq_len_cached
+        needs_reset = seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len
+        if needs_growth or needs_reset:
+            target_seq_len = max(seq_len, self.original_max_seq_len)
+            inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, seq_len=target_seq_len)
+            self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
+            self.max_seq_len_cached = target_seq_len
 
     @torch.no_grad()
-    def forward(self, x, position_ids, seq_len=None):
-        # x: [bs, num_attention_heads, seq_len, head_size]
-        self.inv_freq.to(x.device)
+    def forward(self, x, position_ids):
+        if "dynamic" in self.rope_type:
+            self.dynamic_frequency_update(position_ids, device=x.device)
+
+        # Core RoPE block
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
-        # Force float32 since bfloat16 loses precision on long contexts
-        # See https://github.com/huggingface/transformers/pull/29285
+        # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
         device_type = x.device.type
         device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):
@@ -72,6 +114,11 @@ class DbrxRotaryEmbedding(nn.Module):
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos()
             sin = emb.sin()
+
+        # Advanced RoPE types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling attention
+        cos = cos * self.attention_scaling
+        sin = sin * self.attention_scaling
+
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 

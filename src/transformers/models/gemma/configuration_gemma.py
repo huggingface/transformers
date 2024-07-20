@@ -22,10 +22,11 @@
 
 
 from transformers import PretrainedConfig
+from ...modeling_rope_utils import ROPE_CONFIG_DOCSTRING, rope_config_validation
 
 
 class GemmaConfig(PretrainedConfig):
-    r"""
+    rf"""
     This is the configuration class to store the configuration of a [`GemmaModel`]. It is used to instantiate an Gemma
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the Gemma-7B.
@@ -78,6 +79,7 @@ class GemmaConfig(PretrainedConfig):
             Whether to tie weight embeddings
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
+        {ROPE_CONFIG_DOCSTRING}
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -115,6 +117,7 @@ class GemmaConfig(PretrainedConfig):
         bos_token_id=2,
         tie_word_embeddings=True,
         rope_theta=10000.0,
+        rope_scaling=None,
         attention_bias=False,
         attention_dropout=0.0,
         **kwargs,
@@ -133,8 +136,11 @@ class GemmaConfig(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.rope_theta = rope_theta
+        self.rope_scaling = rope_scaling
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
+
+        rope_config_validation(rope_scaling)
 
         super().__init__(
             pad_token_id=pad_token_id,
