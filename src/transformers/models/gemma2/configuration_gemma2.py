@@ -144,7 +144,7 @@ class Gemma2Config(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.attn_logit_softcapping = attn_logit_softcapping
 
-        rope_config_validation(rope_scaling)
+        rope_config_validation(self)
 
         super().__init__(
             pad_token_id=pad_token_id,

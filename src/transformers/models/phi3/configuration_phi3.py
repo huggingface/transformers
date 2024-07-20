@@ -16,6 +16,7 @@
 """Phi-3 model configuration"""
 
 from ...configuration_utils import PretrainedConfig
+from ...modeling_rope_utils import ROPE_CONFIG_DOCSTRING, rope_config_validation
 from ...utils import logging
 
 
@@ -23,7 +24,7 @@ logger = logging.get_logger(__name__)
 
 
 class Phi3Config(PretrainedConfig):
-    r"""
+    rf"""
     This is the configuration class to store the configuration of a [`Phi3Model`]. It is used to instantiate a Phi-3
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the
@@ -76,11 +77,7 @@ class Phi3Config(PretrainedConfig):
             Whether to tie weight embeddings
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
-        rope_scaling (`dict`, *optional*):
-            The scaling strategy for the RoPE embeddings. If `None`, no scaling is applied. If a dictionary, it must
-            contain the following keys: `type`, `short_factor` and `long_factor`. The `type` must be either `su` or `yarn` and
-            the `short_factor` and `long_factor` must be lists of numbers with the same length as the hidden size
-            divided by the number of attention heads divided by 2.
+        {ROPE_CONFIG_DOCSTRING}
         bos_token_id (`int`, *optional*, defaults to 1):
             The id of the "beginning-of-sequence" token.
         eos_token_id (`int`, *optional*, defaults to 32000):
@@ -155,8 +152,9 @@ class Phi3Config(PretrainedConfig):
         self.use_cache = use_cache
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
-        self._rope_scaling_validation()
         self.sliding_window = sliding_window
+
+        rope_config_validation(self)
 
         super().__init__(
             bos_token_id=bos_token_id,
@@ -165,43 +163,3 @@ class Phi3Config(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
-
-    def _rope_scaling_validation(self):
-        """
-        Validate the `rope_scaling` configuration.
-        """
-        if self.rope_scaling is None:
-            return
-
-        if not isinstance(self.rope_scaling, dict) or len(self.rope_scaling) != 3:
-            raise ValueError(
-                "`rope_scaling` must be a dictionary with three fields, `type`, `short_factor` and `long_factor`, "
-                f"got {self.rope_scaling}"
-            )
-        rope_scaling_type = self.rope_scaling.get("type", None)
-        rope_scaling_short_factor = self.rope_scaling.get("short_factor", None)
-        rope_scaling_long_factor = self.rope_scaling.get("long_factor", None)
-        if rope_scaling_type is None or rope_scaling_type not in ["su", "yarn"]:
-            raise ValueError(f"`rope_scaling`'s type field must be one of ['su', 'yarn'], got {rope_scaling_type}")
-        if not (
-            isinstance(rope_scaling_short_factor, list)
-            and all(isinstance(x, (int, float)) for x in rope_scaling_short_factor)
-        ):
-            raise ValueError(
-                f"`rope_scaling`'s short_factor field must be a list of numbers, got {rope_scaling_short_factor}"
-            )
-        if not len(rope_scaling_short_factor) == self.hidden_size // self.num_attention_heads // 2:
-            raise ValueError(
-                f"`rope_scaling`'s short_factor field must have length {self.hidden_size // self.num_attention_heads // 2}, got {len(rope_scaling_short_factor)}"
-            )
-        if not (
-            isinstance(rope_scaling_long_factor, list)
-            and all(isinstance(x, (int, float)) for x in rope_scaling_long_factor)
-        ):
-            raise ValueError(
-                f"`rope_scaling`'s long_factor field must be a list of numbers, got {rope_scaling_long_factor}"
-            )
-        if not len(rope_scaling_long_factor) == self.hidden_size // self.num_attention_heads // 2:
-            raise ValueError(
-                f"`rope_scaling`'s long_factor field must have length {self.hidden_size // self.num_attention_heads // 2}, got {len(rope_scaling_long_factor)}"
-            )

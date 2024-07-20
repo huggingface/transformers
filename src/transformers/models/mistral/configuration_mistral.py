@@ -146,7 +146,7 @@ class MistralConfig(PretrainedConfig):
         self.rope_scaling = rope_scaling
         self.attention_dropout = attention_dropout
 
-        rope_config_validation(self.rope_scaling)
+        rope_config_validation(self)
 
         super().__init__(
             pad_token_id=pad_token_id,

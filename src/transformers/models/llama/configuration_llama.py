@@ -156,7 +156,7 @@ class LlamaConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.mlp_bias = mlp_bias
 
-        rope_config_validation(rope_scaling)
+        rope_config_validation(self)
 
         super().__init__(
             pad_token_id=pad_token_id,

@@ -239,7 +239,7 @@ class ChameleonConfig(PretrainedConfig):
 
         self.vocabulary_map = vocabulary_map
 
-        rope_config_validation(rope_scaling)
+        rope_config_validation(self)
 
         super().__init__(
             pad_token_id=pad_token_id,

@@ -145,7 +145,7 @@ class OlmoConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.clip_qkv = clip_qkv
 
-        rope_config_validation(rope_scaling)
+        rope_config_validation(self)
 
         super().__init__(
             pad_token_id=pad_token_id,

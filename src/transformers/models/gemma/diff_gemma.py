@@ -160,7 +160,7 @@ class GemmaConfig(PretrainedConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
 
-        rope_config_validation(rope_scaling)
+        rope_config_validation(self)
 
         super().__init__(
             pad_token_id=pad_token_id,
