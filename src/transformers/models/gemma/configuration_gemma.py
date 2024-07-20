@@ -22,6 +22,7 @@
 
 
 from transformers import PretrainedConfig
+
 from ...modeling_rope_utils import ROPE_CONFIG_DOCSTRING, rope_config_validation
 
 

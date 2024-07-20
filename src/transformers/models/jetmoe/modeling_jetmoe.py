@@ -33,6 +33,7 @@ from ...modeling_outputs import (
     MoeModelOutputWithPast,
     SequenceClassifierOutputWithPast,
 )
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,

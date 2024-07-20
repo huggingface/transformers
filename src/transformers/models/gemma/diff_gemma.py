@@ -28,6 +28,7 @@ from transformers.models.llama.modeling_llama import (
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
     LlamaModel,
+    LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
     repeat_kv,
 )
@@ -35,8 +36,8 @@ from transformers.models.llama.modeling_llama import (
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...modeling_flash_attention_utils import _flash_attention_forward
-from ...modeling_rope_utils import ROPE_CONFIG_DOCSTRING, rope_config_validation
 from ...modeling_outputs import CausalLMOutputWithPast
+from ...modeling_rope_utils import ROPE_CONFIG_DOCSTRING, rope_config_validation
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import logging
 
@@ -188,6 +189,10 @@ class GemmaRMSNorm(nn.Module):
 
 
 ALL_LAYERNORM_LAYERS.append(GemmaRMSNorm)
+
+
+class GemmaRotaryEmbedding(LlamaRotaryEmbedding):
+    pass
 
 
 class GemmaMLP(nn.Module):

@@ -105,15 +105,11 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] LlamaModel
     - forward
-    - get_rope_embeddings
-    - set_rope_embeddings
 
 ## LlamaForCausalLM
 
 [[autodoc]] LlamaForCausalLM
     - forward
-    - get_rope_embeddings
-    - set_rope_embeddings
 
 ## LlamaForSequenceClassification
 
