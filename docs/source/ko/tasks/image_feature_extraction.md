@@ -14,20 +14,20 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Image Feature Extraction
+# 이미지 특징 추출
 
 [[open-in-colab]]
 
-Image feature extraction is the task of extracting semantically meaningful features given an image. This has many use cases, including image similarity and image retrieval. Moreover, most computer vision models can be used for image feature extraction, where one can remove the task-specific head (image classification, object detection etc) and get the features. These features are very useful on a higher level: edge detection, corner detection and so on. They may also contain information about the real world (e.g. what a cat looks like) depending on how deep the model is. Therefore, these outputs can be used to train new classifiers on a specific dataset.
+이미지 특징 추출은 주어진 이미지에서 의미론적으로 의미 있는 특징을 추출하는 작업입니다. 이에는 이미지 유사성 및 이미지 검색 등 다양한 사용 사례가 있습니다. 또한 대부분의 컴퓨터 비전 모델은 이미지 특징 추출에 사용할 수 있으며, 여기서 작업별 헤드(이미지 분류, 물체 감지 등)를 제거하고 특징을 얻을 수 있습니다. 이러한 특징은 가장자리 감지, 모서리 감지 등 더 높은 수준에서 매우 유용합니다. 또한 모델의 깊이에 따라 실제 세계에 대한 정보(예: 고양이가 어떻게 생겼는지)를 포함할 수도 있습니다. 따라서 이러한 출력은 특정 데이터 세트에 대한 새로운 분류기를 훈련하는 데 사용할 수 있습니다.
 
-In this guide, you will:
+이 가이드에서는:
 
-- Learn to build a simple image similarity system on top of the `image-feature-extraction` pipeline.
-- Accomplish the same task with bare model inference.
+- '이미지 특징 추출' 파이프라인 위에 간단한 이미지 유사성 시스템을 구축하는 방법을 배웁니다.
+- 베어 모델 추론으로 동일한 작업을 수행합니다.
 
-## Image Similarity using `image-feature-extraction` Pipeline
+## `image-feature-extraction` 파이프라인을 이용한 이미지 유사성
 
-We have two images of cats sitting on top of fish nets, one of them is generated. 
+두 장의 고양이 사진이 있는데, 그 중 하나는 물고기 그물 위에 앉아 있습니다. 이 중 하나는 생성된 이미지입니다.
 
 ```python
 from PIL import Image
@@ -38,7 +38,8 @@ image_real = Image.open(requests.get(img_urls[0], stream=True).raw).convert("RGB
 image_gen = Image.open(requests.get(img_urls[1], stream=True).raw).convert("RGB")
 ```
 
-Let's see the pipeline in action. First, initialize the pipeline. If you don't pass any model to it, the pipeline will be automatically initialized with [google/vit-base-patch16-224](google/vit-base-patch16-224). If you'd like to calculate similarity, set `pool` to True.
+파이프라인을 실행해 봅시다. 먼저 파이프라인을 초기화하세요. 모델을 지정하지 않으면, 파이프라인은 자동으로 [google/vit-base-patch16-224](google/vit-base-patch16-224) 모델로 초기화됩니다. 유사도를 계산하려면 `pool`을 True로 설정하세요. 
+
 
 ```python
 import torch
@@ -48,13 +49,13 @@ DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 pipe = pipeline(task="image-feature-extraction", model_name="google/vit-base-patch16-384", device=DEVICE, pool=True)
 ```
 
-To infer with `pipe` pass both images to it.
+`pipe`를 사용하여 추론하려면 두 이미지를 모두 전달하세요.
 
 ```python
 outputs = pipe([image_real, image_gen])
 ```
 
-The output contains pooled embeddings of those two images.
+출력에는 두 이미지의 풀링된 임베딩이 포함되어 있습니다.
 
 ```python
 # get the length of a single output
@@ -66,7 +67,7 @@ print(outputs)
 # [[[-0.03909236937761307, 0.43381670117378235, -0.06913255900144577,
 ```
 
-To get the similarity score, we need to pass them to a similarity function. 
+유사도 점수를 얻으려면, 이들을 유사도 함수에 전달해야 합니다.
 
 ```python
 from torch.nn.functional import cosine_similarity
@@ -79,14 +80,14 @@ print(similarity_score)
 # tensor([0.6043])
 ```
 
-If you want to get the last hidden states before pooling, avoid passing any value for the `pool` parameter, as it is set to `False` by default. These hidden states are useful for training new classifiers or models based on the features from the model.
+풀링 이전의 마지막 은닉 상태를 얻고 싶다면, `pool` 매개변수에 아무 값도 전달하지 마세요. 기본값은 `False`로 설정되어 있습니다. 이 은닉 상태는 모델의 특징을 기반으로 새로운 분류기나 모델을 훈련시키는 데 유용합니다.
 
 ```python
 pipe = pipeline(task="image-feature-extraction", model_name="google/vit-base-patch16-224", device=DEVICE)
 output = pipe(image_real)
 ```
 
-Since the outputs are unpooled, we get the last hidden states where the first dimension is the batch size, and the last two are the embedding shape.
+아직 출력이 풀링되지 않았기 때문에, 첫 번째 차원은 배치 크기이고 마지막 두 차원은 임베딩 형태인 마지막 은닉 상태를 얻을 수 있습니다.
 
 ```python
 import numpy as np
@@ -94,9 +95,9 @@ print(np.array(outputs).shape)
 # (1, 197, 768)
 ```
 
-## Getting Features and Similarities using `AutoModel`
+## `AutoModel`을 사용하여 특징과 유사성 얻기
 
-We can also use `AutoModel` class of transformers to get the features. `AutoModel` loads any transformers model with no task-specific head, and we can use this to get the features.
+transformers의 `AutoModel` 클래스를 사용하여 특징을 얻을 수도 있습니다. `AutoModel`은 특정 작업에 맞춘 헤드 없이 모든 transformers 모델을 로드할 수 있으며, 이를 통해 특징을 추출할 수 있습니다.
 
 ```python
 from transformers import AutoImageProcessor, AutoModel
@@ -105,7 +106,7 @@ processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224")
 model = AutoModel.from_pretrained("google/vit-base-patch16-224").to(DEVICE)
 ```
 
-Let's write a simple function for inference. We will pass the inputs to the `processor` first and pass its outputs to the `model`.
+추론을 위한 간단한 함수를 작성해 보겠습니다. 먼저 입력값을 `processor`에 전달한 다음, 그 출력값을 `model`에 전달할 것입니다.
 
 ```python
 def infer(image):
@@ -114,14 +115,14 @@ def infer(image):
   return outputs.pooler_output
 ```
 
-We can pass the images directly to this function and get the embeddings.
+이 함수에 이미지를 직접 전달하여 임베딩을 얻을 수 있습니다.
 
 ```python
 embed_real = infer(image_real)
 embed_gen = infer(image_gen)
 ```
 
-We can get the similarity again over the embeddings.
+그리고 이 임베딩을 사용하여 다시 유사도를 계산할 수 있습니다.
 
 ```python
 from torch.nn.functional import cosine_similarity
@@ -131,4 +132,3 @@ print(similarity_score)
 
 # tensor([0.6061], device='cuda:0', grad_fn=<SumBackward1>)
 ```
-
