@@ -64,7 +64,7 @@ with torch.no_grad():
     outputs = model(**inputs)
 
 # Get the respective image masks 
-image0_mask, image1_mask = outputs.mask[0]
+image0_mask, image1_mask = outputs.mask[0] > 0
 
 image0_indices = torch.nonzero(image0_mask).squeeze()
 image1_indices = torch.nonzero(image1_mask).squeeze()
@@ -79,36 +79,36 @@ image1_matching_scores = outputs.matching_scores[0, 1][image1_indices]
 You can then print the matched keypoints on a side-by-side image to visualize the result :
 
 ```python
-import cv2
 import numpy as np
+import matplotlib.pyplot as plt
 
 # Create side by side image
-input_data = inputs['pixel_values']
+input_data = inputs["pixel_values"]
 height, width = input_data.shape[-2:]
 matched_image = np.zeros((height, width * 2, 3))
 matched_image[:, :width] = input_data.squeeze()[0].permute(1, 2, 0).cpu().numpy()
 matched_image[:, width:] = input_data.squeeze()[1].permute(1, 2, 0).cpu().numpy()
 matched_image = (matched_image * 255).astype(np.uint8)
 
-# Retrieve matches by looking at which keypoints in image0 actually matched with keypoints in image1
-image0_mask = outputs.mask[0, 0]
-image0_indices = torch.nonzero(image0_mask).squeeze()
-image0_matches_indices = torch.nonzero(outputs.matches[0, 0][image0_indices] != -1).squeeze()
-image0_keypoints = outputs.keypoints[0, 0][image0_matches_indices]
-image0_matches = outputs.matches[0, 0][image0_matches_indices]
-image0_matching_scores = outputs.matching_scores[0, 0][image0_matches_indices]
-# Retrieve matches from image1
-image1_mask = outputs.mask[0, 1]
-image1_indices = torch.nonzero(image1_mask).squeeze()
-image1_keypoints = outputs.keypoints[0, 1][image0_matches]
+# Get the respective image keypoints
+image0_keypoints = outputs.keypoints[0, 0][image0_mask]
+image1_keypoints = outputs.keypoints[0, 1][image0_matches[image0_matches > -1]]
 
 # Draw matches
-for (keypoint0, keypoint1, score) in zip(image0_keypoints, image1_keypoints, image0_matching_scores):
-    keypoint0_x, keypoint0_y = int(keypoint0[0].item()), int(keypoint0[1].item())
-    keypoint1_x, keypoint1_y = int(keypoint1[0].item() + width), int(keypoint1[1].item())
-    color = tuple([int(score.item() * 255)] * 3)
-    matched_image = cv2.line(matched_image, (keypoint0_x, keypoint0_y), (keypoint1_x, keypoint1_y), color)
-cv2.imwrite(f"matched_image.png", matched_image)
+plt.imshow(matched_image)
+plt.axis('off')
+
+# Draw matches based on score threshold
+for keypoint0, keypoint1, score in zip(image0_keypoints, image1_keypoints, image0_matching_scores):
+    if score > 0.1:
+        keypoint0_x, keypoint0_y = int(keypoint0[0]), int(keypoint0[1])
+        keypoint1_x, keypoint1_y = int(keypoint1[0] + width), int(keypoint1[1])
+        color = [score.item()] * 3  # Set color based on score
+        plt.plot([keypoint0_x, keypoint1_x], [keypoint0_y, keypoint1_y], color=color, linewidth=1)
+
+# Save the image
+plt.savefig("matched_image.png")
+plt.close()
 ```
 
 This model was contributed by [stevenbucaille](https://huggingface.co/stevenbucaille).
