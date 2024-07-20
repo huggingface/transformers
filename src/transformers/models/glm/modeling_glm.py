@@ -24,7 +24,7 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
 
-from ...cache_utils import Cache, DynamicCache
+from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation.utils import ModelOutput
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
@@ -40,6 +40,8 @@ from ...utils import (
     is_flash_attn_greater_or_equal_2_10,
     logging,
 )
+
+from ...modeling_attn_mask_utils import AttentionMaskConverter
 from .configuration_glm import GLMConfig
 
 if is_flash_attn_2_available():
@@ -80,7 +82,7 @@ class GLMRMSNorm(nn.Module):
         GLMRMSNorm is equivalent to T5LayerNorm
         """
         super().__init__()
-        self.weight = torch.nn.Parameter(torch.empty(normalized_shape, device=device, dtype=dtype))
+        self.weight = torch.nn.Parameter(torch.ones(normalized_shape, device=device, dtype=dtype))
         self.eps = eps
 
     def forward(self, hidden_states: torch.Tensor):
@@ -427,14 +429,9 @@ class GLMAttention(nn.Module):
             attention_scores = attention_scores.float()
         if self.coeff is not None:
             attention_scores = attention_scores * self.coeff
-        if attention_mask is None and attention_scores.shape[2] == attention_scores.shape[3]:
-            attention_mask = torch.ones(
-                output_size[0], 1, output_size[2], output_size[3], device=attention_scores.device, dtype=torch.bool
-            )
-            attention_mask.tril_()
-            attention_mask = ~attention_mask
-        if attention_mask is not None:
-            attention_scores = attention_scores.masked_fill(attention_mask, float("-inf"))
+        if attention_mask is not None:  # no matter the length, we just slice it
+            causal_mask = attention_mask[:, :, :, : key_layer.shape[-2]]
+            attention_scores = attention_scores + causal_mask
         attention_probs = F.softmax(attention_scores, dim=-1)
         attention_probs = attention_probs.type_as(value_layer)
 
@@ -598,8 +595,6 @@ class GLMSdpaAttention(GLMAttention):
                                                                              is_causal=True,
                                                                              dropout_p=self.config.attention_dropout if self.training else 0.0)
         else:
-            if attention_mask is not None:
-                attention_mask = ~attention_mask
             context_layer = torch.nn.functional.scaled_dot_product_attention(query_layer, key_layer, value_layer,
                                                                              attention_mask,
                                                                              dropout_p=self.config.attention_dropout if self.training else 0.0)
@@ -659,36 +654,85 @@ class GLMPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
-    def get_masks(self, input_ids, past_key_values, padding_mask=None):
+    def _update_causal_mask(
+            self,
+            attention_mask: torch.Tensor,
+            input_tensor: torch.Tensor,
+            cache_position: torch.Tensor,
+            past_key_values: Cache,
+            output_attentions: bool,
+    ):
+        # TODO: As of torch==2.2.0, the `attention_mask` passed to the model in `generate` is 2D and of dynamic length even when the static
+        # KV cache is used. This is an issue for torch.compile which then recaptures cudagraphs at each decode steps due to the dynamic shapes.
+        # (`recording cudagraph tree for symint key 13`, etc.), which is VERY slow. A workaround is `@torch.compiler.disable`, but this prevents using
+        # `fullgraph=True`. See more context in https://github.com/huggingface/transformers/pull/29114
+
         if self.config._attn_implementation == "flash_attention_2":
-            if padding_mask is not None and not padding_mask.all():
-                return padding_mask
+            if attention_mask is not None and 0.0 in attention_mask:
+                return attention_mask
             return None
 
-        batch_size, seq_length = input_ids.shape
-        full_attention_mask = torch.ones(batch_size, seq_length, seq_length, device=input_ids.device)
-        full_attention_mask.tril_()
+        # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
+        # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
+        # to infer the attention mask.
+        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+        using_static_cache = isinstance(past_key_values, StaticCache)
 
-        past_length = 0
-        if past_key_values:
-            past_length = past_key_values.get_seq_length()
+        # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
+        if self.config._attn_implementation == "sdpa" and not using_static_cache and not output_attentions:
+            if AttentionMaskConverter._ignore_causal_mask_sdpa(
+                    attention_mask,
+                    inputs_embeds=input_tensor,
+                    past_key_values_length=past_seen_tokens,
+                    is_training=self.training,
+            ):
+                return None
 
-        if past_length:
-            full_attention_mask = torch.cat(
-                (torch.ones(batch_size, seq_length, past_length, device=input_ids.device), full_attention_mask), dim=-1
+        dtype, device = input_tensor.dtype, input_tensor.device
+        min_dtype = torch.finfo(dtype).min
+        sequence_length = input_tensor.shape[1]
+        if using_static_cache:
+            target_length = past_key_values.get_max_length()
+        else:
+            target_length = (
+                attention_mask.shape[-1]
+                if isinstance(attention_mask, torch.Tensor)
+                else past_seen_tokens + sequence_length + 1
             )
 
-        if padding_mask is not None:
-            padding_mask = padding_mask.bool()  # Ensure padding_mask is a boolean tensor
-            expanded_padding_mask = padding_mask.unsqueeze(1).expand(-1, seq_length, -1)
-            full_attention_mask = full_attention_mask * expanded_padding_mask
+        if attention_mask is not None and attention_mask.dim() == 4:
+            # in this case we assume that the mask comes already in inverted form and requires no inversion or slicing
+            if attention_mask.max() != 0:
+                raise ValueError("Custom 4D attention mask should be passed in inverted form with max==0`")
+            causal_mask = attention_mask
+        else:
+            causal_mask = torch.full(
+                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
+            )
+            if sequence_length != 1:
+                causal_mask = torch.triu(causal_mask, diagonal=1)
+            causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+            causal_mask = causal_mask[None, None, :, :].expand(input_tensor.shape[0], 1, -1, -1)
+            if attention_mask is not None:
+                causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
+                mask_length = attention_mask.shape[-1]
+                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
+                padding_mask = padding_mask == 0
+                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
+                    padding_mask, min_dtype
+                )
+        if (
+                self.config._attn_implementation == "sdpa"
+                and attention_mask is not None
+                and attention_mask.device.type == "cuda"
+                and not output_attentions
+        ):
+            # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
+            # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
+            # Details: https://github.com/pytorch/pytorch/issues/110213
+            causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
 
-        if not past_length and padding_mask is not None:
-            full_attention_mask = full_attention_mask * (~padding_mask.unsqueeze(-1))
-
-        full_attention_mask = (full_attention_mask < 0.5).bool()
-        full_attention_mask.unsqueeze_(1)
-        return full_attention_mask
+        return causal_mask
 
     def get_position_ids(self, input_ids, device):
         batch_size, seq_length = input_ids.shape
@@ -989,6 +1033,8 @@ class GLMModel(GLMPreTrainedModel):
         self.encoder = init_method(GLMTransformer, config, **init_kwargs)
         self.output_layer = init_method(nn.Linear, config.hidden_size, config.vocab_size, bias=False,
                                         dtype=config.torch_dtype, **init_kwargs)
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embedding.word_embeddings
@@ -1008,6 +1054,7 @@ class GLMModel(GLMPreTrainedModel):
             output_attentions: Optional[bool] = None,
             output_hidden_states: Optional[bool] = None,
             return_dict: Optional[bool] = None,
+            cache_position: Optional[torch.LongTensor] = None
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
@@ -1026,6 +1073,8 @@ class GLMModel(GLMPreTrainedModel):
             raise ValueError(
                 "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
             )
+        if inputs_embeds is None:
+            inputs_embeds = self.embedding(input_ids)
 
         if use_cache and not isinstance(past_key_values, Cache):  # kept for BC (non `Cache` `past_key_values` inputs)
             return_legacy_cache = True
@@ -1035,12 +1084,14 @@ class GLMModel(GLMPreTrainedModel):
                 "Please use an appropriate `Cache` class (https://huggingface.co/docs/transformers/v4.41.3/en/internal/generation_utils#transformers.Cache)"
             )
 
-        if inputs_embeds is None:
-            inputs_embeds = self.embedding(input_ids)
+        if cache_position is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            cache_position = torch.arange(
+                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+            )
 
-        if full_attention_mask is None:
-            if (attention_mask is not None and not attention_mask.all()) or (past_key_values and seq_length != 1):
-                full_attention_mask = self.get_masks(input_ids, past_key_values, padding_mask=attention_mask)
+        full_attention_mask = self._update_causal_mask(
+            attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions)
 
         # Rotary positional embeddings
         rotary_pos_emb = self.rotary_pos_emb(self.seq_length)
