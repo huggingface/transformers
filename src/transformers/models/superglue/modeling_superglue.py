@@ -673,6 +673,7 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
             all_hidden_states = all_hidden_states + concat_inconsistent_pairs(
                 (projected_descriptors0,), (projected_descriptors1,)
             )
+            all_hidden_states = tuple(x.transpose(-1, -2) for x in all_hidden_states)
         if output_attentions:
             all_attentions = all_attentions + gnn_outputs[3]
 
@@ -801,81 +802,3 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
             hidden_states=hidden_states,
             attentions=attentions,
         )
-
-
-#
-# class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
-#     def __init__(self, config: SuperGlueConfig) -> None:
-#         super().__init__(config)
-#
-#         self.superglue_model = SuperGlueModel(config)
-#         self.final_projection = SuperGlueFinalProjection(config)
-#
-#         self.post_init()
-#
-#     def compute_matching_scores(self, descriptors0, descriptors1):
-#         # Compute matching descriptor distance.
-#         scores = torch.einsum("bnd,bmd->bnm", descriptors0, descriptors1)
-#         # scores = torch.einsum("bdn,bdm->bnm", projected_descriptors0, projected_descriptors1)
-#         scores = scores / self.config.descriptor_dim**0.5
-#
-#         # Run the optimal transport.
-#         scores = log_optimal_transport(scores, self.bin_score, iterations=self.config.sinkhorn_iterations)
-#
-#         # Get the matches with score above "match_threshold".
-#         max0, max1 = scores[:, :-1, :-1].max(2), scores[:, :-1, :-1].max(1)
-#         indices0, indices1 = max0.indices, max1.indices
-#         mutual0 = arange_like(indices0, 1)[None] == indices1.gather(1, indices0)
-#         mutual1 = arange_like(indices1, 1)[None] == indices0.gather(1, indices1)
-#         zero = scores.new_tensor(0)
-#         matching_scores0 = torch.where(mutual0, max0.values.exp(), zero)
-#         matching_scores1 = torch.where(mutual1, matching_scores0.gather(1, indices1), zero)
-#         valid0 = mutual0 & (matching_scores0 > self.config.matching_threshold)
-#         valid1 = mutual1 & valid0.gather(1, indices1)
-#         matches0 = torch.where(valid0, indices0, indices0.new_tensor(-1))
-#         matches1 = torch.where(valid1, indices1, indices1.new_tensor(-1))
-#         return matches0, matches1, matching_scores0, matching_scores1
-#
-#     @add_start_docstrings_to_model_forward(SUPERGLUE_INPUTS_DOCSTRING)
-#     def forward(
-#         self,
-#         pixel_values: torch.FloatTensor = None,
-#         labels: Optional[torch.LongTensor] = None,
-#         output_attentions: Optional[bool] = None,
-#         output_hidden_states: Optional[bool] = None,
-#         return_dict: Optional[bool] = None,
-#     ) -> Union[Tuple, KeypointMatchingOutput]:
-#         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-#         output_hidden_states = (
-#             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-#         )
-#         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-#
-#         all_hidden_states = () if output_hidden_states else None
-#         all_attentions = () if output_attentions else None
-#
-#         superglue_outputs = self.superglue_model(
-#             pixel_values, labels, output_attentions, output_hidden_states, return_dict
-#         )
-#
-#         descriptors0, descriptors1 = superglue_outputs[:1]
-#
-#         # Final MLP projection.
-#         projected_descriptors0 = self.final_projection(descriptors0)
-#         projected_descriptors1 = self.final_projection(descriptors1)
-#
-#         # Compute matching scores
-#         matches0, matches1, matching_scores0, matching_scores1 = self.compute_matching_scores(
-#             projected_descriptors0, projected_descriptors1
-#         )
-#
-#         hidden_states = attentions = None
-#         if output_hidden_states:
-#             all_hidden_states = all_hidden_states + concat_inconsistent_pairs(
-#                 (projected_descriptors0,), (projected_descriptors1,)
-#             )
-#             all_hidden_states = all_hidden_states + concat_inconsistent_pairs(
-#                 (projected_descriptors0,), (projected_descriptors1,)
-#             )
-#         if output_attentions:
-#             all_attentions = all_attentions + (attentions,)
