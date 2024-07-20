@@ -75,7 +75,7 @@ def to_channel_dimension_format(
         `np.ndarray`: The image with the channel dimension set to `channel_dim`.
     """
     if not isinstance(image, np.ndarray):
-        raise ValueError(f"Input image must be of type np.ndarray, got {type(image)}")
+        raise TypeError(f"Input image must be of type np.ndarray, got {type(image)}")
 
     if input_channel_dim is None:
         input_channel_dim = infer_channel_dimension_format(image)
@@ -121,7 +121,7 @@ def rescale(
         `np.ndarray`: The rescaled image.
     """
     if not isinstance(image, np.ndarray):
-        raise ValueError(f"Input image must be of type np.ndarray, got {type(image)}")
+        raise TypeError(f"Input image must be of type np.ndarray, got {type(image)}")
 
     rescaled_image = image * scale
     if data_format is not None:
@@ -374,7 +374,7 @@ def normalize(
             The channel dimension format of the input image. If unset, will use the inferred format from the input.
     """
     if not isinstance(image, np.ndarray):
-        raise ValueError("image must be a numpy array")
+        raise TypeError("image must be a numpy array")
 
     if input_data_format is None:
         input_data_format = infer_channel_dimension_format(image)
@@ -453,7 +453,7 @@ def center_crop(
     return_numpy = True if return_numpy is None else return_numpy
 
     if not isinstance(image, np.ndarray):
-        raise ValueError(f"Input image must be of type np.ndarray, got {type(image)}")
+        raise TypeError(f"Input image must be of type np.ndarray, got {type(image)}")
 
     if not isinstance(size, Iterable) or len(size) != 2:
         raise ValueError("size must have 2 elements representing the height and width of the output image")

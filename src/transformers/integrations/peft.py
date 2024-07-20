@@ -262,7 +262,7 @@ class PeftAdapterMixin:
             raise ValueError(f"Adapter with name {adapter_name} already exists. Please use a different name.")
 
         if not isinstance(adapter_config, PeftConfig):
-            raise ValueError(
+            raise TypeError(
                 f"adapter_config should be an instance of PeftConfig. Got {type(adapter_config)} instead."
             )
 
