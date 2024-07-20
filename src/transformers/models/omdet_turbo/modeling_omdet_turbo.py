@@ -535,13 +535,14 @@ class OmDetTurboCSPRepLayer(nn.Module):
     Cross Stage Partial (CSP) network layer with RepVGG blocks.
     """
 
+    # Ignore copy
     def __init__(self, config: OmDetTurboConfig):
         super().__init__()
 
         in_channels = config.encoder_hidden_dim * 2
         out_channels = config.encoder_hidden_dim
         num_blocks = 3
-        activation = config.activation_function
+        activation = config.csp_activation
 
         hidden_channels = int(out_channels * config.hidden_expansion)
         self.conv1 = OmDetTurboConvNormLayer(config, in_channels, hidden_channels, 1, 1, activation=activation)
