@@ -1730,9 +1730,7 @@ class IrisModel(IrisPreTrainedModel):
         )
         losses_actor_critic = losses_actor_critic / self.config.grad_acc_steps_actor_critic
 
-        losses = torch.stack(
-            (losses_discrete_autoencoder.loss_total, losses_world_model.loss_total, losses_actor_critic.loss_total)
-        )
+        losses = (losses_discrete_autoencoder, losses_world_model, losses_actor_critic)
 
         all_hidden_states = (
             all_hidden_states_discrete_autoencoder + all_hidden_states_world_model + all_hidden_states_actor_critic
