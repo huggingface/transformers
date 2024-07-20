@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# 이미지 특징 추출
+# 이미지 특징 추출 [[image-feature-extraction]]
 
 [[open-in-colab]]
 
@@ -25,7 +25,7 @@ rendered properly in your Markdown viewer.
 - '이미지 특징 추출' 파이프라인 위에 간단한 이미지 유사성 시스템을 구축하는 방법을 배웁니다.
 - 베어 모델 추론으로 동일한 작업을 수행합니다.
 
-## `image-feature-extraction` 파이프라인을 이용한 이미지 유사성
+## `image-feature-extraction` 파이프라인을 이용한 이미지 유사성 [[image-similarity-using-image-feature-extraction-pipeline]]
 
 두 장의 고양이 사진이 있는데, 그 중 하나는 물고기 그물 위에 앉아 있습니다. 이 중 하나는 생성된 이미지입니다.
 
@@ -95,7 +95,7 @@ print(np.array(outputs).shape)
 # (1, 197, 768)
 ```
 
-## `AutoModel`을 사용하여 특징과 유사성 얻기
+## `AutoModel`을 사용하여 특징과 유사성 얻기 [[getting-features-and-similarities-using-automodel]]
 
 transformers의 `AutoModel` 클래스를 사용하여 특징을 얻을 수도 있습니다. `AutoModel`은 특정 작업에 맞춘 헤드 없이 모든 transformers 모델을 로드할 수 있으며, 이를 통해 특징을 추출할 수 있습니다.
 
