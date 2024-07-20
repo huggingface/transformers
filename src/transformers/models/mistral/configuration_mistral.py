@@ -15,6 +15,7 @@
 """Mistral model configuration"""
 
 from ...configuration_utils import PretrainedConfig
+from ...modeling_rope_utils import ROPE_CONFIG_DOCSTRING, rope_config_validation
 from ...utils import logging
 
 
@@ -22,7 +23,7 @@ logger = logging.get_logger(__name__)
 
 
 class MistralConfig(PretrainedConfig):
-    r"""
+    rf"""
     This is the configuration class to store the configuration of a [`MistralModel`]. It is used to instantiate an
     Mistral model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the Mistral-7B-v0.1 or Mistral-7B-Instruct-v0.1.
@@ -77,6 +78,7 @@ class MistralConfig(PretrainedConfig):
             Whether the model's input and output word embeddings should be tied.
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
+        {ROPE_CONFIG_DOCSTRING}
         sliding_window (`int`, *optional*, defaults to 4096):
             Sliding window attention window size. If not specified, will default to `4096`.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -117,6 +119,7 @@ class MistralConfig(PretrainedConfig):
         eos_token_id=2,
         tie_word_embeddings=False,
         rope_theta=10000.0,
+        rope_scaling=None,
         sliding_window=4096,
         attention_dropout=0.0,
         **kwargs,
@@ -140,7 +143,10 @@ class MistralConfig(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.rope_theta = rope_theta
+        self.rope_scaling = rope_scaling
         self.attention_dropout = attention_dropout
+
+        rope_config_validation(self.rope_scaling)
 
         super().__init__(
             pad_token_id=pad_token_id,
