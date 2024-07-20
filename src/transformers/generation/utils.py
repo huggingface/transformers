@@ -32,6 +32,7 @@ from ..cache_utils import (
     EncoderDecoderCache,
     HQQQuantizedCache,
     HybridCache,
+    MambaCache,
     QuantizedCacheConfig,
     QuantoQuantizedCache,
     SlidingWindowCache,
@@ -116,7 +117,12 @@ logger = logging.get_logger(__name__)
 if is_accelerate_available():
     from accelerate.hooks import AlignDevicesHook, add_hook_to_module
 
-NEED_SETUP_CACHE_CLASSES_MAPPING = {"static": StaticCache, "sliding_window": SlidingWindowCache, "hybrid": HybridCache}
+NEED_SETUP_CACHE_CLASSES_MAPPING = {
+    "static": StaticCache,
+    "sliding_window": SlidingWindowCache,
+    "hybrid": HybridCache,
+    "mamba": MambaCache,
+}
 QUANT_BACKEND_CLASSES_MAPPING = {"quanto": QuantoQuantizedCache, "HQQ": HQQQuantizedCache}
 
 
@@ -689,13 +695,14 @@ class GenerationMixin:
                     dim=-1,
                 )
 
-        if (
-            model_kwargs.get("use_cache", True)
-            and "cache_position" in model_kwargs
-            and model_kwargs["cache_position"] is not None
-        ):
+        if model_kwargs.get("use_cache", True):
             model_kwargs["cache_position"] = model_kwargs["cache_position"][-1:] + num_new_tokens
-
+        else:
+            past_positions = model_kwargs.pop("cache_position")
+            new_positions = torch.arange(
+                past_positions[-1] + 1, past_positions[-1] + num_new_tokens + 1, dtype=past_positions.dtype
+            ).to(past_positions.device)
+            model_kwargs["cache_position"] = torch.cat((past_positions, new_positions))
         return model_kwargs
 
     def _reorder_cache(self, past_key_values, beam_idx):
@@ -1393,10 +1400,6 @@ class GenerationMixin:
 
     def _get_initial_cache_position(self, input_ids, model_kwargs):
         """Calculates `cache_position` for the pre-fill stage based on `input_ids` and optionally past length"""
-        if not model_kwargs.get("use_cache", True):
-            model_kwargs["cache_position"] = None
-            return model_kwargs
-
         past_length = 0
         if model_kwargs.get("past_key_values") is not None:
             cache = model_kwargs["past_key_values"]
@@ -1434,8 +1437,9 @@ class GenerationMixin:
             not hasattr(self, "_cache")
             or (not isinstance(cache_to_check, cache_cls))
             or cache_to_check.max_batch_size != max_batch_size
-            or cache_to_check.max_cache_len < max_cache_len
         )
+        if cache_implementation != "mamba":
+            need_new_cache = need_new_cache or cache_to_check.max_cache_len < max_cache_len
 
         if requires_cross_attention_cache and hasattr(self, "_cache"):
             need_new_cache = (
@@ -1753,9 +1757,13 @@ class GenerationMixin:
         )
 
         use_dynamic_cache_by_default = False
-        if generation_config.cache_implementation is not None and model_kwargs.get("past_key_values") is not None:
+        if "mamba" in self.__class__.__name__.lower():
+            cache_name = "cache_params"
+        else:
+            cache_name = "past_key_values"
+        if generation_config.cache_implementation is not None and (model_kwargs.get(cache_name) is not None):
             raise ValueError(
-                "Passing both `cache_implementation` (used to initialize certain caches) and `past_key_values` (a "
+                f"Passing both `cache_implementation` (used to initialize certain caches) and `{cache_name}` (a "
                 "Cache object) is unsupported. Please use only one of the two."
             )
         elif generation_config.cache_implementation is not None:
@@ -1765,7 +1773,7 @@ class GenerationMixin:
                         "This model does not support `cache_implementation='static'`. Please check the following "
                         "issue: https://github.com/huggingface/transformers/issues/28981"
                     )
-                model_kwargs["past_key_values"] = self._get_cache(
+                model_kwargs[cache_name] = self._get_cache(
                     generation_config.cache_implementation,
                     getattr(generation_config, "num_beams", 1) * batch_size,
                     generation_config.max_length,
@@ -1796,23 +1804,23 @@ class GenerationMixin:
                         "Please install it via  with `pip install hqq`"
                     )
 
-                model_kwargs["past_key_values"] = cache_class(cache_config)
+                model_kwargs[cache_name] = cache_class(cache_config)
         # Use DynamicCache() instance by default. This will avoid back and forth from legacy format that
         # keeps copying the cache thus using much more memory
         elif generation_config.cache_implementation is None and self._supports_default_dynamic_cache():
-            past = model_kwargs.get("past_key_values", None)
+            past = model_kwargs.get(cache_name, None)
             requires_cross_attention_cache = (
                 self.config.is_encoder_decoder or model_kwargs.get("encoder_outputs") is not None
             )
             if past is None:
-                model_kwargs["past_key_values"] = (
+                model_kwargs[cache_name] = (
                     DynamicCache()
                     if not requires_cross_attention_cache
                     else EncoderDecoderCache(DynamicCache(), DynamicCache())
                 )
                 use_dynamic_cache_by_default = True
             elif isinstance(past, tuple):
-                model_kwargs["past_key_values"] = (
+                model_kwargs[cache_name] = (
                     DynamicCache.from_legacy_cache(past)
                     if not requires_cross_attention_cache
                     else EncoderDecoderCache.from_legacy_cache(past)
@@ -2221,8 +2229,8 @@ class GenerationMixin:
         stopping_criteria: StoppingCriteriaList,
         generation_config: GenerationConfig,
         synced_gpus: bool,
-        streamer: Optional["BaseStreamer"] = None,
-        logits_warper: Optional[LogitsProcessorList] = None,
+        streamer: "BaseStreamer",
+        logits_warper: Optional[LogitsProcessorList],
         **model_kwargs,
     ) -> Union[GenerateNonBeamOutput, torch.LongTensor]:
         r"""
@@ -2821,34 +2829,6 @@ class GenerationMixin:
         else:
             return input_ids
 
-    def _greedy_search(
-        self,
-        input_ids: torch.LongTensor,
-        logits_processor: LogitsProcessorList,
-        stopping_criteria: StoppingCriteriaList,
-        generation_config: GenerationConfig,
-        synced_gpus: bool,
-        streamer: Optional["BaseStreamer"],
-        **model_kwargs,
-    ) -> Union[GenerateNonBeamOutput, torch.LongTensor]:
-        r"""
-        Deprecated. Use `._sample()` instead, passing the same arguments.
-        """
-
-        logger.warning_once(
-            "Calling `._greedy_search()` directly is deprecated and will be removed in v4.42. Use `._sample()` "
-            "instead, passing the same arguments."
-        )
-        return self._sample(
-            input_ids=input_ids,
-            logits_processor=logits_processor,
-            stopping_criteria=stopping_criteria,
-            generation_config=generation_config,
-            synced_gpus=synced_gpus,
-            streamer=streamer,
-            **model_kwargs,
-        )
-
     def _sample(
         self,
         input_ids: torch.LongTensor,
@@ -2857,7 +2837,7 @@ class GenerationMixin:
         generation_config: GenerationConfig,
         synced_gpus: bool,
         streamer: Optional["BaseStreamer"],
-        logits_warper: Optional[LogitsProcessorList] = None,
+        logits_warper: Optional[LogitsProcessorList],
         **model_kwargs,
     ) -> Union[GenerateNonBeamOutput, torch.LongTensor]:
         r"""
@@ -3056,7 +3036,6 @@ class GenerationMixin:
             past_key_values.reorder_cache(beam_idx)
         return past_key_values
 
-    # TODO (joao, v4.42): remove default for `logits_warper`
     def _beam_search(
         self,
         input_ids: torch.LongTensor,
@@ -3065,7 +3044,7 @@ class GenerationMixin:
         stopping_criteria: StoppingCriteriaList,
         generation_config: GenerationConfig,
         synced_gpus: bool,
-        logits_warper: Optional[LogitsProcessorList] = None,
+        logits_warper: Optional[LogitsProcessorList],
         **model_kwargs,
     ) -> Union[GenerateBeamOutput, torch.LongTensor]:
         r"""
@@ -3344,36 +3323,6 @@ class GenerationMixin:
                 )
         else:
             return sequence_outputs["sequences"]
-
-    def _beam_sample(
-        self,
-        input_ids: torch.LongTensor,
-        beam_scorer: BeamScorer,
-        logits_processor: LogitsProcessorList,
-        stopping_criteria: StoppingCriteriaList,
-        logits_warper: LogitsProcessorList,
-        generation_config: GenerationConfig,
-        synced_gpus: bool,
-        **model_kwargs,
-    ) -> Union[GenerateBeamOutput, torch.LongTensor]:
-        r"""
-        Deprecated. Use `._beam_search()` instead, passing the same arguments.
-        """
-
-        logger.warning_once(
-            "Calling `._beam_sample()` directly is deprecated and will be removed in v4.42. Use `._beam_search()` "
-            "instead, passing the same arguments."
-        )
-        return self._beam_search(
-            input_ids=input_ids,
-            beam_scorer=beam_scorer,
-            logits_processor=logits_processor,
-            stopping_criteria=stopping_criteria,
-            logits_warper=logits_warper,
-            generation_config=generation_config,
-            synced_gpus=synced_gpus,
-            **model_kwargs,
-        )
 
     def _group_beam_search(
         self,

@@ -96,8 +96,11 @@ class ImageProcessorPushToHubTester(unittest.TestCase):
         for k, v in image_processor.__dict__.items():
             self.assertEqual(v, getattr(new_image_processor, k))
 
-        # Reset repo
-        delete_repo(token=self._token, repo_id="test-image-processor")
+        try:
+            # Reset repo
+            delete_repo(token=self._token, repo_id="test-image-processor")
+        except:  # noqa E722
+            pass
 
         # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -117,8 +120,11 @@ class ImageProcessorPushToHubTester(unittest.TestCase):
         for k, v in image_processor.__dict__.items():
             self.assertEqual(v, getattr(new_image_processor, k))
 
-        # Reset repo
-        delete_repo(token=self._token, repo_id="valid_org/test-image-processor")
+        try:
+            # Reset repo
+            delete_repo(token=self._token, repo_id="valid_org/test-image-processor")
+        except:  # noqa E722
+            pass
 
         # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:

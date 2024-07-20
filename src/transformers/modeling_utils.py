@@ -338,6 +338,37 @@ def dtype_byte_size(dtype):
     return bit_size // 8
 
 
+def check_support_param_buffer_assignment(model_to_load, state_dict, start_prefix=""):
+    """
+    Checks if `model_to_load` supports param buffer assignment (such
+    as when loading in empty weights) by first checking
+    if the model explicitly disables it, then by ensuring that the state dict keys
+    are a subset of the model's parameters.
+
+    Note: We fully disable this if we are using `deepspeed`
+    """
+    if len([key for key in state_dict if key.startswith(start_prefix)]) == 0:
+        return False
+
+    if is_deepspeed_zero3_enabled():
+        return False
+
+    # Some models explicitly do not support param buffer assignment
+    if not getattr(model_to_load, "_supports_param_buffer_assignment", True):
+        logger.debug(
+            f"{model_to_load.__class__.__name__} does not support param buffer assignment, loading will be slower"
+        )
+        return False
+
+    # If the model does, the incoming `state_dict` and the `model_to_load` must be the same dtype
+    first_key = list(model_to_load.state_dict().keys())[0]
+    if start_prefix + first_key in state_dict:
+        return state_dict[start_prefix + first_key].dtype == model_to_load.state_dict()[first_key].dtype
+
+    # For cases when the `state_dict` doesn't contain real weights to the model (`test_model_weights_reload_no_missing_tied_weights`)
+    return False
+
+
 def shard_checkpoint(
     state_dict: Dict[str, torch.Tensor], max_shard_size: Union[int, str] = "10GB", weights_name: str = WEIGHTS_NAME
 ):
@@ -657,7 +688,7 @@ def _find_identical(tensors: List[Set[str]], state_dict: Dict[str, torch.Tensor]
     return shared_tensors, identical
 
 
-def _load_state_dict_into_model(model_to_load, state_dict, start_prefix):
+def _load_state_dict_into_model(model_to_load, state_dict, start_prefix, assign_to_params_buffers=False):
     # Convert old format to new format if needed from a PyTorch state_dict
     old_keys = []
     new_keys = []
@@ -685,8 +716,10 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix):
 
     # PyTorch's `_load_from_state_dict` does not copy parameters in a module's descendants
     # so we need to apply the function recursively.
-    def load(module: nn.Module, state_dict, prefix=""):
+    def load(module: nn.Module, state_dict, prefix="", assign_to_params_buffers=False):
         local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
+        local_metadata["assign_to_params_buffers"] = assign_to_params_buffers
+
         args = (state_dict, prefix, local_metadata, True, [], [], error_msgs)
         # Parameters of module and children will start with prefix. We can exit early if there are none in this
         # state_dict
@@ -710,9 +743,9 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix):
 
         for name, child in module._modules.items():
             if child is not None:
-                load(child, state_dict, prefix + name + ".")
+                load(child, state_dict, prefix + name + ".", assign_to_params_buffers)
 
-    load(model_to_load, state_dict, prefix=start_prefix)
+    load(model_to_load, state_dict, prefix=start_prefix, assign_to_params_buffers=assign_to_params_buffers)
     # Delete `state_dict` so it could be collected by GC earlier. Note that `state_dict` is a copy of the argument, so
     # it's safe to delete it.
     del state_dict
@@ -2852,6 +2885,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         The warning *Weights from XXX not used in YYY* means that the layer XXX is not used by YYY, therefore those
         weights are discarded.
 
+        If model weights are the same precision as the base model (and is a supported model), weights will be lazily loaded
+        in using the `meta` device and brought into memory once an input is passed through that layer regardless of
+        `low_cpu_mem_usage`.
+
         Parameters:
             pretrained_model_name_or_path (`str` or `os.PathLike`, *optional*):
                 Can be either:
@@ -2952,7 +2989,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             low_cpu_mem_usage(`bool`, *optional*):
                 Tries to not use more than 1x model size in CPU memory (including peak memory) while loading the model.
+                Generally should be combined with a `device_map` (such as `"auto"`) for best results.
                 This is an experimental feature and a subject to change at any moment.
+                </Tip>
+                    If the model weights are in the same precision as the model loaded in, `low_cpu_mem_usage` (without
+                    `device_map`) is redundant and will not provide any benefit in regards to CPU memory usage. However,
+                    this should still be enabled if you are passing in a `device_map`.
+                </Tip>
             torch_dtype (`str` or `torch.dtype`, *optional*):
                 Override the default `torch.dtype` and load the model under a specific `dtype`. The different options
                 are:
@@ -4018,6 +4061,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         missing_keys = sorted(set(expected_keys) - set(loaded_keys))
         unexpected_keys = set(loaded_keys) - set(expected_keys)
+
         # Remove nonpersistent buffers from unexpected keys: they are not in the state dict but will be in the model
         # buffers
         model_buffers = {n for n, _ in model.named_buffers()}
@@ -4252,7 +4296,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
             else:
                 # Sharded checkpoint or whole but low_cpu_mem_usage==True
-                error_msgs = _load_state_dict_into_model(model_to_load, state_dict, start_prefix)
+                assign_to_params_buffers = check_support_param_buffer_assignment(
+                    model_to_load, state_dict, start_prefix
+                )
+                error_msgs = _load_state_dict_into_model(
+                    model_to_load, state_dict, start_prefix, assign_to_params_buffers
+                )
 
         else:
             # This should always be a list but, just to be sure.
@@ -4280,6 +4329,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             if len(resolved_archive_file) > 1:
                 resolved_archive_file = logging.tqdm(resolved_archive_file, desc="Loading checkpoint shards")
+            assign_to_params_buffers = None
             for shard_file in resolved_archive_file:
                 # Skip the load for shards that only contain disk-offloaded weights when using safetensors for the offload.
                 if shard_file in disk_only_shard_files:
@@ -4323,7 +4373,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         )
                         error_msgs += new_error_msgs
                 else:
-                    error_msgs += _load_state_dict_into_model(model_to_load, state_dict, start_prefix)
+                    # Sharded checkpoint or whole but low_cpu_mem_usage==True
+                    if assign_to_params_buffers is None:
+                        assign_to_params_buffers = check_support_param_buffer_assignment(
+                            model_to_load, state_dict, start_prefix
+                        )
+                    error_msgs += _load_state_dict_into_model(
+                        model_to_load, state_dict, start_prefix, assign_to_params_buffers
+                    )
 
                 # force memory release
                 del state_dict
