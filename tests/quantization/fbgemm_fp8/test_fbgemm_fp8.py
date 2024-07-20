@@ -190,6 +190,26 @@ class FbgemmFp8Test(unittest.TestCase):
             output = model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
             self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
+    def test_change_loading_attributes(self):
+        """
+        Simple test that checks if the quantized model is working properly after being saved and loaded
+        """
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            self.quantized_model.save_pretrained(tmpdirname)
+
+            quantization_config = FbgemmFp8Config(activation_scale_ub=1000.0)
+
+            model = AutoModelForCausalLM.from_pretrained(
+                tmpdirname, device_map=self.device_map, quantization_config=quantization_config
+            )
+            print(model.model.layers[1].mlp.down_proj.input_scale_ub.item())
+            self.assertEqual(model.model.layers[1].mlp.down_proj.input_scale_ub.item(), 1000.0)
+
+            input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
+
+            output = model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
+            self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+
     @require_torch_multi_gpu
     def test_quantized_model_multi_gpu(self):
         """

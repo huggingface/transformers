@@ -151,12 +151,6 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
         module._buffers[tensor_name] = new_value.to(target_device)
         # to have the right output shape -> (out_features, 1)
         module._buffers["weight_scale"] = weight_scale.view(weight_scale.shape[0], 1).to(target_device)
-        input_scale_ub = torch.tensor(
-            [self.quantization_config.activation_scale_ub],
-            dtype=torch.float,
-            device=target_device,
-        )
-        module._buffers["input_scale_ub"] = input_scale_ub
 
         if unexpected_keys is not None and param_name in unexpected_keys:
             unexpected_keys.remove(param_name)

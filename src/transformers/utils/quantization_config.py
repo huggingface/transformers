@@ -1073,3 +1073,9 @@ class FbgemmFp8Config(QuantizationConfigMixin):
         self.quant_method = QuantizationMethod.FBGEMM_FP8
         self.activation_scale_ub = activation_scale_ub
         self.modules_to_not_convert = modules_to_not_convert
+
+    def get_loading_attributes(self):
+        attibutes_dict = copy.deepcopy(self.__dict__)
+        loading_attibutes = ["activation_scale_ub"]
+        loading_attibutes_dict = {i: j for i, j in attibutes_dict.items() if i in loading_attibutes}
+        return loading_attibutes_dict
