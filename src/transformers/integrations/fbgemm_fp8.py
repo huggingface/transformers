@@ -30,14 +30,14 @@ logger = logging.get_logger(__name__)
 
 
 class FbgemmFp8Linear(torch.nn.Module):
-    def __init__(self, in_features, out_features, bias, input_scale_ub=1200.0, weight_dtype=torch.float32):
+    def __init__(self, in_features, out_features, bias, weight_dtype=torch.float32):
         super().__init__()
         self.in_features = in_features
         self.out_features = out_features
 
         self.register_buffer("weight", torch.zeros((out_features, in_features), dtype=torch.float8_e4m3fn))
         self.register_buffer("weight_scale", torch.zeros((out_features, 1), dtype=weight_dtype))
-        self.register_buffer("input_scale_ub", torch.tensor([input_scale_ub], dtype=torch.float), persistent=False)
+        self.register_buffer("input_scale_ub", torch.zeros([1], dtype=torch.float), persistent=False)
 
         if bias:
             self.register_buffer("bias", torch.zeros((self.out_features), dtype=weight_dtype))
@@ -90,19 +90,22 @@ def _replace_with_fbgemm_fp8_linear(
             if not any(
                 (key + "." in current_key_name_str) or (key == current_key_name_str) for key in modules_to_not_convert
             ):
-                with init_empty_weights():
+                with init_empty_weights(include_buffers=True):
                     in_features = module.in_features
                     out_features = module.out_features
                     model._modules[name] = FbgemmFp8Linear(
                         in_features,
                         out_features,
                         module.bias is not None,
-                        input_scale_ub=quantization_config.activation_scale_ub,
                     )
                     has_been_replaced = True
 
                     # Force requires grad to False to avoid unexpected errors
                     model._modules[name].requires_grad_(False)
+                # set non persistant buffer outside of init_empty_weights
+                model._modules[name].input_scale_ub = torch.tensor(
+                    [quantization_config.activation_scale_ub], dtype=torch.float
+                )
         if len(list(module.children())) > 0:
             _, has_been_replaced = _replace_with_fbgemm_fp8_linear(
                 module,
