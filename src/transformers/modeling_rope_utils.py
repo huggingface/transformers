@@ -104,7 +104,7 @@ def _compute_linear_scaling_rope_parameters(
 
 def _compute_dynamic_ntk_parameters(
     config: PretrainedConfig, device: "torch.device", seq_len: Optional[int] = None
-) -> Tuple[torch.Tensor, float]:
+) -> Tuple["torch.Tensor", float]:
     """
     Computes the inverse frequencies with NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla
 
