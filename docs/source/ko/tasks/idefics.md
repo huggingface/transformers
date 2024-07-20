@@ -14,60 +14,48 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Image tasks with IDEFICS
+# IDEFICS를 이용한 이미지 작업[[image-tasks-with-idefics]]
 
 [[open-in-colab]]
 
-While individual tasks can be tackled by fine-tuning specialized models, an alternative approach 
-that has recently emerged and gained popularity is to use large models for a diverse set of tasks without fine-tuning. 
-For instance, large language models can handle such NLP tasks as summarization, translation, classification, and more. 
-This approach is no longer limited to a single modality, such as text, and in this guide, we will illustrate how you can 
-solve image-text tasks with a large multimodal model called IDEFICS. 
+개별 작업은 특화된 모델을 미세 조정하여 처리할 수 있지만, 최근 등장하여 인기를 얻고 있는 또 다른 접근 방식은 대형 모델을 미세 조정 없이 다양한 작업에 사용하는 것입니다. 예를 들어, 대형 언어 모델은 요약, 번역, 분류 등과 같은 NLP 작업을 처리할 수 있습니다. 이 접근 방식은 텍스트와 같은 단일 모달리티에 국한되지 않으며, 이 가이드에서는 IDEFICS라는 대형 멀티모달 모델을 사용하여 이미지-텍스트 작업을 해결하는 방법을 설명합니다.
 
-[IDEFICS](../model_doc/idefics) is an open-access vision and language model based on [Flamingo](https://huggingface.co/papers/2204.14198), 
-a state-of-the-art visual language model initially developed by DeepMind. The model accepts arbitrary sequences of image 
-and text inputs and generates coherent text as output. It can answer questions about images, describe visual content, 
-create stories grounded in multiple images, and so on. IDEFICS comes in two variants - [80 billion parameters](https://huggingface.co/HuggingFaceM4/idefics-80b) 
-and [9 billion parameters](https://huggingface.co/HuggingFaceM4/idefics-9b), both of which are available on the 🤗 Hub. For each variant, you can also find fine-tuned instructed 
-versions of the model adapted for conversational use cases.
+[IDEFICS](../model_doc/idefics)는 [Flamingo](https://huggingface.co/papers/2204.14198)를 기반으로 하는 오픈 액세스 비전 및 언어 모델로, DeepMind에서 처음 개발한 최신 시각 언어 모델입니다. 이 모델은 이미지와 텍스트 입력의 임의 시퀀스를 받아 일관된 텍스트를 출력으로 생성합니다. 이미지에 대한 질문에 답변하고, 시각적 내용을 설명하며, 여러 이미지에 기반한 이야기를 생성하는 등 다양한 작업을 수행할 수 있습니다. IDEFICS는 두 가지 버전 - [800억 개 파라미터](https://huggingface.co/HuggingFaceM4/idefics-80b)와 [90억 개 파라미터](https://huggingface.co/HuggingFaceM4/idefics-9b)로 제공되며, 두 버전 모두 🤗 Hub에서 이용할 수 있습니다. 각 버전에는 대화형 사용 사례에 맞게 미세 조정된 버전도 있습니다.
 
-This model is exceptionally versatile and can be used for a wide range of image and multimodal tasks. However, 
-being a large model means it requires significant computational resources and infrastructure. It is up to you to decide whether 
-this approach suits your use case better than fine-tuning specialized models for each individual task. 
+이 모델은 매우 다재다능하며 광범위한 이미지 및 멀티모달 작업에 사용할 수 있습니다. 그러나 대형 모델이기 때문에 상당한 컴퓨팅 자원과 인프라가 필요합니다. 각 개별 작업에 특화된 모델을 미세 조정하는 것보다 이 접근 방식이 더 적합한지 여부는 사용자가 결정해야 합니다.
 
-In this guide, you'll learn how to: 
-- [Load IDEFICS](#loading-the-model) and [load the quantized version of the model](#quantized-model)
-- Use IDEFICS for: 
-  - [Image captioning](#image-captioning)
-  - [Prompted image captioning](#prompted-image-captioning)
-  - [Few-shot prompting](#few-shot-prompting)
-  - [Visual question answering](#visual-question-answering)
-  - [Image classification](#image-classification)
-  - [Image-guided text generation](#image-guided-text-generation)
-- [Run inference in batch mode](#running-inference-in-batch-mode)
-- [Run IDEFICS instruct for conversational use](#idefics-instruct-for-conversational-use)
+이 가이드에서는 다음을 배우게 됩니다:
+- [IDEFICS 로드](#loading-the-model) 및 [양자화된 모델 로드](#quantized-model)
+- IDEFICS를 사용하여:
+  - [이미지 캡셔닝](#image-captioning)
+  - [프롬프트 이미지 캡셔닝](#prompted-image-captioning)
+  - [퓨샷 프롬프트](#few-shot-prompting)
+  - [시각적 질문 답변](#visual-question-answering)
+  - [이미지 분류](#image-classification)
+  - [이미지 기반 텍스트 생성](#image-guided-text-generation)
+- [배치 모드에서 추론 실행](#running-inference-in-batch-mode)
+- [대화형 사용을 위한 IDEFICS 인스트럭트 실행](#idefics-instruct-for-conversational-use)
 
-Before you begin, make sure you have all the necessary libraries installed. 
+시작하기 전에 필요한 모든 라이브러리가 설치되어 있는지 확인하세요.
 
 ```bash
 pip install -q bitsandbytes sentencepiece accelerate transformers
 ```
 
 <Tip>
-To run the following examples with a non-quantized version of the model checkpoint you will need at least 20GB of GPU memory.
+다음 예제를 비양자화된 버전의 모델 체크포인트로 실행하려면 최소 20GB의 GPU 메모리가 필요합니다.
 </Tip>
 
-## Loading the model
+## 모델 로드[[loading-the-model]]
 
-Let's start by loading the model's 9 billion parameters checkpoint: 
+모델의 90억 개 파라미터 체크포인트를 로드해 봅시다:
 
 ```py
 >>> checkpoint = "HuggingFaceM4/idefics-9b"
 ```
 
-Just like for other Transformers models, you need to load a processor and the model itself from the checkpoint. 
-The IDEFICS processor wraps a [`LlamaTokenizer`] and IDEFICS image processor into a single processor to take care of 
-preparing text and image inputs for the model.
+다른 Transformers 모델과 마찬가지로, 체크포인트에서 프로세서와 모델 자체를 로드해야 합니다.
+IDEFICS 프로세서는 [`LlamaTokenizer`]와 IDEFICS 이미지 프로세서를 하나의 프로세서로 감싸서 텍스트와 이미지 입력을 모델에 맞게 준비합니다.
 
 ```py
 >>> import torch
@@ -79,14 +67,11 @@ preparing text and image inputs for the model.
 >>> model = IdeficsForVisionText2Text.from_pretrained(checkpoint, torch_dtype=torch.bfloat16, device_map="auto")
 ```
 
-Setting `device_map` to `"auto"` will automatically determine how to load and store the model weights in the most optimized 
-manner given existing devices.
+`device_map`을 `"auto"`로 설정하면 기존 장치를 고려하여 모델 가중치를 가장 최적화된 방식으로 로드하고 저장하는 방법을 자동으로 결정합니다.
 
-### Quantized model
+### 양자화된 모델[[quantized-model]]
 
-If high-memory GPU availability is an issue, you can load the quantized version of the model. To load the model and the 
-processor in 4bit precision, pass a `BitsAndBytesConfig` to the `from_pretrained` method and the model will be compressed 
-on the fly while loading.
+고용량 GPU 사용이 어려운 경우, 모델의 양자화된 버전을 로드할 수 있습니다. 모델과 프로세서를 4비트 정밀도로 로드하려면, `from_pretrained` 메서드에 `BitsAndBytesConfig`를 전달하면 모델이 로드되는 동안 실시간으로 압축됩니다.
 
 ```py
 >>> import torch
@@ -106,25 +91,22 @@ on the fly while loading.
 ... )
 ```
 
-Now that you have the model loaded in one of the suggested ways, let's move on to exploring tasks that you can use IDEFICS for.
+이제 모델을 제안된 방법 중 하나로 로드했으니, IDEFICS를 사용할 수 있는 작업들을 탐구해봅시다.
 
-## Image captioning
-Image captioning is the task of predicting a caption for a given image. A common application is to aid visually impaired 
-people navigate through different situations, for instance, explore image content online. 
+## 이미지 캡셔닝[[image-captioning]]
+이미지 캡셔닝은 주어진 이미지에 대한 캡션을 예측하는 작업입니다. 일반적인 응용 프로그램은 시각 장애인이 다양한 상황을 탐색하는 데 도움을 주는 것입니다. 예를 들어, 온라인에서 이미지 콘텐츠를 탐색할 수 있습니다.
 
-To illustrate the task, get an image to be captioned, e.g.:
+작업을 설명하기 위해 캡션을 달 이미지 예시를 가져옵니다. 예를 들어:
 
 <div class="flex justify-center">
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/idefics-im-captioning.jpg" alt="Image of a puppy in a flower bed"/>
 </div>
 
-Photo by [Hendo Wang](https://unsplash.com/@hendoo). 
+사진 제공: [Hendo Wang](https://unsplash.com/@hendoo).
 
-IDEFICS accepts text and image prompts. However, to caption an image, you do not have to provide a text prompt to the 
-model, only the preprocessed input image. Without a text prompt, the model will start generating text from the 
-BOS (beginning-of-sequence) token thus creating a caption.
+IDEFICS는 텍스트 및 이미지 프롬프트를 모두 수용합니다. 그러나 이미지를 캡션하기 위해 모델에 텍스트 프롬프트를 제공할 필요는 없습니다. 전처리된 입력 이미지만 제공하면 됩니다. 텍스트 프롬프트 없이 모델은 BOS(시퀀스 시작) 토큰에서 텍스트 생성을 시작하여 캡션을 만듭니다.
 
-As image input to the model, you can use either an image object (`PIL.Image`) or a url from which the image can be retrieved.
+모델에 이미지 입력으로는 이미지 객체(`PIL.Image`) 또는 이미지를 가져올 수 있는 URL을 사용할 수 있습니다.
 
 ```py
 >>> prompt = [
@@ -142,24 +124,21 @@ A puppy in a flower bed
 
 <Tip>
 
-It is a good idea to include the `bad_words_ids` in the call to `generate` to avoid errors arising when increasing 
-the `max_new_tokens`: the model will want to generate a new `<image>` or `<fake_token_around_image>` token when there 
-is no image being generated by the model.
-You can set it on-the-fly as in this guide, or store in the `GenerationConfig` as described in the [Text generation strategies](../generation_strategies) guide.
+`max_new_tokens`를 늘릴 때 발생할 수 있는 오류를 피하기 위해 `generate` 호출 시 `bad_words_ids`를 포함하는 것이 좋습니다. 모델이 이미지를 생성하지 않을 때 새로운 `<image>` 또는 `<fake_token_around_image>` 토큰을 생성하려고 하기 때문입니다.
+이 가이드에서처럼 즉석에서 설정하거나, [텍스트 생성 전략](../generation_strategies) 가이드에 설명된 대로 `GenerationConfig`에 저장할 수 있습니다.
 </Tip>
 
-## Prompted image captioning
+## 프롬프트 이미지 캡셔닝[[prompted-image-captioning]]
 
-You can extend image captioning by providing a text prompt, which the model will continue given the image. Let's take 
-another image to illustrate:
+이미지 캡셔닝을 확장하여 텍스트 프롬프트를 제공할 수 있으며, 모델은 주어진 이미지를 바탕으로 이를 계속 생성합니다. 다음 이미지를 예시로 들어봅시다:
 
 <div class="flex justify-center">
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/idefics-prompted-im-captioning.jpg" alt="Image of the Eiffel Tower at night"/>
 </div>
 
-Photo by [Denys Nevozhai](https://unsplash.com/@dnevozhai).
-   
-Textual and image prompts can be passed to the model's processor as a single list to create appropriate inputs.
+사진 제공: [Denys Nevozhai](https://unsplash.com/@dnevozhai).
+
+텍스트 및 이미지 프롬프트는 적절한 입력을 생성하기 위해 모델의 프로세서에 단일 리스트로 전달될 수 있습니다.
 
 ```py
 >>> prompt = [
@@ -176,21 +155,19 @@ Textual and image prompts can be passed to the model's processor as a single lis
 This is an image of the Eiffel Tower in Paris, France.
 ```
 
-## Few-shot prompting
+## 퓨샷 프롬프트[[few-shot-prompting]]
 
-While IDEFICS demonstrates great zero-shot results, your task may require a certain format of the caption, or come with 
-other restrictions or requirements that increase task's complexity. Few-shot prompting can be used to enable in-context learning.
-By providing examples in the prompt, you can steer the model to generate results that mimic the format of given examples. 
+IDEFICS는 훌륭한 제로샷 결과를 보여주지만, 작업에 특정 형식의 캡션이 필요하거나 작업의 복잡성을 증가시키는 기타 제한이나 요구 사항이 있을 수 있습니다. 퓨샷 프롬프트는 인컨텍스트 학습을 가능하게 합니다.
+프롬프트에 예제를 제공함으로써 모델이 주어진 예제의 형식을 모방한 결과를 생성하도록 유도할 수 있습니다.
 
-Let's use the previous image of the Eiffel Tower as an example for the model and build a prompt that demonstrates to the model 
-that in addition to learning what the object in an image is, we would also like to get some interesting information about it. 
-Then, let's see, if we can get the same response format for an image of the Statue of Liberty:
+모델에 이전의 에펠탑 이미지를 예제로 사용하고, 모델에게 이미지의 객체를 학습하는 것 외에도 그것에 대한 흥미로운 정보를 얻고자 함을 보여주는 프롬프트를 작성해 봅시다.
+그런 다음 자유의 여신상 이미지에 대해 동일한 응답 형식을 얻을 수 있는지 확인해 봅시다:
 
 <div class="flex justify-center">
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/idefics-few-shot.jpg" alt="Image of the Statue of Liberty"/>
 </div>
 
-Photo by [Juan Mayobre](https://unsplash.com/@jmayobres).
+사진 제공: [Juan Mayobre](https://unsplash.com/@jmayobres).
   
 ```py
 >>> prompt = ["User:",
@@ -213,24 +190,21 @@ User: Describe this image.
 Assistant: An image of the Statue of Liberty. Fun fact: the Statue of Liberty is 151 feet tall.
 ```
 
-Notice that just from a single example (i.e., 1-shot) the model has learned how to perform the task. For more complex tasks, 
-feel free to experiment with a larger number of examples (e.g., 3-shot, 5-shot, etc.).
+단일 예제(즉, 1-샷)만으로도 모델이 작업을 수행하는 방법을 학습했다는 점을 주목하세요. 더 복잡한 작업의 경우, 더 많은 예제(예: 3-샷, 5-샷 등)를 사용하여 실험해 보세요.
 
-## Visual question answering
+## 시각적 질문 답변[[visual-question-answering]]
 
-Visual Question Answering (VQA) is the task of answering open-ended questions based on an image. Similar to image 
-captioning it can be used in accessibility applications, but also in education (reasoning about visual materials), customer 
-service (questions about products based on images), and image retrieval.
+시각적 질문 답변(VQA)은 이미지를 기반으로 개방형 질문에 답하는 작업입니다. 이미지 캡셔닝과 마찬가지로 접근성 애플리케이션에서 사용할 수 있지만, 교육(시각 자료에 대한 추론), 고객 서비스(이미지를 기반으로 한 제품 질문), 이미지 검색 등에서도 사용할 수 있습니다.
 
-Let's get a new image for this task: 
+이 작업을 위해 새로운 이미지를 가져옵니다:
 
 <div class="flex justify-center">
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/idefics-vqa.jpg" alt="Image of a couple having a picnic"/>
 </div>
 
-Photo by [Jarritos Mexican Soda](https://unsplash.com/@jarritos). 
+사진 제공: [Jarritos Mexican Soda](https://unsplash.com/@jarritos).
 
-You can steer the model from image captioning to visual question answering by prompting it with appropriate instructions: 
+적절한 지시문을 사용하여 모델을 이미지 캡셔닝에서 시각적 질문 답변으로 유도할 수 있습니다:
 
 ```py
 >>> prompt = [
@@ -249,21 +223,19 @@ Instruction: Provide an answer to the question. Use the image to answer.
  Question: Where are these people and what's the weather like? Answer: They're in a park in New York City, and it's a beautiful day.
 ```
 
-## Image classification
+## 이미지 분류[[image-classification]]
 
-IDEFICS is capable of classifying images into different categories without being explicitly trained on data containing 
-labeled examples from those specific categories. Given a list of categories and using its image and text understanding 
-capabilities, the model can infer which category the image likely belongs to. 
+IDEFICS는 특정 카테고리의 라벨이 포함된 데이터로 명시적으로 학습되지 않아도 이미지를 다양한 카테고리로 분류할 수 있습니다. 카테고리 목록이 주어지면, 모델은 이미지와 텍스트 이해 능력을 사용하여 이미지가 속할 가능성이 높은 카테고리를 추론할 수 있습니다.
 
-Say, we have this image of a vegetable stand: 
+예를 들어, 우리는 이 야채 가판대 이미지를 가지고 있습니다:
 
 <div class="flex justify-center">
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/idefics-classification.jpg" alt="Image of a vegetable stand"/>
 </div>
 
-Photo by [Peter Wendt](https://unsplash.com/@peterwendt).
+사진 제공: [Peter Wendt](https://unsplash.com/@peterwendt).
 
-We can instruct the model to classify the image into one of the categories that we have:
+우리는 모델에게 우리가 가진 카테고리 중 하나로 이미지를 분류하도록 지시할 수 있습니다:
 
 ```py
 >>> categories = ['animals','vegetables', 'city landscape', 'cars', 'office']
@@ -282,20 +254,19 @@ Instruction: Classify the following image into a single category from the follow
 Category: Vegetables
 ```  
 
-In the example above we instruct the model to classify the image into a single category, however, you can also prompt the model to do rank classification.
+위 예제에서는 모델에게 이미지를 단일 카테고리로 분류하도록 지시했지만, 순위 분류를 하도록 모델에 프롬프트를 제공할 수도 있습니다.
 
-## Image-guided text generation
+## 이미지 기반 텍스트 생성[[image-guided-text-generation]]
 
-For more creative applications, you can use image-guided text generation to generate text based on an image. This can be 
-useful to create descriptions of products, ads, descriptions of a scene, etc. 
+보다 창의적인 응용을 위해, 이미지를 기반으로 텍스트를 생성하는 이미지 기반 텍스트 생성을 사용할 수 있습니다. 이는 제품 설명, 광고, 장면 설명 등을 만드는 데 유용할 수 있습니다.
 
-Let's prompt IDEFICS to write a story based on a simple image of a red door: 
+IDEFICS에게 빨간 문 이미지에 기반한 이야기를 작성하도록 프롬프트해 봅시다:
 
 <div class="flex justify-center">
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/idefics-story-generation.jpg" alt="Image of a red door with a pumpkin on the steps"/>
 </div>
 
-Photo by [Craig Tidball](https://unsplash.com/@devonshiremedia).
+사진 제공: [Craig Tidball](https://unsplash.com/@devonshiremedia).
   
 ```py
 >>> prompt = ["Instruction: Use the image to write a story. \n",
@@ -329,19 +300,16 @@ He was wearing a long black coat and a top hat.
 The little girl ran
 ```
 
-Looks like IDEFICS noticed the pumpkin on the doorstep and went with a spooky Halloween story about a ghost.
+IDEFICS가 문 앞에 있는 호박을 보고 유령에 대한 으스스한 할로윈 이야기를 만든 것 같습니다.
 
 <Tip>
 
-For longer outputs like this, you will greatly benefit from tweaking the text generation strategy. This can help 
-you significantly improve the quality of the generated output. Check out [Text generation strategies](../generation_strategies) 
-to learn more. 
+이와 같은 긴 출력의 경우, 텍스트 생성 전략을 조정하면 큰 이점을 얻을 수 있습니다. 이렇게 하면 생성된 출력의 품질을 크게 향상시킬 수 있습니다. 자세한 내용은 [텍스트 생성 전략](../generation_strategies)을 참조하세요.
 </Tip>
 
-## Running inference in batch mode
+## 배치 모드에서 추론 실행[[running-inference-in-batch-mode]]
 
-All of the earlier sections illustrated IDEFICS for a single example. In a very similar fashion, you can run inference 
-for a batch of examples by passing a list of prompts:
+앞선 모든 섹션에서는 단일 예제에 대해 IDEFICS를 설명했습니다. 이와 매우 유사한 방식으로, 프롬프트 리스트를 전달하여 여러 예제에 대해 배치 추론을 실행할 수 있습니다:
 
 ```py
 >>> prompts = [
@@ -373,15 +341,13 @@ This is an image of a couple on a picnic blanket.
 This is an image of a vegetable stand.
 ```
 
-## IDEFICS instruct for conversational use
+## 대화형 사용을 위한 IDEFICS 인스트럭트[[idefics-instruct-for-conversational-use]]
 
-For conversational use cases, you can find fine-tuned instructed versions of the model on the 🤗 Hub: 
-`HuggingFaceM4/idefics-80b-instruct` and `HuggingFaceM4/idefics-9b-instruct`.
+대화형 사용 사례를 위해, 🤗 Hub에서 미세 조정된 인스트럭트 버전의 모델을 찾을 수 있습니다: `HuggingFaceM4/idefics-80b-instruct`와 `HuggingFaceM4/idefics-9b-instruct`.
 
-These checkpoints are the result of fine-tuning the respective base models on a mixture of supervised and instruction 
-fine-tuning datasets, which boosts the downstream performance while making the models more usable in conversational settings.
+이 체크포인트는 각각의 기본 모델을 감독 학습 및 명령어 미세 조정 데이터셋의 혼합으로 미세 조정한 결과로, 모델의 하위 작업 성능을 향상시키는 동시에 대화형 환경에서 더 유용하게 만듭니다.
 
-The use and prompting for the conversational use is very similar to using the base models: 
+대화형 사용을 위한 사용법 및 프롬프트는 기본 모델을 사용하는 것과 매우 유사합니다:
 
 ```py
 >>> import torch
