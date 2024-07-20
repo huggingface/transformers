@@ -2960,8 +2960,10 @@ class Trainer:
 
         # Save the Trainer state
         if self.args.should_save:
-            # Update the `TrainerControl` state to where we are currently
-            self.state.stateful_callbacks["TrainerControl"] = self.control.state()
+            # Update `ExportableState` callbacks and `TrainerControl` state to where we are currently
+            for cb in [cb for cb in self.callback_handler.callbacks + [self.control] if
+                       isinstance(cb, ExportableState)]:
+                self.state.stateful_callbacks[cb.__class__.__name__] = cb.state()
             self.state.save_to_json(os.path.join(output_dir, TRAINER_STATE_NAME))
 
         if self.args.push_to_hub:
