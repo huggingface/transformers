@@ -34,6 +34,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
     TokenClassifierOutput,
 )
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
@@ -72,23 +73,66 @@ class Gemma2RMSNorm(nn.Module):
 
 
 class Gemma2RotaryEmbedding(nn.Module):
-    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
+    def __init__(
+        self,
+        dim=None,
+        max_position_embeddings=2048,
+        base=10000,
+        device=None,
+        scaling_factor=1.0,
+        config: Optional[Gemma2Config] = None,
+        **kwargs,
+    ):
         super().__init__()
+        # TODO (joao): remove this `if` in v4.45; the legacy args rebuild a config to power the rest of the class;
+        if config is None:
+            logger.warning_once(
+                "`LlamaRotaryEmbedding` can now be fully parameterized by passing the model config through the "
+                "`config` argument. All other arguments will be deprecated in v4.45"
+            )
+            config = Gemma2Config(**kwargs)
+            config.rope_theta = base
+            config.max_position_embeddings = max_position_embeddings
+            config.head_dim = dim  # this one doesn't actually exist, will only be used in the deprecation transition
+            if scaling_factor == 1.0 and len(kwargs) == 0:
+                config.rope_scaling = None
+            else:
+                config.rope_scaling = {"type": "default", "factor": scaling_factor}
+                config.rope_scaling |= kwargs  # may overwrite "type"
 
-        self.dim = dim
-        self.max_position_embeddings = max_position_embeddings
-        self.base = base
-        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float() / self.dim))
-        self.register_buffer("inv_freq", tensor=inv_freq, persistent=False)
+        self.config = config
+        self.rope_type = config.rope_scaling["type"] if config.rope_scaling is not None else "default"
+        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+
+        inv_freq, self.attention_scaling = self.rope_init_fn(config, device)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+
+    def dynamic_frequency_update(self, position_ids, device):
+        """
+        dynamic RoPE layers should recompute `inv_freq` in the following situations:
+        1 - growing beyond the cached sequence length (allow scaling)
+        2 - the current sequence length is in the original scale (avoid losing precision with small sequences)
+        """
+        seq_len = torch.max(position_ids) + 1
+        needs_growth = seq_len > self.max_seq_len_cached
+        needs_reset = seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len
+        if needs_growth or needs_reset:
+            target_seq_len = max(seq_len, self.original_max_seq_len)
+            inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, seq_len=target_seq_len)
+            self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
+            self.max_seq_len_cached = target_seq_len
 
     @torch.no_grad()
-    def forward(self, x, position_ids, seq_len=None):
-        # x: [bs, num_attention_heads, seq_len, head_size]
-        self.inv_freq.to(x.device)
+    def forward(self, x, position_ids):
+        if "dynamic" in self.rope_type:
+            self.dynamic_frequency_update(position_ids, device=x.device)
+
+        # Core RoPE block
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
-        # Force float32 since bfloat16 loses precision on long contexts
-        # See https://github.com/huggingface/transformers/pull/29285
+        # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
         device_type = x.device.type
         device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):
@@ -96,6 +140,11 @@ class Gemma2RotaryEmbedding(nn.Module):
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos()
             sin = emb.sin()
+
+        # Advanced RoPE types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling attention
+        cos = cos * self.attention_scaling
+        sin = sin * self.attention_scaling
+
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
@@ -183,7 +232,6 @@ class Gemma2Attention(nn.Module):
         self.max_position_embeddings = config.max_position_embeddings
         self.rope_theta = config.rope_theta
         self.is_causal = True
-        self.scaling = config.query_pre_attn_scalar**-0.5
 
         if self.hidden_size % self.num_heads != 0:
             raise ValueError(
@@ -195,11 +243,11 @@ class Gemma2Attention(nn.Module):
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.attention_bias)
-        self.rotary_emb = Gemma2RotaryEmbedding(
-            self.head_dim,
-            max_position_embeddings=self.max_position_embeddings,
-            base=self.rope_theta,
-        )
+
+        # TODO (joao): remove in v4.45 (RoPE is computed in the model, not in the decoder layers)
+        self.rotary_emb = Gemma2RotaryEmbedding(config=self.config)
+
+        self.scaling = config.query_pre_attn_scalar**-0.5
         self.sliding_window = config.sliding_window if not bool(layer_idx % 2) else None
 
     def forward(
@@ -211,6 +259,7 @@ class Gemma2Attention(nn.Module):
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.45
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
 
@@ -222,7 +271,16 @@ class Gemma2Attention(nn.Module):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        cos, sin = self.rotary_emb(value_states, position_ids)
+        if position_embeddings is None:
+            logger.warning_once(
+                "The attention layers in Llama are transitioning from computing the RoPE embeddings internally "
+                "through `position_ids` (2D tensor with the indexes of the tokens), to using externally computed "
+                "`position_embeddings` (Tuple of tensors, containing cos and sin). In v4.45 `position_ids` will be "
+                " and `position_embeddings` will be mandatory."
+            )
+            cos, sin = self.rotary_emb(value_states, position_ids)
+        else:
+            cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
@@ -295,6 +353,7 @@ class Gemma2FlashAttention2(Gemma2Attention):
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.45
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         output_attentions = False
 
@@ -311,7 +370,16 @@ class Gemma2FlashAttention2(Gemma2Attention):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        cos, sin = self.rotary_emb(value_states, position_ids)
+        if position_embeddings is None:
+            logger.warning_once(
+                "The attention layers in Llama are transitioning from computing the RoPE embeddings internally "
+                "through `position_ids` (2D tensor with the indexes of the tokens), to using externally computed "
+                "`position_embeddings` (Tuple of tensors, containing cos and sin). In v4.45 `position_ids` will be "
+                " and `position_embeddings` will be mandatory."
+            )
+            cos, sin = self.rotary_emb(value_states, position_ids)
+        else:
+            cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
@@ -397,6 +465,7 @@ class Gemma2SdpaAttention(Gemma2Attention):
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.45
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         if output_attentions:
             # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
@@ -412,6 +481,7 @@ class Gemma2SdpaAttention(Gemma2Attention):
                 output_attentions=output_attentions,
                 use_cache=use_cache,
                 cache_position=cache_position,
+                position_embeddings=position_embeddings,
             )
 
         bsz, q_len, _ = hidden_states.size()
@@ -424,7 +494,16 @@ class Gemma2SdpaAttention(Gemma2Attention):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        cos, sin = self.rotary_emb(value_states, position_ids)
+        if position_embeddings is None:
+            logger.warning_once(
+                "The attention layers in Llama are transitioning from computing the RoPE embeddings internally "
+                "through `position_ids` (2D tensor with the indexes of the tokens), to using externally computed "
+                "`position_embeddings` (Tuple of tensors, containing cos and sin). In v4.45 `position_ids` will be "
+                " and `position_embeddings` will be mandatory."
+            )
+            cos, sin = self.rotary_emb(value_states, position_ids)
+        else:
+            cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
@@ -506,6 +585,7 @@ class Gemma2DecoderLayer(nn.Module):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.45
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         if (
             self.config._attn_implementation != "flash_attention_2" and self.is_sliding and attention_mask is not None
@@ -531,6 +611,7 @@ class Gemma2DecoderLayer(nn.Module):
             output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
+            position_embeddings=position_embeddings,
         )
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = residual + hidden_states
@@ -672,6 +753,10 @@ GEMMA2_INPUTS_DOCSTRING = r"""
             Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
             this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
             the complete sequence length.
+        position_embeddings (`Tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
+            Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
+            with `head_dim` being the embedding dimension of each attention head. This input is used to dynamically
+            overwrite the default positional embeddings.
 """
 
 
@@ -721,6 +806,7 @@ class Gemma2Model(Gemma2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -752,9 +838,11 @@ class Gemma2Model(Gemma2PreTrainedModel):
         causal_mask = self._update_causal_mask(
             attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
         )
-
-        # embed positions
         hidden_states = inputs_embeds
+
+        # create position embeddings to be shared across the decoder layers, if not passed
+        if position_embeddings is None:
+            position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         # normalized
         # Gemma2 downcasts the below to float16, causing sqrt(3072)=55.4256 to become 55.5
@@ -779,6 +867,7 @@ class Gemma2Model(Gemma2PreTrainedModel):
                     output_attentions,
                     use_cache,
                     cache_position,
+                    position_embeddings,
                 )
             else:
                 layer_outputs = decoder_layer(
@@ -789,6 +878,7 @@ class Gemma2Model(Gemma2PreTrainedModel):
                     output_attentions=output_attentions,
                     use_cache=use_cache,
                     cache_position=cache_position,
+                    position_embeddings=position_embeddings,
                 )
 
             hidden_states = layer_outputs[0]
@@ -903,6 +993,7 @@ class Gemma2ForCausalLM(Gemma2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         Args:
@@ -952,6 +1043,7 @@ class Gemma2ForCausalLM(Gemma2PreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
+            position_embeddings=position_embeddings,
         )
 
         hidden_states = outputs[0]
@@ -1076,6 +1168,7 @@ class Gemma2ForSequenceClassification(Gemma2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
     ) -> Union[Tuple, SequenceClassifierOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1095,6 +1188,7 @@ class Gemma2ForSequenceClassification(Gemma2PreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            position_embeddings=position_embeddings,
         )
         hidden_states = transformer_outputs[0]
         logits = self.score(hidden_states)
@@ -1198,6 +1292,7 @@ class Gemma2ForTokenClassification(Gemma2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
     ) -> Union[Tuple, TokenClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1217,6 +1312,7 @@ class Gemma2ForTokenClassification(Gemma2PreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            position_embeddings=position_embeddings,
         )
         sequence_output = outputs[0]
         sequence_output = self.dropout(sequence_output)

@@ -1240,7 +1240,6 @@ class GemmaForSequenceClassification(GemmaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
     ) -> Union[Tuple, SequenceClassifierOutputWithPast]:
         r"""
@@ -1261,7 +1260,6 @@ class GemmaForSequenceClassification(GemmaPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
             position_embeddings=position_embeddings,
         )
         hidden_states = transformer_outputs[0]
@@ -1366,7 +1364,6 @@ class GemmaForTokenClassification(GemmaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
     ) -> Union[Tuple, TokenClassifierOutput]:
         r"""
@@ -1387,7 +1384,6 @@ class GemmaForTokenClassification(GemmaPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
             position_embeddings=position_embeddings,
         )
         sequence_output = outputs[0]
