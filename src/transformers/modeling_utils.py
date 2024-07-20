@@ -344,8 +344,13 @@ def check_support_param_buffer_assignment(model_to_load, state_dict, start_prefi
     as when loading in empty weights) by first checking
     if the model explicitly disables it, then by ensuring that the state dict keys
     are a subset of the model's parameters.
+
+    Note: We fully disable this if we are using `deepspeed`
     """
     if len([key for key in state_dict if key.startswith(start_prefix)]) == 0:
+        return False
+
+    if is_deepspeed_zero3_enabled():
         return False
 
     # Some models explicitly do not support param buffer assignment
