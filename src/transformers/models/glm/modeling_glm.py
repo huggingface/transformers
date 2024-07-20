@@ -734,11 +734,6 @@ class GLMPreTrainedModel(PreTrainedModel):
 
         return causal_mask
 
-    def get_position_ids(self, input_ids, device):
-        batch_size, seq_length = input_ids.shape
-        position_ids = torch.arange(seq_length, dtype=torch.long, device=device).unsqueeze(0).repeat(batch_size, 1)
-        return position_ids
-
 
 class Embedding(torch.nn.Module):
     """Language model embeddings."""
@@ -1066,8 +1061,6 @@ class GLMModel(GLMPreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        batch_size, seq_length = input_ids.shape
-
         return_legacy_cache = False
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError(
@@ -1075,6 +1068,8 @@ class GLMModel(GLMPreTrainedModel):
             )
         if inputs_embeds is None:
             inputs_embeds = self.embedding(input_ids)
+
+        batch_size, seq_length = inputs_embeds.shape[:2]
 
         if use_cache and not isinstance(past_key_values, Cache):  # kept for BC (non `Cache` `past_key_values` inputs)
             return_legacy_cache = True
@@ -1089,6 +1084,8 @@ class GLMModel(GLMPreTrainedModel):
             cache_position = torch.arange(
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
+        if position_ids is None:
+            position_ids = cache_position.unsqueeze(0)
 
         full_attention_mask = self._update_causal_mask(
             attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions)
@@ -1295,15 +1292,14 @@ class GLMForCausalLM(GLMPreTrainedModel):
             is_first_forward: bool = True,
             **kwargs,
     ) -> dict:
-        # only last token for input_ids if past is not None
-        if position_ids is None:
-            position_ids = self.get_position_ids(input_ids, device=input_ids.device)
         if not is_first_forward:
             if past_key_values is not None:
-                position_ids = position_ids[..., -1:]
-                input_ids = input_ids[:, -1:]
+                if position_ids is not None:
+                    position_ids = position_ids[..., -1:]
+                if input_ids is not None:
+                    input_ids = input_ids[:, -1:]
 
-        if inputs_embeds is not None:
+        if inputs_embeds is not None and is_first_forward:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids.contiguous()}  # `contiguous()` needed for compilation use cases
