@@ -14,12 +14,13 @@
 # limitations under the License.
 
 import inspect
+import os
 from typing import Optional, Tuple
 
 import torch
 import torch.nn.functional as F
 
-from .utils import is_flash_attn_2_available
+from .utils import is_flash_attn_2_available, is_flash_attn_greater_or_equal
 
 
 if is_flash_attn_2_available():
@@ -141,6 +142,7 @@ def _flash_attention_forward(
     sliding_window: Optional[int] = None,
     use_top_left_mask: bool = False,
     softcap: Optional[float] = None,
+    deterministic: bool = os.environ.get("FLASH_ATTENTION_DETERMINISTIC", "0") == "1",
 ):
     """
     Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
@@ -164,6 +166,8 @@ def _flash_attention_forward(
             flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference.
         softcap (`float`, *optional*):
             Softcap for the attention logits, used e.g. in gemma2.
+        deterministic (`bool`, *optional*):
+            Determines if the deterministic option introduced in flash_attn>=2.4.1 is enabled.
     """
     if not use_top_left_mask:
         causal = is_causal
@@ -176,6 +180,9 @@ def _flash_attention_forward(
         _flash_supports_window_size and sliding_window is not None and key_states.shape[1] > sliding_window
     )
     flash_kwargs = {"window_size": (sliding_window, sliding_window)} if use_sliding_windows else {}
+
+    if is_flash_attn_greater_or_equal("2.4.1"):
+        flash_kwargs["deterministic"] = deterministic
 
     if softcap is not None:
         flash_kwargs["softcap"] = softcap

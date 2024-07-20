@@ -83,8 +83,11 @@ class FlaxModelPushToHubTester(unittest.TestCase):
             max_diff = (base_params[key] - new_params[key]).sum().item()
             self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
-        # Reset repo
-        delete_repo(token=self._token, repo_id="test-model-flax")
+        try:
+            # Reset repo
+            delete_repo(token=self._token, repo_id="test-model-flax")
+        except:  # noqa E722
+            pass
 
         # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -115,8 +118,11 @@ class FlaxModelPushToHubTester(unittest.TestCase):
             max_diff = (base_params[key] - new_params[key]).sum().item()
             self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
-        # Reset repo
-        delete_repo(token=self._token, repo_id="valid_org/test-model-flax-org")
+        try:
+            # Reset repo
+            delete_repo(token=self._token, repo_id="valid_org/test-model-flax-org")
+        except:  # noqa E722
+            pass
 
         # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
