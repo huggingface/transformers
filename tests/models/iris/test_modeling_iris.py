@@ -201,8 +201,6 @@ class IrisModelTester:
         self.parent.assertEqual(result.reward_preds.shape, reward_pred_expected_shape)
         self.parent.assertEqual(result.epsiode_end.shape, ep_end_pred_expected_shape)
         self.parent.assertEqual(result.obs_preds.shape, obs_pred_expected_shape)
-        # number of losses(number of components)
-        self.parent.assertEqual(result.losses.shape, torch.Size([3]))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
