@@ -144,7 +144,7 @@
   - local: in_translation
     title: (번역중) Quantization
   - local: llm_optims
-    title: LLM inference optimization
+    title: LLM 추론 최적화
   - sections:
     - local: in_translation
       title: (번역중) Training on one GPU
