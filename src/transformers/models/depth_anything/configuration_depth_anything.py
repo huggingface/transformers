@@ -100,6 +100,7 @@ class DepthAnythingConfig(PretrainedConfig):
         fusion_hidden_size=64,
         head_in_index=-1,
         head_hidden_size=32,
+        depth_estimation="relative",
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -139,6 +140,7 @@ class DepthAnythingConfig(PretrainedConfig):
         self.fusion_hidden_size = fusion_hidden_size
         self.head_in_index = head_in_index
         self.head_hidden_size = head_hidden_size
+        self.depth_estimation = depth_estimation
 
     def to_dict(self):
         """

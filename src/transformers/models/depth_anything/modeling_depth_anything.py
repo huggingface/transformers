@@ -318,7 +318,8 @@ class DepthAnythingDepthEstimationHead(nn.Module):
     """
     Output head consisting of 3 convolutional layers. It progressively halves the feature dimension and upsamples
     the predictions to the input resolution after the first convolutional layer (details can be found in the DPT paper's
-    supplementary material).
+    supplementary material). The final activation function is either ReLU or Sigmoid, depending on the depth estimation
+    type (relative or metric).
     """
 
     def __init__(self, config):
@@ -332,7 +333,12 @@ class DepthAnythingDepthEstimationHead(nn.Module):
         self.conv2 = nn.Conv2d(features // 2, config.head_hidden_size, kernel_size=3, stride=1, padding=1)
         self.activation1 = nn.ReLU()
         self.conv3 = nn.Conv2d(config.head_hidden_size, 1, kernel_size=1, stride=1, padding=0)
-        self.activation2 = nn.ReLU()
+        if config.depth_estimation == "relative":
+            self.activation2 = nn.ReLU()
+        elif config.depth_estimation == "metric":
+            self.activation2 = nn.Sigmoid()
+        else:
+            raise ValueError(f"Unknown depth estimation type: {config.depth_estimation}")
 
     def forward(self, hidden_states: List[torch.Tensor], patch_height, patch_width) -> torch.Tensor:
         hidden_states = hidden_states[self.head_in_index]

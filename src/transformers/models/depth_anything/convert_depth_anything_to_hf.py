@@ -56,12 +56,15 @@ def get_dpt_config(model_name):
     else:
         raise NotImplementedError(f"Model not supported: {model_name}")
 
+    depth_estimation = "metric" if "metric" in model_name else "relative"
+
     config = DepthAnythingConfig(
         reassemble_hidden_size=backbone_config.hidden_size,
         patch_size=backbone_config.patch_size,
         backbone_config=backbone_config,
         fusion_hidden_size=fusion_hidden_size,
         neck_hidden_sizes=neck_hidden_sizes,
+        depth_estimation=depth_estimation,
     )
 
     return config
