@@ -250,10 +250,11 @@ def _compute_longrope_parameters(
     # values to compute the default attention scaling factor, instead of using `factor`.
     if hasattr(config, "original_max_position_embeddings"):
         max_position_embeddings = config.original_max_position_embeddings
-        expanded_max_position_embeddings = config.max_position_embeddings
-        factor = expanded_max_position_embeddings / max_position_embeddings
+        target_sequence_length = config.max_position_embeddings
+        factor = target_sequence_length / max_position_embeddings
     else:
         max_position_embeddings = config.max_position_embeddings
+        target_sequence_length = max_position_embeddings * factor
 
     # Sets the attention factor as suggested in the paper
     if attention_factor is None:
@@ -262,8 +263,8 @@ def _compute_longrope_parameters(
         else:
             attention_factor = math.sqrt(1 + math.log(factor) / math.log(max_position_embeddings))
 
-    # Compute the inverse frequencies -- scaled based on the sequence length
-    if seq_len > max_position_embeddings:
+    # Compute the inverse frequencies -- scaled based on the target sequence length
+    if target_sequence_length > max_position_embeddings:
         ext_factors = torch.tensor(long_factor, dtype=torch.float32, device=device)
     else:
         ext_factors = torch.tensor(short_factor, dtype=torch.float32, device=device)
@@ -386,9 +387,9 @@ def _validate_longrope_parameters(config: PretrainedConfig):
             f"{config.hidden_size // config.num_attention_heads // 2}, got {len(long_factor)}"
         )
 
-    # Handle Phi3 divergence: prefer the use of `attention_factor` (explicit) or `factor` (implicit) over
-    # `original_max_position_embeddings` to compute the attention factor. The latter lives outside `rope_scaling`
-    # (= undesirable)
+    # Handle Phi3 divergence: prefer the use of `attention_factor` and/or `factor` over
+    # `original_max_position_embeddings` to compute internal variables. The latter lives outside `rope_scaling` and is
+    # unique to longrope (= undesirable)
     if hasattr(config, "original_max_position_embeddings"):
         logger.warning_once(
             "This model has set a `original_max_position_embeddings` field, to be used together with "
@@ -397,19 +398,16 @@ def _validate_longrope_parameters(config: PretrainedConfig):
             "as it is compatible with most model architectures."
         )
     else:
+        factor = rope_scaling.get("factor")
+        if factor is None:
+            raise ValueError("Missing required keys in `rope_scaling`: 'factor'")
+        elif not isinstance(factor, float) or factor < 1.0:
+            raise ValueError(f"`rope_scaling`'s factor field must be a float >= 1, got {factor}")
+
         attention_factor = rope_scaling.get("attention_factor")
         if attention_factor is not None and not isinstance(attention_factor, float) or attention_factor < 0:
             raise ValueError(
                 f"`rope_scaling`'s attention_factor field must be a float greater than 0, got {attention_factor}"
-            )
-        factor = rope_scaling.get("factor")
-        if factor is None or not isinstance(factor, float) or factor < 1.0:
-            raise ValueError(f"`rope_scaling`'s factor field must be a float >= 1, got {factor}")
-
-        if attention_factor is not None and factor is not None:
-            raise ValueError(
-                "`rope_scaling`'s `attention_factor` and `factor` fields are redundant -- one defines the other in "
-                "longrope. Please set only one of them."
             )
 
 
