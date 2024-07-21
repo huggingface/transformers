@@ -108,10 +108,10 @@ class CircleCIJob:
             {"attach_workspace": {"at": "test_preparation"}},
         ]
         steps.extend([{"run": l} for l in self.install_steps])
-        steps.append({"run": {"name": "Show installed libraries and their size", "command": """du -h -d 1 "$(pip -V | cut -d ' ' -f 4 | sed 's/pip//g')" | grep -vE "dist-info|_distutils_hack|__pycache__" | sort -h | tee installed.txt || true"""}})
+        steps.append({"run": {"name": "Show installed libraries and their size", "command": """du -h -d 1 "$(pip -V | cut -d ' ' -f 16 | sed 's/pip//g')" | grep -vE "dist-info|_distutils_hack|__pycache__" | sort -h | tee installed.txt || true"""}})
         steps.append({"run": {"name": "Show installed libraries and their versions", "command": """pip list --format=freeze | tee installed.txt || true"""}})
 
-        steps.append({"run":{"name":"Show biggest libraries","command":"""dpkg-query --show --showformat='${Installed-Size}\t${Package}\n' | sort -rh | head -25 | sort -h | awk '{ package=$2; sub(".*/", "", package); printf("%.5f GB %s\n", $1/1024/1024, package)}' || true"""}})
+        steps.append({"run":{"name":"Show biggest libraries","command":"""dpkg-query --show --showformat='${Installed-Size}\t${Package}\n' | sort -rh | head -25 | sort -h | awk '{ package=$2; sub(".*/", "", package); printf("%.5f GB %s\n", $1/10216/10216, package)}' || true"""}})
         steps.append({"store_artifacts": {"path": "installed.txt"}})
 
         all_options = {**COMMON_PYTEST_OPTIONS, **self.pytest_options}
@@ -248,7 +248,7 @@ torch_job = CircleCIJob(
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
     install_steps=["uv venv && uv pip install ."],
     parallelism=6,
-    pytest_num_workers=4
+    pytest_num_workers=16
 )
 
 tokenization_job = CircleCIJob(
@@ -256,7 +256,7 @@ tokenization_job = CircleCIJob(
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
     install_steps=["uv venv && uv pip install ."],
     parallelism=6,
-    pytest_num_workers=4
+    pytest_num_workers=16
 )
 
 
@@ -265,7 +265,7 @@ tf_job = CircleCIJob(
     docker_image=[{"image":"huggingface/transformers-tf-light"}],
     install_steps=["uv venv", "uv pip install -e."],
     parallelism=6,
-    pytest_num_workers=4,
+    pytest_num_workers=16,
 )
 
 
@@ -274,7 +274,7 @@ flax_job = CircleCIJob(
     docker_image=[{"image":"huggingface/transformers-jax-light"}],
     install_steps=["uv venv && uv pip install ."],
     parallelism=6,
-    pytest_num_workers=4
+    pytest_num_workers=16
 )
 
 
@@ -370,7 +370,7 @@ exotic_models_job = CircleCIJob(
         "tests/models/nougat",
     ],
     pytest_num_workers=12,
-    parallelism=4,
+    parallelism=16,
     pytest_options={"durations": 100},
 )
 
