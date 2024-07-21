@@ -66,6 +66,11 @@ class Dinov2Embeddings(nn.Module):
         super().__init__()
 
         self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
+        self.register_tokens = (
+            nn.Parameter(torch.randn(1, config.num_register_tokens, config.hidden_size))
+            if config.num_register_tokens
+            else None
+        )
         self.mask_token = nn.Parameter(torch.zeros(1, config.hidden_size))
         self.patch_embeddings = Dinov2PatchEmbeddings(config)
         num_patches = self.patch_embeddings.num_patches
@@ -93,7 +98,7 @@ class Dinov2Embeddings(nn.Module):
         width = width // self.config.patch_size
         # we add a small number to avoid floating point error in the interpolation
         # see discussion at https://github.com/facebookresearch/dino/issues/8
-        height, width = height + 0.1, width + 0.1
+        height, width = height + self.config.interpolate_offset, width + self.config.interpolate_offset
         patch_pos_embed = patch_pos_embed.reshape(1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim)
         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
         target_dtype = patch_pos_embed.dtype
@@ -102,6 +107,7 @@ class Dinov2Embeddings(nn.Module):
             scale_factor=(float(height / math.sqrt(num_positions)), float(width / math.sqrt(num_positions))),
             mode="bicubic",
             align_corners=False,
+            antialias=self.config.interpolate_antialias,
         ).to(dtype=target_dtype)
         if int(height) != patch_pos_embed.shape[-2] or int(width) != patch_pos_embed.shape[-1]:
             raise ValueError("Width or height does not match with the interpolated position embeddings")
@@ -124,6 +130,11 @@ class Dinov2Embeddings(nn.Module):
 
         # add positional encoding to each token
         embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
+
+        # Add reg tokens
+        if self.register_tokens is not None:
+            register_tokens = self.register_tokens.expand(batch_size, -1, -1)
+            embeddings = torch.cat((embeddings[:, :1], register_tokens, embeddings[:, 1:]), dim=1)
 
         embeddings = self.dropout(embeddings)
 
@@ -505,6 +516,13 @@ class Dinov2PreTrainedModel(PreTrainedModel):
                 std=self.config.initializer_range,
             ).to(module.cls_token.dtype)
 
+            if module.register_tokens is not None:
+                module.register_tokens.data = nn.init.trunc_normal_(
+                    module.register_tokens.data.to(torch.float32),
+                    mean=0.0,
+                    std=self.config.initializer_range,
+                ).to(module.register_tokens.dtype)
+
 
 DINOV2_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
@@ -830,7 +848,7 @@ class Dinov2Backbone(Dinov2PreTrainedModel, BackboneMixin):
                 if self.config.apply_layernorm:
                     hidden_state = self.layernorm(hidden_state)
                 if self.config.reshape_hidden_states:
-                    hidden_state = hidden_state[:, 1:]
+                    hidden_state = hidden_state[:, 1 + self.config.num_register_tokens :]
                     # this was actually a bug in the original implementation that we copied here,
                     # cause normally the order is height, width
                     batch_size, _, height, width = pixel_values.shape
