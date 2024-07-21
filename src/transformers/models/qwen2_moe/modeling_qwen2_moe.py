@@ -1350,7 +1350,7 @@ class Qwen2MoeForCausalLM(Qwen2MoePreTrainedModel):
     """,
     QWEN2MOE_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with Llama->Qwen2Moe, LLAMA->QWEN2MOE
+# Copied from transformers.models.mixtral.modeling_mixtral.MixtralForSequenceClassification with Mixtral->Qwen2Moe, MIXTRAL->QWEN2MOE
 class Qwen2MoeForSequenceClassification(Qwen2MoePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1380,7 +1380,6 @@ class Qwen2MoeForSequenceClassification(Qwen2MoePreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
     ) -> Union[Tuple, SequenceClassifierOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1400,7 +1399,6 @@ class Qwen2MoeForSequenceClassification(Qwen2MoePreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            position_embeddings=position_embeddings,
         )
         hidden_states = transformer_outputs[0]
         logits = self.score(hidden_states)
@@ -1468,7 +1466,7 @@ class Qwen2MoeForSequenceClassification(Qwen2MoePreTrainedModel):
     """,
     QWEN2MOE_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_llama.LlamaForTokenClassification with Llama->Qwen2Moe, LLAMA->QWEN2MOE
+# Copied from transformers.models.mixtral.modeling_mixtral.MixtralForTokenClassification with Mixtral->Qwen2Moe, MIXTRAL->QWEN2MOE
 class Qwen2MoeForTokenClassification(Qwen2MoePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1505,7 +1503,6 @@ class Qwen2MoeForTokenClassification(Qwen2MoePreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
     ) -> Union[Tuple, TokenClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1525,7 +1522,6 @@ class Qwen2MoeForTokenClassification(Qwen2MoePreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            position_embeddings=position_embeddings,
         )
         sequence_output = outputs[0]
         sequence_output = self.dropout(sequence_output)
