@@ -15,11 +15,11 @@
 
 import argparse
 import copy
-import glob
 import os
+import random
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
-
+import glob
 import yaml
 
 
@@ -206,9 +206,9 @@ class CircleCIJob:
             test_command = f"({test_command} | tee tests_output.txt)"
         steps.append({"run": {"name": "Run tests", "command": test_command}})
 
-        steps.append({"run": {"name": "Skipped tests", "when": "always", "command": "python3 .circleci/parse_test_outputs.py --file tests_output.txt --skip"}})
-        steps.append({"run": {"name": "Failed tests",  "when": "always", "command": "python3 .circleci/parse_test_outputs.py --file tests_output.txt --fail"}})
-        steps.append({"run": {"name": "Errors",        "when": "always", "command": "python3 .circleci/parse_test_outputs.py --file tests_output.txt --errors"}})
+        steps.append({"run": {"name": "Skipped tests", "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --skip"}})
+        steps.append({"run": {"name": "Failed tests",  "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --fail"}})
+        steps.append({"run": {"name": "Errors",        "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --errors"}})
 
         steps.append({"store_test_results": {"path": "test-results"}})
         steps.append({"store_artifacts": {"path": "tests_output.txt"}})
@@ -248,7 +248,7 @@ torch_job = CircleCIJob(
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
     install_steps=["uv venv && uv pip install ."],
     parallelism=6,
-    pytest_num_workers=16
+    pytest_num_workers=4
 )
 
 tokenization_job = CircleCIJob(
@@ -256,7 +256,7 @@ tokenization_job = CircleCIJob(
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
     install_steps=["uv venv && uv pip install ."],
     parallelism=6,
-    pytest_num_workers=16
+    pytest_num_workers=4
 )
 
 
@@ -265,7 +265,7 @@ tf_job = CircleCIJob(
     docker_image=[{"image":"huggingface/transformers-tf-light"}],
     install_steps=["uv venv", "uv pip install -e."],
     parallelism=6,
-    pytest_num_workers=16,
+    pytest_num_workers=4,
 )
 
 
@@ -274,7 +274,7 @@ flax_job = CircleCIJob(
     docker_image=[{"image":"huggingface/transformers-jax-light"}],
     install_steps=["uv venv && uv pip install ."],
     parallelism=6,
-    pytest_num_workers=16
+    pytest_num_workers=4
 )
 
 
