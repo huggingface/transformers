@@ -398,7 +398,7 @@ class JetMoeRotaryEmbedding(nn.Module):
             config = JetMoeConfig(**kwargs)
             config.rope_theta = base
             config.max_position_embeddings = max_position_embeddings
-            config.head_dim = dim  # this one doesn't actually exist, will only be used in the deprecation transition
+            config.rope_dim = dim  # this one doesn't actually exist, will only be used in the deprecation transition
             if scaling_factor == 1.0 and len(kwargs) == 0:
                 config.rope_scaling = None
             else:

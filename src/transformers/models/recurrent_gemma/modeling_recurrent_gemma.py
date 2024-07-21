@@ -82,7 +82,7 @@ class RecurrentGemmaRotaryEmbedding(nn.Module):
             )
             config = RecurrentGemmaConfig()
             config.rope_theta = base
-            config.head_dim = dim  # this one doesn't actually exist, will only be used in the deprecation transition
+            config.rope_dim = dim  # this one doesn't actually exist, will only be used in the deprecation transition
 
         self.config = config
         self.rope_type = config.rope_scaling["type"] if config.rope_scaling is not None else "default"
@@ -874,8 +874,9 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
+        cache_position: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_hidden_states: Optional[bool] = None,
@@ -915,8 +916,9 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
         output_hidden_states = True
         outputs = self.model(
             input_ids=input_ids,
-            cache_position=cache_position,
+            position_ids=position_ids,
             attention_mask=attention_mask,
+            cache_position=cache_position,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_hidden_states=output_hidden_states,

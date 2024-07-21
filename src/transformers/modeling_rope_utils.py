@@ -77,10 +77,11 @@ def _compute_default_rope_parameters(
         post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
     """
     base = config.rope_theta
-    if hasattr(config, "head_dim"):  # TODO (joao): BC -- remove `if` in v4.45, keep `else`
-        dim = config.head_dim
+    if hasattr(config, "rope_dim"):  # TODO (joao): BC -- remove `if` in v4.45, keep `else`
+        dim = config.rope_dim
     else:
-        dim = config.hidden_size // config.num_attention_heads
+        partial_rotary_factor = config.partial_rotary_factor if hasattr(config, "partial_rotary_factor") else 1.0
+        dim = int((config.hidden_size // config.num_attention_heads) * partial_rotary_factor)
     attention_factor = 1.0  # Unused in this type of RoPE
 
     # Compute the inverse frequencies
@@ -136,10 +137,11 @@ def _compute_dynamic_ntk_parameters(
         post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
     """
     base = config.rope_theta
-    if hasattr(config, "head_dim"):  # TODO (joao): BC -- remove `if` in v4.45, keep `else`
-        dim = config.head_dim
+    if hasattr(config, "rope_dim"):  # TODO (joao): BC -- remove `if` in v4.45, keep `else`
+        dim = config.rope_dim
     else:
-        dim = config.hidden_size // config.num_attention_heads
+        partial_rotary_factor = config.partial_rotary_factor if hasattr(config, "partial_rotary_factor") else 1.0
+        dim = int((config.hidden_size // config.num_attention_heads) * partial_rotary_factor)
     max_position_embeddings = config.max_position_embeddings
     factor = config.rope_scaling["factor"]
     attention_factor = 1.0  # Unused in this type of RoPE
@@ -173,7 +175,8 @@ def _compute_yarn_parameters(
         post-processing scaling factor applied to the computed cos/sin.
     """
     base = config.rope_theta
-    dim = config.hidden_size // config.num_attention_heads
+    partial_rotary_factor = config.partial_rotary_factor if hasattr(config, "partial_rotary_factor") else 1.0
+    dim = int((config.hidden_size // config.num_attention_heads) * partial_rotary_factor)
     max_position_embeddings = config.max_position_embeddings
     factor = config.rope_scaling["factor"]
 
@@ -239,7 +242,8 @@ def _compute_longrope_parameters(
         post-processing scaling factor applied to the computed cos/sin.
     """
     base = config.rope_theta
-    dim = config.hidden_size // config.num_attention_heads
+    partial_rotary_factor = config.partial_rotary_factor if hasattr(config, "partial_rotary_factor") else 1.0
+    dim = int((config.hidden_size // config.num_attention_heads) * partial_rotary_factor)
     long_factor = config.rope_scaling["long_factor"]
     short_factor = config.rope_scaling["short_factor"]
     factor = config.rope_scaling.get("factor")
@@ -369,23 +373,20 @@ def _validate_longrope_parameters(config: PretrainedConfig):
     if unused_keys:
         raise ValueError(f"Unrecognized keys in `rope_scaling` for 'type'={rope_type}: {unused_keys}")
 
+    partial_rotary_factor = config.partial_rotary_factor if hasattr(config, "partial_rotary_factor") else 1.0
+    dim = int((config.hidden_size // config.num_attention_heads) * partial_rotary_factor)
+
     short_factor = rope_scaling.get("short_factor")
     if not isinstance(short_factor, list) and all(isinstance(x, (int, float)) for x in short_factor):
         raise ValueError(f"`rope_scaling`'s short_factor field must be a list of numbers, got {short_factor}")
-    if not len(short_factor) == config.hidden_size // config.num_attention_heads // 2:
-        raise ValueError(
-            f"`rope_scaling`'s short_factor field must have length "
-            f"{config.hidden_size // config.num_attention_heads // 2}, got {len(short_factor)}"
-        )
+    if not len(short_factor) == dim // 2:
+        raise ValueError(f"`rope_scaling`'s short_factor field must have length {dim // 2}, got {len(short_factor)}")
 
     long_factor = rope_scaling.get("long_factor")
     if not isinstance(long_factor, list) and all(isinstance(x, (int, float)) for x in long_factor):
         raise ValueError(f"`rope_scaling`'s long_factor field must be a list of numbers, got {long_factor}")
-    if not len(long_factor) == config.hidden_size // config.num_attention_heads // 2:
-        raise ValueError(
-            f"`rope_scaling`'s long_factor field must have length "
-            f"{config.hidden_size // config.num_attention_heads // 2}, got {len(long_factor)}"
-        )
+    if not len(long_factor) == dim // 2:
+        raise ValueError(f"`rope_scaling`'s long_factor field must have length {dim // 2}, got {len(long_factor)}")
 
     # Handle Phi3 divergence: prefer the use of `attention_factor` and/or `factor` over
     # `original_max_position_embeddings` to compute internal variables. The latter lives outside `rope_scaling` and is
