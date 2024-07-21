@@ -1091,6 +1091,7 @@ class OlmoForCausalLM(OlmoPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(OLMO_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    # Ignore copy
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1120,8 +1121,8 @@ class OlmoForCausalLM(OlmoPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, OlmoForCausalLM
 
-        >>> model = OlmoForCausalLM.from_pretrained("meta-llama/Olmo-2-7b-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("meta-llama/Olmo-2-7b-hf")
+        >>> model = OlmoForCausalLM.from_pretrained("allenai/OLMo-1B-hf")
+        >>> tokenizer = AutoTokenizer.from_pretrained("allenai/OLMo-1B-hf")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -1129,8 +1130,9 @@ class OlmoForCausalLM(OlmoPreTrainedModel):
         >>> # Generate
         >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
-        ```"""
+        'Hey, are you conscious? Can you talk to me?\nI’m not sure if you’re conscious of this, but I’m'
+        ```
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1153,12 +1155,7 @@ class OlmoForCausalLM(OlmoPreTrainedModel):
         )
 
         hidden_states = outputs[0]
-        if self.config.pretraining_tp > 1:
-            lm_head_slices = self.lm_head.weight.split(self.vocab_size // self.config.pretraining_tp, dim=0)
-            logits = [F.linear(hidden_states, lm_head_slices[i]) for i in range(self.config.pretraining_tp)]
-            logits = torch.cat(logits, dim=-1)
-        else:
-            logits = self.lm_head(hidden_states)
+        logits = self.lm_head(hidden_states)
         logits = logits.float()
 
         loss = None
