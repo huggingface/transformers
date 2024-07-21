@@ -15,14 +15,11 @@
 """StableLM model configuration"""
 
 from ...configuration_utils import PretrainedConfig
-from ...utils import logging
-
-
-logger = logging.get_logger(__name__)
+from ...modeling_rope_utils import ROPE_CONFIG_DOCSTRING, rope_config_validation
 
 
 class StableLmConfig(PretrainedConfig):
-    r"""
+    rf"""
     This is the configuration class to store the configuration of a [`~StableLmModel`].
     It is used to instantiate an StableLM model according to the specified arguments, defining the model
     architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
@@ -70,14 +67,7 @@ class StableLmConfig(PretrainedConfig):
             Whether the model's input and output word embeddings should be tied.
         rope_theta (`float`, *optional*, defaults to `10000.0`):
             The base period of the RoPE embeddings.
-        rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. Currently supports two scaling
-            strategies: linear and dynamic. Their scaling factor must be a float greater than 1. The expected format is
-            `{"type": strategy name, "factor": scaling factor}`. When using this flag, don't update
-            `max_position_embeddings` to the expected new maximum. See the following thread for more information on how
-            these scaling strategies behave:
-            https://www.reddit.com/r/LocalLLaMA/comments/14mrgpr/dynamically_scaled_rope_further_increases/. This
-            is an experimental feature, subject to breaking API changes in future versions.
+        {ROPE_CONFIG_DOCSTRING}
         use_qkv_bias (`bool`, *optional*, defaults to `False`):
             Whether or not the model should use bias for qkv layers.
         qk_layernorm (`bool`, *optional*, defaults to `False`):
@@ -155,7 +145,8 @@ class StableLmConfig(PretrainedConfig):
         self.hidden_dropout = hidden_dropout
         self.attention_dropout = attention_dropout
         self.partial_rotary_factor = partial_rotary_factor
-        self._rope_scaling_validation()
+
+        rope_config_validation(self)
 
         super().__init__(
             bos_token_id=bos_token_id,
@@ -163,23 +154,3 @@ class StableLmConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
-
-    def _rope_scaling_validation(self):
-        """
-        Validate the `rope_scaling` configuration.
-        """
-        if self.rope_scaling is None:
-            return
-
-        if not isinstance(self.rope_scaling, dict) or len(self.rope_scaling) != 2:
-            raise ValueError(
-                "`rope_scaling` must be a dictionary with two fields, `type` and `factor`, " f"got {self.rope_scaling}"
-            )
-        rope_scaling_type = self.rope_scaling.get("type", None)
-        rope_scaling_factor = self.rope_scaling.get("factor", None)
-        if rope_scaling_type is None or rope_scaling_type not in ["linear", "dynamic"]:
-            raise ValueError(
-                f"`rope_scaling`'s type field must be one of ['linear', 'dynamic'], got {rope_scaling_type}"
-            )
-        if rope_scaling_factor is None or not isinstance(rope_scaling_factor, float) or rope_scaling_factor <= 1.0:
-            raise ValueError(f"`rope_scaling`'s factor field must be a float > 1, got {rope_scaling_factor}")
