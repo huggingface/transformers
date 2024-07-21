@@ -182,6 +182,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("nougat", "VisionEncoderDecoderConfig"),
         ("nystromformer", "NystromformerConfig"),
         ("olmo", "OlmoConfig"),
+        ("olmoe", "OlmoeConfig"),
         ("oneformer", "OneFormerConfig"),
         ("open-llama", "OpenLlamaConfig"),
         ("openai-gpt", "OpenAIGPTConfig"),

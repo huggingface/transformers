@@ -595,6 +595,7 @@ _import_structure = {
     "models.nougat": ["NougatProcessor"],
     "models.nystromformer": ["NystromformerConfig"],
     "models.olmo": ["OlmoConfig"],
+    "models.olmoe": ["OlmoeConfig"],
     "models.oneformer": [
         "OneFormerConfig",
         "OneFormerProcessor",
@@ -2760,6 +2761,13 @@ else:
             "OlmoForCausalLM",
             "OlmoModel",
             "OlmoPreTrainedModel",
+        ]
+    )
+    _import_structure["models.olmoe"].extend(
+        [
+            "OlmoeForCausalLM",
+            "OlmoeModel",
+            "OlmoePreTrainedModel",
         ]
     )
     _import_structure["models.oneformer"].extend(
@@ -5282,6 +5290,7 @@ if TYPE_CHECKING:
         NystromformerConfig,
     )
     from .models.olmo import OlmoConfig
+    from .models.olmoe import OlmoeConfig
     from .models.oneformer import (
         OneFormerConfig,
         OneFormerProcessor,
@@ -7192,6 +7201,11 @@ if TYPE_CHECKING:
             OlmoForCausalLM,
             OlmoModel,
             OlmoPreTrainedModel,
+        )
+        from .models.olmoe import (
+            OlmoeForCausalLM,
+            OlmoeModel,
+            OlmoePreTrainedModel,
         )
         from .models.oneformer import (
             OneFormerForUniversalSegmentation,
