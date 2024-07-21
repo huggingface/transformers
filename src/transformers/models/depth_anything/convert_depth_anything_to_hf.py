@@ -178,6 +178,12 @@ name_to_checkpoint = {
     "depth-anything-v2-small": "depth_anything_v2_vits.pth",
     "depth-anything-v2-base": "depth_anything_v2_vitb.pth",
     "depth-anything-v2-large": "depth_anything_v2_vitl.pth",
+    "depth-anything-v2-metric-indoor-small": "depth_anything_v2_metric_hypersim_vits.pth",
+    "depth-anything-v2-metric-indoor-base": "depth_anything_v2_metric_hypersim_vitb.pth",
+    "depth-anything-v2-metric-indoor-large": "depth_anything_v2_metric_hypersim_vitl.pth",
+    "depth-anything-v2-metric-outdoor-small": "depth_anything_v2_metric_vkitti_vits.pth",
+    "depth-anything-v2-metric-outdoor-base": "depth_anything_v2_metric_vkitti_vitb.pth",
+    "depth-anything-v2-metric-outdoor-large": "depth_anything_v2_metric_vkitti_vitl.pth",
     # v2-giant pending
 }
 
@@ -198,6 +204,12 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
         "depth-anything-v2-small": "depth-anything/Depth-Anything-V2-Small",
         "depth-anything-v2-base": "depth-anything/Depth-Anything-V2-Base",
         "depth-anything-v2-large": "depth-anything/Depth-Anything-V2-Large",
+        "depth-anything-v2-metric-indoor-small": "depth-anything/Depth-Anything-V2-Metric-Hypersim-Small",
+        "depth-anything-v2-metric-indoor-base": "depth-anything/Depth-Anything-V2-Metric-Hypersim-Base",
+        "depth-anything-v2-metric-indoor-large": "depth-anything/Depth-Anything-V2-Metric-Hypersim-Large",
+        "depth-anything-v2-metric-outdoor-small": "depth-anything/Depth-Anything-V2-Metric-VKITTI-Small",
+        "depth-anything-v2-metric-outdoor-base": "depth-anything/Depth-Anything-V2-Metric-VKITTI-Base",
+        "depth-anything-v2-metric-outdoor-large": "depth-anything/Depth-Anything-V2-Metric-VKITTI-Large",
     }
 
     # load original state_dict
