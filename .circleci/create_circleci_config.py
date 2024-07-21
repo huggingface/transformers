@@ -15,11 +15,11 @@
 
 import argparse
 import copy
-import glob
 import os
+import random
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
-
+import glob
 import yaml
 
 
@@ -108,10 +108,10 @@ class CircleCIJob:
             {"attach_workspace": {"at": "test_preparation"}},
         ]
         steps.extend([{"run": l} for l in self.install_steps])
-        steps.append({"run": {"name": "Show installed libraries and their size", "command": """du -h -d 1 "$(pip -V | cut -d ' ' -f 4 | sed 's/pip//g')" | grep -vE "dist-info|_distutils_hack|__pycache__" | sort -h | tee installed.txt || true"""}})
+        steps.append({"run": {"name": "Show installed libraries and their size", "command": """du -h -d 1 "$(pip -V | cut -d ' ' -f 16 | sed 's/pip//g')" | grep -vE "dist-info|_distutils_hack|__pycache__" | sort -h | tee installed.txt || true"""}})
         steps.append({"run": {"name": "Show installed libraries and their versions", "command": """pip list --format=freeze | tee installed.txt || true"""}})
 
-        steps.append({"run":{"name":"Show biggest libraries","command":"""dpkg-query --show --showformat='${Installed-Size}\t${Package}\n' | sort -rh | head -25 | sort -h | awk '{ package=$2; sub(".*/", "", package); printf("%.5f GB %s\n", $1/1024/1024, package)}' || true"""}})
+        steps.append({"run":{"name":"Show biggest libraries","command":"""dpkg-query --show --showformat='${Installed-Size}\t${Package}\n' | sort -rh | head -25 | sort -h | awk '{ package=$2; sub(".*/", "", package); printf("%.5f GB %s\n", $1/10216/10216, package)}' || true"""}})
         steps.append({"store_artifacts": {"path": "installed.txt"}})
 
         all_options = {**COMMON_PYTEST_OPTIONS, **self.pytest_options}
@@ -206,9 +206,9 @@ class CircleCIJob:
             test_command = f"({test_command} | tee tests_output.txt)"
         steps.append({"run": {"name": "Run tests", "command": test_command}})
 
-        steps.append({"run": {"name": "Skipped tests", "when": "always", "command": "python3 .circleci/parse_test_outputs.py --file tests_output.txt --skip"}})
-        steps.append({"run": {"name": "Failed tests",  "when": "always", "command": "python3 .circleci/parse_test_outputs.py --file tests_output.txt --fail"}})
-        steps.append({"run": {"name": "Errors",        "when": "always", "command": "python3 .circleci/parse_test_outputs.py --file tests_output.txt --errors"}})
+        steps.append({"run": {"name": "Skipped tests", "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --skip"}})
+        steps.append({"run": {"name": "Failed tests",  "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --fail"}})
+        steps.append({"run": {"name": "Errors",        "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --errors"}})
 
         steps.append({"store_test_results": {"path": "test-results"}})
         steps.append({"store_artifacts": {"path": "tests_output.txt"}})
@@ -370,7 +370,7 @@ exotic_models_job = CircleCIJob(
         "tests/models/nougat",
     ],
     pytest_num_workers=12,
-    parallelism=4,
+    parallelism=16,
     pytest_options={"durations": 100},
 )
 
