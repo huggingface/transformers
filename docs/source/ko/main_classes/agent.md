@@ -14,35 +14,33 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Agents & Tools
+# Agents & Tools [[agents-tools]]
 
 <Tip warning={true}>
 
-Transformers Agents is an experimental API which is subject to change at any time. Results returned by the agents
-can vary as the APIs or underlying models are prone to change.
+Transformers Agents는 실험적인 API로 언제든지 변경될 수 있습니다. 에이전트가 반환하는 결과는 API 또는 기본 모델이 변경될 수 있으므로 다를 수 있습니다.
 
 </Tip>
 
-To learn more about agents and tools make sure to read the [introductory guide](../transformers_agents). This page
-contains the API docs for the underlying classes.
+에이전트와 도구에 대해 더 알아보려면 [소개 가이드](../transformers_agents)를 꼭 읽어보세요. 이 페이지에는 기본 클래스에 대한 API 문서가 포함되어 있습니다.
 
-## Agents
+## Agents [[agents]]
 
-We provide two types of agents, based on the main [`Agent`] class:
-- [`CodeAgent`] acts in one shot, generating code to solve the task, then executes it at once.
-- [`ReactAgent`] acts step by step, each step consisting of one thought, then one tool call and execution. It has two classes:
-  - [`ReactJsonAgent`] writes its tool calls in JSON.
-  - [`ReactCodeAgent`] writes its tool calls in Python code.
+우리는 주요 [`Agent`] 클래스를 기반으로 두 가지 유형의 에이전트를 제공합니다:
+- [`CodeAgent`]는 코드를 생성하여 작업을 해결한 다음 한 번에 실행합니다.
+- [`ReactAgent`]는 단계별로 작동하며, 각 단계는 하나의 생각, 하나의 도구 호출 및 실행으로 구성됩니다. 이 에이전트에는 두 가지 클래스가 있습니다:
+  - [`ReactJsonAgent`]는 도구 호출을 JSON으로 작성합니다.
+  - [`ReactCodeAgent`]는 도구 호출을 Python 코드로 작성합니다.
 
-### Agent
+### Agent [[agent]]
 
 [[autodoc]] Agent
 
-### CodeAgent
+### CodeAgent [[codeagent]]
 
 [[autodoc]] CodeAgent
 
-### React agents
+### React agents [[react-agents]]
 
 [[autodoc]] ReactAgent
 
@@ -50,42 +48,42 @@ We provide two types of agents, based on the main [`Agent`] class:
 
 [[autodoc]] ReactCodeAgent
 
-## Tools
+## Tools [[tools]]
 
-### load_tool
+### load_tool [[loadtool]]
 
 [[autodoc]] load_tool
 
-### Tool
+### Tool [[tool]]
 
 [[autodoc]] Tool
 
-### Toolbox
+### Toolbox [[toolbox]]
 
 [[autodoc]] Toolbox
 
-### PipelineTool
+### PipelineTool [[pipelinetool]]
 
 [[autodoc]] PipelineTool
 
-### launch_gradio_demo
+### launch_gradio_demo [[launchgradiodemo]]
 
 [[autodoc]] launch_gradio_demo
 
-### ToolCollection
+### ToolCollection [[toolcollection]]
 
 [[autodoc]] ToolCollection
 
-## Engines
+## Engines [[engines]]
 
-You're free to create and use your own engines to be usable by the Agents framework.
-These engines have the following specification:
-1. Follow the [messages format](../chat_templating.md) for its input (`List[Dict[str, str]]`) and return a string.
-2. Stop generating outputs *before* the sequences passed in the argument `stop_sequences`
+에이전트 프레임워크에서 사용할 수 있는 엔진을 자유롭게 만들고 사용할 수 있습니다.
+이 엔진들은 다음과 같은 사양을 가지고 있습니다:
+1. 입력(`List[Dict[str, str]]`)에 [메시지 형식](../chat_templating.md)을 따르고 문자열을 반환해야 합니다.
+2. 인수 `stop_sequences`에 전달된 시퀀스 *이전에* 출력을 생성하는 것을 중지해야 합니다.
 
-### HfEngine
+### HfEngine [[hfengine]]
 
-For convenience, we have added a `HfEngine` that implements the points above and uses an inference endpoint for the execution of the LLM.
+편의를 위해, 위의 사항을 구현하고 LLM 실행을 위해 추론 엔드포인트를 사용하는 `HfEngine`을 추가했습니다.
 
 ```python
 >>> from transformers import HfEngine
@@ -104,31 +102,26 @@ For convenience, we have added a `HfEngine` that implements the points above and
 [[autodoc]] HfEngine
 
 
-## Agent Types
+## Agent Types [[agent-types]]
 
-Agents can handle any type of object in-between tools; tools, being completely multimodal, can accept and return
-text, image, audio, video, among other types. In order to increase compatibility between tools, as well as to 
-correctly render these returns in ipython (jupyter, colab, ipython notebooks, ...), we implement wrapper classes
-around these types.
+에이전트는 도구 간의 모든 유형의 객체를 처리할 수 있습니다; 도구는 완전히 멀티모달이므로 텍스트, 이미지, 오디오, 비디오 등 다양한 유형을 수락하고 반환할 수 있습니다. 도구 간의 호환성을 높이고 ipython (jupyter, colab, ipython 노트북, ...)에서 이러한 반환 값을 올바르게 렌더링하기 위해 이러한 유형 주위에 래퍼 클래스를 구현합니다.
 
-The wrapped objects should continue behaving as initially; a text object should still behave as a string, an image
-object should still behave as a `PIL.Image`.
+래핑된 객체는 초기와 동일하게 작동해야 합니다; 텍스트 객체는 여전히 문자열로 작동해야 하며, 이미지 객체는 여전히 `PIL.Image`로 작동해야 합니다.
 
-These types have three specific purposes:
+이러한 유형에는 세 가지 특정 목적이 있습니다:
 
-- Calling `to_raw` on the type should return the underlying object
-- Calling `to_string` on the type should return the object as a string: that can be the string in case of an `AgentText`
-  but will be the path of the serialized version of the object in other instances
-- Displaying it in an ipython kernel should display the object correctly
+- 유형에서 `to_raw`를 호출하면 기본 객체가 반환되어야 합니다.
+- 유형에서 `to_string`을 호출하면 객체가 문자열로 반환되어야 합니다: `AgentText`의 경우 문자열이 될 수 있지만, 다른 경우에는 객체의 직렬화된 버전의 경로가 됩니다.
+- ipython 커널에서 표시할 때 객체가 올바르게 표시되어야 합니다.
 
-### AgentText
+### AgentText [[agenttext]]
 
 [[autodoc]] transformers.agents.agent_types.AgentText
 
-### AgentImage
+### AgentImage [[agentimage]]
 
 [[autodoc]] transformers.agents.agent_types.AgentImage
 
-### AgentAudio
+### AgentAudio [[agentaudio]]
 
 [[autodoc]] transformers.agents.agent_types.AgentAudio
