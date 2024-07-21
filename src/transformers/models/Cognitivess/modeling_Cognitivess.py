@@ -25,24 +25,18 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import _flash_attention_forward
-from ...modeling_outputs import (
-    BaseModelOutputWithPast,
-    CausalLMOutputWithPast,
-    QuestionAnsweringModelOutput,
-    SequenceClassifierOutputWithPast,
-    TokenClassifierOutput,
-)
+from ...modeling_outputs import (BaseModelOutputWithPast,
+                                 CausalLMOutputWithPast,
+                                 QuestionAnsweringModelOutput,
+                                 SequenceClassifierOutputWithPast,
+                                 TokenClassifierOutput)
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
-from ...utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    is_flash_attn_greater_or_equal_2_10,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import (add_start_docstrings,
+                      add_start_docstrings_to_model_forward,
+                      is_flash_attn_greater_or_equal_2_10, logging,
+                      replace_return_docstrings)
 from .configuration_Cognitivess import CognitivessConfig
-
 
 logger = logging.get_logger(__name__)
 

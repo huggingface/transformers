@@ -13,15 +13,9 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import (
-    OptionalDependencyNotAvailable,
-    _LazyModule,
-    is_flax_available,
-    is_sentencepiece_available,
-    is_tokenizers_available,
-    is_torch_available,
-)
-
+from ...utils import (OptionalDependencyNotAvailable, _LazyModule,
+                      is_flax_available, is_sentencepiece_available,
+                      is_tokenizers_available, is_torch_available)
 
 _import_structure = {
     "configuration_Cognitivess": ["CognitivessConfig"],
@@ -64,7 +58,11 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_flax_Cognitivess"] = ["FlaxCognitivessForCausalLM", "FlaxCognitivessModel", "FlaxCognitivessPreTrainedModel"]
+    _import_structure["modeling_flax_Cognitivess"] = [
+        "FlaxCognitivessForCausalLM",
+        "FlaxCognitivessModel",
+        "FlaxCognitivessPreTrainedModel",
+    ]
 
 
 if TYPE_CHECKING:
@@ -93,13 +91,10 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_Cognitivess import (
-            CognitivessForCausalLM,
-            CognitivessForQuestionAnswering,
+            CognitivessForCausalLM, CognitivessForQuestionAnswering,
             CognitivessForSequenceClassification,
-            CognitivessForTokenClassification,
-            CognitivessModel,
-            CognitivessPreTrainedModel,
-        )
+            CognitivessForTokenClassification, CognitivessModel,
+            CognitivessPreTrainedModel)
 
     try:
         if not is_flax_available():
@@ -107,7 +102,9 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_flax_Cognitivess import FlaxCognitivessForCausalLM, FlaxCognitivessModel, FlaxCognitivessPreTrainedModel
+        from .modeling_flax_Cognitivess import (FlaxCognitivessForCausalLM,
+                                                FlaxCognitivessModel,
+                                                FlaxCognitivessPreTrainedModel)
 
 
 else:

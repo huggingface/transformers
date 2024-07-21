@@ -20,9 +20,9 @@ import warnings
 
 import torch
 
-from transformers import CognitivessConfig, CognitivessForCausalLM, CognitivessTokenizer, PreTrainedTokenizerFast
+from transformers import (CognitivessConfig, CognitivessForCausalLM,
+                          CognitivessTokenizer, PreTrainedTokenizerFast)
 from transformers.convert_slow_tokenizer import TikTokenConverter
-
 
 try:
     from transformers import CognitivessTokenizerFast

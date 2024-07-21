@@ -25,7 +25,6 @@ from ...convert_slow_tokenizer import import_protobuf
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 
-
 if TYPE_CHECKING:
     from ...tokenization_utils_base import TextInput
 

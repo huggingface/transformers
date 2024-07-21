@@ -22,7 +22,6 @@ from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import is_sentencepiece_available, logging
 from ...utils.versions import require_version
 
-
 require_version("tokenizers>=0.13.3")
 
 if is_sentencepiece_available():
