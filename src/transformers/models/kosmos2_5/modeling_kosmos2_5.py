@@ -1985,13 +1985,14 @@ class Kosmos2_5PreTrainedModel(PreTrainedModel):
         if isinstance(self, (Kosmos2_5TextModel, Kosmos2_5TextForCausalLM)):
             std = self.config.init_std
             factor = self.config.initializer_factor
-            # initializer_range = self.config.initializer_range
+            initializer_range = self.config.initializer_range
         elif isinstance(self, (Kosmos2_5Model, Kosmos2_5ForConditionalGeneration)):
             std = self.config.text_config.init_std
             factor = self.config.text_config.initializer_factor
-            # initializer_range = self.config.text_config.initializer_range
+            initializer_range = self.config.text_config.initializer_range
+
         if isinstance(module, Kosmos2_5VisionEmbeddings):
-            nn.init.normal_(module.column_embedder.weight, std=std)
+            nn.init.normal_(module.column_embedder.weight,std=std)
             nn.init.normal_(module.row_embedder.weight, std=std)
             nn.init.normal_(module.patch_projection.weight, std=std)
             if module.patch_projection.bias is not None:
@@ -2055,10 +2056,10 @@ class Kosmos2_5PreTrainedModel(PreTrainedModel):
             if module.dense.bias is not None:
                 module.dense.bias.data.zero_()
         elif isinstance(module, Kosmos2_5TextTransformer):
-            module.embed_tokens.weight.data.normal_(std=std)
+            module.embed_tokens.weight.data.normal_( std=std)
             if module.embed_tokens.padding_idx is not None:
                 module.embed_tokens.weight.data[module.embed_tokens.padding_idx].zero_()
-            module.segment_emb.weight.data.normal_(std=std)
+            module.segment_emb.weight.data.normal_( std=std)
 
 
 class Kosmos2_5TextModel(Kosmos2_5PreTrainedModel):
@@ -2135,12 +2136,8 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
     def __init__(self, config: Kosmos2_5Config):
         super().__init__(config)
 
-        self.text_model = Kosmos2_5TextModel._from_config(
-            config.text_config, attn_implementation=config._attn_implementation
-        )
-        self.vision_model = Kosmos2_5VisionModel._from_config(
-            config.vision_config, attn_implementation=config._attn_implementation
-        )
+        self.text_model = Kosmos2_5TextModel._from_config(config.text_config, attn_implementation=config._attn_implementation)
+        self.vision_model = Kosmos2_5VisionModel._from_config(config.vision_config, attn_implementation=config._attn_implementation)
         self.image_to_text_projection = Kosmos2_5ImageToTextProjection(config)
 
         # Initialize weights and apply final processing
@@ -2456,12 +2453,8 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel):
 
     def __init__(self, config: Kosmos2_5Config):
         super().__init__(config)
-        self.text_model = Kosmos2_5TextForCausalLM._from_config(
-            config.text_config, attn_implementation=config._attn_implementation
-        )
-        self.vision_model = Kosmos2_5VisionModel._from_config(
-            config.vision_config, attn_implementation=config._attn_implementation
-        )
+        self.text_model = Kosmos2_5TextForCausalLM._from_config(config.text_config, attn_implementation=config._attn_implementation)
+        self.vision_model = Kosmos2_5VisionModel._from_config(config.vision_config, attn_implementation=config._attn_implementation)
         self.image_to_text_projection = Kosmos2_5ImageToTextProjection(config)
         # Initialize weights and apply final processing
         self.post_init()
