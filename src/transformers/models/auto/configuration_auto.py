@@ -475,6 +475,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("nougat", "Nougat"),
         ("nystromformer", "Nyströmformer"),
         ("olmo", "OLMo"),
+        ("olmoe", "OLMoE"),
         ("oneformer", "OneFormer"),
         ("open-llama", "OpenLlama"),
         ("openai-gpt", "OpenAI GPT"),
