@@ -14,11 +14,11 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# bitsandbytes
+# bitsandbytes[[bitsandbytes]]
 
-[bitsandbytes](https://github.com/TimDettmers/bitsandbytes) is the easiest option for quantizing a model to 8 and 4-bit. 8-bit quantization multiplies outliers in fp16 with non-outliers in int8, converts the non-outlier values back to fp16, and then adds them together to return the weights in fp16. This reduces the degradative effect outlier values have on a model's performance. 4-bit quantization compresses a model even further, and it is commonly used with [QLoRA](https://hf.co/papers/2305.14314) to finetune quantized LLMs.
+[bitsandbytes](https://github.com/TimDettmers/bitsandbytes)는 모델을 8비트 및 4비트로 양자화하는 가장 쉬운 방법입니다. 8비트 양자화는 fp16에서 이상치를 제외한 값을 int8로 변환한 후, 이상치 값을 fp16으로 다시 변환하고 이들을 합산하여 fp16으로 가중치를 반환합니다. 이렇게 하면 이상치 값이 모델 성능에 미치는 저하 효과를 줄일 수 있습니다. 4비트 양자화는 모델을 더욱 압축하며, [QLoRA](https://hf.co/papers/2305.14314)와 함께 사용하여 양자화된 LLM을 미세 조정하는 데 흔히 사용됩니다.
 
-To use bitsandbytes, make sure you have the following libraries installed:
+bitsandbytes를 사용하려면 다음 라이브러리가 설치되어 있어야 합니다:
 
 <hfoptions id="bnb">
 <hfoption id="8-bit">
@@ -38,12 +38,12 @@ pip install --upgrade accelerate transformers
 </hfoption>
 </hfoptions>
 
-Now you can quantize a model by passing a `BitsAndBytesConfig` to [`~PreTrainedModel.from_pretrained`] method. This works for any model in any modality, as long as it supports loading with Accelerate and contains `torch.nn.Linear` layers.
+이제 `BitsAndBytesConfig`를 [`~PreTrainedModel.from_pretrained`] 메서드에 전달하여 모델을 양자화할 수 있습니다. 이는 Accelerate와 함께 로드할 수 있고 `torch.nn.Linear` 레이어가 포함된 모든 모델에서 작동합니다.
 
 <hfoptions id="bnb">
 <hfoption id="8-bit">
 
-Quantizing a model in 8-bit halves the memory-usage, and for large models, set `device_map="auto"` to efficiently use the GPUs available:
+모델을 8비트로 양자화하면 메모리 사용량이 절반으로 줄어들며, 대형 모델의 경우  `device_map="auto"`를 설정하여 사용 가능한 GPU를 효율적으로 활용할 수 있습니다:
 
 ```py
 from transformers import AutoModelForCausalLM, BitsAndBytesConfig
@@ -56,7 +56,7 @@ model_8bit = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-By default, all the other modules such as `torch.nn.LayerNorm` are converted to `torch.float16`. You can change the data type of these modules with the `torch_dtype` parameter if you want:
+기본적으로 `torch.nn.LayerNorm`과 같은 다른 모듈은 `torch.float16`으로 변환됩니다. 원하면 `torch_dtype` 매개변수로 이 모듈의 데이터 유형을 변경할 수 있습니다:
 
 ```py
 import torch
@@ -72,7 +72,9 @@ model_8bit = AutoModelForCausalLM.from_pretrained(
 model_8bit.model.decoder.layers[-1].final_layer_norm.weight.dtype
 ```
 
-Once a model is quantized to 8-bit, you can't push the quantized weights to the Hub unless you're using the latest version of Transformers and bitsandbytes. If you have the latest versions, then you can push the 8-bit model to the Hub with the [`~PreTrainedModel.push_to_hub`] method. The quantization config.json file is pushed first, followed by the quantized model weights.
+모델이 8비트로 양자화되면 최신 버전의 Transformers와 bitsandbytes를 사용하지 않는 한 양자화된 가중치를 Hub에 푸시할 수 없습니다. 최신 버전을 사용하는 경우, [`~PreTrainedModel.push_to_hub`] 메서드를 사용하여 8비트 모델을 Hub에 푸시할 수 있습니다. 양자화 구성 파일(config.json)이 먼저 푸시되고, 그 다음 양자화된 모델 가중치가 푸시됩니다.
+
+
 
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
@@ -91,7 +93,7 @@ model.push_to_hub("bloom-560m-8bit")
 </hfoption>
 <hfoption id="4-bit">
 
-Quantizing a model in 4-bit reduces your memory-usage by 4x, and for large models, set `device_map="auto"` to efficiently use the GPUs available:
+모델을 4비트로 양자화하면 메모리 사용량이 4배 줄어들며, 대형 모델의 경우 `device_map="auto"`를 설정하여 사용 가능한 GPU를 효율적으로 활용할 수 있습니다:
 
 ```py
 from transformers import AutoModelForCausalLM, BitsAndBytesConfig
@@ -104,7 +106,7 @@ model_4bit = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-By default, all the other modules such as `torch.nn.LayerNorm` are converted to `torch.float16`. You can change the data type of these modules with the `torch_dtype` parameter if you want:
+기본적으로 torch.nn.LayerNorm과 같은 다른 모듈은 `torch.float16`으로 변환됩니다. 원하면 `torch_dtype` 매개변수로 이 모듈의 데이터 유형을 변경할 수 있습니다:
 
 ```py
 import torch
@@ -120,24 +122,27 @@ model_4bit = AutoModelForCausalLM.from_pretrained(
 model_4bit.model.decoder.layers[-1].final_layer_norm.weight.dtype
 ```
 
-If you have `bitsandbytes>=0.41.3`, you can serialize 4-bit models and push them on Hugging Face Hub. Simply call `model.push_to_hub()` after loading it in 4-bit precision. You can also save the serialized 4-bit models locally with `model.save_pretrained()` command.  
+`bitsandbytes>=0.41.3`을 사용하는 경우 4비트 모델을 직렬화하고 Hugging Face Hub에 푸시할 수 있습니다. 모델을 4비트 정밀도로 로드한 후 `model.push_to_hub()`를 호출하면 됩니다. 또한 `model.save_pretrained()` 명령어로 로컬에 직렬화된 4비트 모델을 저장할 수도 있습니다.
 
 </hfoption>
 </hfoptions>
 
 <Tip warning={true}>
 
-Training with 8-bit and 4-bit weights are only supported for training *extra* parameters.
+
+8비트 및 4비트 가중치로 훈련하는 것은 *추가* 매개변수에 대해서만 지원됩니다.
 
 </Tip>
 
-You can check your memory footprint with the `get_memory_footprint` method:
+메모리 사용량을 확인하려면 `get_memory_footprint` 메서드를 사용하세요:
+
 
 ```py
 print(model.get_memory_footprint())
 ```
 
-Quantized models can be loaded from the [`~PreTrainedModel.from_pretrained`] method without needing to specify the `load_in_8bit` or `load_in_4bit` parameters:
+양자화된 모델은 [`~PreTrainedModel.from_pretrained`] 메서드를 사용하여 `load_in_8bit` 또는 `load_in_4bit` 매개변수를 지정하지 않고도 로드할 수 있습니다:
+
 
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -145,19 +150,19 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 model = AutoModelForCausalLM.from_pretrained("{your_username}/bloom-560m-8bit", device_map="auto")
 ```
 
-## 8-bit (LLM.int8() algorithm)
+## 8비트 (LLM.int8() 알고리즘)[[8-bit-(llm.int8()-algorithm)]]
 
 <Tip>
 
-Learn more about the details of 8-bit quantization in this [blog post](https://huggingface.co/blog/hf-bitsandbytes-integration)!
+8비트 양자화에 대한 자세한 내용을 알고 싶다면 이 [블로그 포스트](https://huggingface.co/blog/hf-bitsandbytes-integration)를 참조하세요!
 
 </Tip>
 
-This section explores some of the specific features of 8-bit models, such as offloading, outlier thresholds, skipping module conversion, and finetuning.
+이 섹션에서는 오프로드, 이상치 임계값, 모듈 변환 건너뛰기 및 미세 조정과 같은 8비트 모델의 특정 기능을 살펴봅니다.
 
-### Offloading
+### 오프로드[[offloading]]
 
-8-bit models can offload weights between the CPU and GPU to support fitting very large models into memory. The weights dispatched to the CPU are actually stored in **float32**, and aren't converted to 8-bit. For example, to enable offloading for the [bigscience/bloom-1b7](https://huggingface.co/bigscience/bloom-1b7) model, start by creating a [`BitsAndBytesConfig`]:
+8비트 모델은 CPU와 GPU 간에 가중치를 오프로드하여 매우 큰 모델을 메모리에 적재할 수 있습니다. CPU로 전송된 가중치는 실제로 **float32**로 저장되며 8비트로 변환되지 않습니다. 예를 들어, [bigscience/bloom-1b7](https://huggingface.co/bigscience/bloom-1b7) 모델의 오프로드를 활성화하려면 [`BitsAndBytesConfig`]를 생성합니다:
 
 ```py
 from transformers import AutoModelForCausalLM, BitsAndBytesConfig
@@ -165,7 +170,7 @@ from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 quantization_config = BitsAndBytesConfig(llm_int8_enable_fp32_cpu_offload=True)
 ```
 
-Design a custom device map to fit everything on your GPU except for the `lm_head`, which you'll dispatch to the CPU:
+CPU에 전달할 `lm_head`를 제외한 모든 것을 GPU에 적재할 수 있도록 사용자 정의 장치 맵을 설계합니다:
 
 ```py
 device_map = {
@@ -177,7 +182,7 @@ device_map = {
 }
 ```
 
-Now load your model with the custom `device_map` and `quantization_config`:
+이제 사용자 정의 `device_map`과 `quantization_config`을 사용하여 모델을 로드합니다:
 
 ```py
 model_8bit = AutoModelForCausalLM.from_pretrained(
@@ -187,11 +192,11 @@ model_8bit = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-### Outlier threshold
+### 이상치 임계값[[outlier-threshold]]
 
-An "outlier" is a hidden state value greater than a certain threshold, and these values are computed in fp16. While the values are usually normally distributed ([-3.5, 3.5]), this distribution can be very different for large models ([-60, 6] or [6, 60]). 8-bit quantization works well for values ~5, but beyond that, there is a significant performance penalty. A good default threshold value is 6, but a lower threshold may be needed for more unstable models (small models or finetuning).
+"이상값"은 특정 임계값을 초과하는 히든 상태 값을 의미하며, 이러한 값은 fp16으로 계산됩니다. 값은 일반적으로 정규 분포([-3.5, 3.5])를 따르지만, 대형 모델의 경우 이 분포는 매우 다를 수 있습니다([-60, 6] 또는 [6, 60]). 8비트 양자화는 ~5 정도의 값에서 잘 작동하지만, 그 이상에서는 성능에 큰 페널티가 발생합니다. 기본 임계값 값은 6이 적절하지만, 더 불안정한 모델(소형 모델 또는 미세 조정)에는 더 낮은 임계값이 필요할 수 있습니다.
 
-To find the best threshold for your model, we recommend experimenting with the `llm_int8_threshold` parameter in [`BitsAndBytesConfig`]:
+모델에 가장 적합한 임계값을 찾으려면 [BitsAndBytesConfig]에서 `llm_int8_threshold` 매개변수를 실험해보는 것이 좋습니다:
 
 ```py
 from transformers import AutoModelForCausalLM, BitsAndBytesConfig
@@ -209,9 +214,9 @@ model_8bit = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-### Skip module conversion
+### 모듈 변환 건너뛰기[[skip-module-conversion]]
 
-For some models, like [Jukebox](model_doc/jukebox), you don't need to quantize every module to 8-bit which can actually cause instability. With Jukebox, there are several `lm_head` modules that should be skipped using the `llm_int8_skip_modules` parameter in [`BitsAndBytesConfig`]:
+[Jukebox](model_doc/jukebox)와 같은 일부 모델에서는 모든 모듈을 8비트로 양자화할 필요가 없으며, 이는 실제로 불안정성을 유발할 수 있습니다. Jukebox의 경우, 여러 `lm_head` 모듈은 [`BitsAndBytesConfig`]에서 `llm_int8_skip_modules` 매개변수를 사용하여 건너뛰어야 합니다:
 
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
@@ -229,24 +234,26 @@ model_8bit = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-### Finetuning
+### 미세 조정[[finetuning]]
 
-With the [PEFT](https://github.com/huggingface/peft) library, you can finetune large models like [flan-t5-large](https://huggingface.co/google/flan-t5-large) and [facebook/opt-6.7b](https://huggingface.co/facebook/opt-6.7b) with 8-bit quantization. You don't need to pass the `device_map` parameter for training because it'll automatically load your model on a GPU. However, you can still customize the device map with the `device_map` parameter if you want to (`device_map="auto"` should only be used for inference).
+[PEFT](https://github.com/huggingface/peft) 라이브러리를 사용하면 [flan-t5-large](https://huggingface.co/google/flan-t5-large) 및 [facebook/opt-6.7b](https://huggingface.co/facebook/opt-6.7b)와 같은 대형 모델을 8비트 양자화로 미세 조정할 수 있습니다. 훈련 시 `device_map` 매개변수를 전달할 필요가 없으며, 모델이 자동으로 GPU에 로드됩니다. 그러나 원하는 경우 `device_map` 매개변수로 장치 맵을 사용자 정의할 수 있습니다 (`device_map="auto"`는 추론에만 사용해야 합니다).
 
-## 4-bit (QLoRA algorithm)
+## 4비트 (QLoRA 알고리즘)[[4-bit-(qlora-algorithm)]]
 
 <Tip>
 
-Try 4-bit quantization in this [notebook](https://colab.research.google.com/drive/1ge2F1QSK8Q7h0hn3YKuBCOAS0bK8E0wf) and learn more about it's details in this [blog post](https://huggingface.co/blog/4bit-transformers-bitsandbytes).
+이 [노트북](https://colab.research.google.com/drive/1ge2F1QSK8Q7h0hn3YKuBCOAS0bK8E0wf)에서 4비트 양자화를 시도하고 자세한 내용은 이 [블로그 게시물](https://huggingface.co/blog/4bit-transformers-bitsandbytes)에서 확인하세요.
+
 
 </Tip>
 
-This section explores some of the specific features of 4-bit models, such as changing the compute data type, using the Normal Float 4 (NF4) data type, and using nested quantization.
+이 섹션에서는 계산 데이터 유형 변경, Normal Float 4 (NF4) 데이터 유형 사용, 중첩 양자화와 같은 4비트 모델의 특정 기능을 탐구합니다.
 
 
-### Compute data type
+### 데이터 유형 계산[[compute-data-type]]
 
-To speedup computation, you can change the data type from float32 (the default value) to bf16 using the `bnb_4bit_compute_dtype` parameter in [`BitsAndBytesConfig`]:
+계산 속도를 높이기 위해 [`BitsAndBytesConfig`]에서 `bnb_4bit_compute_dtype` 매개변수를 사용하여 데이터 유형을 float32(기본값)에서 bf16으로 변경할 수 있습니다:
+
 
 ```py
 import torch
@@ -255,9 +262,9 @@ from transformers import BitsAndBytesConfig
 quantization_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16)
 ```
 
-### Normal Float 4 (NF4)
+### Normal Float 4 (NF4)[[normal-float-4-(nf4)]]
 
-NF4 is a 4-bit data type from the [QLoRA](https://hf.co/papers/2305.14314) paper, adapted for weights initialized from a normal distribution. You should use NF4 for training 4-bit base models. This can be configured with the `bnb_4bit_quant_type` parameter in the [`BitsAndBytesConfig`]:
+NF4는 [QLoRA](https://hf.co/papers/2305.14314) 논문에서 소개된 4비트 데이터 유형으로, 정규 분포에서 초기화된 가중치에 적합합니다. 4비트 기반 모델을 훈련할 때 NF4를 사용해야 합니다. 이는 [`BitsAndBytesConfig`]에서 `bnb_4bit_quant_type` 매개변수로 설정할 수 있습니다:
 
 ```py
 from transformers import BitsAndBytesConfig
@@ -270,11 +277,11 @@ nf4_config = BitsAndBytesConfig(
 model_nf4 = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=nf4_config)
 ```
 
-For inference, the `bnb_4bit_quant_type` does not have a huge impact on performance. However, to remain consistent with the model weights, you should use the `bnb_4bit_compute_dtype` and `torch_dtype` values.
+추론의 경우, `bnb_4bit_quant_type`은 성능에 큰 영향을 미치지 않습니다. 그러나 모델 가중치와 일관성을 유지하기 위해 `bnb_4bit_compute_dtype` 및 `torch_dtype` 값을 사용해야 합니다.
 
-### Nested quantization
+### 중첩 양자화[[nested-quantization]]
 
-Nested quantization is a technique that can save additional memory at no additional performance cost. This feature performs a second quantization of the already quantized weights to save an addition 0.4 bits/parameter. For example, with nested quantization, you can finetune a [Llama-13b](https://huggingface.co/meta-llama/Llama-2-13b) model on a 16GB NVIDIA T4 GPU with a sequence length of 1024, a batch size of 1, and enabling gradient accumulation with 4 steps.
+중첩 양자화는 추가적인 성능 손실 없이 추가적인 메모리를 절약할 수 있는 기술입니다. 이 기능은 이미 양자화된 가중치의 2차 양자화를 수행하여 매개변수당 추가로 0.4비트를 절약합니다. 예를 들어, 중첩 양자화를 통해 16GB NVIDIA T4 GPU에서 시퀀스 길이 1024, 배치 크기 1, 그라디언트 누적 4단계를 사용하여 [Llama-13b](https://huggingface.co/meta-llama/Llama-2-13b) 모델을 미세 조정할 수 있습니다.
 
 ```py
 from transformers import BitsAndBytesConfig
@@ -287,9 +294,8 @@ double_quant_config = BitsAndBytesConfig(
 model_double_quant = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-13b", quantization_config=double_quant_config)
 ```
 
-## Dequantizing `bitsandbytes` models
-
-Once quantized, you can dequantize the model to the original precision but this might result in a small quality loss of the model. Make sure you have enough GPU RAM to fit the dequantized model. 
+## `bitsandbytes` 모델의 비양자화[[dequantizing-`bitsandbytes`-models]]
+양자화된 후에는 모델을 원래의 정밀도로 비양자화할 수 있지만, 이는 모델의 품질 손실을 초래할 수 있습니다. 비양자화된 모델을 맞추기 위해 충분한 GPU RAM이 있는지 확인하십시오.
 
 ```python
 from transformers import AutoModelForCausalLM, BitsAndBytesConfig, AutoTokenizer
