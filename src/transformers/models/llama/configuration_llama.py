@@ -21,10 +21,6 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import ROPE_CONFIG_DOCSTRING, rope_config_validation
-from ...utils import logging
-
-
-logger = logging.get_logger(__name__)
 
 
 class LlamaConfig(PretrainedConfig):

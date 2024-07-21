@@ -250,11 +250,11 @@ def _compute_longrope_parameters(
     # values to compute the default attention scaling factor, instead of using `factor`.
     if hasattr(config, "original_max_position_embeddings"):
         max_position_embeddings = config.original_max_position_embeddings
-        target_sequence_length = config.max_position_embeddings
-        factor = target_sequence_length / max_position_embeddings
+        expanded_max_position_embeddings = config.max_position_embeddings
+        factor = expanded_max_position_embeddings / max_position_embeddings
     else:
         max_position_embeddings = config.max_position_embeddings
-        target_sequence_length = max_position_embeddings * factor
+        expanded_max_position_embeddings = max_position_embeddings * factor
 
     # Sets the attention factor as suggested in the paper
     if attention_factor is None:
@@ -264,7 +264,7 @@ def _compute_longrope_parameters(
             attention_factor = math.sqrt(1 + math.log(factor) / math.log(max_position_embeddings))
 
     # Compute the inverse frequencies -- scaled based on the target sequence length
-    if target_sequence_length > max_position_embeddings:
+    if expanded_max_position_embeddings > max_position_embeddings:
         ext_factors = torch.tensor(long_factor, dtype=torch.float32, device=device)
     else:
         ext_factors = torch.tensor(short_factor, dtype=torch.float32, device=device)

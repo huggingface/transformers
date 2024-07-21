@@ -30,7 +30,7 @@ The original code for Phi-3 can be found [here](https://huggingface.co/microsoft
 
 ## Usage tips
 
-- This model is very similar to `Llama` with the main difference of [`Phi3SuScaledRotaryEmbedding`] and [`Phi3YarnScaledRotaryEmbedding`], where they are used to extend the context of the rotary embeddings. The query, key and values are fused, and the MLP's up and gate projection layers are also fused.
+- This model is very similar to `Llama`. The query, key and values are fused, and the MLP's up and gate projection layers are also fused. Some pretrained models include `'longrope'` rotary position embedding expansion, with which the model was fine-tuned to very large context windows.
 - The tokenizer used for this model is identical to the [`LlamaTokenizer`], with the exception of additional tokens.
 
 ## How to use Phi-3
@@ -57,9 +57,9 @@ Phi-3 has been integrated in the development version (4.40.0.dev) of `transforme
 >>> outputs = model.generate(inputs, max_new_tokens=32)
 >>> text = tokenizer.batch_decode(outputs)[0]
 >>> print(text)
-<s><|user|> 
-Can you provide ways to eat combinations of bananas and dragonfruits?<|end|> 
-<|assistant|> 
+<s><|user|>
+Can you provide ways to eat combinations of bananas and dragonfruits?<|end|>
+<|assistant|>
 Certainly! Bananas and dragonfruits can be combined in various delicious ways. Here are some ideas for eating combinations of bananas and
 ```
 

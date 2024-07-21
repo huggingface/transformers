@@ -46,7 +46,7 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "DbrxConfig"
 
 
-# Copied from transformers.models.gemma.modeling_gemma.GemmaRotaryEmbedding with Gemma->Dbrx
+# Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Dbrx
 class DbrxRotaryEmbedding(nn.Module):
     def __init__(
         self,

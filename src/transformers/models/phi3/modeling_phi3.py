@@ -74,7 +74,7 @@ class Phi3RMSNorm(nn.Module):
         return self.weight * hidden_states.to(input_dtype)
 
 
-# Copied from transformers.models.gemma.modeling_gemma.GemmaRotaryEmbedding with gemma->phi3, Gemma->Phi3
+# Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with llama->phi3, Llama->Phi3
 class Phi3RotaryEmbedding(nn.Module):
     def __init__(
         self,

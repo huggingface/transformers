@@ -15,14 +15,11 @@
 """RecurrentGemma model configuration"""
 
 from ...configuration_utils import PretrainedConfig
-from ...utils import logging
-
-
-logger = logging.get_logger(__name__)
+from ...modeling_rope_utils import ROPE_CONFIG_DOCSTRING, rope_config_validation
 
 
 class RecurrentGemmaConfig(PretrainedConfig):
-    r"""
+    rf"""
     This is the configuration class to store the configuration of a [`RecurrentGemmaModel`]. It is used to instantiate a RecurrentGemma
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the RecurrentGemma-7B.
@@ -76,6 +73,7 @@ class RecurrentGemmaConfig(PretrainedConfig):
             The partial rotary factor used in the initialization of the rotary embeddings.
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
+        {ROPE_CONFIG_DOCSTRING}
         block_types (`List[str]`, *optional*, defaults to `('recurrent', 'recurrent', 'attention')`):
             List of aleternating blocks that will be repeated to initialize the `temporal_block` layer.
         attention_dropout (`float`, *optional*, defaults to 0.0): dropout value to use after the attention softmax.
@@ -116,6 +114,7 @@ class RecurrentGemmaConfig(PretrainedConfig):
         hidden_activation="gelu_pytorch_tanh",
         partial_rotary_factor=0.5,
         rope_theta=10000.0,
+        rope_scaling=None,
         block_types=("recurrent", "recurrent", "attention"),
         attention_dropout=0.0,
         num_key_value_heads=None,
@@ -135,6 +134,7 @@ class RecurrentGemmaConfig(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.rope_theta = rope_theta
+        self.rope_scaling = rope_scaling
         self.partial_rotary_factor = partial_rotary_factor
         self.block_types = list(block_types)
         self.hidden_activation = hidden_activation
@@ -146,6 +146,9 @@ class RecurrentGemmaConfig(PretrainedConfig):
         self.attention_bias = attention_bias
         self.w_init_variance_scale = w_init_variance_scale
         self.final_w_init_variance_scale = 2.0 / self.num_hidden_layers
+
+        rope_config_validation(self)
+
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
