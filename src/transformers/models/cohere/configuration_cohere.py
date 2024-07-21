@@ -20,14 +20,11 @@
 """Cohere model configuration"""
 
 from ...configuration_utils import PretrainedConfig
-from ...utils import logging
-
-
-logger = logging.get_logger(__name__)
+from ...modeling_rope_utils import ROPE_CONFIG_DOCSTRING, rope_config_validation
 
 
 class CohereConfig(PretrainedConfig):
-    r"""
+    rf"""
     This is the configuration class to store the configuration of a [`CohereModel`]. It is used to instantiate an Cohere
     model according to the specified arguments, defining the model architecture.
 
@@ -79,6 +76,7 @@ class CohereConfig(PretrainedConfig):
             Whether to tie weight embeddings
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
+        {ROPE_CONFIG_DOCSTRING}
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -121,6 +119,7 @@ class CohereConfig(PretrainedConfig):
         eos_token_id=255001,
         tie_word_embeddings=True,
         rope_theta=10000.0,
+        rope_scaling=None,
         attention_bias=False,
         attention_dropout=0.0,
         use_qk_norm=False,
@@ -144,9 +143,12 @@ class CohereConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
         self.rope_theta = rope_theta
+        self.rope_scaling = rope_scaling
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.use_qk_norm = use_qk_norm
+
+        rope_config_validation(self)
 
         super().__init__(
             pad_token_id=pad_token_id,
