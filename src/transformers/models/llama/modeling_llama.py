@@ -336,7 +336,7 @@ class LlamaAttention(nn.Module):
 
         if position_embeddings is None:
             logger.warning_once(
-                "The attention layers in Llama are transitioning from computing the RoPE embeddings internally "
+                "The attention layers in this model are transitioning from computing the RoPE embeddings internally "
                 "through `position_ids` (2D tensor with the indexes of the tokens), to using externally computed "
                 "`position_embeddings` (Tuple of tensors, containing cos and sin). In v4.45 `position_ids` will be "
                 " and `position_embeddings` will be mandatory."
@@ -437,7 +437,7 @@ class LlamaFlashAttention2(LlamaAttention):
 
         if position_embeddings is None:
             logger.warning_once(
-                "The attention layers in Llama are transitioning from computing the RoPE embeddings internally "
+                "The attention layers in this model are transitioning from computing the RoPE embeddings internally "
                 "through `position_ids` (2D tensor with the indexes of the tokens), to using externally computed "
                 "`position_embeddings` (Tuple of tensors, containing cos and sin). In v4.45 `position_ids` will be "
                 " and `position_embeddings` will be mandatory."
@@ -556,7 +556,7 @@ class LlamaSdpaAttention(LlamaAttention):
 
         if position_embeddings is None:
             logger.warning_once(
-                "The attention layers in Llama are transitioning from computing the RoPE embeddings internally "
+                "The attention layers in this model are transitioning from computing the RoPE embeddings internally "
                 "through `position_ids` (2D tensor with the indexes of the tokens), to using externally computed "
                 "`position_embeddings` (Tuple of tensors, containing cos and sin). In v4.45 `position_ids` will be "
                 " and `position_embeddings` will be mandatory."

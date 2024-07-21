@@ -979,7 +979,7 @@ class PersimmonForCausalLM(PersimmonPreTrainedModel):
     """,
     PERSIMMON_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with LLAMA->PERSIMMON,Llama->Persimmon
+# Copied from transformers.models.mixtral.modeling_mixtral.MixtralForSequenceClassification with Mixtral->Persimmon, MIXTRAL->PERSIMMON
 class PersimmonForSequenceClassification(PersimmonPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1009,7 +1009,6 @@ class PersimmonForSequenceClassification(PersimmonPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
     ) -> Union[Tuple, SequenceClassifierOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1029,7 +1028,6 @@ class PersimmonForSequenceClassification(PersimmonPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            position_embeddings=position_embeddings,
         )
         hidden_states = transformer_outputs[0]
         logits = self.score(hidden_states)
@@ -1097,7 +1095,7 @@ class PersimmonForSequenceClassification(PersimmonPreTrainedModel):
     """,
     PERSIMMON_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_llama.LlamaForTokenClassification with Llama->Persimmon, LLAMA->PERSIMMON
+# Copied from transformers.models.mixtral.modeling_mixtral.MixtralForTokenClassification with Mixtral->Persimmon, MIXTRAL->PERSIMMON
 class PersimmonForTokenClassification(PersimmonPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1134,7 +1132,6 @@ class PersimmonForTokenClassification(PersimmonPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
     ) -> Union[Tuple, TokenClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1154,7 +1151,6 @@ class PersimmonForTokenClassification(PersimmonPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            position_embeddings=position_embeddings,
         )
         sequence_output = outputs[0]
         sequence_output = self.dropout(sequence_output)

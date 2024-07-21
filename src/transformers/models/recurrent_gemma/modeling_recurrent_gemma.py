@@ -64,17 +64,14 @@ class RecurrentGemmaRMSNorm(nn.Module):
 ALL_LAYERNORM_LAYERS.append(RecurrentGemmaRMSNorm)
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->RecurrentGemma
+# Adapted from LlamaRotaryEmbedding
 class RecurrentGemmaRotaryEmbedding(nn.Module):
     def __init__(
         self,
         dim=None,
-        max_position_embeddings=2048,
         base=10000,
         device=None,
-        scaling_factor=1.0,
         config: Optional[RecurrentGemmaConfig] = None,
-        **kwargs,
     ):
         super().__init__()
         # TODO (joao): remove this `if` in v4.45; the legacy args rebuild a config to power the rest of the class;
@@ -83,45 +80,22 @@ class RecurrentGemmaRotaryEmbedding(nn.Module):
                 "`RecurrentGemmaRotaryEmbedding` can now be fully parameterized by passing the model config through the "
                 "`config` argument. All other arguments will be deprecated in v4.45"
             )
-            config = RecurrentGemmaConfig(**kwargs)
+            config = RecurrentGemmaConfig()
             config.rope_theta = base
-            config.max_position_embeddings = max_position_embeddings
             config.head_dim = dim  # this one doesn't actually exist, will only be used in the deprecation transition
-            if scaling_factor == 1.0 and len(kwargs) == 0:
-                config.rope_scaling = None
-            else:
-                config.rope_scaling = {"type": "default", "factor": scaling_factor}
-                config.rope_scaling |= kwargs  # may overwrite "type"
 
         self.config = config
         self.rope_type = config.rope_scaling["type"] if config.rope_scaling is not None else "default"
+        if self.rope_type not in ("default", "linear"):
+            raise ValueError(f"RecurrentGemma only supports 'default' and 'linear' RoPE types, got {self.rope_type}")
+
         self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
         inv_freq, self.attention_scaling = self.rope_init_fn(config, device)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
-
-    def dynamic_frequency_update(self, position_ids, device):
-        """
-        dynamic RoPE layers should recompute `inv_freq` in the following situations:
-        1 - growing beyond the cached sequence length (allow scaling)
-        2 - the current sequence length is in the original scale (avoid losing precision with small sequences)
-        """
-        seq_len = torch.max(position_ids) + 1
-        needs_growth = seq_len > self.max_seq_len_cached
-        needs_reset = seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len
-        if needs_growth or needs_reset:
-            target_seq_len = max(seq_len, self.original_max_seq_len)
-            inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, seq_len=target_seq_len)
-            self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
-            self.max_seq_len_cached = target_seq_len
 
     @torch.no_grad()
     def forward(self, x, position_ids):
-        if "dynamic" in self.rope_type:
-            self.dynamic_frequency_update(position_ids, device=x.device)
-
         # Core RoPE block
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
@@ -233,7 +207,7 @@ class RecurrentGemmaSdpaAttention(nn.Module):
 
         if position_embeddings is None:
             logger.warning_once(
-                "The attention layers in Llama are transitioning from computing the RoPE embeddings internally "
+                "The attention layers in this model are transitioning from computing the RoPE embeddings internally "
                 "through `position_ids` (2D tensor with the indexes of the tokens), to using externally computed "
                 "`position_embeddings` (Tuple of tensors, containing cos and sin). In v4.45 `position_ids` will be "
                 " and `position_embeddings` will be mandatory."
