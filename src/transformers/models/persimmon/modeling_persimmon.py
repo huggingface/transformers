@@ -1095,7 +1095,7 @@ class PersimmonForSequenceClassification(PersimmonPreTrainedModel):
     """,
     PERSIMMON_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_llama.LlamaForTokenClassification with Llama->Persimmon, LLAMA->PERSIMMON
+# Copied from transformers.models.mistral.modeling_mistral.MistralForTokenClassification with Mistral->Persimmon, MISTRAL->PERSIMMON
 class PersimmonForTokenClassification(PersimmonPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

@@ -1249,7 +1249,7 @@ class Starcoder2ForSequenceClassification(Starcoder2PreTrainedModel):
     """,
     STARCODER2_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_llama.LlamaForTokenClassification with Llama->Starcoder2, LLAMA->STARCODER2
+# Copied from transformers.models.mistral.modeling_mistral.MistralForTokenClassification with Mistral->Starcoder2, MISTRAL->STARCODER2
 class Starcoder2ForTokenClassification(Starcoder2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
