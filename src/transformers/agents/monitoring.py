@@ -46,7 +46,7 @@ def pull_message(step_log: dict):
         )
 
 
-def stream_from_transformers_agent(agent: ReactAgent, task: str, **kwargs):
+def stream_to_gradio(agent: ReactAgent, task: str, **kwargs):
     """Runs an agent with the given task and streams the messages from the agent as gradio ChatMessages."""
 
     try:

@@ -67,7 +67,7 @@ _import_structure = {
         "ToolCollection",
         "launch_gradio_demo",
         "load_tool",
-        "stream_from_transformers_agent",
+        "stream_to_gradio",
     ],
     "audio_utils": [],
     "benchmark": [],
@@ -4731,7 +4731,7 @@ if TYPE_CHECKING:
         ToolCollection,
         launch_gradio_demo,
         load_tool,
-        stream_from_transformers_agent,
+        stream_to_gradio,
     )
     from .configuration_utils import PretrainedConfig
 

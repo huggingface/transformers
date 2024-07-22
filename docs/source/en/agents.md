@@ -512,7 +512,7 @@ agent.run("How many more blocks (also denoted as layers) in BERT base encoder th
 
 ## Gradio interface
 
-You can leverage `gradio.Chatbot`to display your agent's thoughts using `stream_from_transformers_agent`, here is an example:
+You can leverage `gradio.Chatbot`to display your agent's thoughts using `stream_to_gradio`, here is an example:
 
 ```py
 import gradio as gr
@@ -520,7 +520,7 @@ from transformers import (
     load_tool,
     ReactCodeAgent,
     HfEngine,
-    stream_from_transformers_agent,
+    stream_to_gradio,
 )
 
 # Import tool from Hub
@@ -536,7 +536,7 @@ def interact_with_agent(task):
     messages = []
     messages.append(gr.ChatMessage(role="user", content=task))
     yield messages
-    for msg in stream_from_transformers_agent(agent, task):
+    for msg in stream_to_gradio(agent, task):
         messages.append(msg)
         yield messages + [
             gr.ChatMessage(role="assistant", content="⏳ Task not finished yet!")
@@ -545,7 +545,7 @@ def interact_with_agent(task):
 
 
 with gr.Blocks() as demo:
-    text_input = gr.Textbox(lines=1, label="Chat Message")
+    text_input = gr.Textbox(lines=1, label="Chat Message", value="Make me a picture of the Statue of Liberty.")
     submit = gr.Button("Run illustrator agent!")
     chatbot = gr.Chatbot(
         label="Agent",
