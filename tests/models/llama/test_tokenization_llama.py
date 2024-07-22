@@ -835,18 +835,16 @@ class TikTokenIntegrationTests(unittest.TestCase):
 
     def test_tiktoken_llama(self):
         model_path = "hf-internal-testing/Llama3-Instruct-Internal"
-        model_file_name = "tokenizer.model"
 
-        tiktoken_tokenizer = AutoTokenizer.from_pretrained(model_path, tiktoken_file=model_file_name, from_slow=True)
+        tiktoken_tokenizer = AutoTokenizer.from_pretrained(model_path, legacy=False)
         self.assertTrue(isinstance(tiktoken_tokenizer, PreTrainedTokenizerFast))
-        self.assertEqual(tiktoken_tokenizer.vocab_files_names["vocab_file"], model_file_name)
         tokens = tiktoken_tokenizer.encode("Hey there")
-        self.assertEqual(tokens, [19182, 1070])
+        self.assertEqual(tokens, [128000, 19182, 1070])
 
         tmpdirname = tempfile.mkdtemp()
+        tiktoken_tokenizer.save_pretrained(tmpdirname)
         tokenizer_reloaded = AutoTokenizer.from_pretrained(tmpdirname)
         self.assertTrue(isinstance(tokenizer_reloaded, PreTrainedTokenizerFast))
-        self.assertEqual(tokenizer_reloaded.vocab_files_names["vocab_file"], model_file_name)
         tokens = tokenizer_reloaded.encode("Hey there")
-        self.assertEqual(tokens, [19182, 1070])
+        self.assertEqual(tokens, [128000, 19182, 1070])
         shutil.rmtree(tmpdirname)

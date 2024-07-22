@@ -114,7 +114,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         elif fast_tokenizer_file is not None and not from_slow:
             # We have a serialization from tokenizers which let us directly build the backend
             fast_tokenizer = TokenizerFast.from_file(fast_tokenizer_file)
-        elif slow_tokenizer is not None and not False:
+        elif slow_tokenizer:
             # We need to convert a slow tokenizer to build the backend
             fast_tokenizer = convert_slow_tokenizer(slow_tokenizer)
         elif gguf_file is not None:

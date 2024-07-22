@@ -2505,8 +2505,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         try:
             tokenizer = cls(*init_inputs, **init_kwargs)
         except DecodeError:
+            # Google Protobuf Error: Cannot load SPM model tokenizer
             return False
-        except OSError:
+        except RuntimeError:
+            # Google Protobuf Error: Cannot load SPM model tokenizer
+            return False
+        except OSError as e:
+            print(e)
             raise OSError(
                 "Unable to load vocabulary from file. "
                 "Please check that the provided vocabulary is accessible and not corrupted."
