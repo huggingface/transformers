@@ -1451,6 +1451,7 @@ class TikTokenConverter:
         vocab_file=None,
         pattern=r"""(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+""",
         add_prefix_space=False,
+        special_tokens=None,
         *args,
         **kwargs,
     ):
@@ -1458,13 +1459,7 @@ class TikTokenConverter:
         self.vocab_file = vocab_file
         self.pattern = pattern
         self.add_prefix_space = add_prefix_space
-        self.special_tokens = kwargs.get("additional_special_tokens", [])
-        self.bos_token = kwargs.get("bos_token", None)
-        self.eos_token = kwargs.get("eos_token", None)
-        self.add_bos_token = kwargs.get("add_bos_token", True)
-        self.add_eos_token = kwargs.get("add_eos_token", False)
-        self.bos_token_id = kwargs.get("bos_token_id", None)
-        self.eos_token_id = kwargs.get("eos_token_id", None)
+        self.special_tokens = special_tokens
 
     def extract_vocab_merges_from_model(self, tiktoken_url: str):
         try:
@@ -1515,28 +1510,7 @@ class TikTokenConverter:
         tokenizer.decoder = decoders.ByteLevel()
         tokenizer.add_special_tokens(self.special_tokens)
 
-        bos = self.bos_token
-        bos_token_id = self.bos_token_id or tokenizer.token_to_id(bos)
-        if bos is None and self.add_bos_token:
-            raise ValueError("add_bos_token = True but bos_token = None")
-
-        eos = self.eos_token
-        eos_token_id = self.eos_token_id or tokenizer.token_to_id(eos)
-        if eos is None and self.add_eos_token:
-            raise ValueError("add_eos_token = True but eos_token = None")
-
-        single = f"{(bos + ':0 ') if self.add_bos_token else ''}$A:0{(' ' + eos + ':0') if self.add_eos_token else ''}"
-        pair = f"{single}{(' ' + bos + ':1') if self.add_bos_token else ''} $B:1{(' ' + eos + ':1') if self.add_eos_token else ''}"
-
-        special_tokens = []
-        if self.add_bos_token:
-            special_tokens.append((bos, bos_token_id))
-        if self.add_eos_token:
-            special_tokens.append((eos, eos_token_id))
-
-        tokenizer.post_processor = processors.TemplateProcessing(
-            single=single, pair=pair, special_tokens=special_tokens
-        )
+        tokenizer.post_processor = processors.ByteLevel(trim_offsets=False)
 
         return tokenizer
 
@@ -1606,7 +1580,7 @@ SLOW_TO_FAST_CONVERTERS = {
 }
 
 
-def convert_slow_tokenizer(transformer_tokenizer, tiktoken_kwargs=None) -> Tokenizer:
+def convert_slow_tokenizer(transformer_tokenizer, tiktoken=False) -> Tokenizer:
     """
     Utilities to convert a slow tokenizer instance in a fast tokenizer instance.
 
@@ -1614,7 +1588,8 @@ def convert_slow_tokenizer(transformer_tokenizer, tiktoken_kwargs=None) -> Token
         transformer_tokenizer ([`~tokenization_utils_base.PreTrainedTokenizer`]):
             Instance of a slow tokenizer to convert in the backend tokenizer for
             [`~tokenization_utils_base.PreTrainedTokenizerFast`].
-       tiktoken_kwargs (Optional[Dict[str, Any]]): Additional arguments to pass to the `TikTokenConverter` class.
+       tiktoken (bool, optional): Whether to use the `tiktoken` library to convert the tokenizer.
+            Defaults to False.
 
     Return:
         A instance of [`~tokenizers.Tokenizer`] to be used as the backend tokenizer of a
@@ -1623,22 +1598,15 @@ def convert_slow_tokenizer(transformer_tokenizer, tiktoken_kwargs=None) -> Token
 
     tokenizer_class_name = transformer_tokenizer.__class__.__name__
 
-    if tokenizer_class_name in SLOW_TO_FAST_CONVERTERS and not tiktoken_kwargs:
+    if tokenizer_class_name in SLOW_TO_FAST_CONVERTERS and not tiktoken:
         converter_class = SLOW_TO_FAST_CONVERTERS[tokenizer_class_name]
         return converter_class(transformer_tokenizer).converted()
 
-    elif tokenizer_class_name in TIKTOKEN_CONVERTERS and tiktoken_kwargs:
+    elif tokenizer_class_name in TIKTOKEN_CONVERTERS and tiktoken:
         converter_class = TIKTOKEN_CONVERTERS[tokenizer_class_name]
-        tiktoken_keys = {
-            "bos_token",
-            "eos_token",
-            "add_bos_token",
-            "add_eos_token",
-            "additional_special_tokens",
-            "vocab_file",
-        }
-        filtered_kwargs = {k: v for k, v in tiktoken_kwargs.items() if k in tiktoken_keys}
-        return converter_class(vocab_file=filtered_kwargs.pop("vocab_file", None), **filtered_kwargs).converted()
+        return converter_class(
+            vocab_file=transformer_tokenizer.vocab_file, special_tokens=transformer_tokenizer.special_tokens
+        ).converted()
 
     else:
         raise ValueError(

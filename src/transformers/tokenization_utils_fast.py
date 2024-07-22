@@ -131,7 +131,9 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             fast_tokenizer = convert_slow_tokenizer(slow_tokenizer)
         elif not slow_tokenizer:
             # We tried loading a slow_tokenizer with spm and failed, try to load with tiktoken
-            fast_tokenizer = convert_slow_tokenizer(self, kwargs)
+            self.vocab_file = kwargs.get("vocab_file", None)
+            self.special_tokens = kwargs.get("additional_special_tokens", [])
+            fast_tokenizer = convert_slow_tokenizer(self, tiktoken=True)
             slow_tokenizer = None
         else:
             raise ValueError(

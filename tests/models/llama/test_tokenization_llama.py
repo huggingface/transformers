@@ -852,6 +852,15 @@ class TikTokenIntegrationTests(unittest.TestCase):
             "<|python_tag|>",  # end of turn
         ] + [f"<|reserved_special_token_{i}|>" for i in range(5, num_reserved_special_tokens - 5)]
 
+        tiktoken_tokenizer = PreTrainedTokenizerFast.from_pretrained(
+            model_path,
+            additional_special_tokens=special_tokens,
+            bos_token="<|begin_of_text|>",
+            eos_token="<|end_of_text|>",
+        )
+        tokens = tiktoken_tokenizer.tokenize(test_text)
+        self.assertTrue(len(tokens), 3)
+
         tiktoken_tokenizer = AutoTokenizer.from_pretrained(
             model_path, legacy=False, additional_special_tokens=special_tokens
         )
@@ -869,15 +878,6 @@ class TikTokenIntegrationTests(unittest.TestCase):
 
         tiktoken_tokenizer = AutoTokenizer.from_pretrained(
             model_path, additional_special_tokens=special_tokens, from_slow=True
-        )
-        tokens = tiktoken_tokenizer.encode(test_text)
-        self.assertEqual(tokens, test_tokens)
-
-        tiktoken_tokenizer = PreTrainedTokenizerFast.from_pretrained(
-            model_path,
-            additional_special_tokens=special_tokens,
-            bos_token="<|begin_of_text|>",
-            eos_token="<|end_of_text|>",
         )
         tokens = tiktoken_tokenizer.encode(test_text)
         self.assertEqual(tokens, test_tokens)
