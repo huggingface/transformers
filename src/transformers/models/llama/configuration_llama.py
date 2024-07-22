@@ -24,7 +24,7 @@ from ...modeling_rope_utils import rope_config_validation
 
 
 class LlamaConfig(PretrainedConfig):
-    rf"""
+    r"""
     This is the configuration class to store the configuration of a [`LlamaModel`]. It is used to instantiate an LLaMA
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the LLaMA-7B.
