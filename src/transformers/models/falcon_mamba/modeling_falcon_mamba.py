@@ -256,7 +256,7 @@ class FalconMambaMixer(nn.Module):
             # use `cache_position.shape[0]` to check whether we are in prefill
             # stage, it's equivalent to check `cache_position[0] == 0`, which
             # breaks dynamo fullgraph constraints
-            if cache_position.shape[0] == self.conv_kernel_size:
+            if cache_position is not None and cache_position.shape[0] == self.conv_kernel_size:
                 conv_state = nn.functional.pad(hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0))
 
                 cache_params.update_conv_state(self.layer_idx, conv_state, cache_position)

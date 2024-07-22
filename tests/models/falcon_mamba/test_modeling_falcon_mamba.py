@@ -19,9 +19,16 @@ import unittest
 from typing import Dict, List, Tuple
 from unittest.util import safe_repr
 
-from transformers import AutoTokenizer, FalconMambaConfig, is_torch_available
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, FalconMambaConfig, is_torch_available
 from transformers.cache_utils import MambaCache
-from transformers.testing_utils import require_torch, require_torch_multi_gpu, slow, torch_device
+from transformers.testing_utils import (
+    require_bitsandbytes,
+    require_torch,
+    require_torch_gpu,
+    require_torch_multi_gpu,
+    slow,
+    torch_device,
+)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -438,8 +445,46 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
 
 
 @require_torch
+@require_torch_gpu
 @slow
 class FalconMambaIntegrationTests(unittest.TestCase):
     def setUp(self):
-        self.model_id = "tiiuae/falcon_mamba-7b"
+        self.model_id = "tiiuae/falcon-mamba-7b"
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+        self.text = "Hello today"
+
+    def test_generation_bf16(self):
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16, device_map="auto")
+
+        inputs = self.tokenizer(self.text, return_tensors="pt").to(torch_device)
+        out = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+
+        self.assertEqual(
+            self.tokenizer.batch_decode(out, skip_special_tokens=False)[0],
+            "Hello today I'm going to show you how to make a very easy and simple origami.\nStep",
+        )
+
+    @require_bitsandbytes
+    def test_generation_4bit(self):
+        quantization_config = BitsAndBytesConfig(load_in_4bit=True)
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, quantization_config=quantization_config)
+
+        inputs = self.tokenizer(self.text, return_tensors="pt").to(torch_device)
+        out = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+
+        self.assertEqual(
+            self.tokenizer.batch_decode(out, skip_special_tokens=False)[0],
+            """Hello today I\'m going to talk about the "Theory of Relativity" by Albert Einstein.""",
+        )
+
+    def test_generation_torch_compile(self):
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16).to(torch_device)
+        model = torch.compile(model)
+
+        inputs = self.tokenizer(self.text, return_tensors="pt").to(torch_device)
+        out = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+
+        self.assertEqual(
+            self.tokenizer.batch_decode(out, skip_special_tokens=False)[0],
+            "Hello today I'm going to show you how to make a very easy and simple origami.\nStep",
+        )
