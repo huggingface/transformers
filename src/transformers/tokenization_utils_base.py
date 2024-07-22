@@ -32,7 +32,6 @@ from inspect import isfunction
 from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
 
 import numpy as np
-from google.protobuf.message import DecodeError
 from packaging import version
 
 from . import __version__
@@ -51,6 +50,7 @@ from .utils import (
     extract_commit_hash,
     get_json_schema,
     is_flax_available,
+    is_google_available,
     is_jax_tensor,
     is_mlx_available,
     is_numpy_array,
@@ -75,6 +75,9 @@ if TYPE_CHECKING:
         import tensorflow as tf
     if is_flax_available():
         import jax.numpy as jnp  # noqa: F401
+
+if is_google_available():
+    from google.protobuf.message import DecodeError
 
 if is_tokenizers_available():
     from tokenizers import AddedToken
