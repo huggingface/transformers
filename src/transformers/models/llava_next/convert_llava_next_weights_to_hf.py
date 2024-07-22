@@ -131,7 +131,7 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     tokenizer = AutoTokenizer.from_pretrained(text_model_id, use_fast=use_fast)
     tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False), special_tokens=True)
 
-    if model_id == "liuhaotian/llava-v1.6-mistral-7b" or model_id == "lmms-lab/llama3-llava-next-8b":
+    if model_id in ("liuhaotian/llava-v1.6-mistral-7b", "lmms-lab/llama3-llava-next-8b"):
         # Mistral-7B doesn't have a padding token set yet
         tokenizer.add_special_tokens({"pad_token": "<pad>"})
 
