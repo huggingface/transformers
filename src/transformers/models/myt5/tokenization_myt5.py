@@ -40,6 +40,7 @@ class ByteRewriter:
             A path to a json file containing the rewriting rules or a dictionary containing the rewriting rules.
 
     """
+
     LEAF = "[LEAF]"
 
     def __init__(self, rewriting_rules: Union[str, Dict[str, str]]):

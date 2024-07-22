@@ -23,7 +23,7 @@ from transformers.utils import logging
 logging.set_verbosity_info()
 
 
-# Copied from transformers.models.t5.convert_t5_original_tf_checkpoint_to_pytorch.py
+# Copied from transformers.models.t5.convert_t5_original_tf_checkpoint_to_pytorch
 def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, config_file, pytorch_dump_path):
     # Initialise PyTorch model
     config = T5Config.from_json_file(config_file)

@@ -12,8 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import unittest
 import binascii
+import unittest
 
 from transformers import MyT5Tokenizer
 
@@ -36,8 +36,8 @@ class TestByteRewriter(unittest.TestCase):
         in_str = "Hello WorlD"
         out_str = "hAello wAorldA"
 
-        in_hex = str_to_hex(in_str).split(' ')
-        out_hex = str_to_hex(out_str).split(' ')
+        in_hex = str_to_hex(in_str).split(" ")
+        out_hex = str_to_hex(out_str).split(" ")
 
         self.assertEqual(self.decompose_rewriter.rewrite_bytes(in_hex), out_hex)
 
@@ -45,25 +45,25 @@ class TestByteRewriter(unittest.TestCase):
         in_str = "Hello WorlD"
         out_str = "Hello WorlD"
 
-        in_hex = str_to_hex(in_str).split(' ')
-        out_hex = str_to_hex(out_str).split(' ')
+        in_hex = str_to_hex(in_str).split(" ")
+        out_hex = str_to_hex(out_str).split(" ")
 
-        self.assertEqual(self.decompose_rewriter.rewrite_bytes(self.decompose_rewriter.rewrite_bytes(in_hex),
-                                                               reverse=True), out_hex)
+        self.assertEqual(
+            self.decompose_rewriter.rewrite_bytes(self.decompose_rewriter.rewrite_bytes(in_hex), reverse=True), out_hex
+        )
 
     def test_simple_decompose_non_latin(self):
-
         in_str = "你好世界 Hello WorlD"
         out_str = "你好世界 hAello wAorldA"
 
-        in_hex = str_to_hex(in_str).split(' ')
-        out_hex = str_to_hex(out_str).split(' ')
+        in_hex = str_to_hex(in_str).split(" ")
+        out_hex = str_to_hex(out_str).split(" ")
 
         self.assertEqual(self.decompose_rewriter.rewrite_bytes(in_hex), out_hex)
 
     def test_unrecognized_byte(self):
-        in_hex = ['00', '01', 'xx', '03', '61']
-        out_hex = ['00', '01', 'xx', '03', '61']
+        in_hex = ["00", "01", "xx", "03", "61"]
+        out_hex = ["00", "01", "xx", "03", "61"]
 
         self.assertEqual(self.decompose_rewriter.rewrite_bytes(in_hex), out_hex)
 
@@ -129,9 +129,8 @@ class MyT5TokenizationTest(unittest.TestCase):
         self.assertEqual(self.tokenizer.tokenize(in_str_mixed), out_tokens)
 
     def test_token_ids_conversion(self):
-
         tokens_range = [f"{x:02x}" for x in range(256)]
-        indices_range = list(range(3, 256+3))
+        indices_range = list(range(3, 256 + 3))
 
         self.assertListEqual(self.tokenizer.convert_tokens_to_ids(tokens_range), indices_range)
         self.assertListEqual(self.tokenizer.convert_ids_to_tokens(indices_range), tokens_range)
