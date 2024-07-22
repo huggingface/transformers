@@ -363,10 +363,10 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     print(outputs)
 
     if push_to_hub:
-        repo_id = model_id.split("/")[-1]
-        print(f"Pushing to repo llava-hf/{repo_id}-hf")
-        model.push_to_hub(f"llava-hf/{repo_id}-hf")
-        processor.push_to_hub(f"llava-hf/{repo_id}-hf")
+        checkpoint_name = model_id.split("/")[-1]
+        print(f"Pushing to repo llava-hf/{checkpoint_name}-hf")
+        model.push_to_hub(f"llava-hf/{checkpoint_name}-hf")
+        processor.push_to_hub(f"llava-hf/{checkpoint_name}-hf")
 
 
 if __name__ == "__main__":
