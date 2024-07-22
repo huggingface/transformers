@@ -271,7 +271,7 @@ class MambaMixer(nn.Module):
 
         # 3.c perform the recurrence y ← SSM(A, B, C)(x)
         if self.use_mambapy and self.training and cache_params is None:
-            hs = pscan(discrete_A.transpose(1, 2), deltaB_u.transpose(1, 2)) # [batch, intermediate_size, seq_len, ssm_state_size]
+            hs = pscan(discrete_A.transpose(1, 2), deltaB_u.transpose(1, 2)) # [batch, seq_len, intermediate_size, ssm_state_size]
 
             scan_output = (hs @ C.unsqueeze(-1)).squeeze(3).transpose(1, 2) # [batch, intermediate_size, seq_len]
             scan_output = scan_output + hidden_states * self.D[None, :, None]
