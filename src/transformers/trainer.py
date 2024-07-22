@@ -1691,7 +1691,12 @@ class Trainer:
 
         # train/eval could be run multiple-times - if already wrapped, don't re-wrap it again
         if self.accelerator.unwrap_model(model) is not model:
-            return model
+            if self.args.ort:
+                from torch_ort import ORTModule
+                if type(model) is not ORTModule:
+                    return model
+            else:
+                return model
 
         # Mixed precision training with apex (torch < 1.6)
         if self.use_apex and training:
@@ -2204,6 +2209,7 @@ class Trainer:
         if args.eval_on_start:
             self._evaluate(trial, ignore_keys_for_eval, skip_scheduler=True)
 
+        start_train_stable_time = 0
         total_batched_samples = 0
         for epoch in range(epochs_trained, num_train_epochs):
             epoch_iterator = train_dataloader
@@ -2259,6 +2265,9 @@ class Trainer:
                 if rng_to_sync:
                     self._load_rng_state(resume_from_checkpoint)
                     rng_to_sync = False
+
+                if (self.state.global_step == 10):
+                    start_train_stable_time = time.time()
 
                 # Skip past any already trained steps if resuming training
                 if steps_trained_in_current_epoch > 0:
@@ -2408,13 +2417,12 @@ class Trainer:
         effective_global_step = max(self.state.global_step, 0.001)  # Avoid ZeroDivisionError
         train_loss = self._total_loss_scalar / effective_global_step
 
-        metrics = speed_metrics(
-            "train",
-            start_time,
-            num_samples=num_train_samples,
-            num_steps=self.state.max_steps,
-            num_tokens=num_train_tokens,
-        )
+        metrics = speed_metrics("train", start_time, num_samples=num_train_samples, num_steps=self.state.max_steps,num_tokens=num_train_tokens,)
+
+        total_samples = self.state.global_step*total_train_batch_size if args.max_steps > 0 else num_examples*num_train_epochs
+        perf_samples = total_samples - self.args.warmup_steps*total_train_batch_size
+        stable_train_metrics = speed_metrics("stable_train", start_train_stable_time, perf_samples)
+
         self.store_flos()
         metrics["total_flos"] = self.state.total_flos
         metrics["train_loss"] = train_loss
@@ -2424,6 +2432,8 @@ class Trainer:
         self._memory_tracker.stop_and_update_metrics(metrics)
 
         self.log(metrics)
+
+        self.log(stable_train_metrics)
 
         run_dir = self._get_output_dir(trial)
         checkpoints_sorted = self._sorted_checkpoints(use_mtime=False, output_dir=run_dir)
