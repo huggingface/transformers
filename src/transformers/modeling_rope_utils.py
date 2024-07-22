@@ -29,7 +29,7 @@ if is_torch_available():
 ROPE_CONFIG_DOCSTRING = r"""
     rope_scaling (`Dict`, *optional*):
         Dictionary containing the scaling configuration for the RoPE embeddings. IMPORTANT: RoPE scaling expects
-        `max_position_embeddings` to remain unchagned -- some methods, like 'longrope', require the original value to
+        `max_position_embeddings` to remain unchanged -- some methods, like 'longrope', require the original value to
         determine which scaling to apply.
         Expected contents:
             `type` (`str`):
