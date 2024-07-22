@@ -46,8 +46,8 @@ def pull_message(step_log: dict):
         )
 
 
-def stream_from_transformers_agent(agent: ReactAgent, prompt: str):
-    """Runs an agent with the given prompt and streams the messages from the agent as ChatMessages."""
+def stream_from_transformers_agent(agent: ReactAgent, task: str, **kwargs):
+    """Runs an agent with the given task and streams the messages from the agent as gradio ChatMessages."""
 
     try:
         from gradio import ChatMessage
@@ -57,7 +57,7 @@ def stream_from_transformers_agent(agent: ReactAgent, prompt: str):
     class Output:
         output: AgentType | str = None
 
-    for step_log in agent.run(prompt, stream=True):
+    for step_log in agent.run(task, stream=True, **kwargs):
         if isinstance(step_log, dict):
             for message in pull_message(step_log):
                 print("message", message)
@@ -77,4 +77,4 @@ def stream_from_transformers_agent(agent: ReactAgent, prompt: str):
             content={"path": Output.output.to_string(), "mime_type": "audio/wav"},
         )
     else:
-        return ChatMessage(role="assistant", content=Output.output)
+        yield ChatMessage(role="assistant", content=Output.output)

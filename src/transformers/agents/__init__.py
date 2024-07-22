@@ -27,6 +27,7 @@ _import_structure = {
     "agents": ["Agent", "CodeAgent", "ReactAgent", "ReactCodeAgent", "ReactJsonAgent", "Toolbox"],
     "llm_engine": ["HfEngine"],
     "tools": ["PipelineTool", "Tool", "ToolCollection", "launch_gradio_demo", "load_tool"],
+    "monitoring": ["stream_from_transformers_agent"],
 }
 
 try:
@@ -45,6 +46,7 @@ else:
 if TYPE_CHECKING:
     from .agents import Agent, CodeAgent, ReactAgent, ReactCodeAgent, ReactJsonAgent, Toolbox
     from .llm_engine import HfEngine
+    from .monitoring import stream_from_transformers_agent
     from .tools import PipelineTool, Tool, ToolCollection, launch_gradio_demo, load_tool
 
     try:
