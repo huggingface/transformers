@@ -410,7 +410,8 @@ class CohereFlashAttention2(CohereAttention):
         return attn_output, attn_weights, past_key_value
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaSdpaAttention Llama->Cohere
+# copied from transformers.models.llama.modeling_llama.LlamaSdpaAttention Llama->Cohere
+# TODO(joao): add me back asap :)
 class CohereSdpaAttention(CohereAttention):
     """
     Cohere attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
