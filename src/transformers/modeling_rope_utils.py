@@ -330,55 +330,51 @@ ROPE_INIT_FUNCTIONS = {
 }
 
 
-def _validate_default_rope_parameters(config: PretrainedConfig):
-    rope_scaling = config.rope_scaling
-    required_keys = {"rope_type"}
-    received_keys = set(rope_scaling.keys())
+def _check_received_keys(rope_type: str, received_keys: set, required_keys: set, optional_keys: Optional[set] = None):
+    """Compare the received keys in `config.rope_scaling` against the expected and optional keys"""
     missing_keys = required_keys - received_keys
     if missing_keys:
-        raise ValueError(f"Missing required keys in `rope_scaling`: {missing_keys}")
+        raise ValueError(f"Missing required keys in `rope_scaling` for 'rope_type'='{rope_type}': {missing_keys}")
 
-    unused_keys = received_keys - received_keys
-    rope_type = rope_scaling["rope_type"]
+    if optional_keys is not None:
+        unused_keys = received_keys - required_keys - optional_keys
+    else:
+        unused_keys = received_keys - received_keys
     if unused_keys:
         raise ValueError(f"Unrecognized keys in `rope_scaling` for 'rope_type'='{rope_type}': {unused_keys}")
+
+
+def _validate_default_rope_parameters(config: PretrainedConfig):
+    rope_scaling = config.rope_scaling
+    rope_type = rope_scaling["rope_type"]
+    required_keys = {"rope_type"}
+    received_keys = set(rope_scaling.keys())
+    _check_received_keys(rope_type, received_keys, required_keys)
 
 
 def _validate_linear_scaling_rope_parameters(config: PretrainedConfig):
     rope_scaling = config.rope_scaling
+    rope_type = rope_scaling["rope_type"]
     required_keys = {"rope_type", "factor"}
     received_keys = set(rope_scaling.keys())
-    missing_keys = required_keys - received_keys
-    if missing_keys:
-        raise ValueError(f"Missing required keys in `rope_scaling`: {missing_keys}")
+    _check_received_keys(rope_type, received_keys, required_keys)
 
     factor = rope_scaling["factor"]
     if factor is None or not isinstance(factor, float) or factor < 1.0:
         raise ValueError(f"`rope_scaling`'s factor field must be a float >= 1, got {factor}")
-
-    unused_keys = received_keys - received_keys
-    rope_type = rope_scaling["rope_type"]
-    if unused_keys:
-        raise ValueError(f"Unrecognized keys in `rope_scaling` for 'rope_type'='{rope_type}': {unused_keys}")
 
 
 def _validate_yarn_parameters(config: PretrainedConfig):
     rope_scaling = config.rope_scaling
+    rope_type = rope_scaling["rope_type"]
     required_keys = {"rope_type", "factor"}
+    optional_keys = {"attention_factor", "beta_fast", "beta_slow"}
     received_keys = set(rope_scaling.keys())
-    missing_keys = required_keys - received_keys
-    if missing_keys:
-        raise ValueError(f"Missing required keys in `rope_scaling`: {missing_keys}")
+    _check_received_keys(rope_type, received_keys, required_keys, optional_keys)
 
     factor = rope_scaling["factor"]
     if factor is None or not isinstance(factor, float) or factor < 1.0:
         raise ValueError(f"`rope_scaling`'s factor field must be a float >= 1, got {factor}")
-
-    optional_keys = {"attention_factor", "beta_fast", "beta_slow"}
-    unused_keys = received_keys - required_keys - optional_keys
-    rope_type = rope_scaling["rope_type"]
-    if unused_keys:
-        raise ValueError(f"Unrecognized keys in `rope_scaling` for 'rope_type'={rope_type}: {unused_keys}")
 
     attention_factor = rope_scaling.get("attention_factor")
     if attention_factor is not None and not isinstance(attention_factor, float) or attention_factor < 0:
@@ -401,17 +397,11 @@ def _validate_yarn_parameters(config: PretrainedConfig):
 
 def _validate_longrope_parameters(config: PretrainedConfig):
     rope_scaling = config.rope_scaling
-    required_keys = {"rope_type", "short_factor", "long_factor"}
-    received_keys = set(rope_scaling.keys())
-    missing_keys = required_keys - received_keys
-    if missing_keys:
-        raise ValueError(f"Missing required keys in `rope_scaling`: {missing_keys}")
-
-    optional_keys = {"attention_factor", "factor"}
-    unused_keys = received_keys - required_keys - optional_keys
     rope_type = rope_scaling["rope_type"]
-    if unused_keys:
-        raise ValueError(f"Unrecognized keys in `rope_scaling` for 'rope_type'={rope_type}: {unused_keys}")
+    required_keys = {"rope_type", "short_factor", "long_factor"}
+    optional_keys = {"attention_factor", "factor"}
+    received_keys = set(rope_scaling.keys())
+    _check_received_keys(rope_type, received_keys, required_keys, optional_keys)
 
     partial_rotary_factor = config.partial_rotary_factor if hasattr(config, "partial_rotary_factor") else 1.0
     dim = int((config.hidden_size // config.num_attention_heads) * partial_rotary_factor)
