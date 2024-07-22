@@ -1255,7 +1255,7 @@ class StableLmForCausalLM(StableLmPreTrainedModel):
     """,
     STABLELM_START_DOCSTRING,
 )
-# Copied from transformers.models.mistral.modeling_mistral.MistralForSequenceClassification with MISTRAL->STABLELM,Mistral->StableLm
+# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with LLAMA->STABLELM,Llama->StableLm
 class StableLmForSequenceClassification(StableLmPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1275,7 +1275,7 @@ class StableLmForSequenceClassification(StableLmPreTrainedModel):
     @add_start_docstrings_to_model_forward(STABLELM_INPUTS_DOCSTRING)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
@@ -1371,7 +1371,7 @@ class StableLmForSequenceClassification(StableLmPreTrainedModel):
     """,
     STABLELM_START_DOCSTRING,
 )
-# Copied from transformers.models.mistral.modeling_mistral.MistralForTokenClassification with Mistral->StableLm, MISTRAL->STABLELM
+# Copied from transformers.models.llama.modeling_llama.LlamaForTokenClassification with Llama->StableLm, LLAMA->STABLELM
 class StableLmForTokenClassification(StableLmPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

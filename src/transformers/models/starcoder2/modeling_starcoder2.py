@@ -1133,7 +1133,7 @@ class Starcoder2ForCausalLM(Starcoder2PreTrainedModel):
     """,
     STARCODER2_START_DOCSTRING,
 )
-# Copied from transformers.models.mistral.modeling_mistral.MistralForSequenceClassification with Mistral->Starcoder2, MISTRAL->STARCODER2
+# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with Llama->Starcoder2, LLAMA->STARCODER2
 class Starcoder2ForSequenceClassification(Starcoder2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1153,7 +1153,7 @@ class Starcoder2ForSequenceClassification(Starcoder2PreTrainedModel):
     @add_start_docstrings_to_model_forward(STARCODER2_INPUTS_DOCSTRING)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
@@ -1249,7 +1249,7 @@ class Starcoder2ForSequenceClassification(Starcoder2PreTrainedModel):
     """,
     STARCODER2_START_DOCSTRING,
 )
-# Copied from transformers.models.mistral.modeling_mistral.MistralForTokenClassification with Mistral->Starcoder2, MISTRAL->STARCODER2
+# Copied from transformers.models.llama.modeling_llama.LlamaForTokenClassification with Llama->Starcoder2, LLAMA->STARCODER2
 class Starcoder2ForTokenClassification(Starcoder2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

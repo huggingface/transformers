@@ -778,8 +778,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         return causal_mask
 
 
-# copied from transformers.models.llama.modeling_llama.LlamaForCausalLM with LLAMA->RECURRENTGEMMA,Llama->RecurrentGemma,llama->gemma
-# TODO(joao): add me back asap :)
+# Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM with LLAMA->RECURRENTGEMMA,Llama->RecurrentGemma,llama->gemma
 class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
