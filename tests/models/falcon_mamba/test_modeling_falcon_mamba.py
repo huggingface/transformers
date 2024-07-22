@@ -20,6 +20,7 @@ from typing import Dict, List, Tuple
 from unittest.util import safe_repr
 
 from transformers import AutoTokenizer, FalconMambaConfig, is_torch_available
+from transformers.cache_utils import MambaCache
 from transformers.testing_utils import require_torch, require_torch_multi_gpu, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -35,7 +36,6 @@ if is_torch_available():
         FalconMambaForCausalLM,
         FalconMambaModel,
     )
-    from transformers.models.falcon_mamba.modeling_falcon_mamba import FalconMambaCache
     from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_0
 else:
     is_torch_greater_or_equal_than_2_0 = False
@@ -186,15 +186,24 @@ class FalconMambaModelTester:
         outputs = model(input_ids)
         output_whole = outputs.last_hidden_state
 
-        outputs = model(input_ids[:, :-1], use_cache=True)
+        outputs = model(
+            input_ids[:, :-1],
+            use_cache=True,
+            cache_position=torch.arange(0, config.conv_kernel, device=input_ids.device),
+        )
         output_one = outputs.last_hidden_state
 
         # Using the state computed on the first inputs, we will get the same output
-        outputs = model(input_ids[:, -1:], cache_params=outputs.cache_params)
+        outputs = model(
+            input_ids[:, -1:],
+            use_cache=True,
+            cache_params=outputs.cache_params,
+            cache_position=torch.arange(config.conv_kernel, config.conv_kernel + 1, device=input_ids.device),
+        )
         output_two = outputs.last_hidden_state
 
         self.parent.assertTrue(torch.allclose(torch.cat([output_one, output_two], dim=1), output_whole, atol=1e-5))
-        # TODO the orignal falcon_mamba does not support decoding more than 1 token neither do we
+        # TODO the orignal mamba does not support decoding more than 1 token neither do we
 
     def create_and_check_falcon_mamba_cached_slow_forward_and_backwards(
         self, config, input_ids, *args, gradient_checkpointing=False
@@ -206,11 +215,13 @@ class FalconMambaModelTester:
 
         # create cache
         cache = model(input_ids, use_cache=True).cache_params
-        cache.seqlen_offset = 0
+        cache.reset()
 
         # use cache
         token_emb = model.embeddings(input_ids)
-        outputs = model.layers[0].mixer.slow_forward(token_emb, cache)
+        outputs = model.layers[0].mixer.slow_forward(
+            token_emb, cache, cache_position=torch.arange(0, config.conv_kernel, device=input_ids.device)
+        )
 
         loss = torch.log(1 + torch.abs(outputs.sum()))
         self.parent.assertEqual(loss.shape, ())
@@ -247,7 +258,7 @@ class FalconMambaModelTester:
     not is_torch_greater_or_equal_than_2_0, reason="See https://github.com/huggingface/transformers/pull/24204"
 )
 @require_torch
-# Copied from transformers.tests.models.mamba.MambaModelTest with Mamba->SindiBad,mamba->falcon_mamba
+# Copied from transformers.tests.models.mamba.MambaModelTest with Mamba->Falcon,mamba->falcon_mamba,FalconMambaCache->MambaCache
 class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (FalconMambaModel, FalconMambaForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (FalconMambaForCausalLM,) if is_torch_available() else ()
@@ -378,7 +389,7 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
                 dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
 
                 def recursive_check(tuple_object, dict_object):
-                    if isinstance(tuple_object, FalconMambaCache):  # MODIFIED PART START
+                    if isinstance(tuple_object, MambaCache):  # MODIFIED PART START
                         recursive_check(tuple_object.conv_states, dict_object.conv_states)
                         recursive_check(tuple_object.ssm_states, dict_object.ssm_states)
                     elif isinstance(tuple_object, (List, Tuple)):  # MODIFIED PART END
