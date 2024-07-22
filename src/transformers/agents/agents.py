@@ -690,8 +690,10 @@ class ReactAgent(Agent):
     def run(self, task: str, stream: bool = False, reset: bool = True, **kwargs):
         """
         Runs the agent for the given task.
+
         Args:
             task (`str`): The task to perform
+
         Example:
         ```py
         from transformers.agents import ReactCodeAgent
@@ -713,6 +715,9 @@ class ReactAgent(Agent):
             return self.direct_run(task)
 
     def stream_run(self, task: str):
+        """
+        Runs the agent in streaming mode, yielding steps as they are executed: should be launched only in the `run` method.
+        """
         final_answer = None
         iteration = 0
         while final_answer is None and iteration < self.max_iterations:
@@ -739,6 +744,9 @@ class ReactAgent(Agent):
         yield final_answer
 
     def direct_run(self, task: str):
+        """
+        Runs the agent in direct mode, returning outputs only at the end: should be launched only in the `run` method.
+        """
         final_answer = None
         iteration = 0
         while final_answer is None and iteration < self.max_iterations:
@@ -764,9 +772,14 @@ class ReactAgent(Agent):
 
         return final_answer
 
-    def planning_step(self, task, is_first_step=False, iteration: int = None):
+    def planning_step(self, task, is_first_step: bool = False, iteration: int = None):
         """
-        Plan the next steps to reach the objective.
+        Used periodically by the agent to plan the next steps to reach the objective.
+
+        Args:
+            task (`str`): The task to perform
+            is_first_step (`bool`): If this step is not the first one, the plan should be an update over a previous plan.
+            iteration (`int`): The number of the current step, used as an indication for the LLM.
         """
         if is_first_step:
             message_prompt_facts = {"role": MessageRole.SYSTEM, "content": SYSTEM_PROMPT_FACTS}

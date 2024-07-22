@@ -863,8 +863,11 @@ def evaluate_python_code(
         code (`str`):
             The code to evaluate.
         static_tools (`Dict[str, Callable]`):
-            The functions that may be called during the evaluation. Any call to another function will fail with an
-            `InterpreterError`.
+            The functions that may be called during the evaluation.
+            These tools cannot be overwritten in the code: any assignment to their name will raise an error.
+        custom_tools (`Dict[str, Callable]`):
+            The functions that may be called during the evaluation.
+            These tools can be overwritten in the code: any assignment to their name will overwrite them.
         state (`Dict[str, Any]`):
             A dictionary mapping variable names to values. The `state` should contain the initial inputs but will be
             updated by this function to contain all variables as they are evaluated.
