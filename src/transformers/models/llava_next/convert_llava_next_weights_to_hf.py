@@ -196,7 +196,7 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     del state_dict
     gc.collect()
 
-    # Load everything back for inference tests in float23 because prev script was written as that
+    # Load everything back for inference tests in float32 because prev script was written as that
     # Though it's mostly loaded in fp16 as original weights are in fp16
     model = LlavaNextForConditionalGeneration.from_pretrained(
         pytorch_dump_folder_path, torch_dtype=torch.float32, device_map="auto"
