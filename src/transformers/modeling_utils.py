@@ -2135,9 +2135,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         old_embeddings.weight.data = new_embeddings.weight.data
         old_embeddings.num_embeddings = new_embeddings.weight.data.shape[0]
 
-        if old_embeddings.padding_idx is not None:
-            if (new_num_tokens - 1) < old_embeddings.padding_idx:
-                old_embeddings.padding_idx = None
+        # If the new number of tokens is smaller than the original `padding_idx`, the `padding_idx`
+        # will be set to `None` in the resized embeddings.
+        if old_embeddings.padding_idx is not None and (new_num_tokens - 1) < old_embeddings.padding_idx:
+            old_embeddings.padding_idx = None
 
         return old_embeddings
 
