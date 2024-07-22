@@ -409,7 +409,7 @@ class ModelManagementTests(unittest.TestCase):
     @require_torch
     def test_model_names(self):
         model_list = list_models()
-        model_ids = [x.modelId for x in model_list if x.modelId.startswith(ORG_NAME)]
+        model_ids = [x.id for x in model_list if x.id.startswith(ORG_NAME)]
         bad_model_ids = [mid for mid in model_ids if "+" in model_ids]
         self.assertListEqual([], bad_model_ids)
         self.assertGreater(len(model_ids), 500)
