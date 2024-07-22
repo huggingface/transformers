@@ -54,6 +54,7 @@ logger = logging.get_logger(__name__)
 TOKENIZER_FILE = "tokenizer.json"
 SPECIAL_TOKENS_MAP_FILE = "special_tokens_map.json"
 TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
+VOCAB_FILE = "tokenizer.model"
 
 # Slow tokenizers have an additional added tokens files
 ADDED_TOKENS_FILE = "added_tokens.json"
@@ -74,7 +75,7 @@ MODEL_TO_TRAINER_MAPPING = {
     "WordPiece": WordPieceTrainer,
 }
 
-VOCAB_FILES_NAMES = {"tokenizer_file": TOKENIZER_FILE}
+VOCAB_FILES_NAMES = {"tokenizer_file": TOKENIZER_FILE, "vocab_file": VOCAB_FILE}
 
 
 @add_end_docstrings(INIT_TOKENIZER_DOCSTRING)
@@ -128,10 +129,9 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             # We need to create and convert a slow tokenizer to build the backend
             slow_tokenizer = self.slow_tokenizer_class(*args, **kwargs)
             fast_tokenizer = convert_slow_tokenizer(slow_tokenizer)
-        elif slow_tokenizer is False:
+        elif not slow_tokenizer:
             # We tried loading a slow_tokenizer with spm and failed, try to load with tiktoken
-            self.vocab_file = kwargs.get("vocab_file", None)
-            fast_tokenizer = convert_slow_tokenizer(self, tiktoken=True)
+            fast_tokenizer = convert_slow_tokenizer(self, kwargs)
             slow_tokenizer = None
         else:
             raise ValueError(
@@ -139,7 +139,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 "(1) a `tokenizers` library serialization file, \n"
                 "(2) a slow tokenizer instance to convert or \n"
                 "(3) an equivalent slow tokenizer class to instantiate and convert. \n"
-                "You need to have sentencepiece installed to convert a slow tokenizer to a fast one."
+                "You need to have sentencepiece or tiktoken installed to convert a slow tokenizer to a fast one."
             )
 
         self._tokenizer = fast_tokenizer
