@@ -1096,6 +1096,7 @@ class ChameleonPreTrainedModel(PreTrainedModel):
     _supports_quantized_cache = True
     _supports_cache_class = True
     _supports_static_cache = True
+    _supports_param_buffer_assignment = False
 
     def _init_weights(self, module):
         std = self.config.initializer_range
