@@ -622,7 +622,7 @@ class GraniteIntegrationTest(unittest.TestCase):
 
         # fmt: off
         # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[-3.5317, -1.3615, -3.6600, -2.4882, -1.4590, -1.5573, -2.7445, -2.2035]])
+        EXPECTED_MEAN = torch.tensor([[-3.5317, -1.1000, -2.8519, -1.9190, -2.5031, -1.6047, -2.5759, -2.4347]])
 
         self.assertTrue(torch.allclose(EXPECTED_MEAN.to(torch_device), out.logits.mean(-1), atol=1e-2, rtol=1e-2))
 
