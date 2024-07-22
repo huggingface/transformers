@@ -59,7 +59,7 @@ ROPE_CONFIG_DOCSTRING = r"""
 
 
 def _compute_default_rope_parameters(
-    config: PretrainedConfig, device: "torch.device", seq_len: Optional[int] = None
+    config: PretrainedConfig, device: "torch.device", seq_len: Optional[int] = None, **rope_kwargs
 ) -> Tuple["torch.Tensor", float]:
     """
     Computes the inverse frequencies according to the original RoPE implementation
@@ -71,17 +71,26 @@ def _compute_default_rope_parameters(
             The device to use for initialization of the inverse frequencies.
         seq_len (`int`, *optional*):
             The current sequence length. Unused for this type of RoPE.
+        rope_kwargs (`Dict`, *optional*):
+            BC compatibility with the previous RoPE class instantiation, will be removed in v4.45.
 
     Returns:
         Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
         post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
     """
-    base = config.rope_theta
-    if hasattr(config, "rope_dim"):  # TODO (joao): BC -- remove `if` in v4.45, keep `else`
-        dim = config.rope_dim
-    else:
+    if config is not None and len(rope_kwargs) > 0:
+        raise ValueError(
+            "Unexpected arguments: `**rope_kwargs` and `config` are mutually exclusive in "
+            f"`_compute_default_rope_parameters`, got `rope_kwargs`={rope_kwargs} and `config`={config}"
+        )
+    if len(rope_kwargs) > 0:
+        base = rope_kwargs["base"]
+        dim = rope_kwargs["dim"]
+    elif config is not None:
+        base = config.rope_theta
         partial_rotary_factor = config.partial_rotary_factor if hasattr(config, "partial_rotary_factor") else 1.0
         dim = int((config.hidden_size // config.num_attention_heads) * partial_rotary_factor)
+
     attention_factor = 1.0  # Unused in this type of RoPE
 
     # Compute the inverse frequencies
@@ -90,7 +99,7 @@ def _compute_default_rope_parameters(
 
 
 def _compute_linear_scaling_rope_parameters(
-    config: PretrainedConfig, device: "torch.device", seq_len: Optional[int] = None
+    config: PretrainedConfig, device: "torch.device", seq_len: Optional[int] = None, **rope_kwargs
 ) -> Tuple["torch.Tensor", float]:
     """
     Computes the inverse frequencies with linear scaling. Credits to the Reddit user /u/kaiokendev
@@ -102,24 +111,35 @@ def _compute_linear_scaling_rope_parameters(
             The device to use for initialization of the inverse frequencies.
         seq_len (`int`, *optional*):
             The current sequence length. Unused for this type of RoPE.
+        rope_kwargs (`Dict`, *optional*):
+            BC compatibility with the previous RoPE class instantiation, will be removed in v4.45.
 
     Returns:
         Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
         post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
     """
+    if config is not None and len(rope_kwargs) > 0:
+        raise ValueError(
+            "Unexpected arguments: `**rope_kwargs` and `config` are mutually exclusive in "
+            f"`_compute_linear_scaling_rope_parameters`, got `rope_kwargs`={rope_kwargs} and `config`={config}"
+        )
+    if len(rope_kwargs) > 0:
+        factor = rope_kwargs["factor"]
+    elif config is not None:
+        factor = config.rope_scaling["factor"]
+
     # Gets the default RoPE parameters
-    inv_freq, attention_factor = _compute_default_rope_parameters(config, device, seq_len)
+    inv_freq, attention_factor = _compute_default_rope_parameters(config, device, seq_len, **rope_kwargs)
 
     # Then applies linear scaling to the frequencies.
     # NOTE: originally, scaling was applied to the position_ids. However, we get `embs = inv_freq @ position_ids`, so
     # applying scaling to the inverse frequencies is equivalent.
-    factor = config.rope_scaling["factor"]
     inv_freq /= factor
     return inv_freq, attention_factor
 
 
 def _compute_dynamic_ntk_parameters(
-    config: PretrainedConfig, device: "torch.device", seq_len: Optional[int] = None
+    config: PretrainedConfig, device: "torch.device", seq_len: Optional[int] = None, **rope_kwargs
 ) -> Tuple["torch.Tensor", float]:
     """
     Computes the inverse frequencies with NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla
@@ -131,19 +151,30 @@ def _compute_dynamic_ntk_parameters(
             The device to use for initialization of the inverse frequencies.
         seq_len (`int`, *optional*):
             The current sequence length, used to update the dynamic RoPE at inference time.
+        rope_kwargs (`Dict`, *optional*):
+            BC compatibility with the previous RoPE class instantiation, will be removed in v4.45.
 
     Returns:
         Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
         post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
     """
-    base = config.rope_theta
-    if hasattr(config, "rope_dim"):  # TODO (joao): BC -- remove `if` in v4.45, keep `else`
-        dim = config.rope_dim
-    else:
+    if config is not None and len(rope_kwargs) > 0:
+        raise ValueError(
+            "Unexpected arguments: `**rope_kwargs` and `config` are mutually exclusive in "
+            f"`_compute_dynamic_ntk_parameters`, got `rope_kwargs`={rope_kwargs} and `config`={config}"
+        )
+    if len(rope_kwargs) > 0:
+        base = rope_kwargs["base"]
+        dim = rope_kwargs["dim"]
+        max_position_embeddings = rope_kwargs["max_position_embeddings"]
+        factor = rope_kwargs["factor"]
+    elif config is not None:
+        base = config.rope_theta
         partial_rotary_factor = config.partial_rotary_factor if hasattr(config, "partial_rotary_factor") else 1.0
         dim = int((config.hidden_size // config.num_attention_heads) * partial_rotary_factor)
-    max_position_embeddings = config.max_position_embeddings
-    factor = config.rope_scaling["factor"]
+        max_position_embeddings = config.max_position_embeddings
+        factor = config.rope_scaling["factor"]
+
     attention_factor = 1.0  # Unused in this type of RoPE
 
     # seq_len: default to max_position_embeddings, e.g. at init time
@@ -156,7 +187,7 @@ def _compute_dynamic_ntk_parameters(
 
 
 def _compute_yarn_parameters(
-    config: PretrainedConfig, device: "torch.device", seq_len: Optional[int] = None
+    config: PretrainedConfig, device: "torch.device", seq_len: Optional[int] = None, **rope_kwargs
 ) -> Tuple["torch.Tensor", float]:
     """
     Computes the inverse frequencies with NTK scaling. Please refer to the
@@ -169,11 +200,19 @@ def _compute_yarn_parameters(
             The device to use for initialization of the inverse frequencies.
         seq_len (`int`, *optional*):
             The current sequence length. Unused for this type of RoPE.
+        rope_kwargs (`Dict`, *optional*):
+            BC compatibility with the previous RoPE class instantiation, will be removed in v4.45.
 
     Returns:
         Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
         post-processing scaling factor applied to the computed cos/sin.
     """
+    # No need to keep BC with yarn, unreleased when this new pattern was created.
+    if len(rope_kwargs) > 0:
+        raise ValueError(
+            f"Unexpected arguments: `**rope_kwargs` should be unset in `_compute_yarn_parameters`, got {rope_kwargs}"
+        )
+
     base = config.rope_theta
     partial_rotary_factor = config.partial_rotary_factor if hasattr(config, "partial_rotary_factor") else 1.0
     dim = int((config.hidden_size // config.num_attention_heads) * partial_rotary_factor)
@@ -223,7 +262,7 @@ def _compute_yarn_parameters(
 
 
 def _compute_longrope_parameters(
-    config: PretrainedConfig, device: "torch.device", seq_len: Optional[int] = None
+    config: PretrainedConfig, device: "torch.device", seq_len: Optional[int] = None, **rope_kwargs
 ) -> Tuple["torch.Tensor", float]:
     """
     Computes the inverse frequencies with LongRoPE scaling. Please refer to the
@@ -236,11 +275,20 @@ def _compute_longrope_parameters(
             The device to use for initialization of the inverse frequencies.
         seq_len (`int`, *optional*):
             The current sequence length. Unused for this type of RoPE.
+        rope_kwargs (`Dict`, *optional*):
+            BC compatibility with the previous RoPE class instantiation, will be removed in v4.45.
 
     Returns:
         Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
         post-processing scaling factor applied to the computed cos/sin.
     """
+    # No need to keep BC with longrope, unreleased when this new pattern was created.
+    if len(rope_kwargs) > 0:
+        raise ValueError(
+            "Unexpected arguments: `**rope_kwargs` should be unset in `_compute_longrope_parameters`, got "
+            f"{rope_kwargs}"
+        )
+
     base = config.rope_theta
     partial_rotary_factor = config.partial_rotary_factor if hasattr(config, "partial_rotary_factor") else 1.0
     dim = int((config.hidden_size // config.num_attention_heads) * partial_rotary_factor)

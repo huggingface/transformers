@@ -83,34 +83,37 @@ class Phi3RotaryEmbedding(nn.Module):
         base=10000,
         device=None,
         scaling_factor=1.0,
+        rope_type="default",
         config: Optional[Phi3Config] = None,
-        **kwargs,
     ):
         super().__init__()
-        # TODO (joao): remove this `if` in v4.45; the legacy args rebuild a config to power the rest of the class;
+        # TODO (joao): remove the `if` below, only used for BC
+        self.rope_kwargs = {}
         if config is None:
             logger.warning_once(
                 "`Phi3RotaryEmbedding` can now be fully parameterized by passing the model config through the "
                 "`config` argument. All other arguments will be removed in v4.45"
             )
-            config = Phi3Config(**kwargs)
-            config.rope_theta = base
-            config.max_position_embeddings = max_position_embeddings
-            config.rope_dim = dim  # this one doesn't actually exist, will only be used in the deprecation transition
-            if scaling_factor == 1.0 and len(kwargs) == 0:
-                config.rope_scaling = None
-            else:
-                config.rope_scaling = {"type": "default", "factor": scaling_factor}
-                config.rope_scaling |= kwargs  # may overwrite "type"
+            self.rope_kwargs = {
+                "type": rope_type,
+                "factor": scaling_factor,
+                "dim": dim,
+                "base": base,
+                "max_position_embeddings": max_position_embeddings,
+            }
+            self.rope_type = rope_type
+            self.max_seq_len_cached = max_position_embeddings
+            self.original_max_seq_len = max_position_embeddings
+        else:
+            self.rope_type = config.rope_scaling["type"] if config.rope_scaling is not None else "default"
+            self.max_seq_len_cached = config.max_position_embeddings
+            self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
-        self.rope_type = config.rope_scaling["type"] if config.rope_scaling is not None else "default"
         self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
-        inv_freq, self.attention_scaling = self.rope_init_fn(config, device)
+        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, **self.rope_kwargs)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
         self.original_inv_freq = self.inv_freq
 
     def dynamic_frequency_update(self, position_ids, device):
@@ -121,7 +124,9 @@ class Phi3RotaryEmbedding(nn.Module):
         """
         seq_len = torch.max(position_ids) + 1
         if seq_len > self.max_seq_len_cached:  # growth
-            inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, seq_len=seq_len)
+            inv_freq, self.attention_scaling = self.rope_init_fn(
+                self.config, device, seq_len=seq_len, **self.rope_kwargs
+            )
             self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
             self.max_seq_len_cached = seq_len
             return
@@ -162,7 +167,7 @@ class Phi3SuScaledRotaryEmbedding(Phi3RotaryEmbedding):
             "`Phi3RotaryEmbedding`, which now also does longrope scaling (simply pass the model config to "
             "__init__)."
         )
-        kwargs["type"] = "longrope"
+        kwargs["rope_type"] = "longrope"
         super().__init__(*args, **kwargs)
 
 
@@ -173,7 +178,7 @@ class Phi3YarnScaledRotaryEmbedding(Phi3RotaryEmbedding):
             "`Phi3RotaryEmbedding`, which now also does dynamic ntk scaling (simply pass the model config to "
             "__init__)."
         )
-        kwargs["type"] = "yarn"
+        kwargs["rope_type"] = "yarn"
         super().__init__(*args, **kwargs)
 
 

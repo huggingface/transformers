@@ -74,24 +74,29 @@ class RecurrentGemmaRotaryEmbedding(nn.Module):
         config: Optional[RecurrentGemmaConfig] = None,
     ):
         super().__init__()
-        # TODO (joao): remove this `if` in v4.45; the legacy args rebuild a config to power the rest of the class;
+        # TODO (joao): remove the `if` below, only used for BC
+        self.rope_kwargs = {}
         if config is None:
             logger.warning_once(
                 "`RecurrentGemmaRotaryEmbedding` can now be fully parameterized by passing the model config through the "
                 "`config` argument. All other arguments will be removed in v4.45"
             )
-            config = RecurrentGemmaConfig()
-            config.rope_theta = base
-            config.rope_dim = dim  # this one doesn't actually exist, will only be used in the deprecation transition
+            self.rope_kwargs = {
+                "type": "default",
+                "dim": dim,
+                "base": base,
+            }
+            self.rope_type = "default"
+        else:
+            self.rope_type = config.rope_scaling["type"] if config.rope_scaling is not None else "default"
 
         self.config = config
-        self.rope_type = config.rope_scaling["type"] if config.rope_scaling is not None else "default"
         if self.rope_type not in ("default", "linear"):
             raise ValueError(f"RecurrentGemma only supports 'default' and 'linear' RoPE types, got {self.rope_type}")
 
         self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
-        inv_freq, self.attention_scaling = self.rope_init_fn(config, device)
+        inv_freq, self.attention_scaling = self.rope_init_fn(config, device, **self.rope_kwargs)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
     @torch.no_grad()
