@@ -99,12 +99,11 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         tokenizer_object = kwargs.pop("tokenizer_object", None)
         slow_tokenizer = kwargs.pop("__slow_tokenizer", None)
         gguf_file = kwargs.pop("gguf_file", None)
-        tiktoken_file = kwargs.pop("tiktoken_file", None)
         fast_tokenizer_file = kwargs.pop("tokenizer_file", None)
         from_slow = kwargs.pop("from_slow", False)
         added_tokens_decoder = kwargs.pop("added_tokens_decoder", {})
 
-        if from_slow and slow_tokenizer is None and self.slow_tokenizer_class is None and not tiktoken_file:
+        if from_slow and slow_tokenizer is None and self.slow_tokenizer_class is None:
             raise ValueError(
                 "Cannot instantiate this tokenizer from a slow version. If it's based on sentencepiece, make sure you "
                 "have sentencepiece installed."
@@ -112,29 +111,29 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
         if tokenizer_object is not None:
             fast_tokenizer = copy.deepcopy(tokenizer_object)
-        elif fast_tokenizer_file is not None and not from_slow and not tiktoken_file:
+        elif fast_tokenizer_file is not None and not from_slow:
             # We have a serialization from tokenizers which let us directly build the backend
             fast_tokenizer = TokenizerFast.from_file(fast_tokenizer_file)
-        elif slow_tokenizer is not None:
+        elif slow_tokenizer is not None and not False:
             # We need to convert a slow tokenizer to build the backend
             fast_tokenizer = convert_slow_tokenizer(slow_tokenizer)
-        elif tiktoken_file is not None:
-            self.vocab_file = kwargs.get("vocab_file", None)
-            fast_tokenizer = convert_slow_tokenizer(self, convert_from="tiktoken")
         elif gguf_file is not None:
             # We need to convert a slow tokenizer to build the backend
             gguf_param = load_gguf_checkpoint(kwargs.get("vocab_file"))
             architecture = gguf_param["config"]["model_type"]
             tokenizer_dict = gguf_param["tokenizer"]
             fast_tokenizer, additional_kwargs = convert_gguf_tokenizer(architecture, tokenizer_dict)
-
             if len(additional_kwargs) > 0:
                 kwargs.update(additional_kwargs)
-
-        elif self.slow_tokenizer_class is not None:
+        elif self.slow_tokenizer_class is not None and slow_tokenizer is not False:
             # We need to create and convert a slow tokenizer to build the backend
             slow_tokenizer = self.slow_tokenizer_class(*args, **kwargs)
             fast_tokenizer = convert_slow_tokenizer(slow_tokenizer)
+        elif slow_tokenizer is False:
+            # We tried loading a slow_tokenizer with spm and failed, try to load with tiktoken
+            self.vocab_file = kwargs.get("vocab_file", None)
+            fast_tokenizer = convert_slow_tokenizer(self, tiktoken=True)
+            slow_tokenizer = None
         else:
             raise ValueError(
                 "Couldn't instantiate the backend tokenizer from one of: \n"

@@ -1589,7 +1589,7 @@ SLOW_TO_FAST_CONVERTERS = {
 }
 
 
-def convert_slow_tokenizer(transformer_tokenizer, convert_from=None) -> Tokenizer:
+def convert_slow_tokenizer(transformer_tokenizer, tiktoken=False) -> Tokenizer:
     """
     Utilities to convert a slow tokenizer instance in a fast tokenizer instance.
 
@@ -1607,17 +1607,17 @@ def convert_slow_tokenizer(transformer_tokenizer, convert_from=None) -> Tokenize
 
     tokenizer_class_name = transformer_tokenizer.__class__.__name__
 
-    if tokenizer_class_name in TIKTOKEN_CONVERTERS and convert_from == "tiktoken":
+    if tokenizer_class_name in SLOW_TO_FAST_CONVERTERS and not tiktoken:
+        converter_class = SLOW_TO_FAST_CONVERTERS[tokenizer_class_name]
+        return converter_class(transformer_tokenizer).converted()
+
+    elif tokenizer_class_name in TIKTOKEN_CONVERTERS and tiktoken:
         converter_class = TIKTOKEN_CONVERTERS[tokenizer_class_name]
         return converter_class(transformer_tokenizer.vocab_file).converted()
 
-    if tokenizer_class_name not in SLOW_TO_FAST_CONVERTERS:
+    else:
         raise ValueError(
             f"An instance of tokenizer class {tokenizer_class_name} cannot be converted in a Fast tokenizer instance."
             " No converter was found. Currently available slow->fast convertors:"
             f" {list(SLOW_TO_FAST_CONVERTERS.keys())}"
         )
-
-    converter_class = SLOW_TO_FAST_CONVERTERS[tokenizer_class_name]
-
-    return converter_class(transformer_tokenizer).converted()

@@ -32,6 +32,7 @@ from inspect import isfunction
 from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
 
 import numpy as np
+from google.protobuf.message import DecodeError
 from packaging import version
 
 from . import __version__
@@ -2301,17 +2302,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # file or if `from_slow` is set to True.
         from_slow = kwargs.get("from_slow", False)
         gguf_file = kwargs.get("gguf_file", None)
-        tiktoken_file = kwargs.get("tiktoken_file", None)
         has_tokenizer_file = resolved_vocab_files.get("tokenizer_file", None) is not None
 
         # If one passes a GGUF file path to `gguf_file` there is no need for this check as the tokenizer will be
         # loaded directly from the GGUF file.
-        if (
-            (from_slow or not has_tokenizer_file)
-            and cls.slow_tokenizer_class is not None
-            and not gguf_file
-            and not tiktoken_file
-        ):
+        if (from_slow or not has_tokenizer_file) and cls.slow_tokenizer_class is not None and not gguf_file:
             slow_tokenizer = (cls.slow_tokenizer_class)._from_pretrained(
                 copy.deepcopy(resolved_vocab_files),
                 pretrained_model_name_or_path,
@@ -2509,6 +2504,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # Instantiate the tokenizer.
         try:
             tokenizer = cls(*init_inputs, **init_kwargs)
+        except DecodeError:
+            return False
         except OSError:
             raise OSError(
                 "Unable to load vocabulary from file. "
