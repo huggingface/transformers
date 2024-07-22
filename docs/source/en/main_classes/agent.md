@@ -72,6 +72,10 @@ We provide two types of agents, based on the main [`Agent`] class:
 
 [[autodoc]] launch_gradio_demo
 
+### stream_from_transformers_agent
+
+[[autodoc]] stream_from_transformers_agent
+
 ### ToolCollection
 
 [[autodoc]] ToolCollection
