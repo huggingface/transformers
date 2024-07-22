@@ -141,9 +141,9 @@
 - sections:
   - local: in_translation
     title: (번역중) Getting started
+  - local: quantization/bitsandbytes
+    title: bitsandbytes
   - local: in_translation
-    title: quantization/bitsandbytes
-  - local: bitsandbytes
     title: (번역중) GPTQ
   - local: in_translation
     title: (번역중) AWQ
