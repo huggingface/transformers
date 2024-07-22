@@ -133,7 +133,6 @@ class LlamaRotaryEmbedding(nn.Module):
             )
             self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
             self.max_seq_len_cached = seq_len
-            return
 
         if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
             self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
