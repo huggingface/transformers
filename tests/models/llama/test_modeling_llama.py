@@ -506,7 +506,7 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
         # Old API -- under the hood, "type": "linear" is set and `LlamaRotaryEmbedding` is called
         old_api_rope = LlamaLinearScalingRotaryEmbedding(
-            config.hidden_size // config.num_heads,
+            config.hidden_size // config.num_attention_heads,
             max_position_embeddings=config.max_position_embeddings,
             base=config.rope_theta,
             scaling_factor=scaling_factor,
