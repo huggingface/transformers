@@ -21,6 +21,7 @@ from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, Fbgemm
 from transformers.testing_utils import (
     require_accelerate,
     require_fbgemm_gpu,
+    require_read_token,
     require_torch_gpu,
     require_torch_multi_gpu,
     slow,
@@ -63,6 +64,7 @@ class FbgemmFp8ConfigTest(unittest.TestCase):
 @require_torch_gpu
 @require_fbgemm_gpu
 @require_accelerate
+@require_read_token
 class FbgemmFp8Test(unittest.TestCase):
     model_name = "meta-llama/Meta-Llama-3-8B"
 
@@ -148,24 +150,23 @@ class FbgemmFp8Test(unittest.TestCase):
                 nb_linears += 1
 
         model = replace_with_fbgemm_fp8_linear(model, quantization_config=quantization_config)
-        nb_eetq_linear = 0
+        nb_fbgemm_linear = 0
         for module in model.modules():
             if isinstance(module, FbgemmFp8Linear):
-                nb_eetq_linear += 1
+                nb_fbgemm_linear += 1
 
-        self.assertEqual(nb_linears - 1, nb_eetq_linear)
+        self.assertEqual(nb_linears - 1, nb_fbgemm_linear)
 
-        # Try with `linear_weights_not_to_quantize`
         with init_empty_weights():
             model = OPTForCausalLM(config)
         quantization_config = FbgemmFp8Config(modules_to_not_convert=["fc1"])
         model = replace_with_fbgemm_fp8_linear(model, quantization_config=quantization_config)
-        nb_eetq_linear = 0
+        nb_fbgemm_linear = 0
         for module in model.modules():
             if isinstance(module, FbgemmFp8Linear):
-                nb_eetq_linear += 1
+                nb_fbgemm_linear += 1
 
-        self.assertEqual(nb_linears - 25, nb_eetq_linear)
+        self.assertEqual(nb_linears - 25, nb_fbgemm_linear)
 
     def test_quantized_model(self):
         """
