@@ -393,7 +393,7 @@ class JetMoeRotaryEmbedding(nn.Module):
         if config is None:
             logger.warning_once(
                 "`JetMoeRotaryEmbedding` can now be fully parameterized by passing the model config through the "
-                "`config` argument. All other arguments will be deprecated in v4.45"
+                "`config` argument. All other arguments will be removed in v4.45"
             )
             config = JetMoeConfig(**kwargs)
             config.rope_theta = base
@@ -413,6 +413,7 @@ class JetMoeRotaryEmbedding(nn.Module):
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
+        self.original_inv_freq = self.inv_freq
 
     def dynamic_frequency_update(self, position_ids, device):
         """
@@ -421,13 +422,16 @@ class JetMoeRotaryEmbedding(nn.Module):
         2 - the current sequence length is in the original scale (avoid losing precision with small sequences)
         """
         seq_len = torch.max(position_ids) + 1
-        needs_growth = seq_len > self.max_seq_len_cached
-        needs_reset = seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len
-        if needs_growth or needs_reset:
-            target_seq_len = max(seq_len, self.original_max_seq_len)
-            inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, seq_len=target_seq_len)
+        if seq_len > self.max_seq_len_cached:  # growth
+            inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, seq_len=seq_len)
             self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
-            self.max_seq_len_cached = target_seq_len
+            self.max_seq_len_cached = seq_len
+            return
+
+        if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
+            self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
+            self.max_seq_len_cached = self.original_max_seq_len
+            return
 
     @torch.no_grad()
     def forward(self, x, position_ids):

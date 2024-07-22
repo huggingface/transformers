@@ -78,7 +78,7 @@ class RecurrentGemmaRotaryEmbedding(nn.Module):
         if config is None:
             logger.warning_once(
                 "`RecurrentGemmaRotaryEmbedding` can now be fully parameterized by passing the model config through the "
-                "`config` argument. All other arguments will be deprecated in v4.45"
+                "`config` argument. All other arguments will be removed in v4.45"
             )
             config = RecurrentGemmaConfig()
             config.rope_theta = base
