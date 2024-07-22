@@ -49,46 +49,50 @@ def clip_boxes(box: torch.Tensor, box_size: Tuple[int, int]) -> torch.Tensor:
 
     Args:
         box (Tensor): The box to be clipped.
-        box_size (height, width): The clipping box's size.
+        box_size (width, height): The clipping box's size.
     """
     assert torch.isfinite(box).all(), "Box tensor contains infinite or NaN!"
-    h, w = box_size
-    x1 = box[:, 0].clamp(min=0, max=h)
-    y1 = box[:, 1].clamp(min=0, max=w)
-    x2 = box[:, 2].clamp(min=0, max=h)
-    y2 = box[:, 3].clamp(min=0, max=w)
+    width, height = box_size
+    x1 = box[:, 0].clamp(min=0, max=width)
+    y1 = box[:, 1].clamp(min=0, max=height)
+    x2 = box[:, 2].clamp(min=0, max=width)
+    y2 = box[:, 3].clamp(min=0, max=height)
     box = torch.stack((x1, y1, x2, y2), dim=-1)
 
     return box
 
 
-def handle_text(
-    text: Union[str, List[str], List[List[str]], TextInput, PreTokenizedInput],
-) -> Tuple[List[str], List[List[str]]]:
-    if isinstance(text, str):
-        # Text needs to be in this format: "Detect cat, dog, bird"
-        tasks = [text]
-        labels = "".join(text.split(" ")[1:])
-        if len(labels) == 0:
-            labels = [[text]]
-        else:
-            labels = labels.split(",")
-    elif isinstance(text, list):
-        if isinstance(text[0], str) and len(text) == 2 and isinstance(text[1], list):
-            tasks = [text[0]]
-            labels = [text[1]]
-        elif isinstance(text[0], str) and len(text) > 2:
-            tasks = ["Detect {}.".format(",".join(text))]
-            labels = text
-        elif isinstance(text[0], list) and len(text) == 2 and isinstance(text[1][0], list):
-            tasks = text[0]
-            labels = text[1]
-        else:
-            raise ValueError("Invalid input format for `text`.")
-    else:
-        raise ValueError("Invalid input format for `text`.")
+# def handle_text(
+#     text: Union[str, List[str], List[List[str]], TextInput, PreTokenizedInput],
+# ) -> Tuple[List[str], List[List[str]]]:
+#     if isinstance(text, str):
+#         # Text needs to be in this format: "Detect cat, dog, bird"
+#         tasks = [text]
+#         # Infer labels from task
+#         labels = "".join(text.split(" ")[1:])
+#         if len(labels) == 0:
+#             labels = [[text]]
+#         else:
+#             labels = labels.split(",")
+#     elif isinstance(text, list):
+#         if isinstance(text[0], str) and len(text) == 2 and isinstance(text[1], list):
+#             # Typical expected not batched input ("Detect cat, dog, bird.", ["cat", "dog", "bird"])
+#             tasks = [text[0]]
+#             labels = [text[1]]
+#         elif isinstance(text[0], str) and len(text) > 2:
+#             # infer task from label (not batched)
+#             tasks = ["Detect {}.".format(",".join(text))]
+#             labels = text
+#         elif isinstance(text[0], list) and len(text) == 2 and isinstance(text[1][0], list):
+#             # Typical expected batched input (["Detect cat, dog, bird.", ["cat", "dog", "bird"]])
+#             tasks = text[0]
+#             labels = text[1]
+#         else:
+#             raise ValueError("Invalid input format for `text`.")
+#     else:
+#         raise ValueError("Invalid input format for `text`.")
 
-    return tasks, labels
+#     return tasks, labels
 
 
 class OmDetTurboProcessorKwargs(ProcessingKwargs, total=False):
@@ -112,7 +116,7 @@ class OmDetTurboProcessorKwargs(ProcessingKwargs, total=False):
 
 class OmDetTurboProcessor(ProcessorMixin):
     r"""
-    Constructs a OmDet-Turbo processor which wraps a Deformable DETR image processor and an Auto tokenizer into a
+    Constructs a OmDet-Turbo processor which wraps a Deformable DETR image processor and an AutoTokenizer into a
     single processor.
 
     [`OmDetTurboProcessor`] offers all the functionalities of [`DetrImageProcessor`] and
@@ -136,7 +140,8 @@ class OmDetTurboProcessor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[str, List[str], List[List[str]], TextInput, PreTokenizedInput] = None,
+        text: Union[str, List[str], TextInput, PreTokenizedInput] = None,
+        labels : Union[List[str], List[List[str]]] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[OmDetTurboProcessorKwargs],
@@ -147,19 +152,25 @@ class OmDetTurboProcessor(ProcessorMixin):
 
         Please refer to the docstring of the above two methods for more information.
         """
-        if images is None or text is None:
-            raise ValueError("You have to specify `images` and `text`.")
+        if images is None or text is None or labels is None:
+            raise ValueError("You have to specify `images`, `text` and `labels`.")
 
-        tasks, labels = handle_text(text)
+        if isinstance(text, str):
+            text = [text]
+        if isinstance(labels[0], str):
+            labels = [labels]
 
+        # error when using `tokenizer_init_kwargs=self.tokenizer.init_kwargs` in _merge_kwargs` as
+        # some init_kwargs are not defined in the forward method of the tokenizer e.g "padding_side"
         output_kwargs = self._merge_kwargs(
             OmDetTurboProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            tokenizer_init_kwargs=OmDetTurboProcessorKwargs._defaults["text_kwargs"],
+            # tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
 
         encoding_image_processor = self.image_processor(images, **output_kwargs["images_kwargs"])
-        tasks_encoding = self.tokenizer(text=tasks, **output_kwargs["text_kwargs"])
+        tasks_encoding = self.tokenizer(text=text, **output_kwargs["text_kwargs"])
 
         labels_encoding = []
         for label in labels:
@@ -191,41 +202,42 @@ class OmDetTurboProcessor(ProcessorMixin):
 
     def process_single_image(
         self,
-        boxes,
-        scores,
-        labels,
-        label_names,
+        boxes: torch.Tensor,
+        scores: torch.Tensor,
+        labels: torch.Tensor,
+        label_names: List[str],
         image_size: Tuple[int, int],
         num_classes: int,
         score_thresh: float,
         nms_thresh: float,
         max_num_det: int = None,
-    ):
+    ) -> dict:
         """
         Filter predicted results using given thresholds and NMS.
         Args:
-            boxes (list[Tensor]): A list of Tensors of predicted class-specific or class-agnostic
-                boxes for each image. Element i has shape (Ri, K * 4) if doing
-                class-specific regression, or (Ri, 4) if doing class-agnostic
-                regression, where Ri is the number of predicted objects for image i.
+            boxes (Tensor): A Tensor of predicted class-specific or class-agnostic
+                boxes for the image. Shape : (R, K * 4) if doing
+                class-specific regression, or (R, 4) if doing class-agnostic
+                regression, where R is the number of predicted objects for the image.
                 This is compatible with the output of :meth:`FastRCNNOutputLayers.predict_boxes`.
-            scores (list[Tensor]): A list of Tensors of predicted class scores for each image.
-                Element i has shape (Ri, K + 1), where Ri is the number of predicted objects
-                for image i. Compatible with the output of :meth:`FastRCNNOutputLayers.predict_probs`.
-            labels (list[Tensor]): A list of Tensors of predicted class labels for each image.
-                Element i has shape (Ri,), where Ri is the number of predicted objects for image i.
+            scores (Tensor): A Tensor of predicted class scores for the image.
+                Shape : (R, K + 1), where R is the number of predicted objects for the image.
+                This is compatible with the output of :meth:`FastRCNNOutputLayers.predict_probs`.
+            labels (Tensor): A Tensor of predicted class labels for the image.
+                Shape : (R,), where R is the number of predicted objects for the image.
             labels_name (list[str]): A list of class labels for each class.
-            image_size (list[tuple]): A list of (width, height) tuples for each image in the batch.
+            image_size (tuple): A tuple of (width, height) for the image.
             num_classes (int): The number of classes given for this image.
             score_thresh (float): Only return detections with a confidence score exceeding this
                 threshold.
             nms_thresh (float):  The threshold to use for box non-maximum suppression. Value in [0, 1].
             max_num_det (int, optional): The maximum number of detections to return. Default is None.
         Returns:
-            list[dict]: A list of dictionaries, each containing the following keys:
-                "pred_boxes" (Tensor): A tensor of shape (N, 4), containing the predicted boxes in (x1, y1, x2, y2) format.
+            dict: A dictionnary the following keys:
+                "boxes" (Tensor): A tensor of shape (N, 4), containing the predicted boxes in (x1, y1, x2, y2) format,
+                where N is the number of predicted objects after filtering.
                 "scores" (Tensor): A tensor of shape (N,), containing the predicted confidence scores for each detection.
-                "pred_classes" (list[str]): A list of strings, where each string is the predicted label for the
+                "labels" (list[str]): A list of strings, where each string is the predicted label for the
                     corresponding detection
         """
         proposal_num = len(boxes) if max_num_det is None else max_num_det
@@ -258,9 +270,9 @@ class OmDetTurboProcessor(ProcessorMixin):
 
         # create an instance
         result = {}
-        result["pred_boxes"] = clip_boxes(box_pred_per_image, image_size)
+        result["boxes"] = clip_boxes(box_pred_per_image, image_size)
         result["scores"] = scores_per_image
-        result["pred_classes"] = labels_per_image
+        result["labels"] = labels_per_image
 
         return result
 
@@ -294,18 +306,17 @@ class OmDetTurboProcessor(ProcessorMixin):
             nms_thresh (float):  The threshold to use for box non-maximum suppression. Value in [0, 1].
             target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
-                `(height, width)` of each image in the batch. If unset, predictions will not be resized.
+                `(width, height)` of each image in the batch. If unset, predictions will not be resized.
         Returns:
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
         """
-        boxes = outputs.decoder_bboxes
-        logits = outputs.decoder_cls
-        scores, labels = self.compute_score(logits)
-        num_classes = logits.shape[2]
+        boxes_logits = outputs.decoder_coord_logits
+        scores_logits = outputs.decoder_class_logits
+        scores, labels = self.compute_score(scores_logits)
+        num_classes = scores_logits.shape[2]
         results = []
-        print(labels_names)
-        for scores_img, box_per_img, image_size, label_names in zip(scores, boxes, target_sizes, labels_names):
+        for scores_img, box_per_img, image_size, label_names in zip(scores, boxes_logits, target_sizes, labels_names):
             results.append(
                 self.process_single_image(
                     box_per_img,

@@ -46,8 +46,6 @@ def get_omdet_turbo_config(model_name, use_timm_backbone):
     else:
         raise ValueError("Model not supported, only supports tiny variant.")
 
-    text_config = CLIPTextConfig()
-
     config = OmDetTurboConfig(
         backbone_window_size=window_size,
         backbone_image_size=image_size,
@@ -55,7 +53,7 @@ def get_omdet_turbo_config(model_name, use_timm_backbone):
         backbone_depths=depths,
         backbone_num_heads=num_heads,
         backbone_out_indices=(1, 2, 3),
-        text_config=text_config,
+        text_config={"model_type": "clip_text_model"},
         use_timm_backbone=use_timm_backbone,
         backbone="swin_tiny_patch4_window7_224" if use_timm_backbone else None,
         use_pretrained_backbone=True,
@@ -195,12 +193,12 @@ def read_in_q_k_v_encoder(state_dict, config):
     in_proj_weight = state_dict.pop("encoder.encoder.0.layers.0.self_attn.in_proj_weight")
     in_proj_bias = state_dict.pop("encoder.encoder.0.layers.0.self_attn.in_proj_bias")
     # next, add query, keys and values (in that order) to the state dict
-    state_dict["encoder.encoder.0.layers.0.self_attn.q_proj.weight"] = in_proj_weight[:embed_dim, :]
-    state_dict["encoder.encoder.0.layers.0.self_attn.q_proj.bias"] = in_proj_bias[:embed_dim]
-    state_dict["encoder.encoder.0.layers.0.self_attn.k_proj.weight"] = in_proj_weight[embed_dim : embed_dim * 2, :]
-    state_dict["encoder.encoder.0.layers.0.self_attn.k_proj.bias"] = in_proj_bias[embed_dim : embed_dim * 2]
-    state_dict["encoder.encoder.0.layers.0.self_attn.v_proj.weight"] = in_proj_weight[-embed_dim:, :]
-    state_dict["encoder.encoder.0.layers.0.self_attn.v_proj.bias"] = in_proj_bias[-embed_dim:]
+    state_dict["encoder.encoder.0.layers.0.self_attn.query.weight"] = in_proj_weight[:embed_dim, :]
+    state_dict["encoder.encoder.0.layers.0.self_attn.query.bias"] = in_proj_bias[:embed_dim]
+    state_dict["encoder.encoder.0.layers.0.self_attn.key.weight"] = in_proj_weight[embed_dim : embed_dim * 2, :]
+    state_dict["encoder.encoder.0.layers.0.self_attn.key.bias"] = in_proj_bias[embed_dim : embed_dim * 2]
+    state_dict["encoder.encoder.0.layers.0.self_attn.value.weight"] = in_proj_weight[-embed_dim:, :]
+    state_dict["encoder.encoder.0.layers.0.self_attn.value.bias"] = in_proj_bias[-embed_dim:]
 
 
 def run_test(model, processor):
@@ -210,8 +208,7 @@ def run_test(model, processor):
 
     labels = ["cat", "remote"]
     task = "Detect {}.".format(",".join(labels))
-    text = [task, labels]
-    inputs = processor(image, text=text, return_tensors="pt")
+    inputs = processor(image, text=task, labels=labels, return_tensors="pt")
 
     # Running forward
     with torch.no_grad():
@@ -261,6 +258,8 @@ def convert_omdet_turbo_checkpoint(args):
     if not use_timm_backbone:
         read_in_q_k_v_vision(new_state_dict, config)
     read_in_q_k_v_text(new_state_dict, config)
+    read_in_q_k_v_encoder(new_state_dict, config)
+
 
     # Load HF model
     model = OmDetTurboModel(config)
@@ -287,8 +286,8 @@ def convert_omdet_turbo_checkpoint(args):
         processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
-        model.push_to_hub(f"EduardoPacheco/{model_name}")
-        processor.push_to_hub(f"EduardoPacheco/{model_name}")
+        model.push_to_hub(f"yonigozlan/{model_name}")
+        processor.push_to_hub(f"yonigozlan/{model_name}")
 
 
 if __name__ == "__main__":

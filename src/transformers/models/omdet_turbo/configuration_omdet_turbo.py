@@ -34,31 +34,41 @@ class OmDetTurboConfig(PretrainedConfig):
 
     Args:
         text_config (`PretrainedConfig`, *optional*):
-            The configuration of the text model.
+            The configuration of the text backbone.
         vision_config (`PretrainedConfig`, *optional*):
-            The configuration of the vision model.
+            The configuration of the vision backbone.
         use_timm_backbone (`bool`, *optional*, defaults to `True`):
-            Whether to use the timm backbone.
-        backbone (`<fill_type>`, *optional*, defaults to `"swin_tiny_patch4_window7_224"`): <fill_docstring>
+            Whether to use the timm for the vision backbone.
+        backbone (`str`, *optional*, defaults to `"swin_tiny_patch4_window7_224"`):
+            The name of the timm vision backbone to use.
         backbone_kwargs (`dict`, *optional*):
-            Additional kwargs for the backbone.
-        backbone_out_indices (`<fill_type>`, *optional*, defaults to `[1, 2, 3]`): <fill_docstring>
-        backbone_embed_dim (`<fill_type>`, *optional*, defaults to 96): <fill_docstring>
-        backbone_qkv_bias (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
-        backbone_depths (`<fill_type>`, *optional*, defaults to `[2, 2, 6, 2]`): <fill_docstring>
-        backbone_num_heads (`<fill_type>`, *optional*, defaults to `[3, 6, 12, 24]`): <fill_docstring>
-        backbone_window_size (`<fill_type>`, *optional*, defaults to 7): <fill_docstring>
-        backbone_features_only (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
-        use_pretrained_backbone (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
-        backbone_image_size (`<fill_type>`, *optional*, defaults to 640): <fill_docstring>
+            Additional kwargs for the timm vision backbone.
+        backbone_out_indices (`list(int)`, *optional*, defaults to `[1, 2, 3]`):
+            The output indices of the vision backbone.
+        backbone_embed_dim (`int`, *optional*, defaults to 96):
+            The embedding dimension of the vision backbone.
+        backbone_qkv_bias (`bool`, *optional*, defaults to `True`):
+            Whether to use bias for the attention int the vision backbone.
+        backbone_depths (`list(int)`, *optional*, defaults to `[2, 2, 6, 2]`):
+            The depths of the vision backbone layers.
+        backbone_num_heads (`list(int)`, *optional*, defaults to `[3, 6, 12, 24]`):
+            The number of heads for the vision backbone.
+        backbone_window_size (`int`, *optional*, defaults to 7):
+            The window size for the vision backbone.
+        backbone_features_only (`bool`, *optional*, defaults to `True`):
+            Whether to output only the features of the vision backbone (no head built on top).
+        use_pretrained_backbone (`bool`, *optional*, defaults to `True`):
+            Whether to use a pretrained timm vision backbone.
+        backbone_image_size (`int`, *optional*, defaults to 640):
+            The image size for the vision backbone.
         encoder_hidden_dim (`int`, *optional*, defaults to 256):
             The hidden dimension of the encoder.
         decoder_hidden_dim (`int`, *optional*, defaults to 256):
             The hidden dimension of the decoder.
         backbone_feat_channels (`tuple(int)`, *optional*, defaults to `[256, 256, 256]`):
-            The feature channels of the backbone.
+            The projected vision features channels used as inputs for the decoder.
         num_feature_levels (`int`, *optional*, defaults to 3):
-            The number of feature levels.
+            The number of feature levels for the multi-scale deformable attention module of the decoder.
         disable_custom_kernels (`bool`, *optional*, defaults to `False`):
             Whether to disable custom kernels.
         text_projection_in_features (`int`, *optional*, defaults to 512):
@@ -93,12 +103,13 @@ class OmDetTurboConfig(PretrainedConfig):
             The number of attention heads for the encoder.
         normalize_before (`bool`, *optional*, defaults to `False`):
             Whether to normalize before in the encoder.
-        eval_size (`int`, *optional*):
-            The evaluation size.
+        eval_size (`Tuple[int, int]`, *optional*):
+            Height and width used to computes the effective height and width of the position embeddings after taking
+            into account the stride (see RTDetr).
         encoder_layers (`int`, *optional*, defaults to 1):
             The number of layers in the encoder.
         positional_encoding_temperature (`int`, *optional*, defaults to 10000):
-            The positional encoding temperature.
+            The positional encoding temperature in the encoder.
         encoder_dim_feedforward (`int`, *optional*, defaults to 2048):
             The feedforward dimension for the encoder.
         decoder_num_heads (`int`, *optional*, defaults to 8):
@@ -106,25 +117,27 @@ class OmDetTurboConfig(PretrainedConfig):
         decoder_num_layers (`int`, *optional*, defaults to 6):
             The number of layers for the decoder.
         label_dim (`int`, *optional*, defaults to 512):
-            The dimension of the label.
+            The dimension of the labels embeddings.
         class_distance_type (`str`, *optional*, defaults to `"cosine"`):
-            The type of of distance to compare predicted classes to labels.
+            The type of of distance to compare predicted classes to projected labels embeddings.
         decoder_activation (`str`, *optional*, defaults to `"relu"`):
             The activation function for the decoder.
-        decoder_encoder_dim_feedforward (`<fill_type>`, *optional*, defaults to 1024): <fill_docstring>
+        decoder_encoder_dim_feedforward (`int`, *optional*, defaults to 1024):
+            The feedforward dimension for the task encoder in the decoder.
         decoder_dim_feedforward (`int`, *optional*, defaults to 2048):
             The feedforward dimension for the decoder.
         decoder_num_points (`int`, *optional*, defaults to 4):
-            The number of points for the decoder.
+            The number of points sampled in the decoder multi-scale deformable attention module.
         decoder_dropout (`float`, *optional*, defaults to 0.0):
             The dropout rate for the decoder.
         decoder_eval_idx (`int`, *optional*, defaults to -1):
-            The evaluation index for the decoder.
+            Debugging tool to stop the decoder at a certain layer index during evaluation.
         learn_init_query (`bool`, *optional*, defaults to `False`):
             Whether to learn the initial query.
         fuse_type (`str`, *optional*, defaults to `"merged_attn"`):
-            The type of fusion.
-        cache_size (`<fill_type>`, *optional*, defaults to 100): <fill_docstring>
+            The type of fusion between task and vision embeddings in the decoder.
+        cache_size (`int`, *optional*, defaults to 100):
+            The cache size for the labels and prompts caches.
         is_encoder_decoder (`bool`, *optional*, defaults to `True`):
             Whether the model is used as an encoder-decoder model or not.
         kwargs (`Dict[str, Any]`, *optional*):

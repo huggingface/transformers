@@ -19,6 +19,7 @@ import math
 import re
 import unittest
 
+import requests
 from transformers import (
     is_torch_available,
     is_vision_available,
@@ -53,7 +54,7 @@ class OmDetTurboModelTester:
     def __init__(
         self,
         parent,
-        batch_size=4,
+        batch_size=1,
         is_training=True,
         use_labels=True,
         hidden_size=32,
@@ -597,13 +598,15 @@ class OmDetTurboModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
 # We will verify our results on an image of cute cats
 def prepare_img():
-    image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
     return image
 
 
 def prepare_text():
-    text = "a cat."
-    return text
+    labels = ["cat", "remote"]
+    task = "Detect {}.".format(",".join(labels))
+    return labels, task
 
 
 @require_timm
@@ -612,59 +615,49 @@ def prepare_text():
 class OmDetTurboModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_processor(self):
-        return AutoProcessor.from_pretrained("omlab/omdet-turbo-tiny") if is_vision_available() else None
+        return AutoProcessor.from_pretrained("yonigozlan/omdet-turbo-tiny") if is_vision_available() else None
 
-    # def test_inference_object_detection_head(self):
-    #     model = OmDetTurboForObjectDetection.from_pretrained("omlab/omdet-turbo-tiny").to(torch_device)
+    def test_inference_object_detection_head(self):
+        model = OmDetTurboForObjectDetection.from_pretrained("yonigozlan/omdet-turbo-tiny").to(torch_device)
 
-    #     processor = self.default_processor
-    #     image = prepare_img()
-    #     text = prepare_text()
-    #     encoding = processor(images=image, text=text, return_tensors="pt").to(torch_device)
+        processor = self.default_processor
+        image = prepare_img()
+        labels, task = prepare_text()
+        encoding = processor(images=image, text=task, labels=labels, return_tensors="pt").to(torch_device)
 
-    #     with torch.no_grad():
-    #         outputs = model(**encoding)
+        with torch.no_grad():
+            outputs = model(**encoding)
 
-    #     expected_shape_logits = torch.Size((1, model.config.num_queries, model.config.d_model))
-    #     self.assertEqual(outputs.logits.shape, expected_shape_logits)
+        expected_shape_coord_logits = torch.Size((1, model.config.num_queries, 4))
+        expected_shape_class_logits = torch.Size((1, model.config.num_queries, 2))
+        self.assertEqual(outputs.decoder_coord_logits.shape, expected_shape_coord_logits)
+        self.assertEqual(outputs.decoder_class_logits.shape, expected_shape_class_logits)
 
-    #     expected_boxes = torch.tensor(
-    #         [[0.7674, 0.4136, 0.4572], [0.2566, 0.5463, 0.4760], [0.2585, 0.5442, 0.4641]]
-    #     ).to(torch_device)
-    #     expected_logits = torch.tensor(
-    #         [[-4.8913, -0.1900, -0.2161], [-4.9653, -0.3719, -0.3950], [-5.9599, -3.3765, -3.3104]]
-    #     ).to(torch_device)
+        expected_class_logits = torch.tensor(
+            [[[0.9624, -3.5492], [0.5973, -2.4723], [-3.0351, 1.1316]]]
+        ).to(torch_device)
+        expected_coord_logits = torch.tensor(
+            [[[0.7694, 0.4108, 0.4603, 0.7279],
+         [0.2564, 0.5512, 0.4731, 0.8781],
+         [0.1690, 0.1971, 0.2135, 0.0970]]]
+        ).to(torch_device)
 
-    #     self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-3))
+        self.assertTrue(torch.allclose(outputs.decoder_class_logits[0, :3, :3], expected_class_logits, atol=1e-3))
+        self.assertTrue(torch.allclose(outputs.decoder_coord_logits[0, :3, :3], expected_coord_logits, atol=1e-4))
 
-    #     expected_shape_boxes = torch.Size((1, model.config.num_queries, 4))
-    #     self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
-    #     self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-4))
+        # verify grounded postprocessing
+        results = processor.image_processor.post_process_grounded_object_detection(
+            outputs, threshold=0.35, target_sizes=[image.size]
+        )[0]
+        expected_scores = torch.tensor([0.7561, 0.7236, 0.6450, 0.5705]).to(torch_device)
+        expected_slice_boxes = torch.tensor([ 39.8632,  71.3144, 176.5091, 117.8587]).to(torch_device)
 
-    #     # verify postprocessing
-    #     results = processor.image_processor.post_process_object_detection(
-    #         outputs, threshold=0.35, target_sizes=[image.size[::-1]]
-    #     )[0]
-    #     expected_scores = torch.tensor([0.4526, 0.4082]).to(torch_device)
-    #     expected_slice_boxes = torch.tensor([344.8143, 23.1796, 637.4004, 373.8295]).to(torch_device)
+        self.assertEqual(len(results["scores"]), 2)
+        self.assertTrue(torch.allclose(results["scores"], expected_scores, atol=1e-3))
+        self.assertTrue(torch.allclose(results["boxes"][0, :], expected_slice_boxes, atol=1e-2))
 
-    #     self.assertEqual(len(results["scores"]), 2)
-    #     self.assertTrue(torch.allclose(results["scores"], expected_scores, atol=1e-3))
-    #     self.assertTrue(torch.allclose(results["boxes"][0, :], expected_slice_boxes, atol=1e-2))
-
-    #     # verify grounded postprocessing
-    #     expected_labels = ["a cat", "a cat"]
-    #     results = processor.post_process_grounded_object_detection(
-    #         outputs=outputs,
-    #         input_ids=encoding.input_ids,
-    #         box_threshold=0.35,
-    #         text_threshold=0.3,
-    #         target_sizes=[image.size[::-1]],
-    #     )[0]
-
-    #     self.assertTrue(torch.allclose(results["scores"], expected_scores, atol=1e-3))
-    #     self.assertTrue(torch.allclose(results["boxes"][0, :], expected_slice_boxes, atol=1e-2))
-    #     self.assertListEqual(results["labels"], expected_labels)
+        expected_labels = ['remote', 'cat', 'cat', 'remote']
+        self.assertListEqual(results["labels"], expected_labels)
 
     # @require_torch_gpu
     # def test_inference_object_detection_head_equivalence_cpu_gpu(self):
