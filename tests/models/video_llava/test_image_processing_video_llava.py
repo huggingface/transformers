@@ -214,7 +214,7 @@ class VideoLlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
     def test_call_pil_videos(self):
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
-        # create random numpy tensors
+        # create random pil input
         video_inputs = self.image_processor_tester.prepare_video_inputs(equal_resolution=True)
         for video in video_inputs:
             self.assertIsInstance(video, PIL.Image.Image)
