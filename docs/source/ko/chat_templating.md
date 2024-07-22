@@ -14,20 +14,15 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Templates for Chat Models
+# 채팅 모델을 위한 템플릿
 
-## Introduction
+## 소개
 
-An increasingly common use case for LLMs is **chat**. In a chat context, rather than continuing a single string
-of text (as is the case with a standard language model), the model instead continues a conversation that consists
-of one or more **messages**, each of which includes a **role**, like "user" or "assistant", as well as message text.
+LLM의 점점 더 흔해지는 사용 사례는 채팅입니다. 채팅 맥락에서는 표준 언어 모델과 같이 단일 문자열을 계속하는 대신, 모델이 "user"나 "assistant"와 같은 역할과 메시지 텍스트를 포함한 하나 이상의 메시지로 구성된 대화를 계속합니다.
 
-Much like tokenization, different models expect very different input formats for chat. This is the reason we added
-**chat templates** as a feature. Chat templates are part of the tokenizer. They specify how to convert conversations, 
-represented as lists of messages, into a single tokenizable string in the format that the model expects. 
+토큰화와 마찬가지로, 다양한 모델은 채팅에 대해 매우 다른 입력 형식을 기대합니다. 이것이 우리가 채팅 템플릿을 기능으로 추가한 이유입니다. 채팅 템플릿은 토크나이저의 일부입니다. 채팅 템플릿은 대화 목록을 모델이 기대하는 형식의 단일 토큰화 가능한 문자열로 변환하는 방법을 지정합니다.
 
-Let's make this concrete with a quick example using the `BlenderBot` model. BlenderBot has an extremely simple default 
-template, which mostly just adds whitespace between rounds of dialogue:
+`BlenderBot` 모델을 사용한 간단한 예제를 통해 이를 구체적으로 살펴보겠습니다. BlenderBot은 기본적으로 매우 간단한 템플릿을 가지고 있으며, 주로 대화 라운드 사이에 공백을 추가합니다:
 
 ```python
 >>> from transformers import AutoTokenizer
@@ -43,9 +38,7 @@ template, which mostly just adds whitespace between rounds of dialogue:
 " Hello, how are you?  I'm doing great. How can I help you today?   I'd like to show off how chat templating works!</s>"
 ```
 
-Notice how the entire chat is condensed into a single string. If we use `tokenize=True`, which is the default setting,
-that string will also be tokenized for us. To see a more complex template in action, though, let's use the 
-`mistralai/Mistral-7B-Instruct-v0.1` model.
+전체 채팅이 하나의 문자열로 압축된 것을 확인할 수 있습니다. 기본 설정인 `tokenize=True`를 사용하면, 그 문자열도 토큰화됩니다. 더 복잡한 템플릿을 사용하려면 `mistralai/Mistral-7B-Instruct-v0.1` 모델을 사용해 보겠습니다.
 
 ```python
 >>> from transformers import AutoTokenizer
@@ -61,24 +54,21 @@ that string will also be tokenized for us. To see a more complex template in act
 "<s>[INST] Hello, how are you? [/INST]I'm doing great. How can I help you today?</s> [INST] I'd like to show off how chat templating works! [/INST]"
 ```
 
-Note that this time, the tokenizer has added the control tokens [INST] and [/INST] to indicate the start and end of 
-user messages (but not assistant messages!). Mistral-instruct was trained with these tokens, but BlenderBot was not.
+이번에는 토크나이저가 [INST]와 [/INST] 제어 토큰을 추가하여 사용자 메시지의 시작과 끝을 표시했음을 주목하세요 (하지만 어시스턴트 메시지는 아닙니다!). Mistral-instruct는 이러한 토큰으로 훈련되었지만, BlenderBot은 그렇지 않았습니다.
 
-## How do I use chat templates?
+## 채팅 템플릿을 어떻게 사용하나요?
 
-As you can see in the example above, chat templates are easy to use. Simply build a list of messages, with `role`
-and `content` keys, and then pass it to the [`~PreTrainedTokenizer.apply_chat_template`] method. Once you do that,
-you'll get output that's ready to go! When using chat templates as input for model generation, it's also a good idea
-to use `add_generation_prompt=True` to add a [generation prompt](#what-are-generation-prompts). 
+위의 예에서 볼 수 있듯이 채팅 템플릿은 사용하기 쉽습니다. `role`과 `content` 키가 포함된 메시지 목록을 작성한 다음, [`~PreTrainedTokenizer.apply_chat_template`] 메서드에 전달하기만 하면 됩니다. 이렇게 하면 바로 사용할 수 있는 출력이 생성됩니다! 모델 생성의 입력으로 채팅 템플릿을 사용할 때, `add_generation_prompt=True`를 사용하여 [생성 프롬프트](#what-are-generation-prompts)를 추가하는 것도 좋은 방법입니다.
 
-Here's an example of preparing input for `model.generate()`, using the `Zephyr` assistant model:
+다음은 `Zephyr` 어시스턴트 모델을 사용하여 `model.generate()`의 입력을 준비하는 예제입니다:
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 checkpoint = "HuggingFaceH4/zephyr-7b-beta"
 tokenizer = AutoTokenizer.from_pretrained(checkpoint)
-model = AutoModelForCausalLM.from_pretrained(checkpoint)  # You may want to use bfloat16 and/or move to GPU here
+model = AutoModelForCausalLM.from_pretrained(checkpoint)   # 여기서 bfloat16 사용 및/또는 GPU로 이동할 수 있습니다.
+
 
 messages = [
     {
@@ -90,7 +80,7 @@ messages = [
 tokenized_chat = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_tensors="pt")
 print(tokenizer.decode(tokenized_chat[0]))
 ```
-This will yield a string in the input format that Zephyr expects. 
+이렇게 하면 Zephyr가 기대하는 입력 형식의 문자열이 생성됩니다.
 ```text
 <|system|>
 You are a friendly chatbot who always responds in the style of a pirate</s> 
@@ -99,14 +89,14 @@ How many helicopters can a human eat in one sitting?</s>
 <|assistant|>
 ```
 
-Now that our input is formatted correctly for Zephyr, we can use the model to generate a response to the user's question:
+이제 입력이 Zephyr에 맞게 형식이 지정되었으므로 모델을 사용하여 사용자의 질문에 대한 응답을 생성할 수 있습니다:
 
 ```python
 outputs = model.generate(tokenized_chat, max_new_tokens=128) 
 print(tokenizer.decode(outputs[0]))
 ```
 
-This will yield:
+이렇게 하면 다음과 같은 결과가 나옵니다:
 
 ```text
 <|system|>
@@ -117,14 +107,11 @@ How many helicopters can a human eat in one sitting?</s>
 Matey, I'm afraid I must inform ye that humans cannot eat helicopters. Helicopters are not food, they are flying machines. Food is meant to be eaten, like a hearty plate o' grog, a savory bowl o' stew, or a delicious loaf o' bread. But helicopters, they be for transportin' and movin' around, not for eatin'. So, I'd say none, me hearties. None at all.
 ```
 
-Arr, 'twas easy after all!
+이제 쉬워졌죠!
 
-## Is there an automated pipeline for chat?
+## 채팅을 위한 자동화된 파이프라인이 있나요?
 
-Yes, there is! Our text generation pipelines support chat inputs, which makes it easy to use chat models. In the past,
-we used to use a dedicated "ConversationalPipeline" class, but this has now been deprecated and its functionality
-has been merged into the [`TextGenerationPipeline`]. Let's try the `Zephyr` example again, but this time using 
-a pipeline:
+네, 있습니다! 우리의 텍스트 생성 파이프라인은 채팅 입력을 지원하여 채팅 모델을 쉽게 사용할 수 있습니다. 이전에는 "ConversationalPipeline" 클래스를 사용했지만, 이제는 이 기능이 [`TextGenerationPipeline`]에 통합되었습니다. 이번에는 파이프라인을 사용하여 `Zephyr` 예제를 다시 시도해 보겠습니다:
 
 ```python
 from transformers import pipeline
@@ -137,20 +124,19 @@ messages = [
     },
     {"role": "user", "content": "How many helicopters can a human eat in one sitting?"},
 ]
-print(pipe(messages, max_new_tokens=128)[0]['generated_text'][-1])  # Print the assistant's response
+print(pipe(messages, max_new_tokens=128)[0]['generated_text'][-1])  # 어시스턴트의 응답을 출력합니다.
 ```
 
 ```text
 {'role': 'assistant', 'content': "Matey, I'm afraid I must inform ye that humans cannot eat helicopters. Helicopters are not food, they are flying machines. Food is meant to be eaten, like a hearty plate o' grog, a savory bowl o' stew, or a delicious loaf o' bread. But helicopters, they be for transportin' and movin' around, not for eatin'. So, I'd say none, me hearties. None at all."}
 ```
 
-The pipeline will take care of all the details of tokenization and calling `apply_chat_template` for you -
-once the model has a chat template, all you need to do is initialize the pipeline and pass it the list of messages!
+파이프라인은 토큰화와 `apply_chat_template` 호출의 모든 세부 사항을 처리합니다. 모델이 채팅 템플릿을 가지면, 파이프라인을 초기화하고 메시지 목록을 전달하기만 하면 됩니다!
 
-## What are "generation prompts"?
 
-You may have noticed that the `apply_chat_template` method has an `add_generation_prompt` argument. This argument tells
-the template to add tokens that indicate the start of a bot response. For example, consider the following chat:
+## "생성 프롬프트"란 무엇인가요?
+
+`apply_chat_template` 메서드에는 `add_generation_prompt` 인수가 있다는 것을 눈치챘을 것입니다. 이 인수는 템플릿에 봇 응답의 시작을 나타내는 토큰을 추가하도록 지시합니다. 예를 들어, 다음과 같은 채팅을 고려해 보세요:
 
 ```python
 messages = [
@@ -160,7 +146,7 @@ messages = [
 ]
 ```
 
-Here's what this will look like without a generation prompt, using the ChatML template we saw in the Zephyr example:
+Zephyr 예제에서 보았던 ChatML 템플릿을 사용하여 생성 프롬프트 없이 다음과 같이 보일 것입니다:
 
 ```python
 tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=False)
@@ -173,7 +159,7 @@ Can I ask a question?<|im_end|>
 """
 ```
 
-And here's what it looks like **with** a generation prompt:
+생성 프롬프트가 있는 경우는 다음과 같습니다:
 
 ```python
 tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
@@ -187,23 +173,15 @@ Can I ask a question?<|im_end|>
 """
 ```
 
-Note that this time, we've added the tokens that indicate the start of a bot response. This ensures that when the model
-generates text it will write a bot response instead of doing something unexpected, like continuing the user's 
-message. Remember, chat models are still just language models - they're trained to continue text, and chat is just a 
-special kind of text to them! You need to guide them with appropriate control tokens, so they know what they're 
-supposed to be doing.
+이번에는 봇 응답의 시작을 나타내는 토큰을 추가한 것을 주목하세요. 이렇게 하면 모델이 텍스트를 생성할 때 사용자의 메시지를 계속하는 대신 봇 응답을 작성하게 됩니다. 기억하세요, 채팅 모델은 여전히 언어 모델일 뿐이며, 채팅은 그들에게는 특별한 종류의 텍스트일 뿐입니다! 적절한 제어 토큰으로 안내해야 그들이 무엇을 해야 하는지 알 수 있습니다.
 
-Not all models require generation prompts. Some models, like BlenderBot and LLaMA, don't have any
-special tokens before bot responses. In these cases, the `add_generation_prompt` argument will have no effect. The exact
-effect that `add_generation_prompt` has will depend on the template being used.
+모든 모델이 생성 프롬프트를 필요로 하는 것은 아닙니다. BlenderBot과 LLaMA 같은 일부 모델은 봇 응답 전에 특별한 토큰이 없습니다. 이러한 경우 `add_generation_prompt` 인수는 효과가 없습니다. `add_generation_prompt`의 정확한 효과는 사용 중인 템플릿에 따라 다릅니다.
 
-## Can I use chat templates in training?
 
-Yes! This is a good way to ensure that the chat template matches the tokens the model sees during training.
-We recommend that you apply the chat template as a preprocessing step for your dataset. After this, you
-can simply continue like any other language model training task. When training, you should usually set 
-`add_generation_prompt=False`, because the added tokens to prompt an assistant response will not be helpful during 
-training. Let's see an example:
+
+## 채팅 템플릿을 훈련에 사용할 수 있나요?
+
+네! 이것은 채팅 템플릿이 모델이 훈련 중에 보는 토큰과 일치하도록 하는 좋은 방법입니다. 데이터 세트에 대한 전처리 단계로 채팅 템플릿을 적용하는 것이 좋습니다. 그 후에는 다른 언어 모델 훈련 작업과 같이 계속할 수 있습니다. 훈련할 때는 일반적으로 `add_generation_prompt=False`로 설정해야 합니다. 어시스턴트 응답을 프롬프트하는 추가 토큰은 훈련 중에는 도움이 되지 않기 때문입니다. 예제를 보겠습니다:
 
 ```python
 from transformers import AutoTokenizer
@@ -224,7 +202,7 @@ dataset = Dataset.from_dict({"chat": [chat1, chat2]})
 dataset = dataset.map(lambda x: {"formatted_chat": tokenizer.apply_chat_template(x["chat"], tokenize=False, add_generation_prompt=False)})
 print(dataset['formatted_chat'][0])
 ```
-And we get:
+다음과 같은 결과를 얻을 수 있습니다:
 ```text
 <|user|>
 Which is bigger, the moon or the sun?</s>
@@ -232,35 +210,22 @@ Which is bigger, the moon or the sun?</s>
 The sun.</s>
 ```
 
-From here, just continue training like you would with a standard language modelling task, using the `formatted_chat` column.
+여기서부터는 표준 언어 모델링 작업과 같이 `formatted_chat` 열을 사용하여 훈련을 계속하면 됩니다.
 
 <Tip>
-If you format text with `apply_chat_template(tokenize=False)` and then tokenize it in a separate step, you should set the argument
-`add_special_tokens=False`. If you use `apply_chat_template(tokenize=True)`, you don't need to worry about this!
-
-By default, some tokenizers add special tokens like `<bos>` and `<eos>` to text they tokenize. Chat templates should 
-always include all of the special tokens they need, and so adding extra special tokens with
-the default `add_special_tokens=True` can result in incorrect or duplicated special tokens, which will hurt model
-performance.
+`apply_chat_template(tokenize=False)`로 텍스트를 형식화한 다음 별도의 단계에서 토큰화하는 경우, `add_special_tokens=False` 인수를 설정해야 합니다. `apply_chat_template(tokenize=True)`를 사용하는 경우에는 이 문제를 걱정할 필요가 없습니다!
+기본적으로 일부 토크나이저는 토큰화할 때 `<bos>` 및 `<eos>`와 같은 특별 토큰을 추가합니다. 채팅 템플릿은 항상 필요한 모든 특별 토큰을 포함해야 하므로, 기본 `add_special_tokens=True`로 추가 특별 토큰을 추가하면 잘못된 또는 중복된 특별 토큰이 발생하여 모델 성능이 저하될 수 있습니다.
 </Tip>
 
-## Advanced: Extra inputs to chat templates
+## 고급: 채팅 템플릿에 추가 입력 사용
 
-The only argument that `apply_chat_template` requires is `messages`. However, you can pass any keyword
-argument to `apply_chat_template` and it will be accessible inside the template. This gives you a lot of freedom to use
-chat templates for many things. There are no restrictions on the names or the format of these arguments - you can pass
-strings, lists, dicts or whatever else you want. 
+`apply_chat_template`가 필요한 유일한 인수는 `messages`입니다. 그러나 `apply_chat_template`에 키워드 인수를 전달하면 템플릿 내부에서 사용할 수 있습니다. 이를 통해 채팅 템플릿을 다양한 용도로 사용할 수 있는 많은 자유를 얻을 수 있습니다. 이러한 인수의 이름이나 형식에는 제한이 없습니다. 문자열, 리스트, 딕셔너리 등을 전달할 수 있습니다.
 
-That said, there are some common use-cases for these extra arguments,
-such as passing tools for function calling, or documents for retrieval-augmented generation. In these common cases,
-we have some opinionated recommendations about what the names and formats of these arguments should be, which are
-described in the sections below. We encourage model authors to make their chat templates compatible with this format,
-to make it easy to transfer tool-calling code between models.
+그렇긴 하지만, 이러한 추가 인수의 일반적인 사용 사례로 함수 호출을 위한 도구나 검색 증강 생성을 위한 문서를 전달하는 것이 있습니다. 이러한 일반적인 경우에 대해 인수의 이름과 형식에 대한 몇 가지 권장 사항이 있으며, 이는 아래 섹션에 설명되어 있습니다. 모델 작성자는 도구 호출 코드를 모델 간에 쉽게 전송할 수 있도록 채팅 템플릿을 이 형식과 호환되도록 만드는 것을 권장합니다.
 
-## Advanced: Tool use / function calling
+## 고급: 도구 사용 / 함수 호출
 
-"Tool use" LLMs can choose to call functions as external tools before generating an answer. When passing tools
-to a tool-use model, you can simply pass a list of functions to the `tools` argument:
+"도구 사용" LLM은 답변을 생성하기 전에 외부 도구로서 함수를 호출할 수 있습니다. 도구 사용 모델에 도구를 전달할 때는 단순히 함수 목록을 `tools` 인수로 전달할 수 있습니다:
 
 ```python
 import datetime
@@ -287,37 +252,29 @@ model_input = tokenizer.apply_chat_template(
 )
 ```
 
-In order for this to work correctly, you should write your functions in the format above, so that they can be parsed
-correctly as tools. Specifically, you should follow these rules:
+이것이 올바르게 작동하려면 함수를 위 형식으로 작성해야 도구로 올바르게 구문 분석할 수 있습니다. 구체적으로 다음 규칙을 따라야 합니다:
 
-- The function should have a descriptive name
-- Every argument must have a type hint
-- The function must have a docstring in the standard Google style (in other words, an initial function description  
-  followed by an `Args:` block that describes the arguments, unless the function does not have any arguments. 
-- Do not include types in the `Args:` block. In other words, write `a: The first number to multiply`, not
-  `a (int): The first number to multiply`. Type hints should go in the function header instead.
-- The function can have a return type and a `Returns:` block in the docstring. However, these are optional
-  because most tool-use models ignore them.
+- 함수는 설명적인 이름을 가져야 합니다.
+- 모든 인수에는 타입 힌트가 있어야 합니다.
+- 함수에는 표준 Google 스타일의 도크스트링이 있어야 합니다(즉, 초기 함수 설명 다음에 인수를 설명하는 `Args:` 블록이 있어야 합니다). 
+- `Args:` 블록에는 타입을 포함하지 마세요. 즉, `a (int): The first number to multiply` 대신 `a: The first number to multiply`라고 작성해야 합니다. 타입 힌트는 함수 헤더에 있어야 합니다.
+- 함수에는 반환 타입과 도크스트링에 `Returns:` 블록이 있을 수 있습니다. 그러나 대부분의 도구 사용 모델은 이를 무시하므로 이는 선택 사항입니다.
 
-### Passing tool results to the model
 
-The sample code above is enough to list the available tools for your model, but what happens if it wants to actually use
-one? If that happens, you should:
+### 도구 결과를 모델에 전달하기
 
-1. Parse the model's output to get the tool name(s) and arguments.
-2. Add the model's tool call(s) to the conversation.
-3. Call the corresponding function(s) with those arguments.
-4. Add the result(s) to the conversation
+위의 예제 코드는 모델에 사용할 수 있는 도구를 나열하는 데 충분하지만, 실제로 사용하고자 하는 경우는 어떻게 해야 할까요? 이러한 경우에는 다음을 수행해야 합니다:
 
-### A complete tool use example
+1. 모델의 출력을 파싱하여 도구 이름과 인수를 가져옵니다.
+2. 모델의 도구 호출을 대화에 추가합니다.
+3. 해당 인수로 해당 함수를 호출합니다.
+4. 결과를 대화에 추가합니다.
 
-Let's walk through a tool use example, step by step. For this example, we will use an 8B `Hermes-2-Pro` model,
-as it is one of the highest-performing tool-use models in its size category at the time of writing. If you have the
-memory, you can consider using a larger model instead like [Command-R](https://huggingface.co/CohereForAI/c4ai-command-r-v01)
-or [Mixtral-8x22B](https://huggingface.co/mistralai/Mixtral-8x22B-Instruct-v0.1), both of which also support tool use
-and offer even stronger performance.
+### 도구 사용 예제
 
-First, let's load our model and tokenizer:
+도구 사용 예제를 단계별로 살펴보겠습니다. 이 예제에서는 도구 사용 모델 중에서 성능이 가장 우수한 8B `Hermes-2-Pro` 모델을 사용할 것입니다. 메모리가 충분하다면, 더 큰 모델인 [Command-R](https://huggingface.co/CohereForAI/c4ai-command-r-v01) 또는 [Mixtral-8x22B](https://huggingface.co/mistralai/Mixtral-8x22B-Instruct-v0.1)를 사용하는 것도 고려할 수 있습니다. 이 두 모델 모두 도구 사용을 지원하며 더 강력한 성능을 제공합니다.
+
+먼저 모델과 토크나이저를 로드해 보겠습니다:
 
 ```python
 import torch
@@ -329,7 +286,7 @@ tokenizer = AutoTokenizer.from_pretrained(checkpoint, revision="pr/13")
 model = AutoModelForCausalLM.from_pretrained(checkpoint, torch_dtype=torch.bfloat16, device_map="auto")
 ```
 
-Next, let's define a list of tools:
+다음으로, 도구 목록을 정의해 보겠습니다:
 
 ```python
 def get_current_temperature(location: str, unit: str) -> float:
@@ -358,7 +315,7 @@ def get_current_wind_speed(location: str) -> float:
 tools = [get_current_temperature, get_current_wind_speed]
 ```
 
-Now, let's set up a conversation for our bot:
+이제 봇을 위한 대화를 설정해 보겠습니다:
 
 ```python
 messages = [
@@ -367,7 +324,7 @@ messages = [
 ]
 ```
 
-Now, let's apply the chat template and generate a response:
+이제 채팅 템플릿을 적용하고 응답을 생성해 보겠습니다:
 
 ```python
 inputs = tokenizer.apply_chat_template(messages, chat_template="tool_use", tools=tools, add_generation_prompt=True, return_dict=True, return_tensors="pt")
@@ -376,7 +333,7 @@ out = model.generate(**inputs, max_new_tokens=128)
 print(tokenizer.decode(out[0][len(inputs["input_ids"][0]):]))
 ```
 
-And we get:
+결과는 다음과 같습니다:
 
 ```text
 <tool_call>
@@ -384,30 +341,24 @@ And we get:
 </tool_call><|im_end|>
 ```
 
-The model has called the function with valid arguments, in the format requested by the function docstring. It has
-inferred that we're most likely referring to the Paris in France, and it remembered that, as the home of SI units,
-the temperature in France should certainly be displayed in Celsius.
+모델이 함수 호출을 유효한 인수로 수행했으며, 함수 도크스트링에 요청된 형식으로 호출했음을 알 수 있습니다. 모델은 우리가 프랑스의 파리를 지칭하고 있다는 것을 추론했고, 프랑스가 SI 단위의 본고장임을 기억하여 온도를 섭씨로 표시해야 한다고 판단했습니다.
 
-Let's append the model's tool call to the conversation. Note that we generate a random `tool_call_id` here. These IDs
-are not used by all models, but they allow models to issue multiple tool calls at once and keep track of which response
-corresponds to which call. You can generate them any way you like, but they should be unique within each chat.
+모델의 도구 호출을 대화에 추가해 보겠습니다. 여기서 임의의 `tool_call_id`를 생성합니다. 이 ID는 모든 모델에서 사용되는 것은 아니지만, 여러 도구 호출을 한 번에 발행하고 각 응답이 어느 호출에 해당하는지 추적할 수 있게 해줍니다. 이 ID는 대화 내에서 고유해야 합니다.
 
 ```python
-tool_call_id = "vAHdf3"  # Random ID, should be unique for each tool call
+tool_call_id = "vAHdf3"  # 임의의 ID, 각 도구 호출마다 고유해야 함
 tool_call = {"name": "get_current_temperature", "arguments": {"location": "Paris, France", "unit": "celsius"}}
 messages.append({"role": "assistant", "tool_calls": [{"id": tool_call_id, "type": "function", "function": tool_call}]})
 ```
 
 
-Now that we've added the tool call to the conversation, we can call the function and append the result to the
-conversation. Since we're just using a dummy function for this example that always returns 22.0, we can just append 
-that result directly. Again, note the `tool_call_id` - this should match the ID used in the tool call above.
+이제 도구 호출을 대화에 추가했으므로, 함수를 호출하고 결과를 대화에 추가할 수 있습니다. 이 예제에서는 항상 22.0을 반환하는 더미 함수를 사용하고 있으므로, 결과를 직접 추가할 수 있습니다. 다시 한 번, `tool_call_id`가 일치해야 합니다.
 
 ```python
 messages.append({"role": "tool", "tool_call_id": tool_call_id, "name": "get_current_temperature", "content": "22.0"})
 ```
 
-Finally, let's let the assistant read the function outputs and continue chatting with the user:
+마지막으로, 어시스턴트가 함수 출력을 읽고 사용자와 계속 대화할 수 있도록 하겠습니다:
 
 ```python
 inputs = tokenizer.apply_chat_template(messages, chat_template="tool_use", tools=tools, add_generation_prompt=True, return_dict=True, return_tensors="pt")
@@ -416,37 +367,23 @@ out = model.generate(**inputs, max_new_tokens=128)
 print(tokenizer.decode(out[0][len(inputs["input_ids"][0]):]))
 ```
 
-And we get:
+결과는 다음과 같습니다:
 
 ```text
 The current temperature in Paris, France is 22.0 ° Celsius.<|im_end|>
 ```
 
-Although this was a simple demo with dummy tools and a single call, the same technique works with 
-multiple real tools and longer conversations. This can be a powerful way to extend the capabilities of conversational
-agents with real-time information, computational tools like calculators, or access to large databases.
+이것은 더미 도구와 단일 호출을 사용한 간단한 데모였지만, 동일한 기술을 사용하여 여러 실제 도구와 더 긴 대화를 처리할 수 있습니다. 이를 통해 실시간 정보, 계산 도구 또는 대규모 데이터베이스에 접근하여 대화형 에이전트의 기능을 확장할 수 있습니다.
 
 <Tip>
-Not all of the tool-calling features shown above are used by all models. Some use tool call IDs, others simply use the function name and
-match tool calls to results using the ordering, and there are several models that use neither and only issue one tool 
-call at a time to avoid confusion. If you want your code to be compatible across as many models as possible, we 
-recommend structuring your tools calls like we've shown here, and returning tool results in the order that
-they were issued by the model. The chat templates on each model should handle the rest.
+위에서 보여준 도구 호출 기능은 모든 모델에서 사용되는 것은 아닙니다. 일부 모델은 도구 호출 ID를 사용하고, 일부는 함수 이름만 사용하여 결과와 도구 호출을 순서에 따라 매칭하며, 혼동을 피하기 위해 한 번에 하나의 도구 호출만 발행하는 모델도 있습니다. 가능한 많은 모델과 호환되는 코드를 원한다면, 여기에 보여준 것처럼 도구 호출을 구성하고, 모델이 발행한 순서대로 도구 결과를 반환하는 것을 권장합니다. 각 모델의 채팅 템플릿은 나머지 작업을 처리할 것입니다.
 </Tip>
 
-### Understanding tool schemas
+### 도구 스키마 이해하기
 
-Each function you pass to the `tools` argument of `apply_chat_template` is converted into a 
-[JSON schema](https://json-schema.org/learn/getting-started-step-by-step). These schemas
-are then passed to the model chat template. In other words, tool-use models do not see your functions directly, and they
-never see the actual code inside them. What they care about is the function **definitions** and the **arguments** they
-need to pass to them - they care about what the tools do and how to use them, not how they work! It is up to you
-to read their outputs, detect if they have requested to use a tool, pass their arguments to the tool function, and
-return the response in the chat.
+`apply_chat_template`의 `tools` 인수에 전달하는 각 함수는 [JSON 스키마](https://json-schema.org/learn/getting-started-step-by-step)로 변환됩니다. 이러한 스키마는 모델 채팅 템플릿에 전달됩니다. 즉, 도구 사용 모델은 함수 자체를 직접 보지 않으며, 함수 내부의 실제 코드를 보지 않습니다. 도구 사용 모델이 관심을 가지는 것은 함수 정의와 인수입니다. 함수가 무엇을 하고 어떻게 사용하는지에 관심이 있을 뿐, 어떻게 작동하는지는 중요하지 않습니다! 출력물을 읽고 도구를 사용하도록 요청했는지 감지하여, 인수를 도구 함수에 전달하고 채팅에서 응답을 반환하는 것은 여러분의 몫입니다.
 
-Generating JSON schemas to pass to the template should be automatic and invisible as long as your functions
-follow the specification above, but if you encounter problems, or you simply want more control over the conversion, 
-you can handle the conversion manually. Here is an example of a manual schema conversion.
+위의 규격을 따르는 한, 템플릿에 전달할 JSON 스키마를 생성하는 것은 자동으로 이루어지며 눈에 띄지 않아야 합니다. 그러나 문제가 발생하거나 변환을 더 제어하고 싶다면 수동으로 변환을 처리할 수 있습니다. 다음은 수동 스키마 변환 예제입니다.
 
 ```python
 from transformers.utils import get_json_schema
@@ -465,7 +402,7 @@ schema = get_json_schema(multiply)
 print(schema)
 ```
 
-This will yield:
+이 결과는 다음과 같습니다:
 
 ```json
 {
@@ -491,17 +428,12 @@ This will yield:
 }
 ```
 
-If you wish, you can edit these schemas, or even write them from scratch yourself without using `get_json_schema` at 
-all. JSON schemas can be passed directly to the `tools` argument of 
-`apply_chat_template` - this gives you a lot of power to define precise schemas for more complex functions. Be careful,
-though - the more complex your schemas, the more likely the model is to get confused when dealing with them! We 
-recommend simple function signatures where possible, keeping arguments (and especially complex, nested arguments) 
-to a minimum.
+원한다면 이러한 스키마를 편집하거나 `get_json_schema`를 전혀 사용하지 않고 처음부터 직접 작성할 수도 있습니다. JSON 스키마는 `apply_chat_template`의 `tools` 인수에 직접 전달할 수 있습니다. 이를 통해 더 복잡한 함수에 대한 정밀한 스키마를 정의할 수 있는 많은 권한을 갖게 됩니다. 그러나 스키마가 복잡할수록 모델이 처리하는 데 혼란을 겪을 가능성이 높아집니다! 가능한 한 간단한 함수 서명을 유지하고, 인수(특히 복잡하고 중첩된 인수)를 최소화하는 것을 권장합니다.
 
-Here is an example of defining schemas by hand, and passing them directly to `apply_chat_template`:
+여기 직접 스키마를 정의하고 이를 `apply_chat_template`에 전달하는 예제가 있습니다:
 
 ```python
-# A simple function that takes no arguments
+# 인수를 받지 않는 간단한 함수
 current_time = {
   "type": "function", 
   "function": {
@@ -514,7 +446,7 @@ current_time = {
   }
 }
 
-# A more complete function that takes two numerical arguments
+# 두 개의 숫자 인수를 받는 더 완전한 함수
 multiply = {
   'type': 'function',
   'function': {
@@ -542,16 +474,13 @@ model_input = tokenizer.apply_chat_template(
 )
 ```
 
-## Advanced: Retrieval-augmented generation
+## 고급: 검색 증강 생성
 
-"Retrieval-augmented generation" or "RAG" LLMs can search a corpus of documents for information before responding
-to a query. This allows models to vastly expand their knowledge base beyond their limited context size. Our 
-recommendation for RAG models is that their template
-should accept a `documents` argument. This should be a list of documents, where each "document"
-is a single dict with `title` and `contents` keys, both of which are strings. Because this format is much simpler
-than the JSON schemas used for tools, no helper functions are necessary.
+"검색 증강 생성" 또는 "RAG" LLM은 쿼리에 응답하기 전에 문서의 코퍼스를 검색하여 정보를 얻을 수 있습니다. 이를 통해 모델은 제한된 컨텍스트 크기 이상으로 지식 기반을 크게 확장할 수 있습니다. RAG 모델에 대한 우리의 권장 사항은 템플릿이 `documents` 인수를 허용해야 한다는 것입니다. 이 인수는 각 "문서"가 `title`과 `contents` 키를 가지는 단일 dict인 문서 목록이어야 합니다. 이 형식은 도구에 사용되는 JSON 스키마보다 훨씬 간단하므로 별도의 도우미 함수가 필요하지 않습니다.
 
-Here's an example of a RAG template in action:
+
+다음은 RAG 템플릿이 작동하는 예제입니다:
+
 
 ```python
 document1 = {
@@ -570,10 +499,9 @@ model_input = tokenizer.apply_chat_template(
 )
 ```
 
-## Advanced: How do chat templates work?
+## 고급: 채팅 템플릿은 어떻게 작동하나요?
 
-The chat template for a model is stored on the `tokenizer.chat_template` attribute. If no chat template is set, the
-default template for that model class is used instead. Let's take a look at the template for `BlenderBot`:
+모델의 채팅 템플릿은 `tokenizer.chat_template` 속성에 저장됩니다. 채팅 템플릿이 설정되지 않은 경우 해당 모델 클래스의 기본 템플릿이 대신 사용됩니다. `BlenderBot`의 템플릿을 살펴보겠습니다:
 
 ```python
 
@@ -584,9 +512,7 @@ default template for that model class is used instead. Let's take a look at the 
 "{% for message in messages %}{% if message['role'] == 'user' %}{{ ' ' }}{% endif %}{{ message['content'] }}{% if not loop.last %}{{ '  ' }}{% endif %}{% endfor %}{{ eos_token }}"
 ```
 
-That's kind of intimidating. Let's clean it up a little to make it more readable. In the process, though, we also make
-sure that the newlines and indentation we add don't end up being included in the template output - see the tip on
-[trimming whitespace](#trimming-whitespace) below!
+약간 복잡해 보일 수 있습니다. 읽기 쉽게 정리해 보겠습니다. 이 과정에서 추가하는 줄바꿈과 들여쓰기가 템플릿 출력에 포함되지 않도록 해야 합니다. 아래는 [공백을 제거하는](#trimming-whitespace) 팁입니다:
 
 ```
 {%- for message in messages %}
@@ -601,9 +527,9 @@ sure that the newlines and indentation we add don't end up being included in the
 {{- eos_token }}
 ```
 
-If you've never seen one of these before, this is a [Jinja template](https://jinja.palletsprojects.com/en/3.1.x/templates/).
-Jinja is a templating language that allows you to write simple code that generates text. In many ways, the code and
-syntax resembles Python. In pure Python, this template would look something like this:
+만약 Jinja 템플릿을 처음 본다면, 이것은 [Jinja 템플릿](https://jinja.palletsprojects.com/en/3.1.x/templates/)입니다.
+Jinja는 텍스트를 생성하는 간단한 코드를 작성할 수 있는 템플릿 언어입니다. 많은 면에서 코드와 구문이 파이썬과 유사합니다. 순수 파이썬에서는 이 템플릿이 다음과 같이 보일 것입니다:
+
 
 ```python
 for idx, message in enumerate(messages):
@@ -615,16 +541,12 @@ for idx, message in enumerate(messages):
 print(eos_token)
 ```
 
-Effectively, the template does three things:
-1. For each message, if the message is a user message, add a blank space before it, otherwise print nothing.
-2. Add the message content
-3. If the message is not the last message, add two spaces after it. After the final message, print the EOS token.
+사실상, 이 템플릿은 세 가지 일을 합니다:
+1. 각 메시지에 대해, 메시지가 사용자 메시지인 경우 공백을 추가하고, 그렇지 않으면 아무것도 출력하지 않습니다.
+2. 메시지 내용을 추가합니다.
+3. 메시지가 마지막 메시지가 아닌 경우 두 개의 공백을 추가합니다. 마지막 메시지 후에는 EOS 토큰을 출력합니다.
 
-This is a pretty simple template - it doesn't add any control tokens, and it doesn't support "system" messages, which 
-are a common way to give the model directives about how it should behave in the subsequent conversation.
-But Jinja gives you a lot of flexibility to do those things! Let's see a Jinja template that can format inputs
-similarly to the way LLaMA formats them (note that the real LLaMA template includes handling for default system
-messages and slightly different system message handling in general - don't use this one in your actual code!)
+이것은 매우 간단한 템플릿입니다. 제어 토큰을 추가하지 않으며, 이후 대화에서 모델이 어떻게 동작해야 하는지 지시하는 "시스템" 메시지를 지원하지 않습니다. 하지만 Jinja는 이러한 작업을 수행할 수 있는 많은 유연성을 제공합니다! LLaMA가 입력을 형식화하는 방식과 유사한 형식의 Jinja 템플릿을 살펴보겠습니다(실제 LLaMA 템플릿은 기본 시스템 메시지 처리와 일반적인 시스템 메시지 처리를 포함하고 있습니다 - 실제 코드에서는 이 템플릿을 사용하지 마세요!).
 
 ```
 {%- for message in messages %}
@@ -638,17 +560,13 @@ messages and slightly different system message handling in general - don't use t
 {%- endfor %}
 ```
 
-Hopefully if you stare at this for a little bit you can see what this template is doing - it adds specific tokens based
-on the "role" of each message, which represents who sent it. User, assistant and system messages are clearly
-distinguishable to the model because of the tokens they're wrapped in.
+이 템플릿이 하는 일을 이해하려면 잠시 시간을 가지고 살펴보면, 각 메시지의 "role"에 따라 특정 토큰을 추가하는 것을 볼 수 있습니다. 이는 누가 메시지를 보냈는지 모델에게 명확하게 알려줍니다. 사용자, 어시스턴트 및 시스템 메시지는 각각 고유한 토큰으로 래핑되어 모델에게 명확하게 구분됩니다.
 
-## Advanced: Adding and editing chat templates
+## 고급: 채팅 템플릿 추가 및 편집
 
-### How do I create a chat template?
+### 채팅 템플릿을 어떻게 만들 수 있나요?
 
-Simple, just write a jinja template and set `tokenizer.chat_template`. You may find it easier to start with an 
-existing template from another model and simply edit it for your needs! For example, we could take the LLaMA template
-above and add "[ASST]" and "[/ASST]" to assistant messages:
+간단합니다. Jinja 템플릿을 작성하고 `tokenizer.chat_template`에 설정하기만 하면 됩니다. 다른 모델의 기존 템플릿을 시작점으로 사용하고 필요에 맞게 편집하는 것이 더 쉬울 수 있습니다! 예를 들어, 위의 LLaMA 템플릿을 가져와 어시스턴트 메시지에 "[ASST]" 및 "[/ASST]"를 추가할 수 있습니다:
 
 ```
 {%- for message in messages %}
@@ -662,77 +580,43 @@ above and add "[ASST]" and "[/ASST]" to assistant messages:
 {%- endfor %}
 ```
 
-Now, simply set the `tokenizer.chat_template` attribute. Next time you use [`~PreTrainedTokenizer.apply_chat_template`], it will
-use your new template! This attribute will be saved in the `tokenizer_config.json` file, so you can use
-[`~utils.PushToHubMixin.push_to_hub`] to upload your new template to the Hub and make sure everyone's using the right
-template for your model!
+이제 `tokenizer.chat_template` 속성을 설정하기만 하면 됩니다. 다음에 [`~PreTrainedTokenizer.apply_chat_template`]를 사용할 때 새 템플릿이 사용됩니다! 이 속성은 `tokenizer_config.json` 파일에 저장되므로, [`~utils.PushToHubMixin.push_to_hub`]를 사용하여 새 템플릿을 허브에 업로드하고 모든 사용자가 모델에 맞는 템플릿을 사용할 수 있도록 할 수 있습니다!
 
 ```python
 template = tokenizer.chat_template
-template = template.replace("SYS", "SYSTEM")  # Change the system token
-tokenizer.chat_template = template  # Set the new template
-tokenizer.push_to_hub("model_name")  # Upload your new template to the Hub!
+template = template.replace("SYS", "SYSTEM")  # 시스템 토큰 변경
+tokenizer.chat_template = template  # 새 템플릿 설정
+tokenizer.push_to_hub("model_name")  # 새 템플릿을 허브에 업로드!
 ```
 
-The method [`~PreTrainedTokenizer.apply_chat_template`] which uses your chat template is called by the [`TextGenerationPipeline`] class, so 
-once you set the correct chat template, your model will automatically become compatible with [`TextGenerationPipeline`].
+채팅 템플릿을 사용하는 [`~PreTrainedTokenizer.apply_chat_template`] 메서드는 [`TextGenerationPipeline`] 클래스에서 호출되므로, 올바른 채팅 템플릿을 설정하면 모델이 자동으로 [`TextGenerationPipeline`]과 호환됩니다.
 
 <Tip>
-If you're fine-tuning a model for chat, in addition to setting a chat template, you should probably add any new chat
-control tokens as special tokens in the tokenizer. Special tokens are never split, 
-ensuring that your control tokens are always handled as single tokens rather than being tokenized in pieces. You 
-should also set the tokenizer's `eos_token` attribute to the token that marks the end of assistant generations in your
-template. This will ensure that text generation tools can correctly figure out when to stop generating text.
+모델을 채팅 용도로 미세 조정하는 경우, 채팅 템플릿을 설정하는 것 외에도 새 채팅 제어 토큰을 토크나이저에 특별 토큰으로 추가하는 것이 좋습니다. 특별 토큰은 절대로 분할되지 않으므로, 제어 토큰이 여러 조각으로 토큰화되는 것을 방지합니다. 또한, 템플릿에서 어시스턴트 생성의 끝을 나타내는 토큰으로 토크나이저의 `eos_token` 속성을 설정해야 합니다. 이렇게 하면 텍스트 생성 도구가 텍스트 생성을 언제 중지해야 할지 정확히 알 수 있습니다.
 </Tip>
 
 
-### Why do some models have multiple templates?
+### 왜 일부 모델은 여러 개의 템플릿을 가지고 있나요?
 
-Some models use different templates for different use cases. For example, they might use one template for normal chat
-and another for tool-use, or retrieval-augmented generation. In these cases, `tokenizer.chat_template` is a dictionary.
-This can cause some confusion, and where possible, we recommend using a single template for all use-cases. You can use
-Jinja statements like `if tools is defined` and `{% macro %}` definitions to easily wrap multiple code paths in a
-single template.
+일부 모델은 다른 사용 사례에 대해 다른 템플릿을 사용합니다. 예를 들어, 일반 채팅을 위한 템플릿과 도구 사용 또는 검색 증강 생성에 대한 템플릿을 별도로 사용할 수 있습니다. 이러한 경우 `tokenizer.chat_template`는 사전(dictionary)입니다. 이것은 약간의 혼란을 초래할 수 있으며, 가능한 한 모든 사용 사례에 대해 단일 템플릿을 사용하는 것을 권장합니다. `if tools is defined`와 같은 Jinja 문장과 `{% macro %}` 정의를 사용하여 여러 코드 경로를 단일 템플릿에 쉽게 래핑할 수 있습니다.
 
-When a tokenizer has multiple templates, `tokenizer.chat_template` will be a `dict`, where each key is the name
-of a template. The `apply_chat_template` method has special handling for certain template names: Specifically, it will
-look for a template named `default` in most cases, and will raise an error if it can't find one. However, if a template
-named `tool_use` exists when the user has passed a `tools` argument, it will use that instead. To access templates
-with other names, pass the name of the template you want to the `chat_template` argument of
-`apply_chat_template()`.
+토크나이저에 여러 개의 템플릿이 있는 경우, `tokenizer.chat_template`는 템플릿 이름이 키인 사전입니다. `apply_chat_template` 메서드는 특정 템플릿 이름에 대한 특별한 처리를 합니다: 일반적으로 `default`라는 템플릿을 찾고, 찾을 수 없으면 오류를 발생시킵니다. 그러나 사용자가 `tools` 인수를 전달할 때 `tool_use`라는 템플릿이 존재하면 대신 그것을 사용합니다. 다른 이름의 템플릿에 접근하려면 `apply_chat_template()`의 `chat_template` 인수에 원하는 템플릿 이름을 전달하면 됩니다.
 
-We find that this can be a bit confusing for users, though - so if you're writing a template yourself, we recommend
-trying to put it all in a single template where possible!
+사용자에게 약간의 혼란을 줄 수 있으므로, 템플릿을 직접 작성하는 경우 가능한 한 단일 템플릿에 모든 것을 넣는 것을 권장합니다!
 
-### What are "default" templates?
+### "기본" 템플릿이란 무엇인가요?
 
-Before the introduction of chat templates, chat handling was hardcoded at the model class level. For backwards 
-compatibility, we have retained this class-specific handling as default templates, also set at the class level. If a
-model does not have a chat template set, but there is a default template for its model class, the `TextGenerationPipeline`
-class and methods like `apply_chat_template` will use the class template instead. You can find out what the default
-template for your tokenizer is by checking the `tokenizer.default_chat_template` attribute.
+채팅 템플릿 도입 이전에는 채팅 처리가 모델 클래스 수준에서 하드코딩되었습니다. 하위 호환성을 유지하기 위해 클래스별로 기본 템플릿을 설정하여 이 처리를 유지했습니다. 모델에 채팅 템플릿이 설정되지 않은 경우, 해당 모델 클래스에 기본 템플릿이 있으면 `TextGenerationPipeline` 클래스와 `apply_chat_template` 메서드는 클래스 템플릿을 대신 사용합니다. 토크나이저의 기본 템플릿을 확인하려면 `tokenizer.default_chat_template` 속성을 확인할 수 있습니다.
 
-This is something we do purely for backward compatibility reasons, to avoid breaking any existing workflows. Even when
-the class template is appropriate for your model, we strongly recommend overriding the default template by
-setting the `chat_template` attribute explicitly to make it clear to users that your model has been correctly configured
-for chat.
+이 작업은 기존 워크플로를 깨뜨리지 않기 위한 하위 호환성 유지 목적입니다. 클래스 템플릿이 모델에 적합하더라도, `chat_template` 속성을 명시적으로 설정하여 사용자가 모델이 채팅에 올바르게 구성되었음을 명확히 알 수 있도록 기본 템플릿을 재정의하는 것을 강력히 권장합니다.
 
-Now that actual chat templates have been adopted more widely, default templates have been deprecated and will be
-removed in a future release. We strongly recommend setting the `chat_template` attribute for any tokenizers that
-still depend on them!
+이제 실제 채팅 템플릿이 널리 채택됨에 따라 기본 템플릿은 더 이상 사용되지 않으며, 향후 릴리스에서 제거될 예정입니다. 여전히 기본 템플릿에 의존하는 모든 토크나이저에 대해 `chat_template` 속성을 설정하는 것을 강력히 권장합니다!
 
-### What template should I use?
+### 어떤 템플릿을 사용해야 하나요?
 
-When setting the template for a model that's already been trained for chat, you should ensure that the template
-exactly matches the message formatting that the model saw during training, or else you will probably experience
-performance degradation. This is true even if you're training the model further - you will probably get the best 
-performance if you keep the chat tokens constant. This is very analogous to tokenization - you generally get the
-best performance for inference or fine-tuning when you precisely match the tokenization used during training.
+이미 채팅용으로 훈련된 모델에 템플릿을 설정할 때는 템플릿이 훈련 중 모델이 본 메시지 형식과 정확히 일치하도록 해야 합니다. 그렇지 않으면 성능 저하를 경험할 가능성이 큽니다. 이는 모델을 추가로 훈련할 때도 마찬가지입니다. 채팅 토큰을 일정하게 유지하는 것이 최상의 성능을 얻는 방법입니다. 이는 토큰화와 매우 유사합니다. 훈련 중에 사용된 토큰화를 정확히 일치시킬 때 추론이나 미세 조정에서 최고의 성능을 얻을 수 있습니다.
 
-If you're training a model from scratch, or fine-tuning a base language model for chat, on the other hand,
-you have a lot of freedom to choose an appropriate template! LLMs are smart enough to learn to handle lots of different
-input formats. One popular choice is the `ChatML` format, and this is a good, flexible choice for many use-cases. 
-It looks like this:
+처음부터 모델을 훈련시키거나 채팅용으로 기본 언어 모델을 미세 조정하는 경우, 적절한 템플릿을 선택할 수 있는 많은 자유가 있습니다. LLM은 다양한 입력 형식을 처리할 만큼 충분히 똑똑합니다. 인기 있는 선택 중 하나는 `ChatML` 형식이며, 이는 많은 사용 사례에 유연하게 사용할 수 있는 좋은 선택입니다. 다음과 같습니다:
 
 ```
 {%- for message in messages %}
@@ -740,18 +624,15 @@ It looks like this:
 {%- endfor %}
 ```
 
-If you like this one, here it is in one-liner form, ready to copy into your code. The one-liner also includes
-handy support for [generation prompts](#what-are-generation-prompts), but note that it doesn't add BOS or EOS tokens!
-If your model expects those, they won't be added automatically by `apply_chat_template` - in other words, the
-text will be tokenized with `add_special_tokens=False`. This is to avoid potential conflicts between the template and
-the `add_special_tokens` logic. If your model expects special tokens, make sure to add them to the template!
+이 템플릿을 마음에 든다면, 코드에 복사하여 사용할 수 있는 한 줄 버전을 제공하겠습니다. 이 한 줄 버전은 [생성 프롬프트](#what-are-generation-prompts)에 대한 편리한 지원도 포함하고 있지만, BOS나 EOS 토큰을 추가하지 않습니다! 모델이 이를 기대하는 경우, `apply_chat_template`에 의해 자동으로 추가되지 않습니다. 즉, 텍스트는 `add_special_tokens=False`로 토큰화됩니다. 이는 템플릿과 `add_special_tokens` 논리 간의 잠재적인 충돌을 피하기 위함입니다. 모델이 특별 토큰을 기대하는 경우, 템플릿에 추가해야 합니다!
+
 
 ```python
 tokenizer.chat_template = "{% if not add_generation_prompt is defined %}{% set add_generation_prompt = false %}{% endif %}{% for message in messages %}{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% endif %}"
 ```
 
-This template wraps each message in `<|im_start|>` and `<|im_end|>` tokens, and simply writes the role as a string, which
-allows for flexibility in the roles you train with. The output looks like this:
+이 템플릿은 각 메시지를 `<|im_start|>` 와 `<|im_end|>`토큰으로 감싸고, 역할을 문자열로 작성하여 훈련 시 사용하는 역할에 대한 유연성을 제공합니다. 출력은 다음과 같습니다:
+
 
 ```text
 <|im_start|>system
@@ -762,40 +643,29 @@ How are you?<|im_end|>
 I'm doing great!<|im_end|>
 ```
 
-The "user", "system" and "assistant" roles are the standard for chat, and we recommend using them when it makes sense,
-particularly if you want your model to operate well with [`TextGenerationPipeline`]. However, you are not limited
-to these roles - templating is extremely flexible, and any string can be a role.
+"사용자", "시스템" 및 "어시스턴트" 역할은 채팅의 표준이며, 가능할 때 이를 사용하는 것을 권장합니다. 특히 모델이 [`TextGenerationPipeline`]과 잘 작동하도록 하려면 그렇습니다. 그러나 이러한 역할에만 국한되지 않습니다. 템플릿은 매우 유연하며, 어떤 문자열이든 역할로 사용할 수 있습니다.
 
-### I want to add some chat templates! How should I get started?
 
-If you have any chat models, you should set their `tokenizer.chat_template` attribute and test it using
-[`~PreTrainedTokenizer.apply_chat_template`], then push the updated tokenizer to the Hub. This applies even if you're
-not the model owner - if you're using a model with an empty chat template, or one that's still using the default class
-template, please open a [pull request](https://huggingface.co/docs/hub/repositories-pull-requests-discussions) to the model repository so that this attribute can be set properly!
 
-Once the attribute is set, that's it, you're done! `tokenizer.apply_chat_template` will now work correctly for that
-model, which means it is also automatically supported in places like `TextGenerationPipeline`!
+### 채팅 템플릿을 추가하고 싶습니다! 어떻게 시작해야 하나요?
 
-By ensuring that models have this attribute, we can make sure that the whole community gets to use the full power of
-open-source models. Formatting mismatches have been haunting the field and silently harming performance for too long - 
-it's time to put an end to them!
+채팅 모델이 있는 경우, 해당 모델의 `tokenizer.chat_template` 속성을 설정하고 [`~PreTrainedTokenizer.apply_chat_template`]를 사용하여 테스트한 다음 업데이트된 토크나이저를 허브에 푸시해야 합니다. 이는 모델 소유자가 아닌 경우에도 적용됩니다. 빈 채팅 템플릿을 사용하는 모델이나 여전히 기본 클래스 템플릿을 사용하는 모델을 사용하는 경우, [풀 리퀘스트](https://huggingface.co/docs/hub/repositories-pull-requests-discussions)를 모델 리포지토리에 열어 이 속성을 올바르게 설정할 수 있도록 하세요!
 
-## Advanced: Template writing tips
+속성을 설정하면 끝입니다! `tokenizer.apply_chat_template`가 이제 해당 모델에 대해 올바르게 작동하므로, `TextGenerationPipeline`과 같은 곳에서도 자동으로 지원됩니다!
 
-If you're unfamiliar with Jinja, we generally find that the easiest way to write a chat template is to first
-write a short Python script that formats messages the way you want, and then convert that script into a template.
+모델에 이 속성을 설정함으로써, 오픈 소스 모델의 전체 기능을 커뮤니티가 사용할 수 있도록 할 수 있습니다. 형식 불일치는 이 분야에서 오랫동안 성능을 저하시키는 문제였으므로, 이제 이를 끝낼 때입니다!
 
-Remember that the template handler will receive the conversation history as a variable called `messages`.  
-You will be able to access `messages` in your template just like you can in Python, which means you can loop over 
-it with `{% for message in messages %}` or access individual messages with `{{ messages[0] }}`, for example.
+## 고급: 템플릿 작성 팁
 
-You can also use the following tips to convert your code to Jinja:
+Jinja에 익숙하지 않은 경우, 채팅 템플릿을 작성하는 가장 쉬운 방법은 먼저 메시지를 원하는 방식으로 형식화하는 짧은 파이썬 스크립트를 작성한 다음, 해당 스크립트를 템플릿으로 변환하는 것입니다.
 
-### Trimming whitespace
+템플릿 핸들러는 `messages`라는 변수로 대화 기록을 받습니다. 템플릿에서 `messages`에 파이썬에서와 마찬가지로 접근할 수 있으며, `{% for message in messages %}`로 반복하거나 `{{ messages[0] }}`와 같이 개별 메시지에 접근할 수 있습니다.
 
-By default, Jinja will print any whitespace that comes before or after a block. This can be a problem for chat
-templates, which generally want to be very precise with whitespace! To avoid this, we strongly recommend writing
-your templates like this:
+다음 팁을 사용하여 코드를 Jinja로 변환할 수도 있습니다:
+
+### 공백 제거
+
+기본적으로 Jinja는 블록 전후의 공백을 출력합니다. 이는 일반적으로 공백을 매우 정확하게 다루고자 하는 채팅 템플릿에서는 문제가 될 수 있습니다! 이를 피하기 위해 템플릿을 다음과 같이 작성하는 것이 좋습니다:
 
 ```
 {%- for message in messages %}
@@ -803,7 +673,7 @@ your templates like this:
 {%- endfor %}
 ```
 
-rather than like this:
+이렇게 하지 말고:
 
 ```
 {% for message in messages %}
@@ -811,12 +681,11 @@ rather than like this:
 {% endfor %}
 ```
 
-Adding `-` will strip any whitespace that comes before the block. The second example looks innocent, but the newline
-and indentation may end up being included in the output, which is probably not what you want!
+`-`를 추가하면 블록 전후의 공백이 제거됩니다. 두 번째 예제는 무해해 보이지만, 줄바꿈과 들여쓰기가 출력에 포함될 수 있으며, 이는 원하지 않는 결과일 수 있습니다!
 
-### For loops
+### 반복문
 
-For loops in Jinja look like this:
+Jinja에서 반복문은 다음과 같습니다:
 
 ```
 {%- for message in messages %}
@@ -824,12 +693,11 @@ For loops in Jinja look like this:
 {%- endfor %}
 ```
 
-Note that whatever's inside the {{ expression block }} will be printed to the output. You can use operators like
-`+` to combine strings inside expression blocks.
+{{ 표현식 블록 }} 내부에 있는 모든 것이 출력으로 인쇄됩니다. `+`와 같은 연산자를 사용하여 표현식 블록 내부에서 문자열을 결합할 수 있습니다.
 
-### If statements
+### 조건문
 
-If statements in Jinja look like this:
+Jinja에서 조건문은 다음과 같습니다:
 
 ```
 {%- if message['role'] == 'user' %}
@@ -837,17 +705,11 @@ If statements in Jinja look like this:
 {%- endif %}
 ```
 
-Note how where Python uses whitespace to mark the beginnings and ends of `for` and `if` blocks, Jinja requires you
-to explicitly end them with `{% endfor %}` and `{% endif %}`.
+파이썬이 공백을 사용하여 `for` 및 `if` 블록의 시작과 끝을 표시하는 반면, Jinja는 `{% endfor %}` 및 `{% endif %}`로 명시적으로 끝을 표시해야 합니다.
 
-### Special variables
+### 특수 변수
 
-Inside your template, you will have access to the list of `messages`, but you can also access several other special
-variables. These include special tokens like `bos_token` and `eos_token`, as well as the `add_generation_prompt`
-variable that we discussed above. You can also use the `loop` variable to access information about the current loop
-iteration, for example  using `{% if loop.last %}` to check if the current message is the last message in the 
-conversation. Here's an example that puts these ideas together to add a generation prompt at the end of the
-conversation if add_generation_prompt is `True`:
+템플릿 내부에서는 `messages` 목록에 접근할 수 있을 뿐만 아니라 여러 다른 특수 변수에도 접근할 수 있습니다. 여기에는 `bos_token` 및 `eos_token`과 같은 특별 토큰과 앞서 논의한 `add_generation_prompt` 변수가 포함됩니다. 또한 `loop` 변수를 사용하여 현재 반복에 대한 정보를 얻을 수 있으며, 예를 들어 `{% if loop.last %}`를 사용하여 현재 메시지가 대화의 마지막 메시지인지 확인할 수 있습니다. `add_generation_prompt`가 `True`인 경우 대화 끝에 생성 프롬프트를 추가하는 예제는 다음과 같습니다:
 
 ```
 {%- if loop.last and add_generation_prompt %}
@@ -855,21 +717,12 @@ conversation if add_generation_prompt is `True`:
 {%- endif %}
 ```
 
-### Compatibility with non-Python Jinja
+### 비 파이썬 Jinja와의 호환성
 
-There are multiple implementations of Jinja in various languages. They generally have the same syntax,
-but a key difference is that when you're writing a template in Python you can use Python methods, such as
-`.lower()` on strings or `.items()` on dicts. This will break if someone tries to use your template on a non-Python
-implementation of Jinja. Non-Python implementations are particularly common in deployment environments, where JS
-and Rust are very popular. 
+Jinja의 여러 구현이 다양한 언어로 제공됩니다. 일반적으로 동일한 구문을 사용하지만, 주요 차이점은 파이썬에서 템플릿을 작성할 때 파이썬 메서드를 사용할 수 있다는 점입니다. 예를 들어, 문자열에 `.lower()`를 사용하거나 딕셔너리에 `.items()`를 사용하는 것입니다. 이는 비파이썬 Jinja 구현에서 템플릿을 사용하려고 할 때 문제가 발생할 수 있습니다. 특히 JS와 Rust가 인기 있는 배포 환경에서는 비파이썬 구현이 흔합니다.
 
-Don't panic, though! There are a few easy changes you can make to your templates to ensure they're compatible across
-all implementations of Jinja:
+하지만 걱정하지 마세요! 모든 Jinja 구현에서 호환성을 보장하기 위해 템플릿을 쉽게 변경할 수 있는 몇 가지 방법이 있습니다:
 
-- Replace Python methods with Jinja filters. These usually have the same name, for example `string.lower()` becomes
-  `string|lower`, and `dict.items()` becomes `dict|items`. One notable change is that `string.strip()` becomes `string|trim`.
-  See the [list of built-in filters](https://jinja.palletsprojects.com/en/3.1.x/templates/#builtin-filters)
-  in the Jinja documentation for more.
-- Replace `True`, `False` and `None`, which are Python-specific, with `true`, `false` and `none`.
-- Directly rendering a dict or list may give different results in other implementations (for example, string entries
-  might change from single-quoted to double-quoted). Adding the `tojson` filter can help to ensure consistency here.
+- 파이썬 메서드를 Jinja 필터로 대체하세요. 일반적으로 같은 이름을 가지며, 예를 들어 `string.lower()`는 `string|lower`로, `dict.items()`는 `dict|items`로 대체할 수 있습니다. 주목할 만한 변경 사항은 `string.strip()`이 `string|trim`으로 바뀌는 것입니다. 더 자세한 내용은 Jinja 문서의 [내장 필터 목록](https://jinja.palletsprojects.com/en/3.1.x/templates/#builtin-filters)을 참조하세요.
+- 파이썬에 특화된 `True`, `False`, `None`을 각각 `true`, `false`, `none`으로 대체하세요.
+- 딕셔너리나 리스트를 직접 렌더링할 때 다른 구현에서는 결과가 다를 수 있습니다(예: 문자열 항목이 단일 따옴표에서 이중 따옴표로 변경될 수 있습니다). `tojson` 필터를 추가하면 일관성을 유지하는 데 도움이 됩니다.
