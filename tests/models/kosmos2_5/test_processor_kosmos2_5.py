@@ -13,15 +13,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+import shutil
+import tempfile
 import unittest
+import requests
 
 from transformers.testing_utils import (
     require_vision,
+    require_torch,
 )
 from transformers.utils import is_vision_available
 
+import numpy as np
 
 if is_vision_available():
+    from PIL import Image
+
     from transformers import (
         AutoProcessor,
         AutoTokenizer,
@@ -29,10 +37,62 @@ if is_vision_available():
 
 
 @require_vision
-class LlavaProcessorTest(unittest.TestCase):
+class Kosmos2_5ProcessorTest(unittest.TestCase):
+    def setUp(self):
+        self.tmpdirname = tempfile.mkdtemp()
+
     def test_can_load_various_tokenizers(self):
         # for checkpoint in ["microsoft/kosmos-2.5", "microsoft/kosmos-2.5"]:
         for checkpoint in ["kirp/kosmos2_5"]:
             processor = AutoProcessor.from_pretrained(checkpoint)
             tokenizer = AutoTokenizer.from_pretrained(checkpoint)
             self.assertEqual(processor.tokenizer.__class__, tokenizer.__class__)
+           
+    def tearDown(self):
+        shutil.rmtree(self.tmpdirname)
+
+    @require_torch
+    def test_full_processor(self):
+        url = "https://huggingface.co/kirp/kosmos2_5/resolve/main/receipt_00008.png"
+        processor = AutoProcessor.from_pretrained("microsoft/kosmos-2.5")
+        texts = [
+            "<md>",
+            "<ocr>"
+        ]
+        expected_input_ids = [
+            [100288],
+            [100282],
+        ]
+        expected_attention_mask = [
+            [1],
+            [1]
+        ]
+
+        image = Image.open(requests.get(url, stream=True).raw)
+        # To match the official (microsoft) Kosmos-2 demo from which the expected values here are grabbed
+        image_path = os.path.join(self.tmpdirname, "image.png")
+        image.save(image_path)
+        image = Image.open(image_path)
+
+        # test single image
+        outputs = processor(images=image, text=texts[0])
+        self.assertListEqual(
+            outputs.input_ids[0].numpy().tolist(),
+            [0, 100283] + [0] * 2048 + [100284] + expected_input_ids[0],
+        )
+        self.assertListEqual(
+            outputs.image_embeds_position_mask[0].numpy().tolist(),
+            [0, -1] + [1] * 2048 + [-1] + [0] * (len(expected_input_ids[0])),
+        )
+        self.assertListEqual(
+            outputs.attention_mask[0].numpy().tolist(),
+           [1, 1] + [1] * 2048 + [1]+ expected_attention_mask[0],
+        )
+        EXPECTED_FP_1 = [1.0, 2.0, -2.9527735710144043, -2.672085762023926, -2.9933173656463623, -2.905944585800171, -2.5891761779785156, -2.8751866817474365, -2.962153434753418, -2.588062047958374]
+        EXPECTED_FP_200 = [4.0, 45.0, 1.5713728666305542, 1.584628939628601, 1.3589054346084595, 1.6515952348709106, 1.7014952898025513, 1.3731343746185303, 1.6010395288467407, 1.6607422828674316]
+        self.assertTupleEqual(outputs.flattened_patches[0].shape, (4096, 770)) #
+        np.testing.assert_allclose(outputs.flattened_patches[0][1][:10].numpy().tolist(), EXPECTED_FP_1, atol=1e-9)
+        np.testing.assert_allclose(outputs.flattened_patches[0][200][:10].numpy().tolist(), EXPECTED_FP_200, atol=1e-9)
+
+
+# pytest tests/models/kosmos2_5/test_processor_kosmos2_5.py::Kosmos2_5ProcessorTest::test_full_processor
