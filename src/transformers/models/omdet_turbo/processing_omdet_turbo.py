@@ -42,7 +42,7 @@ if is_torchvision_available():
     from torchvision.ops.boxes import batched_nms
 
 
-def clip_boxes(box: torch.Tensor, box_size: Tuple[int, int]) -> torch.Tensor:
+def clip_boxes(box, box_size: Tuple[int, int]):
     """
     Clip the boxes by limiting x coordinates to the range [0, width]
     and y coordinates to the range [0, height].
