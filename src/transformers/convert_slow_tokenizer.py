@@ -1597,8 +1597,8 @@ def convert_slow_tokenizer(transformer_tokenizer, tiktoken=False) -> Tokenizer:
         transformer_tokenizer ([`~tokenization_utils_base.PreTrainedTokenizer`]):
             Instance of a slow tokenizer to convert in the backend tokenizer for
             [`~tokenization_utils_base.PreTrainedTokenizerFast`].
-        convert_from (str, optional): Type of tokenizer file to convert from, such as a tiktoken model file.
-
+        tiktoken (bool, optional): Whether to convert the tokenizer to a `tiktoken` tokenizer.
+            Defaults to False.
 
     Return:
         A instance of [`~tokenizers.Tokenizer`] to be used as the backend tokenizer of a
