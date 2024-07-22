@@ -54,7 +54,6 @@ logger = logging.get_logger(__name__)
 TOKENIZER_FILE = "tokenizer.json"
 SPECIAL_TOKENS_MAP_FILE = "special_tokens_map.json"
 TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
-VOCAB_FILE = "tokenizer.model"
 
 # Slow tokenizers have an additional added tokens files
 ADDED_TOKENS_FILE = "added_tokens.json"
@@ -75,7 +74,7 @@ MODEL_TO_TRAINER_MAPPING = {
     "WordPiece": WordPieceTrainer,
 }
 
-VOCAB_FILES_NAMES = {"tokenizer_file": TOKENIZER_FILE, "vocab_file": VOCAB_FILE}
+VOCAB_FILES_NAMES = {"tokenizer_file": TOKENIZER_FILE}
 
 
 @add_end_docstrings(INIT_TOKENIZER_DOCSTRING)
