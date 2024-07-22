@@ -88,36 +88,39 @@ def write_model(model_path, input_base_path, tokenizer_path=None, safe_serializa
     print(f"Fetching all parameters from the checkpoint at {input_base_path}.")
 
     # Not sharded
-    # (The sharded implementation would also work, but this is simpler.)
+    # (The sharded implementation would also work, but this is simpler.)        
     loaded = torch.load(os.path.join(input_base_path, "model.pt"), map_location="cpu")
 
     param_count = 0
     index_dict = {"weight_map": {}}
     for layer_i in range(n_layers):
         filename = f"pytorch_model-{layer_i + 1}-of-{n_layers + 1}.bin"
-        # Unsharded
-        # TODO: Layernorm stuff
-        # TODO: multi query attention
         fused_dims = [dim, dims_per_head * num_key_value_heads, dims_per_head * num_key_value_heads]
         q_proj_weight, k_proj_weight, v_proj_weight = torch.split(
             loaded[f"transformer.blocks.{layer_i}.att_proj.weight"], fused_dims, dim=0
-        )
-        up_proj_weight, gate_proj_weight = torch.chunk(
-            loaded[f"transformer.blocks.{layer_i}.ff_proj.weight"], 2, dim=0
         )
         state_dict = {
             f"model.layers.{layer_i}.self_attn.q_proj.weight": q_proj_weight,
             f"model.layers.{layer_i}.self_attn.k_proj.weight": k_proj_weight,
             f"model.layers.{layer_i}.self_attn.v_proj.weight": v_proj_weight,
             f"model.layers.{layer_i}.self_attn.o_proj.weight": loaded[f"transformer.blocks.{layer_i}.attn_out.weight"],
-            f"model.layers.{layer_i}.mlp.gate_proj.weight": gate_proj_weight,
-            f"model.layers.{layer_i}.mlp.down_proj.weight": loaded[f"transformer.blocks.{layer_i}.ff_out.weight"],
-            f"model.layers.{layer_i}.mlp.up_proj.weight": up_proj_weight,
+            f"model.layers.{layer_i}.self_attn.q_norm.weight": loaded[f"transformer.blocks.{layer_i}.q_norm.weight"],
+            f"model.layers.{layer_i}.self_attn.k_norm.weight": loaded[f"transformer.blocks.{layer_i}.k_norm.weight"],
+            f"model.layers.{layer_i}.mlp.gate.weight": loaded[f"transformer.blocks.{layer_i}.ffn.router.layer.weight"],
         }
+
+        num_experts = loaded[f"transformer.blocks.{layer_i}.ffn.router.layer.weight"].shape[0]
+        dim_per_expert = loaded[f"transformer.blocks.{layer_i}.ffn.experts.mlp.w1"].shape[0] // num_experts
+        print(f"Layer {layer_i} has {num_experts} experts with {dim_per_expert} dimensions each.")
+        for expert_i in range(num_experts):
+            state_dict[f"model.layers.{layer_i}.mlp.experts.{expert_i}.gate_proj.weight"] = loaded[f"transformer.blocks.{layer_i}.ffn.experts.mlp.w1"][dim_per_expert*expert_i:dim_per_expert*(expert_i+1), :]
+            state_dict[f"model.layers.{layer_i}.mlp.experts.{expert_i}.up_proj.weight"] = loaded[f"transformer.blocks.{layer_i}.ffn.experts.mlp.v1"][dim_per_expert*expert_i:dim_per_expert*(expert_i+1), :]
+            state_dict[f"model.layers.{layer_i}.mlp.experts.{expert_i}.down_proj.weight"] = loaded[f"transformer.blocks.{layer_i}.ffn.experts.mlp.w2"][dim_per_expert*expert_i:dim_per_expert*(expert_i+1), :].T.contiguous()
 
         state_dict[f"model.layers.{layer_i}.self_attn.rotary_emb.inv_freq"] = inv_freq
 
         for k, v in state_dict.items():
+            print(f"Counting {k}.")
             index_dict["weight_map"][k] = filename
             param_count += v.numel()
         torch.save(state_dict, os.path.join(tmp_model_path, filename))
@@ -139,15 +142,10 @@ def write_model(model_path, input_base_path, tokenizer_path=None, safe_serializa
     index_dict["metadata"] = {"total_size": param_count * 2}
     write_json(index_dict, os.path.join(tmp_model_path, "pytorch_model.bin.index.json"))
 
-    if olmoe_config.get("mlp_hidden_size", None) is not None:
-        intermediate_size = olmoe_config["mlp_hidden_size"] // 2
-    else:
-        intermediate_size = (dim * olmoe_config["mlp_ratio"]) // 2
-
     config = OlmoeConfig(
         vocab_size=vocab_size,
         hidden_size=dim,
-        intermediate_size=intermediate_size,
+        intermediate_size=dim_per_expert,
         num_hidden_layers=n_layers,
         num_attention_heads=n_heads,
         num_key_value_heads=num_key_value_heads,
