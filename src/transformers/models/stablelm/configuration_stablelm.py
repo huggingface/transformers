@@ -146,6 +146,7 @@ class StableLmConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.partial_rotary_factor = partial_rotary_factor
 
+        # Validate the correctness of rotary position embeddings parameters
         rope_config_validation(self)
 
         super().__init__(

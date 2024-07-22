@@ -138,6 +138,7 @@ class GPTNeoXConfig(PretrainedConfig):
         self.rope_scaling = rope_scaling
         self.attention_bias = attention_bias
 
+        # Validate the correctness of rotary position embeddings parameters
         rope_config_validation(self)
 
         if self.hidden_size % self.num_attention_heads != 0:

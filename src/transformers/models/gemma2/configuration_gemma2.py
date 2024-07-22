@@ -144,6 +144,7 @@ class Gemma2Config(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.attn_logit_softcapping = attn_logit_softcapping
 
+        # Validate the correctness of rotary position embeddings parameters
         rope_config_validation(self)
 
         super().__init__(

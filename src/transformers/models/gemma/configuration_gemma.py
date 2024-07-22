@@ -141,6 +141,7 @@ class GemmaConfig(PretrainedConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
 
+        # Validate the correctness of rotary position embeddings parameters
         rope_config_validation(self)
 
         super().__init__(

@@ -276,7 +276,7 @@ class MistralAttention(nn.Module):
                 "The attention layers in Mistral are transitioning from computing the RoPE embeddings internally "
                 "through `position_ids` (2D tensor with the indexes of the tokens), to using externally computed "
                 "`position_embeddings` (Tuple of tensors, containing cos and sin). In v4.45 `position_ids` will be "
-                " and `position_embeddings` will be mandatory."
+                "removed and `position_embeddings` will be mandatory."
             )
             cos, sin = self.rotary_emb(value_states, position_ids)
         else:
@@ -373,7 +373,7 @@ class MistralFlashAttention2(MistralAttention):
                 "The attention layers in Mistral are transitioning from computing the RoPE embeddings internally "
                 "through `position_ids` (2D tensor with the indexes of the tokens), to using externally computed "
                 "`position_embeddings` (Tuple of tensors, containing cos and sin). In v4.45 `position_ids` will be "
-                " and `position_embeddings` will be mandatory."
+                "removed and `position_embeddings` will be mandatory."
             )
             cos, sin = self.rotary_emb(value_states, position_ids)
         else:
@@ -516,7 +516,7 @@ class MistralSdpaAttention(MistralAttention):
                 "The attention layers in this model are transitioning from computing the RoPE embeddings internally "
                 "through `position_ids` (2D tensor with the indexes of the tokens), to using externally computed "
                 "`position_embeddings` (Tuple of tensors, containing cos and sin). In v4.45 `position_ids` will be "
-                " and `position_embeddings` will be mandatory."
+                "removed and `position_embeddings` will be mandatory."
             )
             cos, sin = self.rotary_emb(value_states, position_ids)
         else:

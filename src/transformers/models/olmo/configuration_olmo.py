@@ -145,6 +145,7 @@ class OlmoConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.clip_qkv = clip_qkv
 
+        # Validate the correctness of rotary position embeddings parameters
         rope_config_validation(self)
 
         super().__init__(

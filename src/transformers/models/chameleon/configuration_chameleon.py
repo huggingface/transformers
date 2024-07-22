@@ -239,6 +239,7 @@ class ChameleonConfig(PretrainedConfig):
 
         self.vocabulary_map = vocabulary_map
 
+        # Validate the correctness of rotary position embeddings parameters
         rope_config_validation(self)
 
         super().__init__(

@@ -147,6 +147,7 @@ class PhiConfig(PretrainedConfig):
         self.partial_rotary_factor = partial_rotary_factor
         self.qk_layernorm = qk_layernorm
 
+        # Validate the correctness of rotary position embeddings parameters
         rope_config_validation(self)
 
         super().__init__(

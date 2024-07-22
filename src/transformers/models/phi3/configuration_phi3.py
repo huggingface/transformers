@@ -150,6 +150,7 @@ class Phi3Config(PretrainedConfig):
         self.rope_scaling = rope_scaling
         self.sliding_window = sliding_window
 
+        # Validate the correctness of rotary position embeddings parameters
         rope_config_validation(self)
 
         super().__init__(

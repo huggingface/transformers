@@ -158,6 +158,7 @@ class FalconConfig(PretrainedConfig):
         else:
             self.ffn_hidden_size = ffn_hidden_size
 
+        # Validate the correctness of rotary position embeddings parameters
         rope_config_validation(self)
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
