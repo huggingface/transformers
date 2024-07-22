@@ -31,7 +31,6 @@ from torch.autograd.function import once_differentiable
 from torch.nn.init import xavier_uniform_
 
 from ...activations import ACT2CLS, ACT2FN
-from ...modeling_outputs import BaseModelOutput
 from ...file_utils import (
     ModelOutput,
     add_start_docstrings,
@@ -41,6 +40,7 @@ from ...file_utils import (
     replace_return_docstrings,
     requires_backends,
 )
+from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import is_ninja_available, logging
 from ...utils.backbone_utils import load_backbone
@@ -678,7 +678,9 @@ class OmDetTurboEncoderLayer(nn.Module):
         # original model implementation, but it is not the case. This is a workaround to have consistent results
         # with the original model, but means that the model does not support batch inference.
         hidden_states = self.self_attn(
-            queries=query.transpose(1, 0), keys=key.transpose(1, 0), values=hidden_states.transpose(1, 0),
+            queries=query.transpose(1, 0),
+            keys=key.transpose(1, 0),
+            values=hidden_states.transpose(1, 0),
             attention_mask=attention_mask,
             output_attentions=output_attentions,
         )
@@ -725,7 +727,6 @@ class OmDetTurboEncoder(nn.Module):
                 output_attentions=output_attentions,
             )
         return hidden_states
-
 
 
 # Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrHybridEncoder with RTDetr->OmDetTurbo
@@ -907,9 +908,7 @@ class OmDetTurboHybridEncoder(nn.Module):
 
         if not return_dict:
             return (fpn_states, encoder_states, all_attentions)
-        return BaseModelOutput(
-            last_hidden_state=fpn_states, hidden_states=encoder_states, attentions=all_attentions
-        )
+        return BaseModelOutput(last_hidden_state=fpn_states, hidden_states=encoder_states, attentions=all_attentions)
 
 
 class OmDetTurboMLPWithDropout(nn.Module):

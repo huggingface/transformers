@@ -141,7 +141,7 @@ class OmDetTurboProcessor(ProcessorMixin):
         self,
         images: ImageInput = None,
         text: Union[str, List[str], TextInput, PreTokenizedInput] = None,
-        labels : Union[List[str], List[List[str]]] = None,
+        labels: Union[List[str], List[List[str]]] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[OmDetTurboProcessorKwargs],

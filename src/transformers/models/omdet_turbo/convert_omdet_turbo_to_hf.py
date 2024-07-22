@@ -24,7 +24,6 @@ from PIL import Image
 
 from transformers import (
     AutoTokenizer,
-    CLIPTextConfig,
     DetrImageProcessor,
     OmDetTurboConfig,
     OmDetTurboModel,
@@ -259,7 +258,6 @@ def convert_omdet_turbo_checkpoint(args):
         read_in_q_k_v_vision(new_state_dict, config)
     read_in_q_k_v_text(new_state_dict, config)
     read_in_q_k_v_encoder(new_state_dict, config)
-
 
     # Load HF model
     model = OmDetTurboModel(config)
