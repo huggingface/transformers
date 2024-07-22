@@ -26,8 +26,8 @@ from ..utils import (
 _import_structure = {
     "agents": ["Agent", "CodeAgent", "ReactAgent", "ReactCodeAgent", "ReactJsonAgent", "Toolbox"],
     "llm_engine": ["HfEngine"],
-    "tools": ["PipelineTool", "Tool", "ToolCollection", "launch_gradio_demo", "load_tool"],
     "monitoring": ["stream_from_transformers_agent"],
+    "tools": ["PipelineTool", "Tool", "ToolCollection", "launch_gradio_demo", "load_tool"],
 }
 
 try:
