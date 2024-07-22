@@ -217,7 +217,7 @@ class VideoLlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         # create random numpy tensors
         video_inputs = self.image_processor_tester.prepare_video_inputs(equal_resolution=True)
         for video in video_inputs:
-            self.assertIsInstance(video, np.ndarray)
+            self.assertIsInstance(video, PIL.Image.Image)
 
         # Test not batched input
         encoded_videos = image_processing(images=None, videos=video_inputs[0], return_tensors="pt").pixel_values_videos
