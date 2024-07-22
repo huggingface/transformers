@@ -32,11 +32,13 @@ ROPE_CONFIG_DOCSTRING = r"""
         `max_position_embeddings` to remain unchanged -- some methods, like 'longrope', require the original value to
         determine which scaling to apply.
         Expected contents:
-            `type` (`str`):
-                The scaling strategy to use. Can be one of ['linear', 'dynamic', 'yarn', 'longrope'].
+            `rope_type` (`str`):
+                The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope'],
+                with 'default' being the original RoPE implementation.
             `factor` (`float`, *optional*):
-                Used with all scaling types. The scaling factor to apply to the RoPE embeddings. In most scaling types,
-                a `factor` of x will enable the model to handle sequences of length x * `max_position_embeddings`.
+                Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In most
+                scaling types, a `factor` of x will enable the model to handle sequences of length x *
+                `max_position_embeddings`.
             `attention_factor` (`float`, *optional*):
                 Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
                 computation. If unspecified, it defaults to value recommended by the implementation, using the `factor`
@@ -49,11 +51,11 @@ ROPE_CONFIG_DOCSTRING = r"""
                 ramp function. If unspecified, it defaults to 1.
             `short_factor` (`List[float]`, *optional*):
                 Only used with 'longrope'. The scaling factor to be applied to short contexts (<
-                `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
+                `max_position_embeddings` * `factor`). Must be a list of numbers with the same length as the hidden
                 size divided by the number of attention heads divided by 2
             `long_factor` (`List[float]`, *optional*):
                 Only used with 'longrope'. The scaling factor to be applied to short contexts (<
-                `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
+                `max_position_embeddings` * `factor`). Must be a list of numbers with the same length as the hidden
                 size divided by the number of attention heads divided by 2
 """
 
@@ -316,8 +318,8 @@ def _compute_longrope_parameters(
     return inv_freq, attention_factor
 
 
-# This maps the "type" string field in rope config to the corresponding function to compute the RoPE parameters from
-# the model config. You can append new {'type': callable} pairs to this dictionary to enable custom RoPE
+# This maps the "rope_type" string field in rope config to the corresponding function to compute the RoPE parameters
+# from the model config. You can append new {'rope_type': callable} pairs to this dictionary to enable custom RoPE
 # parameterizations, as long as the callable has the same signature.
 ROPE_INIT_FUNCTIONS = {
     "default": _compute_default_rope_parameters,
@@ -330,21 +332,21 @@ ROPE_INIT_FUNCTIONS = {
 
 def _validate_default_rope_parameters(config: PretrainedConfig):
     rope_scaling = config.rope_scaling
-    required_keys = {"type"}
+    required_keys = {"rope_type"}
     received_keys = set(rope_scaling.keys())
     missing_keys = required_keys - received_keys
     if missing_keys:
         raise ValueError(f"Missing required keys in `rope_scaling`: {missing_keys}")
 
     unused_keys = received_keys - received_keys
-    rope_type = rope_scaling["type"]
+    rope_type = rope_scaling["rope_type"]
     if unused_keys:
-        raise ValueError(f"Unrecognized keys in `rope_scaling` for 'type'='{rope_type}': {unused_keys}")
+        raise ValueError(f"Unrecognized keys in `rope_scaling` for 'rope_type'='{rope_type}': {unused_keys}")
 
 
 def _validate_linear_scaling_rope_parameters(config: PretrainedConfig):
     rope_scaling = config.rope_scaling
-    required_keys = {"type", "factor"}
+    required_keys = {"rope_type", "factor"}
     received_keys = set(rope_scaling.keys())
     missing_keys = required_keys - received_keys
     if missing_keys:
@@ -355,14 +357,14 @@ def _validate_linear_scaling_rope_parameters(config: PretrainedConfig):
         raise ValueError(f"`rope_scaling`'s factor field must be a float >= 1, got {factor}")
 
     unused_keys = received_keys - received_keys
-    rope_type = rope_scaling["type"]
+    rope_type = rope_scaling["rope_type"]
     if unused_keys:
-        raise ValueError(f"Unrecognized keys in `rope_scaling` for 'type'='{rope_type}': {unused_keys}")
+        raise ValueError(f"Unrecognized keys in `rope_scaling` for 'rope_type'='{rope_type}': {unused_keys}")
 
 
 def _validate_yarn_parameters(config: PretrainedConfig):
     rope_scaling = config.rope_scaling
-    required_keys = {"type", "factor"}
+    required_keys = {"rope_type", "factor"}
     received_keys = set(rope_scaling.keys())
     missing_keys = required_keys - received_keys
     if missing_keys:
@@ -374,9 +376,9 @@ def _validate_yarn_parameters(config: PretrainedConfig):
 
     optional_keys = {"attention_factor", "beta_fast", "beta_slow"}
     unused_keys = received_keys - required_keys - optional_keys
-    rope_type = rope_scaling["type"]
+    rope_type = rope_scaling["rope_type"]
     if unused_keys:
-        raise ValueError(f"Unrecognized keys in `rope_scaling` for 'type'={rope_type}: {unused_keys}")
+        raise ValueError(f"Unrecognized keys in `rope_scaling` for 'rope_type'={rope_type}: {unused_keys}")
 
     attention_factor = rope_scaling.get("attention_factor")
     if attention_factor is not None and not isinstance(attention_factor, float) or attention_factor < 0:
@@ -399,7 +401,7 @@ def _validate_yarn_parameters(config: PretrainedConfig):
 
 def _validate_longrope_parameters(config: PretrainedConfig):
     rope_scaling = config.rope_scaling
-    required_keys = {"type", "short_factor", "long_factor"}
+    required_keys = {"rope_type", "short_factor", "long_factor"}
     received_keys = set(rope_scaling.keys())
     missing_keys = required_keys - received_keys
     if missing_keys:
@@ -407,9 +409,9 @@ def _validate_longrope_parameters(config: PretrainedConfig):
 
     optional_keys = {"attention_factor", "factor"}
     unused_keys = received_keys - required_keys - optional_keys
-    rope_type = rope_scaling["type"]
+    rope_type = rope_scaling["rope_type"]
     if unused_keys:
-        raise ValueError(f"Unrecognized keys in `rope_scaling` for 'type'={rope_type}: {unused_keys}")
+        raise ValueError(f"Unrecognized keys in `rope_scaling` for 'rope_type'={rope_type}: {unused_keys}")
 
     partial_rotary_factor = config.partial_rotary_factor if hasattr(config, "partial_rotary_factor") else 1.0
     dim = int((config.hidden_size // config.num_attention_heads) * partial_rotary_factor)
@@ -469,10 +471,10 @@ def rope_config_validation(config: PretrainedConfig):
         return
 
     possible_rope_types = set(ROPE_INIT_FUNCTIONS.keys())
-    rope_type = rope_scaling.get("type")
+    rope_type = rope_scaling.get("rope_type", rope_scaling.get("type", None))  # BC: "rope_type" was originally "type"
     if rope_type is None:
         raise ValueError(
-            f"rope_scaling must contain a non-None 'type' field. Possible options are {possible_rope_types}"
+            f"rope_scaling must contain a non-None 'rope_type' field. Possible options are {possible_rope_types}"
         )
 
     validation_fn = ROPE_VALIDATION_FUNCTIONS.get(rope_type)
