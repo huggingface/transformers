@@ -205,7 +205,8 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 class OlmoAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaAttention.__init__ with Llama->Olmo
+    # copied from transformers.models.llama.modeling_llama.LlamaAttention.__init__ with Llama->Olmo
+    # TODO(joao): add me back asap :)
     def __init__(self, config: OlmoConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.config = config
