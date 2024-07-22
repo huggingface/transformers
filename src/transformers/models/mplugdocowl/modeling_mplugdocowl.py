@@ -323,7 +323,8 @@ class MPLUGDocOwlAttention(MPLUGDocOwlPreTrainedModel):
 
         return outputs
 
-# Copied from transformers.models.clip.modeling_clip.LIPMLP with CLIP->MPLUGDocOwlVision
+
+# Copied from transformers.models.clip.modeling_clip.CLIPMLP with CLIP->MPLUGDocOwlVision
 class MPLUGDocOwlVisionMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -1118,7 +1119,7 @@ class MPLUGDocOwlDecoderLayer(nn.Module):
             modality_indicators (torch.Tensor): A tensor of 1s and 0s indicating which module to apply to each part of hidden_states. 1 - image, 0 - text embeddings.
             attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states    
+            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
