@@ -827,7 +827,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         self.assertEqual(tokens, ["▁No", "<s>", "▁He"])  # spaces are eaten by rstrip / lstrip
 
 
-@require_read_token
+#@require_read_token
 class TikTokenIntegrationTests(unittest.TestCase):
     """
     A class that regroups important test to make sure that we properly handle the special tokens.
@@ -858,8 +858,8 @@ class TikTokenIntegrationTests(unittest.TestCase):
             bos_token="<|begin_of_text|>",
             eos_token="<|end_of_text|>",
         )
-        tokens = tiktoken_tokenizer.tokenize(test_text)
-        self.assertTrue(len(tokens), 3)
+        tokens = tiktoken_tokenizer.tokenize("<|begin_of_text|> " + test_text)
+        self.assertEqual(tokens[0], "<|begin_of_text|>")
 
         tiktoken_tokenizer = AutoTokenizer.from_pretrained(
             model_path, legacy=False, additional_special_tokens=special_tokens
