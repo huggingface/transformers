@@ -44,7 +44,7 @@ from .configuration_msclap import MSClapAudioConfig, MSClapConfig, MSClapTextCon
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "laion/MSclap-htsat-fused"
+_CHECKPOINT_FOR_DOC = "kamilakesbi/ms_clap"
 
 
 # Copied from transformers.models.clap.modeling_clap.interpolate
@@ -1470,7 +1470,12 @@ class MSClapModel(MSClapPreTrainedModel):
         audio_embeds = self.audio_projection(audio_embeds)
 
         text_embeds = text_outputs[0] if not return_dict else text_outputs.last_hidden_state
-        sequence_lengths = attention_mask.sum() - 1
+
+        if attention_mask is not None:
+            sequence_lengths = attention_mask.sum(axis=-1) - 1
+        else:
+            sequence_lengths = torch.ne(input_ids, 0).sum(-1) - 1
+
         text_embeds = text_embeds[torch.arange(input_ids.shape[0], device=text_embeds.device), sequence_lengths]
 
         text_embeds = self.text_projection(text_embeds)
@@ -1518,7 +1523,7 @@ class MSClapTextModelWithProjection(MSClapPreTrainedModel):
     def __init__(self, config: MSClapTextConfig):
         super().__init__(config)
 
-        text_model_config = AutoConfig.from_pretrained(config)
+        text_model_config = AutoConfig.from_pretrained(config.text_model)
         self.text_model = AutoModel.from_config(text_model_config)
 
         self.text_projection = MSClapProjectionLayer(config)
@@ -1569,12 +1574,15 @@ class MSClapTextModelWithProjection(MSClapPreTrainedModel):
             return_dict=return_dict,
         )
 
-        text_outputs = text_outputs[0] if not return_dict else text_outputs.last_hidden_state
+        text_embeds = text_outputs[0] if not return_dict else text_outputs.last_hidden_state
 
-        sequence_lengths = attention_mask.sum() - 1
-        pooled_output = text_outputs[torch.arange(input_ids.shape[0], device=text_outputs.device), sequence_lengths]
+        if attention_mask is not None:
+            sequence_lengths = attention_mask.sum(axis=-1) - 1
+        else:
+            sequence_lengths = torch.ne(input_ids, 0).sum(-1) - 1
+        text_embeds = text_embeds[torch.arange(input_ids.shape[0], device=text_embeds.device), sequence_lengths]
 
-        text_embeds = self.text_projection(pooled_output)
+        text_embeds = self.text_projection(text_embeds)
 
         if not return_dict:
             outputs = (text_embeds, text_outputs[0]) + text_outputs[2:]

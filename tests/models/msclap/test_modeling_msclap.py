@@ -18,7 +18,7 @@
 import inspect
 import unittest
 
-from transformers import MSClapAudioConfig
+from transformers import MSClapAudioConfig, MSClapTextConfig
 from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.utils import is_torch_available
 
@@ -26,16 +26,20 @@ from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
     floats_tensor,
+    ids_tensor,
+    random_attention_mask,
 )
 
 
 if is_torch_available():
+    import numpy as np
     import torch
     from torch import nn
 
     from transformers import (
         MSClapAudioModel,
         MSClapAudioModelWithProjection,
+        MSClapTextModelWithProjection,
     )
 
 
@@ -276,173 +280,165 @@ class MSClapAudioModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertTrue(hasattr(model, "audio_projection"))
 
 
-# class MSClapTextModelTester:
-#     def __init__(
-#         self,
-#         parent,
-#         batch_size=12,
-#         seq_length=7,
-#         is_training=True,
-#         use_input_mask=True,
-#         use_labels=True,
-#         vocab_size=99,
-#         hidden_size=32,
-#         projection_dim=32,
-#         num_hidden_layers=2,
-#         num_attention_heads=4,
-#         intermediate_size=37,
-#         dropout=0.1,
-#         attention_dropout=0.1,
-#         max_position_embeddings=512,
-#         initializer_range=0.02,
-#         scope=None,
-#         projection_hidden_act="relu",
-#     ):
-#         self.parent = parent
-#         self.batch_size = batch_size
-#         self.seq_length = seq_length
-#         self.is_training = is_training
-#         self.use_input_mask = use_input_mask
-#         self.use_labels = use_labels
-#         self.vocab_size = vocab_size
-#         self.hidden_size = hidden_size
-#         self.projection_dim = projection_dim
-#         self.num_hidden_layers = num_hidden_layers
-#         self.num_attention_heads = num_attention_heads
-#         self.intermediate_size = intermediate_size
-#         self.dropout = dropout
-#         self.attention_dropout = attention_dropout
-#         self.max_position_embeddings = max_position_embeddings
-#         self.initializer_range = initializer_range
-#         self.scope = scope
-#         self.projection_hidden_act = projection_hidden_act
+class MSClapTextModelTester:
+    def __init__(
+        self,
+        parent,
+        batch_size=12,
+        seq_length=7,
+        is_training=True,
+        use_input_mask=True,
+        use_labels=True,
+        vocab_size=99,
+        # hidden_size=32,
+        # projection_dim=32,
+        num_hidden_layers=2,
+        num_attention_heads=2,
+        # intermediate_size=37,
+        # dropout=0.1,
+        # attention_dropout=0.1,
+        # max_position_embeddings=512,
+        # initializer_range=0.02,
+        scope=None,
+        projection_hidden_act="relu",
+        projection_dim=768,
+        hidden_size=768,
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.seq_length = seq_length
+        self.is_training = is_training
+        self.use_input_mask = use_input_mask
+        self.use_labels = use_labels
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.projection_dim = projection_dim
+        self.num_hidden_layers = num_hidden_layers
+        # self.num_attention_heads = num_attention_heads
+        # self.intermediate_size = intermediate_size
+        # self.dropout = dropout
+        # self.attention_dropout = attention_dropout
+        # self.max_position_embeddings = max_position_embeddings
+        # self.initializer_range = initializer_range
+        self.scope = scope
+        self.projection_hidden_act = projection_hidden_act
+        self.num_attention_heads = num_attention_heads
 
-#     def prepare_config_and_inputs(self):
-#         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+    def prepare_config_and_inputs(self):
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
-#         input_mask = None
-#         if self.use_input_mask:
-#             input_mask = random_attention_mask([self.batch_size, self.seq_length])
+        input_mask = None
+        if self.use_input_mask:
+            input_mask = random_attention_mask([self.batch_size, self.seq_length])
 
-#         if input_mask is not None:
-#             batch_size, seq_length = input_mask.shape
-#             rnd_start_indices = np.random.randint(1, seq_length - 1, size=(batch_size,))
-#             for batch_idx, start_index in enumerate(rnd_start_indices):
-#                 input_mask[batch_idx, :start_index] = 1
-#                 input_mask[batch_idx, start_index:] = 0
+        if input_mask is not None:
+            batch_size, seq_length = input_mask.shape
+            rnd_start_indices = np.random.randint(1, seq_length - 1, size=(batch_size,))
+            for batch_idx, start_index in enumerate(rnd_start_indices):
+                input_mask[batch_idx, :start_index] = 1
+                input_mask[batch_idx, start_index:] = 0
 
-#         config = self.get_config()
+        config = self.get_config()
 
-#         return config, input_ids, input_mask
+        return config, input_ids, input_mask
 
-#     def get_config(self):
-#         return MSClapTextConfig(
-#             vocab_size=self.vocab_size,
-#             hidden_size=self.hidden_size,
-#             projection_dim=self.projection_dim,
-#             num_hidden_layers=self.num_hidden_layers,
-#             num_attention_heads=self.num_attention_heads,
-#             intermediate_size=self.intermediate_size,
-#             dropout=self.dropout,
-#             attention_dropout=self.attention_dropout,
-#             max_position_embeddings=self.max_position_embeddings,
-#             initializer_range=self.initializer_range,
-#             projection_hidden_act=self.projection_hidden_act,
-#         )
+    def get_config(self):
+        return MSClapTextConfig(
+            vocab_size=self.vocab_size,
+            hidden_size=self.hidden_size,
+            projection_dim=self.projection_dim,
+            # num_hidden_layers=self.num_hidden_layers,
+            num_attention_heads=self.num_attention_heads,
+            # intermediate_size=self.intermediate_size,
+            # dropout=self.dropout,
+            # attention_dropout=self.attention_dropout,
+            # max_position_embeddings=self.max_position_embeddings,
+            # initializer_range=self.initializer_range,
+            projection_hidden_act=self.projection_hidden_act,
+            num_hidden_layers=self.num_hidden_layers,
+        )
 
-#     # def create_and_check_model(self, config, input_ids, input_mask):
-#         # model = MSClapTextModel(config=config)
-#         # model.to(torch_device)
-#         # model.eval()
-#         # with torch.no_grad():
-#         #     result = model(input_ids, attention_mask=input_mask)
-#         #     result = model(input_ids)
-#         # self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-#         # self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+    def create_and_check_model_with_projection(self, config, input_ids, input_mask):
+        model = MSClapTextModelWithProjection(config=config)
+        model.to(torch_device)
+        model.eval()
+        with torch.no_grad():
+            result = model(input_ids, attention_mask=input_mask)
+            result = model(input_ids)
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(result.text_embeds.shape, (self.batch_size, self.projection_dim))
 
-#     def create_and_check_model_with_projection(self, config, input_ids, input_mask):
-#         model = MSClapTextModelWithProjection(config=config)
-#         model.to(torch_device)
-#         model.eval()
-#         with torch.no_grad():
-#             result = model(input_ids, attention_mask=input_mask)
-#             result = model(input_ids)
-#         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-#         self.parent.assertEqual(result.text_embeds.shape, (self.batch_size, self.projection_dim))
-
-#     def prepare_config_and_inputs_for_common(self):
-#         config_and_inputs = self.prepare_config_and_inputs()
-#         config, input_ids, input_mask = config_and_inputs
-#         inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
-#         return config, inputs_dict
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        config, input_ids, input_mask = config_and_inputs
+        inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
+        return config, inputs_dict
 
 
-# @require_torch
-# class MSClapTextModelTest(ModelTesterMixin, unittest.TestCase):
-#     all_model_classes = (MSClapTextModel, MSClapTextModelWithProjection) if is_torch_available() else ()
-#     fx_compatible = False
-#     test_pruning = False
-#     test_head_masking = False
+@require_torch
+class MSClapTextModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (MSClapTextModelWithProjection,) if is_torch_available() else ()
+    fx_compatible = False
+    test_pruning = False
+    test_head_masking = False
 
-#     def setUp(self):
-#         self.model_tester = MSClapTextModelTester(self)
-#         self.config_tester = ConfigTester(self, config_class=MSClapTextConfig, hidden_size=37)
+    def setUp(self):
+        self.model_tester = MSClapTextModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=MSClapTextConfig, hidden_size=37)
 
-#     def test_config(self):
-#         self.config_tester.run_common_tests()
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
-#     def test_model(self):
-#         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-#         self.model_tester.create_and_check_model(*config_and_inputs)
+    def test_model_with_projection(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model_with_projection(*config_and_inputs)
 
-#     def test_model_with_projection(self):
-#         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-#         self.model_tester.create_and_check_model_with_projection(*config_and_inputs)
+    @unittest.skip(reason="MSClapTextModel does not output any loss term in the forward pass")
+    def test_training(self):
+        pass
 
-#     @unittest.skip(reason="MSClapTextModel does not output any loss term in the forward pass")
-#     def test_training(self):
-#         pass
+    @unittest.skip(reason="MSClapTextModel does not output any loss term in the forward pass")
+    def test_training_gradient_checkpointing(self):
+        pass
 
-#     @unittest.skip(reason="MSClapTextModel does not output any loss term in the forward pass")
-#     def test_training_gradient_checkpointing(self):
-#         pass
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
 
-#     @unittest.skip(
-#         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-#     )
-#     def test_training_gradient_checkpointing_use_reentrant(self):
-#         pass
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
 
-#     @unittest.skip(
-#         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-#     )
-#     def test_training_gradient_checkpointing_use_reentrant_false(self):
-#         pass
+    @unittest.skip(reason="MSClapTextModel does not use embeddings")
+    def test_resize_tokens_embeddings(self):
+        pass
 
-#     @unittest.skip(reason="MSClapTextModel does not use inputs_embeds")
-#     def test_inputs_embeds(self):
-#         pass
+    @unittest.skip(reason="MSClapTextModel does not use inputs_embeds")
+    def test_inputs_embeds(self):
+        pass
 
-#     @unittest.skip(reason="MSClapTextModel has no base class and is not available in MODEL_MAPPING")
-#     def test_save_load_fast_init_from_base(self):
-#         pass
+    @unittest.skip(reason="MSClapTextModel has no base class and is not available in MODEL_MAPPING")
+    def test_save_load_fast_init_from_base(self):
+        pass
 
-#     @unittest.skip(reason="MSClapTextModel has no base class and is not available in MODEL_MAPPING")
-#     def test_save_load_fast_init_to_base(self):
-#         pass
+    @unittest.skip(reason="MSClapTextModel has no base class and is not available in MODEL_MAPPING")
+    def test_save_load_fast_init_to_base(self):
+        pass
 
-#     @slow
-#     def test_model_from_pretrained(self):
-#         model_name = "microsoft/msclap"
-#         model = MSClapTextModel.from_pretrained(model_name)
-#         self.assertIsNotNone(model)
+    @unittest.skip(reason="MSClapTextModel does not have input/output embeddings")
+    def test_model_get_set_embeddings(self):
+        pass
 
-#     @slow
-#     def test_model_with_projection_from_pretrained(self):
-#         model_name = "microsoft/msclap"
-#         model = MSClapTextModelWithProjection.from_pretrained(model_name)
-#         self.assertIsNotNone(model)
-#         self.assertTrue(hasattr(model, "text_projection"))
+    @slow
+    def test_model_with_projection_from_pretrained(self):
+        model_name = "kamilakesbi/ms_clap"
+        model = MSClapTextModelWithProjection.from_pretrained(model_name)
+        self.assertIsNotNone(model)
+        self.assertTrue(hasattr(model, "text_projection"))
 
 
 # class MSClapModelTester:

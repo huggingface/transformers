@@ -13,28 +13,45 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import random
 import shutil
 import tempfile
 import unittest
 
-from transformers import MSClapFeatureExtractor, MSClapProcessor, MSClapTokenizer, MSClapTokenizerFast
+from transformers import ClapFeatureExtractor, GPT2Tokenizer, GPT2TokenizerFast, MSClapProcessor
 from transformers.testing_utils import require_sentencepiece, require_torchaudio
 
-from .test_feature_extraction_msclap import floats_list
+
+global_rng = random.Random()
+
+
+# Copied from tests.models.whisper.test_feature_extraction_whisper.floats_list
+def floats_list(shape, scale=1.0, rng=None, name=None):
+    """Creates a random float32 tensor"""
+    if rng is None:
+        rng = global_rng
+
+    values = []
+    for batch_idx in range(shape[0]):
+        values.append([])
+        for _ in range(shape[1]):
+            values[-1].append(rng.random() * scale)
+
+    return values
 
 
 @require_torchaudio
 @require_sentencepiece
 class MSClapProcessorTest(unittest.TestCase):
     def setUp(self):
-        self.checkpoint = "laion/msclap-htsat-unfused"
+        self.checkpoint = "kamilakesbi/ms_clap"
         self.tmpdirname = tempfile.mkdtemp()
 
     def get_tokenizer(self, **kwargs):
-        return MSClapTokenizer.from_pretrained(self.checkpoint, **kwargs)
+        return GPT2Tokenizer.from_pretrained(self.checkpoint, **kwargs)
 
     def get_feature_extractor(self, **kwargs):
-        return MSClapFeatureExtractor.from_pretrained(self.checkpoint, **kwargs)
+        return ClapFeatureExtractor.from_pretrained(self.checkpoint, **kwargs)
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
@@ -49,10 +66,10 @@ class MSClapProcessorTest(unittest.TestCase):
         processor = MSClapProcessor.from_pretrained(self.tmpdirname)
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
-        self.assertIsInstance(processor.tokenizer, MSClapTokenizerFast)
+        self.assertIsInstance(processor.tokenizer, GPT2TokenizerFast)
 
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
-        self.assertIsInstance(processor.feature_extractor, MSClapFeatureExtractor)
+        self.assertIsInstance(processor.feature_extractor, ClapFeatureExtractor)
 
     def test_save_load_pretrained_additional_features(self):
         processor = MSClapProcessor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
@@ -66,10 +83,10 @@ class MSClapProcessorTest(unittest.TestCase):
         )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
-        self.assertIsInstance(processor.tokenizer, MSClapTokenizerFast)
+        self.assertIsInstance(processor.tokenizer, GPT2TokenizerFast)
 
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.feature_extractor, MSClapFeatureExtractor)
+        self.assertIsInstance(processor.feature_extractor, ClapFeatureExtractor)
 
     def test_feature_extractor(self):
         feature_extractor = self.get_feature_extractor()

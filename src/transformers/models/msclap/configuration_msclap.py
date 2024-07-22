@@ -102,6 +102,7 @@ class MSClapTextConfig(PretrainedConfig):
         projection_dim=768,
         hidden_size=768,
         projection_dropout_prob=0,
+        initializer_factor=1.0,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -109,6 +110,7 @@ class MSClapTextConfig(PretrainedConfig):
         self.projection_dim = projection_dim
         self.hidden_size = hidden_size
         self.projection_dropout_prob = projection_dropout_prob
+        self.initializer_factor = initializer_factor
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
