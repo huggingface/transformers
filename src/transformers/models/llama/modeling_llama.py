@@ -163,101 +163,26 @@ class LlamaRotaryEmbedding(nn.Module):
 class LlamaLinearScalingRotaryEmbedding(LlamaRotaryEmbedding):
     """LlamaRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
 
-    def forward(self, x, position_ids):
-        # difference to the original RoPE: a scaling factor is aplied to the position ids
-        position_ids = position_ids.float() / self.scaling_factor
-        cos, sin = super().forward(x, position_ids)
-        return cos, sin
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "`LlamaLinearScalingRotaryEmbedding` is deprecated an will be removed in v4.45. Please use "
+            "`LlamaRotaryEmbedding`, which now also does linear scaling (simply pass the model config to __init__)."
+        )
+        kwargs["rope_type"] = "linear"
+        super().__init__(*args, **kwargs)
 
 
 class LlamaDynamicNTKScalingRotaryEmbedding(LlamaRotaryEmbedding):
     """LlamaRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
 
-    def forward(self, x, position_ids):
-        # difference to the original RoPE: inv_freq is recomputed when the sequence length > original length
-        seq_len = torch.max(position_ids) + 1
-        if seq_len > self.max_position_embeddings:
-            base = self.base * (
-                (self.scaling_factor * seq_len / self.max_position_embeddings) - (self.scaling_factor - 1)
-            ) ** (self.dim / (self.dim - 2))
-            inv_freq = 1.0 / (
-                base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float().to(x.device) / self.dim)
-            )
-            self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: this may break with compilation
-
-        cos, sin = super().forward(x, position_ids)
-        return cos, sin
-
-
-class LlamaYarnScalingRotaryEmbedding(LlamaRotaryEmbedding):
-    def __init__(
-        self,
-        dim,
-        max_position_embeddings=2048,
-        base=10000,
-        scaling_factor=1,
-        original_max_position_embeddings=2048,
-        attention_factor=None,
-        beta_fast=32,
-        beta_slow=1,
-        device=None,
-    ):
-        super().__init__(dim, max_position_embeddings, base, device, scaling_factor)
-
-        self.original_max_position_embeddings = original_max_position_embeddings
-        self.attention_factor = attention_factor
-        self.beta_fast = beta_fast
-        self.beta_slow = beta_slow
-
-        if self.attention_factor is None:
-            # Recommended attention factor for LLaMA models.
-            # For more details please refer to https://arxiv.org/pdf/2309.00071, Eq. 22.
-            self.attention_factor = 0.1 * math.log(scaling_factor) + 1.0
-
-        self.compute_yarn_scaling(device)
-
-    # Inverse dimension formula to find the dimension based on the number of rotations
-    def find_correction_dim(self, num_rotations, dim, base=10000, max_position_embeddings=2048):
-        return (dim * math.log(max_position_embeddings / (num_rotations * 2 * math.pi))) / (2 * math.log(base))
-
-    # Find dimension range bounds based on rotations
-    def find_correction_range(self, low_rot, high_rot, dim, base=10000, max_position_embeddings=2048):
-        low = math.floor(self.find_correction_dim(low_rot, dim, base, max_position_embeddings))
-        high = math.ceil(self.find_correction_dim(high_rot, dim, base, max_position_embeddings))
-        return max(low, 0), min(high, dim - 1)
-
-    def linear_ramp_mask(self, min, max, dim):
-        if min == max:
-            max += 0.001  # Prevent singularity
-
-        linear_func = (torch.arange(dim, dtype=torch.float32) - min) / (max - min)
-        ramp_func = torch.clamp(linear_func, 0, 1)
-        return ramp_func
-
-    def forward(self, x, position_ids=None):
-        # Difference to the original RoPE: applies a scaling factor computed with
-        # the YaRN method (NTK-by-Parts + Attn Scaling)
-        # x: [bs, num_attention_heads, seq_len, head_size]
-        cos, sin = super().forward(x, position_ids)
-        cos = cos * self.mscale
-        sin = sin * self.mscale
-        return cos, sin
-
-    def compute_yarn_scaling(self, device):
-        pos_freqs = self.base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim)
-        inv_freq_extrapolation = 1.0 / pos_freqs
-        inv_freq_interpolation = 1.0 / (self.scaling_factor * pos_freqs)
-
-        low, high = self.find_correction_range(
-            self.beta_fast, self.beta_slow, self.dim, self.base, self.original_max_position_embeddings
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "`LlamaDynamicNTKScalingRotaryEmbedding` is deprecated an will be removed in v4.45. Please use "
+            "`LlamaRotaryEmbedding`, which now also does dynamic ntk scaling (simply pass the model config to "
+            "__init__)."
         )
-        # Get n-dimensional rotational scaling corrected for extrapolation
-        inv_freq_mask = 1 - self.linear_ramp_mask(low, high, self.dim // 2).float().to(device)
-        inv_freq = inv_freq_interpolation * (1 - inv_freq_mask) + inv_freq_extrapolation * inv_freq_mask
-
-        self.register_buffer("inv_freq", inv_freq)
-        # Get n-dimensional magnitude scaling corrected for interpolation
-        self.mscale = self.attention_factor
+        kwargs["rope_type"] = "dynamic"
+        super().__init__(*args, **kwargs)
 
 
 def rotate_half(x):
