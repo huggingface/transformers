@@ -192,9 +192,7 @@ class Qwen2AudioForConditionalGenerationModelTest(ModelTesterMixin, unittest.Tes
 @require_torch
 class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained(
-            "Qwen/Qwen2-Audio"
-        )
+        self.processor = AutoProcessor.from_pretrained("Qwen/Qwen2-Audio")
 
     def tearDown(self):
         gc.collect()
@@ -257,9 +255,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
     def test_tokenizer_integration(self):
-        slow_tokenizer = AutoTokenizer.from_pretrained(
-            "Qwen/Qwen2-Audio", use_fast=False
-        )
+        slow_tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-Audio", use_fast=False)
         fast_tokenizer = AutoTokenizer.from_pretrained(
             "Qwen/Qwen2-Audio",
             from_slow=True,
