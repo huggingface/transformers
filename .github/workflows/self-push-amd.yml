@@ -18,37 +18,22 @@ env:
   HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
 
 jobs:
-  check_runner_status:
-    name: Check Runner Status
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Checkout transformers
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
-
-      - name: Check Runner Status
-        run: python utils/check_self_hosted_runner.py --target_runners amd-mi210-single-gpu-ci-runner-docker --token ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
-
   check_runners:
     name: Check Runners
-    needs: check_runner_status
     strategy:
       matrix:
         machine_type: [single-gpu, multi-gpu]
-    runs-on: [self-hosted, amd-gpu, '${{ matrix.machine_type }}', '${{ inputs.gpu_flavor }}']
+    runs-on: rocm
     container:
       image: huggingface/transformers-pytorch-amd-gpu-push-ci  # <--- We test only for PyTorch for now
-      options: --device /dev/kfd --device /dev/dri --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      options: --device /dev/kfd --device /dev/dri --env HIP_VISIBLE_DEVICES --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
       - name: ROCM-SMI
         run: |
-          rocm-smi
-      - name: ROCM-INFO
-        run: |
           rocminfo  | grep "Agent" -A 14
-      - name: Show ROCR environment
+      - name: Show HIP environment
         run: |
+          echo "HIP: $HIP_VISIBLE_DEVICES"
           echo "ROCR: $ROCR_VISIBLE_DEVICES"
 
   setup_gpu:
@@ -57,10 +42,10 @@ jobs:
     strategy:
       matrix:
         machine_type: [single-gpu, multi-gpu]
-    runs-on: [self-hosted, amd-gpu, '${{ matrix.machine_type }}', '${{ inputs.gpu_flavor }}']
+    runs-on: rocm
     container:
       image: huggingface/transformers-pytorch-amd-gpu-push-ci  # <--- We test only for PyTorch for now
-      options: --device /dev/kfd --device /dev/dri --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      options: --device /dev/kfd --device /dev/dri --env HIP_VISIBLE_DEVICES --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
       test_map: ${{ steps.set-matrix.outputs.test_map }}
@@ -74,6 +59,13 @@ jobs:
       CI_SHA_PUSH: ${{ github.event.head_commit.id }}
       CI_SHA_WORKFLOW_RUN: ${{ github.event.workflow_run.head_sha }}
     steps:
+      - name: Remove transformers repository (installed during docker image build)
+        working-directory: /
+        shell: bash
+        run:  | 
+          rm -r transformers
+          git clone https://github.com/ROCmSoftwarePlatform/transformers.git
+          
       # Necessary to get the correct branch name and commit SHA for `workflow_run` event
       # We also take into account the `push` event (we might want to test some changes in a branch)
       - name: Prepare custom environment variables
@@ -156,17 +148,23 @@ jobs:
       matrix:
         folders: ${{ fromJson(needs.setup_gpu.outputs.matrix) }}
         machine_type: [single-gpu, multi-gpu]
-    runs-on: [self-hosted, amd-gpu, '${{ matrix.machine_type }}', '${{ inputs.gpu_flavor }}']
+    runs-on: rocm
     container:
       image: huggingface/transformers-pytorch-amd-gpu-push-ci  # <--- We test only for PyTorch for now
-      options: --device /dev/kfd --device /dev/dri --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-    env:
-      # For the meaning of these environment variables, see the job `Setup`
-      CI_BRANCH_PUSH: ${{ github.event.ref }}
-      CI_BRANCH_WORKFLOW_RUN: ${{ github.event.workflow_run.head_branch }}
-      CI_SHA_PUSH: ${{ github.event.head_commit.id }}
-      CI_SHA_WORKFLOW_RUN: ${{ github.event.workflow_run.head_sha }}
+      options: --device /dev/kfd --device /dev/dri --env HIP_VISIBLE_DEVICES --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
+
+      - name: Remove transformers repository (installed during docker image build)
+        working-directory: /
+        shell: bash
+        run:  | 
+          rm -r transformers
+          git clone https://github.com/ROCmSoftwarePlatform/transformers.git
+          
+      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
+        working-directory: /transformers
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
+
       # Necessary to get the correct branch name and commit SHA for `workflow_run` event
       # We also take into account the `push` event (we might want to test some changes in a branch)
       - name: Prepare custom environment variables
@@ -195,10 +193,6 @@ jobs:
           git checkout ${{ env.CI_SHA }}
           echo "log = $(git log -n 1)"
 
-      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
-        working-directory: /transformers
-        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
-
       - name: Echo folder ${{ matrix.folders }}
         shell: bash
         # For folders like `models/bert`, set an env. var. (`matrix_folders`) to `models_bert`, which will be used to
@@ -213,12 +207,10 @@ jobs:
 
       - name: ROCM-SMI
         run: |
-          rocm-smi
-      - name: ROCM-INFO
-        run: |
           rocminfo  | grep "Agent" -A 14
-      - name: Show ROCR environment
+      - name: Show HIP environment
         run: |
+          echo "HIP: $HIP_VISIBLE_DEVICES"
           echo "ROCR: $ROCR_VISIBLE_DEVICES"
 
       - name: Environment
@@ -249,10 +241,9 @@ jobs:
 
   send_results:
     name: Send results to webhook
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     if: always()
     needs: [
-        check_runner_status,
         check_runners,
         setup_gpu,
         run_models_gpu,
@@ -270,7 +261,6 @@ jobs:
         shell: bash
         # For the meaning of these environment variables, see the job `Setup`
         run: |
-          echo "Runner availability: ${{ needs.check_runner_status.result }}"
           echo "Setup status: ${{ needs.setup_gpu.result }}"
           echo "Runner status: ${{ needs.check_runners.result }}"
 
@@ -308,28 +298,3 @@ jobs:
           git checkout ${{ env.CI_SHA }}
           echo "log = $(git log -n 1)"
 
-      - uses: actions/download-artifact@v4
-      - name: Send message to Slack
-        env:
-          CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
-          CI_SLACK_CHANNEL_ID: ${{ secrets.CI_SLACK_CHANNEL_ID }}
-          CI_SLACK_CHANNEL_ID_DAILY: ${{ secrets.CI_SLACK_CHANNEL_ID_DAILY }}
-          CI_SLACK_CHANNEL_ID_AMD: ${{ secrets.CI_SLACK_CHANNEL_ID_AMD }}
-          CI_SLACK_CHANNEL_DUMMY_TESTS: ${{ secrets.CI_SLACK_CHANNEL_DUMMY_TESTS }}
-          CI_SLACK_REPORT_CHANNEL_ID: ${{ secrets.CI_SLACK_CHANNEL_ID_AMD }}
-          ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
-          CI_EVENT: Push CI (AMD) - ${{ inputs.gpu_flavor }}
-          CI_TITLE_PUSH: ${{ github.event.head_commit.message }}
-          CI_TITLE_WORKFLOW_RUN: ${{ github.event.workflow_run.head_commit.message }}
-          CI_SHA: ${{ env.CI_SHA }}
-          RUNNER_STATUS: ${{ needs.check_runner_status.result }}
-          RUNNER_ENV_STATUS: ${{ needs.check_runners.result }}
-          SETUP_STATUS: ${{ needs.setup_gpu.result }}
-
-        # We pass `needs.setup_gpu.outputs.matrix` as the argument. A processing in `notification_service.py` to change
-        # `models/bert` to `models_bert` is required, as the artifact names use `_` instead of `/`.
-        run: |
-          pip install huggingface_hub
-          pip install slack_sdk
-          pip show slack_sdk
-          python utils/notification_service.py "${{ needs.setup_gpu.outputs.matrix }}"

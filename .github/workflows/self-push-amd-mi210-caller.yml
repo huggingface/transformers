@@ -14,6 +14,9 @@ on:
       - ".github/**"
       - "templates/**"
       - "utils/**"
+  pull_request:
+     types: [opened, reopened, synchronize]
+     branches: ["main"]
 
 jobs:
   run_amd_ci:

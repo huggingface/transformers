@@ -190,6 +190,9 @@ class PretrainedConfig(PushToHubMixin):
         loss_type (`str`, *optional*):
             The type of loss that the model should use. It should be in `LOSS_MAPPING`'s keys, otherwise the loss will
             be automatically infered from the model architecture.
+
+    Onnxruntime specific parameters
+        - **ort** (:obj:`bool`, `optional`, defaults to :obj:`False`) -- Whether or not the model should use ORT.
     """
 
     model_type: str = ""
@@ -219,6 +222,7 @@ class PretrainedConfig(PushToHubMixin):
         self.torch_dtype = kwargs.pop("torch_dtype", None)  # Only used by PyTorch models
         self.use_bfloat16 = kwargs.pop("use_bfloat16", False)
         self.tf_legacy_loss = kwargs.pop("tf_legacy_loss", False)  # Only used by TensorFlow models
+        self.ort = kwargs.pop("ort", False)
         self.pruned_heads = kwargs.pop("pruned_heads", {})
         self.tie_word_embeddings = kwargs.pop(
             "tie_word_embeddings", True

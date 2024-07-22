@@ -1126,7 +1126,7 @@ if __name__ == "__main__":
         "Torch CUDA extension tests": "run_torch_cuda_extensions_gpu_test_reports",
     }
 
-    if ci_event in ["push", "Nightly CI"] or ci_event.startswith("Past CI"):
+    if ci_event in ["push", "Nightly CI"] or ci_event.startswith("Past CI") or ci_event.startswith("Push CI (AMD)"):
         del additional_files["Examples directory"]
         del additional_files["PyTorch pipelines"]
         del additional_files["TensorFlow pipelines"]

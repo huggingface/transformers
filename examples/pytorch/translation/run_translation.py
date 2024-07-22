@@ -381,6 +381,8 @@ def main():
         model_args.config_name if model_args.config_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
+        use_auth_token=True if model_args.use_auth_token else None,
+        ort=True if training_args.ort else None,
         token=model_args.token,
         trust_remote_code=model_args.trust_remote_code,
     )

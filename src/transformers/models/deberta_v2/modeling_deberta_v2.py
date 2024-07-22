@@ -44,13 +44,202 @@ _QA_TARGET_START_INDEX = 2
 _QA_TARGET_END_INDEX = 9
 
 
+
+# Copied from transformers.models.deberta.modeling_deberta.XSoftmax with deberta->deberta_v2
+class XSoftmax(torch.autograd.Function):
+    """
+    Masked Softmax which is optimized for saving memory
+
+    Args:
+        input (`torch.tensor`): The input tensor that will apply softmax.
+        mask (`torch.IntTensor`):
+            The mask matrix where 0 indicate that element will be ignored in the softmax calculation.
+        dim (int): The dimension that will apply softmax
+
+    Example:
+
+    ```python
+    >>> import torch
+    >>> from transformers.models.deberta_v2.modeling_deberta_v2 import XSoftmax
+
+    >>> # Make a tensor
+    >>> x = torch.randn([4, 20, 100])
+
+    >>> # Create a mask
+    >>> mask = (x > 0).int()
+
+    >>> # Specify the dimension to apply softmax
+    >>> dim = -1
+
+    >>> y = XSoftmax.apply(x, mask, dim)
+    ```"""
+
+    @staticmethod
+    def forward(self, input, mask, dim):
+        self.dim = dim
+        rmask = ~(mask.to(torch.bool))
+
+        output = input.masked_fill(rmask, torch.tensor(torch.finfo(input.dtype).min))
+        output = torch.softmax(output, self.dim)
+        output.masked_fill_(rmask, 0)
+        self.save_for_backward(output)
+        return output
+
+    @staticmethod
+    def backward(self, grad_output):
+        (output,) = self.saved_tensors
+        inputGrad = softmax_backward_data(self, grad_output, output, self.dim, output)
+        return inputGrad, None, None
+
+    @staticmethod
+    def symbolic(g, self, mask, dim):
+        import torch.onnx.symbolic_helper as sym_help
+        from torch.onnx.symbolic_opset9 import masked_fill, softmax
+
+        mask_cast_value = g.op("Cast", mask, to_i=sym_help.cast_pytorch_to_onnx["Long"])
+        r_mask = g.op(
+            "Cast",
+            g.op("Sub", g.op("Constant", value_t=torch.tensor(1, dtype=torch.int64)), mask_cast_value),
+            to_i=sym_help.cast_pytorch_to_onnx["Bool"],
+        )
+        output = masked_fill(
+            g, self, r_mask, g.op("Constant", value_t=torch.tensor(torch.finfo(self.type().dtype()).min))
+        )
+        output = softmax(g, output, dim)
+        return masked_fill(g, output, r_mask, g.op("Constant", value_t=torch.tensor(0, dtype=torch.bool)))
+
+
+# Copied from transformers.models.deberta.modeling_deberta.DropoutContext
+class DropoutContext(object):
+    def __init__(self):
+        self.dropout = 0
+        self.mask = None
+        self.scale = 1
+        self.reuse_mask = True
+
+
+# Copied from transformers.models.deberta.modeling_deberta.get_mask
+def get_mask(input, local_context):
+    if not isinstance(local_context, DropoutContext):
+        dropout = local_context
+        mask = None
+    else:
+        dropout = local_context.dropout
+        dropout *= local_context.scale
+        mask = local_context.mask if local_context.reuse_mask else None
+
+    if dropout > 0 and mask is None:
+        mask = (1 - torch.empty_like(input).bernoulli_(1 - dropout)).to(torch.bool)
+
+    if isinstance(local_context, DropoutContext):
+        if local_context.mask is None:
+            local_context.mask = mask
+
+    return mask, dropout
+
+# Copied from transformers.models.deberta.modeling_deberta.XDropout
+class XDropout(torch.autograd.Function):
+    """Optimized dropout function to save computation and memory by using mask operation instead of multiplication."""
+
+    @staticmethod
+    def forward(ctx, input, local_ctx):
+        mask, dropout = get_mask(input, local_ctx)
+        ctx.scale = 1.0 / (1 - dropout)
+        if dropout > 0:
+            ctx.save_for_backward(mask)
+            return input.masked_fill(mask, 0) * ctx.scale
+        else:
+            return input
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        if ctx.scale > 1:
+            (mask,) = ctx.saved_tensors
+            return grad_output.masked_fill(mask, 0) * ctx.scale, None
+        else:
+            return grad_output, None
+
+    @staticmethod
+    def symbolic(g: torch._C.Graph, input: torch._C.Value, local_ctx: Union[float, DropoutContext]) -> torch._C.Value:
+        from torch.onnx import symbolic_opset12
+
+        dropout_p = local_ctx
+        if isinstance(local_ctx, DropoutContext):
+            dropout_p = local_ctx.dropout
+        # StableDropout only calls this function when training.
+        train = True
+        # TODO: We should check if the opset_version being used to export
+        # is > 12 here, but there's no good way to do that. As-is, if the
+        # opset_version < 12, export will fail with a CheckerError.
+        # Once https://github.com/pytorch/pytorch/issues/78391 is fixed, do something like:
+        # if opset_version < 12:
+        #   return torch.onnx.symbolic_opset9.dropout(g, input, dropout_p, train)
+        return symbolic_opset12.dropout(g, input, dropout_p, train)
+
+class TorchNNDropout(torch.nn.Dropout):
+    def __init__(self, drop_prob):
+        super().__init__(drop_prob)
+
+# Copied from transformers.models.deberta.modeling_deberta.StableDropout
+class StableDropout(nn.Module):
+    """
+    Optimized dropout module for stabilizing the training
+
+    Args:
+        drop_prob (float): the dropout probabilities
+    """
+
+    def __init__(self, drop_prob):
+        super().__init__()
+        self.drop_prob = drop_prob
+        self.count = 0
+        self.context_stack = None
+
+    def forward(self, x):
+        """
+        Call the module
+
+        Args:
+            x (`torch.tensor`): The input tensor to apply dropout
+        """
+        if self.training and self.drop_prob > 0:
+            return XDropout.apply(x, self.get_context())
+        return x
+
+    def clear_context(self):
+        self.count = 0
+        self.context_stack = None
+
+    def init_context(self, reuse_mask=True, scale=1):
+        if self.context_stack is None:
+            self.context_stack = []
+        self.count = 0
+        for c in self.context_stack:
+            c.reuse_mask = reuse_mask
+            c.scale = scale
+
+    def get_context(self):
+        if self.context_stack is not None:
+            if self.count >= len(self.context_stack):
+                self.context_stack.append(DropoutContext())
+            ctx = self.context_stack[self.count]
+            ctx.dropout = self.drop_prob
+            self.count += 1
+            return ctx
+        else:
+            return self.drop_prob
+
+
 # Copied from transformers.models.deberta.modeling_deberta.DebertaSelfOutput with DebertaLayerNorm->LayerNorm
 class DebertaV2SelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.LayerNorm = LayerNorm(config.hidden_size, config.layer_norm_eps)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        if config.ort:
+            self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        else:
+            self.dropout = StableDropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states, input_tensor):
         hidden_states = self.dense(hidden_states)
@@ -191,6 +380,10 @@ class DisentangledSelfAttention(nn.Module):
                     self.pos_query_proj = nn.Linear(config.hidden_size, self.all_head_size)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+        if config.ort:
+            self.pos_dropout = TorchNNDropout(config.hidden_dropout_prob)
+        else:
+            self.pos_dropout = StableDropout(config.hidden_dropout_prob)
 
     def transpose_for_scores(self, x, attention_heads) -> torch.Tensor:
         new_x_shape = x.size()[:-1] + (attention_heads, -1)
@@ -412,7 +605,10 @@ class DebertaV2Output(nn.Module):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.LayerNorm = LayerNorm(config.hidden_size, config.layer_norm_eps)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        if config.ort:
+            self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        else:
+            self.dropout = StableDropout(config.hidden_dropout_prob)
         self.config = config
 
     def forward(self, hidden_states, input_tensor):
@@ -466,7 +662,10 @@ class ConvLayer(nn.Module):
             config.hidden_size, config.hidden_size, kernel_size, padding=(kernel_size - 1) // 2, groups=groups
         )
         self.LayerNorm = LayerNorm(config.hidden_size, config.layer_norm_eps)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        if config.ort:
+            self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        else:
+            self.dropout = StableDropout(config.hidden_dropout_prob)
         self.config = config
 
     def forward(self, hidden_states, residual_states, input_mask):
@@ -519,7 +718,10 @@ class DebertaV2Embeddings(nn.Module):
             self.embed_proj = None
 
         self.LayerNorm = LayerNorm(config.hidden_size, config.layer_norm_eps)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        if config.ort:
+            self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        else:
+            self.dropout = StableDropout(config.hidden_dropout_prob)
         self.config = config
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
@@ -1095,7 +1297,10 @@ class ContextPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.pooler_hidden_size, config.pooler_hidden_size)
-        self.dropout = nn.Dropout(config.pooler_dropout)
+        if config.ort:
+            self.dropout = nn.Dropout(config.pooler_dropout)
+        else:
+            self.dropout = StableDropout(config.pooler_dropout)
         self.config = config
 
     def forward(self, hidden_states):
@@ -1134,7 +1339,10 @@ class DebertaV2ForSequenceClassification(DebertaV2PreTrainedModel):
         self.classifier = nn.Linear(output_dim, num_labels)
         drop_out = getattr(config, "cls_dropout", None)
         drop_out = self.config.hidden_dropout_prob if drop_out is None else drop_out
-        self.dropout = nn.Dropout(drop_out)
+        if config.ort:
+            self.dropout = nn.Dropout(drop_out)
+        else:
+            self.dropout = StableDropout(drop_out)
 
         # Initialize weights and apply final processing
         self.post_init()
