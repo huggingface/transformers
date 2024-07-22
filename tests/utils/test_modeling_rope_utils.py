@@ -19,9 +19,12 @@ import unittest
 from transformers import LlamaConfig
 from transformers.testing_utils import is_torch_available, require_torch, torch_device
 
+
 if is_torch_available():
     import torch
-    from transformers import ROPE_INIT_FUNCTIONS, rope_config_validation
+
+    from transformers import ROPE_INIT_FUNCTIONS
+    from transformers.modeling_rope_utils import rope_config_validation
 
 
 @require_torch
@@ -113,4 +116,5 @@ class RopeTest(unittest.TestCase):
         kwargs_freqs = rope_fn(**rope_kwargs, device=device)[0]
         torch.testing.assert_close(config_freqs, kwargs_freqs)
 
-#TODO(joao): numerical checks for the different RoPE fns
+
+# TODO(joao): numerical checks for the different RoPE fns
