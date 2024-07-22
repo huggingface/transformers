@@ -136,6 +136,9 @@ class GenerationConfig(PushToHubMixin):
         beam_search_scorer_class: (`class`, *optional*, defaults to `None`):
             Which class to use as a beam search scorer. If `None`, it will use the default `BeamSearchScorer` class.
             The type must inherit from `BeamSearchScorer`.
+        beam_search_scorer_args: (`dict`, *optional*, defaults to `None`)
+            Arguments that will be passed when creating the beam search scorer. When this argument is specified,
+            `beam_search_scorer_class` must not be `None`.
 
         > Parameters for manipulation of the model output logits
 
@@ -357,6 +360,7 @@ class GenerationConfig(PushToHubMixin):
         self.penalty_alpha = kwargs.pop("penalty_alpha", None)
         self.use_cache = kwargs.pop("use_cache", True)
         self.beam_search_scorer_class = kwargs.pop("beam_search_scorer_class", None)
+        self.beam_search_scorer_args = kwargs.pop("beam_search_scorer_args", None)
 
         # Parameters for manipulation of the model output logits
         self.temperature = kwargs.pop("temperature", 1.0)
@@ -650,6 +654,11 @@ class GenerationConfig(PushToHubMixin):
                         flag_name="beam_search_scorer_class", flag_value=self.beam_search_scorer_class
                     ),
                     UserWarning,
+                )
+
+            if self.beam_search_scorer_class is None and self.beam_search_scorer_args is not None:
+                raise ValueError(
+                    "The initialization arguments for the beam search scorer class were provided, but the class was not",
                 )
 
         # 3. detect incorrect paramaterization specific to advanced beam modes

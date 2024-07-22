@@ -586,8 +586,13 @@ class GenerationTesterMixin:
             finalize_called = False
             process_called = False
 
-            def __init__(self, *args, **kwargs):
+            def __init__(inside_self, test_args, *args, **kwargs):
                 super().__init__(*args, **kwargs)
+                inside_self.test_args = test_args
+                self.assertTrue(
+                    inside_self.test_args,
+                    "The argument `test_args` should " "have been passed to the beam search scorer init function",
+                )
 
             def process(self, *args, **kwargs):
                 results = super().process(*args, **kwargs)
@@ -620,6 +625,7 @@ class GenerationTesterMixin:
                 do_sample=False,
                 max_new_tokens=self.max_new_tokens,
                 beam_search_scorer_class=CustomBeamSearchScorer,
+                beam_search_scorer_args={"test_args": True},
                 output_scores=False,
                 output_logits=False,
                 output_attentions=False,
@@ -2343,8 +2349,13 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
             finalize_called = False
             process_called = False
 
-            def __init__(self, *args, **kwargs):
+            def __init__(inside_self, test_args, *args, **kwargs):
                 super().__init__(*args, **kwargs)
+                inside_self.test_args = test_args
+                self.assertTrue(
+                    inside_self.test_args,
+                    ("The argument `test_args` should " "have been passed to the beam search scorer init function"),
+                )
 
             def process(self, *args, **kwargs):
                 results = super().process(*args, **kwargs)
@@ -2371,6 +2382,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
             min_length=5,
             eos_token_id=model.config.eos_token_id,
             beam_search_scorer_class=CustomBeamSearchScorer,
+            beam_search_scorer_args={"test_args": True},
             **model_kwargs,
         )
         outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True)
