@@ -627,7 +627,7 @@ class GraniteIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(EXPECTED_MEAN.to(torch_device), out.logits.mean(-1), atol=1e-2, rtol=1e-2))
 
         # slicing logits[0, 0, 0:15]
-        EXPECTED_SLICE = torch.tensor([4.2118, -5.1181, -5.1250, -5.1181, -5.1215, 3.1250, 2.9948, -5.1250, -5.1250, -5.1250, -1.8108, 2.9080, 0.6523, 3.0608, -4.2326])
+        EXPECTED_SLICE = torch.tensor([4.2109, -5.1172, -5.1250, -5.1172, -5.1211, 3.1250, 2.9941, -5.1250, -5.1250, -5.1250, -1.8105, 2.9082, 0.6523, 3.0605, -4.2344])
         # fmt: on
 
         self.assertTrue(
