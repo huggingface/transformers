@@ -63,7 +63,7 @@ This model was contributed by [julien-c](https://huggingface.co/julien-c). The o
     * Sentence packing: Sentences are packed together to reach 512 tokens (so the sentences are in an order that may span several documents).
     * Larger batches: Training uses larger batches.
     * Byte-level BPE vocabulary: Uses BPE with bytes as a subunit instead of characters, accommodating Unicode characters.
-- [CamemBERT](camembert) is a wrapper around RoBERTa. Refer to that page for usage examples.
+- [CamemBERT](camembert) is a wrapper around RoBERTa. Refer to its model page for usage examples.
 
 ## Resources
 
