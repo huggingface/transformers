@@ -37,6 +37,7 @@ from ...utils import (
     replace_return_docstrings,
     torch_int,
 )
+from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_auto import AutoModel
 from .configuration_msclap import MSClapAudioConfig, MSClapConfig, MSClapTextConfig
 
@@ -1244,64 +1245,67 @@ class MSClapAudioModel(MSClapPreTrainedModel):
         )
 
 
-# Adapted from transformers.models.clap.modeling_clap.ClapTextModel with Clap->MSClap
-class MSClapTextModel(MSClapPreTrainedModel):
-    def __init__(self, config: MSClapTextConfig) -> None:
-        super().__init__(config)
-
-        self.base = AutoModel.from_pretrained(config.text_model)
-
-    def forward(
-        self,
-        input_ids,
-        attention_mask=None,
-        position_ids=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
-        batch_size = input_ids.shape[0]
-        hidden_states = self.base(input_ids)[0]
-
-        sequence_lengths = torch.ne(input_ids, 0).sum(-1) - 1
-        output = hidden_states[torch.arange(batch_size, device=hidden_states.device), sequence_lengths]
-
-        return output
-
-
 @add_start_docstrings(MSCLAP_START_DOCSTRING)
 # Copied from transformers.models.clap.modeling_clap.ClapModel with Clap->MSClap, CLAP->MSCLAP,laion/clap-htsat-unfused->microsoft/ms_clap
 class MSClapModel(MSClapPreTrainedModel):
     config_class = MSClapConfig
 
-    def __init__(self, config: MSClapConfig):
+    # Ignore copy
+    def __init__(
+        self,
+        config: MSClapConfig = None,
+        text_model: Optional[PreTrainedModel] = None,
+        audio_model: Optional[PreTrainedModel] = None,
+        text_projection: Optional[PreTrainedModel] = None,
+        audio_projection: Optional[PreTrainedModel] = None,
+    ):
+        if config is None and (
+            text_model is None or audio_model is None or text_projection is None or audio_projection is None
+        ):
+            raise ValueError(
+                "Either a configuration has to be provided, or all four of text model, audio model and projection layers."
+            )
+        if config is None:
+            config = MSClapConfig.from_text_audio_configs(text_model.config, audio_model.config)
+
+        else:
+            if not isinstance(config, self.config_class):
+                raise ValueError(f"Config: {config} has to be of type {self.config_class}")
+
         super().__init__(config)
-
-        if not isinstance(config.text_config, MSClapTextConfig):
-            raise ValueError(
-                "config.text_config is expected to be of type MSClapTextConfig but is of type"
-                f" {type(config.text_config)}."
-            )
-
-        if not isinstance(config.audio_config, MSClapAudioConfig):
-            raise ValueError(
-                "config.audio_config is expected to be of type MSClapAudioConfig but is of type"
-                f" {type(config.audio_config)}."
-            )
 
         text_config = config.text_config
         audio_config = config.audio_config
 
-        self.logit_scale_a = nn.Parameter(torch.tensor(math.log(config.logit_scale_init_value)))
-        self.logit_scale_t = nn.Parameter(torch.tensor(math.log(config.logit_scale_init_value)))
+        self.logit_scale = nn.Parameter(torch.tensor(math.log(config.logit_scale_init_value)))
 
         self.projection_dim = config.projection_dim
 
-        self.text_model = MSClapTextModel(text_config)
-        self.text_projection = MSClapProjectionLayer(text_config)
+        if not text_model:
+            text_model_config = AutoConfig.from_pretrained(text_config.text_model)
+            self.text_model = AutoModel.from_config(text_model_config)
 
-        self.audio_model = MSClapAudioModel(audio_config)
-        self.audio_projection = MSClapProjectionLayer(audio_config)
+        if not text_projection:
+            self.text_projection = MSClapProjectionLayer(text_config)
+
+        if not audio_model:
+            self.audio_model = MSClapAudioModel(audio_config)
+
+        if not audio_projection:
+            self.audio_projection = MSClapProjectionLayer(audio_config)
+
+        default_text_config = AutoConfig.from_pretrained(self.config.text_config.text_model)
+        if self.text_model.config.to_dict() != default_text_config.to_dict():
+            logger.warning(
+                f"Config of the text_model: {self.text_model.__class__} is overwritten by shared text_model config:"
+                f" {self.config.text_model}"
+            )
+
+        if self.audio_model.config.to_dict() != self.config.audio_config.to_dict():
+            logger.warning(
+                f"Config of the audio_model: {self.audio_model.__class__} is overwritten by shared audio_model config:"
+                f" {self.config.audio_model}"
+            )
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1402,6 +1406,7 @@ class MSClapModel(MSClapPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(MSCLAP_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=MSClapOutput, config_class=MSClapConfig)
+    # Ignore copy
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1464,7 +1469,10 @@ class MSClapModel(MSClapPreTrainedModel):
         audio_embeds = audio_outputs[1] if not return_dict else audio_outputs.pooler_output
         audio_embeds = self.audio_projection(audio_embeds)
 
-        text_embeds = text_outputs[1] if not return_dict else text_outputs.pooler_output
+        text_embeds = text_outputs[0] if not return_dict else text_outputs.last_hidden_state
+        sequence_lengths = attention_mask.sum() - 1
+        text_embeds = text_embeds[torch.arange(input_ids.shape[0], device=text_embeds.device), sequence_lengths]
+
         text_embeds = self.text_projection(text_embeds)
 
         # normalized features
@@ -1472,10 +1480,9 @@ class MSClapModel(MSClapPreTrainedModel):
         text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
 
         # cosine similarity as logits
-        logit_scale_text = self.logit_scale_t.exp()
-        logit_scale_audio = self.logit_scale_a.exp()
-        logits_per_text = torch.matmul(text_embeds, audio_embeds.t()) * logit_scale_text
-        logits_per_audio = torch.matmul(audio_embeds, text_embeds.t()) * logit_scale_audio
+        logit_scale = self.logit_scale.exp()
+        logits_per_text = torch.matmul(text_embeds, audio_embeds.t()) * logit_scale
+        logits_per_audio = torch.matmul(audio_embeds, text_embeds.t()) * logit_scale
 
         loss = None
         if return_loss:
@@ -1510,7 +1517,10 @@ class MSClapTextModelWithProjection(MSClapPreTrainedModel):
 
     def __init__(self, config: MSClapTextConfig):
         super().__init__(config)
-        self.text_model = MSClapTextModel(config)
+
+        text_model_config = AutoConfig.from_pretrained(config)
+        self.text_model = AutoModel.from_config(text_model_config)
+
         self.text_projection = MSClapProjectionLayer(config)
         # Initialize weights and apply final processing
         self.post_init()
@@ -1559,7 +1569,10 @@ class MSClapTextModelWithProjection(MSClapPreTrainedModel):
             return_dict=return_dict,
         )
 
-        pooled_output = text_outputs[1] if not return_dict else text_outputs.pooler_output
+        text_outputs = text_outputs[0] if not return_dict else text_outputs.last_hidden_state
+
+        sequence_lengths = attention_mask.sum() - 1
+        pooled_output = text_outputs[torch.arange(input_ids.shape[0], device=text_outputs.device), sequence_lengths]
 
         text_embeds = self.text_projection(pooled_output)
 
@@ -1581,7 +1594,7 @@ class MSClapTextModelWithProjection(MSClapPreTrainedModel):
     """,
     MSCLAP_START_DOCSTRING,
 )
-# Adaped from transformers.models.clap.modeling_clap.ClapAudioModelWithProjection with Clap->MSClap
+# Copied from transformers.models.clap.modeling_clap.ClapAudioModelWithProjection with Clap->MSClap, CLAP->MSCLAP, laion/clap-htsat-fused->microsoft/ms_clap
 class MSClapAudioModelWithProjection(MSClapPreTrainedModel):
     config_class = MSClapAudioConfig
     main_input_name = "input_features"

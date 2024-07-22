@@ -114,7 +114,7 @@ def rename_state_dict(state_dict):
     for key, value in state_dict.items():
         if re.search(GPT2_WEIGHTS, key):
             # Avoid all the other mapping transformations applied to the Audio Model and Projection Layers:
-            key = key.replace("caption_encoder", "text_model")
+            key = key.replace(GPT2_WEIGHTS, "text_model")
         else:
             for key_to_modify, new_key in KEYS_TO_MODIFY_MAPPING.items():
                 if key_to_modify in key:

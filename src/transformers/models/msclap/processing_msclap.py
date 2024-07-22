@@ -20,22 +20,22 @@ from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
 
 
-# Copied from transformers.models.clap.processing_clap.ClapProcessor with Clap->MSClap, CLAP->MSCLAP, Roberta->GPT2
+# Copied from transformers.models.clap.processing_clap.ClapProcessor with Clap->MSClap, CLAP->MSCLAP, Roberta->GPT2, MSClapFeatureExtractor->ClapFeatureExtractor
 class MSClapProcessor(ProcessorMixin):
     r"""
-    Constructs a MSCLAP processor which wraps a MSCLAP feature extractor and a GPT2 tokenizer into a single processor.
+    Constructs a MSCLAP processor which wraps a MSCLAP feature extractor and a RoBerta tokenizer into a single processor.
 
-    [`MSClapProcessor`] offers all the functionalities of [`MSClapFeatureExtractor`] and [`GPT2TokenizerFast`]. See the
+    [`MSClapProcessor`] offers all the functionalities of [`ClapFeatureExtractor`] and [`GPT2TokenizerFast`]. See the
     [`~MSClapProcessor.__call__`] and [`~MSClapProcessor.decode`] for more information.
 
     Args:
-        feature_extractor ([`MSClapFeatureExtractor`]):
+        feature_extractor ([`ClapFeatureExtractor`]):
             The audio processor is a required input.
         tokenizer ([`GPT2TokenizerFast`]):
             The tokenizer is a required input.
     """
 
-    feature_extractor_class = "MSClapFeatureExtractor"
+    feature_extractor_class = "ClapFeatureExtractor"
     tokenizer_class = ("GPT2Tokenizer", "GPT2TokenizerFast")
 
     def __init__(self, feature_extractor, tokenizer):
@@ -46,7 +46,7 @@ class MSClapProcessor(ProcessorMixin):
         Main method to prepare for the model one or several sequences(s) and audio(s). This method forwards the `text`
         and `kwargs` arguments to GPT2TokenizerFast's [`~GPT2TokenizerFast.__call__`] if `text` is not `None` to
         encode the text. To prepare the audio(s), this method forwards the `audios` and `kwrags` arguments to
-        MSClapFeatureExtractor's [`~MSClapFeatureExtractor.__call__`] if `audios` is not `None`. Please refer to the
+        ClapFeatureExtractor's [`~ClapFeatureExtractor.__call__`] if `audios` is not `None`. Please refer to the
         doctsring of the above two methods for more information.
 
         Args:
