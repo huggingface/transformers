@@ -60,12 +60,12 @@ def get_anyres_image_grid_shape(image_size, grid_pinpoints, patch_size):
         tuple: The shape of the image patch grid in the format (width, height).
     """
     if not isinstance(grid_pinpoints, list):
-        raise ValueError("grid_pinpoints should be a list of tuples or lists")
+        raise TypeError("grid_pinpoints should be a list of tuples or lists")
 
     # ! VERY IMPORTANT if image_size is tensor, must convert to into tuple, otherwise it will cause wrong calculate
     if not isinstance(image_size, (list, tuple)):
         if not isinstance(image_size, (torch.Tensor, np.ndarray)):
-            raise ValueError(
+            raise TypeError(
                 f"image_size invalid type: {type(image_size)} not valid, should be either list, tuple, np.ndarray or tensor"
             )
         image_size = image_size.tolist()
@@ -91,12 +91,12 @@ def image_size_to_num_patches(image_size, grid_pinpoints, patch_size: int):
         int: the number of patches
     """
     if not isinstance(grid_pinpoints, list):
-        raise ValueError("grid_pinpoints should be a list of tuples or lists")
+        raise TypeError("grid_pinpoints should be a list of tuples or lists")
 
     # ! VERY IMPORTANT if image_size is tensor, must convert to into tuple, otherwise it will cause wrong calculate
     if not isinstance(image_size, (list, tuple)):
         if not isinstance(image_size, (torch.Tensor, np.ndarray)):
-            raise ValueError(f"image_size invalid type {type(image_size)} with value {image_size}")
+            raise TypeError(f"image_size invalid type {type(image_size)} with value {image_size}")
         image_size = image_size.tolist()
 
     best_resolution = select_best_resolution(image_size, grid_pinpoints)
