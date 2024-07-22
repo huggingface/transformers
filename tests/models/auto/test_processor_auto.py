@@ -19,8 +19,8 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from shutil import copyfile
 from random import randint
+from shutil import copyfile
 
 from huggingface_hub import HfFolder, Repository, create_repo, delete_repo
 from requests.exceptions import HTTPError
