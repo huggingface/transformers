@@ -16,7 +16,7 @@
 
 import unittest
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, Gemma2Config, is_torch_available
+from transformers import AutoModelForCausalLM, AutoTokenizer, Gemma2Config, is_torch_available, pipeline
 from transformers.testing_utils import (
     require_read_token,
     require_torch,
@@ -102,41 +102,62 @@ class Gemma2IntegrationTest(unittest.TestCase):
             cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
 
     @require_read_token
-    def test_model_2b_bf16(self):
+    def test_model_9b_bf16(self):
         model_id = "google/gemma-2-9b"
         EXPECTED_TEXTS = [
-            "<bos>Hello I am doing a project for a class and I am trying to use the <code><a-image></code>",
-            "<pad><pad><bos>Hi today. So, I'm going to show you how to do a problem from the textbook. So",
+            "<bos>Hello I am doing a project on the 1918 flu pandemic and I am trying to find out how many",
+            "<pad><pad><bos>Hi today I'm going to be talking about the history of the United States. The United States of America",
+        ]
+
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="eager"
+        ).to(torch_device)
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=False)
+
+        self.assertEqual(output_text, EXPECTED_TEXTS)
+
+    @require_read_token
+    def test_model_9b_fp16(self):
+        model_id = "google/gemma-2-9b"
+        EXPECTED_TEXTS = [
+            "<bos>Hello I am doing a project on the 1918 flu pandemic and I am trying to find out how many",
+            "<pad><pad><bos>Hi today I'm going to be talking about the history of the United States. The United States of America",
+        ]
+
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16, attn_implementation="eager"
+        ).to(torch_device)
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=False)
+
+        self.assertEqual(output_text, EXPECTED_TEXTS)
+
+    @require_read_token
+    def test_model_9b_pipeline_bf16(self):
+        # See https://github.com/huggingface/transformers/pull/31747 -- pipeline was broken for Gemma2 before this PR
+        model_id = "google/gemma-2-9b"
+        # EXPECTED_TEXTS should match the same non-pipeline test, minus the special tokens
+        EXPECTED_TEXTS = [
+            "Hello I am doing a project on the 1918 flu pandemic and I am trying to find out how many",
+            "Hi today I'm going to be talking about the history of the United States. The United States of America",
         ]
 
         model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16).to(
             torch_device
         )
-
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+        pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
 
-        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+        output = pipe(self.input_text, max_new_tokens=20, do_sample=False, padding=True)
 
-        self.assertEqual(output_text, EXPECTED_TEXTS)
-
-    @require_read_token
-    def test_model_2b_fp16(self):
-        model_id = "google/gemma-2-9b"
-        EXPECTED_TEXTS = [
-            "<bos>Hello I am doing a project on the effect of the temperature on the rate of a reaction. I am using a ",
-            "<pad><pad><bos>Hi today I'm going to be talking about the 1000-4000-",
-        ]
-
-        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16).to(
-            torch_device
-        )
-
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
-
-        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
-
-        self.assertEqual(output_text, EXPECTED_TEXTS)
+        self.assertEqual(output[0][0]["generated_text"], EXPECTED_TEXTS[0])
+        self.assertEqual(output[1][0]["generated_text"], EXPECTED_TEXTS[1])

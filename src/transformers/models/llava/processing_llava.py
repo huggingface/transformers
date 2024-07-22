@@ -42,10 +42,11 @@ class LlavaProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
+    valid_kwargs = ["chat_template"]
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
-    def __init__(self, image_processor=None, tokenizer=None, chat_template=None):
+    def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(

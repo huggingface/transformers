@@ -61,9 +61,13 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
 
     @require_pytesseract
     @require_vision
-    def get_test_pipeline(self, model, tokenizer, processor):
+    def get_test_pipeline(self, model, tokenizer, processor, torch_dtype="float32"):
         dqa_pipeline = pipeline(
-            "document-question-answering", model=model, tokenizer=tokenizer, image_processor=processor
+            "document-question-answering",
+            model=model,
+            tokenizer=tokenizer,
+            image_processor=processor,
+            torch_dtype=torch_dtype,
         )
 
         image = INVOICE_URL

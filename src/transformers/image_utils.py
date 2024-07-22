@@ -64,7 +64,6 @@ if is_vision_available():
             PILImageResampling.HAMMING: InterpolationMode.HAMMING,
             PILImageResampling.BICUBIC: InterpolationMode.BICUBIC,
             PILImageResampling.LANCZOS: InterpolationMode.LANCZOS,
-            PILImageResampling.NEAREST: InterpolationMode.NEAREST,
         }
 
 
@@ -409,22 +408,22 @@ def validate_preprocess_arguments(
 
     """
     if do_rescale and rescale_factor is None:
-        raise ValueError("rescale_factor must be specified if do_rescale is True.")
+        raise ValueError("`rescale_factor` must be specified if `do_rescale` is `True`.")
 
     if do_pad and size_divisibility is None:
         # Here, size_divisor might be passed as the value of size
         raise ValueError(
-            "Depending on moel, size_divisibility, size_divisor, pad_size or size must be specified if do_pad is True."
+            "Depending on the model, `size_divisibility`, `size_divisor`, `pad_size` or `size` must be specified if `do_pad` is `True`."
         )
 
     if do_normalize and (image_mean is None or image_std is None):
-        raise ValueError("image_mean and image_std must both be specified if do_normalize is True.")
+        raise ValueError("`image_mean` and `image_std` must both be specified if `do_normalize` is `True`.")
 
     if do_center_crop and crop_size is None:
-        raise ValueError("crop_size must be specified if do_center_crop is True.")
+        raise ValueError("`crop_size` must be specified if `do_center_crop` is `True`.")
 
     if do_resize and (size is None or resample is None):
-        raise ValueError("size and resample must be specified if do_resize is True.")
+        raise ValueError("`size` and `resample` must be specified if `do_resize` is `True`.")
 
 
 # In the future we can add a TF implementation here when we have TF models.

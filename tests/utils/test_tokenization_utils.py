@@ -146,8 +146,11 @@ class TokenizerPushToHubTester(unittest.TestCase):
         new_tokenizer = BertTokenizer.from_pretrained(f"{USER}/test-tokenizer")
         self.assertDictEqual(new_tokenizer.vocab, tokenizer.vocab)
 
-        # Reset repo
-        delete_repo(token=self._token, repo_id="test-tokenizer")
+        try:
+            # Reset repo
+            delete_repo(token=self._token, repo_id="test-tokenizer")
+        except:  # noqa E722
+            pass
 
         # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -167,8 +170,11 @@ class TokenizerPushToHubTester(unittest.TestCase):
         new_tokenizer = BertTokenizer.from_pretrained("valid_org/test-tokenizer-org")
         self.assertDictEqual(new_tokenizer.vocab, tokenizer.vocab)
 
-        # Reset repo
-        delete_repo(token=self._token, repo_id="valid_org/test-tokenizer-org")
+        try:
+            # Reset repo
+            delete_repo(token=self._token, repo_id="valid_org/test-tokenizer-org")
+        except:  # noqa E722
+            pass
 
         # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:

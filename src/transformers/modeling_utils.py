@@ -104,6 +104,8 @@ from .utils.quantization_config import BitsAndBytesConfig, QuantizationMethod
 
 XLA_USE_BF16 = os.environ.get("XLA_USE_BF16", "0").upper()
 XLA_DOWNCAST_BF16 = os.environ.get("XLA_DOWNCAST_BF16", "0").upper()
+PARAM_RENAME_WARNING = "A parameter name that contains `{}` will be renamed internally to `{}`. Please use a different name to suppress this warning."
+
 
 if is_accelerate_available():
     from accelerate import dispatch_model, infer_auto_device_map, init_empty_weights
@@ -334,6 +336,37 @@ def dtype_byte_size(dtype):
         raise ValueError(f"`dtype` is not a valid dtype: {dtype}.")
     bit_size = int(bit_search.groups()[0])
     return bit_size // 8
+
+
+def check_support_param_buffer_assignment(model_to_load, state_dict, start_prefix=""):
+    """
+    Checks if `model_to_load` supports param buffer assignment (such
+    as when loading in empty weights) by first checking
+    if the model explicitly disables it, then by ensuring that the state dict keys
+    are a subset of the model's parameters.
+
+    Note: We fully disable this if we are using `deepspeed`
+    """
+    if len([key for key in state_dict if key.startswith(start_prefix)]) == 0:
+        return False
+
+    if is_deepspeed_zero3_enabled():
+        return False
+
+    # Some models explicitly do not support param buffer assignment
+    if not getattr(model_to_load, "_supports_param_buffer_assignment", True):
+        logger.debug(
+            f"{model_to_load.__class__.__name__} does not support param buffer assignment, loading will be slower"
+        )
+        return False
+
+    # If the model does, the incoming `state_dict` and the `model_to_load` must be the same dtype
+    first_key = list(model_to_load.state_dict().keys())[0]
+    if start_prefix + first_key in state_dict:
+        return state_dict[start_prefix + first_key].dtype == model_to_load.state_dict()[first_key].dtype
+
+    # For cases when the `state_dict` doesn't contain real weights to the model (`test_model_weights_reload_no_missing_tied_weights`)
+    return False
 
 
 def shard_checkpoint(
@@ -655,15 +688,17 @@ def _find_identical(tensors: List[Set[str]], state_dict: Dict[str, torch.Tensor]
     return shared_tensors, identical
 
 
-def _load_state_dict_into_model(model_to_load, state_dict, start_prefix):
+def _load_state_dict_into_model(model_to_load, state_dict, start_prefix, assign_to_params_buffers=False):
     # Convert old format to new format if needed from a PyTorch state_dict
     old_keys = []
     new_keys = []
     for key in state_dict.keys():
         new_key = None
         if "gamma" in key:
+            logger.warning(PARAM_RENAME_WARNING.format("gamma", "weight"))
             new_key = key.replace("gamma", "weight")
         if "beta" in key:
+            logger.warning(PARAM_RENAME_WARNING.format("beta", "bias"))
             new_key = key.replace("beta", "bias")
         if new_key:
             old_keys.append(key)
@@ -681,8 +716,10 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix):
 
     # PyTorch's `_load_from_state_dict` does not copy parameters in a module's descendants
     # so we need to apply the function recursively.
-    def load(module: nn.Module, state_dict, prefix=""):
+    def load(module: nn.Module, state_dict, prefix="", assign_to_params_buffers=False):
         local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
+        local_metadata["assign_to_params_buffers"] = assign_to_params_buffers
+
         args = (state_dict, prefix, local_metadata, True, [], [], error_msgs)
         # Parameters of module and children will start with prefix. We can exit early if there are none in this
         # state_dict
@@ -706,9 +743,9 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix):
 
         for name, child in module._modules.items():
             if child is not None:
-                load(child, state_dict, prefix + name + ".")
+                load(child, state_dict, prefix + name + ".", assign_to_params_buffers)
 
-    load(model_to_load, state_dict, prefix=start_prefix)
+    load(model_to_load, state_dict, prefix=start_prefix, assign_to_params_buffers=assign_to_params_buffers)
     # Delete `state_dict` so it could be collected by GC earlier. Note that `state_dict` is a copy of the argument, so
     # it's safe to delete it.
     del state_dict
@@ -807,8 +844,10 @@ def _load_state_dict_into_meta_model(
     for key in state_dict.keys():
         new_key = None
         if "gamma" in key:
+            logger.warning(PARAM_RENAME_WARNING.format("gamma", "weight"))
             new_key = key.replace("gamma", "weight")
         if "beta" in key:
+            logger.warning(PARAM_RENAME_WARNING.format("beta", "bias"))
             new_key = key.replace("beta", "bias")
         if new_key:
             old_keys.append(key)
@@ -1942,8 +1981,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Update base model and current model config
         if hasattr(self.config, "text_config"):
             self.config.text_config.vocab_size = model_embeds.weight.shape[0]
-        # TODO: to be removed after v4.42, config.vocab_size is deprecated for models that have a config.text_config
-        self.config.vocab_size = model_embeds.weight.shape[0]
+        else:
+            self.config.vocab_size = model_embeds.weight.shape[0]
         self.vocab_size = model_embeds.weight.shape[0]
 
         # Tie weights again if needed
@@ -2518,9 +2557,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Save the model
         if state_dict is None:
-            # if any model parameters are offloaded to the disk, make module map
-            if hasattr(self, "hf_device_map") and (
-                "cpu" in self.hf_device_map.values() or "disk" in self.hf_device_map.values()
+            # if any model parameters are offloaded, make module map
+            if (
+                hasattr(self, "hf_device_map")
+                and len(set(self.hf_device_map.values())) > 1
+                and ("cpu" in self.hf_device_map.values() or "disk" in self.hf_device_map.values())
             ):
                 warnings.warn(
                     "Attempting to save a model with offloaded modules. Ensure that unallocated cpu memory exceeds the `shard_size` (5GB default)"
@@ -2532,7 +2573,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
                     for key in module_state_dict:
                         module_map[name + f".{key}"] = module
-
             state_dict = model_to_save.state_dict()
 
         # Translate state_dict from smp to hf if saving with smp >= 1.10
@@ -2655,9 +2695,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 and reg.fullmatch(filename_no_suffix) is not None
             ):
                 os.remove(full_filename)
-
         # Save the model
-        for shard_file, tensors in state_dict_split.filename_to_tensors.items():
+        filename_to_tensors = state_dict_split.filename_to_tensors.items()
+        if module_map:
+            filename_to_tensors = logging.tqdm(filename_to_tensors, desc="Saving checkpoint shards")
+        for shard_file, tensors in filename_to_tensors:
             shard = {tensor: state_dict[tensor] for tensor in tensors}
             # remake shard with onloaded parameters if necessary
             if module_map:
@@ -2667,15 +2709,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         f"Please upgrade accelerate with `pip install -U accelerate`"
                     )
                 # init state_dict for this shard
-                state_dict = {name: "" for name in shard}
+                shard_state_dict = {name: "" for name in shard}
                 for module_name in shard:
                     module = module_map[module_name]
                     # update state dict with onloaded parameters
-                    state_dict = get_state_dict_from_offload(module, module_name, state_dict)
+                    shard_state_dict = get_state_dict_from_offload(module, module_name, shard_state_dict)
 
                 # assign shard to be the completed state dict
-                shard = state_dict
-                del state_dict
+                shard = shard_state_dict
+                del shard_state_dict
                 gc.collect()
 
             if safe_serialization:
@@ -2829,7 +2871,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         revision: str = "main",
         use_safetensors: bool = None,
         **kwargs,
-    ):
+    ) -> "PreTrainedModel":
         r"""
         Instantiate a pretrained pytorch model from a pre-trained model configuration.
 
@@ -2842,6 +2884,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         The warning *Weights from XXX not used in YYY* means that the layer XXX is not used by YYY, therefore those
         weights are discarded.
+
+        If model weights are the same precision as the base model (and is a supported model), weights will be lazily loaded
+        in using the `meta` device and brought into memory once an input is passed through that layer regardless of
+        `low_cpu_mem_usage`.
 
         Parameters:
             pretrained_model_name_or_path (`str` or `os.PathLike`, *optional*):
@@ -2943,7 +2989,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             low_cpu_mem_usage(`bool`, *optional*):
                 Tries to not use more than 1x model size in CPU memory (including peak memory) while loading the model.
+                Generally should be combined with a `device_map` (such as `"auto"`) for best results.
                 This is an experimental feature and a subject to change at any moment.
+                </Tip>
+                    If the model weights are in the same precision as the model loaded in, `low_cpu_mem_usage` (without
+                    `device_map`) is redundant and will not provide any benefit in regards to CPU memory usage. However,
+                    this should still be enabled if you are passing in a `device_map`.
+                </Tip>
             torch_dtype (`str` or `torch.dtype`, *optional*):
                 Override the default `torch.dtype` and load the model under a specific `dtype`. The different options
                 are:
@@ -4009,6 +4061,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         missing_keys = sorted(set(expected_keys) - set(loaded_keys))
         unexpected_keys = set(loaded_keys) - set(expected_keys)
+
         # Remove nonpersistent buffers from unexpected keys: they are not in the state dict but will be in the model
         # buffers
         model_buffers = {n for n, _ in model.named_buffers()}
@@ -4243,7 +4296,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
             else:
                 # Sharded checkpoint or whole but low_cpu_mem_usage==True
-                error_msgs = _load_state_dict_into_model(model_to_load, state_dict, start_prefix)
+                assign_to_params_buffers = check_support_param_buffer_assignment(
+                    model_to_load, state_dict, start_prefix
+                )
+                error_msgs = _load_state_dict_into_model(
+                    model_to_load, state_dict, start_prefix, assign_to_params_buffers
+                )
 
         else:
             # This should always be a list but, just to be sure.
@@ -4271,6 +4329,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             if len(resolved_archive_file) > 1:
                 resolved_archive_file = logging.tqdm(resolved_archive_file, desc="Loading checkpoint shards")
+            assign_to_params_buffers = None
             for shard_file in resolved_archive_file:
                 # Skip the load for shards that only contain disk-offloaded weights when using safetensors for the offload.
                 if shard_file in disk_only_shard_files:
@@ -4314,7 +4373,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         )
                         error_msgs += new_error_msgs
                 else:
-                    error_msgs += _load_state_dict_into_model(model_to_load, state_dict, start_prefix)
+                    # Sharded checkpoint or whole but low_cpu_mem_usage==True
+                    if assign_to_params_buffers is None:
+                        assign_to_params_buffers = check_support_param_buffer_assignment(
+                            model_to_load, state_dict, start_prefix
+                        )
+                    error_msgs += _load_state_dict_into_model(
+                        model_to_load, state_dict, start_prefix, assign_to_params_buffers
+                    )
 
                 # force memory release
                 del state_dict
