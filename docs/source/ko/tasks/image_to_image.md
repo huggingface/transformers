@@ -14,25 +14,25 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Image-to-Image Task Guide
+# Image-to-Image Task Guide [[image-to-image-task-guide]]
 
 [[open-in-colab]]
 
-Image-to-Image task is the task where an application receives an image and outputs another image. This has various subtasks, including image enhancement (super resolution, low light enhancement, deraining and so on), image inpainting, and more. 
+Image-to-Image 작업은 애플리케이션이 이미지를 입력받아 또 다른 이미지를 출력하는 작업입니다. 여기에는 이미지 향상(초고해상도, 저조도 향상, 빗물 제거 등), 이미지 복원 등 다양한 하위 작업이 포함됩니다.
 
-This guide will show you how to:
-- Use an image-to-image pipeline for super resolution task,
-- Run image-to-image models for same task without a pipeline.
+이 가이드에서는 다음을 수행하는 방법을 보여줍니다.
+- 초고해상도 작업을 위한 image-to-image 파이프라인 사용,
+- 파이프라인 없이 동일한 작업을 위한 image-to-image 모델 실행
 
-Note that as of the time this guide is released, `image-to-image` pipeline only supports super resolution task.
+이 가이드가 발표된 시점에서는, `image-to-image` 파이프라인은 초고해상도 작업만 지원합니다.
 
-Let's begin by installing the necessary libraries.
+필요한 라이브러리를 설치하는 것부터 시작하겠습니다.
 
 ```bash
 pip install transformers
 ```
 
-We can now initialize the pipeline with a [Swin2SR model](https://huggingface.co/caidas/swin2SR-lightweight-x2-64). We can then infer with the pipeline by calling it with an image. As of now, only [Swin2SR models](https://huggingface.co/models?sort=trending&search=swin2sr) are supported in this pipeline. 
+이제 [Swin2SR 모델](https://huggingface.co/caidas/swin2SR-lightweight-x2-64)을 사용하여 파이프라인을 초기화할 수 있습니다. 그런 다음 이미지와 함께 호출하여 파이프라인으로 추론할 수 있습니다. 현재 이 파이프라인에서는  [Swin2SR 모델](https://huggingface.co/caidas/swin2SR-lightweight-x2-64)만 지원됩니다.
 
 ```python
 from transformers import pipeline
@@ -41,7 +41,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 pipe = pipeline(task="image-to-image", model="caidas/swin2SR-lightweight-x2-64", device=device)
 ```
 
-Now, let's load an image.
+이제 이미지를 불러와 봅시다.
 
 ```python
 from PIL import Image
@@ -59,7 +59,7 @@ print(image.size)
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/cat.jpg" alt="Photo of a cat"/>
 </div>
 
-We can now do inference with the pipeline. We will get an upscaled version of the cat image. 
+이제 파이프라인으로 추론을 수행할 수 있습니다. 고양이 이미지의 업스케일된 버전을 얻을 수 있습니다.
 
 ```python
 upscaled = pipe(image)
@@ -69,7 +69,7 @@ print(upscaled.size)
 # (1072, 880)
 ```
 
-If you wish to do inference yourself with no pipeline, you can use the `Swin2SRForImageSuperResolution` and `Swin2SRImageProcessor` classes of transformers. We will use the same model checkpoint for this. Let's initialize the model and the processor.
+파이프라인 없이 직접 추론을 수행하려면 Transformers의 `Swin2SRForImageSuperResolution` 및 `Swin2SRImageProcessor` 클래스를 사용할 수 있습니다. 이를 위해 동일한 모델 체크포인트를 사용합니다. 모델과 프로세서를 초기화해 보겠습니다. 
 
 ```python
 from transformers import Swin2SRForImageSuperResolution, Swin2SRImageProcessor 
@@ -78,7 +78,7 @@ model = Swin2SRForImageSuperResolution.from_pretrained("caidas/swin2SR-lightweig
 processor = Swin2SRImageProcessor("caidas/swin2SR-lightweight-x2-64")
 ```
 
-`pipeline` abstracts away the preprocessing and postprocessing steps that we have to do ourselves, so let's preprocess the image. We will pass the image to the processor and then move the pixel values to GPU. 
+pipeline은 우리가 직접 해야 하는 전처리와 후처리 단계를 추상화해 주므로, 이제 이미지를 전처리해 봅시다. 이미지를 프로세서에 전달한 다음, 픽셀 값을 GPU로 이동시킬 것입니다. 
 
 ```python
 pixel_values = processor(image, return_tensors="pt").pixel_values
@@ -87,7 +87,7 @@ print(pixel_values.shape)
 pixel_values = pixel_values.to(device)
 ```
 
-We can now infer the image by passing pixel values to the model.
+이제 픽셀 값을 모델에 전달하여 이미지를 추론할 수 있습니다.
 
 ```python
 import torch
@@ -95,7 +95,7 @@ import torch
 with torch.no_grad():
   outputs = model(pixel_values)
 ```
-Output is an object of type `ImageSuperResolutionOutput` that looks like below 👇 
+출력은 아래와 같은 `ImageSuperResolutionOutput` 유형의 객체입니다 👇 
 
 ```
 (loss=None, reconstruction=tensor([[[[0.8270, 0.8269, 0.8275,  ..., 0.7463, 0.7446, 0.7453],
@@ -107,23 +107,23 @@ Output is an object of type `ImageSuperResolutionOutput` that looks like below �
           [0.5927, 0.5914, 0.5922,  ..., 0.0664, 0.0694, 0.0718]]]],
        device='cuda:0'), hidden_states=None, attentions=None)
 ```
-We need to get the `reconstruction` and post-process it for visualization. Let's see how it looks like.
+`reconstruction`를 가져와 시각화를 위해 후처리해야 합니다. 어떻게 생겼는지 살펴봅시다.
 
 ```python
 outputs.reconstruction.data.shape
 # torch.Size([1, 3, 880, 1072])
 ```
 
-We need to squeeze the output and get rid of axis 0, clip the values, then convert it to be numpy float. Then we will arrange axes to have the shape [1072, 880], and finally, bring the output back to range [0, 255].
+출력 텐서의 크기를 줄이고 0번째 차원을 제거한 다음, 값을 자르고 numpy float으로 변환해야합니다. 그런 다음 [1072, 880] 모양을 갖도록 축을 정렬하고 마지막으로 출력을 [0, 255] 범위로 되돌립니다.
 
 ```python
 import numpy as np
 
-# squeeze, take to CPU and clip the values
+# 크기를 줄이고, CPU로 이동하고, 값을 자릅니다.
 output = outputs.reconstruction.data.squeeze().cpu().clamp_(0, 1).numpy()
-# rearrange the axes
+# 차원을 재정렬합니다.
 output = np.moveaxis(output, source=0, destination=-1)
-# bring values back to pixel values range
+# 값을 픽셀값 범위로 되돌립니다.
 output = (output * 255.0).round().astype(np.uint8)
 Image.fromarray(output)
 ```
