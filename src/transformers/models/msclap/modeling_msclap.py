@@ -121,8 +121,7 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     return incremental_indices.long() + padding_idx
 
 
-# contrastive loss function, adapted from
-# https://sachinruk.github.io/blog/pytorch/pytorch%20lightning/loss%20function/gpu/2021/03/07/CLIP.html#CLIP-loss-function
+# Copied from transformers.models.clap.modeling_clap.contrastive_loss
 def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
     labels = torch.arange(len(logits), device=logits.device)
     return nn.functional.cross_entropy(logits, labels)
@@ -492,21 +491,21 @@ class MSClapAudioSelfAttention(nn.Module):
         return outputs
 
 
-# Adapted from transformers.models.clap.modeling_clap.ClapAudioSelfOutput with Clap->MSClap
+# Copied from transformers.models.clap.modeling_clap.ClapAudioSelfOutput with Clap->MSClap
 class MSClapAudioSelfOutput(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
         self.dense = nn.Linear(dim, dim)
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
         return hidden_states
 
 
-# Adapted from transformers.models.clap.modeling_clap.ClapAudioAttention with Clap->MSClap
+# Copied from transformers.models.clap.modeling_clap.ClapAudioAttention with Clap->MSClap
 class MSClapAudioAttention(nn.Module):
     def __init__(self, config, dim, num_heads, window_size):
         super().__init__()
@@ -540,7 +539,7 @@ class MSClapAudioAttention(nn.Module):
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
         self_outputs = self.self(hidden_states, attention_mask, head_mask, output_attentions)
-        attention_output = self.output(self_outputs[0])
+        attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
 
@@ -1144,10 +1143,14 @@ class MSClapProjectionLayer(nn.Module):
         self.linear2 = nn.Linear(projection_dim, projection_dim, bias=False)
         self.layer_norm = nn.LayerNorm(projection_dim)
         self.drop = nn.Dropout(config.projection_dropout_prob)
+        self.activation = F.gelu
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states1 = self.linear1(hidden_states)
-        hidden_states2 = self.drop(self.linear2(F.gelu(hidden_states1)))
+        hidden_states2 = self.activation(hidden_states1)
+        hidden_states2 = self.linear2(hidden_states2)
+        hidden_states2 = self.drop(hidden_states2)
+
         hidden_states = self.layer_norm(hidden_states1 + hidden_states2)
         return hidden_states
 
@@ -1160,7 +1163,7 @@ class MSClapPreTrainedModel(PreTrainedModel):
     """
 
     config_class = MSClapConfig
-    base_model_prefix = "MSclap"
+    base_model_prefix = "msclap"
     supports_gradient_checkpointing = False
 
     def _init_weights(self, module):
@@ -1267,7 +1270,7 @@ class MSClapTextModel(MSClapPreTrainedModel):
 
 
 @add_start_docstrings(MSCLAP_START_DOCSTRING)
-# Adapted from transformers.models.clap.modeling_clap.ClapModel with Clap->MSClap
+# Copied from transformers.models.clap.modeling_clap.ClapModel with Clap->MSClap, CLAP->MSCLAP,laion/clap-htsat-unfused->microsoft/ms_clap
 class MSClapModel(MSClapPreTrainedModel):
     config_class = MSClapConfig
 
@@ -1289,7 +1292,8 @@ class MSClapModel(MSClapPreTrainedModel):
         text_config = config.text_config
         audio_config = config.audio_config
 
-        self.logit_scale = nn.Parameter(torch.tensor(math.log(config.logit_scale_init_value)))
+        self.logit_scale_a = nn.Parameter(torch.tensor(math.log(config.logit_scale_init_value)))
+        self.logit_scale_t = nn.Parameter(torch.tensor(math.log(config.logit_scale_init_value)))
 
         self.projection_dim = config.projection_dim
 
@@ -1322,8 +1326,8 @@ class MSClapModel(MSClapPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, MSClapModel
 
-        >>> model = MSClapModel.from_pretrained("microsoft/msclap")
-        >>> tokenizer = AutoTokenizer.from_pretrained("microsoft/msclap")
+        >>> model = MSClapModel.from_pretrained("microsoft/ms_clap")
+        >>> tokenizer = AutoTokenizer.from_pretrained("microsoft/ms_clap")
 
         >>> inputs = tokenizer(["the sound of a cat", "the sound of a dog"], padding=True, return_tensors="pt")
         >>> text_features = model.get_text_features(**inputs)
@@ -1344,7 +1348,8 @@ class MSClapModel(MSClapPreTrainedModel):
             return_dict=return_dict,
         )
 
-        text_features = self.text_projection(text_outputs)
+        pooled_output = text_outputs[1] if return_dict is not None else text_outputs.pooler_output
+        text_features = self.text_projection(pooled_output)
         text_features = F.normalize(text_features, dim=-1)
 
         return text_features
@@ -1370,8 +1375,8 @@ class MSClapModel(MSClapPreTrainedModel):
         >>> from transformers import AutoFeatureExtractor, MSClapModel
         >>> import torch
 
-        >>> model = MSClapModel.from_pretrained("microsoft/msclap")
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/msclap")
+        >>> model = MSClapModel.from_pretrained("microsoft/ms_clap")
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/ms_clap")
         >>> random_audio = torch.rand((16_000))
         >>> inputs = feature_extractor(random_audio, return_tensors="pt")
         >>> audio_features = model.get_audio_features(**inputs)
@@ -1421,8 +1426,8 @@ class MSClapModel(MSClapPreTrainedModel):
         >>> dataset = load_dataset("hf-internal-testing/ashraq-esc50-1-dog-example")
         >>> audio_sample = dataset["train"]["audio"][0]["array"]
 
-        >>> model = MSClapModel.from_pretrained("microsoft/msclap")
-        >>> processor = AutoProcessor.from_pretrained("microsoft/msclap")
+        >>> model = MSClapModel.from_pretrained("microsoft/ms_clap")
+        >>> processor = AutoProcessor.from_pretrained("microsoft/ms_clap")
 
         >>> input_text = ["Sound of a dog", "Sound of vaccum cleaner"]
 
@@ -1459,8 +1464,7 @@ class MSClapModel(MSClapPreTrainedModel):
         audio_embeds = audio_outputs[1] if not return_dict else audio_outputs.pooler_output
         audio_embeds = self.audio_projection(audio_embeds)
 
-        text_embeds = text_outputs
-        # text_embeds = text_outputs[1] if not return_dict else text_outputs.pooler_output
+        text_embeds = text_outputs[1] if not return_dict else text_outputs.pooler_output
         text_embeds = self.text_projection(text_embeds)
 
         # normalized features
@@ -1468,9 +1472,10 @@ class MSClapModel(MSClapPreTrainedModel):
         text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
 
         # cosine similarity as logits
-        logit_scale = self.logit_scale.exp()
-        logits_per_text = torch.matmul(text_embeds, audio_embeds.t()) * logit_scale
-        logits_per_audio = torch.matmul(audio_embeds, text_embeds.t()) * logit_scale
+        logit_scale_text = self.logit_scale_t.exp()
+        logit_scale_audio = self.logit_scale_a.exp()
+        logits_per_text = torch.matmul(text_embeds, audio_embeds.t()) * logit_scale_text
+        logits_per_audio = torch.matmul(audio_embeds, text_embeds.t()) * logit_scale_audio
 
         loss = None
         if return_loss:

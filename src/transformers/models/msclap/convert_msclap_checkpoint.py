@@ -18,7 +18,7 @@ import re
 
 from msclap import CLAP
 
-from transformers import AutoTokenizer, MSClapConfig, MSClapFeatureExtractor, MSClapModel, MSClapProcessor
+from transformers import AutoTokenizer, ClapFeatureExtractor, MSClapConfig, MSClapModel, MSClapProcessor
 
 
 KEYS_TO_MODIFY_MAPPING = {
@@ -45,6 +45,25 @@ IGNORE_WEIGHTS = [
 ]
 
 GPT2_WEIGHTS = "caption_encoder.base"
+
+
+def get_feature_extractor():
+    feature_extractor = ClapFeatureExtractor()
+
+    feature_extractor.feature_size = 64
+    feature_extractor.sampling_rate = 44100
+    feature_extractor.hop_length = 320
+    feature_extractor.max_length_s = 7
+    feature_extractor.fft_window_size = 1024
+    feature_extractor.padding_value = 0.0
+    feature_extractor.return_attention_mask = False
+    feature_extractor.frequency_min = 50
+    feature_extractor.frequency_max = 14000
+    feature_extractor.top_db = None
+    feature_extractor.truncation = "rand_trunc"
+    feature_extractor.padding = "repeat"
+
+    return feature_extractor
 
 
 def get_unused_weights(model, converted_state_dict, condition="audio_model"):
@@ -162,7 +181,7 @@ def convert_msclap_checkpoint(version, pytorch_dump_folder_path, repo_id, enable
     tokenizer = AutoTokenizer.from_pretrained("gpt2")
     tokenizer.add_special_tokens({"pad_token": "!"})
 
-    feature_extractor = MSClapFeatureExtractor()
+    feature_extractor = get_feature_extractor()
 
     processor = MSClapProcessor(feature_extractor, tokenizer)
     processor.save_pretrained(pytorch_dump_folder_path)

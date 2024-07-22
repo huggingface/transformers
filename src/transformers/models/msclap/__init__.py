@@ -39,7 +39,6 @@ else:
         "MSClapAudioModel",
         "ClapAudioModelWithProjection",
     ]
-    _import_structure["feature_extraction_msclap"] = ["MSClapFeatureExtractor"]
 
 if TYPE_CHECKING:
     from .configuration_msclap import (
@@ -55,7 +54,6 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .feature_extraction_msclap import MSClapFeatureExtractor
         from .modeling_msclap import (
             MSClapAudioModel,
             MSClapAudioModelWithProjection,

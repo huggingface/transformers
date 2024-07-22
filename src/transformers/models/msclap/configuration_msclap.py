@@ -185,7 +185,7 @@ class MSClapAudioConfig(PretrainedConfig):
             Drop path rate for the patch fusion
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        projection_dropout_prob (`float`, *optional*, defaults to 0.0):
+        projection_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout rate for the projection layer.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether or not to add a bias to the query, key, value projections.

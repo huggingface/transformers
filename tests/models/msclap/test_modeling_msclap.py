@@ -1,3 +1,4 @@
+# Copied from tests.models.clap.test_modeling_clap.py with Clap->MSClap
 # coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
