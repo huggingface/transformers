@@ -34,10 +34,10 @@ else:
     _import_structure["modeling_msclap"] = [
         "MSClapModel",
         "MSClapPreTrainedModel",
-        "ClapTextModel",
-        "ClapTextModelWithProjection",
+        "MSClapTextModel",
+        "MSClapTextModelWithProjection",
         "MSClapAudioModel",
-        "ClapAudioModelWithProjection",
+        "MSClapAudioModelWithProjection",
     ]
 
 if TYPE_CHECKING:
@@ -59,7 +59,6 @@ if TYPE_CHECKING:
             MSClapAudioModelWithProjection,
             MSClapModel,
             MSClapPreTrainedModel,
-            MSClapTextModel,
             MSClapTextModelWithProjection,
         )
 
