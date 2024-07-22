@@ -63,7 +63,7 @@ class DacFeatureExtractor(SequenceFeatureExtractor):
         padding: Optional[Union[bool, str, PaddingStrategy]] = None,
         truncation: Optional[bool] = False,
         max_length: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = "pt",
+        return_tensors: Optional[Union[str, TensorType]] = None,
         sampling_rate: Optional[int] = None,
     ) -> BatchFeature:
         """

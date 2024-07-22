@@ -141,9 +141,7 @@ def should_ignore(name, ignore_keys):
 def recursively_load_weights(orig_dict, hf_model, model_name):
     unused_weights = []
 
-    if model_name in ["dac_16khz", "dac_24khz", "dac_44khz"]:
-        print("supported model")
-    else:
+    if model_name not in ["dac_16khz", "dac_24khz", "dac_44khz"]:
         raise ValueError(f"Unsupported model: {model_name}")
 
     for name, value in orig_dict.items():
