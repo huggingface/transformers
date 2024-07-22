@@ -74,7 +74,8 @@ class OlmoLayerNorm(nn.Module):
 ALL_LAYERNORM_LAYERS.append(OlmoLayerNorm)
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Olmo
+# copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Olmo
+# TODO(joao): add me back asap :)
 class OlmoRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
         super().__init__()

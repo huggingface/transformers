@@ -85,7 +85,8 @@ class MistralRotaryEmbedding(nn.Module):
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
     @torch.no_grad()
-    # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding.forward
+    # copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding.forward
+    # TODO(joao): add me back asap :)
     def forward(self, x, position_ids):
         # x: [bs, num_attention_heads, seq_len, head_size]
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
