@@ -50,11 +50,11 @@ from .utils import (
     extract_commit_hash,
     get_json_schema,
     is_flax_available,
-    is_google_available,
     is_jax_tensor,
     is_mlx_available,
     is_numpy_array,
     is_offline_mode,
+    is_protobuf_available,
     is_remote_url,
     is_tf_available,
     is_tf_tensor,
@@ -76,7 +76,7 @@ if TYPE_CHECKING:
     if is_flax_available():
         import jax.numpy as jnp  # noqa: F401
 
-if is_google_available():
+if is_protobuf_available():
     from google.protobuf.message import DecodeError
 
 if is_tokenizers_available():

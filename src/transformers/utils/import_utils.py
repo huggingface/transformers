@@ -1164,13 +1164,6 @@ def is_mlx_available():
     return _mlx_available
 
 
-def is_google_available():
-    try:
-        return True
-    except Exception:
-        return False
-
-
 # docstyle-ignore
 AV_IMPORT_ERROR = """
 {0} requires the PyAv library but it was not found in your environment. You can install it with:
