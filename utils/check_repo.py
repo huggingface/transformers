@@ -69,6 +69,7 @@ PRIVATE_MODELS = [
     "MT5Stack",
     "UMT5Stack",
     "Pop2PianoStack",
+    # "Qwen2AudioEncoderModel",
     "SwitchTransformersStack",
     "TFDPRSpanPredictor",
     "MaskFormerSwinModel",
@@ -116,6 +117,7 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "FlaxBartForCausalLM",  # Building part of bigger (tested) model.
     "FlaxBertForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through FlaxRobertaForCausalLM.
     "OPTDecoderWrapper",
+    "Qwen2AudioEncoderModel",
     "TFSegformerDecodeHead",  # Not a regular model.
     "AltRobertaModel",  # Building part of bigger (tested) model.
     "BlipTextLMHeadModel",  # No need to test it as it is tested by BlipTextVision models
