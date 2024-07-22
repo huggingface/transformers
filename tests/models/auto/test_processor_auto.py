@@ -19,8 +19,8 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from random import randint
 from shutil import copyfile
+from time import monotonic_ns
 
 from huggingface_hub import HfFolder, Repository, create_repo, delete_repo
 from requests.exceptions import HTTPError
@@ -432,7 +432,9 @@ class ProcessorPushToHubTester(unittest.TestCase):
 
         processor = CustomProcessor(feature_extractor, tokenizer)
 
-        random_repo_id = f"{USER}/test-dynamic-processor-{randint(1000, 1000000)}"
+        # Use a high-precision clock instead of randint() to get a random ID
+        # in case the test runners synchronize random seeds anywhere
+        random_repo_id = f"{USER}/test-dynamic-processor-{monotonic_ns()}"
         with tempfile.TemporaryDirectory() as tmp_dir:
             create_repo(random_repo_id, token=self._token)
             repo = Repository(tmp_dir, clone_from=random_repo_id, token=self._token)
