@@ -14,15 +14,18 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# EETQ
+# EETQ [[eetq]]
 
-The [EETQ](https://github.com/NetEase-FuXi/EETQ) library supports int8 per-channel weight-only quantization for NVIDIA GPUS. The high-performance GEMM and GEMV kernels are from FasterTransformer and TensorRT-LLM. It requires no calibration dataset and does not need to pre-quantize your model. Moreover, the accuracy degradation is negligible owing to the per-channel quantization. 
+[EETQ](https://github.com/NetEase-FuXi/EETQ) 라이브러리는 NVIDIA GPU에 대해 int8 per-channel weight-only quantization을 지원합니다. 고성능 GEMM 및 GEMV 커널은 FasterTransformer 및 TensorRT-LLM에서 가져왔습니다. 캘리브레이션 데이터셋이 필요 없으며, 모델을 사전에 양자화할 필요도 없습니다. 또한, per-channel quantization 덕분에 정확도 저하가 미미합니다.
 
-Make sure you have eetq installed from the [relase page](https://github.com/NetEase-FuXi/EETQ/releases)
+[EETQ 릴리스 페이지](https://github.com/NetEase-FuXi/EETQ/releases)에서 EETQ를 설치했는지 확인하십시오.
+
 ```
 pip install --no-cache-dir https://github.com/NetEase-FuXi/EETQ/releases/download/v1.0.0/EETQ-1.0.0+cu121+torch2.1.2-cp310-cp310-linux_x86_64.whl
 ```
-or via the source code https://github.com/NetEase-FuXi/EETQ. EETQ requires CUDA capability <= 8.9 and >= 7.0
+
+또는 소스 코드 https://github.com/NetEase-FuXi/EETQ에서 설치할 수 있습니다. EETQ는 CUDA 기능이 8.9 이하이고 7.0 이상이어야 합니다.
+
 ```
 git clone https://github.com/NetEase-FuXi/EETQ.git
 cd EETQ/
@@ -30,7 +33,8 @@ git submodule update --init --recursive
 pip install .
 ```
 
-An unquantized model can be quantized via "from_pretrained".
+비양자화 모델은 "from_pretrained"를 통해 양자화할 수 있습니다.
+
 ```py
 from transformers import AutoModelForCausalLM, EetqConfig
 path = "/path/to/model"
@@ -38,7 +42,7 @@ quantization_config = EetqConfig("int8")
 model = AutoModelForCausalLM.from_pretrained(path, device_map="auto", quantization_config=quantization_config)
 ```
 
-A quantized model can be saved via "saved_pretrained" and be reused again via the "from_pretrained".
+양자화된 모델은 "save_pretrained"를 통해 저장할 수 있으며, "from_pretrained"를 통해 다시 사용할 수 있습니다.
 
 ```py
 quant_path = "/path/to/save/quantized/model"
