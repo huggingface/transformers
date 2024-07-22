@@ -979,7 +979,7 @@ class PersimmonForCausalLM(PersimmonPreTrainedModel):
     """,
     PERSIMMON_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with LLAMA->PERSIMMON,Llama->Persimmon
+# Copied from transformers.models.mistral.modeling_mistral.MistralForSequenceClassification with MISTRAL->PERSIMMON,Mistral->Persimmon
 class PersimmonForSequenceClassification(PersimmonPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

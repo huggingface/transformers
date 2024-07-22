@@ -1258,7 +1258,7 @@ class Phi3ForCausalLM(Phi3PreTrainedModel):
     """,
     PHI3_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with Llama->Phi3, LLAMA->PHI3, self.transformer->self.model, transformer_outputs->model_outputs
+# Copied from transformers.models.mistral.modeling_mistral.MistralForSequenceClassification with MISTRAL->PHI3, Mistral->Phi3, self.transformer->self.model, transformer_outputs->model_outputs
 class Phi3ForSequenceClassification(Phi3PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

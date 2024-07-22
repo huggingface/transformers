@@ -1255,7 +1255,7 @@ class StableLmForCausalLM(StableLmPreTrainedModel):
     """,
     STABLELM_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with LLAMA->STABLELM,Llama->StableLm
+# Copied from transformers.models.mistral.modeling_mistral.MistralForSequenceClassification with MISTRAL->STABLELM,Mistral->StableLm
 class StableLmForSequenceClassification(StableLmPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

@@ -928,7 +928,8 @@ class CohereModel(CoherePreTrainedModel):
         return causal_mask
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM with Llama->Cohere
+# copied from transformers.models.llama.modeling_llama.LlamaForCausalLM with Llama->Cohere
+# TODO(joao): add me back asap :)
 class CohereForCausalLM(CoherePreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 

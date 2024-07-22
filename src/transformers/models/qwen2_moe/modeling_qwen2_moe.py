@@ -1350,7 +1350,7 @@ class Qwen2MoeForCausalLM(Qwen2MoePreTrainedModel):
     """,
     QWEN2MOE_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with Llama->Qwen2Moe, LLAMA->QWEN2MOE
+# Copied from transformers.models.mistral.modeling_mistral.MistralForSequenceClassification with Mistral->Qwen2Moe, MISTRAL->QWEN2MOE
 class Qwen2MoeForSequenceClassification(Qwen2MoePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
