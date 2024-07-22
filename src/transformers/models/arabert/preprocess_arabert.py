@@ -1,8 +1,13 @@
 import html
 import logging
+import subprocess
+import tempfile
+from pathlib import Path
+import os
 import re
 from typing import List
 
+# import pyarabic.araby as araby
 
 ACCEPTED_MODELS = [
     "bert-base-arabertv01",
@@ -163,6 +168,154 @@ _ARABIC_NUMS = "0123456789"
 HINDI_TO_ARABIC_MAP = str.maketrans(_HINDI_NUMS, _ARABIC_NUMS)
 
 
+# Diacritics
+FATHATAN = u'\u064b'
+DAMMATAN = u'\u064c'
+KASRATAN = u'\u064d'
+FATHA = u'\u064e'
+DAMMA = u'\u064f'
+KASRA = u'\u0650'
+SHADDA = u'\u0651'
+SUKUN = u'\u0652'
+
+TATWEEL = u'\u0640'
+
+
+TASHKEEL = (FATHATAN, DAMMATAN, KASRATAN, FATHA, DAMMA, KASRA, \
+            SUKUN, SHADDA)
+
+def is_tashkeel(archar):
+    """Checks if the given ``archar`` Arabic Tashkeel Marks (
+        - FATHA, DAMMA, KASRA, SUKUN,
+        - SHADDA,
+        - FATHATAN, DAMMATAN, KASRATAn)."""
+    return archar in TASHKEEL
+
+def is_vocalized(word):
+    """Checks if the arabic word is vocalized.
+    the word musn't  have any spaces and pounctuations.
+    @param word: arabic unicode char
+    @type word: unicode
+    @return: if the word is vocalized
+    @rtype:Boolean
+    """
+    if word.isalpha():
+        return False
+    for char in word:
+        if is_tashkeel(char):
+            break
+    else:
+        return False
+    return True
+
+def strip_tashkeel(text):
+    """Strip vowels from a text, include Shadda.
+    The striped marks are :
+        - FATHA, DAMMA, KASRA
+        - SUKUN
+        - SHADDA
+        - FATHATAN, DAMMATAN, KASRATAN,, , .
+
+    Example:
+        >>> text = u"الْعَرَبِيّةُ"
+        >>> strip_tashkeel(text)
+        العربية
+
+    @param text: arabic text.
+    @type text: unicode.
+    @return: return a striped text.
+    @rtype: unicode.
+    """
+    if not text:
+        return text
+    elif is_vocalized(text):
+        for char in TASHKEEL:
+            text = text.replace(char, '')
+    return text
+
+def strip_tatweel(text):
+    """
+    Strip tatweel from a text and return a result text.
+
+    Example:
+        >>> text = u"العـــــربية"
+        >>> strip_tatweel(text)
+        العربية
+
+    @param text: arabic text.
+    @type text: unicode.
+    @return: return a striped text.
+    @rtype: unicode.
+
+    """
+    return text.replace(TATWEEL, '')
+
+
+class SimpleFarasaSegmenter:
+    def __init__(self, logging_level="WARNING"):
+        self.task = "segment"
+        self.__base_dir = Path(__file__).parent.absolute()
+        self.__bin_lib_dir = Path(f"{self.__base_dir}/farasa_bin/lib")
+        self.__BASE_CMD = ["java", "-Dfile.encoding=UTF-8", "-jar"]
+        self.__segment_cmd = self.__BASE_CMD + [str(self.__bin_lib_dir / "FarasaSegmenterJar.jar")]
+        self.__task_proc = None
+        self.logger = self._config_logs(logging_level)
+        
+        self._check_java_version()
+        self._check_toolkit_binaries()
+        self.__initialize_task_proc()
+
+    def _config_logs(self, logging_level):
+        logger = logging.getLogger("simple_farasapy_logger")
+        logger.propagate = False
+        logger.setLevel(getattr(logging, logging_level.upper()))
+        logs_formatter = logging.Formatter("[%(asctime)s - %(name)s - %(levelname)s]: %(message)s")
+        if not logger.hasHandlers():
+            stream_logger = logging.StreamHandler()
+            stream_logger.setFormatter(logs_formatter)
+            logger.addHandler(stream_logger)
+        return logger
+
+    def _check_java_version(self):
+        try:
+            version_proc_output = subprocess.check_output(
+                ["java", "-version"], stderr=subprocess.STDOUT, encoding="utf8"
+            )
+            version_pattern = r"\"(\d+(\.\d+){0,1})"
+            java_version = float(re.search(version_pattern, version_proc_output).groups()[0])
+            if java_version >= 1.7:
+                self.logger.debug(f"Your java version is {java_version} which is compatible with Farasa")
+            else:
+                self.logger.warning("You are using an old version of java. Farasa is compatible with Java 7 and above")
+        except subprocess.CalledProcessError as proc_err:
+            self.logger.error(f"error occurred: {proc_err}.")
+            raise Exception("Please make sure you have installed Java 1.7+ and add it to your PATH.")
+
+    def _check_toolkit_binaries(self):
+        if not Path(f"{self.__bin_lib_dir}/FarasaSegmenterJar.jar").is_file():
+            raise Exception("FarasaSegmenterJar.jar not found in the expected directory. Please ensure it is correctly placed.")
+
+    def __initialize_task_proc(self):
+        self.__task_proc = subprocess.Popen(
+            self.__segment_cmd,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+
+    def segment(self, text: str) -> str:
+        return self._do_task(text.strip())
+
+    def _do_task(self, text: str) -> str:
+        byted_text = str.encode(text + "\n")
+        self.__task_proc.stdin.flush()
+        self.__task_proc.stdin.write(byted_text)
+        self.__task_proc.stdin.flush()
+        
+        output = self.__task_proc.stdout.readline().decode("utf8").strip()
+        self.__task_proc.stdout.flush()
+        return output
+
 class ArabertPreprocessor:
     """
     A Preprocessor class that cleans and preprocesses text for all models in the AraBERT repo.
@@ -285,9 +438,9 @@ class ArabertPreprocessor:
 
         if self.apply_farasa_segmentation:
             try:
-                from farasa.segmenter import FarasaSegmenter
+                # from farasa.segmenter import FarasaSegmenter
 
-                self.farasa_segmenter = FarasaSegmenter(interactive=True)
+                self.farasa_segmenter = SimpleFarasaSegmenter()
             except ModuleNotFoundError:
                 logging.error(
                     "farasapy is not installed, you want be able to process text for AraBERTv1 and v2. Install it using: pip install farasapy"
@@ -347,76 +500,6 @@ class ArabertPreprocessor:
                 self.map_hindi_numbers_to_arabic = False
         else:
             self.map_hindi_numbers_to_arabic = map_hindi_numbers_to_arabic
-
-    # add helper functions 
-    def is_vocalized(word):
-        """Checks if the arabic word is vocalized.
-        the word musn't  have any spaces and pounctuations.
-        @param word: arabic unicode char
-        @type word: unicode
-        @return: if the word is vocalized
-        @rtype:Boolean
-        """
-        if word.isalpha():
-            return False
-        for char in word:
-            if is_tashkeel(char):
-                break
-        else:
-            return False
-        return True
-    
-    TASHKEEL = (FATHATAN, DAMMATAN, KASRATAN, FATHA, DAMMA, KASRA, \
-            SUKUN, SHADDA)
-    
-    def is_tashkeel(archar):
-        """Checks if the given ``archar`` Arabic Tashkeel Marks (
-            - FATHA, DAMMA, KASRA, SUKUN,
-            - SHADDA,
-            - FATHATAN, DAMMATAN, KASRATAn)."""
-        return archar in TASHKEEL
-    
-    def strip_tashkeel(text):
-        """Strip vowels from a text, include Shadda.
-        The striped marks are :
-            - FATHA, DAMMA, KASRA
-            - SUKUN
-            - SHADDA
-            - FATHATAN, DAMMATAN, KASRATAN,, , .
-
-        Example:
-            >>> text = u"الْعَرَبِيّةُ"
-            >>> strip_tashkeel(text)
-            العربية
-
-        @param text: arabic text.
-        @type text: unicode.
-        @return: return a striped text.
-        @rtype: unicode.
-        """
-        if not text:
-            return text
-        elif is_vocalized(text):
-            for char in TASHKEEL:
-                text = text.replace(char, '')
-        return text
-    
-    def strip_tatweel(text):
-        """
-        Strip tatweel from a text and return a result text.
-
-        Example:
-            >>> text = u"العـــــربية"
-            >>> strip_tatweel(text)
-            العربية
-
-        @param text: arabic text.
-        @type text: unicode.
-        @return: return a striped text.
-        @rtype: unicode.
-
-        """
-        return text.replace(TATWEEL, '')
 
     def preprocess(self, text: str) -> str:
         """
@@ -573,6 +656,8 @@ class ArabertPreprocessor:
 
         # remove extra spaces
         text = " ".join(text.replace("\uFE0F", "").split())
+
+        
 
         if self.apply_farasa_segmentation:
             if self.keep_emojis:
@@ -843,5 +928,3 @@ class ArabertPreprocessor:
             result = re.search(REDUNDANT_PUNCT_PATTERN, text_)
         text = re.sub(r"\s+", " ", text)
         return text.strip()
-    
-    

@@ -163,6 +163,9 @@ _import_structure = {
         "AltCLIPTextConfig",
         "AltCLIPVisionConfig",
     ],
+    "models.arabert": [
+        "ArabertPreprocessor",
+    ],
     "models.audio_spectrogram_transformer": [
         "ASTConfig",
         "ASTFeatureExtractor",
@@ -4815,6 +4818,7 @@ if TYPE_CHECKING:
         AltCLIPTextConfig,
         AltCLIPVisionConfig,
     )
+    from .models.arabert import ArabertPreprocessor
     from .models.audio_spectrogram_transformer import (
         ASTConfig,
         ASTFeatureExtractor,
