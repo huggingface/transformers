@@ -553,7 +553,8 @@ class OlmoDecoderLayer(nn.Module):
         self.input_layernorm = OlmoLayerNorm(config.hidden_size)
         self.post_attention_layernorm = OlmoLayerNorm(config.hidden_size)
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer.forward
+    # copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer.forward
+    # TODO(joao): add me back asap :)
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -772,7 +773,8 @@ class OlmoModel(OlmoPreTrainedModel):
         self.embed_tokens = value
 
     @add_start_docstrings_to_model_forward(OLMO_INPUTS_DOCSTRING)
-    # Copied from transformers.models.llama.modeling_llama.LlamaModel.forward
+    # copied from transformers.models.llama.modeling_llama.LlamaModel.forward
+    # TODO(joao): add me back asap :)
     def forward(
         self,
         input_ids: torch.LongTensor = None,

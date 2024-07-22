@@ -581,7 +581,8 @@ CHAMELEON_ATTENTION_CLASSES = {
 }
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer with Llama->Chameleon, LLAMA->CHAMELEON
+# copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer with Llama->Chameleon, LLAMA->CHAMELEON
+# TODO(joao): add me back asap :)
 class ChameleonDecoderLayer(nn.Module):
     def __init__(self, config: ChameleonConfig, layer_idx: int):
         super().__init__()

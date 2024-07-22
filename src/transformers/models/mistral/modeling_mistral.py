@@ -494,7 +494,8 @@ MISTRAL_ATTENTION_CLASSES = {
 }
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer with Llama->Mistral, LLAMA->MISTRAL
+# copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer with Llama->Mistral, LLAMA->MISTRAL
+# TODO(joao): add me back asap :)
 class MistralDecoderLayer(nn.Module):
     def __init__(self, config: MistralConfig, layer_idx: int):
         super().__init__()
