@@ -62,39 +62,6 @@ def clip_boxes(box, box_size: Tuple[int, int]):
     return box
 
 
-# def handle_text(
-#     text: Union[str, List[str], List[List[str]], TextInput, PreTokenizedInput],
-# ) -> Tuple[List[str], List[List[str]]]:
-#     if isinstance(text, str):
-#         # Text needs to be in this format: "Detect cat, dog, bird"
-#         tasks = [text]
-#         # Infer labels from task
-#         labels = "".join(text.split(" ")[1:])
-#         if len(labels) == 0:
-#             labels = [[text]]
-#         else:
-#             labels = labels.split(",")
-#     elif isinstance(text, list):
-#         if isinstance(text[0], str) and len(text) == 2 and isinstance(text[1], list):
-#             # Typical expected not batched input ("Detect cat, dog, bird.", ["cat", "dog", "bird"])
-#             tasks = [text[0]]
-#             labels = [text[1]]
-#         elif isinstance(text[0], str) and len(text) > 2:
-#             # infer task from label (not batched)
-#             tasks = ["Detect {}.".format(",".join(text))]
-#             labels = text
-#         elif isinstance(text[0], list) and len(text) == 2 and isinstance(text[1][0], list):
-#             # Typical expected batched input (["Detect cat, dog, bird.", ["cat", "dog", "bird"]])
-#             tasks = text[0]
-#             labels = text[1]
-#         else:
-#             raise ValueError("Invalid input format for `text`.")
-#     else:
-#         raise ValueError("Invalid input format for `text`.")
-
-#     return tasks, labels
-
-
 class OmDetTurboProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
@@ -202,9 +169,9 @@ class OmDetTurboProcessor(ProcessorMixin):
 
     def process_single_image(
         self,
-        boxes: torch.Tensor,
-        scores: torch.Tensor,
-        labels: torch.Tensor,
+        boxes,
+        scores,
+        labels,
         label_names: List[str],
         image_size: Tuple[int, int],
         num_classes: int,
