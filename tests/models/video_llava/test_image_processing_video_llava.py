@@ -211,6 +211,24 @@ class VideoLlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         expected_output_video_shape = (5, 8, 3, 18, 18)
         self.assertEqual(tuple(encoded_videos.shape), expected_output_video_shape)
 
+    def test_call_pil_videos(self):
+        # Initialize image_processing
+        image_processing = self.image_processing_class(**self.image_processor_dict)
+        # create random numpy tensors
+        video_inputs = self.image_processor_tester.prepare_video_inputs(equal_resolution=True)
+        for video in video_inputs:
+            self.assertIsInstance(video, np.ndarray)
+
+        # Test not batched input
+        encoded_videos = image_processing(images=None, videos=video_inputs[0], return_tensors="pt").pixel_values_videos
+        expected_output_video_shape = (1, 8, 3, 18, 18)
+        self.assertEqual(tuple(encoded_videos.shape), expected_output_video_shape)
+
+        # Test batched
+        encoded_videos = image_processing(images=None, videos=video_inputs, return_tensors="pt").pixel_values_videos
+        expected_output_video_shape = (5, 8, 3, 18, 18)
+        self.assertEqual(tuple(encoded_videos.shape), expected_output_video_shape)
+
     def test_call_pytorch(self):
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
