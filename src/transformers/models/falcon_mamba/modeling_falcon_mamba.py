@@ -123,9 +123,9 @@ class FalconMambaMixer(nn.Module):
     and is why FalconMamba is called **selective** state spaces)
     """
 
-    # Copied from transformers.models.mamba.modeling_mamba.MambaMixer.__init__ with Mamba->FalconMamba,mamba->falcon_mamba
     def __init__(self, config: FalconMambaConfig, layer_idx: int):
         super().__init__()
+        self.config = config
         self.hidden_size = config.hidden_size
         self.ssm_state_size = config.state_size
         self.conv_kernel_size = config.conv_kernel
@@ -225,7 +225,12 @@ class FalconMambaMixer(nn.Module):
             C = rms_forward(C)
             time_step = rms_forward(time_step)
 
-            discrete_time_step = self.dt_proj.weight @ time_step.transpose(1, 2)
+            # In case the model has been quantized, we need a hack to properly call the `nn.Linear` module
+            # at the price of a small overhead.
+            if hasattr(self.config, "_pre_quantization_dtype"):
+                discrete_time_step = (self.dt_proj(time_step) - self.dt_proj.bias).transpose(1, 2)
+            else:
+                discrete_time_step = self.dt_proj.weight @ time_step.transpose(1, 2)
 
             A = -torch.exp(self.A_log.float())
             # 3.c perform the recurrence y ← SSM(A, B, C)(x)
@@ -396,7 +401,7 @@ class FalconMambaPreTrainedModel(PreTrainedModel):
 
     config_class = FalconMambaConfig
     base_model_prefix = "backbone"
-    _no_split_modules = ["FalconMambaBlock"]
+    _no_split_modules = ["FalconMambaBlock", "FalconMambaMixer"]
     supports_gradient_checkpointing = True
     _is_stateful = True
 
