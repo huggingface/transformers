@@ -38,21 +38,21 @@ ROPE_CONFIG_DOCSTRING = r"""
                 Used with all scaling types. The scaling factor to apply to the RoPE embeddings. In most scaling types,
                 a `factor` of x will enable the model to handle sequences of length x * `max_position_embeddings`.
             `attention_factor` (`float`, *optional*):
-                Optional, used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
+                Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
                 computation. If unspecified, it defaults to value recommended by the implementation, using the `factor`
                 field to infer the suggested value.
             `beta_fast` (`float`, *optional*):
-                Optional, only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear
+                Only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear
                 ramp function. If unspecified, it defaults to 32.
             `beta_slow` (`float`, *optional*):
-                Optional, only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
+                Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
                 ramp function. If unspecified, it defaults to 1.
             `short_factor` (`List[float]`, *optional*):
-                Optional, only used with 'longrope'. The scaling factor to be applied to short contexts (<
+                Only used with 'longrope'. The scaling factor to be applied to short contexts (<
                 `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
                 size divided by the number of attention heads divided by 2
             `long_factor` (`List[float]`, *optional*):
-                Optional, only used with 'longrope'. The scaling factor to be applied to short contexts (<
+                Only used with 'longrope'. The scaling factor to be applied to short contexts (<
                 `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
                 size divided by the number of attention heads divided by 2
 """
