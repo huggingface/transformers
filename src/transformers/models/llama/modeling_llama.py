@@ -120,7 +120,7 @@ class LlamaRotaryEmbedding(nn.Module):
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
 
-    def dynamic_frequency_update(self, position_ids, device):
+    def _dynamic_frequency_update(self, position_ids, device):
         """
         dynamic RoPE layers should recompute `inv_freq` in the following situations:
         1 - growing beyond the cached sequence length (allow scaling)
@@ -143,7 +143,7 @@ class LlamaRotaryEmbedding(nn.Module):
     @torch.no_grad()
     def forward(self, x, position_ids):
         if "dynamic" in self.rope_type:
-            self.dynamic_frequency_update(position_ids, device=x.device)
+            self._dynamic_frequency_update(position_ids, device=x.device)
 
         # Core RoPE block
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)

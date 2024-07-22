@@ -27,7 +27,10 @@ if is_torch_available():
 
 
 def _compute_default_rope_parameters(
-    config: PretrainedConfig, device: "torch.device", seq_len: Optional[int] = None, **rope_kwargs
+    config: Optional[PretrainedConfig] = None,
+    device: Optional["torch.device"] = None,
+    seq_len: Optional[int] = None,
+    **rope_kwargs,
 ) -> Tuple["torch.Tensor", float]:
     """
     Computes the inverse frequencies according to the original RoPE implementation
@@ -65,7 +68,10 @@ def _compute_default_rope_parameters(
 
 
 def _compute_linear_scaling_rope_parameters(
-    config: PretrainedConfig, device: "torch.device", seq_len: Optional[int] = None, **rope_kwargs
+    config: Optional[PretrainedConfig] = None,
+    device: Optional["torch.device"] = None,
+    seq_len: Optional[int] = None,
+    **rope_kwargs,
 ) -> Tuple["torch.Tensor", float]:
     """
     Computes the inverse frequencies with linear scaling. Credits to the Reddit user /u/kaiokendev
@@ -103,7 +109,10 @@ def _compute_linear_scaling_rope_parameters(
 
 
 def _compute_dynamic_ntk_parameters(
-    config: PretrainedConfig, device: "torch.device", seq_len: Optional[int] = None, **rope_kwargs
+    config: Optional[PretrainedConfig] = None,
+    device: Optional["torch.device"] = None,
+    seq_len: Optional[int] = None,
+    **rope_kwargs,
 ) -> Tuple["torch.Tensor", float]:
     """
     Computes the inverse frequencies with NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla
@@ -300,14 +309,14 @@ def _check_received_keys(rope_type: str, received_keys: set, required_keys: set,
     """Compare the received keys in `config.rope_scaling` against the expected and optional keys"""
     missing_keys = required_keys - received_keys
     if missing_keys:
-        raise ValueError(f"Missing required keys in `rope_scaling` for 'rope_type'='{rope_type}': {missing_keys}")
+        raise KeyError(f"Missing required keys in `rope_scaling` for 'rope_type'='{rope_type}': {missing_keys}")
 
     if optional_keys is not None:
         unused_keys = received_keys - required_keys - optional_keys
     else:
         unused_keys = received_keys - received_keys
     if unused_keys:
-        raise ValueError(f"Unrecognized keys in `rope_scaling` for 'rope_type'='{rope_type}': {unused_keys}")
+        raise KeyError(f"Unrecognized keys in `rope_scaling` for 'rope_type'='{rope_type}': {unused_keys}")
 
 
 def _validate_default_rope_parameters(config: PretrainedConfig):
@@ -343,7 +352,7 @@ def _validate_yarn_parameters(config: PretrainedConfig):
         raise ValueError(f"`rope_scaling`'s factor field must be a float >= 1, got {factor}")
 
     attention_factor = rope_scaling.get("attention_factor")
-    if attention_factor is not None and not isinstance(attention_factor, float) or attention_factor < 0:
+    if attention_factor is not None and (not isinstance(attention_factor, float) or attention_factor < 0):
         raise ValueError(
             f"`rope_scaling`'s attention_factor field must be a float greater than 0, got {attention_factor}"
         )
@@ -436,4 +445,7 @@ def rope_config_validation(config: PretrainedConfig):
     validation_fn = ROPE_VALIDATION_FUNCTIONS.get(rope_type)
     if validation_fn is not None:
         validation_fn(config)
-    # else: no validation, it is a registered custom RoPE type without validation
+    else:
+        raise ValueError(
+            f"Missing validation function mapping in `ROPE_VALIDATION_FUNCTIONS` for 'rope_type'='{rope_type}'"
+        )

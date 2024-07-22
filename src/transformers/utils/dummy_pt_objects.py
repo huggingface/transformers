@@ -488,6 +488,10 @@ class WhisperTimeStampLogitsProcessor(metaclass=DummyObject):
 ROPE_INIT_FUNCTIONS = None
 
 
+def rope_config_validation(*args, **kwargs):
+    requires_backends(rope_config_validation, ["torch"])
+
+
 class PreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
