@@ -23,12 +23,13 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
+# Copied from transformers.models.mamba.configuration_mamba.MambaConfig with mamba->falcon_mamba,Mamba->FalconMamba,MAMBA->FALCON_MAMBA,state-spaces/falcon_mamba-2.8b->tiiuae/falcon-mamba-7b
 class FalconMambaConfig(PretrainedConfig):
     """
-    This is the configuration class to store the configuration of a [`FalconMambaModel`]. It is used to instantiate a FALCONMAMBA
+    This is the configuration class to store the configuration of a [`FalconMambaModel`]. It is used to instantiate a FALCON_MAMBA
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the FALCONMAMBA
-    [state-spaces/falcon_mamba-2.8b](https://huggingface.co/state-spaces/falcon_mamba-2.8b) architecture.
+    defaults will yield a similar configuration to that of the FALCON_MAMBA
+    [tiiuae/falcon-mamba-7b](https://huggingface.co/tiiuae/falcon-mamba-7b) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -36,7 +37,7 @@ class FalconMambaConfig(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 50280):
-            Vocabulary size of the FALCONMAMBA model. Defines the number of different tokens that can be represented by the
+            Vocabulary size of the FALCON_MAMBA model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`FalconMambaModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the embeddings and hidden states.
@@ -132,7 +133,7 @@ class FalconMambaConfig(PretrainedConfig):
         self.layer_norm_epsilon = layer_norm_epsilon
         self.conv_kernel = conv_kernel
         self.expand = expand
-        self.intermediate_size = int(self.expand * self.hidden_size)
+        self.intermediate_size = int(expand * self.hidden_size)
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
