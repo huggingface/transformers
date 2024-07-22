@@ -56,6 +56,7 @@ from .pytorch_utils import (  # noqa: F401
     prune_linear_layer,
 )
 from .quantizers import AutoHfQuantizer, HfQuantizer
+from .quantizers.quantizer_hqq import HqqHfQuantizer
 from .quantizers.quantizers_utils import get_module_from_name
 from .safetensors_conversion import auto_conversion
 from .utils import (
@@ -856,8 +857,9 @@ def _load_state_dict_into_meta_model(
         state_dict[new_key] = state_dict.pop(old_key)
 
     for param_name, param in state_dict.items():
+        # print('param_name', param_name, param_name in loaded_state_dict_keys, param_name in expected_keys)
         # First part of the test is always true as load_state_dict_keys always contains state_dict keys.
-        if param_name not in loaded_state_dict_keys or param_name not in expected_keys:
+        if param_name not in loaded_state_dict_keys:  # or param_name not in expected_keys: #TODO @mobicham
             continue
 
         if param_name.startswith(start_prefix):
@@ -888,12 +890,20 @@ def _load_state_dict_into_meta_model(
         # For compatibility with PyTorch load_state_dict which converts state dict dtype to existing dtype in model, and which
         # uses `param.copy_(input_param)` that preserves the contiguity of the parameter in the model.
         # Reference: https://github.com/pytorch/pytorch/blob/db79ceb110f6646523019a59bbd7b838f43d4a86/torch/nn/modules/module.py#L2040C29-L2040C29
-        old_param = model
-        splits = param_name.split(".")
-        for split in splits:
-            old_param = getattr(old_param, split)
-            if old_param is None:
-                break
+
+        # TODO @mobicham: We need this for Hqq Quantizer otherwise it would break because state_dict fields (W_q, etc.) are not in nn.Linear
+        check_old_param = True
+        if is_quantized:
+            if isinstance(hf_quantizer, HqqHfQuantizer):
+                check_old_param, old_param = False, None
+
+        if check_old_param:
+            old_param = model
+            splits = param_name.split(".")
+            for split in splits:
+                old_param = getattr(old_param, split)
+                if old_param is None:
+                    break
 
         if old_param is not None:
             if dtype is None:
@@ -930,6 +940,10 @@ def _load_state_dict_into_meta_model(
                 )
             )
         ):
+            # TODO @mobicham: skip module to device for HQQLinear since it's already on device
+            if is_quantized:
+                if isinstance(hf_quantizer, HqqHfQuantizer) and hf_quantizer.pre_quantized:
+                    continue
             # For backward compatibility with older versions of `accelerate` and for non-quantized params
             set_module_tensor_to_device(model, param_name, param_device, **set_module_kwargs)
         else:
@@ -3684,6 +3698,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         from_pt = not (from_tf | from_flax)
 
         # load pt weights early so that we know which dtype to init the model under
+
         if from_pt:
             if not is_sharded and state_dict is None:
                 # Time to load the checkpoint
@@ -3952,7 +3967,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 and hf_quantizer.quantization_config.quant_method == QuantizationMethod.HQQ
             ):
                 device_map_kwargs["force_hooks"] = True
-            if not is_fsdp_enabled() and not is_deepspeed_zero3_enabled():
+
+            # TODO @mobicham: HQQLinear breaks with dispatch_model() when loading
+            do_dispatch_model = True
+            # if pre_quantized:
+            #     do_dispatch_model = not isinstance(hf_quantizer, HqqHfQuantizer)
+            if not is_fsdp_enabled() and not is_deepspeed_zero3_enabled() and do_dispatch_model:
                 dispatch_model(model, **device_map_kwargs)
 
         if hf_quantizer is not None:
@@ -4133,7 +4153,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     value = torch.empty(*param.size(), dtype=target_dtype)
                     if (
                         not is_quantized
-                        or getattr(hf_quantizer, "requires_parameters_quantization", False)
+                        or (getattr(hf_quantizer, "requires_parameters_quantization", False))
                         or not hf_quantizer.check_quantized_param(
                             model, param_value=value, param_name=key, state_dict={}
                         )
