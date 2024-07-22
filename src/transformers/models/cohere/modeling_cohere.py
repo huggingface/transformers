@@ -295,7 +295,8 @@ class CohereAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2 with Llama->Cohere
+# copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2 with Llama->Cohere
+# TODO(joao): add me back asap :)
 class CohereFlashAttention2(CohereAttention):
     """
     Cohere flash attention module. This module inherits from `CohereAttention` as the weights of the module stays

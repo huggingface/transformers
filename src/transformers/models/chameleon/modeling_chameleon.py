@@ -362,7 +362,8 @@ class ChameleonAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2 with Llama->Chameleon
+# copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2 with Llama->Chameleon
+# TODO(joao): add me back asap :)
 class ChameleonFlashAttention2(ChameleonAttention):
     """
     Chameleon flash attention module. This module inherits from `ChameleonAttention` as the weights of the module stays
