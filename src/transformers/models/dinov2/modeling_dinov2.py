@@ -59,7 +59,7 @@ _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 class Dinov2Embeddings(nn.Module):
     """
-    Construct the CLS token, mask token, position and patch embeddings.
+    Construct the CLS token, register tokens, mask token, position and patch embeddings.
     """
 
     def __init__(self, config: Dinov2Config) -> None:
@@ -73,7 +73,11 @@ class Dinov2Embeddings(nn.Module):
         )
         self.mask_token = nn.Parameter(torch.zeros(1, config.hidden_size))
         self.patch_embeddings = Dinov2PatchEmbeddings(config)
-        num_patches = self.patch_embeddings.num_patches
+
+        # This is kinda confusing... its only used for intepolation image size.... 
+        # The acctual image size is dependent on the input pixel_values
+        num_patches = self.patch_embeddings.num_patches 
+
         self.position_embeddings = nn.Parameter(torch.randn(1, num_patches + 1, config.hidden_size))
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.config = config
@@ -87,31 +91,59 @@ class Dinov2Embeddings(nn.Module):
         https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174
         """
 
-        num_patches = embeddings.shape[1] - 1
-        num_positions = self.position_embeddings.shape[1] - 1
+        # embeddings           - (batch_size, seq_length,  hidden_size) - seq_length contains [CLS]
+        # position_embeddings  - (1,        , num_patches, hidden_size) - num_patches seams to be defined drom a predefined image size
+        num_patches = embeddings.shape[1] - 1                 # Substract teh [CLS] token position embeddings
+        num_positions = self.position_embeddings.shape[1] - 1 # Substract teh [CLS] token position embeddings
+
+        # Do nothing if sequence lengths match
         if num_patches == num_positions and height == width:
             return self.position_embeddings
-        class_pos_embed = self.position_embeddings[:, 0]
-        patch_pos_embed = self.position_embeddings[:, 1:]
+        
+        # Split [CLS] from patches
+        class_pos_embed = self.position_embeddings[:, 0]   # [CLS] token position embeddings
+        patch_pos_embed = self.position_embeddings[:, 1:]  # Patch tokens positioanl embeddings
+
+        # This just seems ot be the hidden_size
         dim = embeddings.shape[-1]
+
+        # Get patch width and patch height (actual patch sized not teh wierd ones defined in self.patch_embeddings)
         height = height // self.config.patch_size
         width = width // self.config.patch_size
+
         # we add a small number to avoid floating point error in the interpolation
         # see discussion at https://github.com/facebookresearch/dino/issues/8
         height, width = height + self.config.interpolate_offset, width + self.config.interpolate_offset
+
+        # Reshape into (1, num_patches[0], num_patches[0], hidden_size)
+        # Again this seams to be teh patch width and height for a predefined image size
+        # FIX: Why isn't it using self.patch_embeddings.num_patches - Specificaly where is the support for a different width and height
+        # FIX: wierd "squarity" enforcement teh rest of the code doesn't apply
         patch_pos_embed = patch_pos_embed.reshape(1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim)
+
+        # (1, hidden_size, num_patches[0], num_patches[0]) - I think this is just to make interpolation work 
         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+
+        # This practicaly is like image scaling just for tensors
         target_dtype = patch_pos_embed.dtype
         patch_pos_embed = nn.functional.interpolate(
             patch_pos_embed.to(dtype=torch.float32),
+            # Kinda a wierd API since its factor upscaling and not dest dimension upscaling
+            # The reason it recomputing teh size is because we need teh  float decimals that are removed with int()
             scale_factor=(float(height / math.sqrt(num_positions)), float(width / math.sqrt(num_positions))),
             mode="bicubic",
             align_corners=False,
             antialias=self.config.interpolate_antialias,
         ).to(dtype=target_dtype)
+
+        # Double check teh interpolation (resize) output is correctly sized
         if int(height) != patch_pos_embed.shape[-2] or int(width) != patch_pos_embed.shape[-1]:
             raise ValueError("Width or height does not match with the interpolated position embeddings")
+        
+        # (1, num_patches[0], num_patches[0], hidden_size) - Undo intepolation reshape
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
+
+        # Concats [CLS] and patch embeddings
         return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
 
     def forward(self, pixel_values: torch.Tensor, bool_masked_pos: Optional[torch.Tensor] = None) -> torch.Tensor:
