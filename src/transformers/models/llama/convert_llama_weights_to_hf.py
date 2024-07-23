@@ -161,7 +161,7 @@ def write_model(
         # Sharded
         loaded = [
             torch.load(os.path.join(input_base_path, file), map_location="cpu")
-            for file in os.listdir(input_base_path)
+            for file in sorted(os.listdir(input_base_path))
             if file.endswith(".pth")
         ]
     param_count = 0

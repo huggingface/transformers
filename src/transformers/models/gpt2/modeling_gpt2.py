@@ -1030,18 +1030,18 @@ class GPT2Model(GPT2PreTrainedModel):
 
         # Attention mask.
         _use_sdpa = self._attn_implementation == "sdpa" and output_attentions is False and head_mask is None
-        if attention_mask is not None:
-            attention_mask = attention_mask.view(batch_size, -1)
-            if self._attn_implementation == "flash_attention_2":
-                attention_mask = attention_mask if 0 in attention_mask else None
-            elif _use_sdpa:
-                attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
-                    attention_mask=attention_mask,
-                    input_shape=(batch_size, input_shape[-1]),
-                    inputs_embeds=inputs_embeds,
-                    past_key_values_length=past_length,
-                )
-            else:
+        attention_mask = attention_mask.view(batch_size, -1) if attention_mask is not None else None
+        if self._attn_implementation == "flash_attention_2":
+            attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
+        elif _use_sdpa:
+            attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
+                attention_mask=attention_mask,
+                input_shape=(batch_size, input_shape[-1]),
+                inputs_embeds=inputs_embeds,
+                past_key_values_length=past_length,
+            )
+        else:
+            if attention_mask is not None:
                 # We create a 3D attention mask from a 2D tensor mask.
                 # Sizes are [batch_size, 1, 1, to_seq_length]
                 # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]

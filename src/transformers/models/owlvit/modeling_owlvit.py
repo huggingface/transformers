@@ -451,7 +451,7 @@ class OwlViTMLP(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->OwlViT
+# Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoderLayer with AltCLIP->OwlViT
 class OwlViTEncoderLayer(nn.Module):
     def __init__(self, config: OwlViTConfig):
         super().__init__()
@@ -998,13 +998,13 @@ class OwlViTModel(OwlViTPreTrainedModel):
         super().__init__(config)
 
         if not isinstance(config.text_config, OwlViTTextConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.text_config is expected to be of type OwlViTTextConfig but is of type"
                 f" {type(config.text_config)}."
             )
 
         if not isinstance(config.vision_config, OwlViTVisionConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.vision_config is expected to be of type OwlViTVisionConfig but is of type"
                 f" {type(config.vision_config)}."
             )
