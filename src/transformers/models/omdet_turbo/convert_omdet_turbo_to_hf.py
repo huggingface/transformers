@@ -199,6 +199,7 @@ def read_in_q_k_v_encoder(state_dict, config):
     state_dict["encoder.encoder.0.layers.0.self_attn.value.weight"] = in_proj_weight[-embed_dim:, :]
     state_dict["encoder.encoder.0.layers.0.self_attn.value.bias"] = in_proj_bias[-embed_dim:]
 
+
 def read_in_q_k_v_decoder(state_dict, config):
     for layer_num in range(config.decoder_num_layers):
         embed_dim = config.decoder_hidden_dim
@@ -208,11 +209,12 @@ def read_in_q_k_v_decoder(state_dict, config):
         # next, add query, keys and values (in that order) to the state dict
         state_dict[f"decoder.decoder.layers.{layer_num}.self_attn.query.weight"] = in_proj_weight[:embed_dim, :]
         state_dict[f"decoder.decoder.layers.{layer_num}.self_attn.query.bias"] = in_proj_bias[:embed_dim]
-        state_dict[f"decoder.decoder.layers.{layer_num}.self_attn.key.weight"] = in_proj_weight[embed_dim : embed_dim * 2, :]
+        state_dict[f"decoder.decoder.layers.{layer_num}.self_attn.key.weight"] = in_proj_weight[
+            embed_dim : embed_dim * 2, :
+        ]
         state_dict[f"decoder.decoder.layers.{layer_num}.self_attn.key.bias"] = in_proj_bias[embed_dim : embed_dim * 2]
         state_dict[f"decoder.decoder.layers.{layer_num}.self_attn.value.weight"] = in_proj_weight[-embed_dim:, :]
         state_dict[f"decoder.decoder.layers.{layer_num}.self_attn.value.bias"] = in_proj_bias[-embed_dim:]
-
 
 
 def run_test(model, processor):
