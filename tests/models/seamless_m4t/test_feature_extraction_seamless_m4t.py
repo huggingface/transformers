@@ -185,13 +185,19 @@ class SeamlessM4TFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
         speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
         np_speech_inputs = [np.asarray(speech_input) for speech_input in speech_inputs]
 
-        # Test feature size
-        input_features = feature_extractor(
+        # Test feature size and attention mask size
+        output = feature_extractor(
             np_speech_inputs, pad_to_multiple_of=pad_to_multiple_of, return_tensors="np"
-        ).input_features
+        )
+        input_features = output.input_features
         self.assertTrue(input_features.ndim == 3)
         self.assertTrue(input_features.shape[0] == 3)
         self.assertTrue(input_features.shape[-1] == feature_extractor.feature_size * feature_extractor.stride)
+        # same as test_attention_mask
+        attention_mask = output.attention_mask
+        self.assertTrue(attention_mask.ndim == 2)
+        self.assertTrue(attention_mask.shape[0] == 3)
+        self.assertTrue(attention_mask.shape[-1] == input_features.shape[1])
 
         # Test not batched input
         encoded_sequences_1 = feature_extractor(
