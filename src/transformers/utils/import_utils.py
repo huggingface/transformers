@@ -177,7 +177,7 @@ _torchdistx_available = _is_package_available("torchdistx")
 _torchvision_available = _is_package_available("torchvision")
 _mlx_available = _is_package_available("mlx")
 _hqq_available = _is_package_available("hqq")
-
+_tiktoken_available = _is_package_available("tiktoken")
 
 _torch_version = "N/A"
 _torch_available = False
@@ -1162,6 +1162,10 @@ def is_jinja_available():
 
 def is_mlx_available():
     return _mlx_available
+
+
+def is_tiktoken_available():
+    return _tiktoken_available
 
 
 # docstyle-ignore

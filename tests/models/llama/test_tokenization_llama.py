@@ -36,6 +36,7 @@ from transformers.testing_utils import (
     require_jinja,
     require_read_token,
     require_sentencepiece,
+    require_tiktoken,
     require_tokenizers,
     require_torch,
     slow,
@@ -827,7 +828,8 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         self.assertEqual(tokens, ["▁No", "<s>", "▁He"])  # spaces are eaten by rstrip / lstrip
 
 
-#@require_read_token
+@require_read_token
+@require_tiktoken
 class TikTokenIntegrationTests(unittest.TestCase):
     """
     A class that regroups important test to make sure that we properly handle the special tokens.
