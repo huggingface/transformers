@@ -867,14 +867,17 @@ class TikTokenIntegrationTests(unittest.TestCase):
             model_path, legacy=False, additional_special_tokens=special_tokens
         )
         self.assertTrue(isinstance(tiktoken_tokenizer, PreTrainedTokenizerFast))
+
         tokens = tiktoken_tokenizer.encode(test_text)
         self.assertEqual(tokens, test_tokens)
 
         tmpdirname = tempfile.mkdtemp()
         tiktoken_tokenizer.save_pretrained(tmpdirname)
         tokenizer_reloaded = AutoTokenizer.from_pretrained(tmpdirname)
+
         self.assertTrue(isinstance(tokenizer_reloaded, PreTrainedTokenizerFast))
         tokens = tokenizer_reloaded.encode(test_text)
+
         self.assertEqual(tokens, test_tokens)
         shutil.rmtree(tmpdirname)
 
