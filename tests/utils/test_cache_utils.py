@@ -39,7 +39,6 @@ if is_torch_available():
         LlamaConfig,
         SinkCache,
         StaticCache,
-        HybridCache,
     )
 
 
