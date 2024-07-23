@@ -356,7 +356,7 @@ class ProcessorMixin(PushToHubMixin):
                 proper_class = getattr(transformers_module, class_name)
 
             if not isinstance(arg, proper_class):
-                raise ValueError(
+                raise TypeError(
                     f"Received a {type(arg).__name__} for argument {attribute_name}, but a {class_name} was expected."
                 )
 
