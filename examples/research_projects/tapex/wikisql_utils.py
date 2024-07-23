@@ -48,7 +48,7 @@ def convert_to_float(value):
     if isinstance(value, int):
         return float(value)
     if not isinstance(value, str):
-        raise ValueError("Argument value is not a string. Can't parse it as float")
+        raise TypeError("Argument value is not a string. Can't parse it as float")
     sanitized = value
 
     try:
@@ -158,7 +158,7 @@ def _respect_conditions(table, row, conditions):
             cmp_value = _normalize_for_match(cmp_value)
 
         if not isinstance(table_value, type(cmp_value)):
-            raise ValueError("Type difference {} != {}".format(type(table_value), type(cmp_value)))
+            raise TypeError("Type difference {} != {}".format(type(table_value), type(cmp_value)))
 
         if not _compare(cond.operator, table_value, cmp_value):
             return False
