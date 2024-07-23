@@ -1059,8 +1059,8 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel):
         >>> from transformers import AutoProcessor, Qwen2AudioForConditionalGeneration
         >>> from transformers.pipelines.audio_utils import ffmpeg_read
 
-        >>> model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio")
-        >>> processor = AutoProcessor.from_pretrained("Qwen/Qwen2-Audio")
+        >>> model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio-7B")
+        >>> processor = AutoProcessor.from_pretrained("Qwen/Qwen2-Audio-7B")
 
         >>> prompt = "<|audio_bos|><|AUDIO|><|audio_eos|>Generate the caption in English:"
         >>> url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3"

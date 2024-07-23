@@ -28,7 +28,7 @@ class Qwen2AudioEncoderConfig(PretrainedConfig):
     configuration with the defaults will yield a similar configuration to that of the audio encoder of the Qwen2-Audio
     architecture.
 
-    e.g. [Qwen/Qwen2-Audio](https://huggingface.co/Qwen/Qwen2-Audio)
+    e.g. [Qwen/Qwen2-Audio-7B](https://huggingface.co/Qwen/Qwen2-Audio-7B)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -118,7 +118,7 @@ class Qwen2AudioConfig(PretrainedConfig):
     Qwen2-Audio model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the Qwen2-Audio.
 
-    e.g. [Qwen/Qwen2-Audio](https://huggingface.co/Qwen/Qwen2-Audio)
+    e.g. [Qwen/Qwen2-Audio-7B](https://huggingface.co/Qwen/Qwen2-Audio-7B)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

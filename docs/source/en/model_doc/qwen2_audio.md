@@ -23,9 +23,9 @@ The Qwen2Audio is the new model series of large audio-language models from the Q
 
 ## Usage tips
 
-`Qwen2-Audio` and `Qwen2-Audio-Instruct` can be found on the [Huggingface Hub](https://huggingface.co/Qwen)
+`Qwen2-Audio-7B` and `Qwen2-Audio-7B-Instruct` can be found on the [Huggingface Hub](https://huggingface.co/Qwen)
 
-In the following, we demonstrate how to use `Qwen2-Audio-Instrucct` for the inference. Note that we have used the ChatML format for dialog, in this demo we show how to leverage `apply_chat_template` for this purpose.
+In the following, we demonstrate how to use `Qwen2-Audio-7B-Instrucct` for the inference. Note that we have used the ChatML format for dialog, in this demo we show how to leverage `apply_chat_template` for this purpose.
 
 ```python
 >>> import requests
@@ -33,8 +33,8 @@ In the following, we demonstrate how to use `Qwen2-Audio-Instrucct` for the infe
 >>> from transformers.pipelines.audio_utils import ffmpeg_read
 >>> device = "cuda" # the device to load the model onto
 
->>> model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2-Audio-Instruct", device_map="auto")
->>> processor = AutoProcessor.from_pretrained("Qwen/Qwen2-Audio-Instruct")
+>>> model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct", device_map="auto")
+>>> processor = AutoProcessor.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct")
 
 >>> query="<|audio_bos|><|AUDIO|><|audio_eos|>\nWhat's that?"
 

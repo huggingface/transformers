@@ -193,7 +193,7 @@ class Qwen2AudioForConditionalGenerationModelTest(ModelTesterMixin, unittest.Tes
 @require_torch
 class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained("Qwen/Qwen2-Audio")
+        self.processor = AutoProcessor.from_pretrained("Qwen/Qwen2-Audio-7B")
 
     def tearDown(self):
         gc.collect()
@@ -202,7 +202,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_single(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio")
+        model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio-7B")
 
         prompt = "<|audio_bos|><|AUDIO|><|audio_eos|>Detect the language and recognize the speech:"
         url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/1272-128104-0000.flac"
@@ -226,7 +226,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_batch(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio")
+        model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio-7B")
 
         prompts = [
             "<|audio_bos|><|AUDIO|><|audio_eos|>Detect the language and recognize the speech:",
@@ -256,9 +256,9 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
     def test_tokenizer_integration(self):
-        slow_tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-Audio", use_fast=False)
+        slow_tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-Audio-7B", use_fast=False)
         fast_tokenizer = AutoTokenizer.from_pretrained(
-            "Qwen/Qwen2-Audio",
+            "Qwen/Qwen2-Audio-7B",
             from_slow=True,
             legacy=False,
         )
