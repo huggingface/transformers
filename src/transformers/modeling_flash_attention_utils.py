@@ -193,7 +193,7 @@ def _flash_attention_forward(
     sliding_window: Optional[int] = None,
     use_top_left_mask: bool = False,
     softcap: Optional[float] = None,
-    deterministic: bool = os.environ.get("FLASH_ATTENTION_DETERMINISTIC", "0") == "1",
+    deterministic: bool = False,
 ):
     """
     Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
@@ -233,7 +233,8 @@ def _flash_attention_forward(
     flash_kwargs = {"window_size": (sliding_window, sliding_window)} if use_sliding_windows else {}
 
     if is_flash_attn_greater_or_equal("2.4.1"):
-        flash_kwargs["deterministic"] = deterministic
+        is_deterministic = os.environ.get("FLASH_ATTENTION_DETERMINISTIC", "0") == "1"
+        flash_kwargs["deterministic"] = is_deterministic
 
     if softcap is not None:
         flash_kwargs["softcap"] = softcap
