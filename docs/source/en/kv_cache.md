@@ -39,8 +39,7 @@ More concretely, key-value cache acts as a memory bank for these generative mode
     <p>The Attention module concatenates the current key-values with the past key-values stored in the cache. This results in an attention weights of shape `(new_tokens_length, past_kv_length + new_tokens_length)`. Essentially, the past and current key-values are combined to compute attention scores, ensuring that the model considers both previous context and new input. The concatenated key-values are used to compute the attention scores resulting in attention weights of shape `(new_tokens_length, past_kv_length + new_tokens_length)`.</p>
     <p>Therefore, when iteratively calling `forward()` instead of the `generate()` method, it’s crucial to ensure that the attention mask shape matches the combined length of past and current key-values. The attention mask should have the shape `(batch_size, past_kv_length + new_tokens_length)`. This is usually handled internally when you call `generate()` method. If you want to implement your own generation loop with Cache classes, take this into consideration and prepare the attention mask to hold values to current and past tokens.</p>
     <p>See an example below for how to implement your own generation loop.</p>
-    <div>
-     ```python
+    ```python
     import torch
     from transformers import AutoTokenizer, AutoModelForCausalLM, DynamicCache
     model_id = "meta-llama/Llama-2-7b-chat-hf"
@@ -63,7 +62,6 @@ More concretely, key-value cache acts as a memory bank for these generative mode
         inputs = {"input_ids": next_token_ids, "attention_mask": attention_mask}
     print(tokenizer.batch_decode(generated_ids, skip_special_tokens=True))
     ```
-    </div>
 </details>
 
 
