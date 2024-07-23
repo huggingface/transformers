@@ -125,7 +125,7 @@ class MambaConfig(PretrainedConfig):
         time_step_floor=1e-4,
         rescale_prenorm_residual=False,
         use_cache=True,
-        use_mambapy=True,
+        use_mambapy=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
