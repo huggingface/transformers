@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
+import torch.nn as nn
 from packaging import version
 
 from .configuration_utils import PretrainedConfig
@@ -22,8 +23,6 @@ if is_hqq_available():
 
 logger = logging.get_logger(__name__)
 
-import torch.nn as nn
-
 
 @dataclass
 class Cache(nn.Module):
@@ -32,7 +31,7 @@ class Cache(nn.Module):
     """
 
     def __init__(self):
-        super().__init__(self)
+        super().__init__()
 
     def update(
         self,
