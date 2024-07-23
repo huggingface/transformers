@@ -37,7 +37,6 @@ from ...utils import (
     replace_return_docstrings,
     torch_int,
 )
-from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_auto import AutoModel
 from .configuration_msclap import MSClapAudioConfig, MSClapConfig, MSClapTextConfig
 
@@ -1282,8 +1281,7 @@ class MSClapModel(MSClapPreTrainedModel):
         self.projection_dim = config.projection_dim
 
         if not text_model:
-            text_model_config = AutoConfig.from_pretrained(text_config.text_model)
-            self.text_model = AutoModel.from_config(text_model_config)
+            self.text_model = AutoModel.from_config(text_config.text_model_config)
 
         if not text_projection:
             self.text_projection = MSClapProjectionLayer(text_config)
@@ -1294,11 +1292,10 @@ class MSClapModel(MSClapPreTrainedModel):
         if not audio_projection:
             self.audio_projection = MSClapProjectionLayer(audio_config)
 
-        default_text_config = AutoConfig.from_pretrained(self.config.text_config.text_model)
-        if self.text_model.config.to_dict() != default_text_config.to_dict():
+        if self.text_model.config.to_dict() != self.config.text_config.text_model_config.to_dict():
             logger.warning(
                 f"Config of the text_model: {self.text_model.__class__} is overwritten by shared text_model config:"
-                f" {self.config.text_model}"
+                f" {self.config.text_config.text_model_config}"
             )
 
         if self.audio_model.config.to_dict() != self.config.audio_config.to_dict():
@@ -1523,8 +1520,7 @@ class MSClapTextModelWithProjection(MSClapPreTrainedModel):
     def __init__(self, config: MSClapTextConfig):
         super().__init__(config)
 
-        text_model_config = AutoConfig.from_pretrained(config.text_model)
-        self.text_model = AutoModel.from_config(text_model_config)
+        self.text_model = AutoModel.from_config(config.text_model_config)
 
         self.text_projection = MSClapProjectionLayer(config)
         # Initialize weights and apply final processing
@@ -1564,6 +1560,11 @@ class MSClapTextModelWithProjection(MSClapPreTrainedModel):
         >>> text_embeds = outputs.text_embeds
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
 
         text_outputs = self.text_model(
             input_ids=input_ids,

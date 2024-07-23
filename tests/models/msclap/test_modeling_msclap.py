@@ -286,43 +286,57 @@ class MSClapTextModelTester:
         parent,
         batch_size=12,
         seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        use_labels=True,
+        projection_dim=24,
+        hidden_size=24,
+        projection_dropout_prob=0,
+        initializer_factor=1.0,
         vocab_size=99,
-        # hidden_size=32,
-        # projection_dim=32,
-        num_hidden_layers=2,
-        num_attention_heads=2,
-        # intermediate_size=37,
-        # dropout=0.1,
-        # attention_dropout=0.1,
-        # max_position_embeddings=512,
-        # initializer_range=0.02,
-        scope=None,
-        projection_hidden_act="relu",
-        projection_dim=768,
-        hidden_size=768,
+        n_positions=1024,
+        n_embd=24,
+        n_layer=2,
+        n_head=2,
+        n_inner=None,
+        activation_function="gelu_new",
+        resid_pdrop=0.1,
+        embd_pdrop=0.1,
+        attn_pdrop=0.1,
+        layer_norm_epsilon=1e-5,
+        initializer_range=0.02,
+        summary_type="cls_index",
+        summary_use_proj=True,
+        summary_activation=None,
+        summary_proj_to_labels=True,
+        summary_first_dropout=0.1,
+        use_input_mask=True,
     ):
         self.parent = parent
         self.batch_size = batch_size
         self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_labels = use_labels
+        self.projection_dropout_prob = projection_dropout_prob
+        self.initializer_factor = initializer_factor
+        self.n_positions = n_positions
+        self.n_embd = n_embd
+        self.n_layer = n_layer
+        self.num_hidden_layers = n_layer
+        self.num_attention_heads = n_head
+        self.n_inner = n_inner
+        self.activation_function = activation_function
+        self.resid_pdrop = resid_pdrop
+        self.embd_pdrop = embd_pdrop
+        self.attn_pdrop = attn_pdrop
+        self.layer_norm_epsilon = layer_norm_epsilon
+        self.summary_type = summary_type
+        self.summary_use_proj = summary_use_proj
+        self.summary_activation = summary_activation
+        self.summary_proj_to_labels = summary_proj_to_labels
+        self.summary_first_dropout = summary_first_dropout
+
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.projection_dim = projection_dim
-        self.num_hidden_layers = num_hidden_layers
-        # self.num_attention_heads = num_attention_heads
-        # self.intermediate_size = intermediate_size
-        # self.dropout = dropout
-        # self.attention_dropout = attention_dropout
-        # self.max_position_embeddings = max_position_embeddings
-        # self.initializer_range = initializer_range
-        self.scope = scope
-        self.projection_hidden_act = projection_hidden_act
-        self.num_attention_heads = num_attention_heads
+
+        self.initializer_range = initializer_range
+        self.use_input_mask = use_input_mask
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -344,17 +358,19 @@ class MSClapTextModelTester:
 
     def get_config(self):
         return MSClapTextConfig(
-            vocab_size=self.vocab_size,
-            hidden_size=self.hidden_size,
             projection_dim=self.projection_dim,
-            # num_hidden_layers=self.num_hidden_layers,
+            hidden_size=self.hidden_size,
+            projection_dropout_prob=self.projection_dropout_prob,
+            initializer_factor=self.initializer_factor,
+            vocab_size=self.vocab_size,
+            n_positions=self.n_positions,
+            n_embd=self.n_embd,
+            n_layer=self.n_layer,
             num_attention_heads=self.num_attention_heads,
-            # intermediate_size=self.intermediate_size,
-            # dropout=self.dropout,
-            # attention_dropout=self.attention_dropout,
-            # max_position_embeddings=self.max_position_embeddings,
-            # initializer_range=self.initializer_range,
-            projection_hidden_act=self.projection_hidden_act,
+            resid_pdrop=self.resid_pdrop,
+            embd_pdrop=self.embd_pdrop,
+            attn_pdrop=self.attn_pdrop,
+            initializer_range=self.initializer_range,
             num_hidden_layers=self.num_hidden_layers,
         )
 
