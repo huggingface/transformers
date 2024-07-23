@@ -4332,7 +4332,6 @@ class ModelTesterMixin:
     @mark.flash_attn_test
     @slow
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
-
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
@@ -4359,26 +4358,35 @@ class ModelTesterMixin:
 
                 assert 0 in inputs_dict["attention_mask"], "assert padding in testing inputs"
                 # ensure left padding, to adapt for some models
-                if 0 in inputs_dict["attention_mask"][:,-1]:
+                if 0 in inputs_dict["attention_mask"][:, -1]:
                     inputs_dict["attention_mask"] = inputs_dict["attention_mask"].flip(1)
                 dummy_attention_mask = inputs_dict["attention_mask"]
                 inputs_dict["input_ids"][~dummy_attention_mask.bool()] = config.pad_token_id
 
-                model = model_class.from_pretrained(
-                    tmpdirname,
-                    torch_dtype=torch.float16,
-                    attn_implementation="flash_attention_2",
-                    low_cpu_mem_usage=True,
-                ).to(torch_device).eval()
+                model = (
+                    model_class.from_pretrained(
+                        tmpdirname,
+                        torch_dtype=torch.float16,
+                        attn_implementation="flash_attention_2",
+                        low_cpu_mem_usage=True,
+                    )
+                    .to(torch_device)
+                    .eval()
+                )
 
                 # flatten
                 padfree_inputs_dict = {
-                    k:v[dummy_attention_mask.bool()].unsqueeze(0) for k,v in inputs_dict.items() if not k=="attention_mask"
+                    k: v[dummy_attention_mask.bool()].unsqueeze(0)
+                    for k, v in inputs_dict.items()
+                    if not k == "attention_mask"
                 }
                 # add position_ids
-                padfree_inputs_dict["position_ids"] = torch.cat(
-                    [torch.arange(length) for length in dummy_attention_mask.sum(1).tolist()]
-                ).long().unsqueeze(0).to(torch_device)
+                padfree_inputs_dict["position_ids"] = (
+                    torch.cat([torch.arange(length) for length in dummy_attention_mask.sum(1).tolist()])
+                    .long()
+                    .unsqueeze(0)
+                    .to(torch_device)
+                )
 
                 res_padded = model(**inputs_dict)
                 res_padfree = model(**padfree_inputs_dict)

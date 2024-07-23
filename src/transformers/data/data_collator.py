@@ -1612,6 +1612,7 @@ class DataCollatorForPermutationLanguageModeling(DataCollatorMixin):
 
         return inputs.astype(np.int64), perm_mask, target_mapping, labels.astype(np.int64)
 
+
 @dataclass
 class DataCollatorWithFlattening(DefaultDataCollator):
     """
@@ -1623,19 +1624,20 @@ class DataCollatorWithFlattening(DefaultDataCollator):
 
     def __init__(self, *args, return_position_ids=True, **kwargs):
         super().__init__(*args, **kwargs)
-        self.return_position_ids=return_position_ids
+        self.return_position_ids = return_position_ids
         warnings.warn(
             "Using `DataCollatorWithFlattening` will flatten the entire mini batch into single long sequence."
             "Make sure your attention computation is able to handle it!"
         )
+
     def __call__(self, features, return_tensors=None):
         if return_tensors is None:
             return_tensors = self.return_tensors
         is_labels_provided = "labels" in features[0]
-        ret = {"input_ids":[], "labels":[]}
+        ret = {"input_ids": [], "labels": []}
         if self.return_position_ids:
-            ret.update({"position_ids":[]})
-        for idx in range(0,len(features)):
+            ret.update({"position_ids": []})
+        for idx in range(0, len(features)):
             ret["input_ids"] += features[idx]["input_ids"]
             if is_labels_provided:
                 ret["labels"] += [-100] + features[idx]["labels"][1:]

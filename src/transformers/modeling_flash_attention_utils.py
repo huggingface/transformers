@@ -168,21 +168,17 @@ def prepare_fa2_from_position_ids(query, key, value, position_ids):
     position_ids = position_ids.flatten()
     indices_q = torch.arange(position_ids.size(0), device=position_ids.device, dtype=torch.int32)
 
-    cu_seq_lens = torch.cat((
-        indices_q[position_ids==0],
-        torch.tensor(position_ids.size(), device=position_ids.device, dtype=torch.int32)
-        ))
-
-    max_length = position_ids.max()+1
-
-    return (
-        query,
-        key,
-        value,
-        indices_q,
-        (cu_seq_lens, cu_seq_lens),
-        (max_length, max_length)
+    cu_seq_lens = torch.cat(
+        (
+            indices_q[position_ids == 0],
+            torch.tensor(position_ids.size(), device=position_ids.device, dtype=torch.int32),
+        )
     )
+
+    max_length = position_ids.max() + 1
+
+    return (query, key, value, indices_q, (cu_seq_lens, cu_seq_lens), (max_length, max_length))
+
 
 def _flash_attention_forward(
     query_states: torch.Tensor,
@@ -268,7 +264,7 @@ def _flash_attention_forward(
 
     # if position_ids is provided and check not all examples (row) contain only 1 sequence,
     # then use `flash_attn_varlen_func` to prevent cross-example attention and also allow padding free approach
-    elif position_ids is not None and not (position_ids[:,-1]==position_ids.size(1)-1).all():
+    elif position_ids is not None and not (position_ids[:, -1] == position_ids.size(1) - 1).all():
         batch_size = query_states.size(0)
         query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = prepare_fa2_from_position_ids(
             query_states, key_states, value_states, position_ids
@@ -288,7 +284,7 @@ def _flash_attention_forward(
             dropout_p=dropout,
             softmax_scale=softmax_scale,
             causal=causal,
-            **flash_kwargs
+            **flash_kwargs,
         )
 
         attn_output = attn_output.view(batch_size, -1, attn_output.size(-2), attn_output.size(-1))
