@@ -518,8 +518,8 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
             _left_padding = torch.any(attention_mask[:, 0] == 0)
             _right_padding = torch.any(attention_mask[:, -1] == 0)
 
-            left_padding = True
-            if batch_size > 1:
+            left_padding = True if not self.training else False
+            if batch_size > 1 and not self.training:
                 if _left_padding and not _right_padding:
                     left_padding = True
                 elif not _left_padding and _right_padding:
