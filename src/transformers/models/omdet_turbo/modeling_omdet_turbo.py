@@ -990,7 +990,7 @@ class OmDetTurboDeformableTransformerDecoderLayer(nn.Module):
         fuse_type = config.fuse_type
 
         # self attention
-        self.self_attn = nn.MultiheadAttention(encoder_hidden_dim, n_heads, dropout=dropout)
+        self.self_attn = nn.MultiheadAttention(encoder_hidden_dim, n_heads, dropout=dropout, batch_first=True)
         self.dropout1 = nn.Dropout(dropout)
         self.norm1 = nn.LayerNorm(encoder_hidden_dim)
 
@@ -1026,6 +1026,7 @@ class OmDetTurboDeformableTransformerDecoderLayer(nn.Module):
         refer_bbox,
         feats,
         shapes,
+        key_padding_mask=None,
         padding_mask=None,
         attn_mask=None,
         query_pos=None,
@@ -1048,9 +1049,7 @@ class OmDetTurboDeformableTransformerDecoderLayer(nn.Module):
             key = torch.cat((key, task_feats), dim=1)  # [bs, dn+num_query+token_len, hidden]
             embed = torch.cat((embed, task_feats), dim=1)  # [bs, dn+num_query+token_len, hidden]
 
-        self_attention = self.self_attn(
-            query.transpose(0, 1), key.transpose(0, 1), embed.transpose(0, 1), attn_mask=attn_mask
-        )[0].transpose(0, 1)
+        self_attention = self.self_attn(query, key, embed, attn_mask=attn_mask, key_padding_mask=key_padding_mask)[0]
         embed = embed + self.dropout1(self_attention)
         embed = self.norm1(embed)
 
@@ -1148,6 +1147,7 @@ class OmDetTurboDeformableTransformerDecoder(nn.Module):
         score_head,
         pos_mlp,
         attn_mask=None,
+        key_padding_mask=None,
         padding_mask=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -1176,10 +1176,11 @@ class OmDetTurboDeformableTransformerDecoder(nn.Module):
                 refer_bbox,
                 feats,
                 shapes,
-                padding_mask,
-                attn_mask,
-                pos_mlp(refer_bbox),
+                key_padding_mask=key_padding_mask,
+                attn_mask=attn_mask,
+                query_pos=pos_mlp(refer_bbox),
                 output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
             )
 
             if output_attentions:
@@ -1586,7 +1587,7 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
         #                   self.box_noise_scale,
         #                   self.training,
         #                   self.amp)
-        dn_embed, dn_bbox, attn_mask, _ = None, None, None, None
+        dn_embed, dn_bbox, attn_mask, key_padding_mask = None, None, None, None
         bs = task_mask.shape[0]
 
         # compose attn_mask for vision_emb and task_emb fusion
@@ -1612,6 +1613,8 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
             # else:
             attn_mask_len = self.num_queries
             fusion_size = attn_mask_len + task_feats.shape[0]
+            key_padding_mask = torch.zeros([bs, fusion_size], dtype=torch.bool)
+            key_padding_mask[:, attn_mask_len:] = src_key_mask
             new_attn_mask = torch.zeros([bs, fusion_size, fusion_size], dtype=torch.bool)
             new_attn_mask[:, :, attn_mask_len:] = src_key_mask.unsqueeze(1)
             new_attn_mask = new_attn_mask.repeat(self.num_head, 1, 1)
@@ -1632,6 +1635,7 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
             self.dec_bbox_head,
             self.dec_score_head,
             self.query_pos_head,
+            key_padding_mask=key_padding_mask,
             attn_mask=attn_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
