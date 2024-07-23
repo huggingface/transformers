@@ -884,5 +884,4 @@ class TikTokenIntegrationTests(unittest.TestCase):
         )
         tokens = tiktoken_tokenizer.encode(test_text)
         self.assertEqual(tokens, test_tokens)
-        self.assertFalse()
 
