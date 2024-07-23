@@ -32,16 +32,15 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
 )
-from ...utils import TensorType, is_cv2_available, is_vision_available, logging
+from ...utils import TensorType, is_scipy_available, is_vision_available, logging
 
 
 if is_vision_available():
     import PIL
 
-if is_cv2_available():
-    # TODO get rid of cv2?
-    import cv2
-
+if is_scipy_available():
+    from scipy.linalg import inv
+    from scipy.ndimage import affine_transform, gaussian_filter
 
 logger = logging.get_logger(__name__)
 
@@ -127,9 +126,10 @@ def post_dark_udp(coords, batch_heatmaps, kernel=3):
     num_coords = coords.shape[0]
     if not (batch_size == 1 or batch_size == num_coords):
         raise ValueError("The batch size of heatmaps should be 1 or equal to the batch size of coordinates.")
+    radius = int((kernel - 1) // 2)
     for heatmaps in batch_heatmaps:
         for heatmap in heatmaps:
-            cv2.GaussianBlur(heatmap, (kernel, kernel), 0, heatmap)
+            gaussian_filter(heatmap, sigma=0.8, output=heatmap, radius=(radius, radius), axes=(0, 1))
     np.clip(batch_heatmaps, 0.001, 50, batch_heatmaps)
     np.log(batch_heatmaps, batch_heatmaps)
 
@@ -247,6 +247,32 @@ def get_warp_matrix(theta: float, size_input: np.ndarray, size_dst: np.ndarray, 
     return matrix
 
 
+def scipy_warp_affine(src, M, size):
+    """
+    This function implements cv2.warpAffine used in the original implementation using scipy.
+
+    Note: the original implementation uses cv2.INTER_LINEAR.
+    """
+    channels = [src[..., i] for i in range(src.shape[-1])]
+
+    # Convert to a 3x3 matrix used by SciPy
+    M_scipy = np.vstack([M, [0, 0, 1]])
+    # If you have a matrix for the ‘push’ transformation, use its inverse (numpy.linalg.inv) in this function.
+    M_inv = inv(M_scipy)
+    M_inv[0, 0], M_inv[0, 1], M_inv[1, 0], M_inv[1, 1], M_inv[0, 2], M_inv[1, 2] = (
+        M_inv[1, 1],
+        M_inv[1, 0],
+        M_inv[0, 1],
+        M_inv[0, 0],
+        M_inv[1, 2],
+        M_inv[0, 2],
+    )
+
+    new_src = [affine_transform(channel, M_inv, output_shape=size, order=1) for channel in channels]
+    new_src = np.stack(new_src, axis=-1)
+    return new_src
+
+
 class ViTPoseImageProcessor(BaseImageProcessor):
     r"""
     Constructs a ViTPose image processor.
@@ -330,12 +356,12 @@ class ViTPoseImageProcessor(BaseImageProcessor):
         transformation = get_warp_matrix(rotation, center * 2.0, np.array(size) - 1.0, scale * 200.0)
 
         # cv2 requires channels last format
-        cv2_image = (
+        image = (
             image
             if input_data_format == ChannelDimension.LAST
             else to_channel_dimension_format(image, ChannelDimension.LAST, input_data_format)
         )
-        image = cv2.warpAffine(cv2_image, transformation, size, flags=cv2.INTER_LINEAR)
+        image = scipy_warp_affine(src=image, M=transformation, size=(size[1], size[0]))
 
         image = to_channel_dimension_format(image, data_format, ChannelDimension.LAST)
 
