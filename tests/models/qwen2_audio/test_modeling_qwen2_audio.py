@@ -123,7 +123,8 @@ class Qwen2AudioModelTester:
         config_and_inputs = self.prepare_config_and_inputs()
         config, input_features_values, feature_attention_mask = config_and_inputs
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
-        attention_mask = input_ids.ne(1).long().to(torch_device)
+        attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
+        attention_mask[:, :1] = 0
         # we are giving 3 audios let's make sure we pass in 3 audios tokens
         input_ids[:, 1] = config.audio_token_index
         inputs_dict = {
