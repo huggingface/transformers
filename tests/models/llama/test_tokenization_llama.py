@@ -828,7 +828,6 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         self.assertEqual(tokens, ["▁No", "<s>", "▁He"])  # spaces are eaten by rstrip / lstrip
 
 
-@require_read_token
 @require_tiktoken
 class TikTokenIntegrationTests(unittest.TestCase):
     """
