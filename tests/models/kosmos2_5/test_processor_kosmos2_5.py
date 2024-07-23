@@ -17,15 +17,16 @@ import os
 import shutil
 import tempfile
 import unittest
+
+import numpy as np
 import requests
 
 from transformers.testing_utils import (
-    require_vision,
     require_torch,
+    require_vision,
 )
 from transformers.utils import is_vision_available
 
-import numpy as np
 
 if is_vision_available():
     from PIL import Image
@@ -47,7 +48,7 @@ class Kosmos2_5ProcessorTest(unittest.TestCase):
             processor = AutoProcessor.from_pretrained(checkpoint)
             tokenizer = AutoTokenizer.from_pretrained(checkpoint)
             self.assertEqual(processor.tokenizer.__class__, tokenizer.__class__)
-           
+
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 

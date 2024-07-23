@@ -785,6 +785,6 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
             prompt, image, model, processor
         )
         EXPECTED_TEXT = [
-            "<md>- **1 \[REG\] BLACK SAKURA** 45,455\n- **1 COOKIE DOH SAUCES** 0\n- **1 NATA DE COCO** 0\n- **Sub Total** 45,455\n- **PB1 (10%)** 4,545\n- **Rounding** 0\n- **Total** **50,000**\n"
+            "<md>- **1 \\[REG\\] BLACK SAKURA** 45,455\n- **1 COOKIE DOH SAUCES** 0\n- **1 NATA DE COCO** 0\n- **Sub Total** 45,455\n- **PB1 (10%)** 4,545\n- **Rounding** 0\n- **Total** **50,000**\n"
         ]
         self.assertListEqual(generated_text, EXPECTED_TEXT)
