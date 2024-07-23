@@ -876,7 +876,6 @@ class TikTokenIntegrationTests(unittest.TestCase):
 
         self.assertTrue(isinstance(tokenizer_reload, PreTrainedTokenizerFast))
         tokens = tokenizer_reload.encode(test_text)
-
         self.assertEqual(tokens, test_tokens)
         shutil.rmtree(tmpdirname)
 
