@@ -39,6 +39,7 @@ if is_torch_available():
         LlamaConfig,
         SinkCache,
         StaticCache,
+        HybridCache,
     )
 
 
@@ -73,7 +74,10 @@ class CacheTest(unittest.TestCase):
         for layer_idx in range(10):
             for key_value_idx in range(2):
                 self.assertTrue(
-                    torch.allclose(new_cache[layer_idx][key_value_idx], legacy_cache[layer_idx][key_value_idx])
+                    torch.allclose(
+                        new_cache[layer_idx][key_value_idx],
+                        legacy_cache[layer_idx][key_value_idx],
+                    )
                 )
 
         # Test 1: We can convert from legacy to new with no changes
@@ -81,7 +85,10 @@ class CacheTest(unittest.TestCase):
         for layer_idx in range(10):
             for key_value_idx in range(2):
                 self.assertTrue(
-                    torch.allclose(from_legacy[layer_idx][key_value_idx], legacy_cache[layer_idx][key_value_idx])
+                    torch.allclose(
+                        from_legacy[layer_idx][key_value_idx],
+                        legacy_cache[layer_idx][key_value_idx],
+                    )
                 )
 
         # Test 2: We can convert from new to legacy with no changes
@@ -89,7 +96,10 @@ class CacheTest(unittest.TestCase):
         for layer_idx in range(10):
             for key_value_idx in range(2):
                 self.assertTrue(
-                    torch.allclose(to_legacy[layer_idx][key_value_idx], new_cache[layer_idx][key_value_idx])
+                    torch.allclose(
+                        to_legacy[layer_idx][key_value_idx],
+                        new_cache[layer_idx][key_value_idx],
+                    )
                 )
 
     def test_reorder_cache_retrocompatibility(self):
@@ -118,7 +128,8 @@ class CacheTest(unittest.TestCase):
             for key_value_idx in range(2):
                 self.assertTrue(
                     torch.allclose(
-                        new_cache[layer_idx][key_value_idx], legacy_cache_reordered[layer_idx][key_value_idx]
+                        new_cache[layer_idx][key_value_idx],
+                        legacy_cache_reordered[layer_idx][key_value_idx],
                     )
                 )
 
@@ -131,11 +142,21 @@ class CacheTest(unittest.TestCase):
         def _random_kvs(config):
             # shape for key and values: (batch_size, num_heads, seq_len, head_dim)
             random_keys = torch.rand(
-                (1, config.num_key_value_heads, 1, config.hidden_size // config.num_attention_heads),
+                (
+                    1,
+                    config.num_key_value_heads,
+                    1,
+                    config.hidden_size // config.num_attention_heads,
+                ),
                 device=torch_device,
             )
             random_values = torch.rand(
-                (1, config.num_key_value_heads, 1, config.hidden_size // config.num_attention_heads),
+                (
+                    1,
+                    config.num_key_value_heads,
+                    1,
+                    config.hidden_size // config.num_attention_heads,
+                ),
                 device=torch_device,
             )
             return random_keys, random_values
@@ -143,7 +164,9 @@ class CacheTest(unittest.TestCase):
         mha_config = LlamaConfig(num_attention_heads=32)
         mha_static_cache = StaticCache(config=mha_config, max_batch_size=1, max_cache_len=10, device=torch_device)
         cached_keys, cached_values = mha_static_cache.update(
-            *_random_kvs(mha_config), 0, cache_kwargs={"cache_position": torch.arange(1)}
+            *_random_kvs(mha_config),
+            0,
+            cache_kwargs={"cache_position": torch.arange(1)},
         )
         self.assertTrue(cached_keys.shape == (1, 32, 10, 128))
         self.assertTrue(cached_values.shape == (1, 32, 10, 128))
@@ -151,7 +174,9 @@ class CacheTest(unittest.TestCase):
         gqa_config = LlamaConfig(num_attention_heads=32, num_key_value_heads=4)
         gqa_static_cache = StaticCache(config=gqa_config, max_batch_size=1, max_cache_len=10, device=torch_device)
         cached_keys, cached_values = gqa_static_cache.update(
-            *_random_kvs(gqa_config), 0, cache_kwargs={"cache_position": torch.arange(1)}
+            *_random_kvs(gqa_config),
+            0,
+            cache_kwargs={"cache_position": torch.arange(1)},
         )
         self.assertTrue(cached_keys.shape == (1, 4, 10, 128))
         self.assertTrue(cached_values.shape == (1, 4, 10, 128))
@@ -159,7 +184,9 @@ class CacheTest(unittest.TestCase):
         mqa_config = LlamaConfig(num_attention_heads=32, num_key_value_heads=1)
         mqa_static_cache = StaticCache(config=mqa_config, max_batch_size=1, max_cache_len=10, device=torch_device)
         cached_keys, cached_values = mqa_static_cache.update(
-            *_random_kvs(mqa_config), 0, cache_kwargs={"cache_position": torch.arange(1)}
+            *_random_kvs(mqa_config),
+            0,
+            cache_kwargs={"cache_position": torch.arange(1)},
         )
         self.assertTrue(cached_keys.shape == (1, 1, 10, 128))
         self.assertTrue(cached_values.shape == (1, 1, 10, 128))
@@ -203,13 +230,18 @@ class CacheIntegrationTest(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(
             "meta-llama/Llama-2-7b-hf", device_map="auto", torch_dtype=torch.float16
         )
-        inputs = tokenizer(["A sequence: 1, 2, 3, 4, 5", "A sequence: A, B, C"], padding=True, return_tensors="pt").to(
-            model.device
-        )
+        inputs = tokenizer(
+            ["A sequence: 1, 2, 3, 4, 5", "A sequence: A, B, C"],
+            padding=True,
+            return_tensors="pt",
+        ).to(model.device)
 
         gen_out = model.generate(**inputs, do_sample=False, max_new_tokens=10, past_key_values=DynamicCache())
         decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
-        expected_text = ["A sequence: 1, 2, 3, 4, 5, 6, 7, 8,", "A sequence: A, B, C, D, E, F, G, H"]
+        expected_text = [
+            "A sequence: 1, 2, 3, 4, 5, 6, 7, 8,",
+            "A sequence: A, B, C, D, E, F, G, H",
+        ]
         self.assertListEqual(decoded, expected_text)
 
     def test_dynamic_cache_beam_search(self):
@@ -230,6 +262,30 @@ class CacheIntegrationTest(unittest.TestCase):
         expected_text = [
             "The best color is the one that makes you feel good.\nThe best color is the one that makes you feel good",
             "The best color is the one that suits you.\nThe best color is the one that suits you. The",
+        ]
+        self.assertListEqual(decoded, expected_text)
+
+    def test_hybrid_cache_n_sequences(self):
+        tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-9b")
+        model = AutoModelForCausalLM.from_pretrained(
+            "google/gemma-2-9b",
+            low_cpu_mem_usage=True,
+            torch_dtype=torch.bfloat16,
+            attn_implementation="eager",
+        ).to(torch_device)
+
+        inputs = tokenizer(["Hello I am doing"], return_tensors="pt", padding=True).to(torch_device)
+
+        gen_out = model.generate(
+            **inputs,
+            do_sample=False,
+            max_new_tokens=20,
+            num_return_sequences=2,
+        )
+        decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
+        expected_text = [
+            "Hello I am doing a project on the 1918 flu pandemic and I am trying to find out how many",
+            "Hello I am doing a project on the 1918 flu pandemic and I am trying to find out how many",
         ]
         self.assertListEqual(decoded, expected_text)
 
@@ -271,7 +327,11 @@ class CacheIntegrationTest(unittest.TestCase):
 
             # Perform the generation
             gen_out = model.generate(
-                input_ids, do_sample=False, max_new_tokens=100, past_key_values=cache, use_cache=True
+                input_ids,
+                do_sample=False,
+                max_new_tokens=100,
+                past_key_values=cache,
+                use_cache=True,
             )
             input_ids = gen_out
 
@@ -306,7 +366,9 @@ class CacheIntegrationTest(unittest.TestCase):
             attn_implementation=attn_implementation,
         ).to(torch_device)
         inputs = tokenizer(
-            ["The best color is", "We should not undermind the issues at hand"], padding=True, return_tensors="pt"
+            ["The best color is", "We should not undermind the issues at hand"],
+            padding=True,
+            return_tensors="pt",
         ).to(model.device)
 
         set_seed(0)
@@ -346,7 +408,9 @@ class CacheIntegrationTest(unittest.TestCase):
             attn_implementation=attn_implementation,
         ).to(torch_device)
         inputs = tokenizer(
-            ["The best color is", "We should not undermind the issues at hand"], padding=True, return_tensors="pt"
+            ["The best color is", "We should not undermind the issues at hand"],
+            padding=True,
+            return_tensors="pt",
         ).to(model.device)
 
         set_seed(0)
@@ -397,7 +461,9 @@ class CacheIntegrationTest(unittest.TestCase):
             torch_dtype=torch.bfloat16,
         ).to(torch_device)
         inputs = tokenizer(
-            ["The best color is", "We should not undermind the issues at hand"], padding=True, return_tensors="pt"
+            ["The best color is", "We should not undermind the issues at hand"],
+            padding=True,
+            return_tensors="pt",
         ).to(model.device)
 
         gen_out = model.generate(**inputs, do_sample=False, max_new_tokens=10)
@@ -431,7 +497,9 @@ class CacheIntegrationTest(unittest.TestCase):
             torch_dtype=torch.bfloat16,
         ).to(torch_device)
         inputs = tokenizer(
-            ["The best color is", "We should not undermind the issues at hand"], padding=True, return_tensors="pt"
+            ["The best color is", "We should not undermind the issues at hand"],
+            padding=True,
+            return_tensors="pt",
         ).to(model.device)
 
         model.generation_config.cache_implementation = "static"
