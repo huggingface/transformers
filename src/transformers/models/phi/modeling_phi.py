@@ -501,6 +501,7 @@ class PhiFlashAttention2(PhiAttention):
             value_states,
             attention_mask,
             q_len,
+            position_ids=position_ids,
             dropout=attn_dropout,
             softmax_scale=None,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
