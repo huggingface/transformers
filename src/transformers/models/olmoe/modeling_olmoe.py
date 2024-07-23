@@ -350,8 +350,8 @@ class OlmoeAttention(nn.Module):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
 
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(hidden_states)
+        query_states = self.q_norm(self.q_proj(hidden_states))
+        key_states = self.k_norm(self.k_proj(hidden_states))
         value_states = self.v_proj(hidden_states)
 
         if self.config.clip_qkv is not None:
@@ -434,10 +434,10 @@ class OlmoeFlashAttention2(OlmoeAttention):
 
         bsz, q_len, _ = hidden_states.size()
 
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(hidden_states)
+        query_states = self.q_norm(self.q_proj(hidden_states))
+        key_states = self.k_norm(self.k_proj(hidden_states))
         value_states = self.v_proj(hidden_states)
-
+        #import pdb; pdb.set_trace()
         if self.config.clip_qkv is not None:
             query_states.clamp_(min=-self.config.clip_qkv, max=self.config.clip_qkv)
             key_states.clamp_(min=-self.config.clip_qkv, max=self.config.clip_qkv)
@@ -548,8 +548,8 @@ class OlmoeSdpaAttention(OlmoeAttention):
 
         bsz, q_len, _ = hidden_states.size()
 
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(hidden_states)
+        query_states = self.q_norm(self.q_proj(hidden_states))
+        key_states = self.k_norm(self.k_proj(hidden_states))
         value_states = self.v_proj(hidden_states)
 
         if self.config.clip_qkv is not None:
@@ -617,11 +617,12 @@ class OlmoeSparseMoeBlock(nn.Module):
         super().__init__()
         self.num_experts = config.num_experts
         self.top_k = config.num_experts_per_tok
+        self.norm_topk_prob = config.norm_topk_prob
         self.gate = nn.Linear(config.hidden_size, self.num_experts, bias=False)
         self.experts = nn.ModuleList([OlmoeMLP(config) for _ in range(self.num_experts)])
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        """ """
+        #import pdb; pdb.set_trace()
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_dim)
         # router_logits: (batch * sequence_length, n_experts)
@@ -629,7 +630,8 @@ class OlmoeSparseMoeBlock(nn.Module):
 
         routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
         routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
-        routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
+        if self.norm_topk_prob:
+            routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
         # we cast back to the input dtype
         routing_weights = routing_weights.to(hidden_states.dtype)
 
@@ -707,6 +709,8 @@ class OlmoeDecoderLayer(nn.Module):
         """
         residual = hidden_states
 
+        #import pdb; pdb.set_trace()
+
         hidden_states = self.input_layernorm(hidden_states)
 
         # Self Attention
@@ -725,6 +729,7 @@ class OlmoeDecoderLayer(nn.Module):
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
+        #import pdb; pdb.set_trace()
         hidden_states, router_logits = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 

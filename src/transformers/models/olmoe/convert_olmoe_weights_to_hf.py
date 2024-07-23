@@ -9,6 +9,41 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""
+Example for running:
+1. Unshard your OLMo checkpoint
+python OLMo/scripts/unshard.py /data/niklas/llm/checkpoints/23485/step954000 /data/niklas/llm/checkpoints/1b-954000-unsharded --model-only
+2. Convert to transformers:
+rm -rf olmoe; mkdir olmoe; python transformers/src/transformers/models/olmoe/convert_olmoe_weights_to_hf.py --input_dir /data/niklas/llm/checkpoints/olmoe-step1200000-unsharded-pt --tokenizer_json_path /data/niklas/llm/checkpoints/olmoe-step1200000-unsharded/tokenizer.json --output_dir olmoe
+rm -rf olmoe; mkdir olmoe; python /home/niklas/transformers/src/transformers/models/olmoe/convert_olmoe_weights_to_hf.py --input_dir /data/niklas/llm/checkpoints/olmoe-step1200000-unsharded-pt --tokenizer_json_path /data/niklas/llm/checkpoints/olmoe-step1200000-unsharded/tokenizer.json --output_dir olmoe
+3. Load model via:
+```
+from transformers import OlmoeForCausalLM, AutoTokenizer
+import torch
+model = OlmoeForCausalLM.from_pretrained("./olmoe", torch_dtype=torch.bfloat16).cuda()
+tokenizer = AutoTokenizer.from_pretrained("./olmoe")
+inputs = tokenizer("Bitcoin is", return_tensors="pt")
+inputs = {k: v.cuda() for k, v in inputs.items()}
+out = model.generate(**inputs, max_length=64)
+print(tokenizer.decode(out[0], skip_special_tokens=True))
+# Or manually:
+o = model(torch.tensor([[0, 1]]).cuda())
+```
+
+Note: you need to be able to host the whole model in RAM to execute this script (even if the biggest versions
+come in several checkpoints they each contain a part of each weight of the model, so we need to load them all in RAM).
+
+Compare with OLMo codebase:
+```
+from olmo.model import OLMo
+import torch
+model = OLMo.from_checkpoint("/data/niklas/llm/checkpoints/olmoe-step1200000-unsharded-pt")
+model = model.cuda()
+model = model.to(torch.bfloat16)
+o = model(torch.tensor([[0, 1]]).cuda())
+o.logits, o.logits.shape
+```
+"""
 import argparse
 import gc
 import json
@@ -22,28 +57,6 @@ from tokenizers import Tokenizer
 
 from transformers import OlmoeConfig, OlmoeForCausalLM
 from transformers.models.gpt_neox.tokenization_gpt_neox_fast import GPTNeoXTokenizerFast
-
-
-"""
-Sample usage:
-
-```
-python src/transformers/models/olmoe/convert_olmoe_weights_to_hf.py \
-    --input_dir /path/to/downloaded/olmoe/weights --model_size 7B --output_dir /output/path
-```
-
-Thereafter, models can be loaded via:
-
-```py
-from transformers import OlmoeForCausalLM, AutoTokenizer
-
-model = OlmoeForCausalLM.from_pretrained("/output/path")
-tokenizer = AutoTokenizer.from_pretrained("/output/path")
-```
-
-Important note: you need to be able to host the whole model in RAM to execute this script (even if the biggest versions
-come in several checkpoints they each contain a part of each weight of the model, so we need to load them all in RAM).
-"""
 
 
 def compute_intermediate_size(n, ffn_dim_multiplier=1, multiple_of=256):
@@ -88,7 +101,6 @@ def write_model(model_path, input_base_path, tokenizer_path=None, safe_serializa
     print(f"Fetching all parameters from the checkpoint at {input_base_path}.")
 
     # Not sharded
-    # (The sharded implementation would also work, but this is simpler.)        
     loaded = torch.load(os.path.join(input_base_path, "model.pt"), map_location="cpu")
 
     param_count = 0
@@ -107,6 +119,8 @@ def write_model(model_path, input_base_path, tokenizer_path=None, safe_serializa
             f"model.layers.{layer_i}.self_attn.q_norm.weight": loaded[f"transformer.blocks.{layer_i}.q_norm.weight"],
             f"model.layers.{layer_i}.self_attn.k_norm.weight": loaded[f"transformer.blocks.{layer_i}.k_norm.weight"],
             f"model.layers.{layer_i}.mlp.gate.weight": loaded[f"transformer.blocks.{layer_i}.ffn.router.layer.weight"],
+            f"model.layers.{layer_i}.input_layernorm.weight": loaded[f"transformer.blocks.{layer_i}.attn_norm.weight"],
+            f"model.layers.{layer_i}.post_attention_layernorm.weight": loaded[f"transformer.blocks.{layer_i}.ff_norm.weight"],
         }
 
         num_experts = loaded[f"transformer.blocks.{layer_i}.ffn.router.layer.weight"].shape[0]
@@ -116,6 +130,7 @@ def write_model(model_path, input_base_path, tokenizer_path=None, safe_serializa
             state_dict[f"model.layers.{layer_i}.mlp.experts.{expert_i}.gate_proj.weight"] = loaded[f"transformer.blocks.{layer_i}.ffn.experts.mlp.w1"][dim_per_expert*expert_i:dim_per_expert*(expert_i+1), :]
             state_dict[f"model.layers.{layer_i}.mlp.experts.{expert_i}.up_proj.weight"] = loaded[f"transformer.blocks.{layer_i}.ffn.experts.mlp.v1"][dim_per_expert*expert_i:dim_per_expert*(expert_i+1), :]
             state_dict[f"model.layers.{layer_i}.mlp.experts.{expert_i}.down_proj.weight"] = loaded[f"transformer.blocks.{layer_i}.ffn.experts.mlp.w2"][dim_per_expert*expert_i:dim_per_expert*(expert_i+1), :].T.contiguous()
+            #state_dict[f"model.layers.{layer_i}.mlp.experts.{expert_i}.down_proj.weight"] = loaded[f"transformer.blocks.{layer_i}.ffn.experts.mlp.w2"][dim_per_expert*expert_i:dim_per_expert*(expert_i+1), :].reshape(-1, dim_per_expert).contiguous()
 
         state_dict[f"model.layers.{layer_i}.self_attn.rotary_emb.inv_freq"] = inv_freq
 
@@ -131,6 +146,7 @@ def write_model(model_path, input_base_path, tokenizer_path=None, safe_serializa
     state_dict = {
         "model.embed_tokens.weight": loaded["transformer.wte.weight"],
         "lm_head.weight": loaded["transformer.ff_out.weight"],
+        "model.norm.weight": loaded["transformer.ln_f.weight"],
     }
 
     for k, v in state_dict.items():
@@ -168,7 +184,7 @@ def write_model(model_path, input_base_path, tokenizer_path=None, safe_serializa
         _write_tokenizer(model_path, config, tokenizer_path, fix_eos_token_id)
 
     print("Loading the checkpoint in a OLMoE model.")
-    model = OlmoeForCausalLM.from_pretrained(tmp_model_path, torch_dtype=torch.float32, low_cpu_mem_usage=True)
+    model = OlmoeForCausalLM.from_pretrained(tmp_model_path, torch_dtype=torch.float32)
     # Avoid saving this as part of the config.
     del model.config._name_or_path
     print("Saving in the Transformers format.")
@@ -187,7 +203,7 @@ def _write_tokenizer(
     pad_token_id = config.pad_token_id if config.pad_token_id is not None else eos_token_id
 
     if fix_eos_token_id and eos_token_id == 0:
-        # Fixing a bug in OLMoE where eos token id was incorrectly set
+        # Fixing a bug in OLMo where eos token id was incorrectly set
         print("Changing eos_token_id from 0 to 50279.")
         eos_token_id = 50279
 
@@ -225,7 +241,7 @@ def main():
         dest="fix_eos_token_id",
         help="If set, does not change eos token id from 0 to 50279 if it is 0. Changing 0 to 50279 is a bug fix, so use this option with care.",
     )
-    parser.add_argument("--safe_serialization", type=bool, help="Whether or not to save using `safetensors`.")
+    parser.add_argument("--safe_serialization", type=bool, default=True, help="Whether or not to save using `safetensors`.")
     args = parser.parse_args()
     write_model(
         model_path=args.output_dir,
