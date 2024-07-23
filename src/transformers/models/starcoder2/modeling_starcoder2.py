@@ -404,6 +404,7 @@ class Starcoder2FlashAttention2(Starcoder2Attention):
             value_states,
             attention_mask,
             q_len,
+            position_ids=position_ids,
             dropout=dropout_rate,
             sliding_window=getattr(self.config, "sliding_window", None),
             is_causal=self.is_causal,
