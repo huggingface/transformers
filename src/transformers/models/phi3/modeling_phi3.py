@@ -1278,7 +1278,7 @@ class Phi3ForSequenceClassification(Phi3PreTrainedModel):
     @add_start_docstrings_to_model_forward(PHI3_INPUTS_DOCSTRING)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,

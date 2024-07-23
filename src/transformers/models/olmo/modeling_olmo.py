@@ -74,7 +74,8 @@ class OlmoLayerNorm(nn.Module):
 ALL_LAYERNORM_LAYERS.append(OlmoLayerNorm)
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Olmo
+# copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Olmo
+# TODO(joao): add me back asap :)
 class OlmoRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
         super().__init__()
@@ -104,7 +105,8 @@ class OlmoRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaLinearScalingRotaryEmbedding with Llama->Olmo
+# copied from transformers.models.llama.modeling_llama.LlamaLinearScalingRotaryEmbedding with Llama->Olmo
+# TODO(joao): add me back asap :)
 class OlmoLinearScalingRotaryEmbedding(OlmoRotaryEmbedding):
     """OlmoRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
 
@@ -115,7 +117,8 @@ class OlmoLinearScalingRotaryEmbedding(OlmoRotaryEmbedding):
         return cos, sin
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaDynamicNTKScalingRotaryEmbedding with Llama->Olmo
+# copied from transformers.models.llama.modeling_llama.LlamaDynamicNTKScalingRotaryEmbedding with Llama->Olmo
+# TODO(joao): add me back asap :)
 class OlmoDynamicNTKScalingRotaryEmbedding(OlmoRotaryEmbedding):
     """OlmoRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
 
@@ -202,7 +205,8 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 class OlmoAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaAttention.__init__ with Llama->Olmo
+    # copied from transformers.models.llama.modeling_llama.LlamaAttention.__init__ with Llama->Olmo
+    # TODO(joao): add me back asap :)
     def __init__(self, config: OlmoConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.config = config
@@ -236,7 +240,6 @@ class OlmoAttention(nn.Module):
         self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=config.attention_bias)
         self._init_rope()
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaAttention._init_rope with Llama->Olmo
     def _init_rope(self):
         if self.config.rope_scaling is None:
             self.rotary_emb = OlmoRotaryEmbedding(
@@ -550,7 +553,8 @@ class OlmoDecoderLayer(nn.Module):
         self.input_layernorm = OlmoLayerNorm(config.hidden_size)
         self.post_attention_layernorm = OlmoLayerNorm(config.hidden_size)
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer.forward
+    # copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer.forward
+    # TODO(joao): add me back asap :)
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -769,7 +773,8 @@ class OlmoModel(OlmoPreTrainedModel):
         self.embed_tokens = value
 
     @add_start_docstrings_to_model_forward(OLMO_INPUTS_DOCSTRING)
-    # Copied from transformers.models.llama.modeling_llama.LlamaModel.forward
+    # copied from transformers.models.llama.modeling_llama.LlamaModel.forward
+    # TODO(joao): add me back asap :)
     def forward(
         self,
         input_ids: torch.LongTensor = None,

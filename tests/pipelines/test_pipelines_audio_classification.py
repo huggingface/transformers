@@ -71,9 +71,7 @@ class AudioClassificationPipelineTests(unittest.TestCase):
         import datasets
 
         # test with a local file
-        dataset = datasets.load_dataset(
-            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
-        )
+        dataset = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         audio = dataset[0]["audio"]["array"]
         output = audio_classifier(audio)
         self.assertEqual(

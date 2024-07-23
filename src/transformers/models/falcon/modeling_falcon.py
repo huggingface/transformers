@@ -283,7 +283,6 @@ class FalconAttention(nn.Module):
         self.attention_dropout = nn.Dropout(config.attention_dropout)
         self.num_kv_heads = config.num_kv_heads if (self.new_decoder_architecture or not self.multi_query) else 1
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaAttention._init_rope with Llama->Falcon
     def _init_rope(self):
         if self.config.rope_scaling is None:
             self.rotary_emb = FalconRotaryEmbedding(
