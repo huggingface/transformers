@@ -16,19 +16,23 @@
 """Testing suite for the PyTorch MSCLAP model."""
 
 import inspect
+import os
+import tempfile
 import unittest
 
-from transformers import MSClapAudioConfig, MSClapTextConfig
+from transformers import MSClapAudioConfig, MSClapConfig, MSClapTextConfig
 from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.utils import is_torch_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
+    _config_zero_init,
     floats_tensor,
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -39,6 +43,7 @@ if is_torch_available():
     from transformers import (
         MSClapAudioModel,
         MSClapAudioModelWithProjection,
+        MSClapModel,
         MSClapTextModelWithProjection,
     )
 
@@ -457,202 +462,203 @@ class MSClapTextModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertTrue(hasattr(model, "text_projection"))
 
 
-# class MSClapModelTester:
-#     def __init__(self, parent, text_kwargs=None, audio_kwargs=None, is_training=True):
-#         if text_kwargs is None:
-#             text_kwargs = {}
-#         if audio_kwargs is None:
-#             audio_kwargs = {}
+class MSClapModelTester:
+    def __init__(self, parent, text_kwargs=None, audio_kwargs=None, is_training=True):
+        if text_kwargs is None:
+            text_kwargs = {}
+        if audio_kwargs is None:
+            audio_kwargs = {}
 
-#         self.parent = parent
-#         self.text_model_tester = MSClapTextModelTester(parent, **text_kwargs)
-#         self.audio_model_tester = MSClapAudioModelTester(parent, **audio_kwargs)
-#         self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
-#         self.is_training = is_training
+        self.parent = parent
+        self.text_model_tester = MSClapTextModelTester(parent, **text_kwargs)
+        self.audio_model_tester = MSClapAudioModelTester(parent, **audio_kwargs)
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
+        self.is_training = is_training
 
-#     def prepare_config_and_inputs(self):
-#         _, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
-#         _, input_features = self.audio_model_tester.prepare_config_and_inputs()
+    def prepare_config_and_inputs(self):
+        _, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
+        _, input_features = self.audio_model_tester.prepare_config_and_inputs()
 
-#         config = self.get_config()
+        config = self.get_config()
 
-#         return config, input_ids, attention_mask, input_features
+        return config, input_ids, attention_mask, input_features
 
-#     def get_config(self):
-#         return MSClapConfig.from_text_audio_configs(
-#             self.text_model_tester.get_config(), self.audio_model_tester.get_config(), projection_dim=64
-#         )
+    def get_config(self):
+        return MSClapConfig.from_text_audio_configs(
+            self.text_model_tester.get_config(), self.audio_model_tester.get_config(), projection_dim=64
+        )
 
-#     def create_and_check_model(self, config, input_ids, attention_mask, input_features):
-#         model = MSClapModel(config).to(torch_device).eval()
-#         with torch.no_grad():
-#             result = model(input_ids, input_features, attention_mask)
-#         self.parent.assertEqual(
-#             result.logits_per_audio.shape, (self.audio_model_tester.batch_size, self.text_model_tester.batch_size)
-#         )
-#         self.parent.assertEqual(
-#             result.logits_per_text.shape, (self.text_model_tester.batch_size, self.audio_model_tester.batch_size)
-#         )
+    def create_and_check_model(self, config, input_ids, attention_mask, input_features):
+        model = MSClapModel(config).to(torch_device).eval()
+        with torch.no_grad():
+            result = model(input_ids, input_features, attention_mask)
+        self.parent.assertEqual(
+            result.logits_per_audio.shape, (self.audio_model_tester.batch_size, self.text_model_tester.batch_size)
+        )
+        self.parent.assertEqual(
+            result.logits_per_text.shape, (self.text_model_tester.batch_size, self.audio_model_tester.batch_size)
+        )
 
-#     def prepare_config_and_inputs_for_common(self):
-#         config_and_inputs = self.prepare_config_and_inputs()
-#         config, input_ids, attention_mask, input_features = config_and_inputs
-#         inputs_dict = {
-#             "input_ids": input_ids,
-#             "attention_mask": attention_mask,
-#             "input_features": input_features,
-#             "return_loss": True,
-#         }
-#         return config, inputs_dict
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        config, input_ids, attention_mask, input_features = config_and_inputs
+        inputs_dict = {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "input_features": input_features,
+            "return_loss": True,
+        }
+        return config, inputs_dict
 
 
-# @require_torch
-# class MSClapModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-#     all_model_classes = (MSClapModel,) if is_torch_available() else ()
-#     fx_compatible = False
-#     test_head_masking = False
-#     test_pruning = False
-#     test_resize_embeddings = False
-#     test_attention_outputs = False
+@require_torch
+class MSClapModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    all_model_classes = (MSClapModel,) if is_torch_available() else ()
+    pipeline_model_mapping = {"feature-extraction": MSClapModel} if is_torch_available() else {}
+    fx_compatible = False
+    test_head_masking = False
+    test_pruning = False
+    test_resize_embeddings = False
+    test_attention_outputs = False
 
-#     def setUp(self):
-#         self.model_tester = MSClapModelTester(self)
+    def setUp(self):
+        self.model_tester = MSClapModelTester(self)
 
-#     def test_model(self):
-#         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-#         self.model_tester.create_and_check_model(*config_and_inputs)
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
 
-#     @unittest.skip(reason="Hidden_states is tested in individual model tests")
-#     def test_hidden_states_output(self):
-#         pass
+    @unittest.skip(reason="Hidden_states is tested in individual model tests")
+    def test_hidden_states_output(self):
+        pass
 
-#     @unittest.skip(reason="Inputs_embeds is tested in individual model tests")
-#     def test_inputs_embeds(self):
-#         pass
+    @unittest.skip(reason="Inputs_embeds is tested in individual model tests")
+    def test_inputs_embeds(self):
+        pass
 
-#     @unittest.skip(reason="Retain_grad is tested in individual model tests")
-#     def test_retain_grad_hidden_states_attentions(self):
-#         pass
+    @unittest.skip(reason="Retain_grad is tested in individual model tests")
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
 
-#     @unittest.skip(reason="MSClapModel does not have input/output embeddings")
-#     def test_model_get_set_embeddings(self):
-#         pass
+    @unittest.skip(reason="MSClapModel does not have input/output embeddings")
+    def test_model_get_set_embeddings(self):
+        pass
 
-#     # override as the `logit_scale` parameter initilization is different for MSCLAP
-#     def test_initialization(self):
-#         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+    # override as the `logit_scale` parameter initilization is different for MSCLAP
+    def test_initialization(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-#         configs_no_init = _config_zero_init(config)
-#         for model_class in self.all_model_classes:
-#             model = model_class(config=configs_no_init)
-#             for name, param in model.named_parameters():
-#                 if param.requires_grad:
-#                     # check if `logit_scale` is initilized as per the original implementation
-#                     if name == "logit_scale":
-#                         self.assertAlmostEqual(
-#                             param.data.item(),
-#                             np.log(1 / 0.07),
-#                             delta=1e-3,
-#                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-#                         )
-#                     else:
-#                         self.assertIn(
-#                             ((param.data.mean() * 1e9).round() / 1e9).item(),
-#                             [0.0, 1.0],
-#                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-#                         )
+        configs_no_init = _config_zero_init(config)
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            for name, param in model.named_parameters():
+                if param.requires_grad:
+                    # check if `logit_scale` is initilized as per the original implementation
+                    if name == "logit_scale":
+                        self.assertAlmostEqual(
+                            param.data.item(),
+                            np.log(1 / 0.07),
+                            delta=1e-3,
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
+                    else:
+                        self.assertIn(
+                            ((param.data.mean() * 1e9).round() / 1e9).item(),
+                            [0.0, 1.0],
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
 
-#     def _create_and_check_torchscript(self, config, inputs_dict):
-#         if not self.test_torchscript:
-#             self.skipTest(reason="test_torchscript is set to False")
+    def _create_and_check_torchscript(self, config, inputs_dict):
+        if not self.test_torchscript:
+            self.skipTest(reason="test_torchscript is set to False")
 
-#         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
-#         configs_no_init.torchscript = True
-#         configs_no_init.return_dict = False
-#         for model_class in self.all_model_classes:
-#             model = model_class(config=configs_no_init)
-#             model.to(torch_device)
-#             model.eval()
+        configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
+        configs_no_init.torchscript = True
+        configs_no_init.return_dict = False
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            model.to(torch_device)
+            model.eval()
 
-#             try:
-#                 input_ids = inputs_dict["input_ids"]
-#                 input_features = inputs_dict["input_features"]  # MSCLAP needs input_features
-#                 traced_model = torch.jit.trace(model, (input_ids, input_features))
-#             except RuntimeError:
-#                 self.fail("Couldn't trace module.")
+            try:
+                input_ids = inputs_dict["input_ids"]
+                input_features = inputs_dict["input_features"]  # MSCLAP needs input_features
+                traced_model = torch.jit.trace(model, (input_ids, input_features))
+            except RuntimeError:
+                self.fail("Couldn't trace module.")
 
-#             with tempfile.TemporaryDirectory() as tmp_dir_name:
-#                 pt_file_name = os.path.join(tmp_dir_name, "traced_model.pt")
+            with tempfile.TemporaryDirectory() as tmp_dir_name:
+                pt_file_name = os.path.join(tmp_dir_name, "traced_model.pt")
 
-#                 try:
-#                     torch.jit.save(traced_model, pt_file_name)
-#                 except Exception:
-#                     self.fail("Couldn't save module.")
+                try:
+                    torch.jit.save(traced_model, pt_file_name)
+                except Exception:
+                    self.fail("Couldn't save module.")
 
-#                 try:
-#                     loaded_model = torch.jit.load(pt_file_name)
-#                 except Exception:
-#                     self.fail("Couldn't load module.")
+                try:
+                    loaded_model = torch.jit.load(pt_file_name)
+                except Exception:
+                    self.fail("Couldn't load module.")
 
-#             model.to(torch_device)
-#             model.eval()
+            model.to(torch_device)
+            model.eval()
 
-#             loaded_model.to(torch_device)
-#             loaded_model.eval()
+            loaded_model.to(torch_device)
+            loaded_model.eval()
 
-#             model_state_dict = model.state_dict()
-#             loaded_model_state_dict = loaded_model.state_dict()
+            model_state_dict = model.state_dict()
+            loaded_model_state_dict = loaded_model.state_dict()
 
-#             non_persistent_buffers = {}
-#             for key in loaded_model_state_dict.keys():
-#                 if key not in model_state_dict.keys():
-#                     non_persistent_buffers[key] = loaded_model_state_dict[key]
+            non_persistent_buffers = {}
+            for key in loaded_model_state_dict.keys():
+                if key not in model_state_dict.keys():
+                    non_persistent_buffers[key] = loaded_model_state_dict[key]
 
-#             loaded_model_state_dict = {
-#                 key: value for key, value in loaded_model_state_dict.items() if key not in non_persistent_buffers
-#             }
+            loaded_model_state_dict = {
+                key: value for key, value in loaded_model_state_dict.items() if key not in non_persistent_buffers
+            }
 
-#             self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
+            self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
 
-#             model_buffers = list(model.buffers())
-#             for non_persistent_buffer in non_persistent_buffers.values():
-#                 found_buffer = False
-#                 for i, model_buffer in enumerate(model_buffers):
-#                     if torch.equal(non_persistent_buffer, model_buffer):
-#                         found_buffer = True
-#                         break
+            model_buffers = list(model.buffers())
+            for non_persistent_buffer in non_persistent_buffers.values():
+                found_buffer = False
+                for i, model_buffer in enumerate(model_buffers):
+                    if torch.equal(non_persistent_buffer, model_buffer):
+                        found_buffer = True
+                        break
 
-#                 self.assertTrue(found_buffer)
-#                 model_buffers.pop(i)
+                self.assertTrue(found_buffer)
+                model_buffers.pop(i)
 
-#             models_equal = True
-#             for layer_name, p1 in model_state_dict.items():
-#                 p2 = loaded_model_state_dict[layer_name]
-#                 if p1.data.ne(p2.data).sum() > 0:
-#                     models_equal = False
+            models_equal = True
+            for layer_name, p1 in model_state_dict.items():
+                p2 = loaded_model_state_dict[layer_name]
+                if p1.data.ne(p2.data).sum() > 0:
+                    models_equal = False
 
-#             self.assertTrue(models_equal)
+            self.assertTrue(models_equal)
 
-#     def test_load_audio_text_config(self):
-#         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+    def test_load_audio_text_config(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-#         # Save MSClapConfig and check if we can load MSClapAudioConfig from it
-#         with tempfile.TemporaryDirectory() as tmp_dir_name:
-#             config.save_pretrained(tmp_dir_name)
-#             audio_config = MSClapAudioConfig.from_pretrained(tmp_dir_name)
-#             self.assertDictEqual(config.audio_config.to_dict(), audio_config.to_dict())
+        # Save MSClapConfig and check if we can load MSClapAudioConfig from it
+        with tempfile.TemporaryDirectory() as tmp_dir_name:
+            config.save_pretrained(tmp_dir_name)
+            audio_config = MSClapAudioConfig.from_pretrained(tmp_dir_name)
+            self.assertDictEqual(config.audio_config.to_dict(), audio_config.to_dict())
 
-#         # Save MSClapConfig and check if we can load MSClapTextConfig from it
-#         with tempfile.TemporaryDirectory() as tmp_dir_name:
-#             config.save_pretrained(tmp_dir_name)
-#             text_config = MSClapTextConfig.from_pretrained(tmp_dir_name)
-#             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
+        # Save MSClapConfig and check if we can load MSClapTextConfig from it
+        with tempfile.TemporaryDirectory() as tmp_dir_name:
+            config.save_pretrained(tmp_dir_name)
+            text_config = MSClapTextConfig.from_pretrained(tmp_dir_name)
+            self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
 
-#     @slow
-#     def test_model_from_pretrained(self):
-#         model_name = "microsoft/msclap"
-#         model = MSClapModel.from_pretrained(model_name)
-#         self.assertIsNotNone(model)
+    @slow
+    def test_model_from_pretrained(self):
+        model_name = "kamilakesbi/ms_clap"
+        model = MSClapModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # @slow
