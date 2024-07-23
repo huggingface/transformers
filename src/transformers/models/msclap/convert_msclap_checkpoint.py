@@ -197,9 +197,8 @@ def convert_msclap_checkpoint(version, pytorch_dump_folder_path, repo_id, enable
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
-    parser.add_argument("--checkpoint_path", default=None, type=str, help="Path to fairseq checkpoint")
-    parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
+    parser.add_argument("--version", default=None, type=str, help="Path to fairseq checkpoint")
+    parser.add_argument("--repo_id", default=None, type=str, help="Path to hf config.json of model to convert")
     args = parser.parse_args()
 
-    pytorch_dump_folder_path = "/home/kamil/cache/msclap/"
-    convert_msclap_checkpoint("2023", pytorch_dump_folder_path, repo_id="kamilakesbi/ms_clap")
+    convert_msclap_checkpoint(args.version, args.pytorch_dump_folder_path, repo_id=args.repo_id)

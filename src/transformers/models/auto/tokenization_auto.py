@@ -310,13 +310,6 @@ else:
             ("mpt", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
             ("mra", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
             (
-                "msclap",
-                (
-                    "MSClapTokenizer",
-                    "MSClapTokenizerFast" if is_tokenizers_available() else None,
-                ),
-            ),
-            (
                 "mt5",
                 (
                     "MT5Tokenizer" if is_sentencepiece_available() else None,

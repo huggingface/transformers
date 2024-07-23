@@ -36,48 +36,62 @@ class MSClapTextConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 30522):
-            Vocabulary size of the MSCLAP model. Defines the number of different tokens that can be represented by the
+        vocab_size (`int`, *optional*, defaults to 50257):
+            Vocabulary size of the MSClap Text model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`ClapTextModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
+        projection_dropout_prob (`float`, *optional*, defaults to 0.0):
+            The dropout rate for the projection layer.
+        initializer_factor (`float`, *optional*, defaults to 1.0):
+            A factor for initializing the model parameters.
+        n_positions (`int`, *optional*, defaults to 1024):
+            The maximum length of the input sequences.
+        n_embd (`int`, *optional*, defaults to 768):
+            Dimensionality of the embeddings.
         num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
-        hidden_act (`str` or `Callable`, *optional*, defaults to `"relu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"relu"`,
-            `"relu"`, `"silu"` and `"relu_new"` are supported.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
+        n_inner (`int`, *optional*):
+            Dimensionality of the inner feed-forward layers. If not specified, it defaults to `4 * hidden_size`.
+        activation_function (`str` or `Callable`, *optional*, defaults to `"gelu_new"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"silu"`, and `"gelu_new"` are supported.
+        resid_pdrop (`float`, *optional*, defaults to 0.1):
+            The dropout probability for the residual connections.
+        embd_pdrop (`float`, *optional*, defaults to 0.1):
+            The dropout probability for the embedding layer.
+        attn_pdrop (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
-        projection_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout rate for the projection layer.
-        max_position_embeddings (`int`, *optional*, defaults to 512):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
-        type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`ClapTextModel`].
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
+        layer_norm_epsilon (`float`, *optional*, defaults to 1e-5):
             The epsilon used by the layer normalization layers.
-        position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
-            Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
-            positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
-            [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
-            For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
-            with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
-        is_decoder (`bool`, *optional*, defaults to `False`):
-            Whether the model is used as a decoder or not. If `False`, the model is used as an encoder.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        summary_type (`str`, *optional*, defaults to `"cls_index"`):
+            The method to summarize a sequence, used in sequence classification tasks.
+        summary_use_proj (`bool`, *optional*, defaults to `True`):
+            Whether or not to add a projection after the summary.
+        summary_activation (`Optional[str]`, *optional*):
+            The activation to use after the projection layer in the summary.
+        summary_proj_to_labels (`bool`, *optional*, defaults to `True`):
+            Whether the projection outputs should be projected to the label space.
+        summary_first_dropout (`float`, *optional*, defaults to 0.1):
+            The dropout ratio to be used after the projection and activation.
+        scale_attn_weights (`bool`, *optional*, defaults to `True`):
+            Whether or not to scale the attention weights by the number of attention heads.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        projection_hidden_act (`str`, *optional*, defaults to `"relu"`):
-            The non-linear activation function (function or string) in the projection layer. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        projection_dim (`int`, *optional*, defaults to 512)
+        bos_token_id (`int`, *optional*, defaults to 50256):
+            The beginning of sequence token ID.
+        eos_token_id (`int`, *optional*, defaults to 50256):
+            The end of sequence token ID.
+        scale_attn_by_inverse_layer_idx (`bool`, *optional*, defaults to `False`):
+            Whether to scale the attention weights by the inverse of their layer index.
+        reorder_and_upcast_attn (`bool`, *optional*, defaults to `False`):
+            Whether to reorder and upcast the attention.
+        projection_dim (`int`, *optional*, defaults to 768):
             Dimension of the projection head of the `ClapTextModelWithProjection`.
 
     Examples:
@@ -99,11 +113,10 @@ class MSClapTextConfig(PretrainedConfig):
 
     def __init__(
         self,
-        projection_dim=768,
+        vocab_size=50257,
         hidden_size=768,
         projection_dropout_prob=0,
         initializer_factor=1.0,
-        vocab_size=50257,
         n_positions=1024,
         n_embd=768,
         num_hidden_layers=12,
@@ -126,6 +139,7 @@ class MSClapTextConfig(PretrainedConfig):
         eos_token_id=50256,
         scale_attn_by_inverse_layer_idx=False,
         reorder_and_upcast_attn=False,
+        projection_dim=768,
         **kwargs,
     ):
         super().__init__(**kwargs)
