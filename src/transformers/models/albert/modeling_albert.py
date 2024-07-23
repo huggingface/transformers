@@ -368,7 +368,7 @@ class AlbertSdpaAttention(AlbertAttention):
     def __init__(self, config):
         super().__init__(config)
         self.dropout_prob = config.attention_probs_dropout_prob
-        self.require_contiguous_qkv = is_torch_greater_or_equal_than_2_2
+        self.require_contiguous_qkv = not is_torch_greater_or_equal_than_2_2
 
     def forward(
         self,
