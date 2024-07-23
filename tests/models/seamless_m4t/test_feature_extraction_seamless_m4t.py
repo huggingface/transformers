@@ -186,9 +186,7 @@ class SeamlessM4TFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
         np_speech_inputs = [np.asarray(speech_input) for speech_input in speech_inputs]
 
         # Test feature size and attention mask size
-        output = feature_extractor(
-            np_speech_inputs, pad_to_multiple_of=pad_to_multiple_of, return_tensors="np"
-        )
+        output = feature_extractor(np_speech_inputs, pad_to_multiple_of=pad_to_multiple_of, return_tensors="np")
         input_features = output.input_features
         self.assertTrue(input_features.ndim == 3)
         self.assertTrue(input_features.shape[0] == 3)
