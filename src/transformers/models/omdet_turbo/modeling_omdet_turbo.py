@@ -596,6 +596,7 @@ class OmDetTurboMultiheadAttention(nn.Module):
         keys: torch.Tensor,
         values: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
+        key_padding_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
         query_layer = self.transpose_for_scores(self.query(queries))
@@ -609,6 +610,12 @@ class OmDetTurboMultiheadAttention(nn.Module):
         if attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers in OmDetTurboModel forward() function)
             attention_scores = attention_scores + attention_mask
+
+        if key_padding_mask is not None:
+            # don't attend to padding symbols
+            attention_scores = attention_scores.masked_fill(
+                key_padding_mask.unsqueeze(1).unsqueeze(2).to(torch.bool), float("-inf")
+            )
 
         # Normalize the attention scores to probabilities.
         attention_probs = nn.functional.softmax(attention_scores, dim=-1)
@@ -990,7 +997,7 @@ class OmDetTurboDeformableTransformerDecoderLayer(nn.Module):
         fuse_type = config.fuse_type
 
         # self attention
-        self.self_attn = nn.MultiheadAttention(encoder_hidden_dim, n_heads, dropout=dropout, batch_first=True)
+        self.self_attn = OmDetTurboMultiheadAttention(encoder_hidden_dim, n_heads, dropout=dropout)
         self.dropout1 = nn.Dropout(dropout)
         self.norm1 = nn.LayerNorm(encoder_hidden_dim)
 
@@ -1049,7 +1056,7 @@ class OmDetTurboDeformableTransformerDecoderLayer(nn.Module):
             key = torch.cat((key, task_feats), dim=1)  # [bs, dn+num_query+token_len, hidden]
             embed = torch.cat((embed, task_feats), dim=1)  # [bs, dn+num_query+token_len, hidden]
 
-        self_attention = self.self_attn(query, key, embed, attn_mask=attn_mask, key_padding_mask=key_padding_mask)[0]
+        self_attention = self.self_attn(query, key, embed, attention_mask=attn_mask, key_padding_mask=key_padding_mask)[0]
         embed = embed + self.dropout1(self_attention)
         embed = self.norm1(embed)
 

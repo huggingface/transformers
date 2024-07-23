@@ -199,6 +199,21 @@ def read_in_q_k_v_encoder(state_dict, config):
     state_dict["encoder.encoder.0.layers.0.self_attn.value.weight"] = in_proj_weight[-embed_dim:, :]
     state_dict["encoder.encoder.0.layers.0.self_attn.value.bias"] = in_proj_bias[-embed_dim:]
 
+def read_in_q_k_v_decoder(state_dict, config):
+    for layer_num in range(config.decoder_num_layers):
+        embed_dim = config.decoder_hidden_dim
+        # read in weights + bias of input projection layer (in original implementation, this is a single matrix + bias)
+        in_proj_weight = state_dict.pop(f"decoder.decoder.layers.{layer_num}.self_attn.in_proj_weight")
+        in_proj_bias = state_dict.pop(f"decoder.decoder.layers.{layer_num}.self_attn.in_proj_bias")
+        # next, add query, keys and values (in that order) to the state dict
+        state_dict[f"decoder.decoder.layers.{layer_num}.self_attn.query.weight"] = in_proj_weight[:embed_dim, :]
+        state_dict[f"decoder.decoder.layers.{layer_num}.self_attn.query.bias"] = in_proj_bias[:embed_dim]
+        state_dict[f"decoder.decoder.layers.{layer_num}.self_attn.key.weight"] = in_proj_weight[embed_dim : embed_dim * 2, :]
+        state_dict[f"decoder.decoder.layers.{layer_num}.self_attn.key.bias"] = in_proj_bias[embed_dim : embed_dim * 2]
+        state_dict[f"decoder.decoder.layers.{layer_num}.self_attn.value.weight"] = in_proj_weight[-embed_dim:, :]
+        state_dict[f"decoder.decoder.layers.{layer_num}.self_attn.value.bias"] = in_proj_bias[-embed_dim:]
+
+
 
 def run_test(model, processor):
     # We will verify our results on an image of cute cats
@@ -258,7 +273,7 @@ def convert_omdet_turbo_checkpoint(args):
         read_in_q_k_v_vision(new_state_dict, config)
     read_in_q_k_v_text(new_state_dict, config)
     read_in_q_k_v_encoder(new_state_dict, config)
-
+    read_in_q_k_v_decoder(new_state_dict, config)
     # Load HF model
     model = OmDetTurboModel(config)
     model.eval()
