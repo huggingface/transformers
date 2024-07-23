@@ -73,7 +73,7 @@ class GroundingDinoProcessorKwargs(ProcessingKwargs, total=False):
             "return_overflowing_tokens": False,
             "return_special_tokens_mask": False,
             "return_offsets_mapping": False,
-            "return_token_type_ids": False,
+            "return_token_type_ids": True,
             "return_length": False,
             "verbose": True,
         },
