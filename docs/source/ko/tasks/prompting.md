@@ -29,7 +29,7 @@ Falcon, LLaMA 등의 대규모 언어 모델은 주어진 입력 텍스트에 �
 
 - [프롬프팅의 기초](#basics-of-prompting)
 - [LLM 프롬프팅의 모범 사례](#best-practices-of-llm-prompting)
-- [고급 프롬프팅 기법: Few-shot 프롬프팅과 생각의 사슬 기법](#advanced-prompting-techniques)
+- [고급 프롬프팅 기법: Few-shot 프롬프팅과 생각의 사슬(Chain-of-thought, CoT) 기법](#advanced-prompting-techniques)
 - [프롬프팅 대신 미세 조정을 해야 할 때](#prompting-vs-fine-tuning)
 
 <Tip>
@@ -47,7 +47,8 @@ Falcon, LLaMA 등의 대규모 언어 모델은 주어진 입력 텍스트에 �
 
 ### 모델의 유형 [[types-of-models]]
 
-현대의 대부분의 LLM은 디코더 전용 트랜스포머입니다. 예를 들어 LLaMA, Llama2, Falcon, GPT2 등이 있습니다. 그러나 Flan-T5와 BART와 같은 인코더-디코더 트랜스포머 LLM을 접할 수도 있습니다.
+현대의 대부분의 LLM은 디코더 전용 트랜스포머입니다. 예를 들어 [LLaMA](../model_doc/llama), 
+[Llama2](../model_doc/llama2), [Falcon](../model_doc/falcon), [GPT2](../model_doc/gpt2) 등이 있습니다. 그러나 [Flan-T5](../model_doc/flan-t5)와 [BART](../model_doc/bart)와 같은 인코더-디코더 트랜스포머 LLM을 접할 수도 있습니다.
 
 인코더-디코더 스타일 모델은 일반적으로 출력이 입력에 크게 의존하는 생성 작업에 사용됩니다. 예를 들어, 번역과 요약 작업에 사용됩니다. 디코더 전용 모델은 다른 모든 유형의 생성 작업에 사용됩니다.
 
@@ -121,7 +122,7 @@ Falcon 모델은 bfloat16 데이터 타입을 사용하여 훈련되었으므로
 
 이제 파이프라인을 통해 모델을 로드했으니, 프롬프트를 사용하여 NLP 작업을 해결하는 방법을 살펴보겠습니다.
 
-#### 텍스트 분 [[text-classification]]
+#### 텍스트 분류 [[text-classification]]
 
 텍스트 분류의 가장 일반적인 형태 중 하나는 감정 분석입니다. 이는 텍스트 시퀀스에 "긍정적", "부정적" 또는 "중립적"과 같은 레이블을 할당합니다. 주어진 텍스트(영화 리뷰)를 분류하도록 모델에 지시하는 프롬프트를 작성해 보겠습니다. 먼저 지시사항을 제공한 다음, 분류할 텍스트를 지정하겠습니다. 여기서 주목할 점은 단순히 거기서 끝내지 않고, 응답의 시작 부분 - "Sentiment: "을 추가한다는 것입니다:
 
@@ -254,7 +255,7 @@ Result: Modern tools often used to make gazpacho include
 
 #### 추론 [[reasoning]]
 
-추론은 LLM에게 가장 어려운 작업 중 하나이며, 좋은 결과를 얻기 위해서는 종종 [생각의 사슬](#chain-of-thought)과 같은 고급 프롬프팅 기법을 적용해야 합니다. 간단한 산술 작업에 대해 기본적인 프롬프트로 모델이 추론할 수 있는지 시도해 보겠습니다:
+추론은 LLM에게 가장 어려운 작업 중 하나이며, 좋은 결과를 얻기 위해서는 종종 [생각의 사슬(Chain-of-thought, CoT)](#chain-of-thought)과 같은 고급 프롬프팅 기법을 적용해야 합니다. 간단한 산술 작업에 대해 기본적인 프롬프트로 모델이 추론할 수 있는지 시도해 보겠습니다:
 
 ```python
 >>> torch.manual_seed(5) # doctest: +IGNORE_RESULT
@@ -308,7 +309,7 @@ The total number of muffins now is 21
 * 모호한 설명과 지시사항을 피하십시오.
 * "하지 말라"는 지시보다는 "무엇을 해야 하는지"를 말하는 지시를 선호하십시오.
 * 첫 번째 단어를 쓰거나 첫 번째 문장을 시작하여 출력을 올바른 방향으로 "유도"하십시오.
-* [Few-shot 프롬프팅](#few-shot-prompting) 및 [생각의 사슬](#chain-of-thought) 같은 고급 기술을 사용하십시오.
+* [Few-shot 프롬프팅](#few-shot-prompting) 및 [생각의 사슬(Chain-of-thought, CoT)](#chain-of-thought) 같은 고급 기술을 사용하십시오.
 * 프롬프트의 강건성을 평가하기 위해 다른 모델로 테스트하십시오.
 * 프롬프트의 성능을 버전 관리하고 추적하십시오.
 
@@ -351,7 +352,7 @@ Few-shot 프롬프팅 기법의 한계:
 - Few-shot 프롬프팅은 길이가 긴 프롬프트를 만들어야 합니다. 토큰 수가 많은 프롬프트는 계산량과 지연 시간을 증가시킬 수 있습니다. 또한 프롬프트 길이에도 제한이 있습니다.  
 - 때때로 여러 예시가 주어질 때, 모델은 의도하지 않은 패턴을 학습할 수 있습니다. 예를 들어, 세 번째 영화 리뷰가 항상 부정적이라고 학습할 수 있습니다.
 
-### 생각의 사슬 [[chain-of-thought]]
+### 생각의 사슬(Chain-of-thought, CoT) [[chain-of-thought]]
 
 생각의 사슬(Chain-of-thought, CoT) 프롬프팅은 모델이 중간 추론 단계를 생성하도록 유도하는 기법으로, 복잡한 추론 작업의 결과를 개선합니다.
 
