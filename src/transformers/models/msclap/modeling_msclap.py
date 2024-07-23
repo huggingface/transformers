@@ -864,7 +864,7 @@ class MSClapAudioEncoder(nn.Module):
     def reshape_mel2img(self, normalized_input_features):
         """
         The input is 4 normalized log mel spectrograms. It is reshape to the common shape of images. Each channel
-        should represent 1 of the 4 crops of the spectrogram. For more details, refer to the [`MSClapFeatureExtractor`].
+        should represent 1 of the 4 crops of the spectrogram. For more details, refer to the [`ClapFeatureExtractor`].
         """
         _, _, time_length, freq_length = normalized_input_features.shape
 
@@ -1078,8 +1078,8 @@ MSCLAP_TEXT_INPUTS_DOCSTRING = r"""
 MSCLAP_AUDIO_INPUTS_DOCSTRING = r"""
     Args:
         input_features (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Input audio features. This should be returnes by the [`MSClapFeatureExtractor`] class that you can also
-            retrieve from [`AutoFeatureExtractor`]. See [`MSClapFeatureExtractor.__call__`] for details.
+            Input audio features. This should be returnes by the [`ClapFeatureExtractor`] class that you can also
+            retrieve from [`AutoFeatureExtractor`]. See [`ClapFeatureExtractor.__call__`] for details.
         is_longer (`torch.FloatTensor`, of shape `(batch_size, 1)`, *optional*):
             Whether the audio clip is longer than `max_length`. If `True`, a feature fusion will be enabled to enhance
             the features.
@@ -1116,8 +1116,8 @@ MSCLAP_INPUTS_DOCSTRING = r"""
 
             [What are position IDs?](../glossary#position-ids)
         input_features (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Input audio features. This should be returnes by the [`MSClapFeatureExtractor`] class that you can also
-            retrieve from [`AutoFeatureExtractor`]. See [`MSClapFeatureExtractor.__call__`] for details.
+            Input audio features. This should be returnes by the [`ClapFeatureExtractor`] class that you can also
+            retrieve from [`AutoFeatureExtractor`]. See [`ClapFeatureExtractor.__call__`] for details.
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
         output_attentions (`bool`, *optional*):

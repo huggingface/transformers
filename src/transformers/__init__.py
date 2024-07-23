@@ -2745,7 +2745,6 @@ else:
         [
             "MSClapAudioModel",
             "MSClapAudioModelWithProjection",
-            "MSClapFeatureExtractor",
             "MSClapModel",
             "MSClapPreTrainedModel",
             "MSClapTextModel",
@@ -7266,7 +7265,6 @@ if TYPE_CHECKING:
         from .models.msclap import (
             MSClapAudioModel,
             MSClapAudioModelWithProjection,
-            MSClapFeatureExtractor,
             MSClapModel,
             MSClapPreTrainedModel,
             MSClapTextModel,
