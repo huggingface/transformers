@@ -281,8 +281,6 @@ class GraniteAttention(nn.Module):
         self.is_causal = True
 
         self.scaling = config.attention_multiplier
-        if self.scaling is None:
-            self.scaling = 1 / math.sqrt(self.head_dim)
 
         if (self.head_dim * self.num_heads) != self.hidden_size:
             raise ValueError(

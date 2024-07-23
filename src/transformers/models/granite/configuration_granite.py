@@ -94,7 +94,7 @@ class GraniteConfig(PretrainedConfig):
         embedding_multiplier (`float`, *optional*, defaults to 1.0): embedding multiplier
         logits_scaling (`float`, *optional*, defaults to 1.0): divisor for output logits
         residual_multiplier (`float`, *optional*, defaults to 1.0): residual multiplier
-        attention_multiplier (`float`, *optional*): attention multiplier. Defaults to 1 / sqrt(head_dim):
+        attention_multiplier (`float`, *optional*, defaults to 1.0): attention multiplier
 
     ```python
     >>> from transformers import GraniteModel, GraniteConfig
@@ -137,7 +137,7 @@ class GraniteConfig(PretrainedConfig):
         embedding_multiplier=1.0,
         logits_scaling=1.0,
         residual_multiplier=1.0,
-        attention_multiplier=None,
+        attention_multiplier=1.0,
         **kwargs,
     ):
         self.vocab_size = vocab_size
