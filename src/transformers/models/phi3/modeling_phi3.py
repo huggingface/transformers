@@ -16,6 +16,7 @@
 """PyTorch Phi-3 model."""
 
 import math
+import warnings
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -106,6 +107,11 @@ class Phi3RotaryEmbedding(nn.Module):
 
 class Phi3SuScaledRotaryEmbedding(Phi3RotaryEmbedding):
     def __init__(self, dim, config, device=None):
+        warnings.warn(
+            "The class Phi3SuScaledRotaryEmbedding is deprecated and will be removed in version 5 of Transformers. Please"
+            " use Phi3LongRoPEScaledRotaryEmbedding instead.",
+            FutureWarning,
+        )
         super().__init__(dim, config.max_position_embeddings, config.rope_theta, device)
 
         self.short_factor = config.rope_scaling["short_factor"]
@@ -119,13 +125,10 @@ class Phi3SuScaledRotaryEmbedding(Phi3RotaryEmbedding):
             ext_factors = torch.tensor(self.long_factor, dtype=torch.float32, device=x.device)
         else:
             ext_factors = torch.tensor(self.short_factor, dtype=torch.float32, device=x.device)
-
         inv_freq_shape = torch.arange(0, self.dim, 2, dtype=torch.int64, device=x.device).float() / self.dim
         self.inv_freq = 1.0 / (ext_factors * self.base**inv_freq_shape)
-
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
-
         # Force float32 since bfloat16 loses precision on long contexts
         # See https://github.com/huggingface/transformers/pull/29285
         device_type = x.device.type
@@ -133,13 +136,11 @@ class Phi3SuScaledRotaryEmbedding(Phi3RotaryEmbedding):
         with torch.autocast(device_type=device_type, enabled=False):
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
-
             scale = self.max_position_embeddings / self.original_max_position_embeddings
             if scale <= 1.0:
                 scaling_factor = 1.0
             else:
                 scaling_factor = math.sqrt(1 + math.log(scale) / math.log(self.original_max_position_embeddings))
-
             cos = emb.cos() * scaling_factor
             sin = emb.sin() * scaling_factor
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
@@ -147,6 +148,10 @@ class Phi3SuScaledRotaryEmbedding(Phi3RotaryEmbedding):
 
 class Phi3YarnScaledRotaryEmbedding(Phi3RotaryEmbedding):
     def __init__(self, dim, config, device=None):
+        warnings.warn(
+            "The class Phi3YarnScaledRotaryEmbedding is deprecated and will be removed in version 5 of Transformers",
+            FutureWarning,
+        )
         super().__init__(dim, config.max_position_embeddings, config.rope_theta, device)
 
         self.short_factor = config.rope_scaling["short_factor"]
@@ -180,6 +185,47 @@ class Phi3YarnScaledRotaryEmbedding(Phi3RotaryEmbedding):
                 scaling_factor = 1.0
             else:
                 scaling_factor = 0.1 * math.log(scale) + 1.0
+
+            cos = emb.cos() * scaling_factor
+            sin = emb.sin() * scaling_factor
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+
+class Phi3LongRoPEScaledRotaryEmbedding(Phi3RotaryEmbedding):
+    def __init__(self, dim, config, device=None):
+        super().__init__(dim, config.max_position_embeddings, config.rope_theta, device)
+
+        self.short_factor = config.rope_scaling["short_factor"]
+        self.long_factor = config.rope_scaling["long_factor"]
+        self.original_max_position_embeddings = config.original_max_position_embeddings
+
+    @torch.no_grad()
+    def forward(self, x, position_ids, seq_len=None):
+        seq_len = torch.max(position_ids) + 1
+        if seq_len > self.original_max_position_embeddings:
+            ext_factors = torch.tensor(self.long_factor, dtype=torch.float32, device=x.device)
+        else:
+            ext_factors = torch.tensor(self.short_factor, dtype=torch.float32, device=x.device)
+
+        inv_freq_shape = torch.arange(0, self.dim, 2, dtype=torch.int64, device=x.device).float() / self.dim
+        self.inv_freq = 1.0 / (ext_factors * self.base**inv_freq_shape)
+
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        position_ids_expanded = position_ids[:, None, :].float()
+
+        # Force float32 since bfloat16 loses precision on long contexts
+        # See https://github.com/huggingface/transformers/pull/29285
+        device_type = x.device.type
+        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+
+            scale = self.max_position_embeddings / self.original_max_position_embeddings
+            if scale <= 1.0:
+                scaling_factor = 1.0
+            else:
+                scaling_factor = math.sqrt(1 + math.log(scale) / math.log(self.original_max_position_embeddings))
 
             cos = emb.cos() * scaling_factor
             sin = emb.sin() * scaling_factor
@@ -300,10 +346,8 @@ class Phi3Attention(nn.Module):
             )
         else:
             scaling_type = self.config.rope_scaling["type"]
-            if scaling_type == "su":
-                self.rotary_emb = Phi3SuScaledRotaryEmbedding(self.head_dim, self.config)
-            elif scaling_type == "yarn":
-                self.rotary_emb = Phi3YarnScaledRotaryEmbedding(self.head_dim, self.config)
+            if scaling_type == "longrope":
+                self.rotary_emb = Phi3LongRoPEScaledRotaryEmbedding(self.head_dim, self.config)
             else:
                 raise ValueError(f"Unknown RoPE scaling type {scaling_type}")
 
@@ -1197,7 +1241,7 @@ class Phi3ForCausalLM(Phi3PreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    # Copied from transformers.models.persimmon.modeling_persimmon.PersimmonForCausalLM.prepare_inputs_for_generation
+    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.prepare_inputs_for_generation
     def prepare_inputs_for_generation(
         self,
         input_ids,
@@ -1205,41 +1249,19 @@ class Phi3ForCausalLM(Phi3PreTrainedModel):
         attention_mask=None,
         inputs_embeds=None,
         cache_position=None,
+        position_ids=None,
         use_cache=True,
         **kwargs,
     ):
-        past_length = 0
+        # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
+        # Exception 1: when passing input_embeds, input_ids may be missing entries
+        # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
         if past_key_values is not None:
-            # Past key values are always initialized with a `Cache` object -> no need for if-else anymore
-            past_length = cache_position[0] if cache_position is not None else past_key_values.get_seq_length()
-            max_cache_length = (
-                torch.tensor(past_key_values.get_max_length(), device=input_ids.device)
-                if past_key_values.get_max_length() is not None
-                else None
-            )
-            cache_length = past_length if max_cache_length is None else torch.min(max_cache_length, past_length)
+            if inputs_embeds is not None:  # Exception 1
+                input_ids = input_ids[:, -cache_position.shape[0] :]
+            elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
+                input_ids = input_ids[:, cache_position]
 
-            # Keep only the unprocessed tokens:
-            # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
-            # some of the inputs are exclusively passed as part of the cache (e.g. when passing input_embeds as
-            # input)
-            if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
-                input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
-            # 2 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
-            # input_ids based on the past_length.
-            elif past_length < input_ids.shape[1]:
-                input_ids = input_ids[:, past_length:]
-            # 3 - Otherwise (past_length >= input_ids.shape[1]), let's assume input_ids only has unprocessed tokens.
-
-            # If we are about to go beyond the maximum cache length, we need to crop the input attention mask.
-            if (
-                max_cache_length is not None
-                and attention_mask is not None
-                and cache_length + input_ids.shape[1] > max_cache_length
-            ):
-                attention_mask = attention_mask[:, -max_cache_length:]
-
-        position_ids = kwargs.get("position_ids", None)
         if attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
@@ -1248,37 +1270,21 @@ class Phi3ForCausalLM(Phi3PreTrainedModel):
                 position_ids = position_ids[:, -input_ids.shape[1] :]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and past_length == 0:
+        if inputs_embeds is not None and cache_position[0] == 0:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
-            model_inputs = {"input_ids": input_ids}
-
-        input_length = position_ids.shape[-1] if position_ids is not None else input_ids.shape[-1]
-        if cache_position is None:
-            cache_position = torch.arange(past_length, past_length + input_length, device=input_ids.device)
-        elif use_cache:
-            cache_position = cache_position[-input_length:]
+            model_inputs = {"input_ids": input_ids.contiguous()}  # `contiguous()` needed for compilation use cases
 
         model_inputs.update(
             {
                 "position_ids": position_ids,
+                "cache_position": cache_position,
                 "past_key_values": past_key_values,
                 "use_cache": use_cache,
                 "attention_mask": attention_mask,
-                "cache_position": cache_position,
             }
         )
         return model_inputs
-
-    @staticmethod
-    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM._reorder_cache
-    def _reorder_cache(past_key_values, beam_idx):
-        reordered_past = ()
-        for layer_past in past_key_values:
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
-            )
-        return reordered_past
 
 
 @add_start_docstrings(
@@ -1316,7 +1322,7 @@ class Phi3ForSequenceClassification(Phi3PreTrainedModel):
     @add_start_docstrings_to_model_forward(PHI3_INPUTS_DOCSTRING)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,

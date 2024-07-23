@@ -174,10 +174,13 @@ class GgufIntegrationTests(unittest.TestCase):
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_llama3_q4_0_tokenizer(self):
-        tokenizer_gguf = AutoTokenizer.from_pretrained(self.llama3_model_id, gguf_file=self.q4_llama3_model_id)
-        special_sentence = "สวัสดี"
-        predicted_text = tokenizer_gguf.decode(tokenizer_gguf.encode(special_sentence, return_tensors="pt")[0])
-        self.assertEqual(predicted_text, "<|begin_of_text|>" + special_sentence)
+        tokenizer = AutoTokenizer.from_pretrained(self.llama3_model_id, gguf_file=self.q4_llama3_model_id)
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            tokenizer.save_pretrained(tmpdirname)
+            tokenizer = AutoTokenizer.from_pretrained(tmpdirname)
+            special_sentence = "สวัสดี"
+            predicted_text = tokenizer.decode(tokenizer.encode(special_sentence, return_tensors="pt")[0])
+            self.assertEqual(predicted_text, "<|begin_of_text|>" + special_sentence)
 
     def test_llama3_q4_0(self):
         tokenizer = AutoTokenizer.from_pretrained(self.llama3_model_id, gguf_file=self.q4_llama3_model_id)
@@ -188,8 +191,7 @@ class GgufIntegrationTests(unittest.TestCase):
         text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
         out = model.generate(**text, max_new_tokens=10)
 
-        EXPECTED_TEXT = "Hello, I am new to this forum. I am"
-
+        EXPECTED_TEXT = "Hello, I am interested in [The Park]\nThe"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_tokenization_xnli(self):

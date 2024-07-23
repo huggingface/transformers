@@ -815,6 +815,72 @@ class ModelUtilsTest(TestCasePlus):
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
             self.assertTrue(torch.allclose(p1, p2))
 
+    def test_checkpoint_loading_only_safetensors_available(self):
+        # Test that the loading behaviour is as expected when only safetensor checkpoints are available
+        # - We can load the model with use_safetensors=True
+        # - We can load the model without specifying use_safetensors i.e. we search for the available checkpoint,
+        #   preferring safetensors
+        # - We cannot load the model with use_safetensors=False
+        model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, max_shard_size="50kB", safe_serialization=True)
+
+            weights_index_name = ".".join(SAFE_WEIGHTS_INDEX_NAME.split(".")[:-1] + ["json"])
+            weights_index_file = os.path.join(tmp_dir, weights_index_name)
+            self.assertTrue(os.path.isfile(weights_index_file))
+
+            for i in range(1, 5):
+                weights_name = f"model-0000{i}-of-00005" + ".safetensors"
+                weights_name_file = os.path.join(tmp_dir, weights_name)
+                self.assertTrue(os.path.isfile(weights_name_file))
+
+            # Setting use_safetensors=False should raise an error as the checkpoint was saved with safetensors=True
+            with self.assertRaises(OSError):
+                _ = BertModel.from_pretrained(tmp_dir, use_safetensors=False)
+
+            # We can load the model with use_safetensors=True
+            new_model = BertModel.from_pretrained(tmp_dir, use_safetensors=True)
+
+            # We can load the model without specifying use_safetensors
+            new_model = BertModel.from_pretrained(tmp_dir)
+
+        for p1, p2 in zip(model.parameters(), new_model.parameters()):
+            self.assertTrue(torch.allclose(p1, p2))
+
+    def test_checkpoint_loading_only_pytorch_bin_available(self):
+        # Test that the loading behaviour is as expected when only pytorch checkpoints are available
+        # - We can load the model with use_safetensors=False
+        # - We can load the model without specifying use_safetensors i.e. we search for the available checkpoint,
+        #   preferring safetensors but falling back to pytorch
+        # - We cannot load the model with use_safetensors=True
+        model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, max_shard_size="50kB", safe_serialization=False)
+
+            weights_index_name = ".".join(WEIGHTS_INDEX_NAME.split(".")[:-1] + ["json"])
+            weights_index_file = os.path.join(tmp_dir, weights_index_name)
+            self.assertTrue(os.path.isfile(weights_index_file))
+
+            for i in range(1, 5):
+                weights_name = WEIGHTS_NAME.split(".")[0].split("_")[0] + f"_model-0000{i}-of-00005" + ".bin"
+                weights_name_file = os.path.join(tmp_dir, weights_name)
+                self.assertTrue(os.path.isfile(weights_name_file))
+
+            # Setting use_safetensors=True should raise an error as the checkpoint was saved with safetensors=False
+            with self.assertRaises(OSError):
+                _ = BertModel.from_pretrained(tmp_dir, use_safetensors=True)
+
+            # We can load the model with use_safetensors=False
+            new_model = BertModel.from_pretrained(tmp_dir, use_safetensors=False)
+
+            # We can load the model without specifying use_safetensors
+            new_model = BertModel.from_pretrained(tmp_dir)
+
+        for p1, p2 in zip(model.parameters(), new_model.parameters()):
+            self.assertTrue(torch.allclose(p1, p2))
+
     def test_checkpoint_variant_hub(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             with self.assertRaises(EnvironmentError):
@@ -894,32 +960,29 @@ class ModelUtilsTest(TestCasePlus):
     @require_usr_bin_time
     @require_accelerate
     @mark.accelerate_tests
-    def test_from_pretrained_low_cpu_mem_usage_measured(self):
-        # test that `from_pretrained(..., low_cpu_mem_usage=True)` uses less cpu memory than default
+    def test_from_pretrained_low_cpu_mem_usage_equal(self):
+        # Before this would test that `from_pretrained(..., low_cpu_mem_usage=True)` uses less cpu memory than default
+        # Now though these should be around the same.
+        # TODO: Look for good bounds to check that their timings are near the same
 
-        mname = "google-bert/bert-base-cased"
+        mname = "hf-internal-testing/tiny-random-bert"
 
         preamble = "from transformers import AutoModel"
         one_liner_str = f'{preamble}; AutoModel.from_pretrained("{mname}", low_cpu_mem_usage=False)'
+        # Save this output as `max_rss_normal` if testing memory results
         max_rss_normal = self.python_one_liner_max_rss(one_liner_str)
         # print(f"{max_rss_normal=}")
 
         one_liner_str = f'{preamble};  AutoModel.from_pretrained("{mname}", low_cpu_mem_usage=True)'
+        # Save this output as `max_rss_low_mem` if testing memory results
         max_rss_low_mem = self.python_one_liner_max_rss(one_liner_str)
-        # print(f"{max_rss_low_mem=}")
 
-        diff_bytes = max_rss_normal - max_rss_low_mem
-        diff_percent = diff_bytes / max_rss_low_mem
-        # print(f"{diff_bytes=}, {diff_percent=}")
-        # ideally we would compare that the diff is close to ~1x checkpoint size in bytes, but
-        # measuring cpu memory on linux is very tricky and inconsistent, so instead let's check that
-        # it's at least 15% less cpu memory consumed
-
-        self.assertGreater(
-            diff_percent,
-            0.15,
-            "should use less CPU memory for low_cpu_mem_usage=True, "
-            f"but got max_rss_normal={max_rss_normal} and max_rss_low_mem={max_rss_low_mem}",
+        # Should be within 2MBs of each other (overhead)
+        self.assertAlmostEqual(
+            max_rss_normal / 1024 / 1024,
+            max_rss_low_mem / 1024 / 1024,
+            delta=2,
+            msg="using `low_cpu_mem_usage` should incur the same memory usage in both cases.",
         )
 
         # if you want to compare things manually, let's first look at the size of the model in bytes
@@ -1847,8 +1910,11 @@ class ModelPushToHubTester(unittest.TestCase):
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
             self.assertTrue(torch.equal(p1, p2))
 
-        # Reset repo
-        delete_repo(token=self._token, repo_id="test-model")
+        try:
+            # Reset repo
+            delete_repo(token=self._token, repo_id="test-model")
+        except:  # noqa E722
+            pass
 
         # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -1887,8 +1953,11 @@ The commit description supports markdown synthax see:
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
             self.assertTrue(torch.equal(p1, p2))
 
-        # Reset repo
-        delete_repo(token=self._token, repo_id="valid_org/test-model-org")
+        try:
+            # Reset repo
+            delete_repo(token=self._token, repo_id="valid_org/test-model-org")
+        except:  # noqa E722
+            pass
 
         # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:

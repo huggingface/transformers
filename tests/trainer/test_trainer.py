@@ -3739,21 +3739,24 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
 
     def test_push_to_hub_with_saves_each_epoch(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            trainer = get_regression_trainer(
-                output_dir=os.path.join(tmp_dir, "test-trainer-epoch"),
-                push_to_hub=True,
-                hub_token=self._token,
-                # To avoid any flakiness if the training goes faster than the uploads.
-                hub_always_push=True,
-                save_strategy="epoch",
-            )
-            trainer.train()
+            with self.assertLogs(level="WARNING") as logs:
+                trainer = get_regression_trainer(
+                    output_dir=os.path.join(tmp_dir, "test-trainer-epoch"),
+                    push_to_hub=True,
+                    hub_token=self._token,
+                    # To avoid any flakiness if the training goes faster than the uploads.
+                    hub_always_push=True,
+                    save_strategy="epoch",
+                )
+                trainer.train()
 
         commits = list_repo_commits(f"{USER}/test-trainer-epoch", token=self._token)
         commits = [c.title for c in commits]
         self.assertIn("initial commit", commits)
-        for i in range(1, 4):
-            self.assertIn(f"Training in progress, epoch {i}", commits)
+        self.assertIn("Training in progress, epoch 1", commits)
+        self.assertIn("Training in progress, epoch 2", commits)
+        # Epochs 3 and 4 are not guaranteed to be present (empty commits)
+        self.assertTrue(any("Skipping to prevent empty commit." in record.message for record in logs.records))
 
     def test_push_to_hub_with_saves_each_n_steps(self):
         num_gpus = max(1, backend_device_count(torch_device))
@@ -3761,25 +3764,35 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
             self.skipTest(reason="More than 2 GPUs available")
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-            trainer = get_regression_trainer(
-                output_dir=os.path.join(tmp_dir, "test-trainer-step"),
-                push_to_hub=True,
-                hub_token=self._token,
-                # To avoid any flakiness if the training goes faster than the uploads.
-                hub_always_push=True,
-                save_strategy="steps",
-                save_steps=5,
-            )
-            trainer.train()
+            with self.assertLogs(level="WARNING") as logs:
+                trainer = get_regression_trainer(
+                    output_dir=os.path.join(tmp_dir, "test-trainer-step"),
+                    push_to_hub=True,
+                    hub_token=self._token,
+                    # To avoid any flakiness if the training goes faster than the uploads.
+                    hub_always_push=True,
+                    save_strategy="steps",
+                    save_steps=5,
+                )
+                trainer.train()
 
         commits = list_repo_commits(f"{USER}/test-trainer-step", token=self._token)
         commits = [c.title for c in commits]
         self.assertIn("initial commit", commits)
 
+        # Some commits are skipped if nothing has changed
+        # We expect 1 commit per 5 epochs + 1 commit at the end
+        nb_empty_commits = len(
+            [record for record in logs.records if "Skipping to prevent empty commit." in record.message]
+        )
+        nb_epoch_commits = len([commit for commit in commits if "Training in progress, step" in commit])
+
         # max_steps depend on the number of available GPUs
         max_steps = math.ceil(trainer.args.num_train_epochs * len(trainer.get_train_dataloader()))
-        for i in range(5, max_steps, 5):
-            self.assertIn(f"Training in progress, step {i}", commits)
+        nb_expected_commits = len(range(5, max_steps, 5))
+
+        # '>=' since final commit might be an empty commit as well (not deterministic)
+        self.assertGreaterEqual(nb_empty_commits + nb_epoch_commits, nb_expected_commits)
 
     @require_tensorboard
     def test_push_to_hub_with_tensorboard_logs(self):

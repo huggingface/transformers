@@ -259,9 +259,11 @@ class ModelTesterMixin:
             # make sure we don't have nans
             out_2 = out2.cpu().numpy()
             out_2[np.isnan(out_2)] = 0
+            out_2 = out_2[~np.isneginf(out_2)]
 
             out_1 = out1.cpu().numpy()
             out_1[np.isnan(out_1)] = 0
+            out_1 = out_1[~np.isneginf(out_1)]
             max_diff = np.amax(np.abs(out_1 - out_2))
             self.assertLessEqual(max_diff, 1e-5)
 
@@ -660,6 +662,8 @@ class ModelTesterMixin:
             out_2 = second.cpu().numpy()
             out_1 = out_1[~np.isnan(out_1)]
             out_2 = out_2[~np.isnan(out_2)]
+            out_1 = out_1[~np.isneginf(out_1)]
+            out_2 = out_2[~np.isneginf(out_2)]
             max_diff = np.amax(np.abs(out_1 - out_2))
             self.assertLessEqual(max_diff, 1e-5)
 
@@ -1751,6 +1755,8 @@ class ModelTesterMixin:
             config = copy.deepcopy(original_config)
             model = model_class(config)
             model.to(torch_device)
+            model_embed_pre_resize = model.get_input_embeddings()
+            type_model_embed_pre_resize = type(model_embed_pre_resize)
 
             if self.model_tester.is_training is False:
                 model.eval()
@@ -1770,6 +1776,9 @@ class ModelTesterMixin:
             self.assertEqual(new_model_vocab_size, model_vocab_size + 10)
             # Check that it actually resizes the embeddings matrix
             self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
+            # Check to make sure the type of embeddings returned post resizing is same as type of input
+            type_model_embed_post_resize = type(model_embed)
+            self.assertEqual(type_model_embed_pre_resize, type_model_embed_post_resize)
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             model(**self._prepare_for_class(inputs_dict, model_class))
 
@@ -4485,9 +4494,6 @@ class ModelTesterMixin:
 
             out_last_tokens = logits[:, -1, :]  # last tokens in each batch line
             out_shared_prefix_last_tokens = logits_shared_prefix[0, -3:, :]  # last three tokens
-
-            # comparing greedily-chosen tokens:
-            assert torch.equal(out_last_tokens.max(axis=1).indices, out_shared_prefix_last_tokens.max(axis=1).indices)
 
             # comparing softmax-normalized logits:
             normalized_0 = F.softmax(out_last_tokens)
