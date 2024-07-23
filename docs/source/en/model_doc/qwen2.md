@@ -27,9 +27,9 @@ Qwen2 is a language model series including decoder language models of different 
 
 ## Usage tips
 
-`Qwen2-7B-beta` and `Qwen2-7B-Chat-beta` can be found on the [Huggingface Hub](https://huggingface.co/Qwen)
+`Qwen2-7B` and `Qwen2-7B-Instruct` can be found on the [Huggingface Hub](https://huggingface.co/Qwen)
 
-In the following, we demonstrate how to use `Qwen2-7B-Chat-beta` for the inference. Note that we have used the ChatML format for dialog, in this demo we show how to leverage `apply_chat_template` for this purpose.
+In the following, we demonstrate how to use `Qwen2-7B-Instruct` for the inference. Note that we have used the ChatML format for dialog, in this demo we show how to leverage `apply_chat_template` for this purpose.
 
 ```python
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
