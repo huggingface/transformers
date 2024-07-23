@@ -34,7 +34,6 @@ from transformers.testing_utils import (
     get_tests_dir,
     nested_simplify,
     require_jinja,
-    require_read_token,
     require_sentencepiece,
     require_tiktoken,
     require_tokenizers,
@@ -884,4 +883,3 @@ class TikTokenIntegrationTests(unittest.TestCase):
         )
         tokens = tiktoken_tokenizer.encode(test_text)
         self.assertEqual(tokens, test_tokens)
-
