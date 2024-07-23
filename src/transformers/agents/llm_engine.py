@@ -71,25 +71,19 @@ class HfEngine:
         self.client = InferenceClient(model=self.model, timeout=120)
 
     def __call__(
-            self,
-            messages: List[Dict[str, str]],
-            stop_sequences: List[str] = [],
-            grammar: Optional[str] = None
-        ) -> str:
+        self, messages: List[Dict[str, str]], stop_sequences: List[str] = [], grammar: Optional[str] = None
+    ) -> str:
         # Get clean message list
         messages = get_clean_message_list(messages, role_conversions=llama_role_conversions)
 
         # Get LLM output
         response = self.client.chat_completion(
-            messages,
-            stop=stop_sequences,
-            max_tokens=1500,
-            response_format={"type": "regex", "value": grammar}
+            messages, stop=stop_sequences, max_tokens=1500, response_format={"type": "regex", "value": grammar}
         )
         response = response.choices[0].message.content
 
         # Remove stop sequences from LLM output
         for stop_seq in stop_sequences:
-            if response[-len(stop_seq):] == stop_seq:
+            if response[-len(stop_seq) :] == stop_seq:
                 response = response[: -len(stop_seq)]
         return response
