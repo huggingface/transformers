@@ -387,7 +387,7 @@ class WhisperFlashAttention2(WhisperAttention):
         bsz, tgt_len, _ = hidden_states.size()
 
         # get query proj
-        query_states = self._shape(self.q_proj(hidden_states), tgt_len, bsz)
+        query_states = torch.reshape(self.q_proj(hidden_states), (bsz, tgt_len, self.num_heads, self.head_dim))
 
         if past_key_value is not None:
             is_updated = past_key_value.is_updated.get(self.layer_idx)
@@ -416,7 +416,6 @@ class WhisperFlashAttention2(WhisperAttention):
 
         # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]
         #  We would need to refactor the KV cache to be able to avoid many of these transpose/reshape/view.
-        query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
 

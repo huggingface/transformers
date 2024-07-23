@@ -301,7 +301,7 @@ class Idefics2VisionFlashAttention2(Idefics2VisionAttention):
         # Flash attention requires the input to have the shape
         # batch_size x seq_length x head_dim x hidden_dim
         # therefore we just need to keep the original shape
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim)
         key_states = key_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
 
@@ -311,7 +311,6 @@ class Idefics2VisionFlashAttention2(Idefics2VisionAttention):
 
         # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
         # to be able to avoid many of these transpose/reshape/view.
-        query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
 
@@ -817,7 +816,7 @@ class Idefics2PerceiverFlashAttention2(Idefics2PerceiverAttention):
         key_states = self.k_proj(torch.cat([context, latents], dim=-2))
         value_states = self.v_proj(torch.cat([context, latents], dim=-2))
 
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim)
         key_states = key_states.view(bsz, kv_seq_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, kv_seq_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
@@ -882,7 +881,6 @@ class Idefics2PerceiverFlashAttention2(Idefics2PerceiverAttention):
             value_states = value_states.to(target_dtype)
 
         # Reashape to the expected shape for Flash Attention
-        query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
 
