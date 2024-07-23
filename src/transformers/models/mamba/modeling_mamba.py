@@ -330,6 +330,7 @@ class MambaRMSNorm(nn.Module):
     def extra_repr(self):
         return f"{self.weight.shape[0]}, eps={self.variance_epsilon}"
 
+
 class MambaBlock(nn.Module):
     def __init__(self, config, layer_idx):
         super().__init__()
