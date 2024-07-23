@@ -237,12 +237,12 @@ class CacheIntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-9b")
         model = AutoModelForCausalLM.from_pretrained(
             "google/gemma-2-9b",
-            low_cpu_mem_usage=True,
+            device_map="auto",
             torch_dtype=torch.bfloat16,
             attn_implementation="eager",
-        ).to(torch_device)
+        )
 
-        inputs = tokenizer(["Hello I am doing"], return_tensors="pt", padding=True).to(torch_device)
+        inputs = tokenizer(["Hello I am doing"], return_tensors="pt").to(model.device)
 
         gen_out = model.generate(
             **inputs,
