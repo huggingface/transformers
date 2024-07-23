@@ -1948,7 +1948,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 return self._rendered_blocks or self._generation_indices
 
             @contextmanager
-            def activate_tracker(self, rendered_blocks: list[int], generation_indices: list[int]):
+            def activate_tracker(self, rendered_blocks: List[int], generation_indices: List[int]):
                 try:
                     if self.is_active():
                         raise ValueError("AssistantTracker should not be reused before closed")
