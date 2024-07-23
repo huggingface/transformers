@@ -198,7 +198,7 @@ Action:
         )
         agent.run("What is 2 multiplied by 3.6452?")
         assert len(agent.logs) == 7
-        assert type(agent.logs[-1]["error"]) == AgentMaxIterationsError
+        assert type(agent.logs[-1]["error"]) is AgentMaxIterationsError
 
     @require_torch
     def test_init_agent_with_different_toolsets(self):
