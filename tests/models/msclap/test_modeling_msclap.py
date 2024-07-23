@@ -20,6 +20,8 @@ import os
 import tempfile
 import unittest
 
+from datasets import load_dataset
+
 from transformers import MSClapAudioConfig, MSClapConfig, MSClapTextConfig
 from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.utils import is_torch_available
@@ -44,6 +46,7 @@ if is_torch_available():
         MSClapAudioModel,
         MSClapAudioModelWithProjection,
         MSClapModel,
+        MSClapProcessor,
         MSClapTextModelWithProjection,
     )
 
@@ -644,13 +647,13 @@ class MSClapModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
         # Save MSClapConfig and check if we can load MSClapAudioConfig from it
         with tempfile.TemporaryDirectory() as tmp_dir_name:
-            config.save_pretrained(tmp_dir_name)
+            config.audio_config.save_pretrained(tmp_dir_name)
             audio_config = MSClapAudioConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.audio_config.to_dict(), audio_config.to_dict())
 
         # Save MSClapConfig and check if we can load MSClapTextConfig from it
         with tempfile.TemporaryDirectory() as tmp_dir_name:
-            config.save_pretrained(tmp_dir_name)
+            config.text_config.save_pretrained(tmp_dir_name)
             text_config = MSClapTextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
 
@@ -661,121 +664,46 @@ class MSClapModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.assertIsNotNone(model)
 
 
-# @slow
-# @require_torch
-# class MSClapModelIntegrationTest(unittest.TestCase):
-#     paddings = ["repeatpad", "repeat", "pad"]
+@slow
+@require_torch
+class MSClapModelIntegrationTest(unittest.TestCase):
+    def test_integration_unfused(self):
+        EXPECTED_MEANS_UNFUSED = 6.15e-05
 
-#     def test_integration_unfused(self):
-#         EXPECTED_MEANS_UNFUSED = {
-#             "repeatpad": 0.0024,
-#             "pad": 0.0020,
-#             "repeat": 0.0023,
-#         }
+        librispeech_dummy = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
+        )
+        audio_sample = librispeech_dummy[-1]
 
-#         librispeech_dummy = load_dataset(
-#             "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
-#         )
-#         audio_sample = librispeech_dummy[-1]
+        model_id = "kamilakesbi/ms_clap"
 
-#         model_id = "laion/msclap-htsat-unfused"
+        model = MSClapModel.from_pretrained(model_id).to(torch_device)
+        processor = MSClapProcessor.from_pretrained(model_id)
 
-#         model = MSClapModel.from_pretrained(model_id).to(torch_device)
-#         processor = MSClapProcessor.from_pretrained(model_id)
+        # for padding in self.paddings:
+        inputs = processor(audios=audio_sample["audio"]["array"], return_tensors="pt").to(torch_device)
 
-#         for padding in self.paddings:
-#             inputs = processor(audios=audio_sample["audio"]["array"], return_tensors="pt", padding=padding).to(
-#                 torch_device
-#             )
+        audio_embed = model.get_audio_features(**inputs)
+        expected_mean = EXPECTED_MEANS_UNFUSED
 
-#             audio_embed = model.get_audio_features(**inputs)
-#             expected_mean = EXPECTED_MEANS_UNFUSED[padding]
+        self.assertTrue(torch.allclose(audio_embed.cpu().mean(), torch.tensor([expected_mean]), atol=1e-3, rtol=1e-3))
 
-#             self.assertTrue(
-#                 torch.allclose(audio_embed.cpu().mean(), torch.tensor([expected_mean]), atol=1e-3, rtol=1e-3)
-#             )
+    def test_batched_unfused(self):
+        EXPECTED_MEANS_FUSED = 6.62e-05
 
-#     def test_integration_fused(self):
-#         EXPECTED_MEANS_FUSED = {
-#             "repeatpad": 0.00069,
-#             "repeat": 0.00196,
-#             "pad": -0.000379,
-#         }
+        librispeech_dummy = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
+        )
+        audio_samples = [sample["array"] for sample in librispeech_dummy[0:4]["audio"]]
 
-#         librispeech_dummy = load_dataset(
-#             "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
-#         )
-#         audio_sample = librispeech_dummy[-1]
+        model_id = "kamilakesbi/ms_clap"
 
-#         model_id = "microsoft/msclap"
+        model = MSClapModel.from_pretrained(model_id).to(torch_device)
+        processor = MSClapProcessor.from_pretrained(model_id)
 
-#         model = MSClapModel.from_pretrained(model_id).to(torch_device)
-#         processor = MSClapProcessor.from_pretrained(model_id)
+        inputs = processor(audios=audio_samples, return_tensors="pt").to(torch_device)
 
-#         for padding in self.paddings:
-#             inputs = processor(
-#                 audios=audio_sample["audio"]["array"], return_tensors="pt", padding=padding, truncation="fusion"
-#             ).to(torch_device)
+        audio_embed = model.get_audio_features(**inputs)
+        expected_mean = EXPECTED_MEANS_FUSED
 
-#             audio_embed = model.get_audio_features(**inputs)
-#             expected_mean = EXPECTED_MEANS_FUSED[padding]
-
-#             self.assertTrue(
-#                 torch.allclose(audio_embed.cpu().mean(), torch.tensor([expected_mean]), atol=1e-3, rtol=1e-3)
-#             )
-
-#     def test_batched_fused(self):
-#         EXPECTED_MEANS_FUSED = {
-#             "repeatpad": 0.0010,
-#             "repeat": 0.0020,
-#             "pad": 0.0006,
-#         }
-
-#         librispeech_dummy = load_dataset(
-#             "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
-#         )
-#         audio_samples = [sample["array"] for sample in librispeech_dummy[0:4]["audio"]]
-
-#         model_id = "microsoft/msclap"
-
-#         model = MSClapModel.from_pretrained(model_id).to(torch_device)
-#         processor = MSClapProcessor.from_pretrained(model_id)
-
-#         for padding in self.paddings:
-#             inputs = processor(audios=audio_samples, return_tensors="pt", padding=padding, truncation="fusion").to(
-#                 torch_device
-#             )
-
-#             audio_embed = model.get_audio_features(**inputs)
-#             expected_mean = EXPECTED_MEANS_FUSED[padding]
-
-#             self.assertTrue(
-#                 torch.allclose(audio_embed.cpu().mean(), torch.tensor([expected_mean]), atol=1e-3, rtol=1e-3)
-#             )
-
-#     def test_batched_unfused(self):
-#         EXPECTED_MEANS_FUSED = {
-#             "repeatpad": 0.0016,
-#             "repeat": 0.0019,
-#             "pad": 0.0019,
-#         }
-
-#         librispeech_dummy = load_dataset(
-#             "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
-#         )
-#         audio_samples = [sample["array"] for sample in librispeech_dummy[0:4]["audio"]]
-
-#         model_id = "laion/msclap-htsat-unfused"
-
-#         model = MSClapModel.from_pretrained(model_id).to(torch_device)
-#         processor = MSClapProcessor.from_pretrained(model_id)
-
-#         for padding in self.paddings:
-#             inputs = processor(audios=audio_samples, return_tensors="pt", padding=padding).to(torch_device)
-
-#             audio_embed = model.get_audio_features(**inputs)
-#             expected_mean = EXPECTED_MEANS_FUSED[padding]
-
-#             self.assertTrue(
-#                 torch.allclose(audio_embed.cpu().mean(), torch.tensor([expected_mean]), atol=1e-3, rtol=1e-3)
-#             )
+        self.assertTrue(torch.allclose(audio_embed.cpu().mean(), torch.tensor([expected_mean]), atol=1e-3, rtol=1e-3))

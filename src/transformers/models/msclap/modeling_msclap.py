@@ -1170,9 +1170,7 @@ class MSClapPreTrainedModel(PreTrainedModel):
         """Initialize the weights"""
         factor = self.config.initializer_factor
 
-        if isinstance(module, MSClapModel):
-            nn.init.normal_(module.logit_scale, std=factor * 0.02)
-        elif isinstance(module, nn.Embedding):
+        if isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=factor * 0.02)
 
         elif isinstance(module, nn.LayerNorm):
