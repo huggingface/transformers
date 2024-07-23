@@ -20,7 +20,6 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Union
 
 import torch
-from packaging import version
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
@@ -36,14 +35,17 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer, \
-    is_torch_greater_or_equal_than_2_2
+from ...pytorch_utils import (
+    apply_chunking_to_forward,
+    find_pruneable_heads_and_indices,
+    is_torch_greater_or_equal_than_2_2,
+    prune_linear_layer,
+)
 from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    get_torch_version,
     logging,
     replace_return_docstrings,
 )
