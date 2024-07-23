@@ -132,9 +132,7 @@ class GroundingDinoProcessor(ProcessorMixin):
 
         # Get only text
         if images is not None:
-            encoding_image_processor = self.image_processor(
-                images, **output_kwargs["images_kwargs"]
-            )
+            encoding_image_processor = self.image_processor(images, **output_kwargs["images_kwargs"])
         else:
             encoding_image_processor = BatchFeature()
 
