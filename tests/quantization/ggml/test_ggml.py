@@ -176,7 +176,6 @@ class GgufIntegrationTests(unittest.TestCase):
     def test_llama3_q4_0_tokenizer(self):
         tokenizer = AutoTokenizer.from_pretrained(self.llama3_model_id, gguf_file=self.q4_llama3_model_id)
         with tempfile.TemporaryDirectory() as tmpdirname:
-            tmpdirname = "quant_test_3"
             tokenizer.save_pretrained(tmpdirname)
             tokenizer = AutoTokenizer.from_pretrained(tmpdirname)
             special_sentence = "สวัสดี"
