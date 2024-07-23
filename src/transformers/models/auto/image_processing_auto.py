@@ -59,6 +59,7 @@ else:
             ("blip", ("BlipImageProcessor",)),
             ("blip-2", ("BlipImageProcessor",)),
             ("bridgetower", ("BridgeTowerImageProcessor",)),
+            ("chameleon", ("ChameleonImageProcessor",)),
             ("chinese_clip", ("ChineseCLIPImageProcessor",)),
             ("clip", ("CLIPImageProcessor",)),
             ("clipseg", ("ViTImageProcessor", "ViTImageProcessorFast")),
@@ -85,6 +86,7 @@ else:
             ("glpn", ("GLPNImageProcessor",)),
             ("grounding-dino", ("GroundingDinoImageProcessor",)),
             ("groupvit", ("CLIPImageProcessor",)),
+            ("hiera", ("BitImageProcessor",)),
             ("idefics", ("IdeficsImageProcessor",)),
             ("idefics2", ("Idefics2ImageProcessor",)),
             ("imagegpt", ("ImageGPTImageProcessor",)),
@@ -142,6 +144,7 @@ else:
             ("vitmatte", ("VitMatteImageProcessor",)),
             ("xclip", ("CLIPImageProcessor",)),
             ("yolos", ("YolosImageProcessor",)),
+            ("zoedepth", ("ZoeDepthImageProcessor",)),
         ]
     )
 

@@ -825,13 +825,13 @@ class TFCLIPMainLayer(keras.layers.Layer):
         super().__init__(**kwargs)
 
         if not isinstance(config.text_config, CLIPTextConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.text_config is expected to be of type CLIPTextConfig but is of type"
                 f" {type(config.text_config)}."
             )
 
         if not isinstance(config.vision_config, CLIPVisionConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.vision_config is expected to be of type CLIPVisionConfig but is of type"
                 f" {type(config.vision_config)}."
             )
