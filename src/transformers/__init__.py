@@ -4545,6 +4545,7 @@ else:
         [
             "FlaxDinov2Model",
             "FlaxDinov2ForImageClassification",
+            "FlaxDinov2PreTrainedModel",
         ]
     )
     _import_structure["models.distilbert"].extend(
@@ -8631,6 +8632,7 @@ if TYPE_CHECKING:
         from .models.dinov2 import (
             FlaxDinov2ForImageClassification,
             FlaxDinov2Model,
+            FlaxDinov2PreTrainedModel,
         )
         from .models.distilbert import (
             FlaxDistilBertForMaskedLM,

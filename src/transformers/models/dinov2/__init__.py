@@ -42,7 +42,11 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_flax_dinov2"] = ["FlaxDinov2ForImageClassification", "FlaxDinov2Model"]
+    _import_structure["modeling_flax_dinov2"] = [
+        "FlaxBeitPreTrainedModel",
+        "FlaxDinov2ForImageClassification",
+        "FlaxDinov2Model",
+    ]
 
 if TYPE_CHECKING:
     from .configuration_dinov2 import Dinov2Config, Dinov2OnnxConfig
@@ -66,10 +70,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_flax_dinov2 import (
-            FlaxDinov2ForImageClassification,
-            FlaxDinov2Model,
-        )
+        from .modeling_flax_dinov2 import FlaxDinov2ForImageClassification, FlaxDinov2Model, FlaxDinov2PreTrainedModel
 
 else:
     import sys
