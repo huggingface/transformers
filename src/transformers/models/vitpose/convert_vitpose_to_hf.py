@@ -175,7 +175,7 @@ def prepare_img():
     return image
 
 
-name_to_path = {
+model_name_to_file_name = {
     "vitpose-base-simple": "vitpose-b-simple.pth",
     "vitpose-base": "vitpose-b.pth",
     "vitpose-base-coco-aic-mpii": "vitpose_base_coco_aic_mpii.pth",
@@ -197,7 +197,10 @@ def convert_vitpose_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     model.eval()
 
     # load original state_dict
-    checkpoint_path = name_to_path[model_name]
+    filename = model_name_to_file_name[model_name]
+    checkpoint_path = hf_hub_download(
+        repo_id="nielsr/vitpose-original-checkpoints", filename=filename, repo_type="model"
+    )
     state_dict = torch.load(checkpoint_path, map_location="cpu")["state_dict"]
 
     # rename some keys
@@ -314,7 +317,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--model_name",
         default="vitpose-base-simple",
-        choices=name_to_path.keys(),
+        choices=model_name_to_file_name.keys(),
         type=str,
         help="Name of the ViTPose model you'd like to convert.",
     )
