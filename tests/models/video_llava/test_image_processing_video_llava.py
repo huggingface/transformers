@@ -97,8 +97,7 @@ class VideoLlavaImageProcessingTester(unittest.TestCase):
             torchify=torchify,
         )
 
-    def prepare_video_inputs(self, equal_resolution=False, torchify=False):
-        numpify = not torchify
+    def prepare_video_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         images = prepare_image_inputs(
             batch_size=self.batch_size,
             num_channels=self.num_channels,
@@ -108,15 +107,19 @@ class VideoLlavaImageProcessingTester(unittest.TestCase):
             numpify=numpify,
             torchify=torchify,
         )
-
         # let's simply copy the frames to fake a long video-clip
-        videos = []
-        for image in images:
-            if numpify:
-                video = image[None, ...].repeat(8, 0)
-            else:
-                video = image[None, ...].repeat(8, 1, 1, 1)
-            videos.append(video)
+        if numpify or torchify:
+            videos = []
+            for image in images:
+                if numpify:
+                    video = image[None, ...].repeat(8, 0)
+                else:
+                    video = image[None, ...].repeat(8, 1, 1, 1)
+                videos.append(video)
+        else:
+            videos = []
+            for pil_image in images:
+                videos.append([pil_image] * 8)
 
         return videos
 
