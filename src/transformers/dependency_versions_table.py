@@ -82,6 +82,7 @@ deps = {
     "tensorflow-probability": "tensorflow-probability<0.24",
     "tf2onnx": "tf2onnx",
     "timeout-decorator": "timeout-decorator",
+    "tiktoken": "tiktoken",
     "timm": "timm<=0.9.16",
     "tokenizers": "tokenizers>=0.19,<0.20",
     "torch": "torch",
