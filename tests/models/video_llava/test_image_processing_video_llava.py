@@ -118,8 +118,9 @@ class VideoLlavaImageProcessingTester(unittest.TestCase):
                 videos.append(video)
         else:
             videos = []
+            # batched videos
             for pil_image in images:
-                videos.append([pil_image] * 8)
+                videos.append([pil_image for _ in range(8)])
 
         return videos
 
@@ -200,7 +201,7 @@ class VideoLlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
         # create random numpy tensors
-        video_inputs = self.image_processor_tester.prepare_video_inputs(equal_resolution=True)
+        video_inputs = self.image_processor_tester.prepare_video_inputs(numpify=True, equal_resolution=True)
         for video in video_inputs:
             self.assertIsInstance(video, np.ndarray)
 
@@ -217,7 +218,7 @@ class VideoLlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
     def test_call_pil_videos(self):
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
-        # create random pil input
+
         video_inputs = self.image_processor_tester.prepare_video_inputs(equal_resolution=True)
         for video in video_inputs:
             self.assertIsInstance(video, Image.Image)
