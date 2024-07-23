@@ -1614,7 +1614,13 @@ class DataCollatorForPermutationLanguageModeling(DataCollatorMixin):
 
 @dataclass
 class DataCollatorWithFlattening(DefaultDataCollator):
-    return_tensors: str = "pt"
+    """
+    Data collator used for padding free approach. Does the following:
+
+    - concatate the entire mini batch into single long sequence [1, total_tokens]
+    - no padding will be added, returns `input_ids`, `labels` and `position_ids`
+    """
+
     def __init__(self, *args, return_position_ids=True, **kwargs):
         super().__init__(*args, **kwargs)
         self.return_position_ids=return_position_ids
@@ -1626,9 +1632,9 @@ class DataCollatorWithFlattening(DefaultDataCollator):
         if return_tensors is None:
             return_tensors = self.return_tensors
         is_labels_provided = "labels" in features[0]
-        ret = dict(input_ids=[], labels=[])
+        ret = {"input_ids":[], "labels":[]}
         if self.return_position_ids:
-            ret.update(dict(position_ids=[]))
+            ret.update({"position_ids":[]})
         for idx in range(0,len(features)):
             ret["input_ids"] += features[idx]["input_ids"]
             if is_labels_provided:

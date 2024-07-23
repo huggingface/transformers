@@ -4765,8 +4765,8 @@ if TYPE_CHECKING:
         DataCollatorForSOP,
         DataCollatorForTokenClassification,
         DataCollatorForWholeWordMask,
-        DataCollatorWithPadding,
         DataCollatorWithFlattening,
+        DataCollatorWithPadding,
         DefaultDataCollator,
         default_data_collator,
     )

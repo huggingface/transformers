@@ -4332,7 +4332,7 @@ class ModelTesterMixin:
     @mark.flash_attn_test
     @slow
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
-        
+
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
@@ -4390,7 +4390,7 @@ class ModelTesterMixin:
                 # acceptable numerical instability
                 tol = torch.finfo(torch.float16).eps
                 torch.testing.assert_close(logits_padded, logits_padfree, atol=tol, rtol=tol)
-                
+
     @is_pt_tf_cross_test
     def test_tf_from_pt_safetensors(self):
         for model_class in self.all_model_classes:

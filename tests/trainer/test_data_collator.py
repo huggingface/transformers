@@ -26,8 +26,8 @@ from transformers import (
     DataCollatorForSeq2Seq,
     DataCollatorForTokenClassification,
     DataCollatorForWholeWordMask,
-    DataCollatorWithPadding,
     DataCollatorWithFlattening,
+    DataCollatorWithPadding,
     default_data_collator,
     is_tf_available,
     is_torch_available,
@@ -1533,7 +1533,6 @@ class NumpyDataCollatorIntegrationTest(unittest.TestCase):
         self.assertEqual(batch["input_ids"].shape, (2, 8))
 
     def test_data_collator_with_flattening(self):
-        tokenizer = BertTokenizer(self.vocab_file)
         features = [{"input_ids": [10, 11, 12]}, {"input_ids": [20, 21, 22, 23, 24, 25]}, {"input_ids": [30, 31, 32, 33, 34, 35, 36]}]
 
         data_collator = DataCollatorWithFlattening(return_tensors="np")

@@ -172,7 +172,7 @@ def prepare_fa2_from_position_ids(query, key, value, position_ids):
         indices_q[position_ids==0],
         torch.tensor(position_ids.size(), device=position_ids.device, dtype=torch.int32)
         ))
-    
+
     max_length = position_ids.max()+1
 
     return (

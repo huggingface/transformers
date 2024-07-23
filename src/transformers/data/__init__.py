@@ -19,8 +19,8 @@ from .data_collator import (
     DataCollatorForSOP,
     DataCollatorForTokenClassification,
     DataCollatorForWholeWordMask,
-    DataCollatorWithPadding,
     DataCollatorWithFlattening,
+    DataCollatorWithPadding,
     DefaultDataCollator,
     default_data_collator,
 )
