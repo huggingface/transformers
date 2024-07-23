@@ -28,6 +28,8 @@ from .base import Pipeline, build_pipeline_init_args
 if is_vision_available():
     from PIL import Image
 
+    from ..image_utils import load_image
+
 
 if is_torch_available():
     from ..models.auto.modeling_auto import MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES
@@ -121,7 +123,33 @@ class ImageTextToTextPipeline(Pipeline):
         return super().__call__(images, **kwargs)
 
     def preprocess(self, image=None, text=None, timeout=None):
-        pass
+        if image is not None:
+            image = load_image(image, timeout=timeout)
+
+        model_type = self.model.config.model_type
+
+        kwargs = {}
+
+        # if model_type == "pix2struct":
+        #     kwargs = {"add_special_tokens": False}
+
+        # if model_type == "idefics":
+        #     model_inputs = self.processor(text, return_tensors=self.framework, **kwargs)
+        model_inputs = self.processor(images=image, text=text, return_tensors=self.framework, **kwargs)
+
+        # if model_type == "git":
+        #     # remove EOS token from input_ids and attention_mask
+        #     model_inputs["input_ids"] = model_inputs["input_ids"][:, :-1]
+        #     model_inputs["attention_mask"] = model_inputs["attention_mask"][:, :-1]
+
+        # if model_type == "vision-encoder-decoder" and self.processor.__class__.__name__ == "DonutProcessor":
+        #     model_inputs["decoder_input_ids"] = self.processor.tokenizer(
+        #         text,
+        #         add_special_tokens=False,
+        #         return_tensors=self.framework,
+        #     ).input_ids
+
+        return model_inputs
 
     def _forward(self, model_inputs, generate_kwargs=None):
         if generate_kwargs is None:

@@ -24,6 +24,7 @@ from ..configuration_utils import PretrainedConfig
 from ..dynamic_module_utils import get_class_from_dynamic_module
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
 from ..image_processing_utils import BaseImageProcessor
+from ..processing_utils import ProcessorMixin
 from ..models.auto.configuration_auto import AutoConfig
 from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, AutoFeatureExtractor
 from ..models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING, AutoImageProcessor
@@ -569,6 +570,7 @@ def pipeline(
     tokenizer: Optional[Union[str, PreTrainedTokenizer, "PreTrainedTokenizerFast"]] = None,
     feature_extractor: Optional[Union[str, PreTrainedFeatureExtractor]] = None,
     image_processor: Optional[Union[str, BaseImageProcessor]] = None,
+    processor: Optional[ProcessorMixin] = None,
     framework: Optional[str] = None,
     revision: Optional[str] = None,
     use_fast: bool = True,
@@ -920,6 +922,7 @@ def pipeline(
     load_tokenizer = type(model_config) in TOKENIZER_MAPPING or model_config.tokenizer_class is not None
     load_feature_extractor = type(model_config) in FEATURE_EXTRACTOR_MAPPING or feature_extractor is not None
     load_image_processor = type(model_config) in IMAGE_PROCESSOR_MAPPING or image_processor is not None
+    load_processor = type(model_config) in PROCESSOR_MAPPING or processor is not None
 
     # If `model` (instance of `PretrainedModel` instead of `str`) is passed (and/or same for config), while
     # `image_processor` or `feature_extractor` is `None`, the loading will fail. This happens particularly for some
@@ -1081,6 +1084,28 @@ def pipeline(
 
                     if not is_pyctcdecode_available():
                         logger.warning("Try to install `pyctcdecode`: `pip install pyctcdecode")
+
+    if load_processor:
+        # Try to infer processor from model or config name (if provided as str)
+        if processor is None:
+            if isinstance(model_name, str):
+                processor = model_name
+            elif isinstance(config, str):
+                processor = config
+            elif load_image_processor or load_feature_extractor:
+                pass
+            else:
+                # Impossible to guess what is the right processor here
+                raise Exception(
+                    "Impossible to guess which processor to use. "
+                    "Please provide a ProcessorMixin class or a path/identifier "
+                    "to a pretrained processor."
+                )
+
+        # Instantiate processor if needed
+        if isinstance(processor, (str, tuple)):
+            processor = AutoProcessor.from_pretrained(processor, _from_pipeline=task, **hub_kwargs, **model_kwargs)
+
 
     if task == "translation" and model.config.task_specific_params:
         for key in model.config.task_specific_params:
