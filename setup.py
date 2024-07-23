@@ -177,6 +177,7 @@ _deps = [
     "tensorflow-probability<0.24",
     "tf2onnx",
     "timeout-decorator",
+    "tiktoken",
     "timm<=0.9.16",
     "tokenizers>=0.19,<0.20",
     "torch",
