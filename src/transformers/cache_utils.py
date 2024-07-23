@@ -456,6 +456,7 @@ class OffloadedCache(DynamicCache):
     """
 
     def __init__(self) -> None:
+        assert torch.cuda.is_available(), "OffloadedCache can only be used with a GPU"
         super().__init__()
         self.original_device = []
         self.prefetch_stream = torch.cuda.Stream()
