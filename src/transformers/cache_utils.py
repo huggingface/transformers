@@ -22,12 +22,17 @@ if is_hqq_available():
 
 logger = logging.get_logger(__name__)
 
+import torch.nn as nn
+
 
 @dataclass
-class Cache:
+class Cache(nn.Module):
     """
     Base, abstract class for all caches. The actual data structure is specific to each subclass.
     """
+
+    def __init__(self):
+        super().__init__(self)
 
     def update(
         self,
@@ -299,6 +304,7 @@ class DynamicCache(Cache):
     """
 
     def __init__(self) -> None:
+        super().__init__(self)
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
         self._seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
