@@ -538,7 +538,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
             start_ = output["start"]
             end_ = output["end"]
             example = output["example"]
-            p_mask = np.array(output["p_mask"])
+            p_mask = output["p_mask"]
             attention_mask = (
                 output["attention_mask"].numpy() if output.get("attention_mask", None) is not None else None
             )
