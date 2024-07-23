@@ -103,6 +103,7 @@ _import_structure = {
         "DataCollatorForSOP",
         "DataCollatorForTokenClassification",
         "DataCollatorForWholeWordMask",
+        "DataCollatorWithFlattening",
         "DataCollatorWithPadding",
         "DefaultDataCollator",
         "default_data_collator",
@@ -935,6 +936,7 @@ _import_structure = {
         "AwqConfig",
         "BitsAndBytesConfig",
         "EetqConfig",
+        "FbgemmFp8Config",
         "GPTQConfig",
         "HqqConfig",
         "QuantoConfig",
@@ -1295,6 +1297,7 @@ else:
     )
     _import_structure["modeling_flash_attention_utils"] = []
     _import_structure["modeling_outputs"] = []
+    _import_structure["modeling_rope_utils"] = ["ROPE_INIT_FUNCTIONS"]
     _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
     # PyTorch models structure
@@ -4773,6 +4776,7 @@ if TYPE_CHECKING:
         DataCollatorForSOP,
         DataCollatorForTokenClassification,
         DataCollatorForWholeWordMask,
+        DataCollatorWithFlattening,
         DataCollatorWithPadding,
         DefaultDataCollator,
         default_data_collator,
@@ -5677,6 +5681,7 @@ if TYPE_CHECKING:
         AwqConfig,
         BitsAndBytesConfig,
         EetqConfig,
+        FbgemmFp8Config,
         GPTQConfig,
         HqqConfig,
         QuantoConfig,
@@ -6020,6 +6025,7 @@ if TYPE_CHECKING:
             WatermarkLogitsProcessor,
             WhisperTimeStampLogitsProcessor,
         )
+        from .modeling_rope_utils import ROPE_INIT_FUNCTIONS
         from .modeling_utils import PreTrainedModel
         from .models.albert import (
             AlbertForMaskedLM,

@@ -157,6 +157,8 @@
     title: EETQ
   - local: quantization/hqq
     title: HQQ
+  - local: quantization/fbgemm_fp8
+    title: FBGEMM_FP8
   - local: quantization/optimum
     title: Optimum
   - local: quantization/contribute
