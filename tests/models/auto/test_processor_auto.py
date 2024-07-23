@@ -435,7 +435,8 @@ class ProcessorPushToHubTester(unittest.TestCase):
         random_repo_id = f"{USER}/test-dynamic-processor-{uuid4()}"
         try:
             with tempfile.TemporaryDirectory() as tmp_dir:
-                create_repo(random_repo_id, token=self._token)
+                # exist_ok=True to avoid unlikely deadlocks
+                create_repo(random_repo_id, token=self._token, exist_ok=True)
                 repo = Repository(tmp_dir, clone_from=random_repo_id, token=self._token)
                 processor.save_pretrained(tmp_dir)
 
