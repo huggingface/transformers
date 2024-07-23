@@ -788,6 +788,8 @@ class SeamlessM4Tv2ConformerEncoder(nn.Module):
                         layer.__call__,
                         hidden_states,
                         attention_mask,
+                        output_attentions,
+                        conv_attention_mask,
                     )
                 else:
                     layer_outputs = layer(
