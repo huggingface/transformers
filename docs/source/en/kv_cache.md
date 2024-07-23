@@ -35,43 +35,10 @@ More concretely, key-value cache acts as a memory bank for these generative mode
 ### Under the Hood: How Cache Object Works in Attention Mechanism
 <details>
     <summary><em>For the Curious Minds Who Like to Dive Deep</em></summary>
-    When utilizing a cache object in the input, the Attention module performs several critical steps to integrate past and present information seamlessly.
-
-    The Attention module concatenates the current key-values with the past key-values stored in the cache. This results in an attention weights of shape `(new_tokens_length, past_kv_length + new_tokens_length)`. Essentially, the past and current key-values are combined to compute attention scores, ensuring that the model considers both previous context and new input. The concatenated key-values are used to compute the attention scores resulting in attention weights of shape `(new_tokens_length, past_kv_length + new_tokens_length)`.
-
-    Therefore, when iteratively calling `forward()` instead of the `generate()` method, it’s crucial to ensure that the attention mask shape matches the combined length of past and current key-values. The attention mask should have the shape `(batch_size, past_kv_length + new_tokens_length)`. This is usually handled internally when you call `generate()` method. If you want to implement your own generation loop with Cache classes, take this into consideration and prepare the attention mask to hold values to current and past tokens.
-
-    See an example below for how to implement your own generation loop.
-
-    ```python
-    import torch
-    from transformers import AutoTokenizer, AutoModelForCausalLM, DynamicCache
-
-    model_id = "meta-llama/Llama-2-7b-chat-hf"
-    model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, device_map='auto')
-    tokenizer = AutoTokenizer.from_pretrained(model_id)
-
-    past_key_values = DynamicCache()
-    messages = [{"role": "user", "content": "Hello, what's your name."}]
-    inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt", return_dict=True).to(model.device)
-    generated_ids = inputs.input_ids
-
-    max_new_tokens = 10
-    for _ in range(max_new_tokens):
-        outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-        
-        # Greedily sample one next token
-        next_token_ids = outputs.logits[:, -1:].argmax(-1)
-        generated_ids = torch.cat([generated_ids, next_token_ids], dim=-1)
-        
-        # Prepare inputs for the next generation step by leaaving unprocessed tokens, in our case we have only one new token
-        # and expanding attn mask for the new token, as explained above
-        attention_mask = torch.cat(inputs.attention_mask)
-        attention_mask = torch.cat([attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1))], dim=-1)
-        inputs = {"input_ids": next_token_ids, "attention_mask": attention_mask}
-
-    print(tokenizer.batch_decode(generated_ids, skip_special_tokens=True))
-    ```
+    <p>When utilizing a cache object in the input, the Attention module performs several critical steps to integrate past and present information seamlessly.</p>
+    <p>The Attention module concatenates the current key-values with the past key-values stored in the cache. This results in an attention weights of shape `(new_tokens_length, past_kv_length + new_tokens_length)`. Essentially, the past and current key-values are combined to compute attention scores, ensuring that the model considers both previous context and new input. The concatenated key-values are used to compute the attention scores resulting in attention weights of shape `(new_tokens_length, past_kv_length + new_tokens_length)`.</p>
+    <p>Therefore, when iteratively calling `forward()` instead of the `generate()` method, it’s crucial to ensure that the attention mask shape matches the combined length of past and current key-values. The attention mask should have the shape `(batch_size, past_kv_length + new_tokens_length)`. This is usually handled internally when you call `generate()` method. If you want to implement your own generation loop with Cache classes, take this into consideration and prepare the attention mask to hold values to current and past tokens.</p>
+    <p>See an example below for how to implement your own generation loop.</p>
 </details>
 
 
