@@ -569,15 +569,15 @@ class Speech2TextBertModelTest(EncoderDecoderMixin, unittest.TestCase):
             "labels": decoder_token_labels,
         }
 
-    # can't save full model for now because Speech2TextModel != Speech2TextEncoder
+    @unittest.skip(reason="Cannot save full model as Speech2TextModel != Speech2TextEncoder")
     def test_encoder_decoder_model_from_pretrained_configs(self):
         pass
 
-    # can't save full model for now because Speech2TextModel != Speech2TextEncoder
+    @unittest.skip(reason="Cannot save full model as Speech2TextModel != Speech2TextEncoder")
     def test_save_and_load_from_pretrained(self):
         pass
 
     @require_deterministic_for_xpu
-    # all published pretrained models are Speech2TextModel != Speech2TextEncoder
+    @unittest.skip(reason="Cannot save full model as Speech2TextModel != Speech2TextEncoder")
     def test_real_model_save_load_from_pretrained(self):
         pass

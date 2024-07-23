@@ -40,8 +40,55 @@ The original code can be found [here](https://github.com/haotian-liu/LLaVA/tree/
 
 - Note the model has not been explicitly trained to process multiple images in the same prompt, although this is technically possible, you may experience inaccurate results.
 
-- For better results, we recommend users to prompt the model with the correct prompt format: 
+- For better results, we recommend users to use the processor's `apply_chat_template()` method to format your prompt correctly. For that you need to construct a conversation history, passing in a plain string will not format your prompt. Each message in the conversation history for chat templates is a dictionary with keys "role" and "content". The "content" should be a list of dictionaries, for "text" and "image" modalities, as follows:
 
+```python
+from transformers import AutoProcessor
+
+processor = AutoProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf")
+
+conversation = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "image"},
+            {"type": "text", "text": "What’s shown in this image?"},
+            ],
+    },
+    {
+        "role": "assistant",
+        "content": [{"type": "text", "text": "This image shows a red stop sign."},]
+    },
+    {
+
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "Describe the image in more details."},
+        ],
+    },
+]
+
+text_prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)
+
+# Note that the template simply formats your prompt, you still have to tokenize it and obtain pixel values for your images
+print(text_prompt)
+>>> "USER: <image>\n<What’s shown in this image? ASSISTANT: This image shows a red stop sign.</s>USER: Describe the image in more details. ASSISTANT:"
+```
+
+- If you want to construct a chat prompt yourself, below is a list of prompt formats accepted by each llava checkpoint:
+
+[llava-interleave models](https://huggingface.co/collections/llava-hf/llava-interleave-668e19a97da0036aad4a2f19) requires the following format:
+```bash
+"<|im_start|>user <image>\nWhat is shown in this image?<|im_end|><|im_start|>assistant"
+```
+
+For multiple turns conversation:
+
+```bash
+"<|im_start|>user <image>\n<prompt1><|im_end|><|im_start|>assistant <answer1><|im_end|><|im_start|>user <image>\n<prompt1><|im_end|><|im_start|>assistant "
+```
+
+[llava-1.5 models](https://huggingface.co/collections/llava-hf/llava-15-65f762d5b6941db5c2ba07e0) requires the following format:
 ```bash
 "USER: <image>\n<prompt> ASSISTANT:"
 ```
@@ -51,6 +98,7 @@ For multiple turns conversation:
 ```bash
 "USER: <image>\n<prompt1> ASSISTANT: <answer1></s>USER: <prompt2> ASSISTANT: <answer2></s>USER: <prompt3> ASSISTANT:"
 ```
+
 
 ### Using Flash Attention 2
 

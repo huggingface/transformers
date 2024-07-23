@@ -388,14 +388,6 @@ my_pipeline = pipeline(model="xxxx", pipeline_class=MyPipeline)
 
 自然言語処理タスクに使用できるパイプラインには次のものがあります。
 
-### ConversationalPipeline
-
-[[autodoc]] Conversation
-
-[[autodoc]] ConversationalPipeline
-    - __call__
-    - all
-
 ### FillMaskPipeline
 
 [[autodoc]] FillMaskPipeline

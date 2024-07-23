@@ -504,7 +504,6 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     all_generative_model_classes = (LongT5ForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "conversational": LongT5ForConditionalGeneration,
             "feature-extraction": LongT5Model,
             "summarization": LongT5ForConditionalGeneration,
             "text2text-generation": LongT5ForConditionalGeneration,
@@ -643,7 +642,7 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
     def test_attention_outputs(self):
         if not self.has_attentions:
-            pass
+            self.skipTest(reason="has_attentions is set to False")
 
         else:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -759,6 +758,12 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             [encoder_expected_shape] * len(attentions),
         )
 
+    @unittest.skip(
+        reason="This architecure has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
+    )
+    def test_load_save_without_tied_weights(self):
+        pass
+
 
 @require_torch
 class LongT5TGlobalModelTest(LongT5ModelTest):
@@ -770,7 +775,7 @@ class LongT5TGlobalModelTest(LongT5ModelTest):
 
     def test_attention_outputs(self):
         if not self.has_attentions:
-            pass
+            self.skipTest(reason="has_attentions is set to False")
 
         else:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1036,7 +1041,7 @@ class LongT5EncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_attention_outputs(self):
         if not self.has_attentions:
-            pass
+            self.skipTest(reason="has_attentions is set to False")
 
         else:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1098,6 +1103,12 @@ class LongT5EncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
                     [self.model_tester.num_attention_heads, block_len, 3 * block_len],
                 )
 
+    @unittest.skip(
+        reason="This architecure has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
+    )
+    def test_load_save_without_tied_weights(self):
+        pass
+
 
 class LongT5EncoderOnlyTGlobalModelTest(LongT5EncoderOnlyModelTest):
     def setUp(self):
@@ -1108,7 +1119,7 @@ class LongT5EncoderOnlyTGlobalModelTest(LongT5EncoderOnlyModelTest):
 
     def test_attention_outputs(self):
         if not self.has_attentions:
-            pass
+            self.skipTest(reason="has_attentions is set to False")
 
         else:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
