@@ -133,7 +133,7 @@ class GroundingDinoProcessor(ProcessorMixin):
         # Get only text
         if images is not None:
             encoding_image_processor = self.image_processor(
-                images, **output_kwargs["common_kwargs"], **output_kwargs["images_kwargs"]
+                images, **output_kwargs["images_kwargs"]
             )
         else:
             encoding_image_processor = BatchFeature()
@@ -141,7 +141,6 @@ class GroundingDinoProcessor(ProcessorMixin):
         if text is not None:
             text_encoding = self.tokenizer(
                 text=text,
-                **output_kwargs["common_kwargs"],
                 **output_kwargs["text_kwargs"],
             )
         else:
