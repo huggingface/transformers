@@ -20,10 +20,7 @@
 """LLaMA model configuration"""
 
 from ...configuration_utils import PretrainedConfig
-from ...utils import logging
-
-
-logger = logging.get_logger(__name__)
+from ...modeling_rope_utils import rope_config_validation
 
 
 class LlamaConfig(PretrainedConfig):
@@ -84,22 +81,35 @@ class LlamaConfig(PretrainedConfig):
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. Currently supports three scaling
-            strategies: linear, dynamic and yarn. Their scaling factor must be a float greater than 1. The expected format is
-            `{"type": strategy name, "factor": scaling factor}`. When using this flag, don't update
-            `max_position_embeddings` to the expected new maximum. See the following thread for more information on how
-            these scaling strategies behave:
-            https://www.reddit.com/r/LocalLLaMA/comments/14mrgpr/dynamically_scaled_rope_further_increases/. This is an
-            experimental feature, subject to breaking API changes in future versions.
-            For the `yarn` strategy, the dictionary may also contain the following fields:
-                `original_max_position_embeddings` (`int`, *optional*):
-                    The original maximum sequence length. This is used to scale the RoPE embeddings.
+            Dictionary containing the scaling configuration for the RoPE embeddings. IMPORTANT: RoPE scaling expects
+            `max_position_embeddings` to remain unchanged -- some methods, like 'longrope', require the original value
+            to determine which scaling to apply.
+            Expected contents:
+                `rope_type` (`str`):
+                    The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope'],
+                    with 'default' being the original RoPE implementation.
+                `factor` (`float`, *optional*):
+                    Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
+                    most scaling types, a `factor` of x will enable the model to handle sequences of length x *
+                    `max_position_embeddings`.
                 `attention_factor` (`float`, *optional*):
-                    The attention scaling factor. If unspecified, it defaults to `0.1 ln(s) + 1`, where `s` is the                    `original_max_position_embeddings/max_position_embeddings` ratio.
+                    Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
+                    computation. If unspecified, it defaults to value recommended by the implementation, using the
+                    `factor` field to infer the suggested value.
                 `beta_fast` (`float`, *optional*):
-                    Parameter to set the boundary for extrapolation (only) in the linear ramp function.
+                    Only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear
+                    ramp function. If unspecified, it defaults to 32.
                 `beta_slow` (`float`, *optional*):
-                    Parameter to set the boundary for interpolation (only) in the linear ramp function.
+                    Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
+                    ramp function. If unspecified, it defaults to 1.
+                `short_factor` (`List[float]`, *optional*):
+                    Only used with 'longrope'. The scaling factor to be applied to short contexts (<
+                    `max_position_embeddings` * `factor`). Must be a list of numbers with the same length as the hidden
+                    size divided by the number of attention heads divided by 2
+                `long_factor` (`List[float]`, *optional*):
+                    Only used with 'longrope'. The scaling factor to be applied to short contexts (<
+                    `max_position_embeddings` * `factor`). Must be a list of numbers with the same length as the hidden
+                    size divided by the number of attention heads divided by 2
         attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -167,10 +177,12 @@ class LlamaConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
-        self._rope_scaling_validation()
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.mlp_bias = mlp_bias
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_config_validation(self)
 
         super().__init__(
             pad_token_id=pad_token_id,
@@ -179,60 +191,3 @@ class LlamaConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
-
-    def _rope_scaling_validation(self):
-        """
-        Validate the `rope_scaling` configuration.
-        """
-        if self.rope_scaling is None:
-            return
-
-        if not isinstance(self.rope_scaling, dict) or len(self.rope_scaling) < 2:
-            raise ValueError(
-                "`rope_scaling` must be a dictionary with a minimum of two fields, `type` and `factor`, "
-                f"got {self.rope_scaling}"
-            )
-        rope_scaling_type = self.rope_scaling.get("type", None)
-        rope_scaling_factor = self.rope_scaling.get("factor", None)
-        if rope_scaling_type is None or rope_scaling_type not in ["linear", "dynamic", "yarn"]:
-            raise ValueError(
-                f"`rope_scaling`'s type field must be one of ['linear', 'dynamic', 'yarn'], got {rope_scaling_type}"
-            )
-        if rope_scaling_factor is None or not isinstance(rope_scaling_factor, float) or rope_scaling_factor <= 1.0:
-            raise ValueError(f"`rope_scaling`'s factor field must be a float > 1, got {rope_scaling_factor}")
-
-        if rope_scaling_type != "yarn":
-            return
-
-        if not isinstance(self.rope_scaling, dict) or len(self.rope_scaling) > 6:
-            raise ValueError(
-                "`rope_scaling` with type "
-                f"{rope_scaling_type}"
-                " must be a dictionary with a maximum of six fields, `type`, `factor`,"
-                "`original_max_position_embeddings`, `attention_factor`, `beta_fast`, `beta_slow`, "
-                f"got {self.rope_scaling}"
-            )
-        original_max_position_embeddings = self.rope_scaling.get("original_max_position_embeddings", None)
-        attention_factor = self.rope_scaling.get("attention_factor", None)
-        beta_fast = self.rope_scaling.get("beta_fast", None)
-        beta_slow = self.rope_scaling.get("beta_slow", None)
-
-        if original_max_position_embeddings is not None and not isinstance(original_max_position_embeddings, int):
-            raise ValueError(
-                f"`rope_scaling`'s original_max_position_embeddings field must be an int, got {original_max_position_embeddings}"
-            )
-        if attention_factor is not None and not isinstance(attention_factor, float) or attention_factor < 0:
-            raise ValueError(
-                f"`rope_scaling`'s attention_factor field must be a float greater than 0, got {attention_factor}"
-            )
-        if beta_fast is not None and not isinstance(beta_fast, float):
-            raise ValueError(f"`rope_scaling`'s beta_fast field must be a float, got {beta_fast}")
-        if beta_slow is not None and not isinstance(beta_slow, float):
-            raise ValueError(f"`rope_scaling`'s beta_slow field must be a float, got {beta_slow}")
-
-        b_fast = beta_fast if beta_fast is not None else 32
-        b_slow = beta_slow if beta_slow is not None else 1
-        if b_fast < b_slow:
-            raise ValueError(
-                f"`rope_scaling`'s beta_fast field must be greater than beta_slow, got beta_fast={b_fast} and beta_slow={b_slow}"
-            )
