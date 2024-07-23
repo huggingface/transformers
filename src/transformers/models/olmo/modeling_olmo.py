@@ -236,7 +236,6 @@ class OlmoAttention(nn.Module):
         self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=config.attention_bias)
         self._init_rope()
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaAttention._init_rope with Llama->Olmo
     def _init_rope(self):
         if self.config.rope_scaling is None:
             self.rotary_emb = OlmoRotaryEmbedding(
