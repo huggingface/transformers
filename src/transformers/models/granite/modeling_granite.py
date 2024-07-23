@@ -641,20 +641,14 @@ class GraniteDecoderLayer(nn.Module):
             **kwargs,
         )
 
-        if self.residual_multiplier is not None:
-            hidden_states = hidden_states * self.residual_multiplier
-
-        hidden_states = residual + hidden_states
+        hidden_states = residual + hidden_states * self.residual_multiplier
 
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
 
-        if self.residual_multiplier is not None:
-            hidden_states = hidden_states * self.residual_multiplier
-
-        hidden_states = residual + hidden_states
+        hidden_states = residual + hidden_states * self.residual_multiplier
 
         outputs = (hidden_states,)
 
@@ -857,8 +851,7 @@ class GraniteModel(GranitePreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if self.embedding_multiplier is not None:
-            inputs_embeds = inputs_embeds * self.embedding_multiplier
+        inputs_embeds = inputs_embeds * self.embedding_multiplier
 
         return_legacy_cache = False
         if use_cache and not isinstance(past_key_values, Cache):  # kept for BC (non `Cache` `past_key_values` inputs)
