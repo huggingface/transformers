@@ -36,7 +36,8 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer, \
+    is_torch_greater_or_equal_than_2_2
 from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -365,7 +366,7 @@ class AlbertSdpaAttention(AlbertAttention):
     def __init__(self, config):
         super().__init__(config)
         self.dropout_prob = config.attention_probs_dropout_prob
-        self.require_contiguous_qkv = version.parse(get_torch_version()) < version.parse("2.2.0")
+        self.require_contiguous_qkv = is_torch_greater_or_equal_than_2_2
 
     def forward(
         self,

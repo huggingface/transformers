@@ -76,6 +76,36 @@ model = AlbertModel.from_pretrained("albert/albert-base-v1", torch_dtype=torch.f
 ...
 ```
 
+For the best speedups, we recommend loading the model in half-precision (e.g. `torch.float16` or `torch.bfloat16`).
+
+On a local benchmark (GeForce RTX 2060-8GB, PyTorch 2.3.1, OS Ubuntu 20.04) with `float16`, we saw the 
+following speedups during training and inference.
+
+#### Training for 100 iterations
+
+|batch_size|seq_len|Time per batch (eager - s)| Time per batch (sdpa - s)| Speedup (%)| Eager peak mem (MB)| sdpa peak mem (MB)| Mem saving (%)|
+|----------|-------|--------------------------|--------------------------|------------|--------------------|-------------------|---------------|
+|2         |256    |0.028                     |0.024                     |14.388      |358.411             |321.088            |11.624         |
+|2         |512    |0.049                     |0.041                     |17.681      |753.458             |602.660            |25.022         |
+|4         |256    |0.044                     |0.039                     |12.246      |679.534             |602.660            |12.756         |
+|4         |512    |0.090                     |0.076                     |18.472      |1434.820            |1134.140           |26.512         |
+|8         |256    |0.081                     |0.072                     |12.664      |1283.825            |1134.140           |13.198         |
+|8         |512    |0.170                     |0.143                     |18.957      |2820.398            |2219.695           |27.062         |
+
+#### Inference with 50 batches
+
+|batch_size|seq_len|Per token latency eager (ms)|Per token latency SDPA (ms)|Speedup (%) |Mem eager (MB)|Mem BT (MB)|Mem saved (%)|
+|----------|-------|----------------------------|---------------------------|------------|--------------|-----------|-------------|
+|4         |128    |0.083                       |0.071                      |16.967      |48.319        |48.45      |-0.268       |
+|4         |256    |0.148                       |0.127                      |16.37       |63.4          |63.922     |-0.817       |
+|4         |512    |0.31                        |0.247                      |25.473      |110.092       |94.343     |16.693       |
+|8         |128    |0.137                       |0.124                      |11.102      |63.4          |63.66      |-0.409       |
+|8         |256    |0.271                       |0.231                      |17.271      |91.202        |92.246     |-1.132       |
+|8         |512    |0.602                       |0.48                       |25.47       |186.159       |152.564    |22.021       |
+|16        |128    |0.252                       |0.224                      |12.506      |91.202        |91.722     |-0.567       |
+|16        |256    |0.526                       |0.448                      |17.604      |148.378       |150.467    |-1.388       |
+|16        |512    |1.203                       |0.96                       |25.365      |338.293       |271.102    |24.784       |
+
 This model was contributed by [lysandre](https://huggingface.co/lysandre). This model jax version was contributed by
 [kamalkraj](https://huggingface.co/kamalkraj). The original code can be found [here](https://github.com/google-research/ALBERT).
 
