@@ -20,6 +20,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from shutil import copyfile
+from uuid import uuid4
 
 from huggingface_hub import HfFolder, Repository, create_repo, delete_repo
 from requests.exceptions import HTTPError
@@ -431,38 +432,42 @@ class ProcessorPushToHubTester(unittest.TestCase):
 
         processor = CustomProcessor(feature_extractor, tokenizer)
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            create_repo(f"{USER}/test-dynamic-processor", token=self._token)
-            repo = Repository(tmp_dir, clone_from=f"{USER}/test-dynamic-processor", token=self._token)
-            processor.save_pretrained(tmp_dir)
+        random_repo_id = f"{USER}/test-dynamic-processor-{uuid4()}"
+        try:
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                create_repo(random_repo_id, token=self._token)
+                repo = Repository(tmp_dir, clone_from=random_repo_id, token=self._token)
+                processor.save_pretrained(tmp_dir)
 
-            # This has added the proper auto_map field to the feature extractor config
-            self.assertDictEqual(
-                processor.feature_extractor.auto_map,
-                {
-                    "AutoFeatureExtractor": "custom_feature_extraction.CustomFeatureExtractor",
-                    "AutoProcessor": "custom_processing.CustomProcessor",
-                },
-            )
+                # This has added the proper auto_map field to the feature extractor config
+                self.assertDictEqual(
+                    processor.feature_extractor.auto_map,
+                    {
+                        "AutoFeatureExtractor": "custom_feature_extraction.CustomFeatureExtractor",
+                        "AutoProcessor": "custom_processing.CustomProcessor",
+                    },
+                )
 
-            # This has added the proper auto_map field to the tokenizer config
-            with open(os.path.join(tmp_dir, "tokenizer_config.json")) as f:
-                tokenizer_config = json.load(f)
-            self.assertDictEqual(
-                tokenizer_config["auto_map"],
-                {
-                    "AutoTokenizer": ["custom_tokenization.CustomTokenizer", None],
-                    "AutoProcessor": "custom_processing.CustomProcessor",
-                },
-            )
+                # This has added the proper auto_map field to the tokenizer config
+                with open(os.path.join(tmp_dir, "tokenizer_config.json")) as f:
+                    tokenizer_config = json.load(f)
+                self.assertDictEqual(
+                    tokenizer_config["auto_map"],
+                    {
+                        "AutoTokenizer": ["custom_tokenization.CustomTokenizer", None],
+                        "AutoProcessor": "custom_processing.CustomProcessor",
+                    },
+                )
 
-            # The code has been copied from fixtures
-            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, "custom_feature_extraction.py")))
-            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, "custom_tokenization.py")))
-            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, "custom_processing.py")))
+                # The code has been copied from fixtures
+                self.assertTrue(os.path.isfile(os.path.join(tmp_dir, "custom_feature_extraction.py")))
+                self.assertTrue(os.path.isfile(os.path.join(tmp_dir, "custom_tokenization.py")))
+                self.assertTrue(os.path.isfile(os.path.join(tmp_dir, "custom_processing.py")))
 
-            repo.push_to_hub()
+                repo.push_to_hub()
 
-        new_processor = AutoProcessor.from_pretrained(f"{USER}/test-dynamic-processor", trust_remote_code=True)
-        # Can't make an isinstance check because the new_processor is from the CustomProcessor class of a dynamic module
-        self.assertEqual(new_processor.__class__.__name__, "CustomProcessor")
+            new_processor = AutoProcessor.from_pretrained(random_repo_id, trust_remote_code=True)
+            # Can't make an isinstance check because the new_processor is from the CustomProcessor class of a dynamic module
+            self.assertEqual(new_processor.__class__.__name__, "CustomProcessor")
+        finally:
+            delete_repo(repo_id=random_repo_id)
