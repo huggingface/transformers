@@ -2591,10 +2591,8 @@ def generalized_box_iou(boxes1, boxes2):
     return iou - (area - union) / area
 
 
-# Changed the way we reduce the loss since pass only valid logits to avoid inf/nan problems
-# also added num_queries and reduction args as the base implementation uses 'sum' reduction
-# but the sigmoid_focal_loss in the original implementation uses 'mean' reduction and the 'sum'
-# reduction leads to a loss_ce that is considerably higher than the other losses.
+# Similar to `DeformableDetr` but we pass `num_queries` (because inputs are only the valid logits)
+# and we also pass `reduction` for testing purposes.
 def sigmoid_focal_loss(
     inputs: torch.Tensor,
     targets: torch.Tensor,
@@ -2814,7 +2812,6 @@ class GroundingDinoLoss(nn.Module):
 
         return target_classes_onehot
 
-    # Added new target_classes_onehot and step to get valid logits and new sigmoid_focal_loss signature
     def loss_labels(self, outputs, targets, indices, num_boxes):
         """
         Classification loss (Binary focal loss) targets dicts must contain the key "class_labels" containing a tensor
@@ -2850,7 +2847,7 @@ class GroundingDinoLoss(nn.Module):
 
         return losses
 
-    # Added loss_xy and loss_hw to calculate the x,y and h,w loss
+    # Same as in `DeformableDetrLoss` with the addition of loss_xy and loss_hw to calculate the x,y and h,w loss
     def loss_boxes(self, outputs, targets, indices, num_boxes):
         """
         Compute the losses related to the bounding boxes, the L1 regression loss and the GIoU loss.
@@ -2881,6 +2878,23 @@ class GroundingDinoLoss(nn.Module):
 
         return losses
 
+    @torch.no_grad()
+    # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrLoss.loss_cardinality
+    def loss_cardinality(self, outputs, targets, indices, num_boxes):
+        """
+        Compute the cardinality error, i.e. the absolute error in the number of predicted non-empty boxes.
+
+        This is not really a loss, it is intended for logging purposes only. It doesn't propagate gradients.
+        """
+        logits = outputs["logits"]
+        device = logits.device
+        target_lengths = torch.as_tensor([len(v["class_labels"]) for v in targets], device=device)
+        # Count the number of predictions that are NOT "no-object" (which is the last class)
+        card_pred = (logits.argmax(-1) != logits.shape[-1] - 1).sum(1)
+        card_err = nn.functional.l1_loss(card_pred.float(), target_lengths.float())
+        losses = {"cardinality_error": card_err}
+        return losses
+
     # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrLoss._get_source_permutation_idx
     def _get_source_permutation_idx(self, indices):
         # permute predictions following indices
@@ -2895,11 +2909,11 @@ class GroundingDinoLoss(nn.Module):
         target_idx = torch.cat([target for (_, target) in indices])
         return batch_idx, target_idx
 
-    # Removed cardinality loss as it is not used.
     def get_loss(self, loss, outputs, targets, indices, num_boxes):
         loss_map = {
             "labels": self.loss_labels,
             "boxes": self.loss_boxes,
+            "cardinality": self.loss_cardinality,
         }
         if loss not in loss_map:
             raise ValueError(f"Loss {loss} not supported")
