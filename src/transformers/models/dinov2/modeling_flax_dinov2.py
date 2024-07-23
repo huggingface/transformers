@@ -14,7 +14,6 @@
 # limitations under the License.
 """Flax DINOv2 model."""
 
-
 import collections.abc
 import math
 import os
@@ -205,7 +204,6 @@ class FlaxDinov2Embeddings(nn.Module):
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
 
     def __call__(self, pixel_values, deterministic=True):
-
         batch_size = pixel_values.shape[0]
         height, width = pixel_values.shape[1], pixel_values.shape[2]  # ? 224, 224
 
@@ -294,7 +292,7 @@ class FlaxDinov2SelfAttention(nn.Module):
 
         outputs = (attn_output, attn_weights) if output_attentions else (attn_output,)
         return outputs
-    
+
 
 # Copied from transformers.models.vit.modeling_flax_vit.FlaxViTSelfOutput with ViT->Dinov2
 class FlaxDinov2SelfOutput(nn.Module):
@@ -315,7 +313,7 @@ class FlaxDinov2SelfOutput(nn.Module):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states, deterministic=deterministic)
         return hidden_states
-    
+
 
 # Copied from transformers.models.vit.modeling_flax_vit.FlaxViTAttention with ViT->Dinov2
 class FlaxDinov2Attention(nn.Module):
@@ -337,6 +335,8 @@ class FlaxDinov2Attention(nn.Module):
             outputs += (attn_outputs[1],)
 
         return outputs
+
+
 def ones_with_scale(key, shape, scale, dtype=jnp.float32):
     return jnp.ones(shape, dtype) * scale
 
@@ -522,7 +522,7 @@ class FlaxDinov2LayerCollection(nn.Module):
         return FlaxBaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
         )
-    
+
 
 # Copied from transformers.models.vit.modeling_flax_vit.FlaxViTEncoder with ViT->Dinov2
 class FlaxDinov2Encoder(nn.Module):
@@ -547,6 +547,8 @@ class FlaxDinov2Encoder(nn.Module):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+
+
 class FlaxDinov2PreTrainedModel(FlaxPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -743,7 +745,6 @@ class FlaxDinov2ForImageClassificationModule(nn.Module):
         linear_input = jnp.concatenate([cls_token, patch_tokens.mean(axis=1)], axis=-1)
 
         logits = self.classifier(linear_input)
-
 
         if not return_dict:
             output = (logits,) + outputs[2:]
