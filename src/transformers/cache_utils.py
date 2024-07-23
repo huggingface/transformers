@@ -467,6 +467,7 @@ class QuantizedCache(DynamicCache):
     """
 
     def __init__(self, cache_config: QuantizedCacheConfig) -> None:
+        super().__init__()
         self._quantized_key_cache: List[torch.Tensor] = []
         self._quantized_value_cache: List[torch.Tensor] = []
 
@@ -477,8 +478,6 @@ class QuantizedCache(DynamicCache):
         self.axis_value = cache_config.axis_value
         self.compute_dtype = cache_config.compute_dtype
         self.device = cache_config.device
-
-        super().__init__()
 
     def update(
         self,
@@ -640,6 +639,7 @@ class SinkCache(Cache):
     """
 
     def __init__(self, window_length: int, num_sink_tokens: int) -> None:
+        super().__init__()
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
         self.window_length = window_length
@@ -1009,6 +1009,7 @@ class EncoderDecoderCache(Cache):
     """
 
     def __init__(self, self_attention_cache: Cache, cross_attention_cache: Cache):
+        super().__init__()
         self.self_attention_cache = self_attention_cache
         self.cross_attention_cache = cross_attention_cache
 
