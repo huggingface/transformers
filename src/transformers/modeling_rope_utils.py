@@ -129,6 +129,7 @@ def _compute_dynamic_ntk_parameters(
         Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
         post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
     """
+    # TODO (joao): use the new `original_max_position_embeddings` from rope_scaling
     if config is not None and len(rope_kwargs) > 0:
         raise ValueError(
             "Unexpected arguments: `**rope_kwargs` and `config` are mutually exclusive in "
@@ -249,6 +250,7 @@ def _compute_longrope_parameters(
         Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
         post-processing scaling factor applied to the computed cos/sin.
     """
+    # TODO (joao): use the new `original_max_position_embeddings` from rope_scaling
     # No need to keep BC with longrope, unreleased when this new pattern was created.
     if len(rope_kwargs) > 0:
         raise ValueError(
@@ -293,6 +295,50 @@ def _compute_longrope_parameters(
     return inv_freq, attention_factor
 
 
+def _compute_llama3_parameters(
+    config: PretrainedConfig, device: "torch.device", seq_len: Optional[int] = None, **rope_kwargs
+) -> Tuple["torch.Tensor", float]:
+    """
+    Computes the inverse frequencies for llama 3.1.
+
+    Args:
+        config ([`~transformers.PretrainedConfig`]):
+            The model configuration.
+        device (`torch.device`):
+            The device to use for initialization of the inverse frequencies.
+        seq_len (`int`, *optional*):
+            The current sequence length. Unused for this type of RoPE.
+        rope_kwargs (`Dict`, *optional*):
+            BC compatibility with the previous RoPE class instantiation, will be removed in v4.45.
+    Returns:
+        Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+        post-processing scaling factor applied to the computed cos/sin.
+    """
+    # Gets the default RoPE parameters
+    inv_freq, attention_factor = _compute_default_rope_parameters(config, device, seq_len, **rope_kwargs)
+
+    factor = config.rope_scaling["factor"]  # `8` in the original implementation
+    low_freq_factor = config.rope_scaling["low_freq_factor"]  # `1` in the original implementation
+    high_freq_factor = config.rope_scaling["high_freq_factor"]  # `4` in the original implementation
+    old_context_len = config.rope_scaling["original_max_position_embeddings"]  # `8192` in the original implementation
+
+    low_freq_wavelen = old_context_len / low_freq_factor
+    high_freq_wavelen = old_context_len / high_freq_factor
+    new_freqs = []
+    for freq in inv_freq:
+        wavelen = 2 * math.pi / freq
+        if wavelen < high_freq_wavelen:
+            new_freqs.append(freq)
+        elif wavelen > low_freq_wavelen:
+            new_freqs.append(freq / factor)
+        else:
+            assert low_freq_wavelen != high_freq_wavelen
+            smooth = (old_context_len / wavelen - low_freq_factor) / (high_freq_factor - low_freq_factor)
+            new_freqs.append((1 - smooth) * freq / factor + smooth * freq)
+    inv_freq = torch.tensor(new_freqs, dtype=inv_freq.dtype, device=inv_freq.device)
+    return inv_freq, attention_factor
+
+
 # This maps the "rope_type" string field in rope config to the corresponding function to compute the RoPE parameters
 # from the model config. You can append new {'rope_type': callable} pairs to this dictionary to enable custom RoPE
 # parameterizations, as long as the callable has the same signature.
@@ -302,6 +348,7 @@ ROPE_INIT_FUNCTIONS = {
     "dynamic": _compute_dynamic_ntk_parameters,
     "yarn": _compute_yarn_parameters,
     "longrope": _compute_longrope_parameters,
+    "llama3": _compute_llama3_parameters,
 }
 
 
@@ -333,6 +380,20 @@ def _validate_linear_scaling_rope_parameters(config: PretrainedConfig):
     required_keys = {"rope_type", "factor"}
     received_keys = set(rope_scaling.keys())
     _check_received_keys(rope_type, received_keys, required_keys)
+
+    factor = rope_scaling["factor"]
+    if factor is None or not isinstance(factor, float) or factor < 1.0:
+        raise ValueError(f"`rope_scaling`'s factor field must be a float >= 1, got {factor}")
+
+
+def _validate_dynamic_scaling_rope_parameters(config: PretrainedConfig):
+    rope_scaling = config.rope_scaling
+    rope_type = rope_scaling["rope_type"]
+    required_keys = {"rope_type", "factor"}
+    # TODO (joao): update logic for the inclusion of `original_max_position_embeddings`
+    optional_keys = {"original_max_position_embeddings"}
+    received_keys = set(rope_scaling.keys())
+    _check_received_keys(rope_type, received_keys, required_keys, optional_keys)
 
     factor = rope_scaling["factor"]
     if factor is None or not isinstance(factor, float) or factor < 1.0:
@@ -374,7 +435,8 @@ def _validate_longrope_parameters(config: PretrainedConfig):
     rope_scaling = config.rope_scaling
     rope_type = rope_scaling["rope_type"]
     required_keys = {"rope_type", "short_factor", "long_factor"}
-    optional_keys = {"attention_factor", "factor"}
+    # TODO (joao): update logic for the inclusion of `original_max_position_embeddings`
+    optional_keys = {"attention_factor", "factor", "original_max_position_embeddings"}
     received_keys = set(rope_scaling.keys())
     _check_received_keys(rope_type, received_keys, required_keys, optional_keys)
 
@@ -417,13 +479,50 @@ def _validate_longrope_parameters(config: PretrainedConfig):
             )
 
 
+def _validate_llama3_parameters(config: PretrainedConfig):
+    rope_scaling = config.rope_scaling
+    rope_type = rope_scaling["rope_type"]
+    required_keys = {"rope_type", "factor", "original_max_position_embeddings", "low_freq_factor", "high_freq_factor"}
+    received_keys = set(rope_scaling.keys())
+    _check_received_keys(rope_type, received_keys, required_keys)
+
+    factor = rope_scaling["factor"]
+    if factor is None or not isinstance(factor, float) or factor < 1.0:
+        raise ValueError(f"`rope_scaling`'s factor field must be a float >= 1, got {factor}")
+
+    low_freq_factor = rope_scaling["low_freq_factor"]
+    high_freq_factor = rope_scaling["high_freq_factor"]
+    if low_freq_factor is None or not isinstance(low_freq_factor, float):
+        raise ValueError(f"`rope_scaling`'s low_freq_factor field must be a float, got {low_freq_factor}")
+    if high_freq_factor is None or not isinstance(high_freq_factor, float):
+        raise ValueError(f"`rope_scaling`'s high_freq_factor field must be a float, got {high_freq_factor}")
+    if high_freq_factor < low_freq_factor:
+        raise ValueError(
+            "`rope_scaling`'s high_freq_factor field must be greater than low_freq_factor, got high_freq_factor="
+            f"{high_freq_factor} and low_freq_factor={low_freq_factor}"
+        )
+
+    original_max_position_embeddings = rope_scaling["original_max_position_embeddings"]
+    if original_max_position_embeddings is None or not isinstance(original_max_position_embeddings, int):
+        raise ValueError(
+            "`rope_scaling`'s original_max_position_embeddings field must be an integer, got "
+            f"{original_max_position_embeddings}"
+        )
+    if original_max_position_embeddings >= config.max_position_embeddings:
+        raise ValueError(
+            "`rope_scaling`'s original_max_position_embeddings field must be less than max_position_embeddings, got "
+            f"{original_max_position_embeddings} and max_position_embeddings={config.max_position_embeddings}"
+        )
+
+
 # Like `ROPE_INIT_FUNCTIONS`, this validation function mapping can be dynamically updated for custom RoPE types.
 ROPE_VALIDATION_FUNCTIONS = {
     "default": _validate_default_rope_parameters,
     "linear": _validate_linear_scaling_rope_parameters,
-    "dynamic": _validate_linear_scaling_rope_parameters,  # `dynamic` has the same validation pattern as `linear`
+    "dynamic": _validate_dynamic_scaling_rope_parameters,
     "yarn": _validate_yarn_parameters,
     "longrope": _validate_longrope_parameters,
+    "llama3": _validate_llama3_parameters,
 }
 
 
