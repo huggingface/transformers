@@ -158,30 +158,40 @@ class ConfigPushToHubTester(unittest.TestCase):
                 self._try_delete_repo(repo_id=tmp_repo, token=self._token)
 
     def test_push_to_hub_in_organization(self):
-        config = BertConfig(
-            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
-        )
-        config.push_to_hub("valid_org/test-config-org", token=self._token)
-
-        new_config = BertConfig.from_pretrained("valid_org/test-config-org")
-        for k, v in config.to_dict().items():
-            if k != "transformers_version":
-                self.assertEqual(v, getattr(new_config, k))
-
-        try:
-            # Reset repo
-            delete_repo(token=self._token, repo_id="valid_org/test-config-org")
-        except:  # noqa E722
-            pass
-
-        # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
-            config.save_pretrained(tmp_dir, repo_id="valid_org/test-config-org", push_to_hub=True, token=self._token)
+            try:
+                tmp_repo = f"valid_org/test-config-org-{Path(tmp_dir).name}"
+                config = BertConfig(
+                    vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+                )
+                config.push_to_hub(tmp_repo, token=self._token)
 
-        new_config = BertConfig.from_pretrained("valid_org/test-config-org")
-        for k, v in config.to_dict().items():
-            if k != "transformers_version":
-                self.assertEqual(v, getattr(new_config, k))
+                new_config = BertConfig.from_pretrained(tmp_repo)
+                for k, v in config.to_dict().items():
+                    if k != "transformers_version":
+                        self.assertEqual(v, getattr(new_config, k))
+            finally:
+                # Always (try to) delete the repo.
+                self._try_delete_repo(repo_id=tmp_repo, token=self._token)
+
+    def test_push_to_hub_in_organization_via_save_pretrained(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            try:
+                tmp_repo = f"valid_org/test-config-org-{Path(tmp_dir).name}"
+                config = BertConfig(
+                    vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+                )
+                # Push to hub via save_pretrained
+                with tempfile.TemporaryDirectory() as tmp_dir:
+                    config.save_pretrained(tmp_dir, repo_id=tmp_repo, push_to_hub=True, token=self._token)
+
+                new_config = BertConfig.from_pretrained(tmp_repo)
+                for k, v in config.to_dict().items():
+                    if k != "transformers_version":
+                        self.assertEqual(v, getattr(new_config, k))
+            finally:
+                # Always (try to) delete the repo.
+                self._try_delete_repo(repo_id=tmp_repo, token=self._token)
 
     def test_push_to_hub_dynamic_config(self):
         CustomConfig.register_for_auto_class()
