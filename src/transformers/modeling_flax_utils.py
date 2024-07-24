@@ -90,7 +90,7 @@ def dtype_byte_size(dtype):
     4
     ```
     """
-    if dtype == bool:
+    if dtype is bool:
         return 1 / 8
     bit_search = re.search(r"[^\d](\d+)$", dtype.name)
     if bit_search is None:

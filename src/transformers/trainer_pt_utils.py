@@ -254,7 +254,7 @@ def reissue_pt_warnings(caught_warnings):
     # Reissue warnings that are not the SAVE_STATE_WARNING
     if len(caught_warnings) > 1:
         for w in caught_warnings:
-            if w.category != UserWarning or w.message != SAVE_STATE_WARNING:
+            if w.category is not UserWarning or w.message != SAVE_STATE_WARNING:
                 warnings.warn(w.message, w.category)
 
 

@@ -395,6 +395,12 @@ def is_causal_conv1d_available():
     return False
 
 
+def is_mambapy_available():
+    if is_torch_available():
+        return _is_package_available("mambapy")
+    return False
+
+
 def is_torch_mps_available():
     if is_torch_available():
         import torch
@@ -820,6 +826,7 @@ def is_flash_attn_greater_or_equal_2_10():
     return version.parse(importlib.metadata.version("flash_attn")) >= version.parse("2.1.0")
 
 
+@lru_cache()
 def is_flash_attn_greater_or_equal(library_version: str):
     if not _is_package_available("flash_attn"):
         return False
