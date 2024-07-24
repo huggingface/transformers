@@ -124,28 +124,34 @@ class ImageProcessorPushToHubTester(unittest.TestCase):
                 self._try_delete_repo(repo_id=tmp_repo, token=self._token)
 
     def test_push_to_hub_in_organization(self):
-        image_processor = ViTImageProcessor.from_pretrained(SAMPLE_IMAGE_PROCESSING_CONFIG_DIR)
-        image_processor.push_to_hub("valid_org/test-image-processor", token=self._token)
-
-        new_image_processor = ViTImageProcessor.from_pretrained("valid_org/test-image-processor")
-        for k, v in image_processor.__dict__.items():
-            self.assertEqual(v, getattr(new_image_processor, k))
-
-        try:
-            # Reset repo
-            delete_repo(token=self._token, repo_id="valid_org/test-image-processor")
-        except:  # noqa E722
-            pass
-
-        # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
-            image_processor.save_pretrained(
-                tmp_dir, repo_id="valid_org/test-image-processor-org", push_to_hub=True, token=self._token
-            )
+            try:
+                tmp_repo = f"valid_org/test-image-processor-{Path(tmp_dir).name}"
+                image_processor = ViTImageProcessor.from_pretrained(SAMPLE_IMAGE_PROCESSING_CONFIG_DIR)
+                image_processor.push_to_hub(tmp_repo, token=self._token)
 
-        new_image_processor = ViTImageProcessor.from_pretrained("valid_org/test-image-processor-org")
-        for k, v in image_processor.__dict__.items():
-            self.assertEqual(v, getattr(new_image_processor, k))
+                new_image_processor = ViTImageProcessor.from_pretrained(tmp_repo)
+                for k, v in image_processor.__dict__.items():
+                    self.assertEqual(v, getattr(new_image_processor, k))
+            finally:
+                self._try_delete_repo(repo_id=tmp_repo, token=self._token)
+
+    def test_push_to_hub_in_organization_via_save_pretrained(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            try:
+                tmp_repo = f"valid_org/test-image-processor-{Path(tmp_dir).name}"
+                image_processor = ViTImageProcessor.from_pretrained(SAMPLE_IMAGE_PROCESSING_CONFIG_DIR)
+                # Push to hub via save_pretrained
+                with tempfile.TemporaryDirectory() as tmp_dir_2:
+                    image_processor.save_pretrained(
+                        tmp_dir_2, repo_id=tmp_repo, push_to_hub=True, token=self._token
+                    )
+
+                new_image_processor = ViTImageProcessor.from_pretrained(tmp_repo)
+                for k, v in image_processor.__dict__.items():
+                    self.assertEqual(v, getattr(new_image_processor, k))
+            finally:
+                self._try_delete_repo(repo_id=tmp_repo, token=self._token)
 
     def test_push_to_hub_dynamic_image_processor(self):
         CustomImageProcessor.register_for_auto_class()
