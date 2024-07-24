@@ -69,7 +69,7 @@ def ffmpeg_microphone(
         input_ = "default"
     elif system == "Darwin":
         format_ = "avfoundation"
-        input_ = ":0"
+        input_ = ":default"
     elif system == "Windows":
         format_ = "dshow"
         input_ = _get_microphone_name()
