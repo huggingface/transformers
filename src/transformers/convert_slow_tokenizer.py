@@ -638,7 +638,7 @@ class SpmConverter(Converter):
             # To adhere to the BPE standard, if ignore_merges=False (default), we must
             # remove all user-defined tokens that can be obtained via merges
             token_to_id = {v.content: k for k, v in tokens_to_add.items() if not v.special}
-            merges = getattr(tokenizer, '_merges', [])
+            merges = getattr(tokenizer, "_merges", [])
             for left, right in merges:
                 full_id = token_to_id.get(left + right)
                 if full_id is not None:
