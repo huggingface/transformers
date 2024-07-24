@@ -126,23 +126,6 @@ class TokenizerPushToHubTester(unittest.TestCase):
         except:  # noqa E722
             pass
 
-    @classmethod
-    def tearDownClass(cls):
-        try:
-            delete_repo(token=cls._token, repo_id="test-tokenizer")
-        except HTTPError:
-            pass
-
-        try:
-            delete_repo(token=cls._token, repo_id="valid_org/test-tokenizer-org")
-        except HTTPError:
-            pass
-
-        try:
-            delete_repo(token=cls._token, repo_id="test-dynamic-tokenizer")
-        except HTTPError:
-            pass
-
     def test_push_to_hub(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             try:
