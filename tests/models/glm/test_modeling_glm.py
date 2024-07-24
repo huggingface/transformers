@@ -17,14 +17,12 @@
 import gc
 import tempfile
 import unittest
-from parameterized import parameterized
 
 import pytest
 
-from transformers import AutoTokenizer, GLMConfig, is_torch_available, set_seed
+from transformers import AutoTokenizer, GLMConfig, is_torch_available
 from transformers.testing_utils import (
     backend_empty_cache,
-    require_bitsandbytes,
     require_flash_attn,
     require_torch,
     require_torch_gpu,
@@ -60,7 +58,7 @@ class GLMModelTester:
             use_token_type_ids=True,
             use_labels=True,
             vocab_size=99,
-            hidden_size=32,
+            hidden_size=8,
             num_hidden_layers=2,
             num_attention_heads=4,
             num_key_value_heads=2,
@@ -394,61 +392,61 @@ class GLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
         )
 
-    @unittest.skip(reason="GLM buffers include complex numbers, which breaks this test")
-    def test_save_load_fast_init_from_base(self):
-        pass
+    def test_hidden_states_output(self):
+        def check_hidden_states_output(inputs_dict, config, model_class):
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
 
-    @unittest.skip(reason="GLM uses GQA on all models so the KV cache is a non standard format")
-    def test_past_key_values_format(self):
-        pass
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-    @unittest.skip(reason="SQRBound is known to have issues with gc")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
+            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
 
-    def _check_attentions_for_generate(self, *args, **kwargs):
-        return True  # Model does not return attention
+            expected_num_layers = getattr(
+                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+            )
 
-    @unittest.skip(reason="Past key values are not returned")
-    def test_prompt_lookup_decoding_matches_greedy_search(self):
-        pass
+            ## GLM block start with id 1 not 0
+            self.assertEqual(len(hidden_states), expected_num_layers + 1)
 
-    @unittest.skip(reason="Past key values are not returned")
-    def test_model_parallelism(self):
-        pass
+            if hasattr(self.model_tester, "encoder_seq_length"):
+                seq_length = self.model_tester.encoder_seq_length
+                if hasattr(self.model_tester, "chunk_length") and self.model_tester.chunk_length > 1:
+                    seq_length = seq_length * self.model_tester.chunk_length
+            else:
+                seq_length = self.model_tester.seq_length
 
-    @unittest.skip(reason="Past key values are not returned")
-    def test_model_parallel_beam_search(self):
-        pass
+            self.assertListEqual(
+                list(hidden_states[0].shape[-2:]),
+                [seq_length, self.model_tester.hidden_size],
+            )
 
-    def _check_past_key_values_for_generate(self, *args, **kwargs):
-        return True
+            if config.is_encoder_decoder:
+                hidden_states = outputs.decoder_hidden_states
+                self.assertIsInstance(hidden_states, (list, tuple))
+                self.assertEqual(len(hidden_states), expected_num_layers + 1)
+                seq_len = getattr(self.model_tester, "seq_length", None)
+                decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
 
-    @unittest.skip(reason="Rely on `past_key_values` to crop the assistant pkv. Not supported")
-    def test_assisted_decoding_matches_greedy_search(self):
-        pass
+                self.assertListEqual(
+                    list(hidden_states[0].shape[-2:]),
+                    [decoder_seq_length, self.model_tester.hidden_size],
+                )
 
-    @unittest.skip(reason="Relies on `past_key_values` returned by the model. Not supported with recurrent GLM")
-    def test_assisted_decoding_sample(self):
-        pass
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-    @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing(self):
-        pass
+        for model_class in self.all_model_classes:
+            inputs_dict["output_hidden_states"] = True
+            check_hidden_states_output(inputs_dict, config, model_class)
 
-    @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
+            # check that output_hidden_states also work using config
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
 
-    @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_retain_grad_hidden_states_attentions(self):
-        pass
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+
     @require_flash_attn
     @require_torch_gpu
     @pytest.mark.flash_attn_test
@@ -482,7 +480,6 @@ class GLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                     _ = model.generate(
                         dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False
                     )
-
 
     @require_flash_attn
     @require_torch_gpu
@@ -529,14 +526,12 @@ class GLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                     use_cache=True,
                 )
 
-
     @require_flash_attn
     @require_torch_gpu
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         self.skipTest(reason="GLM flash attention does not support right padding")
-
 
     @slow
     @require_torch
@@ -584,3 +579,7 @@ class GLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 "[gMASK] <sop> <|system|> \nYou are a helpful digital assistant. Please provide safe, ethical and accurate information to the user. <|user|> \nTell me the answer of 1 plus 1? <|assistant|> \nThe answer to 1 plus 1 is 2. <|user|>"
             ]
             self.assertListEqual(output_text, EXPECTED_OUTPUT)
+
+    @unittest.skip(reason="Gemma uses GQA on all models so the KV cache is a non standard format")
+    def test_past_key_values_format(self):
+        pass
