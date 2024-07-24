@@ -126,7 +126,6 @@ class ConfigPushToHubTester(unittest.TestCase):
                 self._try_delete_repo(repo_id=tmp_repo, token=self._token)
 
     def test_push_to_hub_via_save_pretrained(self):
-
         with tempfile.TemporaryDirectory() as tmp_dir:
             try:
                 tmp_repo = f"{USER}/test-config-{Path(tmp_dir).name}"
@@ -170,8 +169,7 @@ class ConfigPushToHubTester(unittest.TestCase):
                     vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
                 )
                 # Push to hub via save_pretrained
-                with tempfile.TemporaryDirectory() as tmp_dir:
-                    config.save_pretrained(tmp_dir, repo_id=tmp_repo, push_to_hub=True, token=self._token)
+                config.save_pretrained(tmp_dir, repo_id=tmp_repo, push_to_hub=True, token=self._token)
 
                 new_config = BertConfig.from_pretrained(tmp_repo)
                 for k, v in config.to_dict().items():
