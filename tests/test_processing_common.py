@@ -277,13 +277,13 @@ class ProcessorTesterMixin:
 
         input_str = ["lower newer"]
         image_input = self.prepare_image_inputs()
-        with self.assertRaises(ValueError):
-            _ = processor(
-                text=input_str,
-                images=image_input,
-                images_kwargs={"crop_size": {"height": 222, "width": 222}},
-                crop_size={"height": 214, "width": 214},
-            )
+        inputs = processor(
+            text=input_str,
+            images=image_input,
+            images_kwargs={"size": {"height": 222, "width": 222}},
+            size={"height": 35, "width": 35},
+        )
+        self.assertEqual(inputs["pixel_values"][0].shape[2], 35)
 
     @require_torch
     @require_vision

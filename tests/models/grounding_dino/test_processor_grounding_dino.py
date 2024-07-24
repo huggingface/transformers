@@ -43,6 +43,7 @@ if is_vision_available():
 @require_torch
 @require_vision
 class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    from_pretrained_id = "IDEA-Research/grounding-dino-base"
     processor_class = GroundingDinoProcessor
 
     def setUp(self):
@@ -66,6 +67,13 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.image_processor_file = os.path.join(self.tmpdirname, IMAGE_PROCESSOR_NAME)
         with open(self.image_processor_file, "w", encoding="utf-8") as fp:
             json.dump(image_processor_map, fp)
+
+        image_processor = GroundingDinoImageProcessor()
+        tokenizer = BertTokenizer.from_pretrained(self.from_pretrained_id)
+
+        processor = GroundingDinoProcessor(image_processor, tokenizer)
+
+        processor.save_pretrained(self.tmpdirname)
 
         self.batch_size = 7
         self.num_queries = 5
@@ -281,4 +289,4 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         self.assertEqual(inputs["pixel_values"].shape[2], 214)
 
-        self.assertEqual(len(inputs["input_ids"][0]), 11)
+        self.assertEqual(len(inputs["input_ids"][0]), 6)

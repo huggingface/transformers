@@ -736,12 +736,12 @@ class ProcessorMixin(PushToHubMixin):
         The order of operations is as follows:
             1) kwargs passed as before have highest priority to preserve BC.
                 ```python
-                high_priority_kwargs = {"crop_size" = (224, 224), "padding" = "max_length"}
+                high_priority_kwargs = {"crop_size" = {"height": 222, "width": 222}, "padding" = "max_length"}
                 processor(..., **high_priority_kwargs)
                 ```
             2) kwargs passed as modality-specific kwargs have second priority. This is the recommended API.
                 ```python
-                processor(..., text_kwargs={"padding": "max_length"}, images_kwargs={"crop_size": (224, 224)}})
+                processor(..., text_kwargs={"padding": "max_length"}, images_kwargs={"crop_size": {"height": 222, "width": 222}}})
                 ```
             3) kwargs passed during instantiation of a modality processor have fourth priority.
                 ```python
@@ -799,14 +799,20 @@ class ProcessorMixin(PushToHubMixin):
         output_kwargs.update(default_kwargs)
 
         # gather common kwargs and remove them from individual kwargs if present
-        common_kwargs = {
-            key: value
-            for key, value in kwargs.items()
-            if key not in ModelProcessorKwargs.__annotations__["text_kwargs"].__annotations__
-            and key not in ModelProcessorKwargs.__annotations__["images_kwargs"].__annotations__
-            and key not in ModelProcessorKwargs.__annotations__["audio_kwargs"].__annotations__
-            and key not in ModelProcessorKwargs.__annotations__["videos_kwargs"].__annotations__
-        }
+        common_kwargs = {}
+        for key, value in kwargs.items():
+            if key == "common_kwargs":
+                for common_key, common_value in value.items():
+                    common_kwargs[common_key] = common_value
+            elif key in ["text_kwargs", "images_kwargs", "audio_kwargs", "videos_kwargs"]:
+                pass
+            elif (
+                key not in ModelProcessorKwargs.__annotations__["text_kwargs"].__annotations__
+                and key not in ModelProcessorKwargs.__annotations__["images_kwargs"].__annotations__
+                and key not in ModelProcessorKwargs.__annotations__["audio_kwargs"].__annotations__
+                and key not in ModelProcessorKwargs.__annotations__["videos_kwargs"].__annotations__
+            ):
+                common_kwargs[key] = value
 
         # ensure common kwargs are propagated to all relevant modalities
         for key, value in common_kwargs.items():
@@ -820,10 +826,10 @@ class ProcessorMixin(PushToHubMixin):
         # update modality kwargs with passed kwargs
         for modality in output_kwargs:
             for modality_key in ModelProcessorKwargs.__annotations__[modality].__annotations__.keys():
-                if modality in kwargs and modality_key in kwargs[modality]:
-                    output_kwargs[modality][modality_key] = kwargs[modality][modality_key]
-                elif modality_key in kwargs:
+                if modality_key in kwargs:
                     output_kwargs[modality][modality_key] = kwargs[modality_key]
+                elif modality in kwargs and modality_key in kwargs[modality]:
+                    output_kwargs[modality][modality_key] = kwargs[modality][modality_key]
         return output_kwargs
 
     @classmethod
@@ -988,5 +994,4 @@ class ProcessorMixin(PushToHubMixin):
 ProcessorMixin.push_to_hub = copy_func(ProcessorMixin.push_to_hub)
 if ProcessorMixin.push_to_hub.__doc__ is not None:
     ProcessorMixin.push_to_hub.__doc__ = ProcessorMixin.push_to_hub.__doc__.format(
-        object="processor", object_class="AutoProcessor", object_files="processor files"
-    )
+        object="processor", object_class="AutoProcessor", object_
