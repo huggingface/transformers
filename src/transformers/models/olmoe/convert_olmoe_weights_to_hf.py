@@ -20,12 +20,12 @@ rm -rf olmoe; mkdir olmoe; python /home/niklas/transformers/src/transformers/mod
 ```
 from transformers import OlmoeForCausalLM, AutoTokenizer
 import torch
-model = OlmoeForCausalLM.from_pretrained("./olmoe", torch_dtype=torch.bfloat16).cuda()
-tokenizer = AutoTokenizer.from_pretrained("./olmoe")
+model = OlmoeForCausalLM.from_pretrained("../transformers/olmoe", torch_dtype=torch.bfloat16).cuda()
+tokenizer = AutoTokenizer.from_pretrained("../transformers/olmoe")
 inputs = tokenizer("Bitcoin is", return_tensors="pt")
 inputs = {k: v.cuda() for k, v in inputs.items()}
 out = model.generate(**inputs, max_length=64)
-print(tokenizer.decode(out[0], skip_special_tokens=True))
+print(tokenizer.decode(out[0]))
 # Or manually:
 o = model(torch.tensor([[0, 1]]).cuda())
 ```
@@ -40,8 +40,15 @@ import torch
 model = OLMo.from_checkpoint("/data/niklas/llm/checkpoints/olmoe-step1200000-unsharded-pt")
 model = model.cuda()
 model = model.to(torch.bfloat16)
+from transformers import AutoTokenizer
+tokenizer = AutoTokenizer.from_pretrained("../transformers/olmoe")
+inputs = tokenizer("Bitcoin is", return_tensors="pt")
+inputs = {k: v.cuda() for k, v in inputs.items()}
+out = model.generate(**inputs)
+print(tokenizer.decode(out[0][0][0]))
+# Bitcoin is a digital currency that is created and held electronically. No one controls it. Bitcoins aren’t printed, like dollars or euros – they’re produced by people and businesses running computers all around the world, using software that solves mathematical problems. It’s the first example of a growing category of money
+# Or manually:
 o = model(torch.tensor([[0, 1]]).cuda())
-o.logits, o.logits.shape
 ```
 """
 import argparse
