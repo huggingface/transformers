@@ -544,6 +544,9 @@ class DebertaConverter(Converter):
 
 
 class SpmConverter(Converter):
+    handle_byte_fallback = False
+    SpmExtractor = SentencePieceExtractor
+
     def __init__(self, *args):
         requires_backends(self, "protobuf")
 
@@ -557,14 +560,13 @@ class SpmConverter(Converter):
             m.ParseFromString(f.read())
         self.proto = m
 
-        if self.proto.trainer_spec.byte_fallback:
-            if not getattr(self, "handle_byte_fallback", None):
-                warnings.warn(
-                    "The sentencepiece tokenizer that you are converting to a fast tokenizer uses the byte fallback option"
-                    " which is not implemented in the fast tokenizers. In practice this means that the fast version of the"
-                    " tokenizer can produce unknown tokens whereas the sentencepiece version would have converted these "
-                    "unknown tokens into a sequence of byte tokens matching the original piece of text."
-                )
+        if self.proto.trainer_spec.byte_fallback and not self.handle_byte_fallback:
+            warnings.warn(
+                "The sentencepiece tokenizer that you are converting to a fast tokenizer uses the byte fallback option"
+                " which is not implemented in the fast tokenizers. In practice this means that the fast version of the"
+                " tokenizer can produce unknown tokens whereas the sentencepiece version would have converted these "
+                "unknown tokens into a sequence of byte tokens matching the original piece of text."
+            )
 
     def vocab(self, proto):
         return [(piece.piece, piece.score) for piece in proto.pieces]
@@ -577,10 +579,21 @@ class SpmConverter(Converter):
         vocab_scores = self.vocab(proto)
         unk_id = self.unk_id(proto)
 
+        # control tokens are special
+        # user defined symbols are not
+        # both user and control tokens are AddedTokens
+        # Add user defined symbols (type == 4) from sentencepiece (https://github.com/google/sentencepiece/blob/6225e08edb2577757163b3f5dbba4c0b670ef445/src/sentencepiece_model.proto#L299C29-L299C33)
+        spm_added_tokens = [(id, p.piece, p.type == 3) for id, p in enumerate(proto.pieces) if p.type in [3, 4]]
         if model_type == 1:
-            tokenizer = Tokenizer(Unigram(vocab_scores, unk_id))
+            import tokenizers
+
+            if self.handle_byte_fallback and version.parse(tokenizers.__version__) >= version.parse("0.14.0"):
+                tokenizer = Tokenizer(Unigram(vocab_scores, unk_id, byte_fallback=True))
+            else:
+                tokenizer = Tokenizer(Unigram(vocab_scores, unk_id))
+
         elif model_type == 2:
-            _, merges = SentencePieceExtractor(self.original_tokenizer.vocab_file).extract()
+            _, merges = self.SpmExtractor(self.original_tokenizer.vocab_file).extract()
             bpe_vocab = {word: i for i, (word, score) in enumerate(vocab_scores)}
             tokenizer = Tokenizer(
                 BPE(
@@ -588,12 +601,53 @@ class SpmConverter(Converter):
                     merges,
                     unk_token=proto.trainer_spec.unk_piece,
                     fuse_unk=True,
+                    byte_fallback=self.handle_byte_fallback,
+                    dropout=None,
                 )
             )
+
+            # To adhere to the BPE standard, if ignore_merges=False (default), we must
+            # remove all user-defined tokens that can be obtained via merges
+            valid_tokens_from_merges = set(left + right for left, right in merges)
+
+            spm_added_tokens = [
+                (id, token, special)
+                for id, token, special in spm_added_tokens
+                if special or token not in valid_tokens_from_merges
+            ]
+
         else:
             raise Exception(
                 "You're trying to run a `Unigram` model but you're file was trained with a different algorithm"
             )
+
+        tokens_to_add = [
+            AddedToken(token, normalized=False, special=special)
+            for id, token, special in sorted(spm_added_tokens, key=lambda x: x[0])
+        ]
+
+        if len(tokens_to_add) > 0:
+            # super hack: if a token.special is set, tokenizer ignores it for now so FIXME @ArthurZ
+            # Accumulate added tokens into batches of special/non-special tokens, because calling add_tokens() for
+            # individual tokens would repeatedly rebuild a trie, which can be slow.
+            is_last_special = None
+            tokens = []
+            for token in tokens_to_add:
+                is_special = token.special
+                if is_last_special is None or is_last_special == is_special:
+                    tokens.append(token)
+                else:
+                    if is_last_special:
+                        tokenizer.add_special_tokens(tokens)
+                    else:
+                        tokenizer.add_tokens(tokens)
+                    tokens = [token]
+                is_last_special = is_special
+            if tokens:
+                if is_last_special:
+                    tokenizer.add_special_tokens(tokens)
+                else:
+                    tokenizer.add_tokens(tokens)
 
         return tokenizer
 
@@ -622,52 +676,6 @@ class SpmConverter(Converter):
     def converted(self) -> Tokenizer:
         tokenizer = self.tokenizer(self.proto)
 
-        # control tokens are special
-        # user defined symbols are not
-        # both user and control tokens are AddedTokens
-        # Add user defined symbols (type == 4) from sentencepiece (https://github.com/google/sentencepiece/blob/6225e08edb2577757163b3f5dbba4c0b670ef445/src/sentencepiece_model.proto#L299C29-L299C33)
-
-        tokens_to_add = {
-            id: AddedToken(token, normalized=False, special=special)
-            for id, token, special in [
-                (id, p.piece, p.type == 3) for id, p in enumerate(self.proto.pieces) if p.type in [3, 4]
-            ]
-        }
-
-        if isinstance(tokenizer.model, BPE) and not getattr(tokenizer.model, "ignore_merges", False):
-            # To adhere to the BPE standard, if ignore_merges=False (default), we must
-            # remove all user-defined tokens that can be obtained via merges
-            token_to_id = {v.content: k for k, v in tokens_to_add.items() if not v.special}
-            merges = getattr(tokenizer, "_merges", [])
-            for left, right in merges:
-                full_id = token_to_id.get(left + right)
-                if full_id is not None:
-                    tokens_to_add.pop(full_id, None)
-                    continue
-
-        tokens_to_add = [k for _, k in sorted(tokens_to_add.items(), key=lambda x: x[0])]
-        if len(tokens_to_add) > 0:
-            # super hack: if a token.special is set, tokenizer ignores it for now so FIXME @ArthurZ
-            # Accumulate added tokens into batches of special/non-special tokens, because calling add_tokens() for
-            # individual tokens would repeatedly rebuild a trie, which can be slow.
-            is_last_special = None
-            tokens = []
-            for token in tokens_to_add:
-                is_special = token.special
-                if is_last_special is None or is_last_special == is_special:
-                    tokens.append(token)
-                else:
-                    if is_last_special:
-                        tokenizer.add_special_tokens(tokens)
-                    else:
-                        tokenizer.add_tokens(tokens)
-                    tokens = [token]
-                is_last_special = is_special
-            if tokens:
-                if is_last_special:
-                    tokenizer.add_special_tokens(tokens)
-                else:
-                    tokenizer.add_tokens(tokens)
         # Tokenizer assemble
         normalizer = self.normalizer(self.proto)
         if normalizer is not None:
@@ -1295,6 +1303,7 @@ class XGLMConverter(SpmConverter):
 
 class GemmaConvert(SpmConverter):
     handle_byte_fallback = True
+    SpmExtractor = GemmaSentencePieceExtractor
 
     """"
     split_by_unicode_script: true
@@ -1339,49 +1348,6 @@ class GemmaConvert(SpmConverter):
             ]
         )
 
-    def tokenizer(self, proto):
-        model_type = proto.trainer_spec.model_type
-        vocab_scores = self.vocab(proto)
-        if model_type == 1:
-            import tokenizers
-
-            if version.parse(tokenizers.__version__) < version.parse("0.14.0"):
-                tokenizer = Tokenizer(Unigram(vocab_scores, 0))
-            else:
-                tokenizer = Tokenizer(Unigram(vocab_scores, 0, byte_fallback=True))
-
-        elif model_type == 2:
-            _, merges = GemmaSentencePieceExtractor(self.original_tokenizer.vocab_file).extract(vocab_scores)
-            bpe_vocab = {word: i for i, (word, _score) in enumerate(vocab_scores)}
-
-            tokenizer = Tokenizer(
-                BPE(
-                    bpe_vocab,
-                    merges,
-                    unk_token=proto.trainer_spec.unk_piece,
-                    fuse_unk=True,
-                    byte_fallback=True,
-                    dropout=None,
-                )
-            )
-            tokenizer.add_special_tokens(
-                [
-                    AddedToken("<pad>", normalized=False, special=True),
-                    AddedToken("<eos>", normalized=False, special=True),
-                    AddedToken("<bos>", normalized=False, special=True),
-                    AddedToken("<unk>", normalized=False, special=True),
-                ]
-            )
-            # A slight hack so we can use the merges later
-            # In future, we will be able to access the set of merges from the tokenizer directly
-            setattr(tokenizer, "_merges", merges)
-
-        else:
-            raise Exception(
-                "You're trying to run a `Unigram` model but you're file was trained with a different algorithm"
-            )
-        return tokenizer
-
 
 class LlamaConverter(SpmConverter):
     handle_byte_fallback = True
@@ -1408,37 +1374,6 @@ class LlamaConverter(SpmConverter):
         if add_prefix_space:
             sequence += [decoders.Strip(content=" ", left=1)]
         return decoders.Sequence(sequence)
-
-    def tokenizer(self, proto):
-        model_type = proto.trainer_spec.model_type
-        vocab_scores = self.vocab(proto)
-        if model_type == 1:
-            import tokenizers
-
-            if version.parse(tokenizers.__version__) < version.parse("0.14.0"):
-                tokenizer = Tokenizer(Unigram(vocab_scores, 0))
-            else:
-                tokenizer = Tokenizer(Unigram(vocab_scores, 0, byte_fallback=True))
-
-        elif model_type == 2:
-            _, merges = SentencePieceExtractor(self.original_tokenizer.vocab_file).extract(vocab_scores)
-            bpe_vocab = {word: i for i, (word, _score) in enumerate(vocab_scores)}
-            tokenizer = Tokenizer(
-                BPE(bpe_vocab, merges, unk_token=proto.trainer_spec.unk_piece, fuse_unk=True, byte_fallback=True)
-            )
-            tokenizer.add_special_tokens(
-                [
-                    AddedToken(self.original_tokenizer.convert_ids_to_tokens(0), normalized=False, special=True),
-                    AddedToken(self.original_tokenizer.convert_ids_to_tokens(1), normalized=False, special=True),
-                    AddedToken(self.original_tokenizer.convert_ids_to_tokens(2), normalized=False, special=True),
-                ]
-            )
-        else:
-            raise Exception(
-                "You're trying to run a `Unigram` model but you're file was trained with a different algorithm"
-            )
-
-        return tokenizer
 
     def normalizer(self, proto):
         if getattr(self.original_tokenizer, "legacy", True):
@@ -1576,10 +1511,10 @@ class TikTokenConverter:
         tokenizer = Tokenizer(BPE(vocab_scores, merges, fuse_unk=False))
         if hasattr(tokenizer.model, "ignore_merges"):
             tokenizer.model.ignore_merges = True
-        return tokenizer
+        return tokenizer, []
 
     def converted(self) -> Tokenizer:
-        tokenizer = self.tokenizer()
+        tokenizer, _ = self.tokenizer()
         tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
             [
                 pre_tokenizers.Split(Regex(self.pattern), behavior="isolated", invert=False),
