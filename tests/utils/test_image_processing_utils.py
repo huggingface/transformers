@@ -112,7 +112,7 @@ class ImageProcessorPushToHubTester(unittest.TestCase):
                 image_processor = ViTImageProcessor.from_pretrained(SAMPLE_IMAGE_PROCESSING_CONFIG_DIR)
                 # Push to hub via save_pretrained
                 image_processor.save_pretrained(
-                    tmp_dir, repo_id="test-image-processor", push_to_hub=True, token=self._token
+                    tmp_dir, repo_id=tmp_repo, push_to_hub=True, token=self._token
                 )
 
                 new_image_processor = ViTImageProcessor.from_pretrained(tmp_repo)
