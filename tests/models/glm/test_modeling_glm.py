@@ -58,7 +58,7 @@ class GLMModelTester:
             use_token_type_ids=True,
             use_labels=True,
             vocab_size=99,
-            hidden_size=32,
+            hidden_size=8,
             num_hidden_layers=2,
             num_attention_heads=4,
             num_key_value_heads=2,
@@ -579,3 +579,7 @@ class GLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 "[gMASK] <sop> <|system|> \nYou are a helpful digital assistant. Please provide safe, ethical and accurate information to the user. <|user|> \nTell me the answer of 1 plus 1? <|assistant|> \nThe answer to 1 plus 1 is 2. <|user|>"
             ]
             self.assertListEqual(output_text, EXPECTED_OUTPUT)
+
+    @unittest.skip(reason="Gemma uses GQA on all models so the KV cache is a non standard format")
+    def test_past_key_values_format(self):
+        pass

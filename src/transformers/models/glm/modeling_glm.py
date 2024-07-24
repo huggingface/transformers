@@ -60,6 +60,7 @@ def _config_to_kwargs(args):
     }
     return common_kwargs
 
+
 def _get_unpad_data(attention_mask):
     seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
     indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
@@ -126,7 +127,6 @@ class GLMRotaryEmbedding(nn.Module):
         return self.forward_impl(
             max_seq_len, self.dim, dtype=self.inv_freq.dtype, device=self.inv_freq.device
         )
-
 
 
 def split_tensor_along_last_dim(
@@ -267,7 +267,6 @@ class SelfAttention(torch.nn.Module):
         # adjust key and value for inference
         if past_key_value is not None:
             key_layer, value_layer = past_key_value.update(key_layer, value_layer, self.layer_number - 1)
-
         if self.multi_query_attention:
             key_layer = key_layer.unsqueeze(2)
             key_layer = key_layer.expand(
@@ -283,7 +282,6 @@ class SelfAttention(torch.nn.Module):
             value_layer = value_layer.contiguous().view(
                 value_layer.size()[:1] + (self.num_attention_heads_per_partition,) + value_layer.size()[3:]
             )
-
         # ==================================
         # core attention computation
         # ==================================
@@ -454,7 +452,6 @@ class GLMAttention(nn.Module):
         # [b, sq, np, hn] --> [b, sq, hp]
         new_context_layer_shape = context_layer.size()[:-2] + (self.hidden_size_per_partition,)
         context_layer = context_layer.reshape(*new_context_layer_shape)
-
         return context_layer
 
 
@@ -588,13 +585,19 @@ class GLMSdpaAttention(GLMAttention):
 
     def forward(self, query_layer, key_layer, value_layer, attention_mask):
         if attention_mask is None and query_layer.shape[2] == key_layer.shape[2]:
-            context_layer = torch.nn.functional.scaled_dot_product_attention(query_layer, key_layer, value_layer,
-                                                                             is_causal=True,
-                                                                             dropout_p=self.config.attention_dropout if self.training else 0.0)
+            context_layer = torch.nn.functional.scaled_dot_product_attention(
+                query_layer,
+                key_layer,
+                value_layer,
+                is_causal=True,
+                dropout_p=self.config.attention_dropout if self.training else 0.0)
         else:
-            context_layer = torch.nn.functional.scaled_dot_product_attention(query_layer, key_layer, value_layer,
-                                                                             attention_mask,
-                                                                             dropout_p=self.config.attention_dropout if self.training else 0.0)
+            context_layer = torch.nn.functional.scaled_dot_product_attention(
+                query_layer,
+                key_layer,
+                value_layer,
+                attention_mask,
+                dropout_p=self.config.attention_dropout if self.training else 0.0)
         context_layer = context_layer.transpose(1, 2).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.hidden_size_per_partition,)
         context_layer = context_layer.reshape(*new_context_layer_shape)
