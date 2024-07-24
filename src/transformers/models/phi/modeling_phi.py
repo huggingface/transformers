@@ -501,6 +501,7 @@ class PhiFlashAttention2(PhiAttention):
             value_states,
             attention_mask,
             q_len,
+            position_ids=position_ids,
             dropout=attn_dropout,
             softmax_scale=None,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
@@ -1282,7 +1283,7 @@ class PhiForSequenceClassification(PhiPreTrainedModel):
     @add_start_docstrings_to_model_forward(PHI_INPUTS_DOCSTRING)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
