@@ -1658,7 +1658,7 @@ class IrisModel(IrisPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
-        assert component in ("discrete_autoencoder", "world_model", "actor_critic")
+        if component is not None: assert component in ("discrete_autoencoder", "world_model", "actor_critic")
 
         cfg_discrete_autoencoder = {
             "should_preprocess": should_preprocess,
@@ -1682,51 +1682,111 @@ class IrisModel(IrisPreTrainedModel):
             "output_attentions": output_attentions,
         }
 
-        batch = {
-            "observations": observations,
-            "actions": actions,
-            "rewards": rewards,
-            "ends": ends,
-            "mask_padding": mask_padding,
-        }
+        if component is None and isinstance(observations, List):
+            batch_discrete_autoencoder = {
+                "observations": observations[0],
+                "actions": actions[0],
+                "rewards": rewards[0],
+                "ends": ends[0],
+                "mask_padding": mask_padding[0],
+            }
+            batch_world_model = {
+                "observations": observations[1],
+                "actions": actions[1],
+                "rewards": rewards[1],
+                "ends": ends[1],
+                "mask_padding": mask_padding[1],
+            }
+            batch_actor_critic = {
+                "observations": observations[2],
+                "actions": actions[2],
+                "rewards": rewards[2],
+                "ends": ends[2],
+                "mask_padding": mask_padding[2],
+            }
+        else:
+            batch = {
+                "observations": observations,
+                "actions": actions,
+                "rewards": rewards,
+                "ends": ends,
+                "mask_padding": mask_padding,
+            }
 
         all_hidden_states_discrete_autoencoder, all_hidden_states_world_model, all_hidden_states_actor_critic = (), (), ()
 
         component_losses = IrisComponentLosses()
-        if component == "discrete_autoencoder":
+
+        if component is None and isinstance(observations, List):
             (
-                losses,
+                losses_discrete_autoencoder,
                 discrete_autoencoder_outputs,
                 all_hidden_states_discrete_autoencoder,
                 all_attentions_discrete_autoencoder,
             ) = component_losses.compute_discrete_autoencoder_loss(
-                self.rl_agent.discrete_autoencoder, batch, **cfg_discrete_autoencoder
+                self.rl_agent.discrete_autoencoder, batch_discrete_autoencoder, **cfg_discrete_autoencoder
             )
-            losses = losses / self.config.grad_acc_steps_discrete_autoencoder
-        elif component == "world_model":
+            losses_discrete_autoencoder = losses_discrete_autoencoder / self.config.grad_acc_steps_discrete_autoencoder
+
             (
-                losses,
+                losses_world_model,
                 world_model_outputs,
                 all_hidden_states_world_model,
                 all_attentions_world_model,
-            ) = component_losses.compute_world_model_loss(self.rl_agent.world_model, batch, **cfg_world_model)
-            losses = losses / self.config.grad_acc_steps_world_model
-        else:
+            ) = component_losses.compute_world_model_loss(self.rl_agent.world_model, batch_world_model, **cfg_world_model)
+            losses_world_model = losses_world_model / self.config.grad_acc_steps_world_model
+
             (
-                losses,
+                losses_actor_critic,
                 actor_critic_outputs,
                 all_hidden_states_actor_critic,
                 _,
             ) = component_losses.compute_actor_critic_loss(
-                self.rl_agent.actor_critic, self.config, batch, **cfg_actor_critic
+                self.rl_agent.actor_critic, self.config, batch_actor_critic, **cfg_actor_critic
             )
-            losses = losses / self.config.grad_acc_steps_actor_critic
+            losses_actor_critic = losses_actor_critic / self.config.grad_acc_steps_actor_critic
 
-        reconstructed_img = discrete_autoencoder_outputs[2] if component == "discrete_autoencoder" else None
-        action_preds  = actor_critic_outputs[0] if component == "actor_critic" else None
-        reward_preds=world_model_outputs[2] if component == "world_model" else None
-        epsiode_end=world_model_outputs[3] if component == "world_model" else None
-        obs_preds=world_model_outputs[1] if component == "world_model" else None
+            losses = (losses_discrete_autoencoder, losses_world_model, losses_actor_critic)
+            reconstructed_img = discrete_autoencoder_outputs[2]
+            action_preds  = actor_critic_outputs[0]
+            reward_preds=world_model_outputs[2]
+            epsiode_end=world_model_outputs[3]
+            obs_preds=world_model_outputs[1]
+        else:
+            if component == "discrete_autoencoder":
+                (
+                    losses,
+                    discrete_autoencoder_outputs,
+                    all_hidden_states_discrete_autoencoder,
+                    all_attentions_discrete_autoencoder,
+                ) = component_losses.compute_discrete_autoencoder_loss(
+                    self.rl_agent.discrete_autoencoder, batch, **cfg_discrete_autoencoder
+                )
+                losses = losses / self.config.grad_acc_steps_discrete_autoencoder
+            elif component == "world_model":
+                (
+                    losses,
+                    world_model_outputs,
+                    all_hidden_states_world_model,
+                    all_attentions_world_model,
+                ) = component_losses.compute_world_model_loss(self.rl_agent.world_model, batch, **cfg_world_model)
+                losses = losses / self.config.grad_acc_steps_world_model
+            else:
+                (
+                    losses,
+                    actor_critic_outputs,
+                    all_hidden_states_actor_critic,
+                    _,
+                ) = component_losses.compute_actor_critic_loss(
+                    self.rl_agent.actor_critic, self.config, batch, **cfg_actor_critic
+                )
+                losses = losses / self.config.grad_acc_steps_actor_critic
+
+            reconstructed_img = discrete_autoencoder_outputs[2] if component == "discrete_autoencoder" else None
+            action_preds  = actor_critic_outputs[0] if component == "actor_critic" else None
+            reward_preds=world_model_outputs[2] if component == "world_model" else None
+            epsiode_end=world_model_outputs[3] if component == "world_model" else None
+            obs_preds=world_model_outputs[1] if component == "world_model" else None
 
         all_hidden_states = (
             all_hidden_states_discrete_autoencoder + all_hidden_states_world_model + all_hidden_states_actor_critic
