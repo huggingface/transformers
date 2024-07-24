@@ -57,7 +57,6 @@ _CONFIG_FOR_DOC = "GLMConfig"
 
 def _config_to_kwargs(args):
     common_kwargs = {
-        "dtype": args.torch_dtype,
     }
     return common_kwargs
 
@@ -743,7 +742,7 @@ class Embedding(torch.nn.Module):
         self.vocab_size = config.vocab_size
         self.hidden_size = config.hidden_size
         # Word embeddings (parallel).
-        self.word_embeddings = nn.Embedding(self.vocab_size, self.hidden_size, dtype=config.torch_dtype, device=device)
+        self.word_embeddings = nn.Embedding(self.vocab_size, self.hidden_size, device=device)
         self.fp32_residual_connection = config.fp32_residual_connection
 
     def forward(self, input_ids):
@@ -769,13 +768,11 @@ class GLMBlock(torch.nn.Module):
         self.apply_residual_connection_post_layernorm = config.apply_residual_connection_post_layernorm
         self.fp32_residual_connection = config.fp32_residual_connection
         LayerNormFunc = GLMRMSNorm if config.rmsnorm else LayerNorm
-        self.input_layernorm = LayerNormFunc(config.hidden_size, eps=config.layernorm_epsilon, device=device,
-                                             dtype=config.torch_dtype)
+        self.input_layernorm = LayerNormFunc(config.hidden_size, eps=config.layernorm_epsilon, device=device)
 
         self.self_attention = SelfAttention(config, layer_number, device=device)
         self.hidden_dropout = config.hidden_dropout
-        self.post_attention_layernorm = LayerNormFunc(config.hidden_size, eps=config.layernorm_epsilon, device=device,
-                                                      dtype=config.torch_dtype)
+        self.post_attention_layernorm = LayerNormFunc(config.hidden_size, eps=config.layernorm_epsilon, device=device)
         self.mlp = GLMMLP(config, device=device)
 
     def forward(
@@ -847,8 +844,7 @@ class GLMTransformer(torch.nn.Module):
         if self.post_layer_norm:
             LayerNormFunc = GLMRMSNorm if config.rmsnorm else LayerNorm
             # Final layer norm before output.
-            self.final_layernorm = LayerNormFunc(config.hidden_size, eps=config.layernorm_epsilon, device=device,
-                                                 dtype=config.torch_dtype)
+            self.final_layernorm = LayerNormFunc(config.hidden_size, eps=config.layernorm_epsilon, device=device)
 
         self.gradient_checkpointing = False
 
@@ -1022,12 +1018,10 @@ class GLMModel(GLMPreTrainedModel):
             rotary_dim // 2,
             rope_ratio=config.rope_ratio,
             original_impl=True,
-            device=device,
-            dtype=config.torch_dtype
+            device=device
         )
         self.encoder = init_method(GLMTransformer, config, **init_kwargs)
-        self.output_layer = init_method(nn.Linear, config.hidden_size, config.vocab_size, bias=False,
-                                        dtype=config.torch_dtype, **init_kwargs)
+        self.output_layer = init_method(nn.Linear, config.hidden_size, config.vocab_size, bias=False, **init_kwargs)
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1356,7 +1350,7 @@ class GLMForSequenceClassification(GLMPreTrainedModel):
 
         self.num_labels = config.num_labels
         self.transformer = GLMModel(config)
-        self.classifier_head = nn.Linear(config.hidden_size, config.num_labels, bias=True, dtype=config.torch_dtype)
+        self.classifier_head = nn.Linear(config.hidden_size, config.num_labels, bias=True)
 
         # Initialize weights and apply final processing
         self.post_init()
