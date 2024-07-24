@@ -4079,6 +4079,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 return key.replace("beta", "bias")
             if "gamma" in key:
                 return key.replace("gamma", "weight")
+            if "weight_g" in key:
+                return key.replace("weight_g", "parametrizations.weight.original0")
+            if "weight_v" in key:
+                return key.replace("weight_v", "parametrizations.weight.original1")
             return key
 
         original_loaded_keys = loaded_keys
