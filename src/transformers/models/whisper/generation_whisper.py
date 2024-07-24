@@ -956,17 +956,21 @@ class WhisperGenerationMixin:
                 if not is_shortform:
                     # we don't save `past_key_values` as this is too costly for longform
                     return None
+                elif isinstance(values, EncoderDecoderCache):
+                    all_past_key_values = []
+                    for layer_idx in range(self.config.decoder_layers):
+                        layer_past_key_values = []
+                        for cache_cls in [values.self_attention_cache, values.cross_attention_cache]:
+                            for v in [cache_cls.key_cache, cache_cls.value_cache]:
+                                layer_past_key_values.append(v[layer_idx][None].cpu())
+                        all_past_key_values.append(tuple(layer_past_key_values))
+                    return tuple(all_past_key_values)
                 else:
                     return tuple(tuple(w[batch_idx][None].cpu() for w in values[v]) for v in range(len(values)))
 
             return values[batch_idx].cpu()
 
         sequence_tokens = seek_outputs["sequences"]
-
-        if hasattr(seek_outputs, "past_key_values") and seek_outputs.past_key_values is not None:
-            if isinstance(seek_outputs["past_key_values"], EncoderDecoderCache):
-                seek_outputs.past_key_values = seek_outputs.past_key_values.to_legacy_cache()
-
         seek_outputs = [
             {k: split_by_batch_index(v, k, i, is_shortform) for k, v in seek_outputs.items()}
             for i in range(sequence_tokens.shape[0])
