@@ -587,13 +587,13 @@ class SpmConverter(Converter):
         if model_type == 1:
             import tokenizers
 
-            if self.handle_byte_fallback and version.parse(tokenizers.__version__) >= version.parse("0.14.0"):
-                tokenizer = Tokenizer(Unigram(vocab_scores, unk_id, byte_fallback=True))
+            if version.parse(tokenizers.__version__) >= version.parse("0.14.0"):
+                tokenizer = Tokenizer(Unigram(vocab_scores, unk_id, byte_fallback=self.handle_byte_fallback))
             else:
                 tokenizer = Tokenizer(Unigram(vocab_scores, unk_id))
 
         elif model_type == 2:
-            _, merges = self.SpmExtractor(self.original_tokenizer.vocab_file).extract()
+            _, merges = self.SpmExtractor(self.original_tokenizer.vocab_file).extract(vocab_scores)
             bpe_vocab = {word: i for i, (word, score) in enumerate(vocab_scores)}
             tokenizer = Tokenizer(
                 BPE(
