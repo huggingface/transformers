@@ -173,14 +173,14 @@ class PythonInterpreterTool(Tool):
 
     def forward(self, code):
         output = str(
-            evaluate_python_code(code, tools=self.available_tools, authorized_imports=self.authorized_imports)
+            evaluate_python_code(code, static_tools=self.available_tools, authorized_imports=self.authorized_imports)
         )
         return output
 
 
 class FinalAnswerTool(Tool):
     name = "final_answer"
-    description = "Provides a final answer to the given problem"
+    description = "Provides a final answer to the given problem."
     inputs = {"answer": {"type": "text", "description": "The final answer to the problem"}}
     output_type = "any"
 

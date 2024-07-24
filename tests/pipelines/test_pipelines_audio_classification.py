@@ -35,8 +35,10 @@ class AudioClassificationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
     tf_model_mapping = TF_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, processor):
-        audio_classifier = AudioClassificationPipeline(model=model, feature_extractor=processor)
+    def get_test_pipeline(self, model, tokenizer, processor, torch_dtype="float32"):
+        audio_classifier = AudioClassificationPipeline(
+            model=model, feature_extractor=processor, torch_dtype=torch_dtype
+        )
 
         # test with a raw waveform
         audio = np.zeros((34000,))
@@ -69,9 +71,7 @@ class AudioClassificationPipelineTests(unittest.TestCase):
         import datasets
 
         # test with a local file
-        dataset = datasets.load_dataset(
-            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
-        )
+        dataset = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         audio = dataset[0]["audio"]["array"]
         output = audio_classifier(audio)
         self.assertEqual(

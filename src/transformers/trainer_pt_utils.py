@@ -27,6 +27,7 @@ import warnings
 from collections.abc import Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from itertools import chain
 from logging import StreamHandler
 from typing import Any, Dict, Iterator, List, Optional, Union
 
@@ -191,7 +192,7 @@ def nested_detach(tensors):
         return type(tensors)(nested_detach(t) for t in tensors)
     elif isinstance(tensors, Mapping):
         return type(tensors)({k: nested_detach(t) for k, t in tensors.items()})
-    return tensors.detach()
+    return tensors.detach() if isinstance(tensors, torch.Tensor) else tensors
 
 
 def nested_xla_mesh_reduce(tensors, name):
@@ -253,7 +254,7 @@ def reissue_pt_warnings(caught_warnings):
     # Reissue warnings that are not the SAVE_STATE_WARNING
     if len(caught_warnings) > 1:
         for w in caught_warnings:
-            if w.category != UserWarning or w.message != SAVE_STATE_WARNING:
+            if w.category is not UserWarning or w.message != SAVE_STATE_WARNING:
                 warnings.warn(w.message, w.category)
 
 
@@ -1379,13 +1380,24 @@ class LayerWiseDummyScheduler(LRScheduler):
     """
 
     def __init__(self, *args, **kwargs):
-        optimizer = LayerWiseDummyOptimizer()
+        self.default_lr = kwargs["lr"]
+        optimizer = LayerWiseDummyOptimizer(**kwargs)
         last_epoch = -1
         verbose = False
         super().__init__(optimizer, last_epoch, verbose)
 
     def get_lr(self):
-        return [group["lr"] for group in self.optimizer.param_groups]
+        # default value
+        lrs = [self.default_lr]
+
+        # we take each lr in the parameters if they exist, assumes the optimizer to be the `LayerWiseDummyOptimizer`
+        if self.optimizer is not None:
+            param_wise_lrs = [
+                [group["lr"] for group in optim.param_groups] for optim in self.optimizer.optimizer_dict.values()
+            ]
+            lrs = list(chain(*param_wise_lrs))
+
+        return lrs
 
     def _get_closed_form_lr(self):
         return self.base_lrs
