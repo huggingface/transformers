@@ -81,3 +81,13 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] Dinov2ForImageClassification
     - forward
+
+## FlaxDinov2Model
+
+[[autodoc]] FlaxDinov2Model
+    - forward
+
+## FlaxDinov2ForImageClassification
+
+[[autodoc]] FlaxDinov2ForImageClassification
+    - forward

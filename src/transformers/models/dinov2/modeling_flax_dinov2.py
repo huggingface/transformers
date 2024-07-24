@@ -18,7 +18,7 @@ import collections.abc
 import math
 import os
 from typing import Optional, Tuple
-
+#from transformers import BitImageProcessor
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
@@ -101,7 +101,7 @@ class FlaxDinov2PatchEmbeddings(nn.Module):
         patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (
             image_size[0] // patch_size[0]
-        )  # ? 518//14 * 518//14 = 36*36 = 1296
+        )  # ? 518//14 * 518//14 = 37*37 = 1369
 
         self.num_patches = num_patches
         self.num_channels = self.config.num_channels
@@ -129,30 +129,30 @@ class FlaxDinov2PatchEmbeddings(nn.Module):
 
 
 def interpolate_pos_encoding(config, hidden_states, height, width, position_embeddings):
-    num_patches = hidden_states.shape[1] - 1
-    num_positions = position_embeddings.shape[1] - 1
+    num_patches = hidden_states.shape[1] - 1                     # ? 256
+    num_positions = position_embeddings.shape[1] - 1             # ? 1369
     if num_patches == num_positions and height == width:
         return position_embeddings
     class_pos_embed = position_embeddings[:, 0]
     patch_pos_embed = position_embeddings[:, 1:]
     dim = hidden_states.shape[-1]
 
-    height = height // config.patch_size
-    width = width // config.patch_size
+    height = height // config.patch_size                         # ? 224//14 = 16
+    width = width // config.patch_size                           # ? 224//14 = 16
     height, width = height + 0.1, width + 0.1
 
-    patch_pos_embed = patch_pos_embed.reshape((1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim))
-    patch_pos_embed = jnp.transpose(patch_pos_embed, (0, 3, 1, 2))
+    patch_pos_embed = patch_pos_embed.reshape((1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim))     # ? (1, 37, 37, 768)
+    patch_pos_embed = jnp.transpose(patch_pos_embed, (0, 3, 1, 2))  # ? (1, 768, 37, 37)
 
-    new_height_ratio = jnp.float32(height / math.sqrt(num_positions))
-    new_width_ratio = jnp.float32(width / math.sqrt(num_positions))
+    new_height_ratio = jnp.float32(height / math.sqrt(num_positions))    # ? 16/37
+    new_width_ratio = jnp.float32(width / math.sqrt(num_positions))      # ? 16/37
 
     # patch_pos_embed = jax.image.resize(patch_pos_embed, shape=(hidden_states.shape[0], dim, height, width), method='bicubic', antialias=False)
     scale, translation = (
         jnp.array([new_height_ratio, new_width_ratio], dtype=jnp.float32),
         jnp.array([0.0, 0.0], dtype=jnp.float32),
     )
-
+    
     patch_pos_embed = jax.image.scale_and_translate(
         patch_pos_embed,
         shape=(1, 768, 16, 16),
@@ -163,10 +163,24 @@ def interpolate_pos_encoding(config, hidden_states, height, width, position_embe
         antialias=False,
     )
 
+    # processor = BitImageProcessor(
+    #     size={"shortest_edge": 16},
+    #     do_center_crop=False,
+    #     do_rescale=False,
+    #     do_normalize=False,
+    #     do_convert_rgb=False,
+    #     input_data_format="channels_first",
+    # )
+
+    # patch_pos_embed = processor(patch_pos_embed)["pixel_values"]
+    # print(patch_pos_embed, patch_pos_embed.mean())
+
+
     if True:
         patch_pos_embed = load_file(os.path.join(os.path.dirname(__file__), "Dinov2_pos_encoding.safetensors"))[
             "pos_encoding"
         ]  # ! Remove this if interpolation can be fixed
+    #print(patch_pos_embed, patch_pos_embed.mean())
 
     patch_pos_embed = jnp.transpose(patch_pos_embed, (0, 2, 3, 1)).reshape((hidden_states.shape[0], -1, dim))
 
@@ -195,11 +209,11 @@ class FlaxDinov2Embeddings(nn.Module):
             (1, self.config.hidden_size),
         )
         self.patch_embeddings = FlaxDinov2PatchEmbeddings(self.config, dtype=self.dtype)
-        num_patches = self.patch_embeddings.num_patches  # ? 1296
+        num_patches = self.patch_embeddings.num_patches  # ? 1369
         self.position_embeddings = self.param(
             "position_embeddings",
             jax.nn.initializers.variance_scaling(self.config.initializer_range**2, "fan_in", "truncated_normal"),
-            (1, num_patches + 1, self.config.hidden_size),  # ? (1, 1297, 768)
+            (1, num_patches + 1, self.config.hidden_size),  # ? (1, 1370, 768)
         )
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
 

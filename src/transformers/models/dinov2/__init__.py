@@ -43,9 +43,9 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_flax_dinov2"] = [
-        "FlaxBeitPreTrainedModel",
         "FlaxDinov2ForImageClassification",
         "FlaxDinov2Model",
+        "FlaxDinov2PreTrainedModel",
     ]
 
 if TYPE_CHECKING:
@@ -70,7 +70,11 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_flax_dinov2 import FlaxDinov2ForImageClassification, FlaxDinov2Model, FlaxDinov2PreTrainedModel
+        from .modeling_flax_dinov2 import (
+            FlaxDinov2ForImageClassification, 
+            FlaxDinov2Model, 
+            FlaxDinov2PreTrainedModel,
+        )
 
 else:
     import sys

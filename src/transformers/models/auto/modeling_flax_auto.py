@@ -125,6 +125,7 @@ FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Image-classsification
         ("beit", "FlaxBeitForImageClassification"),
+        ("dinov2", "FlaxDinov2ForImageClassification"),
         ("regnet", "FlaxRegNetForImageClassification"),
         ("resnet", "FlaxResNetForImageClassification"),
         ("vit", "FlaxViTForImageClassification"),
