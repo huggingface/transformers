@@ -145,7 +145,7 @@ class PipelineTesterMixin:
         if not isinstance(model_architectures, tuple):
             model_architectures = (model_architectures,)
         if not isinstance(model_architectures, tuple):
-            raise ValueError(f"`model_architectures` must be a tuple. Got {type(model_architectures)} instead.")
+            raise TypeError(f"`model_architectures` must be a tuple. Got {type(model_architectures)} instead.")
 
         for model_architecture in model_architectures:
             model_arch_name = model_architecture.__name__
