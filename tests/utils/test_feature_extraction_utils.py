@@ -60,6 +60,14 @@ class FeatureExtractorPushToHubTester(unittest.TestCase):
         cls._token = TOKEN
         HfFolder.save_token(TOKEN)
 
+    @staticmethod
+    def _try_delete_repo(repo_id, token):
+        try:
+            # Reset repo
+            delete_repo(repo_id=repo_id, token=token)
+        except:  # noqa E722
+            pass
+
     @classmethod
     def tearDownClass(cls):
         try:
@@ -78,52 +86,63 @@ class FeatureExtractorPushToHubTester(unittest.TestCase):
             pass
 
     def test_push_to_hub(self):
-        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(SAMPLE_FEATURE_EXTRACTION_CONFIG_DIR)
-        feature_extractor.push_to_hub("test-feature-extractor", token=self._token)
-
-        new_feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(f"{USER}/test-feature-extractor")
-        for k, v in feature_extractor.__dict__.items():
-            self.assertEqual(v, getattr(new_feature_extractor, k))
-
-        try:
-            # Reset repo
-            delete_repo(token=self._token, repo_id="test-feature-extractor")
-        except:  # noqa E722
-            pass
-
-        # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
-            feature_extractor.save_pretrained(
-                tmp_dir, repo_id="test-feature-extractor", push_to_hub=True, token=self._token
-            )
+            try:
+                tmp_repo = f"{USER}/test-feature-extractor-{Path(tmp_dir).name}"
 
-        new_feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(f"{USER}/test-feature-extractor")
-        for k, v in feature_extractor.__dict__.items():
-            self.assertEqual(v, getattr(new_feature_extractor, k))
+                feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(SAMPLE_FEATURE_EXTRACTION_CONFIG_DIR)
+                feature_extractor.push_to_hub(tmp_repo, token=self._token)
+
+                new_feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(tmp_repo)
+                for k, v in feature_extractor.__dict__.items():
+                    self.assertEqual(v, getattr(new_feature_extractor, k))
+            finally:
+                self._try_delete_repo(repo_id=tmp_repo, token=self._token)
+
+    def test_push_to_hub_via_save_pretrained(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            try:
+                tmp_repo = f"{USER}/test-tokenizer-{Path(tmp_dir).name}"
+                feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(SAMPLE_FEATURE_EXTRACTION_CONFIG_DIR)
+                # Push to hub via save_pretrained
+                feature_extractor.save_pretrained(
+                    tmp_dir, repo_id=tmp_repo, push_to_hub=True, token=self._token
+                )
+
+                new_feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(tmp_repo)
+                for k, v in feature_extractor.__dict__.items():
+                    self.assertEqual(v, getattr(new_feature_extractor, k))
+            finally:
+                self._try_delete_repo(repo_id=tmp_repo, token=self._token)
 
     def test_push_to_hub_in_organization(self):
-        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(SAMPLE_FEATURE_EXTRACTION_CONFIG_DIR)
-        feature_extractor.push_to_hub("valid_org/test-feature-extractor", token=self._token)
-
-        new_feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("valid_org/test-feature-extractor")
-        for k, v in feature_extractor.__dict__.items():
-            self.assertEqual(v, getattr(new_feature_extractor, k))
-
-        try:
-            # Reset repo
-            delete_repo(token=self._token, repo_id="valid_org/test-feature-extractor")
-        except:  # noqa E722
-            pass
-
-        # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
-            feature_extractor.save_pretrained(
-                tmp_dir, repo_id="valid_org/test-feature-extractor-org", push_to_hub=True, token=self._token
-            )
+            try:
+                tmp_repo = f"valid_org/test-tokenizer-{Path(tmp_dir).name}"
+                feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(SAMPLE_FEATURE_EXTRACTION_CONFIG_DIR)
+                feature_extractor.push_to_hub(tmp_repo, token=self._token)
 
-        new_feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("valid_org/test-feature-extractor-org")
-        for k, v in feature_extractor.__dict__.items():
-            self.assertEqual(v, getattr(new_feature_extractor, k))
+                new_feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(tmp_repo)
+                for k, v in feature_extractor.__dict__.items():
+                    self.assertEqual(v, getattr(new_feature_extractor, k))
+            finally:
+                self._try_delete_repo(repo_id=tmp_repo, token=self._token)
+
+    def test_push_to_hub_in_organization_via_save_pretrained(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            try:
+                tmp_repo = f"valid_org/test-tokenizer-{Path(tmp_dir).name}"
+                feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(SAMPLE_FEATURE_EXTRACTION_CONFIG_DIR)
+                # Push to hub via save_pretrained
+                feature_extractor.save_pretrained(
+                    tmp_dir, repo_id=tmp_repo, push_to_hub=True, token=self._token
+                )
+
+                new_feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(tmp_repo)
+                for k, v in feature_extractor.__dict__.items():
+                    self.assertEqual(v, getattr(new_feature_extractor, k))
+            finally:
+                self._try_delete_repo(repo_id=tmp_repo, token=self._token)
 
     def test_push_to_hub_dynamic_feature_extractor(self):
         CustomFeatureExtractor.register_for_auto_class()
