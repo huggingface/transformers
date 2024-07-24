@@ -834,7 +834,6 @@ class WandbCallback(TrainerCallback):
                 logger.info("Could not log the number of model parameters in Weights & Biases.")
 
             # log the initial model architecture to an artifact
-            # if log model is false skip this
             if not self._log_model == "false":
                 with tempfile.TemporaryDirectory() as temp_dir:
                     model_name = (
