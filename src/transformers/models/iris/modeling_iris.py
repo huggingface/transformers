@@ -795,6 +795,7 @@ class IrisKeysValues:
         )
         self._size = []
         self.num_layers = num_layers
+        self.device = device
         self.reset()
 
     def __getitem__(self, key: int) -> StaticCache:
@@ -820,7 +821,7 @@ class IrisKeysValues:
 
     def update(self, k: torch.Tensor, v: torch.Tensor, layer_num: int) -> None:
         self._keys_values.key_cache[layer_num], self._keys_values.value_cache[layer_num] = self._keys_values.update(
-            k, v, layer_num, cache_kwargs={"cache_position": torch.arange(k.shape[2])}
+            k, v, layer_num, cache_kwargs={"cache_position": torch.arange(k.shape[2],device = self.device)}
         )
         if self._size[layer_num] != k.size(2):
             self._size[layer_num] += k.size(2)
