@@ -26,6 +26,7 @@ inputs = tokenizer("Bitcoin is", return_tensors="pt")
 inputs = {k: v.cuda() for k, v in inputs.items()}
 out = model.generate(**inputs, max_length=64)
 print(tokenizer.decode(out[0]))
+# > # Bitcoin is a digital currency that is created and held electronically. No one controls it. Bitcoins aren’t printed, like dollars or euros – they’re produced by people and businesses running computers all around the world, using software that solves mathematical
 # Or manually:
 o = model(torch.tensor([[0, 1]]).cuda())
 ```
