@@ -201,9 +201,7 @@ class TokenizerPushToHubTester(unittest.TestCase):
                 tokenizer = BertTokenizer(vocab_file)
 
                 # Push to hub via save_pretrained
-                tokenizer.save_pretrained(
-                    tmp_dir, repo_id=tmp_repo, push_to_hub=True, token=self._token
-                )
+                tokenizer.save_pretrained(tmp_dir, repo_id=tmp_repo, push_to_hub=True, token=self._token)
 
                 new_tokenizer = BertTokenizer.from_pretrained(tmp_repo)
                 self.assertDictEqual(new_tokenizer.vocab, tokenizer.vocab)
@@ -246,9 +244,7 @@ class TokenizerPushToHubTester(unittest.TestCase):
                 tokenizer = AutoTokenizer.from_pretrained(tmp_repo, trust_remote_code=True)
                 # Can't make an isinstance check because the new_model.config is from the FakeConfig class of a dynamic module
                 self.assertEqual(tokenizer.__class__.__name__, "CustomTokenizerFast")
-                tokenizer = AutoTokenizer.from_pretrained(
-                    tmp_repo, use_fast=False, trust_remote_code=True
-                )
+                tokenizer = AutoTokenizer.from_pretrained(tmp_repo, use_fast=False, trust_remote_code=True)
                 # Can't make an isinstance check because the new_model.config is from the FakeConfig class of a dynamic module
                 self.assertEqual(tokenizer.__class__.__name__, "CustomTokenizer")
             finally:
@@ -278,9 +274,7 @@ class TokenizerPushToHubTester(unittest.TestCase):
                 tokenizer = AutoTokenizer.from_pretrained(tmp_repo, trust_remote_code=True)
                 # Can't make an isinstance check because the new_model.config is from the FakeConfig class of a dynamic module
                 self.assertEqual(tokenizer.__class__.__name__, "CustomTokenizerFast")
-                tokenizer = AutoTokenizer.from_pretrained(
-                    tmp_repo, use_fast=False, trust_remote_code=True
-                )
+                tokenizer = AutoTokenizer.from_pretrained(tmp_repo, use_fast=False, trust_remote_code=True)
                 # Can't make an isinstance check because the new_model.config is from the FakeConfig class of a dynamic module
                 self.assertEqual(tokenizer.__class__.__name__, "CustomTokenizer")
             finally:

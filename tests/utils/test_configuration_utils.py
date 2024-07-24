@@ -107,7 +107,6 @@ class ConfigPushToHubTester(unittest.TestCase):
             pass
 
     def test_push_to_hub(self):
-
         with tempfile.TemporaryDirectory() as tmp_dir:
             try:
                 tmp_repo = f"{USER}/test-config-{Path(tmp_dir).name}"

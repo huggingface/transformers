@@ -141,9 +141,7 @@ class ImageProcessorPushToHubTester(unittest.TestCase):
                 tmp_repo = f"valid_org/test-image-processor-{Path(tmp_dir).name}"
                 image_processor = ViTImageProcessor.from_pretrained(SAMPLE_IMAGE_PROCESSING_CONFIG_DIR)
                 # Push to hub via save_pretrained
-                image_processor.save_pretrained(
-                    tmp_dir, repo_id=tmp_repo, push_to_hub=True, token=self._token
-                )
+                image_processor.save_pretrained(tmp_dir, repo_id=tmp_repo, push_to_hub=True, token=self._token)
 
                 new_image_processor = ViTImageProcessor.from_pretrained(tmp_repo)
                 for k, v in image_processor.__dict__.items():
@@ -166,9 +164,7 @@ class ImageProcessorPushToHubTester(unittest.TestCase):
                     {"AutoImageProcessor": "custom_image_processing.CustomImageProcessor"},
                 )
 
-                new_image_processor = AutoImageProcessor.from_pretrained(
-                    tmp_repo, trust_remote_code=True
-                )
+                new_image_processor = AutoImageProcessor.from_pretrained(tmp_repo, trust_remote_code=True)
                 # Can't make an isinstance check because the new_image_processor is from the CustomImageProcessor class of a dynamic module
                 self.assertEqual(new_image_processor.__class__.__name__, "CustomImageProcessor")
             finally:
