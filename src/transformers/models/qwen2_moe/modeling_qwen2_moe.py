@@ -508,6 +508,7 @@ class Qwen2MoeFlashAttention2(Qwen2MoeAttention):
             value_states,
             attention_mask,
             q_len,
+            position_ids=position_ids,
             dropout=dropout_rate,
             sliding_window=sliding_window,
             is_causal=self.is_causal,
@@ -969,7 +970,7 @@ class Qwen2MoeModel(Qwen2MoePreTrainedModel):
                 use_cache = False
 
         use_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache):
+        if use_cache and not isinstance(past_key_values, Cache) and not self.training:
             use_legacy_cache = True
             past_key_values = DynamicCache.from_legacy_cache(past_key_values)
             logger.warning_once(
