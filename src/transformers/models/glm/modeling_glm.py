@@ -993,7 +993,7 @@ class GLMModel(GLMPreTrainedModel):
         config: GLMConfig
     """
 
-    def __init__(self, config: GLMConfig, device=None):
+    def __init__(self, config: GLMConfig, device=None, add_lm_head=True):
         super().__init__(config)
 
         def default_init(cls, *args, **kwargs):
@@ -1021,7 +1021,8 @@ class GLMModel(GLMPreTrainedModel):
             device=device
         )
         self.encoder = init_method(GLMTransformer, config, **init_kwargs)
-        self.output_layer = init_method(nn.Linear, config.hidden_size, config.vocab_size, bias=False, **init_kwargs)
+        if add_lm_head:
+            self.output_layer = init_method(nn.Linear, config.hidden_size, config.vocab_size, bias=False, **init_kwargs)
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1349,7 +1350,7 @@ class GLMForSequenceClassification(GLMPreTrainedModel):
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        self.transformer = GLMModel(config)
+        self.transformer = GLMModel(config, add_lm_head=False)
         self.classifier_head = nn.Linear(config.hidden_size, config.num_labels, bias=True)
 
         # Initialize weights and apply final processing
@@ -1465,7 +1466,7 @@ class GLMForTokenClassification(GLMPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.transformer = GLMModel(config)
+        self.transformer = GLMModel(config, add_lm_head=False)
         if hasattr(config, "classifier_dropout") and config.classifier_dropout is not None:
             classifier_dropout = config.classifier_dropout
         elif hasattr(config, "hidden_dropout") and config.hidden_dropout is not None:
