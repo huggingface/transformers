@@ -464,7 +464,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
         >>> processor = AutoProcessor.from_pretrained("facebook/wav2vec2-xls-r-300m-en-to-15")
         >>> model = SpeechEncoderDecoderModel.from_pretrained("facebook/wav2vec2-xls-r-300m-en-to-15")
 
-        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True)
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
         >>> input_values = processor(ds[0]["audio"]["array"], return_tensors="pt").input_values
         >>> # Inference: Translate English speech to German

@@ -32,7 +32,7 @@ def _fetch_dims(tree: Union[dict, list, tuple, torch.Tensor]) -> List[Tuple[int,
     elif isinstance(tree, torch.Tensor):
         shapes.append(tree.shape)
     else:
-        raise ValueError("Not supported")
+        raise TypeError("Not supported")
 
     return shapes
 
@@ -302,7 +302,7 @@ def chunk_layer(
             else:
                 out[i : i + chunk_size] = output_chunk
         else:
-            raise ValueError("Not supported")
+            raise TypeError("Not supported")
 
         i += chunk_size
 

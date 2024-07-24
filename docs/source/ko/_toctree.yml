@@ -27,6 +27,8 @@
     title: 에이전트
   - local: llm_tutorial
     title: 대규모 언어 모델로 생성하기
+  - local: in_translation
+    title: (번역중)Chatting with Transformers
   title: 튜토리얼
 - sections:
   - isExpanded: false
@@ -131,21 +133,41 @@
     title: (번역중) Notebooks with examples
   - local: community
     title: 커뮤니티 리소스
-  - local: custom_tools
-    title: 사용자 정의 도구와 프롬프트
   - local: troubleshooting
     title: 문제 해결
   - local: in_translation
-    title: (번역중) Contribute new quantization method
+    title: (번역중) Interoperability with GGUF files
   title: (번역중) 개발자 가이드
+- sections:
+  - local: in_translation
+    title: (번역중) Getting started
+  - local: in_translation
+    title: (번역중) bitsandbytes
+  - local: in_translation
+    title: (번역중) GPTQ
+  - local: in_translation
+    title: (번역중) AWQ
+  - local: in_translation
+    title: (번역중) AQLM
+  - local: in_translation
+    title: (번역중) Quanto
+  - local: in_translation
+    title: (번역중) EETQ
+  - local: in_translation
+    title: (번역중) HQQ
+  - local: in_translation
+    title: (번역중) Optimum
+  - local: in_translation
+    title: (번역중) Contribute new quantization method
+  title: (번역중) 경량화 메소드
 - sections:
   - local: performance
     title: 성능 및 확장성
   - local: in_translation
-    title: (번역중) Quantization
+    title: (번역중) LLM inference optimization
   - sections:
     - local: in_translation
-      title: (번역중) Training on one GPU
+      title: (번역중) Methods and tools for efficient training on a single GPU
     - local: perf_train_gpu_many
       title: 다중 GPU에서 훈련 진행하기
     - local: in_translation
@@ -191,7 +213,7 @@
       title: 테스트
     - local: pr_checks
       title: Pull Request에 대한 검사
-  title: (번역중) 기여하기
+  title: 기여하기
 - sections:
   - local: philosophy
     title: 이념과 목표

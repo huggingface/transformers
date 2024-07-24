@@ -429,6 +429,7 @@ class Qwen2FlashAttention2(Qwen2Attention):
             value_states,
             attention_mask,
             q_len,
+            position_ids=position_ids,
             dropout=dropout_rate,
             sliding_window=sliding_window,
             is_causal=self.is_causal,
