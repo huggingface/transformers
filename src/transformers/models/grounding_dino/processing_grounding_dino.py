@@ -77,8 +77,7 @@ class GroundingDinoProcessorKwargs(ProcessingKwargs, total=False):
             "return_length": False,
             "verbose": True,
         },
-        "images_kwargs": {
-        },
+        "images_kwargs": {},
     }
 
 
