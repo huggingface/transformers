@@ -1511,10 +1511,10 @@ class TikTokenConverter:
         tokenizer = Tokenizer(BPE(vocab_scores, merges, fuse_unk=False))
         if hasattr(tokenizer.model, "ignore_merges"):
             tokenizer.model.ignore_merges = True
-        return tokenizer, []
+        return tokenizer
 
     def converted(self) -> Tokenizer:
-        tokenizer, _ = self.tokenizer()
+        tokenizer = self.tokenizer()
         tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
             [
                 pre_tokenizers.Split(Regex(self.pattern), behavior="isolated", invert=False),
