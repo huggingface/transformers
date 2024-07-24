@@ -364,7 +364,7 @@ def _crop_past_key_values(model, past_key_values, max_length):
                 )
             )
         past_key_values = tuple(new_past)
-    # gptbigcode is special
+    # gptbigcode is special and stores kv in shape (batch_size, seq_len, dim), if it's a multi_query model
     elif "gptbigcode" in model.__class__.__name__.lower() or (
         model.config.architectures is not None and "gptbigcode" in model.config.architectures[0].lower()
     ):

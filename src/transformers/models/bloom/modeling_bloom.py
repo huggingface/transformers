@@ -204,7 +204,7 @@ class BloomAttention(nn.Module):
         self.dense = nn.Linear(self.hidden_size, self.hidden_size)
         self.attention_dropout = nn.Dropout(config.attention_dropout)
 
-    def _shape(self, fused_qkv: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def _reshape(self, fused_qkv: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Split the last dimension into (num_heads, head_dim) and reshapes to (bs, heads, len, dim) shape
         without making any copies, results share same memory storage as `fused_qkv`
@@ -263,7 +263,7 @@ class BloomAttention(nn.Module):
     ):
         batch_size, q_length, _ = hidden_states.shape
         fused_qkv = self.query_key_value(hidden_states)  # [batch_size, seq_length, 3 x hidden_size]
-        (query_layer, key_layer, value_layer) = self._shape(
+        (query_layer, key_layer, value_layer) = self._reshape(
             fused_qkv
         )  # 3 x [batch_size, num_heads, seq_length, head_dim]
 
@@ -638,7 +638,7 @@ class BloomModel(BloomPreTrainedModel):
             use_legacy_cache = True
             past_key_values = DynamicCache.from_legacy_cache(past_key_values)
             logger.warning_once(
-                "Using `past_key_values` as a tuple is deprecated and will be removed in v4.43. "
+                "Using `past_key_values` as a tuple is deprecated and will be removed in v4.45. "
                 "Please use an appropriate `Cache` class (https://huggingface.co/docs/transformers/v4.41.3/en/internal/generation_utils#transformers.Cache)"
             )
 
