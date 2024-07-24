@@ -424,7 +424,6 @@ class GLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
             if config.is_encoder_decoder:
                 hidden_states = outputs.decoder_hidden_states
-
                 self.assertIsInstance(hidden_states, (list, tuple))
                 self.assertEqual(len(hidden_states), expected_num_layers + 1)
                 seq_len = getattr(self.model_tester, "seq_length", None)
@@ -447,17 +446,7 @@ class GLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    @unittest.skip(reason="GLM buffers include complex numbers, which breaks this test")
-    def test_save_load_fast_init_from_base(self):
-        pass
 
-    @unittest.skip(reason="GLM uses GQA on all models so the KV cache is a non standard format")
-    def test_past_key_values_format(self):
-        pass
-
-    @unittest.skip(reason="SQRBound is known to have issues with gc")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
     @require_flash_attn
     @require_torch_gpu
     @pytest.mark.flash_attn_test
