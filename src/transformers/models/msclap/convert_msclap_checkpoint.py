@@ -201,4 +201,7 @@ if __name__ == "__main__":
     parser.add_argument("--repo_id", default=None, type=str, help="Path to hf config.json of model to convert")
     args = parser.parse_args()
 
-    convert_msclap_checkpoint(args.version, args.pytorch_dump_folder_path, repo_id=args.repo_id)
+    # convert_msclap_checkpoint(args.version, args.pytorch_dump_folder_path, repo_id=args.repo_id)
+
+    pytorch_dump_folder_path = "/home/kamil/cache/msclap/"
+    convert_msclap_checkpoint("2023", pytorch_dump_folder_path, repo_id="kamilakesbi/ms_clap")

@@ -140,6 +140,7 @@ class MSClapTextConfig(PretrainedConfig):
         scale_attn_by_inverse_layer_idx=False,
         reorder_and_upcast_attn=False,
         projection_dim=768,
+        projection_hidden_act='gelu', 
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -199,6 +200,7 @@ class MSClapTextConfig(PretrainedConfig):
         self.eos_token_id = eos_token_id
         self.scale_attn_by_inverse_layer_idx = scale_attn_by_inverse_layer_idx
         self.reorder_and_upcast_attn = reorder_and_upcast_attn
+        self.projection_hidden_act = projection_hidden_act
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
@@ -218,7 +220,7 @@ class MSClapTextConfig(PretrainedConfig):
 
         return cls.from_dict(config_dict, **kwargs)
 
-
+# Adapted from transformers.models.clap.configuration_clap.ClapAudioConfig with Clap->MSClap, CLAP->MSCLAP, laion/clap-htsat-fused->microsoft/ms_clap
 class MSClapAudioConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MSClapAudioModel`]. It is used to instantiate a
@@ -311,6 +313,7 @@ class MSClapAudioConfig(PretrainedConfig):
 
     model_type = "msclap_audio_model"
 
+
     def __init__(
         self,
         window_size=8,
@@ -338,7 +341,7 @@ class MSClapAudioConfig(PretrainedConfig):
         mlp_ratio=4.0,
         aff_block_r=4,
         num_hidden_layers=4,
-        projection_hidden_act="relu",
+        projection_hidden_act="gelu",
         layer_norm_eps=1e-5,
         initializer_factor=1.0,
         **kwargs,
@@ -375,6 +378,7 @@ class MSClapAudioConfig(PretrainedConfig):
         self.projection_hidden_act = projection_hidden_act
 
     @classmethod
+    # Copied from transformers.models.clap.configuration_clap.ClapAudioConfig.from_pretrained with clap->msclap
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
         cls._set_token_in_kwargs(kwargs)
 
@@ -405,9 +409,9 @@ class MSClapConfig(PretrainedConfig):
 
     Args:
         text_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`ClapTextConfig`].
+            Dictionary of configuration options used to initialize [`MSClapTextConfig`].
         audio_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`ClapAudioConfig`].
+            Dictionary of configuration options used to initialize [`MSClapAudioConfig`].
         logit_scale_init_value (`float`, *optional*, defaults to 14.29):
             The initial value of the *logit_scale* parameter. Default is used as per the original CLAP implementation.
         projection_dim (`int`, *optional*, defaults to 1024):
@@ -422,25 +426,25 @@ class MSClapConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import ClapConfig, ClapModel
+    >>> from transformers import MSClapConfig, MSClapModel
 
-    >>> # Initializing a ClapConfig with laion-ai/base style configuration
-    >>> configuration = ClapConfig()
+    >>> # Initializing a MSClapConfig with microsoft/ms_clap style configuration
+    >>> configuration = MSClapConfig()
 
-    >>> # Initializing a ClapModel (with random weights) from the laion-ai/base style configuration
-    >>> model = ClapModel(configuration)
+    >>> # Initializing a MSClapModel (with random weights) from the microsoft/ms_clap style configuration
+    >>> model = MSClapModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
 
-    >>> # We can also initialize a ClapConfig from a ClapTextConfig and a ClapAudioConfig
-    >>> from transformers import ClapTextConfig, ClapAudioConfig
+    >>> # We can also initialize a MSClapConfig from a MSClapTextConfig and a MSClapAudioConfig
+    >>> from transformers import MSClapTextConfig, MSClapAudioConfig
 
-    >>> # Initializing a ClapText and ClapAudioConfig configuration
-    >>> config_text = ClapTextConfig()
-    >>> config_audio = ClapAudioConfig()
+    >>> # Initializing a MSClapText and MSClapAudioConfig configuration
+    >>> config_text = MSClapTextConfig()
+    >>> config_audio = MSClapAudioConfig()
 
-    >>> config = ClapConfig.from_text_audio_configs(config_text, config_audio)
+    >>> config = MSClapConfig.from_text_audio_configs(config_text, config_audio)
     ```"""
 
     model_type = "clap"
@@ -477,6 +481,7 @@ class MSClapConfig(PretrainedConfig):
         self.num_hidden_layers = self.audio_config.num_hidden_layers + len(self.audio_config.depths)
 
     @classmethod
+    # Copied from transformers.models.clap.configuration_clap.ClapConfig.from_text_audio_configs with clap->msclap
     def from_text_audio_configs(cls, text_config: MSClapTextConfig, audio_config: MSClapAudioConfig, **kwargs):
         r"""
         Instantiate a [`MSClapConfig`] (or a derived class) from clap text model configuration and clap audio model

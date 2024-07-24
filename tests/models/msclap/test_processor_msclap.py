@@ -42,6 +42,7 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
 
 @require_torchaudio
 @require_sentencepiece
+# Copied from tests.models.clap.test_modeling_clap.ClapModelTest with Clap->MSClap, laion/clap-htsat-fused->kamilakesbi/ms_clap
 class MSClapProcessorTest(unittest.TestCase):
     def setUp(self):
         self.checkpoint = "kamilakesbi/ms_clap"

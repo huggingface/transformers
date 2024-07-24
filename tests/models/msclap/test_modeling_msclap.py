@@ -1,4 +1,4 @@
-# Copied from tests.models.clap.test_modeling_clap.py with Clap->MSClap
+# Copied from tests.models.clap.test_modeling_clap with Clap->MSClap
 # coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
@@ -50,7 +50,7 @@ if is_torch_available():
         MSClapTextModelWithProjection,
     )
 
-
+# Copied from tests.models.clap.test_modeling_clap.ClapAudioModelTester with Clap->MSClap
 class MSClapAudioModelTester:
     def __init__(
         self,
@@ -155,6 +155,7 @@ class MSClapAudioModelTester:
 
 
 @require_torch
+# Copied from tests.models.clap.test_modeling_clap.ClapAudioModelTest with Clap->MSClap, laion/clap-htsat-fused->kamilakesbi/ms_clap
 class MSClapAudioModelTest(ModelTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as MSCLAP does not use input_ids, inputs_embeds,
@@ -465,6 +466,7 @@ class MSClapTextModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertTrue(hasattr(model, "text_projection"))
 
 
+# Copied from tests.models.clap.test_modeling_clap.ClapModelTester with Clap->MSClap
 class MSClapModelTester:
     def __init__(self, parent, text_kwargs=None, audio_kwargs=None, is_training=True):
         if text_kwargs is None:
@@ -515,6 +517,7 @@ class MSClapModelTester:
 
 
 @require_torch
+# Copied from tests.models.clap.test_modeling_clap.ClapModelTest with Clap->MSClap, laion/clap-htsat-fused->kamilakesbi/ms_clap
 class MSClapModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (MSClapModel,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": MSClapModel} if is_torch_available() else {}
@@ -647,12 +650,14 @@ class MSClapModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
         # Save MSClapConfig and check if we can load MSClapAudioConfig from it
         with tempfile.TemporaryDirectory() as tmp_dir_name:
+            # Ignore Copy
             config.audio_config.save_pretrained(tmp_dir_name)
             audio_config = MSClapAudioConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.audio_config.to_dict(), audio_config.to_dict())
 
         # Save MSClapConfig and check if we can load MSClapTextConfig from it
         with tempfile.TemporaryDirectory() as tmp_dir_name:
+            # Ignore Copy
             config.text_config.save_pretrained(tmp_dir_name)
             text_config = MSClapTextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
@@ -667,8 +672,8 @@ class MSClapModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 @slow
 @require_torch
 class MSClapModelIntegrationTest(unittest.TestCase):
-    def test_integration_unfused(self):
-        EXPECTED_MEANS_UNFUSED = 6.15e-05
+    def test_integration(self):
+        EXPECTED_MEANS = 6.15e-05
 
         librispeech_dummy = load_dataset(
             "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
@@ -680,16 +685,15 @@ class MSClapModelIntegrationTest(unittest.TestCase):
         model = MSClapModel.from_pretrained(model_id).to(torch_device)
         processor = MSClapProcessor.from_pretrained(model_id)
 
-        # for padding in self.paddings:
         inputs = processor(audios=audio_sample["audio"]["array"], return_tensors="pt").to(torch_device)
 
         audio_embed = model.get_audio_features(**inputs)
-        expected_mean = EXPECTED_MEANS_UNFUSED
+        expected_mean = EXPECTED_MEANS
 
-        self.assertTrue(torch.allclose(audio_embed.cpu().mean(), torch.tensor([expected_mean]), atol=1e-3, rtol=1e-3))
+        self.assertTrue(torch.allclose(audio_embed.cpu().mean(), torch.tensor([expected_mean]), atol=1e-7, rtol=1e-7))
 
-    def test_batched_unfused(self):
-        EXPECTED_MEANS_FUSED = 6.62e-05
+    def test_batched(self):
+        EXPECTED_MEANS = 6.62e-05
 
         librispeech_dummy = load_dataset(
             "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
@@ -704,6 +708,6 @@ class MSClapModelIntegrationTest(unittest.TestCase):
         inputs = processor(audios=audio_samples, return_tensors="pt").to(torch_device)
 
         audio_embed = model.get_audio_features(**inputs)
-        expected_mean = EXPECTED_MEANS_FUSED
+        expected_mean = EXPECTED_MEANS
 
-        self.assertTrue(torch.allclose(audio_embed.cpu().mean(), torch.tensor([expected_mean]), atol=1e-3, rtol=1e-3))
+        self.assertTrue(torch.allclose(audio_embed.cpu().mean(), torch.tensor([expected_mean]), atol=1e-7, rtol=1e-7))

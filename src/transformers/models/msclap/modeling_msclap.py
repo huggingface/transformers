@@ -1143,7 +1143,7 @@ class MSClapProjectionLayer(nn.Module):
         self.linear2 = nn.Linear(projection_dim, projection_dim, bias=False)
         self.layer_norm = nn.LayerNorm(projection_dim)
         self.drop = nn.Dropout(config.projection_dropout_prob)
-        self.activation = F.gelu
+        self.activation = ACT2FN[config.projection_hidden_act]
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states1 = self.linear1(hidden_states)
@@ -1155,7 +1155,6 @@ class MSClapProjectionLayer(nn.Module):
         return hidden_states
 
 
-# Adapted from transformers.models.clap.modeling_clap.ClapPreTrainedModel with Clap->MSClap
 class MSClapPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1183,7 +1182,7 @@ class MSClapPreTrainedModel(PreTrainedModel):
                 module.bias.data.zero_()
 
 
-# Adapted from transformers.models.clap.modeling_clap.ClapPreTrainedModel with Clap->MSClap
+# Copied from transformers.models.clap.modeling_clap.ClapPreTrainedModel with Clap->MSClap, laion/clap-htsat-fused->microsoft/ms_clap
 class MSClapAudioModel(MSClapPreTrainedModel):
     config_class = MSClapAudioConfig
     main_input_name = "input_features"
@@ -1219,8 +1218,8 @@ class MSClapAudioModel(MSClapPreTrainedModel):
         >>> dataset = load_dataset("hf-internal-testing/ashraq-esc50-1-dog-example")
         >>> audio_sample = dataset["train"]["audio"][0]["array"]
 
-        >>> model = MSClapAudioModel.from_pretrained("microsoft/msclap")
-        >>> processor = AutoProcessor.from_pretrained("microsoft/msclap")
+        >>> model = MSClapAudioModel.from_pretrained("microsoft/ms_clap")
+        >>> processor = AutoProcessor.from_pretrained("microsoft/ms_clap")
 
         >>> inputs = processor(audios=audio_sample, return_tensors="pt")
 
