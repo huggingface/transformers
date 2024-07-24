@@ -608,7 +608,7 @@ class SpmConverter(Converter):
 
             # To adhere to the BPE standard, if ignore_merges=False (default), we must
             # remove all user-defined tokens that can be obtained via merges
-            valid_tokens_from_merges = set(left + right for left, right in merges)
+            valid_tokens_from_merges = {left + right for left, right in merges}
 
             spm_added_tokens = [
                 (id, token, special)
