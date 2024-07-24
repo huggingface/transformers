@@ -994,4 +994,5 @@ class ProcessorMixin(PushToHubMixin):
 ProcessorMixin.push_to_hub = copy_func(ProcessorMixin.push_to_hub)
 if ProcessorMixin.push_to_hub.__doc__ is not None:
     ProcessorMixin.push_to_hub.__doc__ = ProcessorMixin.push_to_hub.__doc__.format(
-        object="processor", object_class="AutoProcessor", object_
+        object="processor", object_class="AutoProcessor", object_files="processor files"
+    )
