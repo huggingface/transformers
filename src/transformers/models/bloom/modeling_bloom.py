@@ -171,7 +171,7 @@ class BloomGelu(nn.Module):
 
 
 class BloomAttention(nn.Module):
-    def __init__(self, config: BloomConfig, layer_idx=None):
+    def __init__(self, config: BloomConfig, layer_idx: Optional[int] = None):
         super().__init__()
 
         self.pretraining_tp = config.pretraining_tp
