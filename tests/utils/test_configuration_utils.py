@@ -194,18 +194,24 @@ class ConfigPushToHubTester(unittest.TestCase):
                 self._try_delete_repo(repo_id=tmp_repo, token=self._token)
 
     def test_push_to_hub_dynamic_config(self):
-        CustomConfig.register_for_auto_class()
-        config = CustomConfig(attribute=42)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            try:
+                tmp_repo = f"{USER}/test-dynamic-config-{Path(tmp_dir).name}"
 
-        config.push_to_hub("test-dynamic-config", token=self._token)
+                CustomConfig.register_for_auto_class()
+                config = CustomConfig(attribute=42)
 
-        # This has added the proper auto_map field to the config
-        self.assertDictEqual(config.auto_map, {"AutoConfig": "custom_configuration.CustomConfig"})
+                config.push_to_hub(tmp_repo, token=self._token)
 
-        new_config = AutoConfig.from_pretrained(f"{USER}/test-dynamic-config", trust_remote_code=True)
-        # Can't make an isinstance check because the new_config is from the FakeConfig class of a dynamic module
-        self.assertEqual(new_config.__class__.__name__, "CustomConfig")
-        self.assertEqual(new_config.attribute, 42)
+                # This has added the proper auto_map field to the config
+                self.assertDictEqual(config.auto_map, {"AutoConfig": "custom_configuration.CustomConfig"})
+
+                new_config = AutoConfig.from_pretrained(tmp_repo, trust_remote_code=True)
+                # Can't make an isinstance check because the new_config is from the FakeConfig class of a dynamic module
+                self.assertEqual(new_config.__class__.__name__, "CustomConfig")
+                self.assertEqual(new_config.attribute, 42)
+            finally:
+                self._try_delete_repo(repo_id=tmp_repo, token=self._token)
 
 
 class ConfigTestUtils(unittest.TestCase):
