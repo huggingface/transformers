@@ -549,6 +549,15 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         original_model = LlamaForCausalLM(config).to(torch_device)
         original_model(**model_inputs)
 
+        # from a config with both 'type' and 'rope_type'  -> ✅ they can coexist (and both are present in the config)
+        config = _reinitialize_config(
+            base_config, {"rope_scaling": {"type": "linear", "rope_type": "linear", "factor": 10.0}}
+        )
+        self.assertTrue(config.rope_scaling["type"] == "linear")
+        self.assertTrue(config.rope_scaling["rope_type"] == "linear")
+        original_model = LlamaForCausalLM(config).to(torch_device)
+        original_model(**model_inputs)
+
         # from a config with parameters in a bad range ('factor' should be >= 1.0) -> ⚠️ throws a warning
         with self.assertLogs("transformers.modeling_rope_utils", level="WARNING") as logs:
             config = _reinitialize_config(base_config, {"rope_scaling": {"rope_type": "linear", "factor": -999.0}})
