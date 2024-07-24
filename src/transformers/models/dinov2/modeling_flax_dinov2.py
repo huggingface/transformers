@@ -18,7 +18,8 @@ import collections.abc
 import math
 import os
 from typing import Optional, Tuple
-#from transformers import BitImageProcessor
+
+# from transformers import BitImageProcessor
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
@@ -129,30 +130,32 @@ class FlaxDinov2PatchEmbeddings(nn.Module):
 
 
 def interpolate_pos_encoding(config, hidden_states, height, width, position_embeddings):
-    num_patches = hidden_states.shape[1] - 1                     # ? 256
-    num_positions = position_embeddings.shape[1] - 1             # ? 1369
+    num_patches = hidden_states.shape[1] - 1  # ? 256
+    num_positions = position_embeddings.shape[1] - 1  # ? 1369
     if num_patches == num_positions and height == width:
         return position_embeddings
     class_pos_embed = position_embeddings[:, 0]
     patch_pos_embed = position_embeddings[:, 1:]
     dim = hidden_states.shape[-1]
 
-    height = height // config.patch_size                         # ? 224//14 = 16
-    width = width // config.patch_size                           # ? 224//14 = 16
+    height = height // config.patch_size  # ? 224//14 = 16
+    width = width // config.patch_size  # ? 224//14 = 16
     height, width = height + 0.1, width + 0.1
 
-    patch_pos_embed = patch_pos_embed.reshape((1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim))     # ? (1, 37, 37, 768)
+    patch_pos_embed = patch_pos_embed.reshape(
+        (1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim)
+    )  # ? (1, 37, 37, 768)
     patch_pos_embed = jnp.transpose(patch_pos_embed, (0, 3, 1, 2))  # ? (1, 768, 37, 37)
 
-    new_height_ratio = jnp.float32(height / math.sqrt(num_positions))    # ? 16/37
-    new_width_ratio = jnp.float32(width / math.sqrt(num_positions))      # ? 16/37
+    new_height_ratio = jnp.float32(height / math.sqrt(num_positions))  # ? 16/37
+    new_width_ratio = jnp.float32(width / math.sqrt(num_positions))  # ? 16/37
 
     # patch_pos_embed = jax.image.resize(patch_pos_embed, shape=(hidden_states.shape[0], dim, height, width), method='bicubic', antialias=False)
     scale, translation = (
         jnp.array([new_height_ratio, new_width_ratio], dtype=jnp.float32),
         jnp.array([0.0, 0.0], dtype=jnp.float32),
     )
-    
+
     patch_pos_embed = jax.image.scale_and_translate(
         patch_pos_embed,
         shape=(1, 768, 16, 16),
@@ -175,12 +178,11 @@ def interpolate_pos_encoding(config, hidden_states, height, width, position_embe
     # patch_pos_embed = processor(patch_pos_embed)["pixel_values"]
     # print(patch_pos_embed, patch_pos_embed.mean())
 
-
     if True:
         patch_pos_embed = load_file(os.path.join(os.path.dirname(__file__), "Dinov2_pos_encoding.safetensors"))[
             "pos_encoding"
         ]  # ! Remove this if interpolation can be fixed
-    #print(patch_pos_embed, patch_pos_embed.mean())
+    # print(patch_pos_embed, patch_pos_embed.mean())
 
     patch_pos_embed = jnp.transpose(patch_pos_embed, (0, 2, 3, 1)).reshape((hidden_states.shape[0], -1, dim))
 

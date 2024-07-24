@@ -71,8 +71,8 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_flax_dinov2 import (
-            FlaxDinov2ForImageClassification, 
-            FlaxDinov2Model, 
+            FlaxDinov2ForImageClassification,
+            FlaxDinov2Model,
             FlaxDinov2PreTrainedModel,
         )
 
