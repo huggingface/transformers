@@ -16,15 +16,14 @@
 Processor class for IDEFICS.
 """
 
+import warnings
 from typing import Callable, List, Optional, Union
 from urllib.parse import urlparse
-import warnings
 
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, TextInput, TruncationStrategy, PreTokenizedInput
-from ...utils import is_tf_available, is_torch_available
-from ...utils import TensorType
+from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
+from ...utils import TensorType, is_tf_available, is_torch_available
 
 
 if is_torch_available():
@@ -209,7 +208,7 @@ class IdeficsProcessor(ProcessorMixin):
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        legacy = True,
+        legacy=True,
         prompts: Optional[Union[List[TextInput], List[List[TextInput]]]] = None,
         transform: Callable = None,
         add_eos_token=False,
@@ -335,13 +334,16 @@ class IdeficsProcessor(ProcessorMixin):
             # Check if batched images are provided
             if not isinstance(images, (list, tuple)):
                 images = [images]
+            if not isinstance(text, (list, tuple)):
+                text = [text] * len(images)
             # Check if batched text is provided
-            if isinstance(text, (list, tuple)) and len(text) > 1:
-                raise ValueError("When using the image-text-to-text behavior, a single prompt should be given.")
-            text_batched = [text] * len(images)
-            prompts = list(zip(images, text_batched))
-
-
+            print("images: ", images)
+            print("text: ", text)
+            if isinstance(text, (list, tuple)) and len(text) != len(images):
+                raise ValueError(
+                    "When using the image-text-to-text behavior, the number of prompts should be the same as the number of images."
+                )
+            prompts = list(zip(images, text))
 
         # if the value isn't overriden by the user, check if the tokenizer was trained with this token and then use it
         if add_end_of_utterance_token is None:

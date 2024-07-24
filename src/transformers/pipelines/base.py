@@ -31,9 +31,9 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 from ..dynamic_module_utils import custom_object_save
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
 from ..image_processing_utils import BaseImageProcessor
-from ..processing_utils import ProcessorMixin
 from ..modelcard import ModelCard
 from ..models.auto.configuration_auto import AutoConfig
+from ..processing_utils import ProcessorMixin
 from ..tokenization_utils import PreTrainedTokenizer
 from ..utils import (
     ModelOutput,
@@ -776,7 +776,11 @@ def build_pipeline_init_args(
 
 
 PIPELINE_INIT_ARGS = build_pipeline_init_args(
-    has_tokenizer=True, has_feature_extractor=True, has_image_processor=True, has_processor=True, supports_binary_output=True
+    has_tokenizer=True,
+    has_feature_extractor=True,
+    has_image_processor=True,
+    has_processor=True,
+    supports_binary_output=True,
 )
 
 
@@ -815,7 +819,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         tokenizer: Optional[PreTrainedTokenizer] = None,
         feature_extractor: Optional[PreTrainedFeatureExtractor] = None,
         image_processor: Optional[BaseImageProcessor] = None,
-        processor:Optional[ProcessorMixin] = None,
+        processor: Optional[ProcessorMixin] = None,
         modelcard: Optional[ModelCard] = None,
         framework: Optional[str] = None,
         task: str = "",

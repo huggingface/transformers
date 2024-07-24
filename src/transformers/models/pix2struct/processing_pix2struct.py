@@ -66,7 +66,7 @@ class Pix2StructProcessor(ProcessorMixin):
         return_length: bool = False,
         verbose: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        legacy = True,
+        legacy=True,
         **kwargs,
     ) -> BatchEncoding:
         """

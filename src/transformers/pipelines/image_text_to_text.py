@@ -106,14 +106,6 @@ class ImageTextToTextPipeline(Pipeline):
             text (`str`):
                 The text to be used as a prompt for the generation.
 
-            max_new_tokens (`int`, *optional*):
-                The amount of maximum tokens to generate. By default it will use `generate` default.
-
-            generate_kwargs (`Dict`, *optional*):
-                Pass it to send all of these arguments directly to `generate` allowing full control of this function.
-            timeout (`float`, *optional*, defaults to None):
-                The maximum time in seconds to wait for fetching images from the web. If None, no timeout is set and
-                the call may block forever.
 
         Return:
             A list or a list of list of `dict`: Each result comes as a dictionary with the following key:
@@ -126,33 +118,13 @@ class ImageTextToTextPipeline(Pipeline):
         if image is not None:
             image = load_image(image, timeout=timeout)
 
-        model_type = self.model.config.model_type
-
         kwargs = {"legacy": False}
 
-        # if model_type == "pix2struct":
-        #     kwargs = {"add_special_tokens": False}
-
-        # if model_type == "idefics":
-        #     model_inputs = self.processor(text, return_tensors=self.framework, **kwargs)
-        # temporary while waiting for uniformized processors
         try:
             model_inputs = self.processor(images=image, text=text, return_tensors=self.framework, **kwargs)
         except TypeError:
             kwargs = {}
             model_inputs = self.processor(images=image, text=text, return_tensors=self.framework, **kwargs)
-
-        # if model_type == "git":
-        #     # remove EOS token from input_ids and attention_mask
-        #     model_inputs["input_ids"] = model_inputs["input_ids"][:, :-1]
-        #     model_inputs["attention_mask"] = model_inputs["attention_mask"][:, :-1]
-
-        # if model_type == "vision-encoder-decoder" and self.processor.__class__.__name__ == "DonutProcessor":
-        #     model_inputs["decoder_input_ids"] = self.processor.tokenizer(
-        #         text,
-        #         add_special_tokens=False,
-        #         return_tensors=self.framework,
-        #     ).input_ids
 
         return model_inputs
 

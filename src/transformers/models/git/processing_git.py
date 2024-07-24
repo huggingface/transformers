@@ -17,6 +17,7 @@ Image/Text processor class for GIT
 """
 
 import warnings
+
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
 
