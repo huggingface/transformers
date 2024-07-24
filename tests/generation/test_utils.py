@@ -1389,9 +1389,8 @@ class GenerationTesterMixin:
             eos_token_id=eos_token_id, num_output_tokens=4, max_matching_ngram_size=1
         )
         output_prompt_lookup = cand_generator.get_candidates(input_ids)[0]
-        self.assertTrue(
-            output_prompt_lookup.shape[-1] == 10
-        )  # PLD shouldn't propose any new tokens based on eos-match
+        # PLD shouldn't propose any new tokens based on eos-match
+        self.assertTrue(output_prompt_lookup.shape[-1] == 10)
 
     def test_generate_with_head_masking(self):
         """Test designed for encoder-decoder models to ensure the attention head masking is used."""
