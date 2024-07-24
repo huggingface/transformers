@@ -821,14 +821,9 @@ class Gemma2Model(Gemma2PreTrainedModel):
         past_key_values: Cache,
         output_attentions: bool,
     ):
-        if self.config._attn_implementation == "flash_attention_2":
-            if attention_mask is not None and 0.0 in attention_mask:
-                return attention_mask
-            return None
-
         dtype, device = input_tensor.dtype, input_tensor.device
         min_dtype = torch.finfo(dtype).min
-        sequence_length = input_tensor.shape[1]
+        batch_size, sequence_length = input_tensor.shape[:2]
         if past_key_values is not None:
             target_length = past_key_values.get_max_length()
         else:
@@ -838,7 +833,19 @@ class Gemma2Model(Gemma2PreTrainedModel):
             # in this case we assume that the mask comes already in inverted form and requires no inversion or slicing
             if attention_mask.max() != 0:
                 raise ValueError("Custom 4D attention mask should be passed in inverted form with max==0`")
+            if self.config._attn_implementation == "flash_attention_2":
+                raise ValueError("Custom 4D attention mask should not be passed when Flash_attention is used.")
             causal_mask = attention_mask
+
+        elif self.config._attn_implementation == "flash_attention_2":
+            # Flash attention is a special case. We cannot skip this step and assign mask=None because the cache used
+            # by Gemma2 is a static cache  which means that right-end values will all be zeros for kv. We will need to
+            # mask them out and prepare 2D mask for Flash-attention.
+            causal_mask = torch.ones((batch_size, target_length), dtype=torch.int64, device=device)
+            if attention_mask.shape[1] <= target_length:
+                mask_length = attention_mask.shape[-1]
+                causal_mask[:, :mask_length] = causal_mask[:, :mask_length] * attention_mask
+            return causal_mask
         else:
             causal_mask = torch.full(
                 (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
