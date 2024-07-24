@@ -57,7 +57,7 @@ print((last_hidden_states - traced_outputs[0]).abs().max())
 
 ## Resources
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with DPT.
+A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with DINOv2.
 
 - Demo notebooks for DINOv2 can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/DINOv2). 🌎
 

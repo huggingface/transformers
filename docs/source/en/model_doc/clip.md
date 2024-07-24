@@ -79,6 +79,123 @@ encode the text and prepare the images. The following example shows how to get t
 >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
 ```
 
+
+### Combining CLIP and Flash Attention 2
+
+First, make sure to install the latest version of Flash Attention 2.
+
+```bash
+pip install -U flash-attn --no-build-isolation
+```
+
+Make also sure that you have a hardware that is compatible with Flash-Attention 2. Read more about it in the official documentation of flash-attn repository. Make also sure to load your model in half-precision (e.g. `torch.float16`)
+
+<Tip warning={true}>
+
+For small batch sizes, you might notice a slowdown in your model when using flash attention. Refer to the section [Expected speedups with Flash Attention and SDPA](#Expected-speedups-with-Flash-Attention-and-SDPA) below and select an appropriate attention implementation.
+
+</Tip>
+
+To load and run a model using Flash Attention 2, refer to the snippet below:
+
+```python
+>>> import torch
+>>> import requests
+>>> from PIL import Image
+
+>>> from transformers import CLIPProcessor, CLIPModel
+
+>>> device = "cuda"
+>>> torch_dtype = torch.float16
+
+>>> model = CLIPModel.from_pretrained(
+...     "openai/clip-vit-base-patch32",
+...     attn_implementation="flash_attention_2",
+...     device_map=device,
+...     torch_dtype=torch_dtype,
+... )
+>>> processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+
+>>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+>>> image = Image.open(requests.get(url, stream=True).raw)
+
+>>> inputs = processor(text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True)
+>>> inputs.to(device)
+
+>>> with torch.no_grad():
+...     with torch.autocast(device):
+...         outputs = model(**inputs)
+
+>>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
+>>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
+>>> print(probs)
+tensor([[0.9946, 0.0052]], device='cuda:0', dtype=torch.float16)
+```
+
+
+### Using Scaled Dot Product Attention (SDPA)
+
+PyTorch includes a native scaled dot-product attention (SDPA) operator as part of `torch.nn.functional`. This function 
+encompasses several implementations that can be applied depending on the inputs and the hardware in use. See the 
+[official documentation](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html) 
+or the [GPU Inference](https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#pytorch-scaled-dot-product-attention)
+page for more information.
+
+SDPA is used by default for `torch>=2.1.1` when an implementation is available, but you may also set 
+`attn_implementation="sdpa"` in `from_pretrained()` to explicitly request SDPA to be used.
+
+```python
+from transformers import CLIPModel
+
+model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32", torch_dtype=torch.float16, attn_implementation="sdpa")
+```
+
+For the best speedups, we recommend loading the model in half-precision (e.g. `torch.float16` or `torch.bfloat16`).
+
+### Expected speedups with Flash Attention and SDPA
+
+On a local benchmark (NVIDIA A10G, PyTorch 2.3.1+cu121) with `float16`, we saw the following speedups during inference for `"openai/clip-vit-large-patch14"` checkpoint ([code](https://gist.github.com/qubvel/ac691a54e54f9fae8144275f866a7ff8)):
+
+#### CLIPTextModel
+
+|   Num text labels |   Eager (s/iter) |   FA2 (s/iter) |   FA2 speedup |   SDPA (s/iter) |   SDPA speedup |
+|------------------:|-----------------:|---------------:|--------------:|----------------:|---------------:|
+|                 4 |            0.009 |          0.012 |         0.737 |           0.007 |          1.269 |
+|                16 |            0.009 |          0.014 |         0.659 |           0.008 |          1.187 |
+|                32 |            0.018 |          0.021 |         0.862 |           0.016 |          1.142 |
+|                64 |            0.034 |          0.034 |         1.001 |           0.03  |          1.163 |
+|               128 |            0.063 |          0.058 |         1.09  |           0.054 |          1.174 |
+
+![clip_text_model_viz_3](https://github.com/user-attachments/assets/e9826b43-4e66-4f4c-952b-af4d90bd38eb)
+
+#### CLIPVisionModel
+
+|   Image batch size |   Eager (s/iter) |   FA2 (s/iter) |   FA2 speedup |   SDPA (s/iter) |   SDPA speedup |
+|-------------------:|-----------------:|---------------:|--------------:|----------------:|---------------:|
+|                  1 |            0.016 |          0.013 |         1.247 |           0.012 |          1.318 |
+|                  4 |            0.025 |          0.021 |         1.198 |           0.021 |          1.202 |
+|                 16 |            0.093 |          0.075 |         1.234 |           0.075 |          1.24  |
+|                 32 |            0.181 |          0.147 |         1.237 |           0.146 |          1.241 |
+
+![clip_image_model_viz_3](https://github.com/user-attachments/assets/50a36206-e3b9-4adc-ac8e-926b8b071d63)
+
+#### CLIPModel
+
+|   Image batch size |   Num text labels |   Eager (s/iter) |   FA2 (s/iter) |   FA2 speedup |   SDPA (s/iter) |   SDPA speedup |
+|-------------------:|------------------:|-----------------:|---------------:|--------------:|----------------:|---------------:|
+|                  1 |                 4 |            0.025 |          0.026 |         0.954 |           0.02  |          1.217 |
+|                  1 |                16 |            0.026 |          0.028 |         0.918 |           0.02  |          1.287 |
+|                  1 |                64 |            0.042 |          0.046 |         0.906 |           0.036 |          1.167 |
+|                  4 |                 4 |            0.028 |          0.033 |         0.849 |           0.024 |          1.189 |
+|                  4 |                16 |            0.034 |          0.035 |         0.955 |           0.029 |          1.169 |
+|                  4 |                64 |            0.059 |          0.055 |         1.072 |           0.05  |          1.179 |
+|                 16 |                 4 |            0.096 |          0.088 |         1.091 |           0.078 |          1.234 |
+|                 16 |                16 |            0.102 |          0.09  |         1.129 |           0.083 |          1.224 |
+|                 16 |                64 |            0.127 |          0.11  |         1.157 |           0.105 |          1.218 |
+|                 32 |                 4 |            0.185 |          0.159 |         1.157 |           0.149 |          1.238 |
+|                 32 |                16 |            0.19  |          0.162 |         1.177 |           0.154 |          1.233 |
+|                 32 |                64 |            0.216 |          0.181 |         1.19  |           0.176 |          1.228 |
+
 ## Resources
 
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with CLIP.

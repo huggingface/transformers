@@ -35,8 +35,8 @@ if is_torch_available():
         AutoModelForCausalLM,
         AutoTokenizer,
         DynamicCache,
+        GPT2LMHeadModel,
         LlamaConfig,
-        LlamaForCausalLM,
         SinkCache,
         StaticCache,
     )
@@ -94,7 +94,7 @@ class CacheTest(unittest.TestCase):
 
     def test_reorder_cache_retrocompatibility(self):
         """Tests that Cache.reorder_cache is retrocompatible with the legacy code path"""
-        legacy_reorder_fn = LlamaForCausalLM._reorder_cache  # An example of a legacy `_reorder_cache` function
+        legacy_reorder_fn = GPT2LMHeadModel._reorder_cache  # An example of a legacy `_reorder_cache` function
 
         legacy_cache = ()
         new_cache = DynamicCache()
