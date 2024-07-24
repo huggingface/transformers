@@ -18,7 +18,7 @@ import re
 
 from msclap import CLAP
 
-from transformers import AutoTokenizer, ClapFeatureExtractor, MSClapConfig, MSClapModel, MSClapProcessor
+from transformers import AutoTokenizer, ClapFeatureExtractor, MSClapConfig, MSClapModel, MSClapProcessor, GPT2Config
 
 
 KEYS_TO_MODIFY_MAPPING = {
@@ -94,8 +94,8 @@ def get_config_from_original(clap_model):
         "hidden_size": clap_model.clap.audio_encoder.projection.linear1.in_features,
         "projection_dim": clap_model.clap.audio_encoder.projection.linear1.out_features,
     }
-
     text_config = {
+        "text_encoder": GPT2Config().to_dict(),
         "hidden_size": clap_model.clap.caption_encoder.projection.linear1.in_features,
         "projection_dim": clap_model.clap.audio_encoder.projection.linear1.out_features,
     }

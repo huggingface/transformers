@@ -300,22 +300,10 @@ class MSClapTextModelTester:
         projection_dropout_prob=0,
         initializer_factor=1.0,
         vocab_size=99,
-        n_positions=1024,
         n_embd=24,
         n_layer=2,
         n_head=2,
-        n_inner=None,
-        activation_function="gelu_new",
-        resid_pdrop=0.1,
-        embd_pdrop=0.1,
-        attn_pdrop=0.1,
-        layer_norm_epsilon=1e-5,
         initializer_range=0.02,
-        summary_type="cls_index",
-        summary_use_proj=True,
-        summary_activation=None,
-        summary_proj_to_labels=True,
-        summary_first_dropout=0.1,
         use_input_mask=True,
     ):
         self.parent = parent
@@ -323,22 +311,10 @@ class MSClapTextModelTester:
         self.seq_length = seq_length
         self.projection_dropout_prob = projection_dropout_prob
         self.initializer_factor = initializer_factor
-        self.n_positions = n_positions
         self.n_embd = n_embd
         self.n_layer = n_layer
         self.num_hidden_layers = n_layer
         self.num_attention_heads = n_head
-        self.n_inner = n_inner
-        self.activation_function = activation_function
-        self.resid_pdrop = resid_pdrop
-        self.embd_pdrop = embd_pdrop
-        self.attn_pdrop = attn_pdrop
-        self.layer_norm_epsilon = layer_norm_epsilon
-        self.summary_type = summary_type
-        self.summary_use_proj = summary_use_proj
-        self.summary_activation = summary_activation
-        self.summary_proj_to_labels = summary_proj_to_labels
-        self.summary_first_dropout = summary_first_dropout
 
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
@@ -372,13 +348,9 @@ class MSClapTextModelTester:
             projection_dropout_prob=self.projection_dropout_prob,
             initializer_factor=self.initializer_factor,
             vocab_size=self.vocab_size,
-            n_positions=self.n_positions,
             n_embd=self.n_embd,
             n_layer=self.n_layer,
             num_attention_heads=self.num_attention_heads,
-            resid_pdrop=self.resid_pdrop,
-            embd_pdrop=self.embd_pdrop,
-            attn_pdrop=self.attn_pdrop,
             initializer_range=self.initializer_range,
             num_hidden_layers=self.num_hidden_layers,
         )

@@ -17,9 +17,10 @@
 import os
 from typing import Union
 
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from ..gpt2.configuration_gpt2 import GPT2Config
+from ..auto.configuration_auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -92,7 +93,7 @@ class MSClapTextConfig(PretrainedConfig):
         reorder_and_upcast_attn (`bool`, *optional*, defaults to `False`):
             Whether to reorder and upcast the attention.
         projection_dim (`int`, *optional*, defaults to 768):
-            Dimension of the projection head of the `ClapTextModelWithProjection`.
+            Dimension of the projection head of the `MSClapTextModelWithProjection`.
 
     Examples:
 
@@ -113,94 +114,28 @@ class MSClapTextConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=50257,
         hidden_size=768,
         projection_dropout_prob=0,
         initializer_factor=1.0,
-        n_positions=1024,
-        n_embd=768,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        n_inner=None,
-        activation_function="gelu_new",
-        resid_pdrop=0.1,
-        embd_pdrop=0.1,
-        attn_pdrop=0.1,
-        layer_norm_epsilon=1e-5,
-        initializer_range=0.02,
-        summary_type="cls_index",
-        summary_use_proj=True,
-        summary_activation=None,
-        summary_proj_to_labels=True,
-        summary_first_dropout=0.1,
-        scale_attn_weights=True,
-        use_cache=True,
-        bos_token_id=50256,
-        eos_token_id=50256,
-        scale_attn_by_inverse_layer_idx=False,
-        reorder_and_upcast_attn=False,
         projection_dim=768,
         projection_hidden_act='gelu', 
         **kwargs,
     ):
         super().__init__(**kwargs)
+        if "text_encoder" not in kwargs:
+            raise ValueError("Config has to be initialized with text_encoder")
+        
+        text_encoder_config = kwargs.pop('text_encoder')
+        text_encoder_model_type = text_encoder_config.pop("model_type")
 
-        self.text_model_config = GPT2Config(
-            vocab_size,
-            n_positions,
-            n_embd,
-            num_hidden_layers,
-            num_attention_heads,
-            n_inner,
-            activation_function,
-            resid_pdrop,
-            embd_pdrop,
-            attn_pdrop,
-            layer_norm_epsilon,
-            initializer_range,
-            summary_type,
-            summary_use_proj,
-            summary_activation,
-            summary_proj_to_labels,
-            summary_first_dropout,
-            scale_attn_weights,
-            use_cache,
-            bos_token_id,
-            eos_token_id,
-            scale_attn_by_inverse_layer_idx,
-            reorder_and_upcast_attn,
-        )
+        self.text_model_config = AutoConfig.for_model(text_encoder_model_type, **text_encoder_config)
 
         self.projection_dim = projection_dim
         self.hidden_size = hidden_size
         self.projection_dropout_prob = projection_dropout_prob
         self.initializer_factor = initializer_factor
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.vocab_size = vocab_size
-        self.n_positions = n_positions
-        self.n_embd = n_embd
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.n_inner = n_inner
-        self.activation_function = activation_function
-        self.resid_pdrop = resid_pdrop
-        self.embd_pdrop = embd_pdrop
-        self.attn_pdrop = attn_pdrop
-        self.layer_norm_epsilon = layer_norm_epsilon
-        self.initializer_range = initializer_range
-        self.summary_type = summary_type
-        self.summary_use_proj = summary_use_proj
-        self.summary_activation = summary_activation
-        self.summary_proj_to_labels = summary_proj_to_labels
-        self.summary_first_dropout = summary_first_dropout
-        self.scale_attn_weights = scale_attn_weights
-        self.use_cache = use_cache
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.scale_attn_by_inverse_layer_idx = scale_attn_by_inverse_layer_idx
-        self.reorder_and_upcast_attn = reorder_and_upcast_attn
         self.projection_hidden_act = projection_hidden_act
+        
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
@@ -217,8 +152,21 @@ class MSClapTextConfig(PretrainedConfig):
                 f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
                 f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
             )
-
         return cls.from_dict(config_dict, **kwargs)
+
+    @classmethod
+    def from_sub_models_config(
+        cls, 
+        text_encoder_config: PretrainedConfig, 
+        **kwargs, 
+    ): 
+        
+        return cls(
+            text_encoder=text_encoder_config.to_dict(),
+            **kwargs, 
+        )
+        
+        
 
 # Adapted from transformers.models.clap.configuration_clap.ClapAudioConfig with Clap->MSClap, CLAP->MSCLAP, laion/clap-htsat-fused->microsoft/ms_clap
 class MSClapAudioConfig(PretrainedConfig):
@@ -447,7 +395,7 @@ class MSClapConfig(PretrainedConfig):
     >>> config = MSClapConfig.from_text_audio_configs(config_text, config_audio)
     ```"""
 
-    model_type = "clap"
+    model_type = "msclap"
 
     def __init__(
         self,
@@ -462,11 +410,11 @@ class MSClapConfig(PretrainedConfig):
 
         if text_config is None:
             text_config = {}
-            logger.info("text_config is None. Initializing the ClapTextConfig with default values.")
+            logger.info("text_config is None. Initializing the MSClapTextConfig with default values.")
 
         if audio_config is None:
             audio_config = {}
-            logger.info("audio_config is None. initializing the ClapAudioConfig with default values.")
+            logger.info("audio_config is None. initializing the MSClapAudioConfig with default values.")
 
         self.text_config = MSClapTextConfig(**text_config)
         self.audio_config = MSClapAudioConfig(**audio_config)
