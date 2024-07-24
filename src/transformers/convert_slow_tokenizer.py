@@ -625,7 +625,7 @@ class SpmConverter(Converter):
         # control tokens are special
         # user defined symbols are not
         # both user and control tokens are AddedTokens
-        # Add user defined symbols (type == 4) from sentnecepiece (https://github.com/google/sentencepiece/blob/6225e08edb2577757163b3f5dbba4c0b670ef445/src/sentencepiece_model.proto#L299C29-L299C33)
+        # Add user defined symbols (type == 4) from sentencepiece (https://github.com/google/sentencepiece/blob/6225e08edb2577757163b3f5dbba4c0b670ef445/src/sentencepiece_model.proto#L299C29-L299C33)
 
         tokens_to_add = {
             id: AddedToken(token, normalized=False, special=special)
@@ -633,6 +633,18 @@ class SpmConverter(Converter):
                 (id, p.piece, p.type == 3) for id, p in enumerate(self.proto.pieces) if p.type in [3, 4]
             ]
         }
+
+        if isinstance(tokenizer.model, BPE) and not getattr(tokenizer.model, "ignore_merges", False):
+            # To adhere to the BPE standard, if ignore_merges=False (default), we must
+            # remove all user-defined tokens that can be obtained via merges
+            token_to_id = {v.content: k for k, v in tokens_to_add.items() if not v.special}
+            merges = getattr(tokenizer, '_merges', [])
+            for left, right in merges:
+                full_id = token_to_id.get(left + right)
+                if full_id is not None:
+                    tokens_to_add.pop(full_id, None)
+                    continue
+
         tokens_to_add = [k for _, k in sorted(tokens_to_add.items(), key=lambda x: x[0])]
         if len(tokens_to_add) > 0:
             # super hack: if a token.special is set, tokenizer ignores it for now so FIXME @ArthurZ
@@ -1360,6 +1372,9 @@ class GemmaConvert(SpmConverter):
                     AddedToken("<unk>", normalized=False, special=True),
                 ]
             )
+            print('set merges')
+            setattr(tokenizer, "_merges", merges)
+
         else:
             raise Exception(
                 "You're trying to run a `Unigram` model but you're file was trained with a different algorithm"
