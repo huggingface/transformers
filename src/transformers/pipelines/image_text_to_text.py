@@ -128,14 +128,19 @@ class ImageTextToTextPipeline(Pipeline):
 
         model_type = self.model.config.model_type
 
-        kwargs = {}
+        kwargs = {"legacy": False}
 
         # if model_type == "pix2struct":
         #     kwargs = {"add_special_tokens": False}
 
         # if model_type == "idefics":
         #     model_inputs = self.processor(text, return_tensors=self.framework, **kwargs)
-        model_inputs = self.processor(images=image, text=text, return_tensors=self.framework, **kwargs)
+        # temporary while waiting for uniformized processors
+        try:
+            model_inputs = self.processor(images=image, text=text, return_tensors=self.framework, **kwargs)
+        except TypeError:
+            kwargs = {}
+            model_inputs = self.processor(images=image, text=text, return_tensors=self.framework, **kwargs)
 
         # if model_type == "git":
         #     # remove EOS token from input_ids and attention_mask

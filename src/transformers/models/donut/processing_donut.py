@@ -71,6 +71,13 @@ class DonutProcessor(ProcessorMixin):
         [`~DonutTokenizer.__call__`]. Please refer to the doctsring of the above two methods for more information.
         """
         # For backward compatibility
+        legacy = kwargs.pop("legacy", True)
+        print("legacy: ", legacy)
+        if legacy:
+            warnings.warn(
+                "The use of legacy will be deprecated in the future. Please use the new processing behavior by setting legacy=False."
+            )
+
         if self._in_target_context_manager:
             return self.current_processor(*args, **kwargs)
 
@@ -85,7 +92,11 @@ class DonutProcessor(ProcessorMixin):
 
         if images is not None:
             inputs = self.image_processor(images, *args, **kwargs)
-        if text is not None:
+        if text is not None and images is None:
+            encodings = self.tokenizer(text, **kwargs)
+        elif text is not None:
+            if not legacy:
+                kwargs.update({"add_special_tokens": False})
             encodings = self.tokenizer(text, **kwargs)
 
         if text is None:
@@ -93,7 +104,10 @@ class DonutProcessor(ProcessorMixin):
         elif images is None:
             return encodings
         else:
-            inputs["labels"] = encodings["input_ids"]
+            if not legacy:
+                inputs["decoder_input_ids"] = encodings["input_ids"]
+            else:
+                inputs["labels"] = encodings["input_ids"]
             return inputs
 
     def batch_decode(self, *args, **kwargs):

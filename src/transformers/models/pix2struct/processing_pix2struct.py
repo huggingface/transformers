@@ -16,6 +16,7 @@
 Processor class for Pix2Struct.
 """
 
+import warnings
 from typing import List, Optional, Union
 
 from ...processing_utils import ProcessorMixin
@@ -65,6 +66,7 @@ class Pix2StructProcessor(ProcessorMixin):
         return_length: bool = False,
         verbose: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
+        legacy = True,
         **kwargs,
     ) -> BatchEncoding:
         """
@@ -73,6 +75,11 @@ class Pix2StructProcessor(ProcessorMixin):
 
         Please refer to the docstring of the above two methods for more information.
         """
+        if legacy:
+            warnings.warn(
+                "The use of legacy will be deprecated in the future. Please use the new processing behavior by setting legacy=False."
+            )
+
         if images is None and text is None:
             raise ValueError("You have to specify either images or text.")
 
@@ -111,6 +118,8 @@ class Pix2StructProcessor(ProcessorMixin):
             )
 
         if text is not None and not self.image_processor.is_vqa:
+            if not legacy:
+                add_special_tokens = False
             text_encoding = self.tokenizer(
                 text=text,
                 add_special_tokens=add_special_tokens,

@@ -29,6 +29,7 @@ from ..models.auto.configuration_auto import AutoConfig
 from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, AutoFeatureExtractor
 from ..models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING, AutoImageProcessor
 from ..models.auto.modeling_auto import AutoModelForDepthEstimation, AutoModelForImageToImage
+from ..models.auto.processing_auto import PROCESSOR_MAPPING, AutoProcessor
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from ..tokenization_utils import PreTrainedTokenizer
 from ..utils import (
@@ -921,8 +922,10 @@ def pipeline(
     hub_kwargs["_commit_hash"] = model.config._commit_hash
     load_tokenizer = type(model_config) in TOKENIZER_MAPPING or model_config.tokenizer_class is not None
     load_feature_extractor = type(model_config) in FEATURE_EXTRACTOR_MAPPING or feature_extractor is not None
+    print("type(model_config)", type(model_config))
     load_image_processor = type(model_config) in IMAGE_PROCESSOR_MAPPING or image_processor is not None
     load_processor = type(model_config) in PROCESSOR_MAPPING or processor is not None
+    print("load_processor", load_processor)
 
     # If `model` (instance of `PretrainedModel` instead of `str`) is passed (and/or same for config), while
     # `image_processor` or `feature_extractor` is `None`, the loading will fail. This happens particularly for some
@@ -1006,7 +1009,7 @@ def pipeline(
                 tokenizer_identifier = tokenizer
                 tokenizer_kwargs = model_kwargs.copy()
                 tokenizer_kwargs.pop("torch_dtype", None)
-
+            print("tokenizer_identifier", tokenizer_identifier)
             tokenizer = AutoTokenizer.from_pretrained(
                 tokenizer_identifier, use_fast=use_fast, _from_pipeline=task, **hub_kwargs, **tokenizer_kwargs
             )
@@ -1128,6 +1131,9 @@ def pipeline(
 
     if image_processor is not None:
         kwargs["image_processor"] = image_processor
+
+    if processor is not None:
+        kwargs["processor"] = processor
 
     if device is not None:
         kwargs["device"] = device

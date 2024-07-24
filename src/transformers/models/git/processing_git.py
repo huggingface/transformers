@@ -16,6 +16,7 @@
 Image/Text processor class for GIT
 """
 
+import warnings
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
 
@@ -42,7 +43,7 @@ class GitProcessor(ProcessorMixin):
         super().__init__(image_processor, tokenizer)
         self.current_processor = self.image_processor
 
-    def __call__(self, text=None, images=None, return_tensors=None, **kwargs):
+    def __call__(self, text=None, images=None, return_tensors=None, legacy=True, **kwargs):
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to BertTokenizerFast's [`~BertTokenizerFast.__call__`] if `text` is not `None` to encode
@@ -76,6 +77,11 @@ class GitProcessor(ProcessorMixin):
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
+        if legacy:
+            warnings.warn(
+                "The use of legacy will be deprecated in the future. Please use the new processing behavior by setting legacy=False."
+            )
+
         tokenizer_kwargs, image_processor_kwargs = {}, {}
         if kwargs:
             tokenizer_kwargs = {k: v for k, v in kwargs.items() if k not in self.image_processor._valid_processor_keys}
@@ -94,6 +100,9 @@ class GitProcessor(ProcessorMixin):
 
         if text is not None and images is not None:
             encoding["pixel_values"] = image_features.pixel_values
+            if not legacy:
+                encoding["input_ids"] = encoding["input_ids"][:, :-1]
+                encoding["attention_mask"] = encoding["attention_mask"][:, :-1]
             return encoding
         elif text is not None:
             return encoding
