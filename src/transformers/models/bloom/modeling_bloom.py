@@ -364,7 +364,7 @@ class BloomMLP(nn.Module):
 
 
 class BloomBlock(nn.Module):
-    def __init__(self, config: BloomConfig, layer_idx=None):
+    def __init__(self, config: BloomConfig, layer_idx: Optional[int] = None):
         super().__init__()
         hidden_size = config.hidden_size
 
