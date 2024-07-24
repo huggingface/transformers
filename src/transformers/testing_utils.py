@@ -170,6 +170,7 @@ if is_pytest_available():
     from _pytest.outcomes import skip
     from _pytest.pathlib import import_path
     from pytest import DoctestItem
+    import pytest
 else:
     Module = object
     DoctestItem = object
@@ -187,6 +188,8 @@ ENDPOINT_STAGING = "https://hub-ci.huggingface.co"
 # Not critical, only usable on the sandboxed CI instance.
 TOKEN = "hf_94wBhPGp6KrrTH3KDchhKpRxZwd6dmHWLL"
 
+
+
 if is_torch_available():
     import torch
 
@@ -195,7 +198,6 @@ if is_torch_available():
 else:
     IS_ROCM_SYSTEM = False
     IS_CUDA_SYSTEM = False
-
 
 def parse_flag_from_env(key, default=False):
     try:
@@ -235,6 +237,22 @@ _tf_gpu_memory_limit = parse_int_from_env("TF_GPU_MEMORY_LIMIT", default=None)
 _run_pipeline_tests = parse_flag_from_env("RUN_PIPELINE_TESTS", default=True)
 _run_agent_tests = parse_flag_from_env("RUN_AGENT_TESTS", default=False)
 _run_third_party_device_tests = parse_flag_from_env("RUN_THIRD_PARTY_DEVICE_TESTS", default=False)
+_test_with_rocm = parse_flag_from_env("TEST_WITH_ROCM", default=False)
+
+def skipIfRocm(func=None, *, msg="test doesn't currently work on the ROCm stack"):
+    def dec_fn(fn):
+        reason = f"skipIfRocm: {msg}"
+
+        @wraps(fn)
+        def wrapper(*args, **kwargs):
+            if _test_with_rocm:
+                pytest.skip(reason)
+            else:
+                return fn(*args, **kwargs)
+        return wrapper
+    if func:
+        return dec_fn(func)
+    return dec_fn
 
 
 def get_device_count():
