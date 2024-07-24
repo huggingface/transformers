@@ -3947,40 +3947,50 @@ class GenerationMixin:
                 start_from_empty_dynamic_cache = True
 
         this_peer_finished = False
-        
+
         max_len = stopping_criteria[0].max_length
-        position_ids = torch.arange(2 * max_len, device=input_ids.device, dtype=torch.long)[None, :].broadcast_to(batch_size, 2 * max_len) if batch_size > 1 else None
-        attention_mask = torch.ones_like(position_ids) if position_ids is not None else  None        
-        n_matches = None 
+        position_ids = (
+            torch.arange(2 * max_len, device=input_ids.device, dtype=torch.long)[None, :].broadcast_to(
+                batch_size, 2 * max_len
+            )
+            if batch_size > 1
+            else None
+        )
+        attention_mask = torch.ones_like(position_ids) if position_ids is not None else None
+        n_matches = None
         eos_tokens_mask = None
 
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
-            
             # Rotate everything for bsz > 1
             if n_matches is not None and position_ids is not None:
-                shift = unfinished_sequences * (n_matches.max() - n_matches) + (1 - unfinished_sequences) * (eos_tokens_mask.sum(-1) - 1)
-            
+                shift = unfinished_sequences * (n_matches.max() - n_matches) + (1 - unfinished_sequences) * (
+                    eos_tokens_mask.sum(-1) - 1
+                )
+
                 for i in range(batch_size):
                     if shift[i] > 0:
-                        input_ids[i][shift[i]:] = input_ids[i][:-shift[i]].clone()
-                        input_ids[i][:shift[i]] = self.config.pad_token_id
-                
+                        input_ids[i][shift[i] :] = input_ids[i][: -shift[i]].clone()
+                        input_ids[i][: shift[i]] = self.config.pad_token_id
+
                 position_ids = position_ids.add(-shift[:, None]).clamp(min=0)
                 attention_mask[:, :-1] = position_ids[:, 1:] > 0
-                
+
                 left_cut = (1 - attention_mask).sum(-1).min()
-                
+
                 if left_cut > 0:
                     position_ids = position_ids[:, left_cut:]
                     attention_mask = attention_mask[:, left_cut:]
                     input_ids = input_ids[:, left_cut:]
 
-                    model_kwargs["past_key_values"] = _crop_past_key_values(self, model_kwargs["past_key_values"], left_cut=left_cut)
+                    model_kwargs["past_key_values"] = _crop_past_key_values(
+                        self, model_kwargs["past_key_values"], left_cut=left_cut
+                    )
                     model_kwargs["assistant_past_key_values"] = _crop_past_key_values(
-                        candidate_generator.assistant_model, model_kwargs["assistant_past_key_values"], left_cut=left_cut
+                        candidate_generator.assistant_model,
+                        model_kwargs["assistant_past_key_values"],
+                        left_cut=left_cut,
                     )  # the assistant does not have the token after the last match, hence the -1
 
-            
             cur_len = input_ids.shape[-1]
 
             #  1. Fetch candidate sequences from a `CandidateGenerator`
@@ -4010,12 +4020,16 @@ class GenerationMixin:
                     ),
                     dim=0,
                 )
-                
+
             if self.config.is_encoder_decoder:
-                candidate_kwargs["decoder_position_ids"] = position_ids[:, :cur_len + candidate_length] if position_ids is not None else None
-                candidate_kwargs["decoder_attention_mask"] = attention_mask[:, :cur_len + candidate_length] if attention_mask is not None else None
+                candidate_kwargs["decoder_position_ids"] = (
+                    position_ids[:, : cur_len + candidate_length] if position_ids is not None else None
+                )
+                candidate_kwargs["decoder_attention_mask"] = (
+                    attention_mask[:, : cur_len + candidate_length] if attention_mask is not None else None
+                )
             else:
-                candidate_kwargs["position_ids"] = position_ids[:, :cur_len + candidate_length]
+                candidate_kwargs["position_ids"] = position_ids[:, : cur_len + candidate_length]
 
             model_inputs = self.prepare_inputs_for_generation(candidate_input_ids, **candidate_kwargs)
             if "num_logits_to_keep" in model_inputs:
@@ -4067,15 +4081,18 @@ class GenerationMixin:
                 # make sure than already finished sequences always match until longest "still active" sequence
                 n_matches = torch.clamp(n_matches, max=max_len - cur_len - 1)
                 # make sure that finished sentences cannot slow down valid tokens
-                n_matches = unfinished_sequences * n_matches + (1 - unfinished_sequences) * (unfinished_sequences * n_matches).max()
-                       
+                n_matches = (
+                    unfinished_sequences * n_matches
+                    + (1 - unfinished_sequences) * (unfinished_sequences * n_matches).max()
+                )
+
                 valid_tokens = selected_tokens[:, : n_matches.max() + 1]
 
             # 4. Update variables according to the number of matching assistant tokens. Remember: the token generated
             # by the model after the last candidate match is also valid, as it is generated from a correct sequence.
             # Because of this last token, assisted generation search reduces to a normal greedy search/sample if there
             # is no match.
-            
+
             # if eos_token was found in one sentence, set sentence to finished
             eos_token_id_tensor = stopping_criteria[1].eos_token_id
             eos_tokens = valid_tokens.eq(stopping_criteria[1].eos_token_id)

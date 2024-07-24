@@ -361,7 +361,7 @@ def _crop_past_key_values(model, past_key_values, max_length, n_matches=None, le
             else:
                 k_cache = past_key_values[idx][0][:, :, left_cut:, :]
                 v_cache = past_key_values[idx][1][:, :, left_cut:, :]
-            
+
             if n_matches is not None:
                 for batch_idx in range(len(n_matches)):
                     num_roll_left = n_matches.max() - n_matches[batch_idx]
@@ -371,7 +371,7 @@ def _crop_past_key_values(model, past_key_values, max_length, n_matches=None, le
                         # v_cache[batch_idx].index_copy_(1, torch.arange(num_roll_left, maximum_length, device=v_cache.device), v_cache[batch_idx][:, :-num_roll_left].clone())
                         k_cache[batch_idx][:, num_roll_left:] = k_cache[batch_idx][:, :-num_roll_left].clone()
                         v_cache[batch_idx][:, num_roll_left:] = v_cache[batch_idx][:, :-num_roll_left].clone()
-                
+
             new_past.append(
                 (
                     k_cache,
