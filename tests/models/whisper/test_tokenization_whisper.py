@@ -15,6 +15,7 @@
 import unittest
 
 import numpy as np
+import torch
 
 from transformers.models.whisper import WhisperTokenizer, WhisperTokenizerFast
 from transformers.models.whisper.tokenization_whisper import _combine_tokens_into_words, _find_longest_common_sequence
@@ -337,6 +338,130 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
             encoded_input, skip_special_tokens=True, basic_normalize=True, remove_diacritics=True
         )
         self.assertEqual(decoded_output_diacritics, expected_output_diacritics)
+
+
+    def test_decode_asr_with_word_level_timestamps(self):
+        # fmt: off
+        model_outputs = [
+            {
+                'stride': [30, 0, 5],
+                'tokens': torch.tensor([[
+                    50257, 50362, 8410, 7283, 0, 2329, 8410, 7283, 0, 2094, 470, 1309, 534, 10625, 307, 10625, 13, 34668, 11, 345, 531, 9439, 11, 523, 655, 8410, 7283, 0, 39134, 16592, 10560, 3955, 50, 0, 7102, 5446, 46, 0, 25848, 8410, 7283, 0, 2773, 661, 4320, 1943, 981, 345, 821, 8066, 7765, 510, 290, 670, 1327, 379, 340, 13, 10528, 318, 5340, 13, 50256 ]]),
+                'token_timestamps': torch.tensor([[
+                    0, 0, 0, 3.78, 4.22, 5.26, 6.04, 6.54, 7, 7.94, 8.58, 8.58, 8.88, 9.16, 9.54, 9.94, 10.6, 11.38, 11.88, 12.38, 12.44, 12.62, 13, 13.36, 13.64, 14.24, 14.74, 15.12, 15.4, 15.74, 16.1, 16.54, 16.54, 16.78, 17.08, 17.2, 17.36, 17.56, 18.08, 18.58, 19.38, 19.88, 22.54, 22.9, 23.24, 23.5, 24.14, 24.56, 24.7, 24.94, 24.94, 25.18, 25.54, 25.72, 26.04, 26.34, 26.46, 26.84, 27.04, 27.14, 27.54, 28.06, 29.92 ]])
+            },
+            {
+                'stride': [30, 5, 5],
+                'tokens': torch.tensor([[ 50257, 50362, 2773, 661, 4320, 1943, 981, 345, 821, 8066, 7765, 510, 290, 670, 1327, 379, 340, 13, 10528, 318, 5340, 13, 921, 815, 651, 284, 262, 966, 810, 2687, 2073, 561, 11238, 290, 345, 821, 407, 8066, 2245, 612, 13, 1400, 11, 644, 389, 345, 4953, 329, 30, 2141, 340, 0, 2329, 466, 340, 0, 3363, 11, 345, 460, 0, 2329, 466, 340, 0, 50256 ]]),
+                'token_timestamps': torch.tensor([[ 0, 0, 0, 2.92, 3.24, 3.5, 4.14, 4.56, 4.7, 4.74, 4.92, 5.18, 5.54, 5.74, 6.04, 6.34, 6.46, 6.84, 7.04, 7.18, 7.56, 8.12, 9.68, 10.7, 10.88, 11.1, 11.24, 11.48, 11.82, 12.46, 12.82, 13.2, 13.46, 13.72, 14.08, 14.28, 14.34, 14.56, 14.82, 15.16, 15.72, 16.42, 16.82, 16.86, 17, 17.1, 17.2, 17.56, 18.06, 19.28, 19.6, 20.28, 21.96, 22.64, 24.28, 24.76, 25.18, 25.56, 25.56, 25.84, 26.36, 27.12, 27.54, 27.82, 28.16, 29.48 ]])
+            },
+            {
+                'stride': [23.7728125, 5, 0],
+                'tokens': torch.tensor([[ 50257, 50362, 2329, 466, 340, 0, 3363, 345, 460, 0, 2329, 466, 340, 0, 1002, 534, 15867, 318, 3599, 625, 11, 2245, 3501, 510, 13, 50256 ]]),
+                'token_timestamps': torch.tensor([[ 0, 0, 0, 2.44, 4.3, 5.04, 5.06, 5.56, 5.8, 6.32, 7.12, 7.56, 7.8, 8.72, 10.04, 12.96, 13.3, 13.44, 13.72, 13.98, 14.86, 15.5, 16, 16.88, 17.76, 20.9]])
+            }
+        ]
+        # fmt: on
+
+        tokenizer = WhisperTokenizer.from_pretrained("onnx-community/whisper-tiny.en_timestamped")
+        result = tokenizer._decode_asr(
+            model_outputs, return_timestamps="word", return_language=False, time_precision=0.02
+        )
+
+        EXPECTED_OUTPUT = (
+            " DO IT! Just DO IT! Don't let your dreams be dreams. Yesterday, you said tomorrow, so just DO IT! MAKE YOUR DRIMS! CONTRO! JUST DO IT! Some people dream success while you're gonna wake up and work hard at it. Nothing is impossible. You should get to the point where anyone else would quit and you're not gonna stop there. No, what are you waiting for? Do it! Just do it! Yes, you can! Just do it! If your tire is starting over, stop giving up.",
+            {
+                "chunks": [
+                    {"text": " DO", "timestamp": (0.0, 3.78)},
+                    {"text": " IT!", "timestamp": (3.78, 5.26)},
+                    {"text": " Just", "timestamp": (5.26, 6.04)},
+                    {"text": " DO", "timestamp": (6.04, 6.54)},
+                    {"text": " IT!", "timestamp": (6.54, 7.94)},
+                    {"text": " Don't", "timestamp": (7.94, 8.58)},
+                    {"text": " let", "timestamp": (8.58, 8.88)},
+                    {"text": " your", "timestamp": (8.88, 9.16)},
+                    {"text": " dreams", "timestamp": (9.16, 9.54)},
+                    {"text": " be", "timestamp": (9.54, 9.94)},
+                    {"text": " dreams.", "timestamp": (9.94, 11.38)},
+                    {"text": " Yesterday,", "timestamp": (11.38, 12.38)},
+                    {"text": " you", "timestamp": (12.38, 12.44)},
+                    {"text": " said", "timestamp": (12.44, 12.62)},
+                    {"text": " tomorrow,", "timestamp": (12.62, 13.36)},
+                    {"text": " so", "timestamp": (13.36, 13.64)},
+                    {"text": " just", "timestamp": (13.64, 14.24)},
+                    {"text": " DO", "timestamp": (14.24, 14.74)},
+                    {"text": " IT!", "timestamp": (14.74, 15.4)},
+                    {"text": " MAKE", "timestamp": (15.4, 15.74)},
+                    {"text": " YOUR", "timestamp": (15.74, 16.1)},
+                    {"text": " DRIMS!", "timestamp": (16.1, 17.08)},
+                    {"text": " CONTRO!", "timestamp": (17.08, 18.08)},
+                    {"text": " JUST", "timestamp": (18.08, 18.58)},
+                    {"text": " DO", "timestamp": (18.58, 19.38)},
+                    {"text": " IT!", "timestamp": (19.38, 22.54)},
+                    {"text": " Some", "timestamp": (22.54, 22.9)},
+                    {"text": " people", "timestamp": (22.9, 23.24)},
+                    {"text": " dream", "timestamp": (23.24, 23.5)},
+                    {"text": " success", "timestamp": (23.5, 24.14)},
+                    {"text": " while", "timestamp": (24.14, 24.56)},
+                    {"text": " you're", "timestamp": (24.56, 24.94)},
+                    {"text": " gonna", "timestamp": (24.94, 24.94)},
+                    {"text": " wake", "timestamp": (24.94, 25.18)},
+                    {"text": " up", "timestamp": (25.18, 25.54)},
+                    {"text": " and", "timestamp": (25.54, 25.74)},
+                    {"text": " work", "timestamp": (25.74, 26.04)},
+                    {"text": " hard", "timestamp": (26.04, 26.34)},
+                    {"text": " at", "timestamp": (26.34, 26.46)},
+                    {"text": " it.", "timestamp": (26.46, 27.04)},
+                    {"text": " Nothing", "timestamp": (27.04, 27.18)},
+                    {"text": " is", "timestamp": (27.18, 27.56)},
+                    {"text": " impossible.", "timestamp": (27.56, 29.68)},
+                    {"text": " You", "timestamp": (29.68, 30.7)},
+                    {"text": " should", "timestamp": (30.7, 30.88)},
+                    {"text": " get", "timestamp": (30.88, 31.1)},
+                    {"text": " to", "timestamp": (31.1, 31.24)},
+                    {"text": " the", "timestamp": (31.24, 31.48)},
+                    {"text": " point", "timestamp": (31.48, 31.82)},
+                    {"text": " where", "timestamp": (31.82, 32.46)},
+                    {"text": " anyone", "timestamp": (32.46, 32.82)},
+                    {"text": " else", "timestamp": (32.82, 33.2)},
+                    {"text": " would", "timestamp": (33.2, 33.46)},
+                    {"text": " quit", "timestamp": (33.46, 33.72)},
+                    {"text": " and", "timestamp": (33.72, 34.08)},
+                    {"text": " you're", "timestamp": (34.08, 34.34)},
+                    {"text": " not", "timestamp": (34.34, 34.56)},
+                    {"text": " gonna", "timestamp": (34.56, 34.82)},
+                    {"text": " stop", "timestamp": (34.82, 35.16)},
+                    {"text": " there.", "timestamp": (35.16, 36.42)},
+                    {"text": " No,", "timestamp": (36.42, 36.86)},
+                    {"text": " what", "timestamp": (36.86, 37.0)},
+                    {"text": " are", "timestamp": (37.0, 37.1)},
+                    {"text": " you", "timestamp": (37.1, 37.2)},
+                    {"text": " waiting", "timestamp": (37.2, 37.56)},
+                    {"text": " for?", "timestamp": (37.56, 39.28)},
+                    {"text": " Do", "timestamp": (39.28, 39.6)},
+                    {"text": " it!", "timestamp": (39.6, 41.96)},
+                    {"text": " Just", "timestamp": (41.96, 42.64)},
+                    {"text": " do", "timestamp": (42.64, 44.28)},
+                    {"text": " it!", "timestamp": (44.28, 45.18)},
+                    {"text": " Yes,", "timestamp": (45.18, 45.56)},
+                    {"text": " you", "timestamp": (45.56, 45.84)},
+                    {"text": " can!", "timestamp": (45.8, 47.12)},
+                    {"text": " Just", "timestamp": (47.12, 47.56)},
+                    {"text": " do", "timestamp": (47.56, 47.8)},
+                    {"text": " it!", "timestamp": (47.8, 50.04)},
+                    {"text": " If", "timestamp": (50.04, 52.96)},
+                    {"text": " your", "timestamp": (52.96, 53.3)},
+                    {"text": " tire", "timestamp": (53.3, 53.44)},
+                    {"text": " is", "timestamp": (53.44, 53.72)},
+                    {"text": " starting", "timestamp": (53.72, 53.98)},
+                    {"text": " over,", "timestamp": (53.98, 55.5)},
+                    {"text": " stop", "timestamp": (55.5, 56.0)},
+                    {"text": " giving", "timestamp": (56.0, 56.88)},
+                    {"text": " up.", "timestamp": (56.88, 60.9)},
+                ]
+            },
+        )
+        self.assertEqual(result, EXPECTED_OUTPUT)
 
 
 class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
