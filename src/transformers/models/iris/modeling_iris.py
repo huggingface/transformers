@@ -821,7 +821,7 @@ class IrisKeysValues:
 
     def update(self, k: torch.Tensor, v: torch.Tensor, layer_num: int) -> None:
         self._keys_values.key_cache[layer_num], self._keys_values.value_cache[layer_num] = self._keys_values.update(
-            k, v, layer_num, cache_kwargs={"cache_position": torch.arange(k.shape[2],device = self.device)}
+            k, v, layer_num, cache_kwargs={"cache_position": torch.arange(k.shape[2], device=self.device)}
         )
         if self._size[layer_num] != k.size(2):
             self._size[layer_num] += k.size(2)
@@ -1534,7 +1534,7 @@ class IrisModel(IrisPreTrainedModel):
         rewards: torch.FloatTensor = None,
         ends: torch.IntTensor = None,
         mask_padding: torch.BoolTensor = None,
-        component: str= None,
+        component: str = None,
         should_preprocess: Optional[bool] = None,
         should_postprocess: Optional[bool] = None,
         output_hidden_states: Optional[bool] = True,
@@ -1658,7 +1658,8 @@ class IrisModel(IrisPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
-        if component is not None: assert component in ("discrete_autoencoder", "world_model", "actor_critic")
+        if component is not None:
+            assert component in ("discrete_autoencoder", "world_model", "actor_critic")
 
         cfg_discrete_autoencoder = {
             "should_preprocess": should_preprocess,
@@ -1713,7 +1714,11 @@ class IrisModel(IrisPreTrainedModel):
                 "mask_padding": mask_padding,
             }
 
-        all_hidden_states_discrete_autoencoder, all_hidden_states_world_model, all_hidden_states_actor_critic = (), (), ()
+        all_hidden_states_discrete_autoencoder, all_hidden_states_world_model, all_hidden_states_actor_critic = (
+            (),
+            (),
+            (),
+        )
 
         component_losses = IrisComponentLosses()
 
@@ -1733,7 +1738,9 @@ class IrisModel(IrisPreTrainedModel):
                 world_model_outputs,
                 all_hidden_states_world_model,
                 all_attentions_world_model,
-            ) = component_losses.compute_world_model_loss(self.rl_agent.world_model, batch_world_model, **cfg_world_model)
+            ) = component_losses.compute_world_model_loss(
+                self.rl_agent.world_model, batch_world_model, **cfg_world_model
+            )
             losses_world_model = losses_world_model / self.config.grad_acc_steps_world_model
 
             (
@@ -1748,10 +1755,10 @@ class IrisModel(IrisPreTrainedModel):
 
             losses = (losses_discrete_autoencoder, losses_world_model, losses_actor_critic)
             reconstructed_img = discrete_autoencoder_outputs[2]
-            action_preds  = actor_critic_outputs[0]
-            reward_preds=world_model_outputs[2]
-            epsiode_end=world_model_outputs[3]
-            obs_preds=world_model_outputs[1]
+            action_preds = actor_critic_outputs[0]
+            reward_preds = world_model_outputs[2]
+            epsiode_end = world_model_outputs[3]
+            obs_preds = world_model_outputs[1]
         else:
             if component == "discrete_autoencoder":
                 (
@@ -1783,10 +1790,10 @@ class IrisModel(IrisPreTrainedModel):
                 losses = losses / self.config.grad_acc_steps_actor_critic
 
             reconstructed_img = discrete_autoencoder_outputs[2] if component == "discrete_autoencoder" else None
-            action_preds  = actor_critic_outputs[0] if component == "actor_critic" else None
-            reward_preds=world_model_outputs[2] if component == "world_model" else None
-            epsiode_end=world_model_outputs[3] if component == "world_model" else None
-            obs_preds=world_model_outputs[1] if component == "world_model" else None
+            action_preds = actor_critic_outputs[0] if component == "actor_critic" else None
+            reward_preds = world_model_outputs[2] if component == "world_model" else None
+            epsiode_end = world_model_outputs[3] if component == "world_model" else None
+            obs_preds = world_model_outputs[1] if component == "world_model" else None
 
         all_hidden_states = (
             all_hidden_states_discrete_autoencoder + all_hidden_states_world_model + all_hidden_states_actor_critic
