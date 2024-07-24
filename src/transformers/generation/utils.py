@@ -3025,7 +3025,7 @@ class GenerationMixin:
         # Exception 2: models with different cache formats. These are limited to `DynamicCache` until their
         # cache format is standardized, to avoid adding complexity to the codebase.
         elif "gptbigcode" in model_class:
-            if not isinstance(past_key_values, DynamicCache, EncoderDecoderCache):
+            if not isinstance(past_key_values, (DynamicCache, EncoderDecoderCache)):
                 raise ValueError(
                     f"Using an unsupported cache format with {model_class}. Currently, it only supports the "
                     "legacy tuple format or `DynamicCache`"
