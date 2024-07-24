@@ -214,7 +214,7 @@ recur_fibo(6)"""
     def test_access_attributes(self):
         code = "integer = 1\nobj_class = integer.__class__\nobj_class"
         result = evaluate_python_code(code, {}, state={})
-        assert result == int
+        assert result is int
 
     def test_list_comprehension(self):
         code = "sentence = 'THESEAGULL43'\nmeaningful_sentence = '-'.join([char.lower() for char in sentence if char.isalpha()])"
@@ -591,7 +591,7 @@ except ValueError as e:
         code = "type_a = float(2); type_b = str; type_c = int"
         state = {}
         result = evaluate_python_code(code, {"float": float, "str": str, "int": int}, state=state)
-        assert result == int
+        assert result is int
 
     def test_tuple_id(self):
         code = """

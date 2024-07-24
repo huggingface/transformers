@@ -609,7 +609,7 @@ class GGUFLlamaConverter(LlamaConverter):
         self.additional_kwargs["bos_token"] = eos_token
 
         if self.is_llama_3_tokenizer:
-            self.additional_kwargs["add_prefix_space"] = False
+            self.additional_kwargs["add_prefix_space"] = None
             self.additional_kwargs["clean_up_tokenization_spaces"] = True
 
             self.additional_kwargs["legacy"] = False
