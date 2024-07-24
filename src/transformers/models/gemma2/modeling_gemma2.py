@@ -324,6 +324,11 @@ class Gemma2FlashAttention2(Gemma2Attention):
             }
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
+        if attention_mask is not None:
+            seq_len = attention_mask.shape[1]
+            key_states = key_states[:, :, :seq_len]
+            value_states = value_states[:, :, :seq_len]
+
         # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
         # to be able to avoid many of these transpose/reshape/view.
         query_states = query_states.transpose(1, 2)
@@ -821,9 +826,16 @@ class Gemma2Model(Gemma2PreTrainedModel):
         past_key_values: Cache,
         output_attentions: bool,
     ):
+        # Flash Attention currently doesn't support static cache but Gemma2 work only with static cache.
+        # So we will pass in attention mask as is in any case, not only when ther's padding. Then we'll use its shape
+        # to cut out keys/values trailing 0 used in static cache. This workaround should be compile compatible
+        # as it doesn't cause dynamic control issues.
+        if self.config._attn_implementation == "flash_attention_2":
+            return attention_mask
+
         dtype, device = input_tensor.dtype, input_tensor.device
         min_dtype = torch.finfo(dtype).min
-        batch_size, sequence_length = input_tensor.shape[:2]
+        sequence_length = input_tensor.shape[1]
         if past_key_values is not None:
             target_length = past_key_values.get_max_length()
         else:
@@ -833,19 +845,7 @@ class Gemma2Model(Gemma2PreTrainedModel):
             # in this case we assume that the mask comes already in inverted form and requires no inversion or slicing
             if attention_mask.max() != 0:
                 raise ValueError("Custom 4D attention mask should be passed in inverted form with max==0`")
-            if self.config._attn_implementation == "flash_attention_2":
-                raise ValueError("Custom 4D attention mask should not be passed when Flash_attention is used.")
             causal_mask = attention_mask
-
-        elif self.config._attn_implementation == "flash_attention_2":
-            # Flash attention is a special case. We cannot skip this step and assign mask=None because the cache used
-            # by Gemma2 is a static cache  which means that right-end values will all be zeros for kv. We will need to
-            # mask them out and prepare 2D mask for Flash-attention.
-            causal_mask = torch.ones((batch_size, target_length), dtype=torch.int64, device=device)
-            if attention_mask.shape[1] <= target_length:
-                mask_length = attention_mask.shape[-1]
-                causal_mask[:, :mask_length] = causal_mask[:, :mask_length] * attention_mask
-            return causal_mask
         else:
             causal_mask = torch.full(
                 (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
