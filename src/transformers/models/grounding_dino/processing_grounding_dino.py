@@ -78,8 +78,6 @@ class GroundingDinoProcessorKwargs(ProcessingKwargs, total=False):
             "verbose": True,
         },
         "images_kwargs": {
-            "do_convert_annotations": True,
-            "do_resize": True,
         },
     }
 
