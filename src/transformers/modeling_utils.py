@@ -866,9 +866,11 @@ def _load_state_dict_into_meta_model(
         module_name = param_name
         set_module_kwargs = {}
 
+        is_param_float8_e4m3fn = hasattr(torch, 'float8_e4m3fn') and param.dtype == torch.float8_e4m3fn
+
         # We convert floating dtypes to the `dtype` passed. We want to keep the buffers/params
         # in int/uint/bool and not cast them.
-        if dtype is not None and torch.is_floating_point(param) and param.dtype != torch.float8_e4m3fn:
+        if dtype is not None and torch.is_floating_point(param) and not is_param_float8_e4m3fn:
             if (
                 keep_in_fp32_modules is not None
                 and any(
