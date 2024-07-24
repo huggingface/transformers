@@ -868,7 +868,7 @@ def _load_state_dict_into_meta_model(
         module_name = param_name
         set_module_kwargs = {}
 
-        # We convert floating dtypes to the `dtype` passed expect for float8_e4m3fn type . We also want to keep the buffers/params
+        # We convert floating dtypes to the `dtype` passed except for float8_e4m3fn type. We also want to keep the buffers/params
         # in int/uint/bool and not cast them.
         is_param_float8_e4m3fn = is_torch_e4m3fn_available and param.dtype == torch.float8_e4m3fn
         if dtype is not None and torch.is_floating_point(param) and not is_param_float8_e4m3fn:
