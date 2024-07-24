@@ -732,7 +732,7 @@ class WhisperGenerationMixin:
             else:
                 outputs = sequences
 
-            if generation_config.return_dict_in_generate:
+            if return_dict_in_generate:
                 dict_outputs = self._stack_split_outputs(seek_outputs, model_output_type, sequences.device, kwargs)
 
                 if num_return_sequences > 1:
