@@ -1156,32 +1156,6 @@ class GLMForCausalLM(GLMPreTrainedModel):
     def get_decoder(self):
         return self.transformer
 
-    def _update_model_kwargs_for_generation(
-            self, outputs: ModelOutput, model_kwargs: Dict[str, Any], standardize_cache_format: bool = False, **kwargs
-    ) -> Dict[str, Any]:
-
-        cache_name, cache = self._extract_past_from_model_output(
-            outputs, standardize_cache_format=standardize_cache_format
-        )
-        model_kwargs[cache_name] = cache
-
-        # update attention mask
-        if "attention_mask" in model_kwargs:
-            attention_mask = model_kwargs["attention_mask"]
-            model_kwargs["attention_mask"] = torch.cat(
-                [attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1))], dim=-1
-            )
-
-        # update position ids
-        if "position_ids" in model_kwargs:
-            position_ids = model_kwargs["position_ids"]
-            new_position_id = position_ids[..., -1:].clone()
-            new_position_id += 1
-            model_kwargs["position_ids"] = torch.cat([position_ids, new_position_id], dim=-1)
-
-        model_kwargs["is_first_forward"] = False
-        return model_kwargs
-
     @add_start_docstrings_to_model_forward(GLM_INPUTS_DOCSTRING)
     def forward(
             self,
@@ -1195,6 +1169,7 @@ class GLMForCausalLM(GLMPreTrainedModel):
             output_attentions: bool = False,
             output_hidden_states: Optional[bool] = None,
             return_dict: Optional[bool] = None,
+            cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         Args:
@@ -1239,6 +1214,7 @@ class GLMForCausalLM(GLMPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            cache_position=cache_position,
         )
 
         hidden_states = outputs[0]
@@ -1278,36 +1254,46 @@ class GLMForCausalLM(GLMPreTrainedModel):
     # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.prepare_inputs_for_generation
     def prepare_inputs_for_generation(
             self,
-            input_ids: torch.LongTensor,
-            past_key_values: Optional[torch.Tensor] = None,
-            attention_mask: Optional[torch.Tensor] = None,
+            input_ids,
+            past_key_values=None,
+            attention_mask=None,
             inputs_embeds=None,
-            position_ids: Optional[torch.Tensor] = None,
-            use_cache: Optional[bool] = None,
-            is_first_forward: bool = True,
+            cache_position=None,
+            position_ids=None,
+            use_cache=True,
             **kwargs,
-    ) -> dict:
-        if not is_first_forward:
-            if past_key_values is not None:
-                if position_ids is not None:
-                    position_ids = position_ids[..., -1:]
-                if input_ids is not None:
-                    input_ids = input_ids[:, -1:]
+    ):
+        # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
+        # Exception 1: when passing input_embeds, input_ids may be missing entries
+        # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
+        if past_key_values is not None:
+            if inputs_embeds is not None:  # Exception 1
+                input_ids = input_ids[:, -cache_position.shape[0]:]
+            elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
+                input_ids = input_ids[:, cache_position]
 
-        if inputs_embeds is not None and is_first_forward:
+        if attention_mask is not None and position_ids is None:
+            # create position_ids on the fly for batch generation
+            position_ids = attention_mask.long().cumsum(-1) - 1
+            position_ids.masked_fill_(attention_mask == 0, 1)
+            if past_key_values:
+                position_ids = position_ids[:, -input_ids.shape[1]:]
+
+        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
+        if inputs_embeds is not None and cache_position[0] == 0:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids.contiguous()}  # `contiguous()` needed for compilation use cases
 
         model_inputs.update(
             {
-                "past_key_values": past_key_values,
                 "position_ids": position_ids,
-                "attention_mask": attention_mask,
+                "cache_position": cache_position,
+                "past_key_values": past_key_values,
                 "use_cache": use_cache,
+                "attention_mask": attention_mask,
             }
         )
-
         return model_inputs
 
     @staticmethod
