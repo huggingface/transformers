@@ -684,6 +684,7 @@ class WhisperGenerationMixin:
                 synced_gpus=synced_gpus,
                 return_token_timestamps=return_token_timestamps,
                 do_condition_on_prev_tokens=do_condition_on_prev_tokens,
+                is_shortform=is_shortform,
                 batch_size=batch_size,
                 kwargs=kwargs,
             )
@@ -787,6 +788,7 @@ class WhisperGenerationMixin:
         synced_gpus,
         return_token_timestamps,
         do_condition_on_prev_tokens,
+        is_shortform,
         batch_size,
         kwargs,
     ):
