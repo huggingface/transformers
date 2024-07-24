@@ -226,7 +226,7 @@ class CLIPSegTextEmbeddings(nn.Module):
         if seq_length > self.max_position_embeddings:
             raise ValueError(
                 f"Sequence length must be less than max_position_embeddings (got `sequence length`: "
-                f"{seq_length} and max_position_embeddings: {max_position_embedding}"
+                f"{seq_length} and max_position_embeddings: {self.max_position_embedding}"
             )
 
         if position_ids is None:
