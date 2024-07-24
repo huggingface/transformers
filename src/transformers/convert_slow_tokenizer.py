@@ -1372,7 +1372,8 @@ class GemmaConvert(SpmConverter):
                     AddedToken("<unk>", normalized=False, special=True),
                 ]
             )
-            print('set merges')
+            # A slight hack so we can use the merges later
+            # In future, we will be able to access the set of merges from the tokenizer directly
             setattr(tokenizer, "_merges", merges)
 
         else:
