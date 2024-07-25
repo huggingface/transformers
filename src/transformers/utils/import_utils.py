@@ -1819,6 +1819,58 @@ def fetch__all__(file_content):
 
 @lru_cache()
 def define_import_structure(module_path):
+    """
+    This method takes the path to a file/a folder and returns the import structure.
+    If a file is given, it will return the import structure of the parent folder.
+
+    Import structures are designed to be digestible by `_LazyModule` objects. They are
+    created from the __all__ definitions in each files as well as the `@export` decorators
+    above methods and objects.
+
+    The import structure allows explicit display of the required backends for a given object.
+    These backends are specified in two ways:
+
+    1. Through their `@export`, if they are exported with that decorator. This `@export` decorator
+       accepts a `backend` tuple kwarg mentioning which backends are required to run this object.
+
+    2. If an object is defined in a file with "default" backends, it will have, at a minimum, this
+       backend specified. The default backends are defined according to the filename:
+
+       - If a file is named like `modeling_*.py`, it will have a `torch` backend
+       - If a file is named like `modeling_tf_*.py`, it will have a `tf` backend
+       - If a file is named like `modeling_flax_*.py`, it will have a `flax` backend
+       - If a file is named like `tokenization_*_fast.py`, it will have a `tokenizers` backend
+
+    Backends serve the purpose of displaying a clear error message to the user in case the backends are not installed.
+    Should an object be imported without its required backends being in the environment, any attempt to use the
+    object will raise an error mentioning which backend(s) should be added to the environment in order to use
+    that object.
+
+    Here's an example of an input import structure at the src.transformers.models level:
+
+    {
+        'albert': {
+            frozenset(): {
+                'configuration_albert': {'AlbertConfig', 'AlbertOnnxConfig'}
+            },
+            frozenset({'tokenizers'}): {
+                'tokenization_albert_fast': {'AlbertTokenizerFast'}
+            },
+        },
+        'align': {
+            frozenset(): {
+                'configuration_align': {'AlignConfig', 'AlignTextConfig', 'AlignVisionConfig'},
+                'processing_align': {'AlignProcessor'}
+            },
+        },
+        'altclip': {
+            frozenset(): {
+                'configuration_altclip': {'AltCLIPConfig', 'AltCLIPTextConfig', 'AltCLIPVisionConfig'},
+                'processing_altclip': {'AltCLIPProcessor'},
+            }
+        }
+    }
+    """
     import_structure = {}
     if os.path.isdir(module_path):
         for f in os.listdir(module_path):
