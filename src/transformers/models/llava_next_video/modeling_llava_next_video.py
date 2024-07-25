@@ -388,7 +388,9 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel):
         config: LlavaNextVideoConfig,
     ):
         super().__init__(config)
-        self.vision_tower = AutoModel.from_config(config.vision_config, attn_implementation=config.vision_config._attn_implementation)
+        self.vision_tower = AutoModel.from_config(
+            config.vision_config, attn_implementation=config.vision_config._attn_implementation
+        )
 
         embed_std = 1 / math.sqrt(config.text_config.hidden_size)
         self.image_newline = nn.Parameter(torch.randn(config.text_config.hidden_size, dtype=self.dtype) * embed_std)
