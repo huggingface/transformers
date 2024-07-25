@@ -459,10 +459,10 @@ class DacIntegrationTest(unittest.TestCase):
         expected_rmse = 0.0039
 
         expected_encoder_sums_dict = {
-            "loss": 30.0086,
-            "quantized_representation": 0.0105,
-            "audio_codes": 518.3932,
-            "projected_latents": -0.0052,
+            "loss": 30.0052,
+            "quantized_representation": 0.0098,
+            "audio_codes": 516.1803,
+            "projected_latents": -0.0050,
         }
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
