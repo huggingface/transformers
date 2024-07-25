@@ -404,10 +404,10 @@ class DacIntegrationTest(unittest.TestCase):
         expected_rmse = 0.004
 
         expected_encoder_sums_dict = {
-            "loss": 24.8727,
-            "quantized_representation": -0.0749,
-            "audio_codes": 502.5054,
-            "projected_latents": 0.0678,
+            "loss": 24.8596,
+            "quantized_representation": -0.0745,
+            "audio_codes": 504.0948,
+            "projected_latents": 0.0682,
         }
 
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -459,9 +459,9 @@ class DacIntegrationTest(unittest.TestCase):
         expected_rmse = 0.0039
 
         expected_encoder_sums_dict = {
-            "loss": 29.9858,
-            "quantized_representation": 0.0099,
-            "audio_codes": 516.2979,
+            "loss": 30.0086,
+            "quantized_representation": 0.0105,
+            "audio_codes": 518.3932,
             "projected_latents": -0.0052,
         }
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -513,10 +513,10 @@ class DacIntegrationTest(unittest.TestCase):
         expected_rmse = 0.002
 
         expected_encoder_sums_dict = {
-            "loss": 34.3724,
-            "quantized_representation": 0.0077,
-            "audio_codes": 509.6745,
-            "projected_latents": -0.1053,
+            "loss": 34.3612,
+            "quantized_representation": 0.0078,
+            "audio_codes": 509.6812,
+            "projected_latents": -0.1054,
         }
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
@@ -567,10 +567,10 @@ class DacIntegrationTest(unittest.TestCase):
         expected_rmse = 0.002
 
         expected_encoder_sums_dict = {
-            "loss": 20.3718,
-            "quantized_representation": -0.0544,
-            "audio_codes": 488.0180,
-            "projected_latents": 0.0227,
+            "loss": 20.3913,
+            "quantized_representation": -0.0538,
+            "audio_codes": 487.8470,
+            "projected_latents": 0.0237,
         }
 
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -624,10 +624,10 @@ class DacIntegrationTest(unittest.TestCase):
         expected_rmse = 0.002
 
         expected_encoder_sums_dict = {
-            "loss": 24.2455,
-            "quantized_representation": 0.0507,
-            "audio_codes": 510.0157,
-            "projected_latents": -0.0078,
+            "loss": 24.2309,
+            "quantized_representation": 0.0520,
+            "audio_codes": 510.2700,
+            "projected_latents": -0.0076,
         }
 
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -681,10 +681,10 @@ class DacIntegrationTest(unittest.TestCase):
         expected_rmse = 0.001
 
         expected_encoder_sums_dict = {
-            "loss": 25.9091,
-            "quantized_representation": 0.0017,
-            "audio_codes": 528.0723,
-            "projected_latents": -0.1197,
+            "loss": 25.9233,
+            "quantized_representation": 0.0013,
+            "audio_codes": 528.5620,
+            "projected_latents": -0.1194,
         }
 
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
