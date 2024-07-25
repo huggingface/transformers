@@ -1,4 +1,4 @@
-# Copied from tests.models.clap.test_processor_clap.py with Clap->MSClap
+# Copied from tests.models.clap.test_processor_clap with Clap->MSClap
 # Copyright 2024 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
