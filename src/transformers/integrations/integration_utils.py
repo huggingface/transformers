@@ -740,7 +740,7 @@ class WandbLogModel(str, Enum):
         return self in (WandbLogModel.CHECKPOINT, WandbLogModel.END)
 
     @classmethod
-    def _missing_(cls, value: Any) -> 'WandbLogModel':
+    def _missing_(cls, value: Any) -> "WandbLogModel":
         if not isinstance(value, str):
             raise ValueError(f"Expecting to have a string `WANDB_LOG_MODEL` setting, but got {type(value)}")
         if value.upper() in ENV_VARS_TRUE_VALUES:
@@ -750,8 +750,11 @@ class WandbLogModel(str, Enum):
             )
             logger.info(f"Setting `WANDB_LOG_MODEL` from {os.getenv('WANDB_LOG_MODEL')} to `end` instead")
             return WandbLogModel.END
-        logger.warning(f"Received unrecognized `WANDB_LOG_MODEL` setting value={value}; so disabling `WANDB_LOG_MODEL`")
+        logger.warning(
+            f"Received unrecognized `WANDB_LOG_MODEL` setting value={value}; so disabling `WANDB_LOG_MODEL`"
+        )
         return WandbLogModel.FALSE
+
 
 class WandbCallback(TrainerCallback):
     """
