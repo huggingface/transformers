@@ -73,23 +73,22 @@ def _get_unpad_data(attention_mask):
     )
 
 
+# Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->GLM
 class GLMRMSNorm(nn.Module):
-    def __init__(self, normalized_shape, eps=1e-5, device=None, dtype=None, **kwargs):
+    def __init__(self, hidden_size, eps=1e-6):
         """
         GLMRMSNorm is equivalent to T5LayerNorm
         """
         super().__init__()
-        self.weight = torch.nn.Parameter(
-            torch.ones(normalized_shape, device=device, dtype=dtype)
-        )
-        self.eps = eps
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
 
-    def forward(self, hidden_states: torch.Tensor):
+    def forward(self, hidden_states):
         input_dtype = hidden_states.dtype
-        variance = hidden_states.to(torch.float32).pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.eps)
-
-        return (self.weight * hidden_states).to(input_dtype)
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
 
 
 class GLMRotaryEmbedding(nn.Module):
@@ -899,15 +898,11 @@ class GLMBlock(torch.nn.Module):
         )
         self.fp32_residual_connection = config.fp32_residual_connection
         LayerNormFunc = GLMRMSNorm if config.rmsnorm else LayerNorm
-        self.input_layernorm = LayerNormFunc(
-            config.hidden_size, eps=config.rms_norm_eps, device=device
-        )
+        self.input_layernorm = LayerNormFunc(config.hidden_size, eps=config.rms_norm_eps)
 
         self.self_attention = SelfAttention(config, layer_number, device=device)
         self.hidden_dropout = config.hidden_dropout
-        self.post_attention_layernorm = LayerNormFunc(
-            config.hidden_size, eps=config.rms_norm_eps, device=device
-        )
+        self.post_attention_layernorm = LayerNormFunc(config.hidden_size, eps=config.rms_norm_eps)
         self.mlp = GLMMLP(config)
 
     def forward(
@@ -984,10 +979,7 @@ class GLMTransformer(torch.nn.Module):
 
         if self.post_layer_norm:
             LayerNormFunc = GLMRMSNorm if config.rmsnorm else LayerNorm
-            # Final layer norm before output.
-            self.final_layernorm = LayerNormFunc(
-                config.hidden_size, eps=config.rms_norm_eps, device=device
-            )
+            self.final_layernorm = LayerNormFunc(config.hidden_size, eps=config.rms_norm_eps)
 
         self.gradient_checkpointing = False
 

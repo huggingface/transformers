@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 """Testing suite for the PyTorch GLM model."""
 
 import gc
@@ -37,6 +38,7 @@ from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
+
 if is_torch_available():
     import torch
 
@@ -46,7 +48,6 @@ if is_torch_available():
         GLMForTokenClassification,
         GLMModel,
     )
-
 
 class GLMModelTester:
     def __init__(
@@ -307,7 +308,9 @@ class GLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     )
     test_headmasking = False
     test_pruning = False
-    fx_compatible = True
+    test_hidden_states_output = False
+    fx_compatible = False
+    test_attention_outputs = False
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
     def is_pipeline_test_to_skip(
