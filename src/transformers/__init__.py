@@ -447,8 +447,8 @@ _import_structure = {
         "GitProcessor",
         "GitVisionConfig",
     ],
-    "models.glpn": ["GLPNConfig"],
     "models.glm": ["GLMConfig", "GLMTokenizer"],
+    "models.glpn": ["GLPNConfig"],
     "models.gpt2": [
         "GPT2Config",
         "GPT2Tokenizer",
@@ -2224,13 +2224,6 @@ else:
             "GitVisionModel",
         ]
     )
-    _import_structure["models.glpn"].extend(
-        [
-            "GLPNForDepthEstimation",
-            "GLPNModel",
-            "GLPNPreTrainedModel",
-        ]
-    )
     _import_structure["models.glm"].extend(
         [
             "GLMForCausalLM",
@@ -2238,6 +2231,13 @@ else:
             "GLMForTokenClassification",
             "GLMModel",
             "GLMPreTrainedModel",
+        ]
+    )
+    _import_structure["models.glpn"].extend(
+        [
+            "GLPNForDepthEstimation",
+            "GLPNModel",
+            "GLPNPreTrainedModel",
         ]
     )
     _import_structure["models.gpt2"].extend(
