@@ -20,10 +20,8 @@ from typing import Mapping
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
-from ...utils.import_utils import register
 
 
-@register()
 class AlbertConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`AlbertModel`] or a [`TFAlbertModel`]. It is used
@@ -153,7 +151,6 @@ class AlbertConfig(PretrainedConfig):
 
 
 # Copied from transformers.models.bert.configuration_bert.BertOnnxConfig with Roberta->Albert
-@register()
 class AlbertOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:

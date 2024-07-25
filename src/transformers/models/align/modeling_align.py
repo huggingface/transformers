@@ -20,6 +20,7 @@ from typing import Any, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
+from IPython.terminal.pt_inputhooks import backends
 from torch import nn
 
 from ...activations import ACT2FN
@@ -38,7 +39,6 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ...utils.import_utils import register
 from .configuration_align import AlignConfig, AlignTextConfig, AlignVisionConfig
 
 
@@ -1166,7 +1166,6 @@ class AlignTextPooler(nn.Module):
         return pooled_output
 
 
-@register(backends=("torch",))
 class AlignPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1200,7 +1199,6 @@ class AlignPreTrainedModel(PreTrainedModel):
     """The text model from ALIGN without any head or projection on top.""",
     ALIGN_START_DOCSTRING,
 )
-@register(backends=("torch",))
 class AlignTextModel(AlignPreTrainedModel):
     config_class = AlignTextConfig
     _no_split_modules = ["AlignTextEmbeddings"]
@@ -1328,7 +1326,6 @@ class AlignTextModel(AlignPreTrainedModel):
     """The vision model from ALIGN without any head or projection on top.""",
     ALIGN_START_DOCSTRING,
 )
-@register(backends=("torch",))
 class AlignVisionModel(AlignPreTrainedModel):
     config_class = AlignVisionConfig
     main_input_name = "pixel_values"
@@ -1415,7 +1412,6 @@ class AlignVisionModel(AlignPreTrainedModel):
 
 
 @add_start_docstrings(ALIGN_START_DOCSTRING)
-@register(backends=("torch",))
 class AlignModel(AlignPreTrainedModel):
     config_class = AlignConfig
 

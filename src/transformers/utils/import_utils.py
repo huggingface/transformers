@@ -27,8 +27,9 @@ from collections import OrderedDict
 from functools import lru_cache
 from itertools import chain
 from types import ModuleType
-from typing import Any, Optional, Tuple, Union
+from typing import Any, Optional, Tuple, Union, List
 
+from nltk.downloader import update
 from packaging import version
 
 from . import logging
@@ -1657,7 +1658,7 @@ class _LazyModule(ModuleType):
                     if key not in _import_structure:
                         _import_structure[key] = values
                     else:
-                        _import_structure[key].extend(values)
+                        _import_structure[key].update(values)
 
                 # Needed for autocompletion in an IDE
                 self.__all__.extend(list(item.keys()) + list(chain(*item.values())))
@@ -1675,7 +1676,7 @@ class _LazyModule(ModuleType):
             self._name = name
             self._import_structure = _import_structure
 
-        # This can be removed once every exportable object has a `register()` export.
+        # This can be removed once every exportable object has a `export()` export.
         if not PER_BACKEND_SPLIT:
             self._modules = set(import_structure.keys())
             self._class_to_module = {}
@@ -1765,12 +1766,12 @@ def direct_transformers_import(path: str, file="__init__.py") -> ModuleType:
     return module
 
 
-def register(*, backends=()):
+def export(*, backends=()):
     """
     This method enables two things:
     - Attaching a `__backends` tuple to an object to see what are the necessary backends for it
       to execute correctly without instantiating it
-    - The '@register' string is used to dynamically import objects
+    - The '@export' string is used to dynamically import objects
     """
 
     if not isinstance(backends, tuple):
@@ -1781,6 +1782,51 @@ def register(*, backends=()):
         return fun
 
     return inner_fn
+
+
+BASE_FILE_REQUIREMENTS = {
+    lambda e: 'modeling_tf_' in e: ('tf',),
+    lambda e: 'modeling_flax_' in e: ('flax',),
+    lambda e: 'modeling_' in e: ('torch',),
+    lambda e: e.startswith('tokenization_') and e.endswith('_fast'): ('tokenizers',),
+}
+
+
+def fetch__all__(file_content):
+    """
+    Returns the content of the __all__ variable in the file content.
+    Returns None if not defined, otherwise returns a list of strings.
+    """
+
+    if '__all__' not in file_content:
+        return []
+
+    lines = file_content.splitlines()
+    for index, line in enumerate(lines):
+        if line.startswith("__all__"):
+            start_index = index
+
+    lines = lines[start_index:]
+
+    if not lines[0].startswith('__all__'):
+        raise ValueError(
+            "fetch__all__ accepts a list of lines, with the first line being the __all__ variable declaration"
+        )
+
+    # __all__ is defined on a single line
+    if lines[0].endswith("]"):
+        return [obj.strip("\"' ") for obj in lines[0].split("=")[1].strip(" []").split(",")]
+
+    # __all__ is defined on multiple lines
+    else:
+        _all = []
+        for __all__line_index in range(1, len(lines)):
+            if lines[__all__line_index].strip() == "]":
+                return _all
+            else:
+                _all.append(lines[__all__line_index].strip("\"', "))
+
+        return _all
 
 
 @lru_cache()
@@ -1796,6 +1842,9 @@ def define_import_structure(module_path):
 
     adjacent_modules = [f for f in os.listdir(directory) if not os.path.isdir(os.path.join(directory, f))]
 
+    # We're only taking a look at files different from __init__.py
+    # We could theoretically export things directly from the __init__.py
+    # files, but this is not supported at this time.
     if "__init__.py" in adjacent_modules:
         adjacent_modules.remove("__init__.py")
 
@@ -1811,78 +1860,108 @@ def define_import_structure(module_path):
         previous_line = ""
         previous_index = 0
 
-        lines = file_content.split("\n")
-        for index, line in enumerate(lines):
-            # This allows registering items with other decorators. We'll take a look
-            # at the line that follows at the same indentation level.
-            if line.startswith((" ", "\t", "@", ")")) and not line.startswith("@register"):
-                continue
+        # Some files have some requirements by default.
+        # For example, any file named `modeling_tf_xxx.py`
+        # should have TensorFlow as a required backend.
+        base_requirements = ()
+        for string_check, requirements in BASE_FILE_REQUIREMENTS.items():
+            if string_check(module_name):
+                base_requirements = requirements
+                break
 
-            # Skipping line enables putting whatever we want between the
-            # register() call and the actuall class/method definition.
-            # This is what enables having # Copied from statements, docs, etc.
-            skip_line = False
+        # Objects that have a `@export` assigned to them will get exported
+        # with the backends specified in the decorator as well as the file backends.
+        registered_objects = set()
+        if '@export' in file_content:
+            lines = file_content.split("\n")
+            for index, line in enumerate(lines):
 
-            if "@register" in previous_line:
+                # This allows exporting items with other decorators. We'll take a look
+                # at the line that follows at the same indentation level.
+                if line.startswith((" ", "\t", "@", ")")) and not line.startswith("@export"):
+                    continue
+
+                # Skipping line enables putting whatever we want between the
+                # export() call and the actual class/method definition.
+                # This is what enables having # Copied from statements, docs, etc.
                 skip_line = False
 
-                # Backends are defined on the same line as register
-                if "backends" in previous_line:
-                    backends_string = previous_line.split("backends=")[1].split("(")[1].split(")")[0]
-                    backends = tuple(sorted([b.strip("'\",") for b in backends_string.split(", ")]))
+                if "@export" in previous_line:
+                    skip_line = False
 
-                # Backends are defined in the lines following register, for example such as:
-                # @register(
-                #     backends=(
-                #             "sentencepiece",
-                #             "torch",
-                #             "tf",
-                #     )
-                # )
-                #
-                # or
-                #
-                # @register(
-                #     backends=(
-                #             "sentencepiece", "tf"
-                #     )
-                # )
-                elif "backends" in lines[previous_index + 1]:
-                    backends = []
-                    for backend_line in lines[previous_index:index]:
-                        if "backends" in backend_line:
-                            backend_line = backend_line.split("=")[1]
-                        if '"' in backend_line or "'" in backend_line:
-                            if ", " in backend_line:
-                                backends.extend(backend.strip("()\"', ") for backend in backend_line.split(", "))
-                            else:
-                                backends.append(backend_line.strip("()\"', "))
+                    # Backends are defined on the same line as export
+                    if "backends" in previous_line:
+                        backends_string = previous_line.split("backends=")[1].split("(")[1].split(")")[0]
+                        backends = tuple(sorted([b.strip("'\",") for b in backends_string.split(", ") if b]))
 
-                        # If the line is only a ')', then we reached the end of the backends and we break.
-                        if backend_line.strip() == ")":
-                            break
-                    backends = tuple(backends)
+                    # Backends are defined in the lines following export, for example such as:
+                    # @export(
+                    #     backends=(
+                    #             "sentencepiece",
+                    #             "torch",
+                    #             "tf",
+                    #     )
+                    # )
+                    #
+                    # or
+                    #
+                    # @export(
+                    #     backends=(
+                    #             "sentencepiece", "tf"
+                    #     )
+                    # )
+                    elif "backends" in lines[previous_index + 1]:
+                        backends = []
+                        for backend_line in lines[previous_index:index]:
+                            if "backends" in backend_line:
+                                backend_line = backend_line.split("=")[1]
+                            if '"' in backend_line or "'" in backend_line:
+                                if ", " in backend_line:
+                                    backends.extend(backend.strip("()\"', ") for backend in backend_line.split(", "))
+                                else:
+                                    backends.append(backend_line.strip("()\"', "))
 
-                # No backends are registered
-                else:
-                    backends = ()
+                            # If the line is only a ')', then we reached the end of the backends and we break.
+                            if backend_line.strip() == ")":
+                                break
+                        backends = tuple(backends)
 
-                backends = frozenset(backends)
-                if backends not in module_requirements:
-                    module_requirements[backends] = {}
-                if module_name not in module_requirements[backends]:
-                    module_requirements[backends][module_name] = []
+                    # No backends are registered for export
+                    else:
+                        backends = ()
 
-                if not line.startswith("class") and not line.startswith("def"):
-                    skip_line = True
-                else:
-                    start_index = 6 if line.startswith("class") else 4
-                    object_name = line[start_index:].split("(")[0].strip(":")
-                    module_requirements[backends][module_name].append(object_name)
+                    backends = frozenset(backends + base_requirements)
+                    if backends not in module_requirements:
+                        module_requirements[backends] = {}
+                    if module_name not in module_requirements[backends]:
+                        module_requirements[backends][module_name] = set()
 
-            if not skip_line:
-                previous_line = line
-                previous_index = index
+                    if not line.startswith("class") and not line.startswith("def"):
+                        skip_line = True
+                    else:
+                        start_index = 6 if line.startswith("class") else 4
+                        object_name = line[start_index:].split("(")[0].strip(":")
+                        module_requirements[backends][module_name].add(object_name)
+                        registered_objects.add(object_name)
+
+                if not skip_line:
+                    previous_line = line
+                    previous_index = index
+
+        # All objects that are in __all__ should be exported by default.
+        # These objects are exported with the file backends.
+        if '__all__' in file_content:
+            _all = fetch__all__(file_content)
+
+            backends = frozenset(base_requirements)
+            if backends not in module_requirements:
+                module_requirements[backends] = {}
+            if module_name not in module_requirements[backends]:
+                module_requirements[backends][module_name] = set()
+
+            for _all_object in _all:
+                if _all_object not in registered_objects:
+                    module_requirements[backends][module_name].add(_all_object)
 
     import_structure = {**module_requirements, **import_structure}
     return import_structure

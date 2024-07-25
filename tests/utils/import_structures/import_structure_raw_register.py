@@ -1,31 +1,31 @@
 # fmt: off
 
-from transformers.utils.import_utils import register
+from transformers.utils.import_utils import export
 
 
-@register()
+@export()
 class A0:
     def __init__(self):
         pass
 
 
-@register()
+@export()
 def a0():
     pass
 
 
-@register(backends=("torch", "tf"))
+@export(backends=("torch", "tf"))
 class A1:
     def __init__(self):
         pass
 
 
-@register(backends=("torch", "tf"))
+@export(backends=("torch", "tf"))
 def a1():
     pass
 
 
-@register(
+@export(
     backends=("torch", "tf")
 )
 class A2:
@@ -33,14 +33,14 @@ class A2:
         pass
 
 
-@register(
+@export(
     backends=("torch", "tf")
 )
 def a2():
     pass
 
 
-@register(
+@export(
     backends=(
         "torch",
         "tf"
@@ -51,7 +51,7 @@ class A3:
         pass
 
 
-@register(
+@export(
     backends=(
             "torch",
             "tf"
@@ -59,3 +59,8 @@ class A3:
 )
 def a3():
     pass
+
+@export(backends=())
+class A4:
+    def __init__(self):
+        pass

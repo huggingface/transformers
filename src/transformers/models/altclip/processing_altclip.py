@@ -20,10 +20,8 @@ import warnings
 
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
-from ...utils.import_utils import register
 
 
-@register()
 class AltCLIPProcessor(ProcessorMixin):
     r"""
     Constructs a AltCLIP processor which wraps a CLIP image processor and a XLM-Roberta tokenizer into a single

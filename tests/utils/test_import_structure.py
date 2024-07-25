@@ -40,15 +40,15 @@ class TestImportStructures(unittest.TestCase):
         import_structure = define_import_structure(import_structures)
         import_structure_definition = {
             frozenset(()): {
-                "import_structure_raw_register": ["A0", "a0"],
-                "import_structure_register_with_comments": ["B0", "b0"],
+                "import_structure_raw_register": {"A0", "a0", "A4"},
+                "import_structure_register_with_comments": {"B0", "b0"},
             },
             frozenset(("tf", "torch")): {
-                "import_structure_raw_register": ["A1", "a1", "A2", "a2", "A3", "a3"],
-                "import_structure_register_with_comments": ["B1", "b1", "B2", "b2", "B3", "b3"],
+                "import_structure_raw_register": {"A1", "a1", "A2", "a2", "A3", "a3"},
+                "import_structure_register_with_comments": {"B1", "b1", "B2", "b2", "B3", "b3"},
             },
             frozenset(("torch",)): {
-                "import_structure_register_with_duplicates": ["C0", "c0", "C1", "c1", "C2", "c2", "C3", "c3"],
+                "import_structure_register_with_duplicates": {"C0", "c0", "C1", "c1", "C2", "c2", "C3", "c3"},
             },
         }
 

@@ -49,7 +49,6 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ...utils.import_utils import register
 from .configuration_albert import AlbertConfig
 
 
@@ -59,7 +58,6 @@ _CHECKPOINT_FOR_DOC = "albert/albert-base-v2"
 _CONFIG_FOR_DOC = "AlbertConfig"
 
 
-@register()
 def load_tf_weights_in_albert(model, config, tf_checkpoint_path):
     """Load tf checkpoints in a pytorch model."""
     try:
@@ -555,7 +553,6 @@ class AlbertTransformer(nn.Module):
         )
 
 
-@register(backends=("torch",))
 class AlbertPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -688,7 +685,6 @@ ALBERT_INPUTS_DOCSTRING = r"""
     "The bare ALBERT Model transformer outputting raw hidden-states without any specific head on top.",
     ALBERT_START_DOCSTRING,
 )
-@register(backends=("torch",))
 class AlbertModel(AlbertPreTrainedModel):
     config_class = AlbertConfig
     base_model_prefix = "albert"
@@ -835,7 +831,6 @@ class AlbertModel(AlbertPreTrainedModel):
     """,
     ALBERT_START_DOCSTRING,
 )
-@register(backends=("torch",))
 class AlbertForPreTraining(AlbertPreTrainedModel):
     _tied_weights_keys = ["predictions.decoder.bias", "predictions.decoder.weight"]
 
@@ -988,7 +983,6 @@ class AlbertSOPHead(nn.Module):
     "Albert Model with a `language modeling` head on top.",
     ALBERT_START_DOCSTRING,
 )
-@register(backends=("torch",))
 class AlbertForMaskedLM(AlbertPreTrainedModel):
     _tied_weights_keys = ["predictions.decoder.bias", "predictions.decoder.weight"]
 
@@ -1104,7 +1098,6 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
     """,
     ALBERT_START_DOCSTRING,
 )
-@register(backends=("torch",))
 class AlbertForSequenceClassification(AlbertPreTrainedModel):
     def __init__(self, config: AlbertConfig):
         super().__init__(config)
@@ -1206,7 +1199,6 @@ class AlbertForSequenceClassification(AlbertPreTrainedModel):
     """,
     ALBERT_START_DOCSTRING,
 )
-@register(backends=("torch",))
 class AlbertForTokenClassification(AlbertPreTrainedModel):
     def __init__(self, config: AlbertConfig):
         super().__init__(config)
@@ -1290,7 +1282,6 @@ class AlbertForTokenClassification(AlbertPreTrainedModel):
     """,
     ALBERT_START_DOCSTRING,
 )
-@register(backends=("torch",))
 class AlbertForQuestionAnswering(AlbertPreTrainedModel):
     def __init__(self, config: AlbertConfig):
         super().__init__(config)
@@ -1394,7 +1385,6 @@ class AlbertForQuestionAnswering(AlbertPreTrainedModel):
     """,
     ALBERT_START_DOCSTRING,
 )
-@register(backends=("torch",))
 class AlbertForMultipleChoice(AlbertPreTrainedModel):
     def __init__(self, config: AlbertConfig):
         super().__init__(config)

@@ -16,8 +16,6 @@
 Image/Text processor class for ALIGN
 """
 
-from ...utils.import_utils import register
-
 
 try:
     from typing import Unpack
@@ -42,7 +40,6 @@ class AlignProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-@register()
 class AlignProcessor(ProcessorMixin):
     r"""
     Constructs an ALIGN processor which wraps [`EfficientNetImageProcessor`] and
