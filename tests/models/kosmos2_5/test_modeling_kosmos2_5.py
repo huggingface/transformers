@@ -698,7 +698,6 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
         model = Kosmos2_5ForConditionalGeneration.from_pretrained(
             repo, device_map=torch_device, torch_dtype=dtype, attn_implementation="eager"
         )
-        model.eval()
         processor = AutoProcessor.from_pretrained(repo)
         prompt = "<ocr>"
         generated_ids, generated_text = self.run_example(
@@ -736,7 +735,6 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
         model = Kosmos2_5ForConditionalGeneration.from_pretrained(
             repo, device_map=torch_device, torch_dtype=dtype, attn_implementation="sdpa"
         )
-        model.eval()
         processor = AutoProcessor.from_pretrained(repo)
         prompt = "<ocr>"
         generated_ids, generated_text = self.run_example(
@@ -773,7 +771,6 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
             torch_dtype=dtype,
             attn_implementation="flash_attention_2",
         )
-        model.eval()
         processor = AutoProcessor.from_pretrained(repo)
         prompt = "<ocr>"
         generated_ids, generated_text = self.run_example(
