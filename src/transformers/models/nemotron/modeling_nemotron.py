@@ -145,12 +145,12 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
-    
+
     rot_dim = cos.shape[-1]
     # If q_pass/k_pass is empty, rotary pos embedding is applied to all tensor q/k
-    q, q_pass = q[..., :rot_dim], q[..., rot_dim:] 
+    q, q_pass = q[..., :rot_dim], q[..., rot_dim:]
     k, k_pass = k[..., :rot_dim], k[..., rot_dim:]
-    
+
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return torch.cat((q_embed, q_pass), dim=-1), torch.cat((k_embed, k_pass), dim=-1)
@@ -288,7 +288,6 @@ class NemotronAttention(nn.Module):
 
         attn_output = attn_output.reshape(bsz, q_len, self.head_dim * self.num_heads)
 
-
         attn_output = self.o_proj(attn_output)
 
         if not output_attentions:
@@ -405,44 +404,6 @@ class NemotronFlashAttention2(NemotronAttention):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
-
-    def _upad_input(self, query_layer, key_layer, value_layer, attention_mask, query_length):
-        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
-        batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
-
-        key_layer = index_first_axis(
-            key_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
-        )
-        value_layer = index_first_axis(
-            value_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
-        )
-        if query_length == kv_seq_len:
-            query_layer = index_first_axis(
-                query_layer.reshape(batch_size * kv_seq_len, self.num_heads, head_dim), indices_k
-            )
-            cu_seqlens_q = cu_seqlens_k
-            max_seqlen_in_batch_q = max_seqlen_in_batch_k
-            indices_q = indices_k
-        elif query_length == 1:
-            max_seqlen_in_batch_q = 1
-            cu_seqlens_q = torch.arange(
-                batch_size + 1, dtype=torch.int32, device=query_layer.device
-            )  # There is a memcpy here, that is very bad.
-            indices_q = cu_seqlens_q[:-1]
-            query_layer = query_layer.squeeze(1)
-        else:
-            # The -q_len: slice assumes left padding.
-            attention_mask = attention_mask[:, -query_length:]
-            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_layer, attention_mask)
-
-        return (
-            query_layer,
-            key_layer,
-            value_layer,
-            indices_q,
-            (cu_seqlens_q, cu_seqlens_k),
-            (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
-        )
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaSdpaAttention with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
@@ -1143,17 +1104,7 @@ class NemotronForCausalLM(NemotronPreTrainedModel):
         )
         return model_inputs
 
-    @staticmethod
-    def _reorder_cache(past_key_values, beam_idx):
-        reordered_past = ()
-        for layer_past in past_key_values:
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
-            )
-        return reordered_past
 
-
-# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
 @add_start_docstrings(
     """
     The Nemotron Model transformer with a sequence classification head on top (linear layer).
@@ -1169,6 +1120,7 @@ class NemotronForCausalLM(NemotronPreTrainedModel):
     """,
     NEMOTRON_START_DOCSTRING,
 )
+# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
 class NemotronForSequenceClassification(NemotronPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1277,7 +1229,6 @@ class NemotronForSequenceClassification(NemotronPreTrainedModel):
         )
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaForQuestionAnswering with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
 @add_start_docstrings(
     """
 The Nemotron Model transformer with a span classification head on top for extractive question-answering tasks like
@@ -1285,6 +1236,7 @@ SQuAD (a linear layer on top of the hidden-states output to compute `span start 
     """,
     NEMOTRON_START_DOCSTRING,
 )
+# Copied from transformers.models.llama.modeling_llama.LlamaForQuestionAnswering with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
 class NemotronForQuestionAnswering(NemotronPreTrainedModel):
     base_model_prefix = "transformer"
 
@@ -1377,7 +1329,6 @@ class NemotronForQuestionAnswering(NemotronPreTrainedModel):
         )
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaForTokenClassification with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
 @add_start_docstrings(
     """
     The Nemotron Model transformer with a token classification head on top (a linear layer on top of the hidden-states
@@ -1385,6 +1336,7 @@ class NemotronForQuestionAnswering(NemotronPreTrainedModel):
     """,
     NEMOTRON_START_DOCSTRING,
 )
+# Copied from transformers.models.llama.modeling_llama.LlamaForTokenClassification with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
 class NemotronForTokenClassification(NemotronPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
