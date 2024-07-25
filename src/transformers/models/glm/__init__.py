@@ -77,7 +77,6 @@ if TYPE_CHECKING:
             GLMPreTrainedModel,
         )
 
-
 else:
     import sys
 
