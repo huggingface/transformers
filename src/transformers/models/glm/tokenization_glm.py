@@ -48,9 +48,21 @@ def bytes_to_unicode():
     tables between utf-8 bytes and unicode strings.
     """
     bs = (
-            list(range(ord("!"), ord("~") + 1)) + list(range(ord("¡"), ord("¬") + 1)) + list(
-        range(ord("®"), ord("ÿ") + 1))
-    )
+        list(
+            range(
+                ord("!"),
+                ord("~") +
+                1)) +
+        list(
+            range(
+                ord("¡"),
+                ord("¬") +
+                1)) +
+        list(
+            range(
+                ord("®"),
+                ord("ÿ") +
+                1)))
     cs = bs[:]
     n = 0
     for b in range(2 ** 8):
@@ -149,25 +161,41 @@ class GLMTokenizer(PreTrainedTokenizer):
     ):
 
         bos_token = (
-            AddedToken(bos_token, lstrip=False, rstrip=False, special=True, normalized=False)
-            if isinstance(bos_token, str)
-            else bos_token
-        )
+            AddedToken(
+                bos_token,
+                lstrip=False,
+                rstrip=False,
+                special=True,
+                normalized=False) if isinstance(
+                bos_token,
+                str) else bos_token)
         eos_token = (
-            AddedToken(eos_token, lstrip=False, rstrip=False, special=True, normalized=False)
-            if isinstance(eos_token, str)
-            else eos_token
-        )
+            AddedToken(
+                eos_token,
+                lstrip=False,
+                rstrip=False,
+                special=True,
+                normalized=False) if isinstance(
+                eos_token,
+                str) else eos_token)
         unk_token = (
-            AddedToken(unk_token, lstrip=False, rstrip=False, special=True, normalized=False)
-            if isinstance(unk_token, str)
-            else unk_token
-        )
+            AddedToken(
+                unk_token,
+                lstrip=False,
+                rstrip=False,
+                special=True,
+                normalized=False) if isinstance(
+                unk_token,
+                str) else unk_token)
         pad_token = (
-            AddedToken(pad_token, lstrip=False, rstrip=False, special=True, normalized=False)
-            if isinstance(pad_token, str)
-            else pad_token
-        )
+            AddedToken(
+                pad_token,
+                lstrip=False,
+                rstrip=False,
+                special=True,
+                normalized=False) if isinstance(
+                pad_token,
+                str) else pad_token)
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
@@ -227,7 +255,9 @@ class GLMTokenizer(PreTrainedTokenizer):
             return token
 
         while True:
-            bigram = min(pairs, key=lambda pair: self.bpe_ranks.get(pair, float("inf")))
+            bigram = min(
+                pairs, key=lambda pair: self.bpe_ranks.get(
+                    pair, float("inf")))
             if bigram not in self.bpe_ranks:
                 break
             first, second = bigram
@@ -243,7 +273,8 @@ class GLMTokenizer(PreTrainedTokenizer):
                     new_word.extend(word[i:j])
                     i = j
 
-                if word[i] == first and i < len(word) - 1 and word[i + 1] == second:
+                if word[i] == first and i < len(
+                        word) - 1 and word[i + 1] == second:
                     new_word.append(first + second)
                     i += 2
                 else:
@@ -267,8 +298,10 @@ class GLMTokenizer(PreTrainedTokenizer):
             token = "".join(
                 self.byte_encoder[b] for b in token.encode("utf-8")
             )
-            # Maps all our bytes to unicode strings, avoiding control tokens of the BPE (spaces in our case)
-            bpe_tokens.extend(bpe_token for bpe_token in self.bpe(token).split(" "))
+            # Maps all our bytes to unicode strings, avoiding control tokens of
+            # the BPE (spaces in our case)
+            bpe_tokens.extend(
+                bpe_token for bpe_token in self.bpe(token).split(" "))
         return bpe_tokens
 
     # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer._convert_token_to_id
@@ -285,36 +318,50 @@ class GLMTokenizer(PreTrainedTokenizer):
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
         text = "".join(tokens)
-        text = bytearray([self.byte_decoder[c] for c in text]).decode("utf-8", errors=self.errors)
+        text = bytearray([self.byte_decoder[c]
+                         for c in text]).decode("utf-8", errors=self.errors)
         return text
 
     # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.save_vocabulary
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Type[tuple] | tuple[
-        str, str]:
+    def save_vocabulary(self,
+                        save_directory: str,
+                        filename_prefix: Optional[str] = None) -> Type[tuple] | tuple[str,
+                                                                                      str]:
 
         if not os.path.isdir(save_directory):
-            logger.error(f"Vocabulary path ({save_directory}) should be a directory")
+            logger.error(
+                f"Vocabulary path ({save_directory}) should be a directory")
             return Tuple[None]
 
         vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
-        )
+            save_directory,
+            (filename_prefix +
+             "-" if filename_prefix else "") +
+            VOCAB_FILES_NAMES["vocab_file"])
         merge_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["merges_file"]
-        )
+            save_directory,
+            (filename_prefix +
+             "-" if filename_prefix else "") +
+            VOCAB_FILES_NAMES["merges_file"])
 
         with open(vocab_file, "w", encoding="utf-8") as f:
-            f.write(json.dumps(self.encoder, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
+            f.write(
+                json.dumps(
+                    self.encoder,
+                    indent=2,
+                    sort_keys=True,
+                    ensure_ascii=False) +
+                "\n")
 
         index = 0
         with open(merge_file, "w", encoding="utf-8") as writer:
             writer.write("#version: 0.2\n")
-            for bpe_tokens, token_index in sorted(self.bpe_ranks.items(), key=lambda kv: kv[1]):
+            for bpe_tokens, token_index in sorted(
+                    self.bpe_ranks.items(), key=lambda kv: kv[1]):
                 if index != token_index:
                     logger.warning(
                         f"Saving vocabulary to {merge_file}: BPE merge indices are not consecutive."
-                        " Please check that the tokenizer is not corrupted!"
-                    )
+                        " Please check that the tokenizer is not corrupted!")
                     index = token_index
                 writer.write(" ".join(bpe_tokens) + "\n")
                 index += 1
@@ -331,11 +378,13 @@ class GLMTokenizer(PreTrainedTokenizer):
 
         Here is an example of output：
 
-        [gMASK]<sop><|system|>\nSystemPrompt<|user|>\nPrompt<|assistant|>n\Answer<|user|>\nPrompt<|assistant|>\nAnswer<|user|>
+        [gMASK]<sop><|system|>\nSystemPrompt<|user|>\nPrompt<|assistant|>n\\Answer<|user|>\nPrompt<|assistant|>\nAnswer<|user|>
 
         """
         template = (
             "[gMASK]<sop>{% for item in messages %}{% if item['tools'] is defined %}<|system|>\n你是一个名为 GLM-4 的人工智能助手。你是基于智谱AI训练的语言模型 GLM-4 模型开发的，你的任务是针对用户的问题和要求提供适当的答复和支持。\n\n# 可用工具{% set tools = item['tools'] %}{% for tool in tools %}{% if tool['type'] == 'function' %}\n\n## {{ tool['function']['name'] }}\n\n{{ tool['function'] | tojson(indent=4) }}\n在调用上述函数时，请使用 Json 格式表示调用的参数。{% elif tool['type'] == 'python' %}\n\n## python\n\n当你向 `python` 发送包含 Python 代码的消息时，该代码将会在一个有状态的 Jupyter notebook 环境中执行。\n`python` 返回代码执行的输出，或在执行 60 秒后返回超时。\n`/mnt/data` 将会持久化存储你的文件。在此会话中，`python` 无法访问互联网。不要使用 `python` 进行任何网络请求或者在线 API 调用，这些在线内容的访问将不会成功。{% elif tool['type'] == 'simple_browser' %}\n\n## simple_browser\n\n你可以使用 `simple_browser` 工具。该工具支持以下函数：\n`search(query: str, recency_days: int)`：使用搜索引擎进行查询并显示结果，可以使用 `recency_days` 参数控制搜索内容的时效性。\n`mclick(ids: list[int])`：获取一系列指定 id 的页面内容。每次调用时，须选择3-10个页面。选择多个角度的页面，同时尽可能选择可信任的信息来源。考虑到部分页面是无法加载的，你也可以多打开一些可能有用的页面而不用担心内容过多。\n`open_url(url: str)`：打开指定的 URL。\n\n使用 `【{引用 id}†{引用文本}】` 来引用内容。\n\n操作步骤：1. 使用 `search` 来获得信息列表; 2. 使用 `mclick` 来获取指定 ID 页面的内容; 3. 根据获得的内容进行回复。在回复中应当引用信息来源。\n 如果用户提供了 URL，也可以用 `open_url` 直接打开页面。\n如果初次搜索结果没有找到合适的信息，也可以再次使用 `search` 进行搜索。{% elif tool['type'] == 'cogview' %}\n\n## cogview\n\n如果用户的请求中包含了对图像的描述，你可以使用 `cogview` 来生成图像并展示给用户。你需要向 `cogview` 发送图像描述，规则：\n- 发送给 `cogview` 的消息必须使用英语。用户的中文描述必须完全翻译为英语。\n- 应当尽可能详细地描述图像生成的需求，需求描述约 100 英文单词。\n- 保持用户原始描述的意图。不要虚构内容或者没见过的人物。\n- 如无特殊说明，所在地为中国，持有中国立场并遵循中国社会主义价值观。{% endif %}{% endfor %}{% endif %}{% if item['content'] %}<|{{ item['role'] }}|>{{ item['metadata'] }}\n{{ item['content'] }}{% endif %}{% endfor %}{% if add_generation_prompt %}<|assistant|>{% endif %}"
         )
-        template = template.replace("USE_DEFAULT_PROMPT", "true" if self.use_default_system_prompt else "false")
+        template = template.replace(
+            "USE_DEFAULT_PROMPT",
+            "true" if self.use_default_system_prompt else "false")
         return template

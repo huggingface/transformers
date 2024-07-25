@@ -43,14 +43,15 @@ class GLMConfig(PretrainedConfig):
             Number of hidden layers in the Transformer decoder.
         num_attention_heads (`int`, *optional*, defaults to 32):
             Number of attention heads for each attention layer in the Transformer decoder.
-        resid_pdrop (`float`, *optional*, defaults to 0.0):
-            Dropout probability for mlp outputs.
-        embd_pdrop (`int`, *optional*, defaults to 0.0):
-            The dropout ratio for the embeddings.
+        num_key_value_heads (`int`, *optional*, defaults to 32):
+            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
+            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
+            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
+            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
+            by meanpooling all the original heads within that group. For more details checkout [this
+            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `32`.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio after computing the attention scores.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 4096):
             The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -87,7 +88,7 @@ class GLMConfig(PretrainedConfig):
             attention_dropout=0.0,
             max_position_embeddings=32768,
             initializer_range=0.02,
-            layernorm_epsilon=1.5625e-07,
+            rms_norm_eps=1.5625e-07,
             rmsnorm=True,
             apply_residual_connection_post_layernorm=False,
             post_layer_norm=True,
@@ -120,7 +121,7 @@ class GLMConfig(PretrainedConfig):
         self.hidden_dropout = hidden_dropout
         self.classifier_dropout = classifier_dropout
         self.attention_dropout = attention_dropout
-        self.layernorm_epsilon = layernorm_epsilon
+        self.rms_norm_eps = rms_norm_eps
         self.rmsnorm = rmsnorm
         self.apply_residual_connection_post_layernorm = apply_residual_connection_post_layernorm
         self.post_layer_norm = post_layer_norm
