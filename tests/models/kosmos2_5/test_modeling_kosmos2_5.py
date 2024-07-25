@@ -669,6 +669,16 @@ class Kosmos2_5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 @require_torch
 @slow
 class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
+    # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
+    # Depending on the hardware we get different logits / generations
+    cuda_compute_capability_major_version = None
+
+    @classmethod
+    def setUpClass(cls):
+        if is_torch_available() and torch.cuda.is_available():
+            # 8 is for A100 / A10 and 7 for T4
+            cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
+
     def run_example(self, prompt, image, model, processor):
         inputs = processor(text=prompt, images=image, return_tensors="pt")
         _, _ = inputs.pop("height"), inputs.pop("width")
@@ -724,6 +734,9 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
     @pytest.mark.flash_attn_test
     @slow
     def test_sdpa(self):
+        if self.cuda_compute_capability_major_version < 8:
+            self.skipTest("GPU OOM on T4")
+
         url = (
             "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
         )
@@ -757,6 +770,9 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(generated_text, EXPECTED_TEXT)
 
     def test_FA2(self):
+        if self.cuda_compute_capability_major_version < 8:
+            self.skipTest("GPU OOM on T4")
+
         url = (
             "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
         )
