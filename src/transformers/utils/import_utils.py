@@ -1890,12 +1890,16 @@ def define_import_structure(module_path):
 
     module_requirements = {}
     for module_name in adjacent_modules:
+
+        # Only modules ending in `.py` are accepted here.
+        if not module_name.endswith('.py'):
+            continue
+
         with open(os.path.join(directory, module_name)) as f:
             file_content = f.read()
 
         # Remove the .py suffix
-        if module_name.endswith(".py"):
-            module_name = module_name[:-3]
+        module_name = module_name[:-3]
 
         previous_line = ""
         previous_index = 0
