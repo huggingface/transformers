@@ -1504,6 +1504,7 @@ class IrisModel(IrisPreTrainedModel):
         super().__init__(config)
 
         self.config = config
+        self.device = config.device
         encoder = IrisEncoder(config)
         decoder = IrisDecoder(config)
         discrete_autoencoder = IrisDiscreteAutoEncoder(
