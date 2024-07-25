@@ -263,9 +263,8 @@ class BloomAttention(nn.Module):
     ):
         batch_size, q_length, _ = hidden_states.shape
         fused_qkv = self.query_key_value(hidden_states)  # [batch_size, seq_length, 3 x hidden_size]
-        (query_layer, key_layer, value_layer) = self._reshape(
-            fused_qkv
-        )  # 3 x [batch_size, num_heads, seq_length, head_dim]
+        # 3 x [batch_size, num_heads, seq_length, head_dim]
+        query_layer, key_layer, value_layer = self._reshape(fused_qkv)
 
         if layer_past is not None:
             cache_kwargs = {"cache_position": cache_position}
@@ -633,8 +632,9 @@ class BloomModel(BloomPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
 
+        # kept for BC (non `Cache` `past_key_values` inputs)
         use_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache):  # kept for BC (non `Cache` `past_key_values` inputs)
+        if use_cache and not isinstance(past_key_values, Cache) and not self.training:
             use_legacy_cache = True
             past_key_values = DynamicCache.from_legacy_cache(past_key_values)
             logger.warning_once(
@@ -643,7 +643,7 @@ class BloomModel(BloomPreTrainedModel):
             )
 
         batch_size, seq_length, _ = inputs_embeds.shape
-        past_length = past_key_values.get_seq_length() if use_cache else 0
+        past_length = past_key_values.get_seq_length() if past_key_values is not None else 0
         seq_length_with_past = seq_length + past_length
         if cache_position is None:
             cache_position = torch.arange(past_length, past_length + seq_length, device=inputs_embeds.device)
@@ -835,61 +835,35 @@ class BloomForCausalLM(BloomPreTrainedModel):
 
     def prepare_inputs_for_generation(
         self,
-        input_ids: torch.LongTensor,
-        use_cache: bool = True,
-        past_key_values: Optional[Cache] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids,
+        past_key_values=None,
+        attention_mask=None,
+        inputs_embeds=None,
+        cache_position=None,
+        use_cache=True,
         **kwargs,
-    ) -> dict:
-        # only last tokens for input_ids if past is not None
-        past_length = 0
+    ):
+        # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
+        # Exception 1: when passing input_embeds, input_ids may be missing entries
+        # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
         if past_key_values is not None:
-            past_length = cache_position[0] if cache_position is not None else past_key_values.get_seq_length()
-            max_cache_length = (
-                torch.tensor(past_key_values.get_max_length(), device=input_ids.device)
-                if past_key_values.get_max_length() is not None
-                else None
-            )
-            cache_length = past_length if max_cache_length is None else torch.min(max_cache_length, past_length)
-
-            # Some generation methods already pass only the last input ID
-            if input_ids.shape[1] > past_length:
-                remove_prefix_length = past_length
-            else:
-                # Default to old behavior: keep only final ID
-                remove_prefix_length = input_ids.shape[1] - 1
-
-            input_ids = input_ids[:, remove_prefix_length:]
-
-            # If we are about to go beyond the maximum cache length, we need to crop the input attention mask.
-            if (
-                max_cache_length is not None
-                and attention_mask is not None
-                and cache_length + input_ids.shape[1] > max_cache_length
-            ):
-                attention_mask = attention_mask[:, -max_cache_length:]
+            if inputs_embeds is not None:  # Exception 1
+                input_ids = input_ids[:, -cache_position.shape[0] :]
+            elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
+                input_ids = input_ids[:, cache_position]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and past_length == 0:
+        if inputs_embeds is not None and cache_position[0] == 0:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
-            model_inputs = {"input_ids": input_ids}
-
-        input_length = input_ids.shape[-1]
-        if use_cache:
-            if cache_position is None:
-                cache_position = torch.arange(past_length, past_length + input_length, device=input_ids.device)
-            else:
-                cache_position = cache_position[-input_length:]
+            model_inputs = {"input_ids": input_ids.contiguous()}  # `contiguous()` needed for compilation use cases
 
         model_inputs.update(
             {
+                "cache_position": cache_position,
                 "past_key_values": past_key_values,
                 "use_cache": use_cache,
                 "attention_mask": attention_mask,
-                "cache_position": cache_position,
             }
         )
         return model_inputs
@@ -985,8 +959,6 @@ class BloomForCausalLM(BloomPreTrainedModel):
 
         Output shares the same memory storage as `past`.
         """
-        standardized_past = self._convert_to_standard_cache(past, batch_size=len(beam_idx))
-
         # Get a copy of `beam_idx` on all the devices where we need those indices.
         device_to_beam_idx = {
             past_state.device: beam_idx.to(past_state.device) for layer_past in past for past_state in layer_past
@@ -996,9 +968,9 @@ class BloomForCausalLM(BloomPreTrainedModel):
                 layer_past[0].index_select(0, device_to_beam_idx[layer_past[0].device]),
                 layer_past[1].index_select(0, device_to_beam_idx[layer_past[0].device]),
             )
-            for layer_past in standardized_past
+            for layer_past in past
         )
-        return self._convert_to_bloom_cache(reordered_past)
+        return reordered_past
 
 
 @add_start_docstrings(
