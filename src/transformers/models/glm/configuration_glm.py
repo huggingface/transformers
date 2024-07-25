@@ -18,6 +18,7 @@
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
+
 logger = logging.get_logger(__name__)
 
 
@@ -32,15 +33,16 @@ class GLMConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 32064):
+        num_hidden_layers (`int`, *optional*, defaults to 40):
+            Number of hidden layers in the Transformer decoder.
+        vocab_size (`int`, *optional*, defaults to 151552):
             Vocabulary size of the Phi-3 model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`GLMModel`].
-        hidden_size (`int`, *optional*, defaults to 3072):
+        hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 8192):
+        intermediate_size (`int`, *optional*, defaults to 13696):
             Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 32):
-            Number of hidden layers in the Transformer decoder.
+        kv_channels (`<fill_type>`, *optional*, defaults to 128): <fill_docstring>
         num_attention_heads (`int`, *optional*, defaults to 32):
             Number of attention heads for each attention layer in the Transformer decoder.
         num_key_value_heads (`int`, *optional*, defaults to 32):
@@ -50,14 +52,30 @@ class GLMConfig(PretrainedConfig):
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
             by meanpooling all the original heads within that group. For more details checkout [this
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `32`.
+        hidden_act (`<fill_type>`, *optional*, defaults to `"gelu"`): <fill_docstring>
+        seq_length (`<fill_type>`, *optional*, defaults to 131072): <fill_docstring>
+        hidden_dropout (`<fill_type>`, *optional*, defaults to 0.0): <fill_docstring>
+        classifier_dropout (`<fill_type>`, *optional*): <fill_docstring>
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio after computing the attention scores.
-        max_position_embeddings (`int`, *optional*, defaults to 4096):
+        max_position_embeddings (`int`, *optional*, defaults to 32768):
             The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
+        rms_norm_eps (`float`, *optional*, defaults to 0.0):
             The epsilon value used for the RMSNorm.
+        rmsnorm (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+        apply_residual_connection_post_layernorm (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+        post_layer_norm (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+        add_bias_linear (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+        add_qkv_bias (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+        bias_dropout_fusion (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+        multi_query_attention (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+        multi_query_group_num (`<fill_type>`, *optional*, defaults to 2): <fill_docstring>
+        rope_ratio (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
+        apply_query_key_layer_scaling (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+        attention_softmax_in_fp32 (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+        fp32_residual_connection (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`. Whether to tie weight embeddings or not.

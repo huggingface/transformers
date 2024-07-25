@@ -25,6 +25,7 @@ import regex as re
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 
+
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {
@@ -120,11 +121,14 @@ class GLMTokenizer(PreTrainedTokenizer):
         clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
             Whether or not the model should cleanup the spaces that were added when splitting the input text during the
             tokenization process. Not applicable to this tokenizer, since tokenization does not add spaces.
+        use_default_system_prompt (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
         split_special_tokens (`bool`, *optional*, defaults to `False`):
             Whether or not the special tokens should be split during the tokenization process. The default behavior is
             to not split special tokens. This means that if `<|endoftext|>` is the `eos_token`, then `tokenizer.tokenize("<|endoftext|>") =
             ['<|endoftext|>`]. Otherwise, if `split_special_tokens=True`, then `tokenizer.tokenize("<|endoftext|>")` will be give `['<',
             '|', 'endo', 'ft', 'ext', '|', '>']`. This argument is only supported for `slow` tokenizers for the moment.
+        spaces_between_special_tokens (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+        add_prefix_space (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

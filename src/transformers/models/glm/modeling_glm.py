@@ -21,10 +21,9 @@ from typing import List, Optional, Tuple, Union
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
-from torch import nn, Tensor
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss, Module
+from torch import nn
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
 
-from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import (
@@ -44,12 +43,10 @@ from ...utils import (
 from .configuration_glm import GLMConfig
 
 if is_flash_attn_2_available():
-    from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
+    from flash_attn import flash_attn_func, flash_attn_varlen_func
 
-    _flash_supports_window_size = "window_size" in list(
-        inspect.signature(flash_attn_func).parameters
-    )
+    _flash_supports_window_size = "window_size" in list(inspect.signature(flash_attn_func).parameters)
 
 logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "THUDM/glm-4-9b-chat"
@@ -1470,28 +1467,6 @@ class GLMForCausalLM(GLMPreTrainedModel):
             }
         )
         return model_inputs
-
-    @staticmethod
-    def _reorder_cache(
-            past: Tuple[Tuple[torch.Tensor, torch.Tensor], ...],
-            beam_idx: torch.LongTensor,
-            **kwargs,
-    ) -> Tuple[Tuple[torch.Tensor, torch.Tensor], ...]:
-        """
-        This function is used to re-order the `past_key_values` cache if [`~PreTrainedModel.beam_search`] or
-        [`~PreTrainedModel.beam_sample`] is called. This is required to match `past_key_values` with the correct
-        beam_idx at every generation step.
-
-        Output shares the same memory storage as `past`.
-        """
-        return tuple(
-            (
-                layer_past[0].index_select(0, beam_idx.to(layer_past[0].device)),
-                layer_past[1].index_select(0, beam_idx.to(layer_past[1].device)),
-            )
-            for layer_past in past
-        )
-
 
 @add_start_docstrings(
     """
