@@ -1521,7 +1521,7 @@ class IrisModel(IrisPreTrainedModel):
             act_vocab_size=self.config.num_actions,
             use_original_obs=self.config.use_original_obs_actor_critic,
         )
-        self.rl_agent = IrisRlAgent(discrete_autoencoder, world_model, actor_critic).to(config.device)
+        self.rl_agent = IrisRlAgent(discrete_autoencoder, world_model, actor_critic)
 
         # Initialize weights and apply final processing
         self.post_init()
