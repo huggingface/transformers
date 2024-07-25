@@ -729,10 +729,6 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
         ]
         self.assertListEqual(generated_text, EXPECTED_TEXT)
 
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
     def test_sdpa(self):
         if self.cuda_compute_capability_major_version < 8:
             self.skipTest("GPU OOM on T4")
@@ -769,6 +765,10 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
         ]
         self.assertListEqual(generated_text, EXPECTED_TEXT)
 
+    @require_flash_attn
+    @require_torch_gpu
+    @pytest.mark.flash_attn_test
+    @slow
     def test_FA2(self):
         if self.cuda_compute_capability_major_version < 8:
             self.skipTest("GPU OOM on T4")
