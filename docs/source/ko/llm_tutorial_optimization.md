@@ -12,55 +12,55 @@ rendered properly in your Markdown viewer.
 
 [[open-in-colab]]
 
-Large Language Models (LLMs) such as GPT3/4, [Falcon](https://huggingface.co/tiiuae/falcon-40b), and [Llama](https://huggingface.co/meta-llama/Llama-2-70b-hf) are rapidly advancing in their ability to tackle human-centric tasks, establishing themselves as essential tools in modern knowledge-based industries.
-Deploying these models in real-world tasks remains challenging, however:
+GPT3/4, [Falcon](https://huggingface.co/tiiuae/falcon-40b), [Llama](https://huggingface.co/meta-llama/Llama-2-70b-hf)와 같은 대형 언어 모델(LLM)은 인간 중심의 과제를 해결하는 능력이 빠르게 발전하고 있으며, 현대 지식 기반 산업에서 필수 도구로 자리잡고 있습니다.
+그러나 이러한 모델을 실제 과제에 배포하는 것은 여전히 도전 과제입니다:
 
--   To exhibit near-human text understanding and generation capabilities, LLMs currently require to be composed of billions of parameters (see [Kaplan et al](https://arxiv.org/abs/2001.08361), [Wei et. al](https://arxiv.org/abs/2206.07682)). This consequently amplifies the memory demands for inference.
--   In many real-world tasks, LLMs need to be given extensive contextual information. This necessitates the model's capability to manage very long input sequences during inference.
+-   거의 인간과 같은 텍스트 이해 및 생성 능력을 보이기 위해, 현재 LLM은 수십억 개의 매개변수로 구성되어야 합니다 (참조: [Kaplan et al](https://arxiv.org/abs/2001.08361), [Wei et. al](https://arxiv.org/abs/2206.07682)). 이는 추론을 위한 메모리 요구를 크게 증가시킵니다.
+-   많은 실제 과제에서 LLM은 방대한 맥락 정보를 제공받아야 합니다. 이는 추론 중에 매우 긴 입력 시퀀스를 처리할 수 있는 모델의 능력이 필요합니다.
 
-The crux of these challenges lies in augmenting the computational and memory capabilities of LLMs, especially when handling expansive input sequences.
+이러한 도전 과제의 핵심은 특히 방대한 입력 시퀀스를 처리할 때 LLM의 계산 및 메모리 능력을 증대시키는 데 있습니다.
 
-In this guide, we will go over the effective techniques for efficient LLM deployment:
+이 가이드에서는 효율적인 LLM 배포를 위한 효과적인 기법들을 다룰 것입니다:
 
-1.  **Lower Precision:** Research has shown that operating at reduced numerical precision, namely [8-bit and 4-bit](./main_classes/quantization.md) can achieve computational advantages without a considerable decline in model performance.
+1.  **낮은 정밀도:** 연구에 따르면, [8비트와 4비트](./main_classes/quantization.md)와 같이 낮은 수치 정밀도로 작동하면 모델 성능의 큰 저하 없이 계산상의 이점을 얻을 수 있습니다.
 
-2.  **Flash Attention:** Flash Attention is a variation of the attention algorithm that not only provides a more memory-efficient approach but also realizes increased efficiency due to optimized GPU memory utilization.
+2.  **플래시 어텐션:** 플래시 어텐션은 메모리 효율성을 높일 뿐만 아니라 최적화된 GPU 메모리 활용을 통해 효율성을 향상시키는 어텐션 알고리즘의 변형입니다.
 
-3.  **Architectural Innovations:** Considering that LLMs are always deployed in the same way during inference, namely autoregressive text generation with a long input context, specialized model architectures have been proposed that allow for more efficient inference. The most important advancement in model architectures hereby are [Alibi](https://arxiv.org/abs/2108.12409), [Rotary embeddings](https://arxiv.org/abs/2104.09864), [Multi-Query Attention (MQA)](https://arxiv.org/abs/1911.02150) and [Grouped-Query-Attention (GQA)]((https://arxiv.org/abs/2305.13245)).
+3.  **아키텍처 혁신:** LLM이 항상 동일한 방식으로 추론 중에 배포된다는 점, 즉 긴 입력 맥락을 가진 자회귀 텍스트 생성을 고려할 때, 더 효율적인 추론을 가능하게 하는 특화된 모델 아키텍처가 제안되었습니다. 모델 아키텍처에서 가장 중요한 발전은 [Alibi](https://arxiv.org/abs/2108.12409), [Rotary embeddings](https://arxiv.org/abs/2104.09864), [Multi-Query Attention (MQA)](https://arxiv.org/abs/1911.02150), [Grouped-Query-Attention (GQA)]((https://arxiv.org/abs/2305.13245))입니다.
 
-Throughout this guide, we will offer an analysis of auto-regressive generation from a tensor's perspective. We delve into the pros and cons of adopting lower precision, provide a comprehensive exploration of the latest attention algorithms, and discuss improved LLM architectures. While doing so, we run practical examples showcasing each of the feature improvements.
+이 가이드에서는 텐서의 관점에서 자회귀 생성에 대한 분석을 제공합니다. 낮은 정밀도 채택의 장단점을 논의하고, 최신 어텐션 알고리즘을 포괄적으로 탐구하며, 향상된 LLM 아키텍처를 설명합니다. 이 과정에서 각 기능 개선을 보여주는 실용적인 예제를 실행합니다.
 
-## 1. Lower Precision
+## 1. 낮은 정밀도 [[1-lower-precision]]
 
-Memory requirements of LLMs can be best understood by seeing the LLM as a set of weight matrices and vectors and the text inputs as a sequence of vectors. In the following, the definition *weights* will be used to signify all model weight matrices and vectors.
+LLM의 메모리 요구 사항은 LLM을 가중치 행렬과 벡터의 집합으로 보고 텍스트 입력을 벡터 시퀀스로 보는 것으로 가장 잘 이해할 수 있습니다. 다음에서는 *가중치*라는 정의를 모든 모델 가중치 행렬과 벡터를 나타내는 데 사용합니다.
 
-At the time of writing this guide, LLMs consist of at least a couple billion parameters. Each parameter thereby is made of a decimal number, e.g. `4.5689` which is usually stored in either [float32](https://en.wikipedia.org/wiki/Single-precision_floating-point_format), [bfloat16](https://en.wikipedia.org/wiki/Bfloat16_floating-point_format), or [float16](https://en.wikipedia.org/wiki/Half-precision_floating-point_format) format. This allows us to easily compute the memory requirement to load the LLM into memory:
+이 가이드를 작성하는 시점에서, LLM은 적어도 몇십억 개의 매개변수로 구성되어 있습니다. 각 매개변수는 `4.5689`와 같은 십진수로 이루어져 있으며, 보통 [float32](https://en.wikipedia.org/wiki/Single-precision_floating-point_format), [bfloat16](https://en.wikipedia.org/wiki/Bfloat16_floating-point_format) 또는 [float16](https://en.wikipedia.org/wiki/Half-precision_floating-point_format) 형식으로 저장됩니다. 이를 통해 LLM을 메모리에 로드하는 데 필요한 메모리 요구 사항을 쉽게 계산할 수 있습니다:
 
-> *Loading the weights of a model having X billion parameters requires roughly 4 * X GB of VRAM in float32 precision*
+> *X억 개의 매개변수를 가진 모델의 가중치를 로드하려면 float32 정밀도에서 대략 4 * X GB의 VRAM이 필요합니다.*
 
-Nowadays, models are however rarely trained in full float32 precision, but usually in bfloat16 precision or less frequently in float16 precision. Therefore the rule of thumb becomes:
+요즘에는 모델이 float32 정밀도로 훈련되는 경우는 드물고, 일반적으로 bfloat16 정밀도나 가끔 float16 정밀도로 훈련됩니다. 따라서 경험 법칙은 다음과 같습니다:
 
-> *Loading the weights of a model having X billion parameters requires roughly 2 * X GB of VRAM in bfloat16/float16 precision*
+> *X억 개의 매개변수를 가진 모델의 가중치를 로드하려면 bfloat16/float16 정밀도에서 대략 2 * X GB의 VRAM이 필요합니다.*
 
-For shorter text inputs (less than 1024 tokens), the memory requirement for inference is very much dominated by the memory requirement to load the weights. Therefore, for now, let's assume that the memory requirement for inference is equal to the memory requirement to load the model into the GPU VRAM.
+짧은 텍스트 입력(1024 토큰 미만)의 경우 추론을 위한 메모리 요구 사항은 가중치를 로드하는 데 필요한 메모리 요구 사항에 크게 좌우됩니다. 따라서 지금은 추론을 위한 메모리 요구 사항이 모델을 GPU VRAM에 로드하는 데 필요한 메모리 요구 사항과 같다고 가정합시다.
 
-To give some examples of how much VRAM it roughly takes to load a model in bfloat16:
+모델을 bfloat16으로 로드하는 데 대략 얼마나 많은 VRAM이 필요한지 몇 가지 예를 들어보겠습니다:
 
--   **GPT3** requires 2 \* 175 GB = **350 GB** VRAM
--   [**Bloom**](https://huggingface.co/bigscience/bloom) requires 2 \* 176 GB = **352 GB** VRAM
--   [**Llama-2-70b**](https://huggingface.co/meta-llama/Llama-2-70b-hf) requires 2 \* 70 GB = **140 GB** VRAM
--   [**Falcon-40b**](https://huggingface.co/tiiuae/falcon-40b) requires 2 \* 40 GB = **80 GB** VRAM
--   [**MPT-30b**](https://huggingface.co/mosaicml/mpt-30b) requires 2 \* 30 GB = **60 GB** VRAM
--   [**bigcode/starcoder**](https://huggingface.co/bigcode/starcoder) requires 2 \* 15.5 = **31 GB** VRAM
+-   **GPT3**는 2 \* 175 GB = **350 GB** VRAM이 필요합니다.
+-   [**Bloom**](https://huggingface.co/bigscience/bloom)은 2 \* 176 GB = **352 GB** VRAM이 필요합니다.
+-   [**Llama-2-70b**](https://huggingface.co/meta-llama/Llama-2-70b-hf)는 2 \* 70 GB = **140 GB** VRAM이 필요합니다.
+-   [**Falcon-40b**](https://huggingface.co/tiiuae/falcon-40b)는 2 \* 40 GB = **80 GB** VRAM이 필요합니다.
+-   [**MPT-30b**](https://huggingface.co/mosaicml/mpt-30b)는 2 * 30 GB = **60 GB** VRAM이 필요합니다.
+-   [**bigcode/starcoder**](https://huggingface.co/bigcode/starcoder)는 2 * 15.5 GB = **31 GB** VRAM이 필요합니다.
 
-As of writing this document, the largest GPU chip on the market is the A100 & H100 offering 80GB of VRAM. Most of the models listed before require more than 80GB just to be loaded and therefore necessarily require [tensor parallelism](https://huggingface.co/docs/transformers/perf_train_gpu_many#tensor-parallelism) and/or [pipeline parallelism](https://huggingface.co/docs/transformers/perf_train_gpu_many#naive-model-parallelism-vertical-and-pipeline-parallelism).
+이 문서를 작성하는 시점에서, 시장에서 가장 큰 GPU 칩은 80GB의 VRAM을 제공하는 A100 및 H100입니다. 앞서 언급된 대부분의 모델들은 로드하기 위해서만 80GB 이상의 용량을 필요로 하며, 따라서 [텐서 병렬 처리](https://huggingface.co/docs/transformers/perf_train_gpu_many#tensor-parallelism) 및/또는 [파이프라인 병렬 처리](https://huggingface.co/docs/transformers/perf_train_gpu_many#naive-model-parallelism-vertical-and-pipeline-parallelism)를 반드시 필요로 합니다.
 
-🤗 Transformers does not support tensor parallelism out of the box as it requires the model architecture to be written in a specific way. If you're interested in writing models in a tensor-parallelism-friendly way, feel free to have a look at [the text-generation-inference library](https://github.com/huggingface/text-generation-inference/tree/main/server/text_generation_server/models/custom_modeling).
+🤗 Transformers는 텐서 병렬 처리를 바로 지원하지 않습니다. 이는 모델 아키텍처가 특정 방식으로 작성되어야 하기 때문입니다. 텐서 병렬 처리를 지원하는 방식으로 모델을 작성하는 데 관심이 있다면 [the text-generation-inference library](https://github.com/huggingface/text-generation-inference/tree/main/server/text_generation_server/models/custom_modeling)를 참조해 보시기 바랍니다.
 
-Naive pipeline parallelism is supported out of the box. For this, simply load the model with `device="auto"` which will automatically place the different layers on the available GPUs as explained [here](https://huggingface.co/docs/accelerate/v0.22.0/en/concept_guides/big_model_inference).
-Note, however that while very effective, this naive pipeline parallelism does not tackle the issues of GPU idling. For this more advanced pipeline parallelism is required as explained [here](https://huggingface.co/docs/transformers/en/perf_train_gpu_many#naive-model-parallelism-vertical-and-pipeline-parallelism).
+기본 파이프라인 병렬 처리는 바로 지원됩니다. 이를 위해 단순히 모델을 `device="auto"`로 로드하면 [여기](https://huggingface.co/docs/accelerate/v0.22.0/en/concept_guides/big_model_inference)에 설명된 대로 사용 가능한 GPU에 다른 레이어를 자동으로 배치합니다. 
+그러나 매우 효과적이긴 하지만, 이러한 기본 파이프라인 병렬 처리는 GPU 유휴 문제를 해결하지 못한다는 점을 유의해야 합니다. 더 고급 파이프라인 병렬 처리가 필요하며, 이에 대한 설명은 [여기](https://huggingface.co/docs/transformers/en/perf_train_gpu_many#naive-model-parallelism-vertical-and-pipeline-parallelism)에서 확인할 수 있습니다.
 
-If you have access to an 8 x 80GB A100 node, you could load BLOOM as follows
+80GB A100 GPU 8개를 가진 노드에 접근할 수 있다면, BLOOM을 다음과 같이 로드할 수 있습니다.
 
 ```bash
 !pip install transformers accelerate bitsandbytes optimum
@@ -71,13 +71,13 @@ from transformers import AutoModelForCausalLM
 model = AutoModelForCausalLM.from_pretrained("bigscience/bloom", device_map="auto", pad_token_id=0)
 ```
 
-By using `device_map="auto"` the attention layers would be equally distributed over all available GPUs.
+`device_map="auto"`를 사용하면 모든 사용 가능한 GPU에 주의 레이어가 고르게 분산됩니다.
 
-In this guide, we will use [bigcode/octocoder](https://huggingface.co/bigcode/octocoder) as it can be run on a single 40 GB A100 GPU device chip. Note that all memory and speed optimizations that we will apply going forward, are equally applicable to models that require model or tensor parallelism.
+이 가이드에서는 [bigcode/octocoder](https://huggingface.co/bigcode/octocoder)를 사용할 것입니다. 이 모델은 단일 40GB A100 GPU 장치에서 실행할 수 있습니다. 앞으로 적용할 모든 메모리 및 속도 최적화는 모델 또는 텐서 병렬 처리를 필요로 하는 모델에도 동일하게 적용될 수 있다는 점을 참고하세요.
 
-Since the model is loaded in bfloat16 precision, using our rule of thumb above, we would expect the memory requirement to run inference with `bigcode/octocoder` to be around 31 GB VRAM. Let's give it a try.
+모델이 bfloat16 정밀도로 로드되기 때문에, 위의 경험 법칙을 사용하면 `bigcode/octocoder`를 사용하여 추론을 실행하기 위한 메모리 요구 사항이 약 31GB VRAM일 것으로 예상됩니다. 한 번 시도해 보겠습니다.
 
-We first load the model and tokenizer and then pass both to Transformers' [pipeline](https://huggingface.co/docs/transformers/main_classes/pipelines) object.
+먼저 모델과 토크나이저를 로드한 다음, 둘 다 Transformers의 [pipeline](https://huggingface.co/docs/transformers/main_classes/pipelines) 객체에 전달합니다.
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
@@ -101,14 +101,14 @@ result
 Here is a Python function that transforms bytes to Giga bytes:\n\n```python\ndef bytes_to_giga_bytes(bytes):\n    return bytes / 1024 / 1024 / 1024\n```\n\nThis function takes a single
 ```
 
-Nice, we can now directly use the result to convert bytes into Gigabytes.
+좋습니다, 이제 결과를 직접 사용하여 바이트를 기가바이트로 변환할 수 있습니다.
 
 ```python
 def bytes_to_giga_bytes(bytes):
   return bytes / 1024 / 1024 / 1024
 ```
 
-Let's call [`torch.cuda.max_memory_allocated`](https://pytorch.org/docs/stable/generated/torch.cuda.max_memory_allocated.html) to measure the peak GPU memory allocation.
+[`torch.cuda.max_memory_allocated`](https://pytorch.org/docs/stable/generated/torch.cuda.max_memory_allocated.html)를 호출하여 최대 GPU 메모리 할당을 측정해 보겠습니다.
 
 ```python
 bytes_to_giga_bytes(torch.cuda.max_memory_allocated())
@@ -119,15 +119,15 @@ bytes_to_giga_bytes(torch.cuda.max_memory_allocated())
 29.0260648727417
 ```
 
-Close enough to our back-of-the-envelope computation! We can see the number is not exactly correct as going from bytes to kilobytes requires a multiplication of 1024 instead of 1000. Therefore the back-of-the-envelope formula can also be understood as an "at most X GB" computation.
-Note that if we had tried to run the model in full float32 precision, a whopping 64 GB of VRAM would have been required.
+백지 계산 결과와 거의 일치합니다! 바이트에서 킬로바이트로 변환할 때 1000이 아닌 1024로 곱해야 하므로 숫자가 정확하지 않은 것을 알 수 있습니다. 따라서 백지 계산 공식은 "최대 X GB" 계산으로 이해할 수 있습니다.
+만약 우리가 모델을 float32 정밀도로 실행하려고 했다면 엄청난 64GB의 VRAM이 필요했을 것입니다.
 
-> Almost all models are trained in bfloat16 nowadays, there is no reason to run the model in full float32 precision if [your GPU supports bfloat16](https://discuss.pytorch.org/t/bfloat16-native-support/117155/5). Float32 won't give better inference results than the precision that was used to train the model.
+> 거의 모든 모델이 요즘 bfloat16으로 훈련되므로, [GPU가 bfloat16을 지원](https://discuss.pytorch.org/t/bfloat16-native-support/117155/5)한다면 모델을 float32 정밀도로 실행할 이유가 없습니다. float32는 모델을 훈련할 때 사용된 정밀도보다 더 나은 추론 결과를 제공하지 않습니다.
 
-If you are unsure in which format the model weights are stored on the Hub, you can always look into the checkpoint's config under `"torch_dtype"`, *e.g.* [here](https://huggingface.co/meta-llama/Llama-2-7b-hf/blob/6fdf2e60f86ff2481f2241aaee459f85b5b0bbb9/config.json#L21). It is recommended to set the model to the same precision type as written in the config when loading with `from_pretrained(..., torch_dtype=...)` except when the original type is float32 in which case one can use both `float16` or `bfloat16` for inference.
+Hub에서 모델 가중치가 어떤 형식으로 저장되어 있는지 확실하지 않은 경우, 항상 체크포인트의 설정에서 `"torch_dtype"`을 확인할 수 있습니다, *예*를 들어 [여기](https://huggingface.co/meta-llama/Llama-2-7b-hf/blob/6fdf2e60f86ff2481f2241aaee459f85b5b0bbb9/config.json#L21). 모델을 `from_pretrained(..., torch_dtype=...)`로 로드할 때는 설정에 명시된 정밀도 유형과 동일한 정밀도로 설정하는 것이 권장됩니다. 단, 원래 유형이 float32인 경우 추론을 위해 `float16` 또는 `bfloat16`을 사용할 수 있습니다.
 
+모든 할당된 메모리를 해제하여 GPU 메모리의 최대 할당량을 정확하게 측정할 수 있도록 `flush(...)` 함수를 정의해 봅시다.
 
-Let's define a `flush(...)` function to free all allocated memory so that we can accurately measure the peak allocated GPU memory.
 
 ```python
 del pipe
@@ -142,12 +142,12 @@ def flush():
   torch.cuda.reset_peak_memory_stats()
 ```
 
-Let's call it now for the next experiment.
+다음 실험을 위해 지금 호출해 봅시다.
 
 ```python
 flush()
 ```
-In the recent version of the accelerate library, you can also use a utility method called `release_memory()`
+최근 버전의 accelerate 라이브러리에서는 `release_memory()`라는 유틸리티 메서드도 사용할 수 있습니다.
 
 ```python
 from accelerate.utils import release_memory
@@ -156,44 +156,40 @@ from accelerate.utils import release_memory
 release_memory(model)
 ```
 
-Now what if your GPU does not have 32 GB of VRAM? It has been found that model weights can be quantized to 8-bit or 4-bits without a significant loss in performance (see [Dettmers et al.](https://arxiv.org/abs/2208.07339)).
-Model can be quantized to even 3 or 2 bits with an acceptable loss in performance as shown in the recent [GPTQ paper](https://arxiv.org/abs/2210.17323) 🤯.
+만약 GPU에 32GB의 VRAM이 없다면 어떻게 될까요? 모델 가중치는 성능에 큰 손실 없이 8비트 또는 4비트로 양자화할 수 있다는 것이 밝혀졌습니다(참고: [Dettmers et al.](https://arxiv.org/abs/2208.07339)). 최근의 [GPTQ 논문](https://arxiv.org/abs/2210.17323) 에서는 모델을 3비트 또는 2비트로 양자화해도 성능 손실이 허용 가능한 수준임을 보여주었습니다🤯.
 
-Without going into too many details, quantization schemes aim at reducing the precision of weights while trying to keep the model's inference results as accurate as possible (*a.k.a* as close as possible to bfloat16).
-Note that quantization works especially well for text generation since all we care about is choosing the *set of most likely next tokens* and don't really care about the exact values of the next token *logit* distribution.
-All that matters is that the next token *logit* distribution stays roughly the same so that an `argmax` or `topk` operation gives the same results.
+너무 많은 세부 사항을 다루지 않고, 양자화 스킴은 가중치의 정밀도를 줄이면서 모델의 추론 결과를 가능한 한 정확하게 유지하려고 합니다 (*a.k.a* bfloat16과 최대한 가깝게). 양자화는 특히 텍스트 생성에 잘 작동하는데, 이는 우리가 신경 쓰는 것은 *가장 가능성 있는 다음 토큰 집합*을 선택하는 것이며, 다음 토큰 *로그잇* 분포의 정확한 값에는 크게 신경 쓰지 않기 때문입니다. 중요한 것은 다음 토큰 *로그잇* 분포가 대략적으로 동일하게 유지되어 `argmax` 또는 `topk` 연산이 동일한 결과를 제공하는 것입니다.
 
-There are various quantization techniques, which we won't discuss in detail here, but in general, all quantization techniques work as follows:
+여기서 다양한 양자화 기법이 있지만, 자세히 다루지는 않을 것입니다. 일반적으로 모든 양자화 기법은 다음과 같이 작동합니다:
 
--   1.  Quantize all weights to the target precision
--   2.  Load the quantized weights, and pass the input sequence of vectors in bfloat16 precision
--   3.  Dynamically dequantize weights to bfloat16 to perform the computation with their input vectors in bfloat16 precision
+-   1.  모든 가중치를 목표 정밀도로 양자화합니다.
+-   2.  양자화된 가중치를 로드하고, bfloat16 정밀도의 입력 벡터 시퀀스를 전달합니다.
+-   3.  가중치를 동적으로 bfloat16으로 디양자화하여 입력 벡터와 함께 bfloat16 정밀도로 계산을 수행합니다.
 
-In a nutshell, this means that *inputs-weight matrix* multiplications, with \\( X \\) being the *inputs*, \\( W \\) being a weight matrix and \\( Y \\) being the output:
+간단히 말해서, *입력-가중치 행렬* 곱셈은, \\( X \\)가 *입력*, \\( W \\)가 가중치 행렬, \\( Y \\)가 출력인 경우 다음과 같습니다:
 
 $$ Y = X * W $$
 
-are changed to
+다음과 같이 변경됩니다
 
 $$ Y = X * \text{dequantize}(W) $$
 
-for every matrix multiplication. Dequantization and re-quantization is performed sequentially for all weight matrices as the inputs run through the network graph.
+모든 행렬 곱셈에 대해 다음과 같이 변경됩니다. 입력이 네트워크 그래프를 통과할 때 모든 가중치 행렬에 대해 디양자화와 재양자화가 순차적으로 수행됩니다.
 
-Therefore, inference time is often **not** reduced when using quantized weights, but rather increases.
-Enough theory, let's give it a try! To quantize the weights with Transformers, you need to make sure that
-the [`bitsandbytes`](https://github.com/TimDettmers/bitsandbytes) library is installed.
+따라서, 양자화된 가중치를 사용할 때 추론 시간이 감소하지 **않고** 오히려 증가하는 경우가 많습니다.
+이제 이론은 충분하니 실제로 시도해 봅시다! Transformers를 사용하여 가중치를 양자화하려면 [`bitsandbytes`](https://github.com/TimDettmers/bitsandbytes) 라이브러리가 설치되어 있는지 확인해야 합니다.
 
 ```bash
 !pip install bitsandbytes
 ```
 
-We can then load models in 8-bit quantization by simply adding a `load_in_8bit=True` flag to `from_pretrained`.
+그런 다음 `from_pretrained`에 `load_in_8bit=True` 플래그를 추가하여 8비트 양자화로 모델을 로드할 수 있습니다.
 
 ```python
 model = AutoModelForCausalLM.from_pretrained("bigcode/octocoder", load_in_8bit=True, pad_token_id=0)
 ```
 
-Now, let's run our example again and measure the memory usage.
+이제, 예제를 다시 실행하고 메모리 사용량을 측정해 봅시다.
 
 ```python
 pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
@@ -207,7 +203,7 @@ result
 Here is a Python function that transforms bytes to Giga bytes:\n\n```python\ndef bytes_to_giga_bytes(bytes):\n    return bytes / 1024 / 1024 / 1024\n```\n\nThis function takes a single
 ```
 
-Nice, we're getting the same result as before, so no loss in accuracy! Let's look at how much memory was used this time.
+좋습니다, 정확도 손실 없이 이전과 동일한 결과를 얻고 있습니다! 이번에 사용된 메모리 양을 확인해 봅시다.
 
 ```python
 bytes_to_giga_bytes(torch.cuda.max_memory_allocated())
@@ -218,11 +214,12 @@ bytes_to_giga_bytes(torch.cuda.max_memory_allocated())
 15.219234466552734
 ```
 
-Significantly less! We're down to just a bit over 15 GBs and could therefore run this model on consumer GPUs like the 4090.
-We're seeing a very nice gain in memory efficiency and more or less no degradation to the model's output. However, we can also notice a slight slow-down during inference.
+훨씬 적습니다! 메모리 사용량이 15GB를 조금 넘는 수준으로 줄어들어 4090과 같은 소비자용 GPU에서도 이 모델을 실행할 수 있습니다.
+메모리 효율성에서 매우 큰 향상을 보이고 있으며 모델 출력의 품질 저하도 거의 없습니다. 그러나 추론 중에 약간의 속도 저하가 발생한 것도 확인할 수 있습니다.
 
 
-We delete the models and flush the memory again.
+모델을 삭제하고 메모리를 다시 해제합니다.
+
 ```python
 del model
 del pipe
@@ -232,7 +229,7 @@ del pipe
 flush()
 ```
 
-Let's see what peak GPU memory consumption 4-bit quantization gives. Quantizing the model to 4-bit can be done with the same API as before - this time by passing `load_in_4bit=True` instead of `load_in_8bit=True`.
+이제 4비트 양자화가 제공하는 최대 GPU 메모리 소비를 확인해 봅시다. 4비트로 모델을 양자화하려면 이전과 동일한 API를 사용하되 이번에는 `load_in_4bit=True` 대신 `load_in_8bit=True`를 전달하면 됩니다.
 
 ```python
 model = AutoModelForCausalLM.from_pretrained("bigcode/octocoder", load_in_4bit=True, low_cpu_mem_usage=True, pad_token_id=0)
@@ -248,7 +245,7 @@ result
 Here is a Python function that transforms bytes to Giga bytes:\n\n```\ndef bytes_to_gigabytes(bytes):\n    return bytes / 1024 / 1024 / 1024\n```\n\nThis function takes a single argument
 ```
 
-We're almost seeing the same output text as before - just the `python` is missing just before the code snippet. Let's see how much memory was required.
+이전과 거의 동일한 출력 텍스트를 보고 있습니다 - 코드 스니펫 바로 앞에 `python`만 누락되었습니다. 이번에 얼마나 많은 메모리가 필요했는지 확인해 봅시다.
 
 ```python
 bytes_to_giga_bytes(torch.cuda.max_memory_allocated())
@@ -259,11 +256,11 @@ bytes_to_giga_bytes(torch.cuda.max_memory_allocated())
 9.543574333190918
 ```
 
-Just 9.5GB! That's really not a lot for a >15 billion parameter model.
+단지 9.5GB! 이는 150억 개 이상의 파라미터를 가진 모델에 대해 매우 적은 양입니다.
 
-While we see very little degradation in accuracy for our model here, 4-bit quantization can in practice often lead to different results compared to 8-bit quantization or full `bfloat16` inference. It is up to the user to try it out.
+여기서는 모델의 정확도 저하가 거의 없음을 확인할 수 있지만, 실제로는 4비트 양자화가 8비트 양자화나 전체 `bfloat16` 추론과 비교하여 다른 결과를 초래할 수 있습니다. 사용자가 직접 시도해 보는 것이 좋습니다.
 
-Also note that inference here was again a bit slower compared to 8-bit quantization which is due to the more aggressive quantization method used for 4-bit quantization leading to \\( \text{quantize} \\) and \\( \text{dequantize} \\) taking longer during inference.
+또한 4비트 양자화에 사용된 더 공격적인 양자화 방법으로 인해 추론 시 \\( \text{quantize} \\)와 \\( \text{dequantize} \\) 과정이 더 오래 걸리므로 여기서도 8비트 양자화와 비교하여 추론 속도가 약간 느려졌음을 유의하세요.
 
 ```python
 del model
@@ -273,66 +270,65 @@ del pipe
 flush()
 ```
 
-Overall, we saw that running OctoCoder in 8-bit precision reduced the required GPU VRAM from 32G GPU VRAM to only 15GB and running the model in 4-bit precision further reduces the required GPU VRAM to just a bit over 9GB.
+전체적으로, OctoCoder를 8비트 정밀도로 실행하면 필요한 GPU VRAM이 32GB에서 15GB로 줄어들었고, 4비트 정밀도로 모델을 실행하면 필요한 GPU VRAM이 9GB로 더 줄어드는 것을 확인했습니다.
 
-4-bit quantization allows the model to be run on GPUs such as RTX3090, V100, and T4 which are quite accessible for most people.
+4비트 양자화는 RTX3090, V100, T4와 같은 GPU에서 모델을 실행할 수 있게 해주며, 이는 대부분의 사람들이 접근할 수 있는 GPU입니다.
 
-For more information on quantization and to see how one can quantize models to require even less GPU VRAM memory than 4-bit, we recommend looking into the [`AutoGPTQ`](https://huggingface.co/docs/transformers/main/en/main_classes/quantization#autogptq-integration%60) implementation.
+양자화에 대한 더 많은 정보와 4비트보다 적은 GPU VRAM 메모리가 필요한 모델 양자화 방법을 보려면 [`AutoGPTQ`](https://huggingface.co/docs/transformers/main/en/main_classes/quantization#autogptq-integration%60) 구현을 참조하는 것을 추천합니다.
 
-> As a conclusion, it is important to remember that model quantization trades improved memory efficiency against accuracy and in some cases inference time.
+> 결론적으로, 모델 양자화는 향상된 메모리 효율성과 정확성 간의 균형을 맞추는 것이며, 경우에 따라 추론 시간에도 영향을 미칠 수 있습니다.
 
-If GPU memory is not a constraint for your use case, there is often no need to look into quantization. However many GPUs simply can't run LLMs without quantization methods and in this case, 4-bit and 8-bit quantization schemes are extremely useful tools.
+사용 사례에서 GPU 메모리가 제한되지 않는다면, 양자화를 고려할 필요는 없습니다. 그러나 많은 GPU는 양자화 방법 없이 LLM을 실행할 수 없으며, 이 경우 4비트 및 8비트 양자화 스킴이 매우 유용한 도구입니다.
 
-For more in-detail usage information, we strongly recommend taking a look at the [Transformers Quantization Docs](https://huggingface.co/docs/transformers/main_classes/quantization#general-usage).
-Next, let's look into how we can improve computational and memory efficiency by using better algorithms and an improved model architecture.
+더 자세한 사용 정보는 [Transformers Quantization Docs](https://huggingface.co/docs/transformers/main_classes/quantization#general-usage)를 참고하는 것을 강력히 추천합니다.
+다음으로, 더 나은 알고리즘과 개선된 모델 아키텍처를 사용하여 계산 및 메모리 효율성을 향상시키는 방법을 살펴보겠습니다.
 
-## 2. Flash Attention
+## 2. 플래시 어텐션 [[#2-flash-attention]]
 
-Today's top-performing LLMs share more or less the same fundamental architecture that consists of feed-forward layers, activation layers, layer normalization layers, and most crucially, self-attention layers.
+오늘날의 최고 성능을 자랑하는 대규모 언어 모델(LLM)은 대체로 피드포워드 층, 활성화 층, 층 정규화 층, 그리고 가장 중요한 자기 어텐션 층으로 구성된 기본적인 아키텍처를 공유하고 있습니다.
 
-Self-attention layers are central to Large Language Models (LLMs) in that they enable the model to understand the contextual relationships between input tokens.
-However, the peak GPU memory consumption for self-attention layers grows *quadratically* both in compute and memory complexity with number of input tokens (also called *sequence length*) that we denote in the following by \\( N \\) .
-While this is not really noticeable for shorter input sequences (of up to 1000 input tokens), it becomes a serious problem for longer input sequences (at around 16000 input tokens).
+자기 어텐션 층은 입력 토큰 간의 문맥적 관계를 이해할 수 있게 해 주기 때문에 대규모 언어 모델(LLM)의 핵심 요소입니다.
+하지만 자기 어텐션 층의 최대 GPU 메모리 소비는 입력 토큰의 수(이하 \\( N \\)으로 표기)와 함께 계산 및 메모리 복잡성이 *이차적*으로 증가합니다. 입력 시퀀스가 짧은 경우(최대 1000개의 입력 토큰)에는 크게 눈에 띄지 않지만, 더 긴 입력 시퀀스(약 16000개의 입력 토큰)에서는 심각한 문제가 됩니다.
 
-Let's take a closer look. The formula to compute the output \\( \mathbf{O} \\) of a self-attention layer for an input \\( \mathbf{X} \\) of length \\( N \\) is:
+길이 \\( N \\)의 입력 \\( \mathbf{X} \\)에 대한 자기 어텐션 층의 출력 \\( \mathbf{O} \\)를 계산하는 공식은 다음과 같습니다:
 
 $$ \textbf{O} = \text{Attn}(\mathbf{X}) = \mathbf{V} \times \text{Softmax}(\mathbf{QK}^T) \text{ with } \mathbf{Q} = \mathbf{W}_q \mathbf{X}, \mathbf{V} = \mathbf{W}_v \mathbf{X}, \mathbf{K} = \mathbf{W}_k \mathbf{X} $$
 
-\\(  \mathbf{X} = (\mathbf{x}_1, ... \mathbf{x}_{N}) \\) is thereby the input sequence to the attention layer. The projections \\( \mathbf{Q} \\) and \\( \mathbf{K} \\) will each consist of \\( N \\) vectors resulting in the \\( \mathbf{QK}^T \\) being of size \\( N^2 \\) .
+\\( \mathbf{X} = (\mathbf{x}1, ... \mathbf{x}{N}) \\)은 따라서 어텐션 층의 입력 시퀀스입니다. 프로젝션 \\( \mathbf{Q} \\)와 \\( \mathbf{K} \\)는 각각 \\( N \\)개의 벡터로 구성되며, 그 결과 \\( \mathbf{QK}^T \\)의 크기는 \\( N^2 \\)가 됩니다.
 
-LLMs usually have multiple attention heads, thus doing multiple self-attention computations in parallel.
-Assuming, the LLM has 40 attention heads and runs in bfloat16 precision, we can calculate the memory requirement to store the \\( \mathbf{QK^T} \\) matrices to be \\( 40 * 2 * N^2 \\) bytes. For \\( N=1000 \\) only around 50 MB of VRAM are needed, however, for \\( N=16000 \\) we would need 19 GB of VRAM, and for \\( N=100,000 \\) we would need almost 1TB just to store the \\( \mathbf{QK}^T \\) matrices.
+LLM은 일반적으로 여러 개의 어텐션 헤드를 가지고 있어 여러 개의 자기 어텐션 계산을 병렬로 수행합니다.
+LLM이 40개의 어텐션 헤드를 가지고 bfloat16 정밀도로 실행된다고 가정하면, \\( \mathbf{QK^T} \\) 행렬을 저장하는 데 필요한 메모리를 \\( 40 * 2 * N^2 \\) 바이트로 계산할 수 있습니다. \\( N=1000 \\)일 때는 약 50MB의 VRAM만 필요하지만, \\( N=16000 \\)일 때는 19GB의 VRAM이 필요하며, \\( N=100,000 \\)일 때는 \\( \mathbf{QK^T} \\) 행렬을 저장하기 위해 거의 1TB의 VRAM이 필요합니다.
 
-Long story short, the default self-attention algorithm quickly becomes prohibitively memory-expensive for large input contexts.
+요약하자면, 기본 자기 어텐션 알고리즘은 큰 입력 컨텍스트에 대해 매우 빠르게 과도한 메모리 사용을 요구하게 됩니다.
 
-As LLMs improve in text comprehension and generation, they are applied to increasingly complex tasks. While models once handled the translation or summarization of a few sentences, they now manage entire pages, demanding the capability to process extensive input lengths.
+LLM이 텍스트 이해 및 생성 능력을 개선하면서 점점 더 복잡한 작업에 적용되고 있습니다. 한때 몇 문장의 번역이나 요약을 처리하던 모델이 이제는 전체 페이지를 처리할 수 있게 되면서 광범위한 입력 길이를 처리할 수 있는 능력이 요구됩니다.
 
-How can we get rid of the exorbitant memory requirements for large input lengths? We need a new way to compute the self-attention mechanism that gets rid of the \\( QK^T \\) matrix. [Tri Dao et al.](https://arxiv.org/abs/2205.14135) developed exactly such a new algorithm and called it **Flash Attention**.
+어떻게 하면 큰 입력 길이에 대한 과도한 메모리 요구를 없앨 수 있을까요? \\( QK^T \\) 행렬을 제거하는 새로운 자기 어텐션 메커니즘을 계산하는 방법이 필요합니다. [Tri Dao et al.](https://arxiv.org/abs/2205.14135)은 바로 이러한 새로운 알고리즘을 개발하여 **Flash Attention**이라고 명명했습니다.
 
-In a nutshell, Flash Attention breaks the  \\(\mathbf{V} \times \text{Softmax}(\mathbf{QK}^T\\)) computation apart and instead computes smaller chunks of the output by iterating over multiple softmax computation steps:
+간단히 말해, Flash Attention은 \\(\mathbf{V} \times \text{Softmax}(\mathbf{QK}^T\\)) 계산을 분할하여 여러 번의 소프트맥스 계산 단계를 반복하면서 더 작은 청크 단위로 출력을 계산합니다:
 
 $$ \textbf{O}_i \leftarrow s^a_{ij} * \textbf{O}_i + s^b_{ij} * \mathbf{V}_{j} \times \text{Softmax}(\mathbf{QK}^T_{i,j}) \text{ for multiple } i, j \text{ iterations} $$
 
-with \\( s^a_{ij} \\) and \\( s^b_{ij} \\) being some softmax normalization statistics that need to be recomputed for every \\( i \\) and \\( j \\) .
+여기서 \\( s^a_{ij} \\)와 \\( s^b_{ij} \\)는 각 \\( i \\)와 \\( j \\)에 대해 다시 계산해야 하는 소프트맥스 정규화 통계입니다.
 
-Please note that the whole Flash Attention is a bit more complex and is greatly simplified here as going in too much depth is out of scope for this guide. The reader is invited to take a look at the well-written [Flash Attention paper](https://arxiv.org/abs/2205.14135) for more details.
+Flash Attention 전체는 조금 더 복잡하며, 여기서는 너무 깊이 들어가는 것이 이 가이드의 범위를 벗어나기 때문에 크게 단순화하였습니다. 독자는 잘 작성된 [Flash Attention paper](https://arxiv.org/abs/2205.14135) 논문을 참조하여 더 자세한 내용을 확인할 수 있습니다.
 
-The main takeaway here is:
+여기서 주요 요점은 다음과 같습니다:
 
-> By keeping track of softmax normalization statistics and by using some smart mathematics, Flash Attention gives **numerical identical** outputs compared to the default self-attention layer at a memory cost that only increases linearly with \\( N \\) .
+> 소프트맥스 정규화 통계를 추적하고 몇 가지 스마트한 수학을 사용함으로써, Flash Attention은 기본 자기 어텐션 층과 **숫자적으로 동일한** 출력을 제공하면서 메모리 비용은 \\( N \\)에 따라 선형적으로만 증가합니다.
 
-Looking at the formula, one would intuitively say that Flash Attention must be much slower compared to the default self-attention formula as more computation needs to be done. Indeed Flash Attention requires more FLOPs compared to normal attention as the softmax normalization statistics have to constantly be recomputed (see [paper](https://arxiv.org/abs/2205.14135) for more details if interested)
+공식을 보면, Flash Attention이 더 많은 계산을 필요로 하기 때문에 기본 자기 어텐션 공식보다 훨씬 느릴 것이라고 직관적으로 생각할 수 있습니다. 실제로 Flash Attention은 소프트맥스 정규화 통계를 지속적으로 다시 계산해야 하기 때문에 일반 어텐션보다 더 많은 FLOP가 필요합니다. (더 자세한 내용은 [논문](https://arxiv.org/abs/2205.14135)을 참조하십시오)
 
-> However, Flash Attention is much faster in inference compared to default attention which comes from its ability to significantly reduce the demands on the slower, high-bandwidth memory of the GPU (VRAM), focusing instead on the faster on-chip memory (SRAM).
+> 그러나 Flash Attention은 기본 어텐션보다 추론 속도가 훨씬 빠릅니다. 이는 GPU의 느리고 고대역폭 메모리(VRAM)에 대한 요구를 크게 줄이고 대신 빠른 온칩 메모리(SRAM)에 집중할 수 있기 때문입니다.
 
-Essentially, Flash Attention makes sure that all intermediate write and read operations can be done using the fast *on-chip* SRAM memory instead of having to access the slower VRAM memory to compute the output vector \\( \mathbf{O} \\) .
+본질적으로, Flash Attention은 모든 중간 쓰기 및 읽기 작업이 느린 VRAM 메모리에 접근하지 않고 빠른 *온칩* SRAM 메모리를 사용하여 출력 벡터 \\( \mathbf{O} \\)를 계산할 수 있도록 합니다.
 
-In practice, there is currently absolutely no reason to **not** use Flash Attention if available. The algorithm gives mathematically the same outputs, and is both faster and more memory-efficient.
+실제로, Flash Attention이 사용 가능한 경우 이를 **사용하지 않을** 이유는 전혀 없습니다. 이 알고리즘은 수학적으로 동일한 출력을 제공하며, 더 빠르고 메모리 효율적입니다.
 
-Let's look at a practical example.
+실제 예를 살펴보겠습니다.
 
-Our OctoCoder model now gets a significantly longer input prompt which includes a so-called *system prompt*. System prompts are used to steer the LLM into a better assistant that is tailored to the users' task.
-In the following, we use a system prompt that will make OctoCoder a better coding assistant.
+우리의 OctoCoder 모델은 이제 *시스템 프롬프트*가 포함된 훨씬 더 긴 입력 프롬프트를 받게 됩니다. 시스템 프롬프트는 LLM을 사용자의 작업에 맞춘 더 나은 어시스턴트로 유도하는 데 사용됩니다. 
+다음 예제에서는 OctoCoder를 더 나은 코딩 어시스턴트로 만들기 위한 시스템 프롬프트를 사용합니다.
 
 ```python
 system_prompt = """Below are a series of dialogues between various people and an AI technical assistant.
@@ -383,14 +379,13 @@ def alternating(list1, list2):
 -----
 """
 ```
-For demonstration purposes, we duplicate the system prompt by ten so that the input length is long enough to observe Flash Attention's memory savings.
-We append the original text prompt `"Question: Please write a function in Python that transforms bytes to Giga bytes.\n\nAnswer: Here"`
+시연을 위해, 시스템 프롬프트를 10번 중복하여 입력 길이가 Flash Attention의 메모리 절약 효과를 관찰할 수 있을 만큼 충분히 길게 만듭니다. 원래의 텍스트 프롬프트를 추가합니다. `"Question: Please write a function in Python that transforms bytes to Giga bytes.\n\nAnswer: Here"`
 
 ```python
 long_prompt = 10 * system_prompt + prompt
 ```
 
-We instantiate our model again in bfloat16 precision.
+모델을 다시 bfloat16 정밀도로 인스턴스화합니다.
 
 ```python
 model = AutoModelForCausalLM.from_pretrained("bigcode/octocoder", torch_dtype=torch.bfloat16, device_map="auto")
@@ -399,7 +394,7 @@ tokenizer = AutoTokenizer.from_pretrained("bigcode/octocoder")
 pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
 ```
 
-Let's now run the model just like before *without Flash Attention* and measure the peak GPU memory requirement and inference time.
+이제 Flash Attention을 *사용하지 않고* 이전과 동일하게 모델을 실행하여 최대 GPU 메모리 요구량과 추론 시간을 측정해 봅시다.
 
 ```python
 import time
@@ -417,11 +412,11 @@ Generated in 10.96854019165039 seconds.
 Sure. Here is a function that does that.\n\ndef bytes_to_giga(bytes):\n   return bytes / 1024 / 1024 / 1024\n\nAnswer: Sure. Here is a function that does that.\n\ndef
 ````
 
-We're getting the same output as before, however this time, the model repeats the answer multiple times until it's 60 tokens cut-off. This is not surprising as we've repeated the system prompt ten times for demonstration purposes and thus cued the model to repeat itself.
+이전과 동일한 출력을 얻고 있지만, 이번에는 모델이 답변을 여러 번 반복하여 60개의 토큰이 잘릴 때까지 계속됩니다. 시연을 위해 시스템 프롬프트를 10번 반복했기 때문에 모델이 스스로 반복하도록 유도된 결과입니다. 이는 놀라운 일이 아닙니다.
 
-**Note** that the system prompt should not be repeated ten times in real-world applications - one time is enough!
+**참고** 실제 응용에서는 시스템 프롬프트를 10번 반복할 필요가 없습니다 - 한 번만 사용하면 충분합니다!
 
-Let's measure the peak GPU memory requirement.
+최대 GPU 메모리 요구량을 측정해 봅시다.
 
 ```python
 bytes_to_giga_bytes(torch.cuda.max_memory_allocated())
@@ -432,22 +427,22 @@ bytes_to_giga_bytes(torch.cuda.max_memory_allocated())
 37.668193340301514
 ```
 
-As we can see the peak GPU memory requirement is now significantly higher than in the beginning, which is largely due to the longer input sequence. Also the generation takes a little over a minute now.
+보시다시피, 최대 GPU 메모리 요구량이 처음보다 상당히 높아졌습니다. 이는 주로 입력 시퀀스가 길어졌기 때문입니다. 또한 생성 시간이 이제 1분을 넘게 걸립니다.
 
-We call `flush()` to free GPU memory for our next experiment.
+다음 실험을 위해 GPU 메모리를 해제하려면 `flush()`를 호출합니다.
 
 ```python
 flush()
 ```
 
-For comparison, let's run the same function, but enable Flash Attention instead.
-To do so, we convert the model to [BetterTransformer](https://huggingface.co/docs/optimum/bettertransformer/overview) and by doing so enabling PyTorch's [SDPA self-attention](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention) which in turn is able to use Flash Attention.
+비교를 위해, 동일한 기능을 실행하되 Flash Attention을 활성화해 보겠습니다.
+이를 위해 모델을 [BetterTransformer](https://huggingface.co/docs/optimum/bettertransformer/overview)로 변환하고, 이를 통해 PyTorch의 [SDPA self-attention](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention)을 활성화하면 Flash Attention을 사용할 수 있습니다.
 
 ```python
 model.to_bettertransformer()
 ```
 
-Now we run the exact same code snippet as before and under the hood Transformers will make use of Flash Attention.
+이제 이전과 동일한 코드 스니펫을 실행하면, 내부적으로 Transformers가 Flash Attention을 사용할 것입니다.
 
 ```py
 start_time = time.time()
@@ -464,9 +459,9 @@ Generated in 3.0211617946624756 seconds.
  Sure. Here is a function that does that.\n\ndef bytes_to_giga(bytes):\n   return bytes / 1024 / 1024 / 1024\n\nAnswer: Sure. Here is a function that does that.\n\ndef
 ```
 
-We're getting the exact same result as before, but can observe a very significant speed-up thanks to Flash Attention.
+이전과 동일한 결과를 얻었지만, Flash Attention 덕분에 매우 큰 속도 향상을 관찰할 수 있습니다.
 
-Let's measure the memory consumption one last time.
+메모리 소비를 마지막으로 한 번 더 측정해 봅시다.
 
 ```python
 bytes_to_giga_bytes(torch.cuda.max_memory_allocated())
@@ -477,116 +472,112 @@ bytes_to_giga_bytes(torch.cuda.max_memory_allocated())
 32.617331981658936
 ```
 
-And we're almost back to our original 29GB peak GPU memory from the beginning.
+그리고 우리는 거의 처음의 29GB 최대 GPU 메모리로 돌아왔습니다.
 
-We can observe that we only use roughly 100MB more GPU memory when passing a very long input sequence with Flash Attention compared to passing a short input sequence as done in the beginning.
+Flash Attention을 사용하여 매우 긴 입력 시퀀스를 전달할 때 처음에 짧은 입력 시퀀스를 전달했을 때와 비교하여 약 100MB 정도의 GPU 메모리를 더 사용한다는 것을 관찰할 수 있습니다.
 
 ```py
 flush()
 ```
 
-For more information on how to use Flash Attention, please have a look at [this doc page](https://huggingface.co/docs/transformers/en/perf_infer_gpu_one#flashattention-2).
+Flash Attention 사용에 대한 자세한 정보는 [이 문서 페이지](https://huggingface.co/docs/transformers/en/perf_infer_gpu_one#flashattention-2)를 참조해 주세요.
 
-## 3. Architectural Innovations
+## 3. 아키텍처 혁신 [[3-architectural-innovations]]
 
-So far we have looked into improving computational and memory efficiency by:
+지금까지 우리는 계산 및 메모리 효율성을 개선하기 위해 다음을 살펴보았습니다:
 
--   Casting the weights to a lower precision format
--   Replacing the self-attention algorithm with a more memory- and compute efficient version
+-   가중치를 낮은 정밀도 형식으로 변환
+-   자기 어텐션 알고리즘을 더 메모리 및 계산 효율적인 버전으로 교체
 
-Let's now look into how we can change the architecture of an LLM so that it is most effective and efficient for task that require long text inputs, *e.g.*:
--   Retrieval augmented Questions Answering,
--   Summarization,
--   Chat
+이제 긴 텍스트 입력이 필요한 작업에 가장 효과적이고 효율적인 LLM 아키텍처를 변경하는 방법을 살펴보겠습니다. 예를 들어:
+-   검색 증강 질문 응답
+-   요약
+-   채팅
 
-Note that *chat* not only requires the LLM to handle long text inputs, but it also necessitates that the LLM is able to efficiently handle the back-and-forth dialogue between user and assistant (such as ChatGPT).
+*채팅*은 LLM이 긴 텍스트 입력을 처리하는 것뿐만 아니라 사용자와 어시스턴트 간의 대화도 효율적으로 처리할 수 있어야 한다는 것을 의미합니다(예: ChatGPT).
 
-Once trained, the fundamental LLM architecture is difficult to change, so it is important to make considerations about the LLM's tasks beforehand and accordingly optimize the model's architecture.
-There are two important components of the model architecture that quickly become memory and/or performance bottlenecks for large input sequences.
+한번 훈련된 후에는 LLM의 기본 아키텍처를 변경하기 어렵기 때문에, LLM의 작업에 대한 고려를 미리 하고 이에 따라 모델의 아키텍처를 최적화하는 것이 중요합니다. 긴 입력 시퀀스에 대해 메모리 및/또는 성능 병목 현상이 빠르게 발생하는 모델 아키텍처의 중요한 두 가지 구성 요소가 있습니다.
 
--   The positional embeddings
--   The key-value cache
+-   위치 임베딩
+-   키-값 캐시
 
-Let's go over each component in more detail
+각 구성 요소를 더 자세히 살펴보겠습니다.
 
-### 3.1 Improving positional embeddings of LLMs
+### 3.1 LLM의 위치 임베딩 개선 [[#31-improving-positional-embeddings-of-llms]]
 
-Self-attention puts each token in relation to each other's tokens.
-As an example, the \\( \text{Softmax}(\mathbf{QK}^T) \\) matrix of the text input sequence *"Hello", "I", "love", "you"* could look as follows:
+자기 어텐션은 각 토큰을 서로의 토큰과 연관시킵니다.
+예를 들어, 텍스트 입력 시퀀스 *"Hello", "I", "love", "you"*의 \\( \text{Softmax}(\mathbf{QK}^T) \\) 행렬은 다음과 같을 수 있습니다:
 
 ![](/blog/assets/163_optimize_llm/self_attn_tokens.png)
 
-Each word token is given a probability mass at which it attends all other word tokens and, therefore is put into relation with all other word tokens. E.g. the word *"love"* attends to the word *"Hello"* with 5%, to *"I"* with 30%, and to itself with 65%.
+각 단어 토큰은 다른 모든 단어 토큰에 주의를 기울이는 확률 질량을 부여받아, 따라서 모든 다른 단어 토큰과 관계를 맺게 됩니다. 예를 들어, 단어 *"love"*는 단어 *"Hello"*에 5%, *"I"*에 30%, 그리고 자신에게 65%의 주의를 기울입니다.
 
-A LLM based on self-attention, but without position embeddings would have great difficulties in understanding the positions of the text inputs to each other.
-This is because the probability score computed by \\( \mathbf{QK}^T \\) relates each word token to each other word token in \\( O(1) \\) computations regardless of their relative positional distance to each other.
-Therefore, for the LLM without position embeddings each token appears to have the same distance to all other tokens, *e.g.* differentiating between *"Hello I love you"* and *"You love I hello"* would be very challenging.
+자기 어텐션을 기반으로 하지만 위치 임베딩이 없는 LLM은 텍스트 입력의 위치를 서로 이해하는 데 큰 어려움을 겪을 것입니다. 이는 \\( \mathbf{QK}^T \\)에 의해 계산된 확률 점수가 상대적 위치 거리에 상관없이 각 단어 토큰을 다른 모든 단어 토큰과 \\( O(1) \\) 계산으로 연관시키기 때문입니다. 따라서 위치 임베딩이 없는 LLM은 각 토큰이 다른 모든 토큰과 동일한 거리에 있는 것으로 나타나기 때문에, *"Hello I love you"*와 *"You love I hello"*를 구분하는 것이 매우 어렵습니다.
 
-For the LLM to understand sentence order, an additional *cue* is needed and is usually applied in the form of *positional encodings* (or also called *positional embeddings*).
-Positional encodings, encode the position of each token into a numerical presentation that the LLM can leverage to better understand sentence order.
+LLM이 문장의 순서를 이해하려면 추가적인 *단서*가 필요하며, 이는 일반적으로 *위치 인코딩* (또는 *위치 임베딩*이라고도 함)의 형태로 적용됩니다. 
+위치 인코딩은 각 토큰의 위치를 숫자 표현으로 인코딩하여 LLM이 문장의 순서를 더 잘 이해할 수 있도록 도와줍니다.
 
-The authors of the [*Attention Is All You Need*](https://arxiv.org/abs/1706.03762) paper introduced sinusoidal positional embeddings \\( \mathbf{P} = \mathbf{p}_1, \ldots, \mathbf{p}_N \\) .
-where each vector \\( \mathbf{p}_i \\) is computed as a sinusoidal function of its position \\( i \\) .
-The positional encodings are then simply added to the input sequence vectors \\( \mathbf{\hat{X}} = \mathbf{\hat{x}}_1, \ldots, \mathbf{\hat{x}}_N \\) = \\( \mathbf{x}_1 + \mathbf{p}_1, \ldots, \mathbf{x}_N + \mathbf{p}_N \\) thereby cueing the model to better learn sentence order.
+[*Attention Is All You Need*](https://arxiv.org/abs/1706.03762) 논문의 저자들은 사인 함수 기반의 위치 임베딩 \\( \mathbf{P} = \mathbf{p}_1, \ldots, \mathbf{p}_N \\)을 도입했습니다. 
+각 벡터 \\( \mathbf{p}_i \\)는 위치 \\( i \\)의 사인 함수로 계산됩니다. 
+위치 인코딩은 입력 시퀀스 벡터에 단순히 추가되어 \\( \mathbf{\hat{X}} = \mathbf{\hat{x}}_1, \ldots, \mathbf{\hat{x}}_N \\) = \\( \mathbf{x}_1 + \mathbf{p}_1, \ldots, \mathbf{x}_N + \mathbf{p}_N \\)으로 모델이 문장 순서를 더 잘 학습할 수 있도록 합니다.
 
-Instead of using fixed position embeddings, others (such as [Devlin et al.](https://arxiv.org/abs/1810.04805)) used learned positional encodings for which the positional embeddings
-\\( \mathbf{P} \\) are learned during training.
+고정된 위치 임베딩 대신, [Devlin et al.](https://arxiv.org/abs/1810.04805)과 같은 다른 연구자들은 학습된 위치 인코딩을 사용했습니다. 이 경우 위치 임베딩 \\( \mathbf{P} \\)은 훈련 중에 학습됩니다.
 
-Sinusoidal and learned position embeddings used to be the predominant methods to encode sentence order into LLMs, but a couple of problems related to these positional encodings were found:
+사인 함수 및 학습된 위치 임베딩은 문장 순서를 LLM에 인코딩하는 주요 방법이었지만, 이러한 위치 인코딩과 관련된 몇 가지 문제가 발견되었습니다:
 
-  1. Sinusoidal and learned position embeddings are both absolute positional embeddings, *i.e.* encoding a unique embedding for each position id: \\( 0, \ldots, N \\) . As shown by [Huang et al.](https://arxiv.org/abs/2009.13658) and [Su et al.](https://arxiv.org/abs/2104.09864), absolute positional embeddings lead to poor LLM performance for long text inputs. For long text inputs, it is advantageous if the model learns the relative positional distance input tokens have to each other instead of their absolute position.
-  2. When using learned position embeddings, the LLM has to be trained on a fixed input length \\( N \\), which makes it difficult to extrapolate to an input length longer than what it was trained on.
+  1. 사인 함수와 학습된 위치 임베딩은 모두 절대 위치 임베딩으로, 각 위치 ID \\( 0, \ldots, N \\)에 대해 고유한 임베딩을 인코딩합니다. [Huang et al.](https://arxiv.org/abs/2009.13658) 및 [Su et al.](https://arxiv.org/abs/2104.09864)의 연구에 따르면, 절대 위치 임베딩은 긴 텍스트 입력에 대해 LLM 성능이 저하됩니다. 긴 텍스트 입력의 경우, 모델이 절대 위치 대신 입력 토큰 간의 상대적 위치 거리를 학습하는 것이 유리합니다.
+  2. 학습된 위치 임베딩을 사용할 때, LLM은 고정된 입력 길이 \\( N \\)에 대해 훈련되어야 하므로, 훈련된 길이보다 더 긴 입력 길이로 외삽하는 것이 어렵습니다.
 
-Recently, relative positional embeddings that can tackle the above mentioned problems have become more popular, most notably:
+최근에는 위에서 언급한 문제를 해결할 수 있는 상대적 위치 임베딩이 더 인기를 끌고 있습니다. 특히 다음과 같은 방법들이 주목받고 있습니다:
 
 -   [Rotary Position Embedding (RoPE)](https://arxiv.org/abs/2104.09864)
 -   [ALiBi](https://arxiv.org/abs/2108.12409)
 
-Both *RoPE* and *ALiBi* argue that it's best to cue the LLM about sentence order directly in the self-attention algorithm as it's there that word tokens are put into relation with each other. More specifically, sentence order should be cued by modifying the \\( \mathbf{QK}^T \\) computation.
+*RoPE*와 *ALiBi*는 모두 자기 어텐션 알고리즘 내에서 직접적으로 문장 순서를 모델에게 알려주는 것이 최선이라고 주장합니다. 이는 단어 토큰이 서로 관계를 맺는 곳이기 때문입니다. 구체적으로, 문장 순서는 \\( \mathbf{QK}^T \\) 계산을 수정하여 표시해야 합니다.
 
-Without going into too many details, *RoPE* notes that positional information can be encoded into query-key pairs, *e.g.* \\( \mathbf{q}_i \\) and \\( \mathbf{x}_j \\) by rotating each vector by an angle \\( \theta * i \\) and \\( \theta * j \\) respectively with \\( i, j \\) describing each vectors sentence position:
+너무 많은 세부 사항을 다루지 않고, *RoPE*는 위치 정보를 쿼리-키 쌍에 인코딩할 수 있다고 지적합니다. 예를 들어, 각 벡터 \\( \mathbf{q}_i \\)와 \\( \mathbf{x}_j \\)를 각각 \\( \theta * i \\)와 \\( \theta * j \\)의 각도로 회전시킴으로써 다음과 같이 표현할 수 있습니다:
 
 $$ \mathbf{\hat{q}}_i^T \mathbf{\hat{x}}_j = \mathbf{{q}}_i^T \mathbf{R}_{\theta, i -j} \mathbf{{x}}_j. $$
 
-\\( \mathbf{R}_{\theta, i - j} \\) thereby represents a rotational matrix. \\( \theta \\) is *not* learned during training, but instead set to a pre-defined value that depends on the maximum input sequence length during training.
+여기서 \\( \mathbf{R}_{\theta, i - j} \\)는 회전 행렬을 나타냅니다. \\( \theta \\)는 훈련 중에 *학습되지 않으며*, 대신 훈련 중 최대 입력 시퀀스 길이에 따라 사전 정의된 값으로 설정됩니다.
 
-> By doing so, the propability score between \\( \mathbf{q}_i \\) and \\( \mathbf{q}_j \\) is only affected if \\( i \ne j \\) and solely depends on the relative distance \\( i - j \\) regardless of each vector's specific positions \\( i \\) and \\( j \\) .
+> 이렇게 함으로써 \\( \mathbf{q}_i \\)와 \\( \mathbf{q}_j \\) 간의 확률 점수는 \\( i \ne j \\)인 경우에만 영향을 받으며, 각 벡터의 특정 위치 \\( i \\)와 \\( j \\)와는 상관없이 오직 상대적 거리 \\( i - j \\)에만 의존하게 됩니다.
 
-*RoPE* is used in multiple of today's most important LLMs, such as:
+*RoPE*는 현재의 중요한 여러 LLM에서 사용되고 있습니다. 예를 들면:
 
 -   [**Falcon**](https://huggingface.co/tiiuae/falcon-40b)
 -   [**Llama**](https://arxiv.org/abs/2302.13971)
 -   [**PaLM**](https://arxiv.org/abs/2204.02311)
 
-As an alternative, *ALiBi* proposes a much simpler relative position encoding scheme. The relative distance that input tokens have to each other is added as a negative integer scaled by a pre-defined value `m` to each query-key entry of the \\( \mathbf{QK}^T \\) matrix right before the softmax computation.
+대안으로, *ALiBi*는 훨씬 더 간단한 상대적 위치 인코딩 방식을 제안합니다. 입력 토큰 간의 상대적 거리를 음수 정수로서 사전 정의된 값 `m`으로 스케일링하여 \\( \mathbf{QK}^T \\) 행렬의 각 쿼리-키 항목에 소프트맥스 계산 직전에 추가합니다.
 
 ![](/blog/assets/163_optimize_llm/alibi.png)
 
-As shown in the [ALiBi](https://arxiv.org/abs/2108.12409) paper, this simple relative positional encoding allows the model to retain a high performance even at very long text input sequences.
+[ALiBi](https://arxiv.org/abs/2108.12409) 논문에서 보여주듯이, 이 간단한 상대적 위치 인코딩은 모델이 매우 긴 텍스트 입력 시퀀스에서도 높은 성능을 유지할 수 있게 합니다.
 
-*ALiBi* is used in multiple of today's most important LLMs, such as:
+*ALiBi*는 현재의 중요한 여러 LLM에서 사용되고 있습니다. 예를 들면:
 
 -   [**MPT**](https://huggingface.co/mosaicml/mpt-30b)
 -   [**BLOOM**](https://huggingface.co/bigscience/bloom)
 
-Both *RoPE* and *ALiBi* position encodings can extrapolate to input lengths not seen during training whereas it has been shown that extrapolation works much better out-of-the-box for *ALiBi* as compared to *RoPE*.
-For ALiBi, one simply increases the values of the lower triangular position matrix to match the length of the input sequence.
-For *RoPE*, keeping the same \\( \theta \\) that was used during training leads to poor results when passing text inputs much longer than those seen during training, *c.f* [Press et al.](https://arxiv.org/abs/2108.12409). However, the community has found a couple of effective tricks that adapt \\( \theta \\), thereby allowing *RoPE* position embeddings to work well for extrapolated text input sequences (see [here](https://github.com/huggingface/transformers/pull/24653)).
+*RoPE*와 *ALiBi* 위치 인코딩은 모두 훈련 중에 보지 못한 입력 길이에 대해 외삽할 수 있으며, *ALiBi*가 *RoPE*보다 외삽이 훨씬 더 잘 작동함이 입증되었습니다.
+*ALiBi*의 경우, 하삼각 위치 행렬의 값을 입력 시퀀스 길이에 맞추어 증가시키기만 하면 됩니다.
+*RoPE*의 경우, 훈련 중에 사용된 동일한 \\( \theta \\)를 유지하면 훈련 중에 보지 못한 매우 긴 텍스트 입력을 전달할 때 성능이 저하됩니다(참고: [Press et al.](https://arxiv.org/abs/2108.12409)). 그러나 커뮤니티는 \\( \theta \\)를 조정하는 몇 가지 효과적인 트릭을 찾아냈으며, 이를 통해 *RoPE* 위치 임베딩이 외삽된 텍스트 입력 시퀀스에서도 잘 작동할 수 있게 되었습니다(참고: [here](https://github.com/huggingface/transformers/pull/24653)).
 
-> Both RoPE and ALiBi are relative positional embeddings that are *not* learned during training, but instead are based on the following intuitions:
- -   Positional cues about the text inputs should be given directly to the \\( QK^T \\) matrix of the self-attention layer
- -   The LLM should be incentivized to learn a constant *relative* distance positional encodings have to each other
- -   The further text input tokens are from each other, the lower the probability of their query-value probability. Both RoPE and ALiBi lower the query-key probability of tokens far away from each other. RoPE by decreasing their vector product by increasing the angle between the query-key vectors. ALiBi by adding large negative numbers to the vector product
+> RoPE와 ALiBi는 모두 훈련 중에 *학습되지 않는* 상대적 위치 임베딩으로 다음과 같은 직관에 기반합니다:
+ -   텍스트 입력에 대한 위치 단서는 자기 어텐션 층의 \\( QK^T \\) 행렬에 직접 제공되어야 합니다.
+ -   LLM은 일정한 *상대적* 거리 위치 인코딩을 서로 학습하도록 유도되어야 합니다.
+ -   텍스트 입력 토큰 간의 거리가 멀어질수록, 그들의 쿼리-값 확률은 낮아져야 합니다. RoPE와 ALiBi는 서로 멀리 떨어진 토큰의 쿼리-키 확률을 낮춥니다. RoPE는 쿼리-키 벡터 간의 각도를 증가시켜 벡터 곱을 감소시키는 방식으로, ALiBi는 벡터 곱에 큰 음수를 추가하는 방식으로 이 작업을 수행합니다.
 
-In conclusion, LLMs that are intended to be deployed in tasks that require handling large text inputs are better trained with relative positional embeddings, such as RoPE and ALiBi. Also note that even if an LLM with RoPE and ALiBi has been trained only on a fixed length of say \\( N_1 = 2048 \\) it can still be used in practice with text inputs much larger than \\( N_1 \\), like \\( N_2 = 8192 > N_1 \\) by extrapolating the positional embeddings.
+결론적으로, 큰 텍스트 입력을 처리해야 하는 작업에 배포될 예정인 LLM은 RoPE와 ALiBi와 같은 상대적 위치 임베딩으로 훈련하는 것이 더 좋습니다. 또한 RoPE와 ALiBi를 사용하여 훈련된 LLM이 고정 길이 \\( N_1 = 2048 \\)에서만 훈련되었더라도 위치 임베딩을 외삽하여 \\( N_1 \\)보다 훨씬 큰 텍스트 입력 \\( N_2 = 8192 > N_1 \\)로 실습에서 사용할 수 있음을 유의하세요.
 
-### 3.2 The key-value cache
+### 3.2 키-값 캐시 [[#32-the-key-value-cache]]
 
-Auto-regressive text generation with LLMs works by iteratively putting in an input sequence, sampling the next token, appending the next token to the input sequence, and continuing to do so until the LLM produces a token that signifies that the generation has finished.
+LLM을 이용한 자가회귀 텍스트 생성은 입력 시퀀스를 반복적으로 넣고, 다음 토큰을 샘플링하며, 그 다음 토큰을 입력 시퀀스에 추가하고, LLM이 생성을 완료했다는 토큰을 생성할 때까지 이를 계속 수행하는 방식으로 작동합니다.
 
-Please have a look at [Transformer's Generate Text Tutorial](https://huggingface.co/docs/transformers/llm_tutorial#generate-text) to get a more visual explanation of how auto-regressive generation works.
+자가회귀 생성이 어떻게 작동하는지에 대한 시각적 설명을 보려면 [Transformer's Generate Text Tutorial](https://huggingface.co/docs/transformers/llm_tutorial#generate-text)을 참조하세요.
 
-Let's run a quick code snippet to show how auto-regressive works in practice. We will simply take the most likely next token via `torch.argmax`.
+자가회귀 생성이 실제로 어떻게 작동하는지 보여주는 간단한 코드 스니펫을 실행해 보겠습니다. 여기서는 `torch.argmax`를 통해 가장 가능성이 높은 다음 토큰을 가져올 것입니다.
 
 ```python
 input_ids = tokenizer(prompt, return_tensors="pt")["input_ids"].to("cuda")
@@ -612,14 +603,14 @@ shape of input_ids torch.Size([1, 25])
 [' Here is a Python function']
 ```
 
-As we can see every time we increase the text input tokens by the just sampled token.
+보시다시피, 우리는 샘플링된 토큰에 의해 텍스트 입력 토큰을 매번 증가시킵니다.
 
-With very few exceptions, LLMs are trained using the [causal language modeling objective](https://huggingface.co/docs/transformers/tasks/language_modeling#causal-language-modeling) and therefore mask the upper triangle matrix of the attention score - this is why in the two diagrams above the attention scores are left blank (*a.k.a* have 0 probability). For a quick recap on causal language modeling you can refer to the [*Illustrated Self Attention blog*](https://jalammar.github.io/illustrated-gpt2/#part-2-illustrated-self-attention).
+매우 예외적인 경우를 제외하고, LLM은 [인과 언어 모델링 목표](https://huggingface.co/docs/transformers/tasks/language_modeling#causal-language-modeling)를 사용하여 훈련되므로 어텐션 점수의 상삼각 행렬을 마스킹합니다. 이것이 위의 두 다이어그램에서 어텐션 점수가 비어 있는 이유입니다 (*a.k.a* 0 확률을 가짐). 인과 언어 모델링에 대한 빠른 요약은 [*Illustrated Self Attention 블로그*](https://jalammar.github.io/illustrated-gpt2/#part-2-illustrated-self-attention)를 참조할 수 있습니다.
 
-As a consequence, tokens *never* depend on previous tokens, more specifically the \\( \mathbf{q}_i \\) vector is never put in relation with any key, values vectors \\( \mathbf{k}_j, \mathbf{v}_j \\) if \\( j > i \\) . Instead \\( \mathbf{q}_i \\) only attends to previous key-value vectors \\( \mathbf{k}_{m < i}, \mathbf{v}_{m < i} \text{ , for } m \in \{0, \ldots i - 1\} \\). In order to reduce unnecessary computation, one can therefore cache each layer's key-value vectors for all previous timesteps.
+결과적으로, 토큰은 *절대* 이전 토큰에 의존하지 않습니다. 더 구체적으로는 \\( \mathbf{q}_i \\) 벡터가 \\( j > i \\)인 경우 어떤 키, 값 벡터 \\( \mathbf{k}_j, \mathbf{v}j \\)와도 연관되지 않습니다. 대신 \\( \mathbf{q}i \\)는 이전의 키-값 벡터 \\( \mathbf{k}{m < i}, \mathbf{v}{m < i} \text{ , for } m \in {0, \ldots i - 1} \\)에만 주의를 기울입니다. 불필요한 계산을 줄이기 위해 각 층의 키-값 벡터를 모든 이전 시간 단계에 대해 캐시할 수 있습니다.
 
-In the following, we will tell the LLM to make use of the key-value cache by retrieving and forwarding it for each forward pass.
-In Transformers, we can retrieve the key-value cache by passing the `use_cache` flag to the `forward` call and can then pass it with the current token.
+다음으로, LLM이 각 포워드 패스마다 키-값 캐시를 검색하고 전달하여 이를 활용하도록 합니다. 
+Transformers에서는 `forward` 호출에 `use_cache` 플래그를 전달하여 키-값 캐시를 검색한 다음 현재 토큰과 함께 전달할 수 있습니다.
 
 ```python
 past_key_values = None # past_key_values is the key-value cache
@@ -654,25 +645,25 @@ length of key-value cache 24
 [' Here', ' is', ' a', ' Python', ' function']
 ```
 
-As one can see, when using the key-value cache the text input tokens are *not* increased in length, but remain a single input vector. The length of the key-value cache on the other hand is increased by one at every decoding step.
+키-값 캐시를 사용할 때, 텍스트 입력 토큰의 길이는 *증가하지 않고* 단일 입력 벡터로 유지되는 것을 볼 수 있습니다. 반면에 키-값 캐시의 길이는 각 디코딩 단계마다 하나씩 증가합니다.
 
-> Making use of the key-value cache means that the \\( \mathbf{QK}^T \\) is essentially reduced to \\( \mathbf{q}_c\mathbf{K}^T \\) with \\( \mathbf{q}_c \\) being the query projection of the currently passed input token which is *always* just a single vector.
+> 키-값 캐시를 사용하면 \\( \mathbf{QK}^T \\)가 본질적으로 \\( \mathbf{q}_c\mathbf{K}^T \\)로 줄어드는데, 여기서 \\( \mathbf{q}_c \\)는 현재 전달된 입력 토큰의 쿼리 프로젝션으로, *항상* 단일 벡터입니다.
 
-Using the key-value cache has two advantages:
--   Significant increase in computational efficiency as less computations are performed compared to computing the full \\( \mathbf{QK}^T \\) matrix. This leads to an increase in inference speed
--   The maximum required memory is not increased quadratically with the number of generated tokens, but only increases linearly.
+키-값 캐시를 사용하는 것에는 두 가지 장점이 있습니다:
+-   전체 \\( \mathbf{QK}^T \\) 행렬을 계산하는 것과 비교하여 계산 효율성이 크게 향상됩니다. 이는 추론 속도의 증가로 이어집니다.
+-   생성된 토큰 수에 따라 필요한 최대 메모리가 이차적으로 증가하지 않고, 선형적으로만 증가합니다.
 
-> One should *always* make use of the key-value cache as it leads to identical results and a significant speed-up for longer input sequences. Transformers has the key-value cache enabled by default when making use of the text pipeline or the [`generate` method](https://huggingface.co/docs/transformers/main_classes/text_generation).
+> 더 긴 입력 시퀀스에 대해 동일한 결과와 큰 속도 향상을 가져오기 때문에 키-값 캐시를 *항상* 사용해야 합니다. Transformers는 텍스트 파이프라인이나 [`generate` 메서드](https://huggingface.co/docs/transformers/main_classes/text_generation)를 사용할 때 기본적으로 키-값 캐시를 활성화합니다.
 
 <Tip warning={true}>
 
-Note that, despite our advice to use key-value caches, your LLM output may be slightly different when you use them. This is a property of the matrix multiplication kernels themselves -- you can read more about it [here](https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535).
+참고로, 키-값 캐시를 사용할 것을 권장하지만, 이를 사용할 때 LLM 출력이 약간 다를 수 있습니다. 이것은 행렬 곱셈 커널 자체의 특성 때문입니다 -- 더 자세한 내용은 [여기](https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535)에서 읽어볼 수 있습니다.
 
 </Tip>
 
-#### 3.2.1 Multi-round conversation
+#### 3.2.1 다회차 대화 [[#321-multi-round-conversation]]
 
-The key-value cache is especially useful for applications such as chat where multiple passes of auto-regressive decoding are required. Let's look at an example.
+키-값 캐시는 여러 번의 자가회귀 디코딩이 필요한 채팅과 같은 애플리케이션에 특히 유용합니다. 예제를 살펴보겠습니다.
 
 ```
 User: How many people live in France?
@@ -681,15 +672,15 @@ User: And how many are in Germany?
 Assistant: Germany has ca. 81 million inhabitants
 ```
 
-In this chat, the LLM runs auto-regressive decoding twice:
-  1. The first time, the key-value cache is empty and the input prompt is `"User: How many people live in France?"` and the model auto-regressively generates the text `"Roughly 75 million people live in France"` while increasing the key-value cache at every decoding step.
-  2. The second time the input prompt is `"User: How many people live in France? \n Assistant: Roughly 75 million people live in France \n User: And how many in Germany?"`. Thanks to the cache, all key-value vectors for the first two sentences are already computed. Therefore the input prompt only consists of `"User: And how many in Germany?"`. While processing the shortened input prompt, its computed key-value vectors are concatenated to the key-value cache of the first decoding. The second Assistant's answer `"Germany has ca. 81 million inhabitants"` is then auto-regressively generated with the key-value cache consisting of encoded key-value vectors of `"User: How many people live in France? \n Assistant: Roughly 75 million people live in France \n User: And how many are in Germany?"`.
+이 채팅에서 LLM은 두 번의 자가회귀 디코딩을 실행합니다:
+  1. 첫 번째로, 키-값 캐시는 비어 있고 입력 프롬프트는 `"User: How many people live in France?"`입니다. 모델은 자가회귀적으로 `"Roughly 75 million people live in France"`라는 텍스트를 생성하며 디코딩 단계마다 키-값 캐시를 증가시킵니다.
+  2. 두 번째로, 입력 프롬프트는 `"User: How many people live in France? \n Assistant: Roughly 75 million people live in France \n User: And how many in Germany?"`입니다. 캐시 덕분에 첫 번째 두 문장에 대한 모든 키-값 벡터는 이미 계산되어 있습니다. 따라서 입력 프롬프트는 `"User: And how many in Germany?"`로만 구성됩니다. 줄어든 입력 프롬프트를 처리하는 동안 계산된 키-값 벡터가 첫 번째 디코딩의 키-값 캐시에 연결됩니다. 두 번째 어시스턴트의 답변인 `"Germany has ca. 81 million inhabitants"`는 `"User: How many people live in France? \n Assistant: Roughly 75 million people live in France \n User: And how many are in Germany?"`의 인코딩된 키-값 벡터로 구성된 키-값 캐시를 사용하여 자가회귀적으로 생성됩니다.
 
-Two things should be noted here:
-  1. Keeping all the context is crucial for LLMs deployed in chat so that the LLM understands all the previous context of the conversation. E.g. for the example above the LLM needs to understand that the user refers to the population when asking `"And how many are in Germany"`.
-  2. The key-value cache is extremely useful for chat as it allows us to continuously grow the encoded chat history instead of having to re-encode the chat history again from scratch (as e.g. would be the case when using an encoder-decoder architecture).
+여기서 두 가지를 주목해야 합니다:
+  1. LLM이 대화의 모든 이전 문맥을 이해할 수 있도록 모든 문맥을 유지하는 것이 채팅에 배포된 LLM에서는 매우 중요합니다. 예를 들어, 위의 예에서 LLM은 사용자가 `"And how many are in Germany"`라고 물을 때 인구를 언급하고 있음을 이해해야 합니다.
+  2. 키-값 캐시는 채팅에서 매우 유용합니다. 이는 인코딩된 채팅 기록을 처음부터 다시 인코딩할 필요 없이 계속해서 확장할 수 있게 해주기 때문입니다(예: 인코더-디코더 아키텍처를 사용할 때와 같은 경우).
 
-In `transformers`, a `generate` call will return `past_key_values` when `return_dict_in_generate=True` is passed, in addition to the default `use_cache=True`. Note that it is not yet available through the `pipeline` interface.
+`transformers`에서 `generate` 호출은 기본적으로 `use_cache=True`와 함께 `return_dict_in_generate=True`를 전달하면 `past_key_values`를 반환합니다. 이는 아직 `pipeline` 인터페이스를 통해서는 사용할 수 없습니다.
 
 ```python
 # Generation as usual
@@ -720,11 +711,11 @@ def bytes_to_megabytes(bytes):
 Answer: The function takes a number of bytes as input and returns the number of
 ```
 
-Great, no additional time is spent recomputing the same key and values for the attention layer! There is however one catch. While the required peak memory for the \\( \mathbf{QK}^T \\) matrix is significantly reduced, holding the key-value cache in memory can become very memory expensive for long input sequences or multi-turn chat. Remember that the key-value cache needs to store the key-value vectors for all previous input vectors \\( \mathbf{x}_i \text{, for } i \in \{1, \ldots, c - 1\} \\) for all self-attention layers and for all attention heads.
+훌륭합니다. 어텐션 층의 동일한 키와 값을 다시 계산하는 데 추가 시간이 소요되지 않습니다! 그러나 한 가지 문제가 있습니다. \\( \mathbf{QK}^T \\) 행렬에 필요한 최대 메모리는 크게 줄어들지만, 긴 입력 시퀀스나 다회차 채팅의 경우 키-값 캐시를 메모리에 보관하는 것이 매우 메모리 집약적이 될 수 있습니다. 키-값 캐시는 모든 자기 어텐션 층과 모든 어텐션 헤드에 대해 이전 입력 벡터 \\( \mathbf{x}_i \text{, for } i \in {1, \ldots, c - 1} \\)의 키-값 벡터를 저장해야 한다는 점을 기억하세요.
 
-Let's compute the number of float values that need to be stored in the key-value cache for the LLM `bigcode/octocoder` that we used before.
-The number of float values amounts to two times the sequence length times the number of attention heads times the attention head dimension and times the number of layers.
-Computing this for our LLM at a hypothetical input sequence length of 16000 gives:
+이전에 사용한 LLM `bigcode/octocoder`에 대해 키-값 캐시에 저장해야 하는 플로트 값의 수를 계산해 봅시다.
+플로트 값의 수는 시퀀스 길이의 두 배에 어텐션 헤드 수, 어텐션 헤드 차원, 레이어 수를 곱한 값입니다.
+가상의 입력 시퀀스 길이 16000에 대해 우리 LLM에 대해 이를 계산하면 다음과 같습니다:
 
 ```python
 config = model.config
@@ -736,46 +727,45 @@ config = model.config
 7864320000
 ```
 
-Roughly 8 billion float values! Storing 8 billion float values in `float16` precision requires around 15 GB of RAM which is circa half as much as the model weights themselves!
-Researchers have proposed two methods that allow to significantly reduce the memory cost of storing the key-value cache, which are explored in the next subsections.
+대략 80억 개의 플로트 값입니다! `float16` 정밀도로 80억 개의 플로트 값을 저장하는 데는 약 15GB의 RAM이 필요하며, 이는 모델 가중치 자체의 절반 정도입니다.
+연구자들은 키-값 캐시를 저장하는 데 필요한 메모리 비용을 크게 줄일 수 있는 두 가지 방법을 제안했으며, 이는 다음 절에서 살펴보겠습니다.
 
-#### 3.2.2 Multi-Query-Attention (MQA)
+#### 3.2.2 멀티 쿼리 어텐션 (MQA) [[322-multi-query-attention-mqa]]
 
-[Multi-Query-Attention](https://arxiv.org/abs/1911.02150) was proposed in Noam Shazeer's *Fast Transformer Decoding: One Write-Head is All You Need* paper. As the title says, Noam found out that instead of using `n_head` key-value projections weights, one can use a single head-value projection weight pair that is shared across all attention heads without that the model's performance significantly degrades.
+[멀티 쿼리 어텐션 (MQA)](https://arxiv.org/abs/1911.02150)은 Noam Shazeer의 *Fast Transformer Decoding: One Write-Head is All You Need* 논문에서 제안되었습니다. 제목에서 알 수 있듯이, Noam은 `n_head` 키-값 프로젝션 가중치 대신, 모든 어텐션 헤드에서 공유되는 단일 헤드-값 프로젝션 가중치를 사용할 수 있으며, 이를 통해 모델 성능이 크게 저하되지 않는다는 것을 발견했습니다.
+> 단일 헤드-값 프로젝션 가중치를 사용함으로써, 키-값 벡터 \\( \mathbf{k}_i, \mathbf{v}_i \\)는 모든 어텐션 헤드에서 동일해야 하며, 이는 캐시에 `n_head` 개 대신 하나의 키-값 프로젝션 쌍만 저장하면 된다는 것을 의미합니다.
 
-> By using a single head-value projection weight pair, the key value vectors \\( \mathbf{k}_i, \mathbf{v}_i \\) have to be identical across all attention heads which in turn means that we only need to store 1 key-value projection pair in the cache instead of `n_head` ones.
+대부분의 LLM이 20에서 100 사이의 어텐션 헤드를 사용하기 때문에, MQA는 키-값 캐시의 메모리 소비를 크게 줄입니다. 이 노트북에서 사용된 LLM의 경우, 입력 시퀀스 길이 16000에서 필요한 메모리 소비를 15GB에서 400MB 미만으로 줄일 수 있습니다.
 
-As most LLMs use between 20 and 100 attention heads, MQA significantly reduces the memory consumption of the key-value cache. For the LLM used in this notebook we could therefore reduce the required memory consumption from 15 GB to less than 400 MB at an input sequence length of 16000.
+메모리 절감 외에도, MQA는 계산 효율성도 향상시킵니다. 다음과 같이 설명합니다.
+자가회귀 디코딩에서는 큰 키-값 벡터를 다시 로드하고, 현재 키-값 벡터 쌍과 연결한 후 \\( \mathbf{q}_c\mathbf{K}^T \\) 계산에 매 단계마다 입력해야 합니다. 자가회귀 디코딩의 경우, 지속적인 재로드에 필요한 메모리 대역폭이 심각한 시간 병목 현상이 될 수 있습니다. 키-값 벡터의 크기를 줄이면 접근해야 하는 메모리 양이 줄어들어 메모리 대역폭 병목 현상이 감소합니다. 자세한 내용은 [Noam의 논문](https://arxiv.org/abs/1911.02150)을 참조하세요.
 
-In addition to memory savings, MQA also leads to improved computational efficiency as explained in the following.
-In auto-regressive decoding, large key-value vectors need to be reloaded, concatenated with the current key-value vector pair to be then fed into the \\( \mathbf{q}_c\mathbf{K}^T \\) computation at every step. For auto-regressive decoding, the required memory bandwidth for the constant reloading can become a serious time bottleneck. By reducing the size of the key-value vectors less memory needs to be accessed, thus reducing the memory bandwidth bottleneck. For more detail, please have a look at [Noam's paper](https://arxiv.org/abs/1911.02150).
+여기서 이해해야 할 중요한 부분은 키-값 어텐션 헤드 수를 1로 줄이는 것이 키-값 캐시를 사용할 때만 의미가 있다는 것입니다. 키-값 캐시 없이 단일 포워드 패스에 대한 모델의 최대 메모리 소비는 변경되지 않으며, 각 어텐션 헤드는 여전히 고유한 쿼리 벡터를 가지므로 각 어텐션 헤드는 여전히 다른 \\( \mathbf{QK}^T \\) 행렬을 가집니다.
 
-The important part to understand here is that reducing the number of key-value attention heads to 1 only makes sense if a key-value cache is used. The peak memory consumption of the model for a single forward pass without key-value cache stays unchanged as every attention head still has a unique query vector so that each attention head still has a different \\( \mathbf{QK}^T \\) matrix.
-
-MQA has seen wide adoption by the community and is now used by many of the most popular LLMs:
+MQA는 커뮤니티에서 널리 채택되어 현재 가장 인기 있는 많은 LLM에서 사용되고 있습니다:
 
 -   [**Falcon**](https://huggingface.co/tiiuae/falcon-40b)
 -   [**PaLM**](https://arxiv.org/abs/2204.02311)
 -   [**MPT**](https://huggingface.co/mosaicml/mpt-30b)
 -   [**BLOOM**](https://huggingface.co/bigscience/bloom)
 
-Also, the checkpoint used in this notebook - `bigcode/octocoder` - makes use of MQA.
+또한, 이 노트북에서 사용된 체크포인트 - `bigcode/octocoder` -는 MQA를 사용합니다.
 
-#### 3.2.3 Grouped-Query-Attention (GQA)
+#### 3.2.3 그룹 쿼리 어텐션 (GQA) [[323-grouped-query-attention-gqa]]
 
-[Grouped-Query-Attention](https://arxiv.org/abs/2305.13245), as proposed by Ainslie et al. from Google, found that using MQA can often lead to quality degradation compared to using vanilla multi-key-value head projections. The paper argues that more model performance can be kept by less drastically reducing the number of query head projection weights. Instead of using just a single key-value projection weight, `n < n_head` key-value projection weights should be used. By choosing `n` to a significantly smaller value than `n_head`, such as 2,4 or 8 almost all of the memory and speed gains from MQA can be kept while sacrificing less model capacity and thus arguably less performance.
+[Grouped-Query-Attention (GQA)](https://arxiv.org/abs/2305.13245)는 Google의 Ainslie 등 연구진에 의해 제안되었습니다. 그들은 MQA를 사용하는 것이 종종 일반적인 멀티 키-값 헤드 프로젝션을 사용하는 것보다 품질 저하를 초래할 수 있다는 것을 발견했습니다. 이 논문은 쿼리 헤드 프로젝션 가중치의 수를 너무 극단적으로 줄이는 대신, 더 많은 모델 성능을 유지할 수 있다고 주장합니다. 단일 키-값 프로젝션 가중치 대신, `n < n_head` 키-값 프로젝션 가중치를 사용해야 합니다. `n_head`보다 훨씬 작은 `n`값, 예를 들어 2, 4 또는 8을 선택하면, MQA의 거의 모든 메모리 및 속도 이점을 유지하면서 모델 용량을 덜 희생하고 따라서 성능 저하를 줄일 수 있습니다.
 
-Moreover, the authors of GQA found out that existing model checkpoints can be *uptrained* to have a GQA architecture with as little as 5% of the original pre-training compute. While 5% of the original pre-training compute can still be a massive amount, GQA *uptraining* allows existing checkpoints to be useful for longer input sequences.
+또한, GQA의 저자들은 기존 모델 체크포인트를 원래 사전 학습 계산의 5% 정도의 적은 양으로 GQA 아키텍처로 *업트레이닝*할 수 있음을 발견했습니다. 원래 사전 학습 계산의 5%가 여전히 엄청난 양일 수 있지만, GQA *업트레이닝*은 기존 체크포인트가 더 긴 입력 시퀀스에서도 유용하도록 합니다.
 
-GQA was only recently proposed which is why there is less adoption at the time of writing this notebook.
-The most notable application of GQA is [Llama-v2](https://huggingface.co/meta-llama/Llama-2-70b-hf).
+GQA는 최근에 제안되었기 때문에 이 노트북을 작성할 당시에는 채택이 덜 되었습니다.
+GQA의 가장 주목할 만한 적용 사례는 [Llama-v2](https://huggingface.co/meta-llama/Llama-2-70b-hf)입니다.
 
-> As a conclusion, it is strongly recommended to make use of either GQA or MQA if the LLM is deployed with auto-regressive decoding and is required to handle large input sequences as is the case for example for chat.
+> 결론적으로, LLM이 자가회귀 디코딩으로 배포되고 예를 들어 채팅과 같이 큰 입력 시퀀스를 처리해야 하는 경우 GQA 또는 MQA를 사용하는 것이 강력히 권장됩니다.
 
 
-## Conclusion
+## 결론 [[conclusion]]
 
-The research community is constantly coming up with new, nifty ways to speed up inference time for ever-larger LLMs. As an example, one such promising research direction is [speculative decoding](https://arxiv.org/abs/2211.17192) where "easy tokens" are generated by smaller, faster language models and only "hard tokens" are generated by the LLM itself. Going into more detail is out of the scope of this notebook, but can be read upon in this [nice blog post](https://huggingface.co/blog/assisted-generation).
+연구 커뮤니티는 점점 더 큰 LLM의 추론 시간을 가속화하기 위한 새로운 기발한 방법들을 끊임없이 찾아내고 있습니다. 예를 들어, [speculative decoding](https://arxiv.org/abs/2211.17192)이라는 유망한 연구 방향이 있습니다. 여기서 "쉬운 토큰"은 더 작고 빠른 언어 모델에 의해 생성되고, "어려운 토큰"만 LLM 자체에 의해 생성됩니다. 자세한 내용은 이 노트북의 범위를 벗어나지만, [이 멋진 블로그 포스트](https://huggingface.co/blog/assisted-generation)에서 읽어볼 수 있습니다.
 
-The reason massive LLMs such as GPT3/4, Llama-2-70b, Claude, PaLM can run so quickly in chat-interfaces such as [Hugging Face Chat](https://huggingface.co/chat/) or ChatGPT is to a big part thanks to the above-mentioned improvements in precision, algorithms, and architecture.
-Going forward, accelerators such as GPUs, TPUs, etc... will only get faster and allow for more memory, but one should nevertheless always make sure to use the best available algorithms and architectures to get the most bang for your buck 🤗
+GPT3/4, Llama-2-70b, Claude, PaLM과 같은 거대한 LLM이 [Hugging Face Chat](https://huggingface.co/chat/) 또는 ChatGPT와 같은 채팅 인터페이스에서 빠르게 실행될 수 있는 이유는 위에서 언급한 정밀도, 알고리즘, 아키텍처의 개선 덕분입니다.
+앞으로 GPU, TPU 등과 같은 가속기는 점점 더 빨라지고 더 많은 메모리를 허용할 것입니다. 그럼에도 불구하고, 가장 좋은 알고리즘과 아키텍처를 사용하여 최고의 효율을 얻는 것이 중요합니다 🤗
