@@ -579,11 +579,6 @@ class SpmConverter(Converter):
         vocab_scores = self.vocab(proto)
         unk_id = self.unk_id(proto)
 
-        # control tokens are special
-        # user defined symbols are not
-        # both user and control tokens are AddedTokens
-        # Add user defined symbols (type == 4) from sentencepiece (https://github.com/google/sentencepiece/blob/6225e08edb2577757163b3f5dbba4c0b670ef445/src/sentencepiece_model.proto#L299C29-L299C33)
-        spm_added_tokens = [(id, p.piece, p.type == 3) for id, p in enumerate(proto.pieces) if p.type in [3, 4]]
         if model_type == 1:
             import tokenizers
 
@@ -606,21 +601,16 @@ class SpmConverter(Converter):
                 )
             )
 
-            # To adhere to the BPE standard, if ignore_merges=False (default), we must
-            # remove all user-defined tokens that can be obtained via merges
-            valid_tokens_from_merges = {left + right for left, right in merges}
-
-            spm_added_tokens = [
-                (id, token, special)
-                for id, token, special in spm_added_tokens
-                if special or token not in valid_tokens_from_merges
-            ]
-
         else:
             raise Exception(
                 "You're trying to run a `Unigram` model but you're file was trained with a different algorithm"
             )
 
+        # control tokens are special
+        # user defined symbols are not
+        # both user and control tokens are AddedTokens
+        # Add user defined symbols (type == 4) from sentencepiece (https://github.com/google/sentencepiece/blob/6225e08edb2577757163b3f5dbba4c0b670ef445/src/sentencepiece_model.proto#L299C29-L299C33)
+        spm_added_tokens = [(id, p.piece, p.type == 3) for id, p in enumerate(proto.pieces) if p.type in [3, 4]]
         tokens_to_add = [
             AddedToken(token, normalized=False, special=special)
             for id, token, special in sorted(spm_added_tokens, key=lambda x: x[0])
