@@ -1884,28 +1884,6 @@ class ModelPushToHubTester(unittest.TestCase):
         except:  # noqa E722
             pass
 
-    @classmethod
-    def tearDownClass(cls):
-        try:
-            delete_repo(token=cls._token, repo_id="test-model")
-        except HTTPError:
-            pass
-
-        try:
-            delete_repo(token=cls._token, repo_id="valid_org/test-model-org")
-        except HTTPError:
-            pass
-
-        try:
-            delete_repo(token=cls._token, repo_id="test-dynamic-model")
-        except HTTPError:
-            pass
-
-        try:
-            delete_repo(token=cls._token, repo_id="test-dynamic-model-with-tags")
-        except HTTPError:
-            pass
-
     @unittest.skip(reason="This test is flaky")
     def test_push_to_hub(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -1994,8 +1972,7 @@ The commit description supports markdown synthax see:
                 )
                 model = BertModel(config)
                 # Push to hub via save_pretrained
-                with tempfile.TemporaryDirectory() as tmp_dir:
-                    model.save_pretrained(tmp_dir, push_to_hub=True, token=self._token, repo_id=tmp_repo)
+                model.save_pretrained(tmp_dir, push_to_hub=True, token=self._token, repo_id=tmp_repo)
 
                 new_model = BertModel.from_pretrained(tmp_repo)
                 for p1, p2 in zip(model.parameters(), new_model.parameters()):
