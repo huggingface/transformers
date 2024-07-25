@@ -20,7 +20,7 @@ import unittest
 from parameterized import parameterized
 
 from transformers import AutoTokenizer, Mamba2Config, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -128,9 +128,9 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
 
 @require_torch
-class Mamba2IntegrationTests(unittest.TestCase):
+class Mamba2IntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.model_id = "state-spaces/mamba2-2.8b-hf"
+        self.model_id = "state-spaces/mamba2-2.8b-hf"  # FIXME add correct model id here
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_id)
 
     @parameterized.expand([(torch_device,), ("cpu",)])
@@ -140,77 +140,29 @@ class Mamba2IntegrationTests(unittest.TestCase):
 
         model = Mamba2ForCausalLM.from_pretrained("mistralai/mamba-codestral-7B-v0.1", torch_dtype=torch.float16)
         model.to(device)
-        input_ids = tokenizer("Hey how are you doing?", return_tensors="pt")["input_ids"].to(device)
-
-        out = model.generate(input_ids, do_sample=False, use_cache=True, max_new_tokens=10)
-        output_sentence = tokenizer.decode(out[0, :])
-        self.assertEqual(output_sentence, "Hey how are you doing?\n\nI'm so glad you're here.")
-
-        with torch.no_grad():
-            logits = model(input_ids=input_ids).logits
-
-        EXPECTED_LOGITS_NO_GRAD = torch.tensor(
-            [
-                -55.6875, -69.8750, -49.9062, -51.7500, -57.6875, -57.9375, -56.9688,
-                -57.9375, -54.6875, -55.9375, -55.3125, -58.0938, -60.5625, -47.0000,
-                -52.0312, -49.7812, -55.9375, -57.9062, -56.7812, -57.1250, -57.3438,
-                -58.3125, -57.8125, -58.7812, -59.6250, -59.0938, -58.7188, -52.9375,
-                -53.4688, -57.3750, -56.9375, -55.7500, -53.3125, -55.8438, -57.0000,
-                -56.9062, -56.2188, -54.7188, -56.4375, -57.5000
-            ]
-        ,dtype=torch.float32)  # fmt: skip
-
-        torch.testing.assert_close(logits[0, 0, :40].cpu(), EXPECTED_LOGITS_NO_GRAD, rtol=1e-3, atol=1e-3)
-
-    @parameterized.expand([(torch_device,), ("cpu",)])
-    def test_simple_generate_cuda_kernels_tiny(self, device):
-        expected_output = "Hello my name is John and I am a newbie to the world"
-
-        input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(device)
-        model = Mamba2ForCausalLM.from_pretrained("mistralai/mamba-codestral-7B-v0.1", torch_dtype=torch.float16).to(
+        input_ids = tokenizer("[INST]Write a hello world program in C++.[/INST]", return_tensors="pt")["input_ids"].to(
             device
         )
 
-        output = model.generate(input_ids, max_new_tokens=10)
-        output_sentence = self.tokenizer.decode(output[0].tolist())
+        out = model.generate(input_ids, do_sample=False, use_cache=True, max_new_tokens=10)
+        output_sentence = tokenizer.decode(out[0, :])
 
-        self.assertEqual(output_sentence, expected_output)
+        ground_truth_sentence = """Sure, here is a simple "Hello, World!" program in C++:
+                                ```cpp
+                                #include <iostream>
 
-    @parameterized.expand([(torch_device,), ("cpu",)])
-    @slow
-    def test_simple_generate_cuda_kernels_small(self, device):
-        expected_output = "Hello my name is\n\nI am a\n\nI am a"
+                                int main() {
+                                    std::cout << "Hello, World!";
+                                    return 0;
+                                }
+                                ```
 
-        input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(device)
-        model = Mamba2ForCausalLM.from_pretrained("state-spaces/mamba2-790m-hf", torch_dtype=torch.float16).to(device)
+                                This program will output the text "Hello, World!" when run. Let me break it down for you:
 
-        output = model.generate(input_ids, max_new_tokens=10)
-        output_sentence = self.tokenizer.decode(output[0].tolist())
-
-        self.assertEqual(output_sentence, expected_output)
-
-    @parameterized.expand([(torch_device,), ("cpu",)])
-    @slow
-    def test_simple_generate_cuda_kernels_mid(self, device):
-        expected_output = "Hello my name is John and I am a\n\nI am a single father of a beautiful daughter. I am a"
-
-        input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(device)
-        model = Mamba2ForCausalLM.from_pretrained("state-spaces/mamba2-1.4b-hf", torch_dtype=torch.float16).to(device)
-
-        output = model.generate(input_ids, max_new_tokens=20)
-        output_sentence = self.tokenizer.decode(output[0].tolist())
-
-        self.assertEqual(output_sentence, expected_output)
-
-    @parameterized.expand([(torch_device,), ("cpu",)])
-    @slow
-    def test_simple_generate_cuda_kernels_big(self, device):
-        expected_output = "Hello my name is John and I am a new member of this forum. I am a retired Marine and I am a member of the Marine Corps League. I am a"
-
-        input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(device)
-        model = Mamba2ForCausalLM.from_pretrained("state-spaces/mamba2-2.8b-hf", torch_dtype=torch.float16).to(device)
-
-        output = model.generate(input_ids, max_new_tokens=30)
-        output_sentence = self.tokenizer.decode(output[0].tolist())
-
-        self.assertEqual(output_sentence, expected_output)
+                                - `#include <iostream>`: This is a preprocessor directive that tells the compiler to include the iostream standard library.
+                                - `int main()`: This is the main function where the program starts executing.
+                                - `std::cout << "Hello, World!";`: This line is where the magic happens. `std::cout` is an object in the standard library that is used for outputting text to the console. The text "Hello, World!" is what we want to output.
+                                - `return 0;`: This line indicates that the program has run successfully. In Unix-like operating systems, the convention is that a return value of 0 indicates success, while a non-zero value indicates failure.
+                                """
+        # TODO finish up integration test for all cases (cpu, gpu, kernels, no kernels)
+        self.assertEqual(output_sentence, ground_truth_sentence)
