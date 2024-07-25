@@ -21,7 +21,6 @@ allow to make our dependency on SentencePiece optional.
 
 import warnings
 from typing import Dict, List, Tuple
-import re
 
 from packaging import version
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
@@ -367,49 +366,6 @@ class GPT2Converter(Converter):
             # XXX trim_offsets=False actually means this post_processor doesn't
             # really do anything.
             tokenizer.post_processor = processors.ByteLevel(trim_offsets=False)
-        return tokenizer
-
-
-class GLMConverter(Converter):
-    def converted(self, vocab: Dict[str, int] = None, merges: List[Tuple[str, str]] = None) -> Tokenizer:
-        if not vocab:
-            vocab = self.original_tokenizer.encoder
-        if not merges:
-            merges = list(self.original_tokenizer.bpe_ranks.keys())
-
-        tokenizer = Tokenizer(
-            BPE(
-                vocab=vocab,
-                merges=merges,
-                dropout=None,
-                unk_token=None,
-                continuing_subword_prefix="",
-                end_of_word_suffix="",
-                fuse_unk=False,
-                byte_fallback=False,
-            )
-        )
-
-        tokenizer.normalizer = normalizers.NFC()
-        tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
-            [
-                pre_tokenizers.Split(
-                    Regex(
-                        r"""(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\\r\\n\\p{L}\\p{N}]?\\p{L}+|\\p{N}{1,3}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+"""
-                    ),
-                    behavior="isolated",
-                    invert=False,
-                ),
-                pre_tokenizers.ByteLevel(
-                    add_prefix_space=getattr(self.original_tokenizer, "add_prefix_space", False),
-                    use_regex=False,
-                ),
-            ]
-        )
-
-        tokenizer.decoder = decoders.ByteLevel()
-        tokenizer.post_processor = processors.ByteLevel(trim_offsets=False)
-
         return tokenizer
 
 
@@ -899,15 +855,7 @@ class MBart50Converter(SpmConverter):
             ("<unk>", 0.0),
         ]
         vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
-        vocab += [("ar_AR", 0.0), ("cs_CZ", 0.0), ("de_DE", 0.0), ("en_XX", 0.0), ("es_XX", 0.0), ("et_EE", 0.0),
-                  ("fi_FI", 0.0), ("fr_XX", 0.0), ("gu_IN", 0.0), ("hi_IN", 0.0), ("it_IT", 0.0), ("ja_XX", 0.0),
-                  ("kk_KZ", 0.0), ("ko_KR", 0.0), ("lt_LT", 0.0), ("lv_LV", 0.0), ("my_MM", 0.0), ("ne_NP", 0.0),
-                  ("nl_XX", 0.0), ("ro_RO", 0.0), ("ru_RU", 0.0), ("si_LK", 0.0), ("tr_TR", 0.0), ("vi_VN", 0.0),
-                  ("zh_CN", 0.0), ("af_ZA", 0.0), ("az_AZ", 0.0), ("bn_IN", 0.0), ("fa_IR", 0.0), ("he_IL", 0.0),
-                  ("hr_HR", 0.0), ("id_ID", 0.0), ("ka_GE", 0.0), ("km_KH", 0.0), ("mk_MK", 0.0), ("ml_IN", 0.0),
-                  ("mn_MN", 0.0), ("mr_IN", 0.0), ("pl_PL", 0.0), ("ps_AF", 0.0), ("pt_XX", 0.0), ("sv_SE", 0.0),
-                  ("sw_KE", 0.0), ("ta_IN", 0.0), ("te_IN", 0.0), ("th_TH", 0.0), ("tl_XX", 0.0), ("uk_UA", 0.0),
-                  ("ur_PK", 0.0), ("xh_ZA", 0.0), ("gl_ES", 0.0), ("sl_SI", 0.0)]  # fmt: skip
+        vocab += [("ar_AR", 0.0), ("cs_CZ", 0.0), ("de_DE", 0.0), ("en_XX", 0.0), ("es_XX", 0.0), ("et_EE", 0.0), ("fi_FI", 0.0), ("fr_XX", 0.0), ("gu_IN", 0.0), ("hi_IN", 0.0), ("it_IT", 0.0), ("ja_XX", 0.0), ("kk_KZ", 0.0), ("ko_KR", 0.0), ("lt_LT", 0.0), ("lv_LV", 0.0), ("my_MM", 0.0), ("ne_NP", 0.0), ("nl_XX", 0.0), ("ro_RO", 0.0), ("ru_RU", 0.0), ("si_LK", 0.0), ("tr_TR", 0.0), ("vi_VN", 0.0), ("zh_CN", 0.0), ("af_ZA", 0.0), ("az_AZ", 0.0), ("bn_IN", 0.0), ("fa_IR", 0.0), ("he_IL", 0.0), ("hr_HR", 0.0), ("id_ID", 0.0), ("ka_GE", 0.0), ("km_KH", 0.0), ("mk_MK", 0.0), ("ml_IN", 0.0), ("mn_MN", 0.0), ("mr_IN", 0.0), ("pl_PL", 0.0), ("ps_AF", 0.0), ("pt_XX", 0.0), ("sv_SE", 0.0), ("sw_KE", 0.0), ("ta_IN", 0.0), ("te_IN", 0.0), ("th_TH", 0.0), ("tl_XX", 0.0), ("uk_UA", 0.0), ("ur_PK", 0.0), ("xh_ZA", 0.0), ("gl_ES", 0.0), ("sl_SI", 0.0)]  # fmt: skip
         vocab += [("<mask>", 0.0)]
         return vocab
 
@@ -1090,8 +1038,8 @@ class PegasusConverter(SpmConverter):
             vocab += [(self.original_tokenizer.mask_token_sent, 0.0)]
 
         if (
-                self.original_tokenizer.mask_token is not None
-                and self.original_tokenizer.mask_token_id < self.original_tokenizer.offset
+            self.original_tokenizer.mask_token is not None
+            and self.original_tokenizer.mask_token_id < self.original_tokenizer.offset
         ):
             vocab += [(self.original_tokenizer.mask_token, 0.0)]
 
@@ -1277,6 +1225,48 @@ class LayoutLMv2Converter(Converter):
         return tokenizer
 
 
+class GLMConverter(Converter):
+    def converted(self, vocab: Dict[str, int] = None, merges: List[Tuple[str, str]] = None) -> Tokenizer:
+        if not vocab:
+            vocab = self.original_tokenizer.encoder
+        if not merges:
+            merges = list(self.original_tokenizer.bpe_ranks.keys())
+
+        tokenizer = Tokenizer(
+            BPE(
+                vocab=vocab,
+                merges=merges,
+                dropout=None,
+                unk_token=None,
+                continuing_subword_prefix="",
+                end_of_word_suffix="",
+                fuse_unk=False,
+                byte_fallback=False,
+            )
+        )
+
+        tokenizer.normalizer = normalizers.NFC()
+        tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
+            [
+                pre_tokenizers.Split(
+                    Regex(
+                        r"""(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\\r\\n\\p{L}\\p{N}]?\\p{L}+|\\p{N}{1,3}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+"""
+                    ),
+                    behavior="isolated",
+                    invert=False,
+                ),
+                pre_tokenizers.ByteLevel(
+                    add_prefix_space=getattr(self.original_tokenizer, "add_prefix_space", False),
+                    use_regex=False,
+                ),
+            ]
+        )
+
+        tokenizer.decoder = decoders.ByteLevel()
+        tokenizer.post_processor = processors.ByteLevel(trim_offsets=False)
+
+        return tokenizer
+
 class BlenderbotConverter(Converter):
     def converted(self) -> Tokenizer:
         ot = self.original_tokenizer
@@ -1315,8 +1305,7 @@ class XGLMConverter(SpmConverter):
             ("<unk>", 0.0),
         ]
         vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
-        vocab += [("<madeupword0>", 0.0), ("<madeupword1>", 0.0), ("<madeupword2>", 0.0), ("<madeupword3>", 0.0),
-                  ("<madeupword4>", 0.0), ("<madeupword5>", 0.0), ("<madeupword6>", 0.0)]  # fmt: skip
+        vocab += [("<madeupword0>", 0.0), ("<madeupword1>", 0.0), ("<madeupword2>", 0.0), ("<madeupword3>", 0.0), ("<madeupword4>", 0.0), ("<madeupword5>", 0.0), ("<madeupword6>", 0.0)]  # fmt: skip
         return vocab
 
     def unk_id(self, proto):
@@ -1547,15 +1536,14 @@ def bytes_to_unicode():
     tables between utf-8 bytes and unicode strings.
     """
     bs = (
-            list(range(ord("!"), ord("~") + 1)) + list(range(ord("¡"), ord("¬") + 1)) + list(
-        range(ord("®"), ord("ÿ") + 1))
+        list(range(ord("!"), ord("~") + 1)) + list(range(ord("¡"), ord("¬") + 1)) + list(range(ord("®"), ord("ÿ") + 1))
     )
     cs = bs[:]
     n = 0
-    for b in range(2 ** 8):
+    for b in range(2**8):
         if b not in bs:
             bs.append(b)
-            cs.append(2 ** 8 + n)
+            cs.append(2**8 + n)
             n += 1
     cs = [chr(n) for n in cs]
     return dict(zip(bs, cs))
@@ -1567,11 +1555,11 @@ class TikTokenConverter:
     """
 
     def __init__(
-            self,
-            vocab_file=None,
-            pattern=r"""(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+""",
-            add_prefix_space=False,
-            *args,
+        self,
+        vocab_file=None,
+        pattern=r"""(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+""",
+        add_prefix_space=False,
+        *args,
     ):
         super().__init__(*args)
         self.vocab_file = vocab_file

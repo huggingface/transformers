@@ -33,7 +33,7 @@ VOCAB_FILES_NAMES = {
 
 class GLMTokenizerFast(PreTrainedTokenizerFast):
     """
-    Construct a "fast" Qwen2 tokenizer (backed by HuggingFace's *tokenizers* library). Based on byte-level
+    Construct a "fast" GLM tokenizer (backed by HuggingFace's *tokenizers* library). Based on byte-level
     Byte-Pair-Encoding.
 
     Same with GPT2Tokenizer, this tokenizer has been trained to treat spaces like parts of the tokens so a word will
