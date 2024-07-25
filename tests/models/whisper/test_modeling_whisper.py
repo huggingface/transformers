@@ -26,6 +26,7 @@ import unittest
 import numpy as np
 import pytest
 from huggingface_hub import hf_hub_download
+from parameterized import parameterized
 
 import transformers
 from transformers import WhisperConfig
@@ -72,6 +73,7 @@ if is_torch_available():
         BeamSearchEncoderDecoderOutput,
         GenerateBeamDecoderOnlyOutput,
         GenerateBeamEncoderDecoderOutput,
+        GenerateEncoderDecoderOutput,
         PhrasalConstraint,
     )
     from transformers.generation.logits_process import LogitsProcessor
@@ -1820,39 +1822,25 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         normalized_1 = torch.nn.functional.softmax(out_shared_prefix_last_tokens)
         torch.testing.assert_close(normalized_0, normalized_1, rtol=1e-3, atol=1e-4)
 
-    def test_generate_output_type(self):
+    @parameterized.expand([(True,), (False,)])
+    def test_generate_output_type(self, return_dict_in_generate):
+        expected_output_type = GenerateEncoderDecoderOutput if return_dict_in_generate else torch.Tensor
         for model_class in self.all_generative_model_classes:
             config, inputs = self.model_tester.prepare_config_and_inputs()
             model = model_class(config).to(torch_device).eval()
 
             # short-form generation without fallback
-            pred_ids = model.generate(**inputs)
-            assert isinstance(pred_ids, torch.Tensor)
+            pred_ids = model.generate(**inputs, return_dict_in_generate=return_dict_in_generate)
+            assert isinstance(pred_ids, expected_output_type)
 
             # short-form generation with fallback
-            pred_ids = model.generate(**inputs, logprob_threshold=-1.0, temperature=[0.0, 0.1])
-            assert isinstance(pred_ids, torch.Tensor)
-
-            # create artificial long-form inputs
-            inputs["input_features"] = torch.randn(
-                [self.model_tester.batch_size, config.num_mel_bins, 4 * config.max_source_positions],
-                dtype=inputs["input_features"].dtype,
-                device=inputs["input_features"].device,
+            pred_ids = model.generate(
+                **inputs,
+                logprob_threshold=-1.0,
+                temperature=[0.0, 0.1],
+                return_dict_in_generate=return_dict_in_generate,
             )
-            inputs["attention_mask"] = torch.ones(
-                [self.model_tester.batch_size, 4 * config.max_source_positions],
-                dtype=torch.int,
-                device=inputs["input_features"].device,
-            )
-            model.generation_config.no_timestamps_token_id = model.generation_config.decoder_start_token_id
-
-            # long-form generation without fallback
-            pred_ids = model.generate(**inputs)
-            assert isinstance(pred_ids, torch.Tensor)
-
-            # long-form generation with fallback
-            pred_ids = model.generate(**inputs, logprob_threshold=-1.0, temperature=[0.0, 0.1])
-            assert isinstance(pred_ids, torch.Tensor)
+            assert isinstance(pred_ids, expected_output_type)
 
 
 @require_torch
