@@ -794,11 +794,6 @@ QWEN2AUDIO_INPUTS_DOCSTRING = r"""
             the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
             [`AutoFeatureExtractor`] should be used for extracting the mel features, padding and conversion into a
             tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
-        feature_attention_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
-            Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -819,6 +814,11 @@ QWEN2AUDIO_INPUTS_DOCSTRING = r"""
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
+        feature_attention_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
+            Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
         position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
             config.n_positions - 1]`. [What are position IDs?](../glossary#position-ids)
@@ -1026,8 +1026,8 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel):
         self,
         input_ids: torch.LongTensor = None,
         input_features: torch.FloatTensor = None,
-        feature_attention_mask: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
+        feature_attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -1109,12 +1109,9 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel):
                 )
                 audio_attention_mask[audio_attention_mask_] = float("-inf")
 
-                audio_outputs = self.audio_tower(
-                    input_features, attention_mask=audio_attention_mask
-                )
-                # this is not memory efficient at all (output_hidden_states=True) will save all the hidden stated.
+                audio_outputs = self.audio_tower(input_features, attention_mask=audio_attention_mask)
                 selected_audio_feature = audio_outputs.last_hidden_state
-                audio_features = self.multi_modal_projector(selected_audio_feature) 
+                audio_features = self.multi_modal_projector(selected_audio_feature)
 
                 inputs_embeds, attention_mask, labels, position_ids, _ = self._merge_input_ids_with_audio_features(
                     audio_features, audio_output_lengths, inputs_embeds, input_ids, attention_mask, labels
