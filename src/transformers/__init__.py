@@ -448,6 +448,7 @@ _import_structure = {
         "GitVisionConfig",
     ],
     "models.glpn": ["GLPNConfig"],
+    "models.glm": ["GLMConfig","GLMTokenizer"],
     "models.gpt2": [
         "GPT2Config",
         "GPT2Tokenizer",
@@ -632,10 +633,6 @@ _import_structure = {
     "models.persimmon": ["PersimmonConfig"],
     "models.phi": ["PhiConfig"],
     "models.phi3": ["Phi3Config"],
-    "models.glm": [
-        "GLMConfig",
-        "GLMTokenizer"
-    ],
     "models.phobert": ["PhobertTokenizer"],
     "models.pix2struct": [
         "Pix2StructConfig",
@@ -2234,6 +2231,15 @@ else:
             "GLPNPreTrainedModel",
         ]
     )
+    _import_structure["models.glm"].extend(
+        [
+            "GLMForCausalLM",
+            "GLMForSequenceClassification",
+            "GLMForTokenClassification",
+            "GLMModel",
+            "GLMPreTrainedModel",
+        ]
+    )
     _import_structure["models.gpt2"].extend(
         [
             "GPT2DoubleHeadsModel",
@@ -2895,15 +2901,6 @@ else:
             "Phi3ForTokenClassification",
             "Phi3Model",
             "Phi3PreTrainedModel",
-        ]
-    )
-    _import_structure["models.glm"].extend(
-        [
-            "GLMForCausalLM",
-            "GLMForSequenceClassification",
-            "GLMForTokenClassification",
-            "GLMModel",
-            "GLMPreTrainedModel",
         ]
     )
     _import_structure["models.pix2struct"].extend(
@@ -5344,7 +5341,6 @@ if TYPE_CHECKING:
     )
     from .models.phi import PhiConfig
     from .models.phi3 import Phi3Config
-    from .models.glm import GLMConfig,GLMTokenizer
     from .models.phobert import PhobertTokenizer
     from .models.pix2struct import (
         Pix2StructConfig,
@@ -5878,6 +5874,7 @@ if TYPE_CHECKING:
             FlavaProcessor,
         )
         from .models.fuyu import FuyuImageProcessor, FuyuProcessor
+        from .models.glm import GLMConfig, GLMTokenizer
         from .models.glpn import GLPNFeatureExtractor, GLPNImageProcessor
         from .models.grounding_dino import GroundingDinoImageProcessor
         from .models.idefics import IdeficsImageProcessor
@@ -6792,6 +6789,13 @@ if TYPE_CHECKING:
             GitPreTrainedModel,
             GitVisionModel,
         )
+        from .models.glm import (
+            GLMForCausalLM,
+            GLMForSequenceClassification,
+            GLMForTokenClassification,
+            GLMModel,
+            GLMPreTrainedModel,
+        )
         from .models.glpn import (
             GLPNForDepthEstimation,
             GLPNModel,
@@ -7313,13 +7317,6 @@ if TYPE_CHECKING:
             Phi3ForTokenClassification,
             Phi3Model,
             Phi3PreTrainedModel,
-        )
-        from .models.glm import (
-            GLMForCausalLM,
-            GLMForSequenceClassification,
-            GLMForTokenClassification,
-            GLMModel,
-            GLMPreTrainedModel,
         )
         from .models.pix2struct import (
             Pix2StructForConditionalGeneration,
