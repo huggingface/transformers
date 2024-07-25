@@ -194,7 +194,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("pvt_v2", "PvtV2Model"),
         ("qdqbert", "QDQBertModel"),
         ("qwen2", "Qwen2Model"),
-        ("qwen2_audio_encoder", "Qwen2AudioEncoderModel"),
+        ("qwen2_audio_encoder", "Qwen2AudioEncoder"),
         ("qwen2_moe", "Qwen2MoeModel"),
         ("recurrent_gemma", "RecurrentGemmaModel"),
         ("reformer", "ReformerModel"),

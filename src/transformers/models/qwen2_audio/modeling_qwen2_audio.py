@@ -86,6 +86,7 @@ class Qwen2AudioCausalLMOutputWithPast(ModelOutput):
     state: Optional[torch.FloatTensor] = None
 
 
+# Copied from transformers.models.whisper.modeling_whisper.WhisperAttention with Whisper->Qwen2Audio
 class Qwen2AudioAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -514,6 +515,62 @@ class Qwen2AudioEncoderLayer(nn.Module):
         return outputs
 
 
+QWEN2AUDIO_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`Qwen2AudioConfig`]):
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+
+@add_start_docstrings(
+    "The bare Qwen2Audio Model outputting raw hidden-states without any specific head on top.",
+    QWEN2AUDIO_START_DOCSTRING,
+)
+class Qwen2AudioPreTrainedModel(PreTrainedModel):
+    config_class = Qwen2AudioConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["Qwen2AudioAttention"]
+    _skip_keys_device_placement = "past_key_values"
+    _supports_flash_attn_2 = True
+
+    def _init_weights(self, module):
+        # important: this ported version of Qwen2Audio isn't meant for training from scratch - only
+        # inference and fine-tuning - so the proper init weights code has been removed
+        std = (
+            self.config.initializer_range
+            if hasattr(self.config, "initializer_range")
+            else self.config.text_config.initializer_range
+        )
+
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+
+    @property
+    def _supports_sdpa(self):
+        """
+        Retrieve language_model's attribute to check whether the model supports
+        SDPA or not.
+        """
+        return self.language_model._supports_sdpa
+
+
 QWEN2AUDIOENCODER_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -535,38 +592,30 @@ QWEN2AUDIOENCODER_START_DOCSTRING = r"""
     """The audio model from Qwen2Audio without any head or projection on top.""",
     QWEN2AUDIOENCODER_START_DOCSTRING,
 )
-class Qwen2AudioEncoderModel(PreTrainedModel):
+# Copied from transformers.models.whisper.modeling_whisper.WhisperEncoder with Whisper->Qwen2Audio
+class Qwen2AudioEncoder(Qwen2AudioPreTrainedModel):
+    # Ignore copy
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
-    [`Qwen2AudioEncoderLayer`].
+    [`WhisperEncoderLayer`].
 
     Args:
         config: Qwen2AudioEncoderConfig
     """
 
+    # Ignore copy
     config_class = Qwen2AudioEncoderConfig
     main_input_name = "input_features"
     _no_split_modules = ["Qwen2AudioEncoderLayer"]
 
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-
-    def __init__(self, config):
+    def __init__(self, config: Qwen2AudioEncoderConfig):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.encoder_layerdrop
 
         embed_dim = config.d_model
         self.num_mel_bins = config.num_mel_bins
-        # self.padding_idx = config.pad_token_id
+        self.padding_idx = config.pad_token_id
         self.max_source_positions = config.max_source_positions
         self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
@@ -578,6 +627,7 @@ class Qwen2AudioEncoderModel(PreTrainedModel):
 
         self.layers = nn.ModuleList([Qwen2AudioEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layer_norm = nn.LayerNorm(config.d_model)
+        # Ignore copy
         self.avg_pooler = nn.AvgPool1d(2, stride=2)
 
         self.gradient_checkpointing = False
@@ -641,7 +691,6 @@ class Qwen2AudioEncoderModel(PreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        input_features = input_features.to(dtype=self.conv1.weight.dtype, device=self.conv1.weight.device)
         inputs_embeds = nn.functional.gelu(self.conv1(input_features))
         inputs_embeds = nn.functional.gelu(self.conv2(inputs_embeds))
 
@@ -677,14 +726,14 @@ class Qwen2AudioEncoderModel(PreTrainedModel):
                     layer_outputs = self._gradient_checkpointing_func(
                         encoder_layer.__call__,
                         hidden_states,
-                        attention_mask,
+                        None,
                         (head_mask[idx] if head_mask is not None else None),
                         output_attentions,
                     )
                 else:
                     layer_outputs = encoder_layer(
                         hidden_states,
-                        attention_mask,
+                        None,
                         layer_head_mask=(head_mask[idx] if head_mask is not None else None),
                         output_attentions=output_attentions,
                     )
@@ -694,9 +743,11 @@ class Qwen2AudioEncoderModel(PreTrainedModel):
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
 
+        # Ignore copy
         hidden_states = hidden_states.permute(0, 2, 1)
         hidden_states = self.avg_pooler(hidden_states)
         hidden_states = hidden_states.permute(0, 2, 1)
+
         hidden_states = self.layer_norm(hidden_states)
         if output_hidden_states:
             encoder_states = encoder_states + (hidden_states,)
@@ -707,6 +758,7 @@ class Qwen2AudioEncoderModel(PreTrainedModel):
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
 
+    # Ignore copy
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
         """
         Computes the output length of the convolutional layers and the output length of the audio encoder
@@ -724,62 +776,6 @@ class Qwen2AudioMultiModalProjector(nn.Module):
     def forward(self, audio_features):
         hidden_states = self.linear(audio_features)
         return hidden_states
-
-
-QWEN2AUDIO_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`Qwen2AudioConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-@add_start_docstrings(
-    "The bare Qwen2Audio Model outputting raw hidden-states without any specific head on top.",
-    QWEN2AUDIO_START_DOCSTRING,
-)
-class Qwen2AudioPreTrainedModel(PreTrainedModel):
-    config_class = Qwen2AudioConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["Qwen2AudioAttention"]
-    _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
-
-    def _init_weights(self, module):
-        # important: this ported version of Qwen2Audio isn't meant for training from scratch - only
-        # inference and fine-tuning - so the proper init weights code has been removed
-        std = (
-            self.config.initializer_range
-            if hasattr(self.config, "initializer_range")
-            else self.config.text_config.initializer_range
-        )
-
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-
-    @property
-    def _supports_sdpa(self):
-        """
-        Retrieve language_model's attribute to check whether the model supports
-        SDPA or not.
-        """
-        return self.language_model._supports_sdpa
 
 
 QWEN2AUDIO_INPUTS_DOCSTRING = r"""

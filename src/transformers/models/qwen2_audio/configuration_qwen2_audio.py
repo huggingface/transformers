@@ -23,7 +23,7 @@ logger = logging.get_logger(__name__)
 
 class Qwen2AudioEncoderConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Qwen2AudioEncoderModel`]. It is used to instantiate a
+    This is the configuration class to store the configuration of a [`Qwen2AudioEncoder`]. It is used to instantiate a
     Qwen2-Audio audio encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the audio encoder of the Qwen2-Audio
     architecture.
@@ -65,13 +65,13 @@ class Qwen2AudioEncoderConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import Qwen2AudioEncoderConfig, Qwen2AudioEncoderModel
+    >>> from transformers import Qwen2AudioEncoderConfig, Qwen2AudioEncoder
 
     >>> # Initializing a Qwen2AudioEncoderConfig
     >>> configuration = Qwen2AudioEncoderConfig()
 
-    >>> # Initializing a Qwen2AudioEncoderModel (with random weights)
-    >>> model = Qwen2AudioEncoderModel(configuration)
+    >>> # Initializing a Qwen2AudioEncoder (with random weights)
+    >>> model = Qwen2AudioEncoder(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -138,7 +138,7 @@ class Qwen2AudioConfig(PretrainedConfig):
     ```python
     >>> from transformers import Qwen2AudioForConditionalGeneration, Qwen2AudioConfig, Qwen2AudioEncoderConfig, Qwen2Config
 
-    >>> # Initializing a Qwen2AudioEncoderModel config
+    >>> # Initializing a Qwen2AudioEncoder config
     >>> audio_config = Qwen2AudioEncoderConfig()
 
     >>> # Initializing a Qwen2 config

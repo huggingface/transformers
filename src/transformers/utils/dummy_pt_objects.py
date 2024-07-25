@@ -7140,7 +7140,7 @@ class Qwen2PreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class Qwen2AudioEncoderModel(metaclass=DummyObject):
+class Qwen2AudioEncoder(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

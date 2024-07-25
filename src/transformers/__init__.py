@@ -2963,7 +2963,7 @@ else:
     )
     _import_structure["models.qwen2_audio"].extend(
         [
-            "Qwen2AudioEncoderModel",
+            "Qwen2AudioEncoder",
             "Qwen2AudioForConditionalGeneration",
             "Qwen2AudioPreTrainedModel",
         ]
@@ -7364,7 +7364,7 @@ if TYPE_CHECKING:
             Qwen2PreTrainedModel,
         )
         from .models.qwen2_audio import (
-            Qwen2AudioEncoderModel,
+            Qwen2AudioEncoder,
             Qwen2AudioForConditionalGeneration,
             Qwen2AudioPreTrainedModel,
         )

@@ -31,7 +31,7 @@ else:
     _import_structure["modeling_qwen2_audio"] = [
         "Qwen2AudioForConditionalGeneration",
         "Qwen2AudioPreTrainedModel",
-        "Qwen2AudioEncoderModel",
+        "Qwen2AudioEncoder",
     ]
 
 
@@ -46,7 +46,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_qwen2_audio import (
-            Qwen2AudioEncoderModel,
+            Qwen2AudioEncoder,
             Qwen2AudioForConditionalGeneration,
             Qwen2AudioPreTrainedModel,
         )
