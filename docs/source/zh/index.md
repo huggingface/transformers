@@ -143,6 +143,7 @@ rendered properly in your Markdown viewer.
 |                         [Gemma](../en/model_doc/gemma)                         |       ✅        |         ❌         |      ✅      |
 |                           [GIT](../en/model_doc/git)                           |       ✅        |         ❌         |      ❌      |
 |                          [GLPN](../en/model_doc/glpn)                          |       ✅        |         ❌         |      ❌      |
+|                           [GLM](../en/model_doc/glm)                           |       ✅        |         ❌         |      ❌      |
 |                       [GPT Neo](../en/model_doc/gpt_neo)                       |       ✅        |         ❌         |      ✅      |
 |                      [GPT NeoX](../en/model_doc/gpt_neox)                      |       ✅        |         ❌         |      ❌      |
 |             [GPT NeoX Japanese](../en/model_doc/gpt_neox_japanese)             |       ✅        |         ❌         |      ❌      |
