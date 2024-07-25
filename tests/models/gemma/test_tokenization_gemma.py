@@ -442,6 +442,30 @@ class GemmaIntegrationTest(unittest.TestCase):
         for tokenized_chat, expected_tokens in zip(tokenized_chats, expected_tokens):
             self.assertListEqual(tokenized_chat, expected_tokens)
 
+    def test_save_fast_load_slow(self):
+        # Ensure that we can save a fast tokenizer and load it as a slow tokenizer
+        slow_tokenizer = self.tokenizer
+        text = "a  "
+        target_encoded = [2, 235250, 139]
+        slow = slow_tokenizer.encode(text, add_special_tokens=True)
+        assert slow == target_encoded
+
+        slow_decoded = slow_tokenizer.decode(slow, skip_special_tokens=True)
+        assert slow_decoded == text
+
+        with tempfile.TemporaryDirectory() as dirname:
+            # Save fast tokenizer
+            self.rust_tokenizer.save_pretrained(dirname)
+
+            # Load slow tokenizer with fast files present in the directory
+            slow_tokenizer_from_fast = GemmaTokenizer.from_pretrained(dirname)
+
+        slow_from_fast = slow_tokenizer_from_fast.encode(text, add_special_tokens=True)
+        assert slow_from_fast == target_encoded
+
+        slow_from_fast_decoded = slow_tokenizer_from_fast.decode(slow, skip_special_tokens=True)
+        assert slow_from_fast_decoded == text
+
 
 @require_sentencepiece
 @require_tokenizers
