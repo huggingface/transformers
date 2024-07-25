@@ -65,11 +65,12 @@ class GLMConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         rms_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon value used for the RMSNorm.
-        add_qkv_bias  (`bool`, *optional*, defaults to `True`):
+        add_qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add bias to the query, key, value tensors.
-        multi_query_attention(`bool`, *optional*, defaults to `False`):
             Whether to use multi query attention or not.
-        multi_query_group_num (`int`, *optional*, defaults to 12):
+        multi_query_attention (`bool`, *optional*, defaults to `False`):
+            Whether to use multi query attention or not.
+        multi_query_group_num (`int`, *optional*, defaults to 2):
             The number of groups in the multi query attention
         rope_theta (`float`, *optional*, defaults to 1.0):
             The base period of the RoPE embeddings.
@@ -77,8 +78,8 @@ class GLMConfig(PretrainedConfig):
             Whether to apply layer scaling to query and key.
         attention_softmax_in_fp32 (`bool`, *optional*, defaults to `True`):
             Whether to use fp32 for softmax in attention.
-        fp32_residual_connection(`bool`, *optional*, defaults to `False`):
             Whether to use fp32 for residual connection.
+        fp32_residual_connection (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`. Whether to tie weight embeddings or not.
