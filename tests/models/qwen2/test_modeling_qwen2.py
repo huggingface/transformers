@@ -408,11 +408,11 @@ class Qwen2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
         )
 
-    @unittest.skip("Qwen2 buffers include complex numbers, which breaks this test")
+    @unittest.skip(reason="Qwen2 buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip("Qwen2 uses GQA on all models so the KV cache is a non standard format")
+    @unittest.skip(reason="Qwen2 uses GQA on all models so the KV cache is a non standard format")
     def test_past_key_values_format(self):
         pass
 
@@ -500,7 +500,7 @@ class Qwen2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest("Qwen2 flash attention does not support right padding")
+        self.skipTest(reason="Qwen2 flash attention does not support right padding")
 
 
 @require_torch

@@ -394,7 +394,7 @@ def map_structure_with_atom_order(in_list: list, first_call: bool = True) -> lis
         elif isinstance(in_list[i], str):
             in_list[i] = atom_order[in_list[i]]
         else:
-            raise ValueError("Unexpected type when mapping nested lists!")
+            raise TypeError("Unexpected type when mapping nested lists!")
     return in_list
 
 

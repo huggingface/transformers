@@ -88,7 +88,8 @@ class AgentImage(AgentType, ImageType):
     """
 
     def __init__(self, value):
-        super().__init__(value)
+        AgentType.__init__(self, value)
+        ImageType.__init__(self)
 
         if not is_vision_available():
             raise ImportError("PIL must be installed in order to handle images.")
@@ -103,8 +104,10 @@ class AgentImage(AgentType, ImageType):
             self._path = value
         elif isinstance(value, torch.Tensor):
             self._tensor = value
+        elif isinstance(value, np.ndarray):
+            self._tensor = torch.tensor(value)
         else:
-            raise ValueError(f"Unsupported type for {self.__class__.__name__}: {type(value)}")
+            raise TypeError(f"Unsupported type for {self.__class__.__name__}: {type(value)}")
 
     def _ipython_display_(self, include=None, exclude=None):
         """
@@ -125,6 +128,10 @@ class AgentImage(AgentType, ImageType):
             self._raw = Image.open(self._path)
             return self._raw
 
+        if self._tensor is not None:
+            array = self._tensor.cpu().detach().numpy()
+            return Image.fromarray((255 - array * 255).astype(np.uint8))
+
     def to_string(self):
         """
         Returns the stringified version of that object. In the case of an AgentImage, it is a path to the serialized
@@ -137,14 +144,13 @@ class AgentImage(AgentType, ImageType):
             directory = tempfile.mkdtemp()
             self._path = os.path.join(directory, str(uuid.uuid4()) + ".png")
             self._raw.save(self._path)
-
             return self._path
 
         if self._tensor is not None:
             array = self._tensor.cpu().detach().numpy()
 
             # There is likely simpler than load into image into save
-            img = Image.fromarray((array * 255).astype(np.uint8))
+            img = Image.fromarray((255 - array * 255).astype(np.uint8))
 
             directory = tempfile.mkdtemp()
             self._path = os.path.join(directory, str(uuid.uuid4()) + ".png")
@@ -153,8 +159,19 @@ class AgentImage(AgentType, ImageType):
 
             return self._path
 
+    def save(self, output_bytes, format, **params):
+        """
+        Saves the image to a file.
+        Args:
+            output_bytes (bytes): The output bytes to save the image to.
+            format (str): The format to use for the output image. The format is the same as in PIL.Image.save.
+            **params: Additional parameters to pass to PIL.Image.save.
+        """
+        img = self.to_raw()
+        img.save(output_bytes, format, **params)
 
-class AgentAudio(AgentType):
+
+class AgentAudio(AgentType, str):
     """
     Audio type returned by the agent.
     """
@@ -169,11 +186,13 @@ class AgentAudio(AgentType):
         self._tensor = None
 
         self.samplerate = samplerate
-
         if isinstance(value, (str, pathlib.Path)):
             self._path = value
-        elif isinstance(value, torch.Tensor):
+        elif is_torch_available() and isinstance(value, torch.Tensor):
             self._tensor = value
+        elif isinstance(value, tuple):
+            self.samplerate = value[0]
+            self._tensor = torch.tensor(value[1])
         else:
             raise ValueError(f"Unsupported audio type: {type(value)}")
 
@@ -213,7 +232,10 @@ class AgentAudio(AgentType):
 
 
 AGENT_TYPE_MAPPING = {"text": AgentText, "image": AgentImage, "audio": AgentAudio}
-INSTANCE_TYPE_MAPPING = {str: AgentText, float: AgentText, int: AgentText, Tensor: AgentAudio, ImageType: AgentImage}
+INSTANCE_TYPE_MAPPING = {str: AgentText, ImageType: AgentImage}
+
+if is_torch_available():
+    INSTANCE_TYPE_MAPPING[Tensor] = AgentAudio
 
 
 def handle_agent_inputs(*args, **kwargs):
@@ -232,4 +254,4 @@ def handle_agent_outputs(output, output_type=None):
         for _k, _v in INSTANCE_TYPE_MAPPING.items():
             if isinstance(output, _k):
                 return _v(output)
-        return AgentType(output)
+        return output

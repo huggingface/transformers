@@ -401,9 +401,11 @@ class HerbertConverter(Converter):
 
 
 class Qwen2Converter(Converter):
-    def converted(self) -> Tokenizer:
-        vocab = self.original_tokenizer.encoder
-        merges = list(self.original_tokenizer.bpe_ranks.keys())
+    def converted(self, vocab: Dict[str, int] = None, merges: List[Tuple[str, str]] = None) -> Tokenizer:
+        if not vocab:
+            vocab = self.original_tokenizer.encoder
+        if not merges:
+            merges = list(self.original_tokenizer.bpe_ranks.keys())
 
         tokenizer = Tokenizer(
             BPE(
@@ -620,6 +622,40 @@ class SpmConverter(Converter):
     def converted(self) -> Tokenizer:
         tokenizer = self.tokenizer(self.proto)
 
+        # control tokens are special
+        # user defined symbols are not
+        # both user and control tokens are AddedTokens
+        # Add user defined symbols (type == 4) from sentnecepiece (https://github.com/google/sentencepiece/blob/6225e08edb2577757163b3f5dbba4c0b670ef445/src/sentencepiece_model.proto#L299C29-L299C33)
+
+        tokens_to_add = {
+            id: AddedToken(token, normalized=False, special=special)
+            for id, token, special in [
+                (id, p.piece, p.type == 3) for id, p in enumerate(self.proto.pieces) if p.type in [3, 4]
+            ]
+        }
+        tokens_to_add = [k for _, k in sorted(tokens_to_add.items(), key=lambda x: x[0])]
+        if len(tokens_to_add) > 0:
+            # super hack: if a token.special is set, tokenizer ignores it for now so FIXME @ArthurZ
+            # Accumulate added tokens into batches of special/non-special tokens, because calling add_tokens() for
+            # individual tokens would repeatedly rebuild a trie, which can be slow.
+            is_last_special = None
+            tokens = []
+            for token in tokens_to_add:
+                is_special = token.special
+                if is_last_special is None or is_last_special == is_special:
+                    tokens.append(token)
+                else:
+                    if is_last_special:
+                        tokenizer.add_special_tokens(tokens)
+                    else:
+                        tokenizer.add_tokens(tokens)
+                    tokens = [token]
+                is_last_special = is_special
+            if tokens:
+                if is_last_special:
+                    tokenizer.add_special_tokens(tokens)
+                else:
+                    tokenizer.add_tokens(tokens)
         # Tokenizer assemble
         normalizer = self.normalizer(self.proto)
         if normalizer is not None:
@@ -1328,10 +1364,6 @@ class GemmaConvert(SpmConverter):
             raise Exception(
                 "You're trying to run a `Unigram` model but you're file was trained with a different algorithm"
             )
-        user_defined_symbols = [
-            AddedToken(token, normalized=True, special=False) for token in proto.trainer_spec.user_defined_symbols
-        ]
-        tokenizer.add_tokens(user_defined_symbols)
         return tokenizer
 
 

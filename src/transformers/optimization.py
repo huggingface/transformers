@@ -519,7 +519,7 @@ def get_scheduler(
             if param.requires_grad:
                 param.register_post_accumulate_grad_hook(scheduler_hook)
 
-        return LayerWiseDummyScheduler()
+        return LayerWiseDummyScheduler(optimizer_dict=optimizer_dict, lr=optimizer.defaults["lr"])
 
     if name == SchedulerType.CONSTANT:
         return schedule_func(optimizer)
@@ -539,6 +539,9 @@ def get_scheduler(
 
     if name == SchedulerType.INVERSE_SQRT:
         return schedule_func(optimizer, num_warmup_steps=num_warmup_steps)
+
+    if name == SchedulerType.WARMUP_STABLE_DECAY:
+        return schedule_func(optimizer, num_warmup_steps=num_warmup_steps, **scheduler_specific_kwargs)
 
     # All other schedulers require `num_training_steps`
     if num_training_steps is None:

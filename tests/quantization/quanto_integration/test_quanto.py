@@ -332,20 +332,23 @@ class QuantoQuantizationOffloadTest(QuantoQuantizationTest):
         "lm_head": 0,
     }
 
-    # the execution device is a gpu
+    @unittest.skip(reason="The execution device is a gpu")
     def test_generate_quality_cpu(self):
         pass
 
-    # we can't save offloaded values
+    @unittest.skip(reason="We can't save offloaded values")
     def test_serialization_bin(self):
         pass
 
+    @unittest.skip
     def test_serialization_safetensors(self):
         pass
 
+    @unittest.skip
     def test_compare_with_quanto(self):
         pass
 
+    @unittest.skip
     def test_load_from_quanto_saved(self):
         pass
 
@@ -370,7 +373,7 @@ class QuantoQuantizationOffloadTest(QuantoQuantizationTest):
             )
 
 
-@unittest.skip("Skipping test class because serialization is not supported yet")
+@unittest.skip(reason="Skipping test class because serialization is not supported yet")
 class QuantoQuantizationSerializationTest(QuantoQuantizationTest):
     """
     Perform the same tests as in QuantoQuantizationTest but with a serialized model.
@@ -403,7 +406,7 @@ class QuantoQuantizationSerializationTest(QuantoQuantizationTest):
         )
 
 
-@unittest.skip("Skipping test class because serialization is not supported yet")
+@unittest.skip(reason="Skipping test class because serialization is not supported yet")
 class QuantoQuantizationSerializationCudaTest(QuantoQuantizationTest):
     """
     Perform the same tests as in QuantoQuantizationTest but with model on cuda
@@ -422,7 +425,7 @@ class QuantoQuantizationQBitsTensorOffloadTest(QuantoQuantizationOffloadTest):
     weights = "int4"
 
 
-@unittest.skip("Skipping test class because serialization is not supported yet")
+@unittest.skip(reason="Skipping test class because serialization is not supported yet")
 class QuantoQuantizationQBitsTensorSerializationTest(QuantoQuantizationSerializationTest):
     EXPECTED_OUTPUTS = "Hello my name is Nils, I am a student of the University"
     weights = "int4"
@@ -448,7 +451,7 @@ class QuantoKVCacheQuantizationTest(unittest.TestCase):
     def test_quantized_cache(self):
         EXPECTED_TEXT_COMPLETION = [
             "Simply put, the theory of relativity states that 1) the speed of light is the same for all observers, and 2) the laws of physics are the same for all observers.\nThe first part of the theory of relativity",
-            "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, my fries, my burgers, my hot dogs, my sandwiches, my salads, my chicken, my fish",
+            "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p",
         ]
 
         prompts = [

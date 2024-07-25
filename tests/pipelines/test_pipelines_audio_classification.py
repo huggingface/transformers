@@ -35,8 +35,10 @@ class AudioClassificationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
     tf_model_mapping = TF_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, processor):
-        audio_classifier = AudioClassificationPipeline(model=model, feature_extractor=processor)
+    def get_test_pipeline(self, model, tokenizer, processor, torch_dtype="float32"):
+        audio_classifier = AudioClassificationPipeline(
+            model=model, feature_extractor=processor, torch_dtype=torch_dtype
+        )
 
         # test with a raw waveform
         audio = np.zeros((34000,))
@@ -115,7 +117,7 @@ class AudioClassificationPipelineTests(unittest.TestCase):
         model = "superb/wav2vec2-base-superb-ks"
 
         audio_classifier = pipeline("audio-classification", model=model)
-        dataset = datasets.load_dataset("anton-l/superb_dummy", "ks", split="test")
+        dataset = datasets.load_dataset("anton-l/superb_dummy", "ks", split="test", trust_remote_code=True)
 
         audio = np.array(dataset[3]["speech"], dtype=np.float32)
         output = audio_classifier(audio, top_k=4)
@@ -130,6 +132,6 @@ class AudioClassificationPipelineTests(unittest.TestCase):
         )
 
     @require_tf
-    @unittest.skip("Audio classification is not implemented for TF")
+    @unittest.skip(reason="Audio classification is not implemented for TF")
     def test_small_model_tf(self):
         pass

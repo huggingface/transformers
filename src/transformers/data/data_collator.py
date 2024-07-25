@@ -632,9 +632,19 @@ class DataCollatorForSeq2Seq:
                     ]
                 else:
                     batch["labels"] = [
-                        np.concatenate([label, [self.label_pad_token_id] * (max_label_length - len(label))])
+                        np.concatenate(
+                            [
+                                label,
+                                np.array([self.label_pad_token_id] * (max_label_length - len(label)), dtype=np.int64),
+                            ]
+                        )
                         if padding_side == "right"
-                        else np.concatenate([[self.label_pad_token_id] * (max_label_length - len(label)), label])
+                        else np.concatenate(
+                            [
+                                np.array([self.label_pad_token_id] * (max_label_length - len(label)), dtype=np.int64),
+                                label,
+                            ]
+                        )
                         for label in labels
                     ]
 
@@ -1601,3 +1611,38 @@ class DataCollatorForPermutationLanguageModeling(DataCollatorMixin):
             ) & masked_indices[i]
 
         return inputs.astype(np.int64), perm_mask, target_mapping, labels.astype(np.int64)
+
+
+@dataclass
+class DataCollatorWithFlattening(DefaultDataCollator):
+    """
+    Data collator used for padding free approach. Does the following:
+
+    - concatate the entire mini batch into single long sequence [1, total_tokens]
+    - no padding will be added, returns `input_ids`, `labels` and `position_ids`
+    """
+
+    def __init__(self, *args, return_position_ids=True, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.return_position_ids = return_position_ids
+        warnings.warn(
+            "Using `DataCollatorWithFlattening` will flatten the entire mini batch into single long sequence."
+            "Make sure your attention computation is able to handle it!"
+        )
+
+    def __call__(self, features, return_tensors=None):
+        if return_tensors is None:
+            return_tensors = self.return_tensors
+        is_labels_provided = "labels" in features[0]
+        ret = {"input_ids": [], "labels": []}
+        if self.return_position_ids:
+            ret.update({"position_ids": []})
+        for idx in range(0, len(features)):
+            ret["input_ids"] += features[idx]["input_ids"]
+            if is_labels_provided:
+                ret["labels"] += [-100] + features[idx]["labels"][1:]
+            else:
+                ret["labels"] += [-100] + features[idx]["input_ids"][1:]
+            if self.return_position_ids:
+                ret["position_ids"] += list(range(len(features[idx]["input_ids"])))
+        return default_data_collator([ret], return_tensors)
