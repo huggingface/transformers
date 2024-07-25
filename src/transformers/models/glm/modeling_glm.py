@@ -42,6 +42,7 @@ from ...utils import (
 )
 from .configuration_glm import GLMConfig
 
+
 if is_flash_attn_2_available():
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
     from flash_attn import flash_attn_func, flash_attn_varlen_func
@@ -49,14 +50,17 @@ if is_flash_attn_2_available():
     _flash_supports_window_size = "window_size" in list(inspect.signature(flash_attn_func).parameters)
 
 logger = logging.get_logger(__name__)
+
+
 _CHECKPOINT_FOR_DOC = "THUDM/glm-4-9b-chat"
 _CONFIG_FOR_DOC = "GLMConfig"
 
 
 def _config_to_kwargs(args):
-    common_kwargs = {}
+    common_kwargs = {
+        "dtype": args.torch_dtype,
+    }
     return common_kwargs
-
 
 def _get_unpad_data(attention_mask):
     seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
