@@ -1475,6 +1475,7 @@ class IrisRlAgent(nn.Module):
         self.discrete_autoencoder = discrete_autoencoder
         self.world_model = world_model
         self.actor_critic = actor_critic
+        self.device = self.actor_critic.conv1.weight.device
 
     def act(self, obs: torch.FloatTensor, should_sample: bool = True, temperature: float = 1.0) -> torch.LongTensor:
         input_ac = (
@@ -1484,7 +1485,7 @@ class IrisRlAgent(nn.Module):
                 self.discrete_autoencoder.encode_decode(obs, should_preprocess=True, should_postprocess=True)[0], 0, 1
             )
         )
-        logits_actions = self.actor_critic(input_ac)[0][:, -1] / temperature
+        logits_actions = self.actor_critic(input_ac)[0][0][:, -1] / temperature
         act_token = Categorical(logits=logits_actions).sample() if should_sample else logits_actions.argmax(dim=-1)
         return act_token
 
@@ -1520,7 +1521,7 @@ class IrisModel(IrisPreTrainedModel):
             act_vocab_size=self.config.num_actions,
             use_original_obs=self.config.use_original_obs_actor_critic,
         )
-        self.rl_agent = IrisRlAgent(discrete_autoencoder, world_model, actor_critic)
+        self.rl_agent = IrisRlAgent(discrete_autoencoder, world_model, actor_critic).to(config.device)
 
         # Initialize weights and apply final processing
         self.post_init()

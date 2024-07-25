@@ -128,6 +128,7 @@ class IrisConfig(PretrainedConfig):
         self,
         num_actions=4,
         vocab_size=512,
+        device="cuda:0",
         embed_dim_discrete_autoencoder=512,
         resolution=64,
         in_channels=3,
@@ -163,6 +164,7 @@ class IrisConfig(PretrainedConfig):
     ):
         self.num_actions = num_actions
         self.vocab_size = vocab_size
+        self.device = device
         self.embed_dim_discrete_autoencoder = embed_dim_discrete_autoencoder
         self.resolution = resolution
         self.in_channels = in_channels
