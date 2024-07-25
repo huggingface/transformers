@@ -1111,7 +1111,7 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel):
 
                 audio_outputs = self.audio_tower(
                     input_features, attention_mask=audio_attention_mask
-                )  # [3, 1500, 1280]
+                )
                 # this is not memory efficient at all (output_hidden_states=True) will save all the hidden stated.
                 selected_audio_feature = audio_outputs.last_hidden_state
                 audio_features = self.multi_modal_projector(selected_audio_feature) 
