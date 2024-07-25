@@ -559,7 +559,7 @@ def rotate_half(x):
 
 
 def apply_rotary_pos_emb(x: torch.Tensor, rope_cache: torch.Tensor) -> torch.Tensor:
-    # x: [b, np, sq, hn]
+    # x: [b, np, sq, hn] and hn is not used in here.
     b, np, sq, _ = x.size(0), x.size(1), x.size(2), x.size(3)
     rot_dim = rope_cache.shape[-2] * 2
     x, x_pass = x[..., :rot_dim], x[..., rot_dim:]
