@@ -1702,5 +1702,3 @@ def convert_slow_tokenizer(transformer_tokenizer) -> Tokenizer:
         )
 
     converter_class = SLOW_TO_FAST_CONVERTERS[tokenizer_class_name]
-
-    return converter_class(transformer_tokenizer).converted()
