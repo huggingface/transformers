@@ -169,11 +169,11 @@ class SelfAttention(torch.nn.Module):
         super(SelfAttention, self).__init__()
         self.layer_number = max(1, layer_number)
 
-        self.projection_size = config.kv_channels * config.num_attention_heads
+        self.projection_size = config.kv_channels * config.num_key_value_heads
 
         # Per attention head and per partition values.
-        self.hidden_size_per_attention_head = self.projection_size // config.num_attention_heads
-        self.num_attention_heads_per_partition = config.num_attention_heads
+        self.hidden_size_per_attention_head = self.projection_size // config.num_key_value_heads
+        self.num_key_value_heads_per_partition = config.num_key_value_heads
 
         self.multi_query_attention = config.multi_query_attention
         self.qkv_hidden_size = 3 * self.projection_size
@@ -196,13 +196,13 @@ class SelfAttention(torch.nn.Module):
 
     def _allocate_memory(self, inference_max_sequence_len, batch_size, device=None, dtype=None):
         if self.multi_query_attention:
-            num_attention_heads = self.num_multi_query_groups_per_partition
+            num_key_value_heads = self.num_multi_query_groups_per_partition
         else:
-            num_attention_heads = self.num_attention_heads_per_partition
+            num_key_value_heads = self.num_key_value_heads_per_partition
         return torch.empty(
             inference_max_sequence_len,
             batch_size,
-            num_attention_heads,
+            num_key_value_heads,
             self.hidden_size_per_attention_head,
             dtype=dtype,
             device=device,
@@ -231,14 +231,14 @@ class SelfAttention(torch.nn.Module):
         if self.multi_query_attention:
             (query_layer, key_layer, value_layer) = mixed_x_layer.split(
                 [
-                    self.num_attention_heads_per_partition * self.hidden_size_per_attention_head,
+                    self.num_key_value_heads_per_partition * self.hidden_size_per_attention_head,
                     self.num_multi_query_groups_per_partition * self.hidden_size_per_attention_head,
                     self.num_multi_query_groups_per_partition * self.hidden_size_per_attention_head,
                 ],
                 dim=-1,
             )
             query_layer = query_layer.view(
-                query_layer.size()[:-1] + (self.num_attention_heads_per_partition, self.hidden_size_per_attention_head)
+                query_layer.size()[:-1] + (self.num_key_value_heads_per_partition, self.hidden_size_per_attention_head)
             )
             key_layer = key_layer.view(
                 key_layer.size()[:-1] + (self.num_multi_query_groups_per_partition, self.hidden_size_per_attention_head)
@@ -249,7 +249,7 @@ class SelfAttention(torch.nn.Module):
             )
         else:
             new_tensor_shape = mixed_x_layer.size()[:-1] + \
-                               (self.num_attention_heads_per_partition,
+                               (self.num_key_value_heads_per_partition,
                                 3 * self.hidden_size_per_attention_head)
             mixed_x_layer = mixed_x_layer.view(*new_tensor_shape)
 
@@ -270,17 +270,17 @@ class SelfAttention(torch.nn.Module):
         if self.multi_query_attention:
             key_layer = key_layer.unsqueeze(2)
             key_layer = key_layer.expand(
-                -1, -1, self.num_attention_heads_per_partition // self.num_multi_query_groups_per_partition, -1, -1
+                -1, -1, self.num_key_value_heads_per_partition // self.num_multi_query_groups_per_partition, -1, -1
             )
             key_layer = key_layer.contiguous().view(
-                key_layer.size()[:1] + (self.num_attention_heads_per_partition,) + key_layer.size()[3:]
+                key_layer.size()[:1] + (self.num_key_value_heads_per_partition,) + key_layer.size()[3:]
             )
             value_layer = value_layer.unsqueeze(2)
             value_layer = value_layer.expand(
-                -1, -1, self.num_attention_heads_per_partition // self.num_multi_query_groups_per_partition, -1, -1
+                -1, -1, self.num_key_value_heads_per_partition // self.num_multi_query_groups_per_partition, -1, -1
             )
             value_layer = value_layer.contiguous().view(
-                value_layer.size()[:1] + (self.num_attention_heads_per_partition,) + value_layer.size()[3:]
+                value_layer.size()[:1] + (self.num_key_value_heads_per_partition,) + value_layer.size()[3:]
             )
         # ==================================
         # core attention computation
@@ -347,7 +347,7 @@ class GLMMLP(nn.Module):
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    num_key_value_heads, seqlen, head_dim) to (batch, num_key_value_heads, seqlen, head_dim)
     """
     batch, num_key_value_heads, slen, head_dim = hidden_states.shape
     if n_rep == 1:
@@ -369,12 +369,12 @@ class GLMAttention(nn.Module):
         self.layer_number = max(1, layer_number)
         self.is_causal = True
 
-        projection_size = config.kv_channels * config.num_attention_heads
+        projection_size = config.kv_channels * config.num_key_value_heads
 
         # Per attention head and per partition values.
         self.hidden_size_per_partition = projection_size
-        self.hidden_size_per_attention_head = projection_size // config.num_attention_heads
-        self.num_attention_heads_per_partition = config.num_attention_heads
+        self.hidden_size_per_attention_head = projection_size // config.num_key_value_heads
+        self.num_key_value_heads_per_partition = config.num_key_value_heads
 
         coeff = None
         self.norm_factor = math.sqrt(self.hidden_size_per_attention_head)
@@ -547,7 +547,7 @@ class GLMFlashAttention2(GLMAttention):
         )
         if query_length == kv_seq_len:
             query_layer = index_first_axis(
-                query_layer.reshape(batch_size * kv_seq_len, self.num_attention_heads_per_partition, head_dim),
+                query_layer.reshape(batch_size * kv_seq_len, self.num_key_value_heads_per_partition, head_dim),
                 indices_k
             )
             cu_seqlens_q = cu_seqlens_k
@@ -1012,7 +1012,7 @@ class GLMModel(GLMPreTrainedModel):
         # Rotary positional embeddings
         self.seq_length = config.seq_length
         rotary_dim = (
-            config.hidden_size // config.num_attention_heads if config.kv_channels is None else config.kv_channels
+            config.hidden_size // config.num_key_value_heads if config.kv_channels is None else config.kv_channels
         )
 
         self.rotary_pos_emb = GLMRotaryEmbedding(

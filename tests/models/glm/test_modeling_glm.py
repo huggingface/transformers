@@ -22,6 +22,7 @@ import pytest
 
 from transformers import AutoTokenizer, GLMConfig, is_torch_available
 from transformers.testing_utils import (
+    is_flaky,
     backend_empty_cache,
     require_flash_attn,
     require_torch,
@@ -319,9 +320,9 @@ class GLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
     # Ignore copy
     # TODO: @Fxmarty
+    @is_flaky(max_attempts=3, description="flaky on some models.")
     @require_torch_sdpa
     @slow
-    @unittest.skip(reason="Currently failing.")
     def test_eager_matches_sdpa_generate(self):
         super().test_eager_matches_sdpa_generate()
 
@@ -446,7 +447,6 @@ class GLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
-
     @require_flash_attn
     @require_torch_gpu
     @pytest.mark.flash_attn_test
@@ -533,6 +533,10 @@ class GLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         self.skipTest(reason="GLM flash attention does not support right padding")
 
+    @unittest.skip("GLM KV cache is a non standard format")
+    def test_past_key_values_format(self):
+        pass
+
     @slow
     @require_torch
     class GLMIntegrationTest(unittest.TestCase):
@@ -580,6 +584,48 @@ class GLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             ]
             self.assertListEqual(output_text, EXPECTED_OUTPUT)
 
-    @unittest.skip(reason="Gemma uses GQA on all models so the KV cache is a non standard format")
-    def test_past_key_values_format(self):
-        pass
+    def _check_attentions_for_generate(
+            self, batch_size, attentions, min_length, max_length, config, use_cache=False, num_beam_groups=1
+    ):
+        self.assertIsInstance(attentions, tuple)
+        self.assertListEqual(
+            [isinstance(iter_attentions, tuple) for iter_attentions in attentions], [True] * len(attentions)
+        )
+        self.assertEqual(len(attentions), (max_length - min_length) * num_beam_groups)
+
+        for idx, iter_attentions in enumerate(attentions):
+            tgt_len = min_length + idx if not use_cache else 1
+
+            expected_shape = (
+                batch_size,
+                tgt_len,
+                config.hidden_size,
+            )
+
+            # check attn size
+            self.assertListEqual([layer_attention.shape for layer_attention in iter_attentions],
+                                 [expected_shape] * len(iter_attentions))
+
+    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config, num_beam_groups=1):
+        self.assertIsInstance(past_key_values, tuple)
+        self.assertListEqual(
+            [isinstance(iter_past_key_values, tuple) for iter_past_key_values in past_key_values],
+            [True] * len(past_key_values),
+        )
+
+        # (batch, head, seq_length, kv_channels)
+        expected_shape = (
+            batch_size * num_beam_groups,
+            config.num_key_value_heads if hasattr(config, "num_key_value_heads") else config.num_attention_heads,
+            seq_length,
+            config.kv_channels
+        )
+        # check shape key, value
+        self.assertListEqual(
+            [layer_past_key_values[0].shape for layer_past_key_values in past_key_values],
+            [expected_shape] * len(past_key_values),
+        )
+        self.assertListEqual(
+            [layer_past_key_values[1].shape for layer_past_key_values in past_key_values],
+            [expected_shape] * len(past_key_values),
+        )

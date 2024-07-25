@@ -80,6 +80,7 @@ class GLMConfig(PretrainedConfig):
             ffn_hidden_size=13696,
             kv_channels=128,
             num_attention_heads=32,
+            num_key_value_heads=32,
             seq_length=131072,
             hidden_dropout=0.0,
             classifier_dropout=None,
@@ -103,13 +104,18 @@ class GLMConfig(PretrainedConfig):
             **kwargs
     ):
         self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.initializer_range = initializer_range
         self.hidden_size = hidden_size
         self.ffn_hidden_size = ffn_hidden_size
         self.kv_channels = kv_channels
-        self.num_attention_heads = num_attention_heads
+
+        if num_key_value_heads is None:
+            num_key_value_heads = num_attention_heads
+
+        self.num_key_value_heads = num_key_value_heads
         self.seq_length = seq_length
         self.hidden_dropout = hidden_dropout
         self.classifier_dropout = classifier_dropout
