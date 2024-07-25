@@ -42,7 +42,6 @@ from ...utils import (
 )
 from .configuration_glm import GLMConfig
 
-
 if is_flash_attn_2_available():
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
     from flash_attn import flash_attn_func, flash_attn_varlen_func
@@ -51,16 +50,9 @@ if is_flash_attn_2_available():
 
 logger = logging.get_logger(__name__)
 
-
 _CHECKPOINT_FOR_DOC = "THUDM/glm-4-9b-chat"
 _CONFIG_FOR_DOC = "GLMConfig"
 
-
-def _config_to_kwargs(args):
-    common_kwargs = {
-        "dtype": args.torch_dtype,
-    }
-    return common_kwargs
 
 def _get_unpad_data(attention_mask):
     seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
@@ -93,7 +85,7 @@ class GLMRMSNorm(nn.Module):
 
 
 class GLMRotaryEmbedding(nn.Module):
-    def __init__(self, dim, rope_ratio=1, original_impl=False, device=None, dtype=None):
+    def __init__(self, dim, rope_theta=1, original_impl=False, device=None, dtype=None):
         super().__init__()
         inv_freq = 1.0 / (
                 10000 ** (torch.arange(0, dim, 2, device=device).to(dtype=dtype) / dim)
@@ -101,7 +93,7 @@ class GLMRotaryEmbedding(nn.Module):
         self.register_buffer("inv_freq", inv_freq)
         self.dim = dim
         self.original_impl = original_impl
-        self.rope_ratio = rope_ratio
+        self.rope_theta = rope_theta
 
     def forward_impl(
             self,
@@ -117,7 +109,7 @@ class GLMRotaryEmbedding(nn.Module):
         https://github.com/labmlai/annotated_deep_learning_paper_implementations/blob/master/license.
         """
         # $\Theta = {\theta_i = 10000^{\frac{2(i-1)}{d}}, i \in [1, 2, ..., \frac{d}{2}]}$
-        base = base * self.rope_ratio
+        base = base * self.rope_theta
         theta = 1.0 / (
                 base
                 ** (torch.arange(0, n_elem, 2, dtype=torch.float, device=device) / n_elem)
@@ -202,9 +194,8 @@ class SelfAttention(torch.nn.Module):
         self.query_key_value = nn.Linear(
             config.hidden_size,
             self.qkv_hidden_size,
-            bias=config.add_bias_linear or config.add_qkv_bias,
+            bias=config.add_qkv_bias,
             device=device,
-            **_config_to_kwargs(config),
         )
 
         self.core_attention = GLM_ATTENTION_CLASSES[config._attn_implementation](
@@ -215,9 +206,8 @@ class SelfAttention(torch.nn.Module):
         self.dense = nn.Linear(
             self.projection_size,
             config.hidden_size,
-            bias=config.add_bias_linear,
+            bias=False,
             device=device,
-            **_config_to_kwargs(config),
         )
 
     def _allocate_memory(
@@ -375,21 +365,13 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     )
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
+
 class GLMMLP(nn.Module):
     def __init__(self, config: GLMConfig):
         super().__init__()
 
-        self.add_bias = config.add_bias_linear
-        self.dense_h_to_4h = nn.Linear(
-            config.hidden_size,
-            config.intermediate_size * 2,
-            bias=self.add_bias,
-        )
-        self.dense_4h_to_h = nn.Linear(
-            config.intermediate_size,
-            config.hidden_size,
-            bias=self.add_bias,
-        )
+        self.dense_h_to_4h = nn.Linear(config.hidden_size, config.intermediate_size * 2, bias=False)
+        self.dense_4h_to_h = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
 
         def swiglu(x):
             x = torch.chunk(x, 2, dim=-1)
@@ -894,16 +876,12 @@ class GLMBlock(torch.nn.Module):
         super(GLMBlock, self).__init__()
         self.layer_number = layer_number
 
-        self.apply_residual_connection_post_layernorm = (
-            config.apply_residual_connection_post_layernorm
-        )
         self.fp32_residual_connection = config.fp32_residual_connection
-        LayerNormFunc = GLMRMSNorm if config.rmsnorm else LayerNorm
-        self.input_layernorm = LayerNormFunc(config.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = GLMRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.self_attention = SelfAttention(config, layer_number, device=device)
         self.hidden_dropout = config.hidden_dropout
-        self.post_attention_layernorm = LayerNormFunc(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = GLMRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.mlp = GLMMLP(config)
 
     def forward(
@@ -928,10 +906,7 @@ class GLMBlock(torch.nn.Module):
         )
 
         # Residual connection.
-        if self.apply_residual_connection_post_layernorm:
-            residual = layernorm_output
-        else:
-            residual = hidden_states
+        residual = hidden_states
 
         layernorm_input = torch.nn.functional.dropout(
             attention_output, p=self.hidden_dropout, training=self.training
@@ -945,10 +920,7 @@ class GLMBlock(torch.nn.Module):
         mlp_output = self.mlp(layernorm_output)
 
         # Second residual connection.
-        if self.apply_residual_connection_post_layernorm:
-            residual = layernorm_output
-        else:
-            residual = layernorm_input
+        residual = layernorm_input
 
         output = torch.nn.functional.dropout(
             mlp_output, p=self.hidden_dropout, training=self.training
@@ -965,7 +937,6 @@ class GLMTransformer(torch.nn.Module):
         super(GLMTransformer, self).__init__()
 
         self.fp32_residual_connection = config.fp32_residual_connection
-        self.post_layer_norm = config.post_layer_norm
 
         # Number of layers.
         self.num_hidden_layers = config.num_hidden_layers
@@ -978,10 +949,7 @@ class GLMTransformer(torch.nn.Module):
             [build_layer(i + 1) for i in range(self.num_hidden_layers)]
         )
 
-        if self.post_layer_norm:
-            LayerNormFunc = GLMRMSNorm if config.rmsnorm else LayerNorm
-            self.final_layernorm = LayerNormFunc(config.hidden_size, eps=config.rms_norm_eps)
-
+        self.final_layernorm = GLMRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
 
     def _get_layer(self, layer_number):
@@ -1130,7 +1098,7 @@ class GLMModel(GLMPreTrainedModel):
         config: GLMConfig
     """
 
-    def __init__(self, config: GLMConfig, device=None, add_lm_head=True):
+    def __init__(self, config: GLMConfig, device=None, add_lm_head=False):
         super().__init__(config)
 
         def default_init(cls, *args, **kwargs):
@@ -1146,7 +1114,7 @@ class GLMModel(GLMPreTrainedModel):
         self.kv_channels = config.kv_channels
 
         # Rotary positional embeddings
-        self.seq_length = config.seq_length
+        self.max_position_embeddings = config.max_position_embeddings
         rotary_dim = (
             config.hidden_size // config.num_key_value_heads
             if config.kv_channels is None
@@ -1155,7 +1123,7 @@ class GLMModel(GLMPreTrainedModel):
 
         self.rotary_pos_emb = GLMRotaryEmbedding(
             rotary_dim // 2,
-            rope_ratio=config.rope_ratio,
+            rope_theta=config.rope_theta,
             original_impl=True,
             device=device,
         )
@@ -1177,12 +1145,12 @@ class GLMModel(GLMPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embedding.word_embeddings = value
 
+    @add_start_docstrings_to_model_forward(GLM_INPUTS_DOCSTRING)
     def forward(
             self,
             input_ids: Optional[torch.LongTensor] = None,
             attention_mask: Optional[torch.Tensor] = None,
             position_ids: Optional[torch.LongTensor] = None,
-            full_attention_mask: Optional[torch.BoolTensor] = None,
             past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
             inputs_embeds: Optional[torch.Tensor] = None,
             use_cache: Optional[bool] = None,
@@ -1250,7 +1218,7 @@ class GLMModel(GLMPreTrainedModel):
         )
 
         # Rotary positional embeddings
-        rotary_pos_emb = self.rotary_pos_emb(self.seq_length)
+        rotary_pos_emb = self.rotary_pos_emb(self.max_position_embeddings)
         if position_ids is not None:
             rotary_pos_emb = rotary_pos_emb[position_ids]
         else:
@@ -1306,7 +1274,7 @@ class GLMForCausalLM(GLMPreTrainedModel):
         super().__init__(config)
 
         self.max_sequence_length = config.max_length
-        self.transformer = GLMModel(config, device=device)
+        self.transformer = GLMModel(config, add_lm_head=True, device=device)
         self.config = config
         # Initialize weights and apply final processing
         self.post_init()
@@ -1472,6 +1440,7 @@ class GLMForCausalLM(GLMPreTrainedModel):
         )
         return model_inputs
 
+
 @add_start_docstrings(
     """
     The GLM Model transformer with a sequence classification head on top (linear layer).
@@ -1488,14 +1457,11 @@ class GLMForCausalLM(GLMPreTrainedModel):
     GLM_START_DOCSTRING,
 )
 class GLMForSequenceClassification(GLMPreTrainedModel):
-    def __init__(self, config: GLMConfig):
+    def __init__(self, config):
         super().__init__(config)
-
         self.num_labels = config.num_labels
-        self.transformer = GLMModel(config, add_lm_head=False)
-        self.classifier_head = nn.Linear(
-            config.hidden_size, config.num_labels, bias=True
-        )
+        self.transformer = GLMModel(config)
+        self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1509,10 +1475,9 @@ class GLMForSequenceClassification(GLMPreTrainedModel):
     @add_start_docstrings_to_model_forward(GLM_INPUTS_DOCSTRING)
     def forward(
             self,
-            input_ids: torch.LongTensor = None,
-            position_ids: Optional[torch.LongTensor] = None,
+            input_ids: Optional[torch.LongTensor] = None,
             attention_mask: Optional[torch.Tensor] = None,
-            full_attention_mask: Optional[torch.Tensor] = None,
+            position_ids: Optional[torch.LongTensor] = None,
             past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
             inputs_embeds: Optional[torch.FloatTensor] = None,
             labels: Optional[torch.LongTensor] = None,
@@ -1527,15 +1492,12 @@ class GLMForSequenceClassification(GLMPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        model_outputs = self.transformer(
-            input_ids=input_ids,
-            position_ids=position_ids,
+        transformer_outputs = self.transformer(
+            input_ids,
             attention_mask=attention_mask,
-            full_attention_mask=full_attention_mask,
+            position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
@@ -1543,43 +1505,36 @@ class GLMForSequenceClassification(GLMPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        hidden_states = model_outputs[0]
-        logits = self.classifier_head(hidden_states)
+        hidden_states = transformer_outputs[0]
+        logits = self.score(hidden_states)
+
         if input_ids is not None:
             batch_size = input_ids.shape[0]
         else:
             batch_size = inputs_embeds.shape[0]
 
         if self.config.pad_token_id is None and batch_size != 1:
-            raise ValueError(
-                "Cannot handle batch sizes > 1 if no padding token is defined."
-            )
+            raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
         if self.config.pad_token_id is None:
             sequence_lengths = -1
         else:
             if input_ids is not None:
-                # if no pad token found, use modulo instead of reverse indexing
-                # for ONNX compatibility
-                sequence_lengths = (
-                        torch.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1
-                )
+                # if no pad token found, use modulo instead of reverse indexing for ONNX compatibility
+                sequence_lengths = torch.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1
                 sequence_lengths = sequence_lengths % input_ids.shape[-1]
                 sequence_lengths = sequence_lengths.to(logits.device)
             else:
                 sequence_lengths = -1
 
-        pooled_logits = logits[
-            torch.arange(batch_size, device=logits.device), sequence_lengths
-        ]
+        pooled_logits = logits[torch.arange(batch_size, device=logits.device), sequence_lengths]
 
         loss = None
         if labels is not None:
+            labels = labels.to(logits.device)
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (
-                        labels.dtype == torch.long or labels.dtype == torch.int
-                ):
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"
@@ -1592,22 +1547,20 @@ class GLMForSequenceClassification(GLMPreTrainedModel):
                     loss = loss_fct(pooled_logits, labels)
             elif self.config.problem_type == "single_label_classification":
                 loss_fct = CrossEntropyLoss()
-                loss = loss_fct(
-                    pooled_logits.view(-1, self.num_labels), labels.view(-1)
-                )
+                loss = loss_fct(pooled_logits.view(-1, self.num_labels), labels.view(-1))
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(pooled_logits, labels)
         if not return_dict:
-            output = (pooled_logits,) + model_outputs[1:]
+            output = (pooled_logits,) + transformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutputWithPast(
             loss=loss,
             logits=pooled_logits,
-            past_key_values=model_outputs.past_key_values,
-            hidden_states=model_outputs.hidden_states,
-            attentions=model_outputs.attentions,
+            past_key_values=transformer_outputs.past_key_values,
+            hidden_states=transformer_outputs.hidden_states,
+            attentions=transformer_outputs.attentions,
         )
 
 
@@ -1618,23 +1571,20 @@ class GLMForSequenceClassification(GLMPreTrainedModel):
     """,
     GLM_START_DOCSTRING,
 )
+
 class GLMForTokenClassification(GLMPreTrainedModel):
-    def __init__(self, config: GLMConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-
-        self.transformer = GLMModel(config, add_lm_head=False)
-        if (
-                hasattr(config, "classifier_dropout")
-                and config.classifier_dropout is not None
-        ):
+        self.transformer = GLMModel(config)
+        if getattr(config, "classifier_dropout", None) is not None:
             classifier_dropout = config.classifier_dropout
-        elif hasattr(config, "hidden_dropout") and config.hidden_dropout is not None:
+        elif getattr(config, "hidden_dropout", None) is not None:
             classifier_dropout = config.hidden_dropout
         else:
             classifier_dropout = 0.1
         self.dropout = nn.Dropout(classifier_dropout)
-        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+        self.score = nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1645,63 +1595,55 @@ class GLMForTokenClassification(GLMPreTrainedModel):
     def set_input_embeddings(self, value):
         self.transformer.embedding.word_embeddings = value
 
-    @add_start_docstrings_to_model_forward(GLM_START_DOCSTRING)
+    @add_start_docstrings_to_model_forward(GLM_INPUTS_DOCSTRING)
     def forward(
-            self,
-            input_ids: Optional[torch.LongTensor] = None,
-            past_key_values: Optional[Tuple[Tuple[torch.Tensor, torch.Tensor], ...]] = None,
-            attention_mask: Optional[torch.Tensor] = None,
-            inputs_embeds: Optional[torch.Tensor] = None,
-            labels: Optional[torch.Tensor] = None,
-            use_cache: Optional[bool] = None,
-            output_attentions: bool = False,
-            output_hidden_states: Optional[bool] = None,
-            return_dict: Optional[bool] = None,
-            **deprecated_arguments,
-    ) -> Union[Tuple[torch.Tensor], TokenClassifierOutput]:
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, TokenClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        model_outputs = self.transformer(
+        outputs = self.transformer(
             input_ids,
-            past_key_values=past_key_values,
             attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-
-        hidden_states = model_outputs[0]
-        hidden_states = self.dropout(hidden_states)
-        logits = self.classifier(hidden_states)
+        sequence_output = outputs[0]
+        sequence_output = self.dropout(sequence_output)
+        logits = self.score(sequence_output)
 
         loss = None
         if labels is not None:
-            # move labels to correct device to enable model parallelism
-            labels = labels.to(logits.device)
-            batch_size, seq_length = labels.shape
             loss_fct = CrossEntropyLoss()
-            loss = loss_fct(
-                logits.view(batch_size * seq_length, self.num_labels),
-                labels.view(batch_size * seq_length),
-            )
+            loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
         if not return_dict:
-            output = (logits,) + model_outputs[2:]
+            output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
             loss=loss,
             logits=logits,
-            hidden_states=model_outputs.hidden_states,
-            attentions=model_outputs.attentions,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )

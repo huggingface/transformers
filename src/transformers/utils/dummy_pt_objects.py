@@ -2778,7 +2778,8 @@ class GLMPreTrainedModel(metaclass=DummyObject):
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
-        
+
+
 class GPTSanJapaneseForConditionalGeneration(metaclass=DummyObject):
     _backends = ["torch"]
 
