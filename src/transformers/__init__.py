@@ -448,7 +448,7 @@ _import_structure = {
         "GitVisionConfig",
     ],
     "models.glpn": ["GLPNConfig"],
-    "models.glm": ["GLMConfig","GLMTokenizer"],
+    "models.glm": ["GLMConfig", "GLMTokenizer"],
     "models.gpt2": [
         "GPT2Config",
         "GPT2Tokenizer",

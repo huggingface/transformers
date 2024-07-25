@@ -49,34 +49,35 @@ if is_torch_available():
         GLMModel,
     )
 
+
 class GLMModelTester:
     def __init__(
-            self,
-            parent,
-            batch_size=13,
-            seq_length=7,
-            is_training=True,
-            use_input_mask=True,
-            use_token_type_ids=True,
-            use_labels=True,
-            vocab_size=99,
-            hidden_size=8,
-            num_hidden_layers=2,
-            num_attention_heads=4,
-            num_key_value_heads=2,
-            intermediate_size=37,
-            hidden_act="gelu",
-            hidden_dropout_prob=0.1,
-            attention_probs_dropout_prob=0.1,
-            max_position_embeddings=512,
-            type_vocab_size=16,
-            type_sequence_label_size=2,
-            initializer_range=0.02,
-            num_labels=3,
-            num_choices=4,
-            pad_token_id=0,
-            bos_token_id=1,
-            scope=None,
+        self,
+        parent,
+        batch_size=13,
+        seq_length=7,
+        is_training=True,
+        use_input_mask=True,
+        use_token_type_ids=True,
+        use_labels=True,
+        vocab_size=99,
+        hidden_size=8,
+        num_hidden_layers=2,
+        num_attention_heads=4,
+        num_key_value_heads=2,
+        intermediate_size=37,
+        hidden_act="gelu",
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        max_position_embeddings=512,
+        type_vocab_size=16,
+        type_sequence_label_size=2,
+        initializer_range=0.02,
+        num_labels=3,
+        num_choices=4,
+        pad_token_id=0,
+        bos_token_id=1,
+        scope=None,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -314,7 +315,7 @@ class GLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
     def is_pipeline_test_to_skip(
-            self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
     ):
         return True
 
@@ -498,8 +499,24 @@ class GLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     @require_torch
     class GLMIntegrationTest(unittest.TestCase):
         def test_glm_instruct_logits(self):
-            input_ids = [151331, 151333, 151336, 198, 102162, 220, 16, 10, 16, 100694, 99312, 3837, 99558, 104559,
-                         100295, 151337]
+            input_ids = [
+                151331,
+                151333,
+                151336,
+                198,
+                102162,
+                220,
+                16,
+                10,
+                16,
+                100694,
+                99312,
+                3837,
+                99558,
+                104559,
+                100295,
+                151337,
+            ]
             model = GLMForCausalLM.from_pretrained("THUDM/glm-4-9b-chat").to(torch_device)
             input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
             with torch.no_grad():
@@ -509,27 +526,64 @@ class GLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             EXPECTED_MEAN = torch.tensor(
                 [
                     [
-                        -2.6504, -0.0175, -1.7773, -1.9961, -2.2734, -2.8457, -2.4512, -2.6133, -2.4199,
-                        -2.3535, -2.8203, -2.5664, -1.9512, -3.4766, -3.4395, -3.0156,
+                        -2.6504,
+                        -0.0175,
+                        -1.7773,
+                        -1.9961,
+                        -2.2734,
+                        -2.8457,
+                        -2.4512,
+                        -2.6133,
+                        -2.4199,
+                        -2.3535,
+                        -2.8203,
+                        -2.5664,
+                        -1.9512,
+                        -3.4766,
+                        -3.4395,
+                        -3.0156,
                     ]
                 ]
             )
-            torch.testing.assert_close(
-                out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2
-            )
+            torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
 
             # slicing logits[0, 0, 0:30]
             EXPECTED_SLICE = torch.tensor(
                 [
-                    3.9199, 6.3906, 4.7812, 4.1914, -1.0078, -1.2148, 4.2109, 5.5625, 2.4121, 2.2910, 4.3438, 5.7969,
-                    7.0859, 4.5273, 0.9565, -1.8076, 3.1582, 3.7305, 4.5977, 5.7500, 4.1211, 4.2461, 4.4883, 2.9395,
-                    4.0703, 7.1953, 3.5430, 2.4707, 0.0379, 2.0449,
+                    3.9199,
+                    6.3906,
+                    4.7812,
+                    4.1914,
+                    -1.0078,
+                    -1.2148,
+                    4.2109,
+                    5.5625,
+                    2.4121,
+                    2.2910,
+                    4.3438,
+                    5.7969,
+                    7.0859,
+                    4.5273,
+                    0.9565,
+                    -1.8076,
+                    3.1582,
+                    3.7305,
+                    4.5977,
+                    5.7500,
+                    4.1211,
+                    4.2461,
+                    4.4883,
+                    2.9395,
+                    4.0703,
+                    7.1953,
+                    3.5430,
+                    2.4707,
+                    0.0379,
+                    2.0449,
                 ]
             )
 
-            torch.testing.assert_close(
-                out[0, 0, :30], EXPECTED_SLICE, atol=1e-4, rtol=1e-4
-            )
+            torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, atol=1e-4, rtol=1e-4)
 
             del model
             backend_empty_cache(torch_device)
@@ -545,9 +599,7 @@ class GLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 },
                 {"role": "user", "content": "Tell me the answer of 1 plus 1?"},
             ]
-            inputs = tokenizer.apply_chat_template(
-                messages, add_generation_prompt=True, return_tensors="pt"
-            )
+            inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt")
             outputs = model.generate(inputs, max_new_tokens=32)
             output_text = tokenizer.batch_decode(outputs)
             EXPECTED_OUTPUT = [
@@ -556,14 +608,14 @@ class GLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             self.assertListEqual(output_text, EXPECTED_OUTPUT)
 
     def _check_attentions_for_generate(
-            self,
-            batch_size,
-            attentions,
-            min_length,
-            max_length,
-            config,
-            use_cache=False,
-            num_beam_groups=1,
+        self,
+        batch_size,
+        attentions,
+        min_length,
+        max_length,
+        config,
+        use_cache=False,
+        num_beam_groups=1,
     ):
         self.assertIsInstance(attentions, tuple)
         self.assertListEqual(
@@ -587,41 +639,26 @@ class GLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 [expected_shape] * len(iter_attentions),
             )
 
-    def _check_past_key_values_for_generate(
-            self, batch_size, past_key_values, seq_length, config, num_beam_groups=1
-    ):
+    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config, num_beam_groups=1):
         self.assertIsInstance(past_key_values, tuple)
         self.assertListEqual(
-            [
-                isinstance(iter_past_key_values, tuple)
-                for iter_past_key_values in past_key_values
-            ],
+            [isinstance(iter_past_key_values, tuple) for iter_past_key_values in past_key_values],
             [True] * len(past_key_values),
         )
 
         # (batch, head, seq_length, kv_channels)
         expected_shape = (
             batch_size * num_beam_groups,
-            (
-                config.num_key_value_heads
-                if hasattr(config, "num_key_value_heads")
-                else config.num_attention_heads
-            ),
+            (config.num_key_value_heads if hasattr(config, "num_key_value_heads") else config.num_attention_heads),
             seq_length,
             config.kv_channels,
         )
         # check shape key, value
         self.assertListEqual(
-            [
-                layer_past_key_values[0].shape
-                for layer_past_key_values in past_key_values
-            ],
+            [layer_past_key_values[0].shape for layer_past_key_values in past_key_values],
             [expected_shape] * len(past_key_values),
         )
         self.assertListEqual(
-            [
-                layer_past_key_values[1].shape
-                for layer_past_key_values in past_key_values
-            ],
+            [layer_past_key_values[1].shape for layer_past_key_values in past_key_values],
             [expected_shape] * len(past_key_values),
         )

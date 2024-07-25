@@ -1267,6 +1267,7 @@ class GLMConverter(Converter):
 
         return tokenizer
 
+
 class BlenderbotConverter(Converter):
     def converted(self) -> Tokenizer:
         ot = self.original_tokenizer

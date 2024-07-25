@@ -88,21 +88,19 @@ class GLMRMSNorm(nn.Module):
 class GLMRotaryEmbedding(nn.Module):
     def __init__(self, dim, rope_theta=1, original_impl=False, device=None, dtype=None):
         super().__init__()
-        inv_freq = 1.0 / (
-                10000 ** (torch.arange(0, dim, 2, device=device).to(dtype=dtype) / dim)
-        )
+        inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2, device=device).to(dtype=dtype) / dim))
         self.register_buffer("inv_freq", inv_freq)
         self.dim = dim
         self.original_impl = original_impl
         self.rope_theta = rope_theta
 
     def forward_impl(
-            self,
-            seq_len: int,
-            n_elem: int,
-            dtype: torch.dtype,
-            device: torch.device,
-            base: int = 10000,
+        self,
+        seq_len: int,
+        n_elem: int,
+        dtype: torch.dtype,
+        device: torch.device,
+        base: int = 10000,
     ):
         """Enhanced Transformer with Rotary Position Embedding.
         Derived from: https://github.com/labmlai/annotated_deep_learning_paper_implementations/blob/master/labml_nn/
@@ -111,10 +109,7 @@ class GLMRotaryEmbedding(nn.Module):
         """
         # $\Theta = {\theta_i = 10000^{\frac{2(i-1)}{d}}, i \in [1, 2, ..., \frac{d}{2}]}$
         base = base * self.rope_theta
-        theta = 1.0 / (
-                base
-                ** (torch.arange(0, n_elem, 2, dtype=torch.float, device=device) / n_elem)
-        )
+        theta = 1.0 / (base ** (torch.arange(0, n_elem, 2, dtype=torch.float, device=device) / n_elem))
 
         # Create position indexes `[0, 1, ..., seq_len - 1]`
         seq_idx = torch.arange(seq_len, dtype=torch.float, device=device)
@@ -122,9 +117,7 @@ class GLMRotaryEmbedding(nn.Module):
         # Calculate the product of position index and $\theta_i$
         idx_theta = torch.outer(seq_idx, theta).float()
 
-        cache = torch.stack([torch.cos(idx_theta), torch.sin(idx_theta)], dim=-1).to(
-            dtype=dtype
-        )
+        cache = torch.stack([torch.cos(idx_theta), torch.sin(idx_theta)], dim=-1).to(dtype=dtype)
         return cache
 
     def forward(self, max_seq_len, offset=0):
@@ -137,9 +130,9 @@ class GLMRotaryEmbedding(nn.Module):
 
 
 def split_tensor_along_last_dim(
-        tensor: torch.Tensor,
-        num_partitions: int,
-        contiguous_split_chunks: bool = False,
+    tensor: torch.Tensor,
+    num_partitions: int,
+    contiguous_split_chunks: bool = False,
 ) -> List[torch.Tensor]:
     """Split a tensor along its last dimension.
 
@@ -172,16 +165,13 @@ class SelfAttention(torch.nn.Module):
     """
 
     def __init__(self, config: GLMConfig, layer_number, device=None):
-
         super(SelfAttention, self).__init__()
         self.layer_number = max(1, layer_number)
 
         self.projection_size = config.kv_channels * config.num_key_value_heads
 
         # Per attention head and per partition values.
-        self.hidden_size_per_attention_head = (
-                self.projection_size // config.num_key_value_heads
-        )
+        self.hidden_size_per_attention_head = self.projection_size // config.num_key_value_heads
         self.num_key_value_heads_per_partition = config.num_key_value_heads
 
         self.multi_query_attention = config.multi_query_attention
@@ -189,8 +179,7 @@ class SelfAttention(torch.nn.Module):
         if self.multi_query_attention:
             self.num_multi_query_groups_per_partition = config.multi_query_group_num
             self.qkv_hidden_size = (
-                    self.projection_size
-                    + 2 * self.hidden_size_per_attention_head * config.multi_query_group_num
+                self.projection_size + 2 * self.hidden_size_per_attention_head * config.multi_query_group_num
             )
         self.query_key_value = nn.Linear(
             config.hidden_size,
@@ -199,9 +188,7 @@ class SelfAttention(torch.nn.Module):
             device=device,
         )
 
-        self.core_attention = GLM_ATTENTION_CLASSES[config._attn_implementation](
-            config, self.layer_number
-        )
+        self.core_attention = GLM_ATTENTION_CLASSES[config._attn_implementation](config, self.layer_number)
 
         # Output.
         self.dense = nn.Linear(
@@ -211,9 +198,7 @@ class SelfAttention(torch.nn.Module):
             device=device,
         )
 
-    def _allocate_memory(
-            self, inference_max_sequence_len, batch_size, device=None, dtype=None
-    ):
+    def _allocate_memory(self, inference_max_sequence_len, batch_size, device=None, dtype=None):
         if self.multi_query_attention:
             num_key_value_heads = self.num_multi_query_groups_per_partition
         else:
@@ -228,12 +213,12 @@ class SelfAttention(torch.nn.Module):
         )
 
     def forward(
-            self,
-            hidden_states,
-            attention_mask,
-            rotary_pos_emb,
-            past_key_value=None,
-            use_cache=True,
+        self,
+        hidden_states,
+        attention_mask,
+        rotary_pos_emb,
+        past_key_value=None,
+        use_cache=True,
     ):
         # hidden_states: [b, sq, h]
 
@@ -250,12 +235,9 @@ class SelfAttention(torch.nn.Module):
         if self.multi_query_attention:
             (query_layer, key_layer, value_layer) = mixed_x_layer.split(
                 [
-                    self.num_key_value_heads_per_partition
-                    * self.hidden_size_per_attention_head,
-                    self.num_multi_query_groups_per_partition
-                    * self.hidden_size_per_attention_head,
-                    self.num_multi_query_groups_per_partition
-                    * self.hidden_size_per_attention_head,
+                    self.num_key_value_heads_per_partition * self.hidden_size_per_attention_head,
+                    self.num_multi_query_groups_per_partition * self.hidden_size_per_attention_head,
+                    self.num_multi_query_groups_per_partition * self.hidden_size_per_attention_head,
                 ],
                 dim=-1,
             )
@@ -288,14 +270,10 @@ class SelfAttention(torch.nn.Module):
             mixed_x_layer = mixed_x_layer.view(*new_tensor_shape)
 
             # [b, sq, np, 3 * hn] --> 3 [b, sq, np, hn]
-            (query_layer, key_layer, value_layer) = split_tensor_along_last_dim(
-                mixed_x_layer, 3
-            )
+            (query_layer, key_layer, value_layer) = split_tensor_along_last_dim(mixed_x_layer, 3)
 
         # [b, sq, np, hn] -> [b, np, sq, hn]
-        query_layer, key_layer, value_layer = [
-            k.transpose(1, 2) for k in [query_layer, key_layer, value_layer]
-        ]
+        query_layer, key_layer, value_layer = [k.transpose(1, 2) for k in [query_layer, key_layer, value_layer]]
 
         # apply relative positional encoding (rotary embedding)
         if rotary_pos_emb is not None:
@@ -304,45 +282,35 @@ class SelfAttention(torch.nn.Module):
 
         # adjust key and value for inference
         if past_key_value is not None:
-            key_layer, value_layer = past_key_value.update(
-                key_layer, value_layer, self.layer_number - 1
-            )
+            key_layer, value_layer = past_key_value.update(key_layer, value_layer, self.layer_number - 1)
         if self.multi_query_attention:
             key_layer = key_layer.unsqueeze(2)
             key_layer = key_layer.expand(
                 -1,
                 -1,
-                self.num_key_value_heads_per_partition
-                // self.num_multi_query_groups_per_partition,
+                self.num_key_value_heads_per_partition // self.num_multi_query_groups_per_partition,
                 -1,
                 -1,
             )
             key_layer = key_layer.contiguous().view(
-                key_layer.size()[:1]
-                + (self.num_key_value_heads_per_partition,)
-                + key_layer.size()[3:]
+                key_layer.size()[:1] + (self.num_key_value_heads_per_partition,) + key_layer.size()[3:]
             )
             value_layer = value_layer.unsqueeze(2)
             value_layer = value_layer.expand(
                 -1,
                 -1,
-                self.num_key_value_heads_per_partition
-                // self.num_multi_query_groups_per_partition,
+                self.num_key_value_heads_per_partition // self.num_multi_query_groups_per_partition,
                 -1,
                 -1,
             )
             value_layer = value_layer.contiguous().view(
-                value_layer.size()[:1]
-                + (self.num_key_value_heads_per_partition,)
-                + value_layer.size()[3:]
+                value_layer.size()[:1] + (self.num_key_value_heads_per_partition,) + value_layer.size()[3:]
             )
         # ==================================
         # core attention computation
         # ==================================
 
-        context_layer = self.core_attention(
-            query_layer, key_layer, value_layer, attention_mask
-        )
+        context_layer = self.core_attention(query_layer, key_layer, value_layer, attention_mask)
 
         # =================
         # Output. [sq, b, h]
@@ -361,9 +329,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     batch, num_key_value_heads, slen, head_dim = hidden_states.shape
     if n_rep == 1:
         return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(
-        batch, num_key_value_heads, n_rep, slen, head_dim
-    )
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
@@ -404,9 +370,7 @@ class GLMAttention(nn.Module):
 
         # Per attention head and per partition values.
         self.hidden_size_per_partition = projection_size
-        self.hidden_size_per_attention_head = (
-                projection_size // config.num_key_value_heads
-        )
+        self.hidden_size_per_attention_head = projection_size // config.num_key_value_heads
         self.num_key_value_heads_per_partition = config.num_key_value_heads
 
         coeff = None
@@ -428,13 +392,9 @@ class GLMAttention(nn.Module):
         )
 
         # [b, np, sq, hn] -> [b * np, sq, hn]
-        query_layer = query_layer.reshape(
-            output_size[0] * output_size[1], output_size[2], -1
-        )
+        query_layer = query_layer.reshape(output_size[0] * output_size[1], output_size[2], -1)
         # [b, np, sk, hn] -> [b * np, sk, hn]
-        key_layer = key_layer.reshape(
-            output_size[0] * output_size[1], output_size[3], -1
-        )
+        key_layer = key_layer.reshape(output_size[0] * output_size[1], output_size[3], -1)
 
         # preallocating input tensor: [b * np, sq, sk]
         matmul_input_buffer = torch.empty(
@@ -487,13 +447,9 @@ class GLMAttention(nn.Module):
             value_layer.size(3),
         )
         # change view [b * np, sk, hn]
-        value_layer = value_layer.reshape(
-            output_size[0] * output_size[1], value_layer.size(2), -1
-        )
+        value_layer = value_layer.reshape(output_size[0] * output_size[1], value_layer.size(2), -1)
         # change view [b * np, sq, sk]
-        attention_probs = attention_probs.reshape(
-            output_size[0] * output_size[1], output_size[2], -1
-        )
+        attention_probs = attention_probs.reshape(output_size[0] * output_size[1], output_size[2], -1)
         # matmul: [b * np, sq, hn]
         context_layer = torch.bmm(attention_probs, value_layer)
         # change view [b, np, sq, hn]
@@ -501,9 +457,7 @@ class GLMAttention(nn.Module):
         # [b, np, sq, hn] --> [b, sq, np, hn]
         context_layer = context_layer.transpose(1, 2).contiguous()
         # [b, sq, np, hn] --> [b, sq, hp]
-        new_context_layer_shape = context_layer.size()[:-2] + (
-            self.hidden_size_per_partition,
-        )
+        new_context_layer_shape = context_layer.size()[:-2] + (self.hidden_size_per_partition,)
         context_layer = context_layer.reshape(*new_context_layer_shape)
         return context_layer
 
@@ -569,9 +523,7 @@ class GLMFlashAttention2(GLMAttention):
                 indices_q,
                 cu_seq_lens,
                 max_seq_lens,
-            ) = self._upad_input(
-                query_states, key_states, value_states, attention_mask, query_length
-            )
+            ) = self._upad_input(query_states, key_states, value_states, attention_mask, query_length)
 
             cu_seqlens_q, cu_seqlens_k = cu_seq_lens
             max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
@@ -589,9 +541,7 @@ class GLMFlashAttention2(GLMAttention):
                 causal=causal,
             )
 
-            attn_output = pad_input(
-                attn_output_unpad, indices_q, batch_size, query_length
-            )
+            attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
         else:
             attn_output = flash_attn_func(
                 query_states,
@@ -601,14 +551,10 @@ class GLMFlashAttention2(GLMAttention):
                 softmax_scale=None,
                 causal=causal,
             )
-        attn_output = attn_output.reshape(
-            batch_size, query_length, self.hidden_size_per_partition
-        ).contiguous()
+        attn_output = attn_output.reshape(batch_size, query_length, self.hidden_size_per_partition).contiguous()
         return attn_output
 
-    def _upad_input(
-            self, query_layer, key_layer, value_layer, attention_mask, query_length
-    ):
+    def _upad_input(self, query_layer, key_layer, value_layer, attention_mask, query_length):
         indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
         batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
 
@@ -642,9 +588,7 @@ class GLMFlashAttention2(GLMAttention):
         else:
             # The -q_len: slice assumes left padding.
             attention_mask = attention_mask[:, -query_length:]
-            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(
-                query_layer, attention_mask
-            )
+            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_layer, attention_mask)
 
         return (
             query_layer,
@@ -681,9 +625,7 @@ class GLMSdpaAttention(GLMAttention):
                 dropout_p=self.config.attention_dropout if self.training else 0.0,
             )
         context_layer = context_layer.transpose(1, 2).contiguous()
-        new_context_layer_shape = context_layer.size()[:-2] + (
-            self.hidden_size_per_partition,
-        )
+        new_context_layer_shape = context_layer.size()[:-2] + (self.hidden_size_per_partition,)
         context_layer = context_layer.reshape(*new_context_layer_shape)
         return context_layer
 
@@ -739,12 +681,12 @@ class GLMPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
     def _update_causal_mask(
-            self,
-            attention_mask: torch.Tensor,
-            input_tensor: torch.Tensor,
-            cache_position: torch.Tensor,
-            past_key_values: Cache,
-            output_attentions: bool,
+        self,
+        attention_mask: torch.Tensor,
+        input_tensor: torch.Tensor,
+        cache_position: torch.Tensor,
+        past_key_values: Cache,
+        output_attentions: bool,
     ):
         # TODO: As of torch==2.2.0, the `attention_mask` passed to the model in `generate` is 2D and of dynamic length even when the static
         # KV cache is used. This is an issue for torch.compile which then recaptures cudagraphs at each decode steps due to the dynamic shapes.
@@ -759,23 +701,17 @@ class GLMPreTrainedModel(PreTrainedModel):
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
         # to infer the attention mask.
-        past_seen_tokens = (
-            past_key_values.get_seq_length() if past_key_values is not None else 0
-        )
+        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
         using_static_cache = isinstance(past_key_values, StaticCache)
 
         # When output attentions is True, sdpa implementation's forward method
         # calls the eager implementation's forward
-        if (
-                self.config._attn_implementation == "sdpa"
-                and not using_static_cache
-                and not output_attentions
-        ):
+        if self.config._attn_implementation == "sdpa" and not using_static_cache and not output_attentions:
             if AttentionMaskConverter._ignore_causal_mask_sdpa(
-                    attention_mask,
-                    inputs_embeds=input_tensor,
-                    past_key_values_length=past_seen_tokens,
-                    is_training=self.training,
+                attention_mask,
+                inputs_embeds=input_tensor,
+                past_key_values_length=past_seen_tokens,
+                is_training=self.training,
             ):
                 return None
 
@@ -795,9 +731,7 @@ class GLMPreTrainedModel(PreTrainedModel):
             # in this case we assume that the mask comes already in inverted
             # form and requires no inversion or slicing
             if attention_mask.max() != 0:
-                raise ValueError(
-                    "Custom 4D attention mask should be passed in inverted form with max==0`"
-                )
+                raise ValueError("Custom 4D attention mask should be passed in inverted form with max==0`")
             causal_mask = attention_mask
         else:
             causal_mask = torch.full(
@@ -808,37 +742,26 @@ class GLMPreTrainedModel(PreTrainedModel):
             )
             if sequence_length != 1:
                 causal_mask = torch.triu(causal_mask, diagonal=1)
-            causal_mask *= torch.arange(
-                target_length, device=device
-            ) > cache_position.reshape(-1, 1)
-            causal_mask = causal_mask[None, None, :, :].expand(
-                input_tensor.shape[0], 1, -1, -1
-            )
+            causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+            causal_mask = causal_mask[None, None, :, :].expand(input_tensor.shape[0], 1, -1, -1)
             if attention_mask is not None:
-                causal_mask = (
-                    causal_mask.clone()
-                )  # copy to contiguous memory for in-place edit
+                causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
                 mask_length = attention_mask.shape[-1]
-                padding_mask = (
-                        causal_mask[:, :, :, :mask_length]
-                        + attention_mask[:, None, None, :]
-                )
+                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
                 padding_mask = padding_mask == 0
-                causal_mask[:, :, :, :mask_length] = causal_mask[
-                                                     :, :, :, :mask_length
-                                                     ].masked_fill(padding_mask, min_dtype)
+                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
+                    padding_mask, min_dtype
+                )
         if (
-                self.config._attn_implementation == "sdpa"
-                and attention_mask is not None
-                and attention_mask.device.type == "cuda"
-                and not output_attentions
+            self.config._attn_implementation == "sdpa"
+            and attention_mask is not None
+            and attention_mask.device.type == "cuda"
+            and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
             # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
             # Details: https://github.com/pytorch/pytorch/issues/110213
-            causal_mask = AttentionMaskConverter._unmask_unattended(
-                causal_mask, min_dtype
-            )
+            causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
 
         return causal_mask
 
@@ -851,9 +774,7 @@ class Embedding(torch.nn.Module):
         self.vocab_size = config.vocab_size
         self.hidden_size = config.hidden_size
         # Word embeddings (parallel).
-        self.word_embeddings = nn.Embedding(
-            self.vocab_size, self.hidden_size, device=device
-        )
+        self.word_embeddings = nn.Embedding(self.vocab_size, self.hidden_size, device=device)
         self.fp32_residual_connection = config.fp32_residual_connection
 
     def forward(self, input_ids):
@@ -886,12 +807,12 @@ class GLMBlock(torch.nn.Module):
         self.mlp = GLMMLP(config)
 
     def forward(
-            self,
-            hidden_states,
-            attention_mask,
-            rotary_pos_emb,
-            past_key_value=None,
-            use_cache=True,
+        self,
+        hidden_states,
+        attention_mask,
+        rotary_pos_emb,
+        past_key_value=None,
+        use_cache=True,
     ):
         # hidden_states: [s, b, h]
 
@@ -909,9 +830,7 @@ class GLMBlock(torch.nn.Module):
         # Residual connection.
         residual = hidden_states
 
-        layernorm_input = torch.nn.functional.dropout(
-            attention_output, p=self.hidden_dropout, training=self.training
-        )
+        layernorm_input = torch.nn.functional.dropout(attention_output, p=self.hidden_dropout, training=self.training)
         layernorm_input = residual + layernorm_input
 
         # Layer norm post the self attention.
@@ -923,9 +842,7 @@ class GLMBlock(torch.nn.Module):
         # Second residual connection.
         residual = layernorm_input
 
-        output = torch.nn.functional.dropout(
-            mlp_output, p=self.hidden_dropout, training=self.training
-        )
+        output = torch.nn.functional.dropout(mlp_output, p=self.hidden_dropout, training=self.training)
         output = residual + output
 
         return output, past_key_value
@@ -946,9 +863,7 @@ class GLMTransformer(torch.nn.Module):
         def build_layer(layer_number):
             return GLMBlock(config, layer_number, device=device)
 
-        self.layers = torch.nn.ModuleList(
-            [build_layer(i + 1) for i in range(self.num_hidden_layers)]
-        )
+        self.layers = torch.nn.ModuleList([build_layer(i + 1) for i in range(self.num_hidden_layers)])
 
         self.final_layernorm = GLMRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
@@ -957,16 +872,15 @@ class GLMTransformer(torch.nn.Module):
         return self.layers[layer_number]
 
     def forward(
-            self,
-            hidden_states,
-            attention_mask,
-            rotary_pos_emb,
-            past_key_values,
-            output_attentions: bool = False,
-            use_cache: Optional[bool] = True,
-            output_hidden_states: Optional[bool] = False,
+        self,
+        hidden_states,
+        attention_mask,
+        rotary_pos_emb,
+        past_key_values,
+        output_attentions: bool = False,
+        use_cache: Optional[bool] = True,
+        output_hidden_states: Optional[bool] = False,
     ):
-
         if self.gradient_checkpointing and self.training and use_cache:
             logger.warning(
                 "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
@@ -1117,9 +1031,7 @@ class GLMModel(GLMPreTrainedModel):
         # Rotary positional embeddings
         self.max_position_embeddings = config.max_position_embeddings
         rotary_dim = (
-            config.hidden_size // config.num_key_value_heads
-            if config.kv_channels is None
-            else config.kv_channels
+            config.hidden_size // config.num_key_value_heads if config.kv_channels is None else config.kv_channels
         )
 
         self.rotary_pos_emb = GLMRotaryEmbedding(
@@ -1148,35 +1060,27 @@ class GLMModel(GLMPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(GLM_INPUTS_DOCSTRING)
     def forward(
-            self,
-            input_ids: Optional[torch.LongTensor] = None,
-            attention_mask: Optional[torch.Tensor] = None,
-            position_ids: Optional[torch.LongTensor] = None,
-            past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
-            inputs_embeds: Optional[torch.Tensor] = None,
-            use_cache: Optional[bool] = None,
-            output_attentions: Optional[bool] = None,
-            output_hidden_states: Optional[bool] = None,
-            return_dict: Optional[bool] = None,
-            cache_position: Optional[torch.LongTensor] = None,
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
     ):
-        output_attentions = (
-            output_attentions
-            if output_attentions is not None
-            else self.config.output_attentions
-        )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
         output_hidden_states = (
-            output_hidden_states
-            if output_hidden_states is not None
-            else self.config.output_hidden_states
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
         use_cache = use_cache if use_cache is not None else self.config.use_cache
 
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         return_legacy_cache = False
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -1188,9 +1092,7 @@ class GLMModel(GLMPreTrainedModel):
 
         batch_size, seq_length = inputs_embeds.shape[:2]
 
-        if use_cache and not isinstance(
-                past_key_values, Cache
-        ):  # kept for BC (non `Cache` `past_key_values` inputs)
+        if use_cache and not isinstance(past_key_values, Cache):  # kept for BC (non `Cache` `past_key_values` inputs)
             return_legacy_cache = True
             past_key_values = DynamicCache.from_legacy_cache(past_key_values)
             logger.warning_once(
@@ -1199,9 +1101,7 @@ class GLMModel(GLMPreTrainedModel):
             )
 
         if cache_position is None:
-            past_seen_tokens = (
-                past_key_values.get_seq_length() if past_key_values is not None else 0
-            )
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(
                 past_seen_tokens,
                 past_seen_tokens + inputs_embeds.shape[1],
@@ -1300,18 +1200,18 @@ class GLMForCausalLM(GLMPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(GLM_INPUTS_DOCSTRING)
     def forward(
-            self,
-            input_ids: torch.LongTensor = None,
-            attention_mask: Optional[torch.Tensor] = None,
-            position_ids: Optional[torch.LongTensor] = None,
-            past_key_values: Optional[List[torch.FloatTensor]] = None,
-            inputs_embeds: Optional[torch.FloatTensor] = None,
-            labels: Optional[torch.LongTensor] = None,
-            use_cache: Optional[bool] = None,
-            output_attentions: bool = False,
-            output_hidden_states: Optional[bool] = None,
-            return_dict: Optional[bool] = None,
-            cache_position: Optional[torch.LongTensor] = None,
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: bool = False,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         Args:
@@ -1339,19 +1239,11 @@ class GLMForCausalLM(GLMPreTrainedModel):
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
 
-        output_attentions = (
-            output_attentions
-            if output_attentions is not None
-            else self.config.output_attentions
-        )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
-            output_hidden_states
-            if output_hidden_states is not None
-            else self.config.output_hidden_states
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden,
         # dec_attn)
@@ -1475,17 +1367,17 @@ class GLMForSequenceClassification(GLMPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(GLM_INPUTS_DOCSTRING)
     def forward(
-            self,
-            input_ids: Optional[torch.LongTensor] = None,
-            attention_mask: Optional[torch.Tensor] = None,
-            position_ids: Optional[torch.LongTensor] = None,
-            past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
-            inputs_embeds: Optional[torch.FloatTensor] = None,
-            labels: Optional[torch.LongTensor] = None,
-            use_cache: Optional[bool] = None,
-            output_attentions: Optional[bool] = None,
-            output_hidden_states: Optional[bool] = None,
-            return_dict: Optional[bool] = None,
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ) -> Union[Tuple, SequenceClassifierOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1572,7 +1464,6 @@ class GLMForSequenceClassification(GLMPreTrainedModel):
     """,
     GLM_START_DOCSTRING,
 )
-
 class GLMForTokenClassification(GLMPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

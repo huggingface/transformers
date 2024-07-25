@@ -117,7 +117,7 @@ class GLMConfig(PretrainedConfig):
         attention_softmax_in_fp32=True,
         fp32_residual_connection=False,
         use_cache=True,
-        **kwargs
+        **kwargs,
     ):
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
