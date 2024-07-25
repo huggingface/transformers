@@ -162,7 +162,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
         self.generation_config.min_length = 0
         self.generation_config.min_new_tokens = None
         for processor in self.logits_processor:
-            if type(processor) == MinLengthLogitsProcessor:
+            if isinstance(processor, MinLengthLogitsProcessor):
                 raise ValueError(
                     "Passing `MinLengthLogitsProcessor` when using `assisted_generation is disabled. "
                     "Please pass in `min_length` into `.generate()` instead"
