@@ -1,4 +1,3 @@
-# Copied from tests.models.clap.test_processor_clap with Clap->MSClap
 # Copyright 2024 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -42,7 +41,7 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
 
 @require_torchaudio
 @require_sentencepiece
-# Copied from tests.models.clap.test_modeling_clap.ClapModelTest with Clap->MSClap, laion/clap-htsat-fused->kamilakesbi/ms_clap
+# Copied from tests.models.clap.test_processor_clap.ClapProcessorTest with ClapProcessor->MSClapProcessor, laion/clap-htsat-fused->kamilakesbi/ms_clap, Roberta->GPT2
 class MSClapProcessorTest(unittest.TestCase):
     def setUp(self):
         self.checkpoint = "kamilakesbi/ms_clap"

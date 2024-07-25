@@ -1,4 +1,3 @@
-# Copied from tests.models.clap.test_modeling_clap with Clap->MSClap
 # coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
@@ -156,7 +155,7 @@ class MSClapAudioModelTester:
 
 
 @require_torch
-# Copied from tests.models.clap.test_modeling_clap.ClapAudioModelTest with Clap->MSClap, laion/clap-htsat-fused->kamilakesbi/ms_clap
+# Copied from tests.models.clap.test_modeling_clap.ClapAudioModelTest with Clap->MSClap, laion/clap-htsat-fused->kamilakesbi/ms_clap, CLAP->MSCLAP
 class MSClapAudioModelTest(ModelTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as MSCLAP does not use input_ids, inputs_embeds,
@@ -487,7 +486,7 @@ class MSClapModelTester:
 
 
 @require_torch
-# Copied from tests.models.clap.test_modeling_clap.ClapModelTest with Clap->MSClap, laion/clap-htsat-fused->kamilakesbi/ms_clap
+# Copied from tests.models.clap.test_modeling_clap.ClapModelTest with Clap->MSClap, laion/clap-htsat-fused->kamilakesbi/ms_clap, CLAP->MSCLAP
 class MSClapModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (MSClapModel,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": MSClapModel} if is_torch_available() else {}
@@ -615,19 +614,18 @@ class MSClapModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             self.assertTrue(models_equal)
 
+    # Ignore copy
     def test_load_audio_text_config(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         # Save MSClapConfig and check if we can load MSClapAudioConfig from it
         with tempfile.TemporaryDirectory() as tmp_dir_name:
-            # Ignore Copy
             config.audio_config.save_pretrained(tmp_dir_name)
             audio_config = MSClapAudioConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.audio_config.to_dict(), audio_config.to_dict())
 
         # Save MSClapConfig and check if we can load MSClapTextConfig from it
         with tempfile.TemporaryDirectory() as tmp_dir_name:
-            # Ignore Copy
             config.text_config.save_pretrained(tmp_dir_name)
             text_config = MSClapTextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())

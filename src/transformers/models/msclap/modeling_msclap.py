@@ -1182,7 +1182,7 @@ class MSClapPreTrainedModel(PreTrainedModel):
                 module.bias.data.zero_()
 
 
-# Copied from transformers.models.clap.modeling_clap.ClapPreTrainedModel with Clap->MSClap, laion/clap-htsat-fused->microsoft/ms_clap
+# Copied from transformers.models.clap.modeling_clap.ClapAudioModel with Clap->MSClap, laion/clap-htsat-fused->microsoft/ms_clap, CLAP->MSCLAP
 class MSClapAudioModel(MSClapPreTrainedModel):
     config_class = MSClapAudioConfig
     main_input_name = "input_features"

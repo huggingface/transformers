@@ -36,63 +36,22 @@ class MSClapTextConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 50257):
-            Vocabulary size of the MSClap Text model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`ClapTextModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
-        projection_dropout_prob (`float`, *optional*, defaults to 0.0):
+        projection_dropout_prob (`float`, *optional*, defaults to `0.0`):
             The dropout rate for the projection layer.
         initializer_factor (`float`, *optional*, defaults to 1.0):
             A factor for initializing the model parameters.
-        n_positions (`int`, *optional*, defaults to 1024):
-            The maximum length of the input sequences.
-        n_embd (`int`, *optional*, defaults to 768):
-            Dimensionality of the embeddings.
+        projection_dim (`int`, *optional*, defaults to 768):
+            Dimension of the projection head of the `MSClapTextModelWithProjection`.
+        projection_hidden_act (`<fill_type>`, *optional*, defaults to `"gelu"`): <fill_docstring>
         num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
-        n_inner (`int`, *optional*):
-            Dimensionality of the inner feed-forward layers. If not specified, it defaults to `4 * hidden_size`.
-        activation_function (`str` or `Callable`, *optional*, defaults to `"gelu_new"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"silu"`, and `"gelu_new"` are supported.
-        resid_pdrop (`float`, *optional*, defaults to 0.1):
-            The dropout probability for the residual connections.
-        embd_pdrop (`float`, *optional*, defaults to 0.1):
-            The dropout probability for the embedding layer.
-        attn_pdrop (`float`, *optional*, defaults to 0.1):
-            The dropout ratio for the attention probabilities.
-        layer_norm_epsilon (`float`, *optional*, defaults to 1e-5):
-            The epsilon used by the layer normalization layers.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        summary_type (`str`, *optional*, defaults to `"cls_index"`):
-            The method to summarize a sequence, used in sequence classification tasks.
-        summary_use_proj (`bool`, *optional*, defaults to `True`):
-            Whether or not to add a projection after the summary.
-        summary_activation (`Optional[str]`, *optional*):
-            The activation to use after the projection layer in the summary.
-        summary_proj_to_labels (`bool`, *optional*, defaults to `True`):
-            Whether the projection outputs should be projected to the label space.
-        summary_first_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout ratio to be used after the projection and activation.
-        scale_attn_weights (`bool`, *optional*, defaults to `True`):
-            Whether or not to scale the attention weights by the number of attention heads.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        bos_token_id (`int`, *optional*, defaults to 50256):
-            The beginning of sequence token ID.
-        eos_token_id (`int`, *optional*, defaults to 50256):
-            The end of sequence token ID.
-        scale_attn_by_inverse_layer_idx (`bool`, *optional*, defaults to `False`):
-            Whether to scale the attention weights by the inverse of their layer index.
-        reorder_and_upcast_attn (`bool`, *optional*, defaults to `False`):
-            Whether to reorder and upcast the attention.
-        projection_dim (`int`, *optional*, defaults to 768):
-            Dimension of the projection head of the `MSClapTextModelWithProjection`.
+        vocab_size (`int`, *optional*, defaults to 50257):
+            Vocabulary size of the MSClap Text model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`ClapTextModel`].
 
     Examples:
 
@@ -236,7 +195,7 @@ class MSClapAudioConfig(PretrainedConfig):
             downsize_ratio used in the AudioFF block
         num_hidden_layers (`int`, *optional*, defaults to 4):
             Number of hidden layers in the Transformer encoder.
-        projection_hidden_act (`str`, *optional*, defaults to `"relu"`):
+        projection_hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the projection layer. If string, `"gelu"`,
             `"relu"`, `"silu"` and `"gelu_new"` are supported.
         layer_norm_eps (`[type]`, *optional*, defaults to 1e-05):
@@ -364,8 +323,6 @@ class MSClapConfig(PretrainedConfig):
             The initial value of the *logit_scale* parameter. Default is used as per the original CLAP implementation.
         projection_dim (`int`, *optional*, defaults to 1024):
             Dimensionality of text and audio projection layers.
-        projection_hidden_act (`str`, *optional*, defaults to `"relu"`):
-            Activation function for the projection layers.
         initializer_factor (`float`, *optional*, defaults to 1.0):
             Factor to scale the initialization of the model weights.
         kwargs (*optional*):
@@ -429,10 +386,10 @@ class MSClapConfig(PretrainedConfig):
         self.num_hidden_layers = self.audio_config.num_hidden_layers + len(self.audio_config.depths)
 
     @classmethod
-    # Copied from transformers.models.clap.configuration_clap.ClapConfig.from_text_audio_configs with clap->msclap
+    # Copied from transformers.models.clap.configuration_clap.ClapConfig.from_text_audio_configs with clap->msclap, Clap->MSClap
     def from_text_audio_configs(cls, text_config: MSClapTextConfig, audio_config: MSClapAudioConfig, **kwargs):
         r"""
-        Instantiate a [`MSClapConfig`] (or a derived class) from clap text model configuration and clap audio model
+        Instantiate a [`MSClapConfig`] (or a derived class) from msclap text model configuration and msclap audio model
         configuration.
 
         Returns:
