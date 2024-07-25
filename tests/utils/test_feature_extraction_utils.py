@@ -80,6 +80,7 @@ class FeatureExtractorPushToHubTester(unittest.TestCase):
                 for k, v in feature_extractor.__dict__.items():
                     self.assertEqual(v, getattr(new_feature_extractor, k))
             finally:
+                # Always (try to) delete the repo.
                 self._try_delete_repo(repo_id=tmp_repo, token=self._token)
 
     def test_push_to_hub_via_save_pretrained(self):
@@ -94,6 +95,7 @@ class FeatureExtractorPushToHubTester(unittest.TestCase):
                 for k, v in feature_extractor.__dict__.items():
                     self.assertEqual(v, getattr(new_feature_extractor, k))
             finally:
+                # Always (try to) delete the repo.
                 self._try_delete_repo(repo_id=tmp_repo, token=self._token)
 
     def test_push_to_hub_in_organization(self):
@@ -107,6 +109,7 @@ class FeatureExtractorPushToHubTester(unittest.TestCase):
                 for k, v in feature_extractor.__dict__.items():
                     self.assertEqual(v, getattr(new_feature_extractor, k))
             finally:
+                # Always (try to) delete the repo.
                 self._try_delete_repo(repo_id=tmp_repo, token=self._token)
 
     def test_push_to_hub_in_organization_via_save_pretrained(self):
@@ -121,6 +124,7 @@ class FeatureExtractorPushToHubTester(unittest.TestCase):
                 for k, v in feature_extractor.__dict__.items():
                     self.assertEqual(v, getattr(new_feature_extractor, k))
             finally:
+                # Always (try to) delete the repo.
                 self._try_delete_repo(repo_id=tmp_repo, token=self._token)
 
     def test_push_to_hub_dynamic_feature_extractor(self):
@@ -142,4 +146,5 @@ class FeatureExtractorPushToHubTester(unittest.TestCase):
                 # Can't make an isinstance check because the new_feature_extractor is from the CustomFeatureExtractor class of a dynamic module
                 self.assertEqual(new_feature_extractor.__class__.__name__, "CustomFeatureExtractor")
             finally:
+                # Always (try to) delete the repo.
                 self._try_delete_repo(repo_id=tmp_repo, token=self._token)

@@ -119,6 +119,7 @@ class ImageProcessorPushToHubTester(unittest.TestCase):
                 for k, v in image_processor.__dict__.items():
                     self.assertEqual(v, getattr(new_image_processor, k))
             finally:
+                # Always (try to) delete the repo.
                 self._try_delete_repo(repo_id=tmp_repo, token=self._token)
 
     def test_push_to_hub_in_organization_via_save_pretrained(self):
@@ -133,6 +134,7 @@ class ImageProcessorPushToHubTester(unittest.TestCase):
                 for k, v in image_processor.__dict__.items():
                     self.assertEqual(v, getattr(new_image_processor, k))
             finally:
+                # Always (try to) delete the repo.
                 self._try_delete_repo(repo_id=tmp_repo, token=self._token)
 
     def test_push_to_hub_dynamic_image_processor(self):
@@ -154,6 +156,7 @@ class ImageProcessorPushToHubTester(unittest.TestCase):
                 # Can't make an isinstance check because the new_image_processor is from the CustomImageProcessor class of a dynamic module
                 self.assertEqual(new_image_processor.__class__.__name__, "CustomImageProcessor")
             finally:
+                # Always (try to) delete the repo.
                 self._try_delete_repo(repo_id=tmp_repo, token=self._token)
 
 

@@ -757,13 +757,12 @@ class TFModelPushToHubTester(unittest.TestCase):
                 model = TFBertForMaskedLM(config)
                 model.compile()
 
-                with tempfile.TemporaryDirectory() as tmp_dir:
-                    push_to_hub_callback = PushToHubCallback(
-                        output_dir=tmp_dir,
-                        hub_model_id=tmp_repo,
-                        hub_token=self._token,
-                    )
-                    model.fit(model.dummy_inputs, model.dummy_inputs, epochs=1, callbacks=[push_to_hub_callback])
+                push_to_hub_callback = PushToHubCallback(
+                    output_dir=tmp_dir,
+                    hub_model_id=tmp_repo,
+                    hub_token=self._token,
+                )
+                model.fit(model.dummy_inputs, model.dummy_inputs, epochs=1, callbacks=[push_to_hub_callback])
 
                 new_model = TFBertForMaskedLM.from_pretrained(tmp_repo)
                 models_equal = True

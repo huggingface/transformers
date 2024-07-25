@@ -196,6 +196,7 @@ class ConfigPushToHubTester(unittest.TestCase):
                 self.assertEqual(new_config.__class__.__name__, "CustomConfig")
                 self.assertEqual(new_config.attribute, 42)
             finally:
+                # Always (try to) delete the repo.
                 self._try_delete_repo(repo_id=tmp_repo, token=self._token)
 
 

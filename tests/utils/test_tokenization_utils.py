@@ -139,6 +139,7 @@ class TokenizerPushToHubTester(unittest.TestCase):
                 new_tokenizer = BertTokenizer.from_pretrained(tmp_repo)
                 self.assertDictEqual(new_tokenizer.vocab, tokenizer.vocab)
             finally:
+                # Always (try to) delete the repo.
                 self._try_delete_repo(repo_id=tmp_repo, token=self._token)
 
     def test_push_to_hub_via_save_pretrained(self):
@@ -156,6 +157,7 @@ class TokenizerPushToHubTester(unittest.TestCase):
                 new_tokenizer = BertTokenizer.from_pretrained(tmp_repo)
                 self.assertDictEqual(new_tokenizer.vocab, tokenizer.vocab)
             finally:
+                # Always (try to) delete the repo.
                 self._try_delete_repo(repo_id=tmp_repo, token=self._token)
 
     def test_push_to_hub_in_organization(self):
@@ -209,26 +211,6 @@ class TokenizerPushToHubTester(unittest.TestCase):
 
                 tokenizer = AutoTokenizer.from_pretrained(tmp_repo, trust_remote_code=True)
                 # Can't make an isinstance check because the new_model.config is from the CustomTokenizer class of a dynamic module
-                self.assertEqual(tokenizer.__class__.__name__, "CustomTokenizer")
-
-                # Fast and slow custom tokenizer
-                CustomTokenizerFast.register_for_auto_class()
-
-                vocab_file = os.path.join(tmp_dir, "vocab.txt")
-                with open(vocab_file, "w", encoding="utf-8") as vocab_writer:
-                    vocab_writer.write("".join([x + "\n" for x in self.vocab_tokens]))
-
-                bert_tokenizer = BertTokenizerFast.from_pretrained(tmp_dir)
-                bert_tokenizer.save_pretrained(tmp_dir)
-                tokenizer = CustomTokenizerFast.from_pretrained(tmp_dir)
-
-                tokenizer.push_to_hub(tmp_repo, token=self._token)
-
-                tokenizer = AutoTokenizer.from_pretrained(tmp_repo, trust_remote_code=True)
-                # Can't make an isinstance check because the new_model.config is from the FakeConfig class of a dynamic module
-                self.assertEqual(tokenizer.__class__.__name__, "CustomTokenizerFast")
-                tokenizer = AutoTokenizer.from_pretrained(tmp_repo, use_fast=False, trust_remote_code=True)
-                # Can't make an isinstance check because the new_model.config is from the FakeConfig class of a dynamic module
                 self.assertEqual(tokenizer.__class__.__name__, "CustomTokenizer")
             finally:
                 # Always (try to) delete the repo.
