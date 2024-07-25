@@ -17,7 +17,6 @@
 import os
 from typing import Union
 
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
@@ -118,24 +117,24 @@ class MSClapTextConfig(PretrainedConfig):
         projection_dropout_prob=0,
         initializer_factor=1.0,
         projection_dim=768,
-        projection_hidden_act='gelu', 
+        projection_hidden_act="gelu",
         **kwargs,
     ):
         super().__init__(**kwargs)
         if "text_encoder" not in kwargs:
-            raise ValueError("Config has to be initialized with text_encoder")
-        
-        text_encoder_config = kwargs.pop('text_encoder')
-        text_encoder_model_type = text_encoder_config.pop("model_type")
+            # text_encoder_model_type = "gpt2"
+            text_encoder_config = {"model_type": "gpt2"}
+        else:
+            text_encoder_config = kwargs.pop("text_encoder")
+            # text_encoder_model_type = text_encoder_config.pop("model_type")
 
-        self.text_model_config = AutoConfig.for_model(text_encoder_model_type, **text_encoder_config)
+        self.text_model_config = AutoConfig.for_model(**text_encoder_config)
 
         self.projection_dim = projection_dim
         self.hidden_size = hidden_size
         self.projection_dropout_prob = projection_dropout_prob
         self.initializer_factor = initializer_factor
         self.projection_hidden_act = projection_hidden_act
-        
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
@@ -156,17 +155,15 @@ class MSClapTextConfig(PretrainedConfig):
 
     @classmethod
     def from_sub_models_config(
-        cls, 
-        text_encoder_config: PretrainedConfig, 
-        **kwargs, 
-    ): 
-        
+        cls,
+        text_encoder_config: PretrainedConfig,
+        **kwargs,
+    ):
         return cls(
             text_encoder=text_encoder_config.to_dict(),
-            **kwargs, 
+            **kwargs,
         )
-        
-        
+
 
 # Adapted from transformers.models.clap.configuration_clap.ClapAudioConfig with Clap->MSClap, CLAP->MSCLAP, laion/clap-htsat-fused->microsoft/ms_clap
 class MSClapAudioConfig(PretrainedConfig):
@@ -260,7 +257,6 @@ class MSClapAudioConfig(PretrainedConfig):
     ```"""
 
     model_type = "msclap_audio_model"
-
 
     def __init__(
         self,

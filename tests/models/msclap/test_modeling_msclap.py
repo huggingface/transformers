@@ -50,6 +50,7 @@ if is_torch_available():
         MSClapTextModelWithProjection,
     )
 
+
 # Copied from tests.models.clap.test_modeling_clap.ClapAudioModelTester with Clap->MSClap
 class MSClapAudioModelTester:
     def __init__(

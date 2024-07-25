@@ -18,7 +18,7 @@ import re
 
 from msclap import CLAP
 
-from transformers import AutoTokenizer, ClapFeatureExtractor, MSClapConfig, MSClapModel, MSClapProcessor, GPT2Config
+from transformers import AutoTokenizer, ClapFeatureExtractor, GPT2Config, MSClapConfig, MSClapModel, MSClapProcessor
 
 
 KEYS_TO_MODIFY_MAPPING = {
@@ -192,6 +192,7 @@ def convert_msclap_checkpoint(version, pytorch_dump_folder_path, repo_id, enable
         processor.push_to_hub(repo_id)
         tokenizer.push_to_hub(repo_id)
         model.push_to_hub(repo_id)
+        transformers_config.push_to_hub(repo_id)
 
 
 if __name__ == "__main__":
