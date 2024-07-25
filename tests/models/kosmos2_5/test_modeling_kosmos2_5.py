@@ -696,6 +696,7 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
 
         return generated_ids, generated_text
 
+    @unittest.skip(reason="GPU OOM on T4 and A10")
     def test_eager(self):
         url = (
             "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
@@ -802,7 +803,9 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
         generated_ids, generated_text = self.run_example(
             prompt, image, model, processor
         )
+        # A10 gives the 1st one, but A100 gives the 2nd one
         EXPECTED_TEXT = [
-            "<md>- **1 \\[REG\\] BLACK SAKURA** 45,455\n- **1 COOKIE DOH SAUCES** 0\n- **1 NATA DE COCO** 0\n\n<table>\n<thead>\n<tr>\n<th>\nSub Total\n</th>\n<th>\n45,455\n</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td>\nPB1 (10%)\n</td>\n<td>\n4,545\n</td>\n</tr>\n<tr>\n<td>\nRounding\n</td>\n<td>\n0\n</td>\n</tr>\n<tr>\n<td>\n<strong>\nTotal\n</strong>\n</td>\n<td>\n<strong>\n50,000\n</strong>\n</td>\n</tr>\n</tbody>\n</table>\n\nCard Payment 50,000"
+            "<md>- **1 \\[REG\\] BLACK SAKURA** 45,455\n- **1 COOKIE DOH SAUCES** 0\n- **1 NATA DE COCO** 0\n\n<table>\n<thead>\n<tr>\n<th>\nSub Total\n</th>\n<th>\n45,455\n</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td>\nPB1 (10%)\n</td>\n<td>\n4,545\n</td>\n</tr>\n<tr>\n<td>\nRounding\n</td>\n<td>\n0\n</td>\n</tr>\n<tr>\n<td>\n<strong>\nTotal\n</strong>\n</td>\n<td>\n<strong>\n50,000\n</strong>\n</td>\n</tr>\n</tbody>\n</table>\n\nCard Payment 50,000",
+            "<md>- **1 \\[REG\\] BLACK SAKURA** 45,455\n- **1 COOKIE DOH SAUCES** 0\n- **1 NATA DE COCO** 0\n- **Sub Total** 45,455\n- **PB1 (10%)** 4,545\n- **Rounding** 0\n- **Total** **50,000**\n",
         ]
-        self.assertListEqual(generated_text, EXPECTED_TEXT)
+        self.assertIn(generated_text, EXPECTED_TEXT)
