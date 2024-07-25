@@ -128,6 +128,7 @@ class Mamba2Config(PretrainedConfig):
         rescale_prenorm_residual=False,
         use_cache=True,
         norm_before_gate=True,
+        rms_norm=True,
         chunk_size=256,
         tie_word_embeddings=False,
         **kwargs,
@@ -160,6 +161,7 @@ class Mamba2Config(PretrainedConfig):
         self.num_heads = num_heads
         self.head_dim = head_dim
         self.norm_before_gate = norm_before_gate
+        self.rms_norm = rms_norm
         self.state_size = state_size
         self.chunk_size = chunk_size
         self.time_step_limit = time_step_limit
