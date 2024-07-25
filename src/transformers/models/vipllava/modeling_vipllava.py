@@ -241,7 +241,9 @@ VIPLLAVA_INPUTS_DOCSTRING = r"""
 class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
     def __init__(self, config: VipLlavaConfig):
         super().__init__(config)
-        self.vision_tower = AutoModel.from_config(config.vision_config)
+        self.vision_tower = AutoModel.from_config(
+            config.vision_config, attn_implementation=config._attn_implementation
+        )
 
         self.multi_modal_projector = VipLlavaMultiModalProjector(config)
         self.vocab_size = config.text_config.vocab_size

@@ -237,8 +237,8 @@ VIDEO_LLAVA_INPUTS_DOCSTRING = r"""
 class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
     def __init__(self, config: VideoLlavaConfig):
         super().__init__(config)
-        self.video_tower = AutoModel.from_config(config.vision_config)
-        self.image_tower = AutoModel.from_config(config.vision_config)
+        self.video_tower = AutoModel.from_config(config.vision_config, attn_implementation=config._attn_implementation)
+        self.image_tower = AutoModel.from_config(config.vision_config, attn_implementation=config._attn_implementation)
 
         self.multi_modal_projector = VideoLlavaMultiModalProjector(config)
         self.vocab_size = config.text_config.vocab_size

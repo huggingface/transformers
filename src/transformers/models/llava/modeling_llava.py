@@ -236,7 +236,9 @@ LLAVA_INPUTS_DOCSTRING = r"""
 class LlavaForConditionalGeneration(LlavaPreTrainedModel):
     def __init__(self, config: LlavaConfig):
         super().__init__(config)
-        self.vision_tower = AutoModel.from_config(config.vision_config)
+        self.vision_tower = AutoModel.from_config(
+            config.vision_config, attn_implementation=config._attn_implementation
+        )
 
         self.multi_modal_projector = LlavaMultiModalProjector(config)
         self.vocab_size = config.text_config.vocab_size
