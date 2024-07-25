@@ -184,6 +184,7 @@ class ModelTesterMixin:
     is_encoder_decoder = False
     has_attentions = True
     model_split_percents = [0.5, 0.7, 0.9]
+    is_multimodal = False
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
@@ -3711,7 +3712,9 @@ class ModelTesterMixin:
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
-        if not self.all_model_classes[0]._supports_sdpa:
+        if (not self.is_multimodal and not self.all_model_classes[0]._supports_sdpa) or (
+            self.is_multimodal and not self.supports_sdpa
+        ):
             self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
 
         if torch_dtype == "float16" and not is_torch_fp16_available_on_device(torch_device):
@@ -4019,7 +4022,9 @@ class ModelTesterMixin:
             self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
 
         for model_class in self.all_model_classes:
-            if not model_class._supports_sdpa:
+            if (not self.is_multimodal and not model_class._supports_sdpa) or (
+                self.is_multimodal and not self.supports_sdpa
+            ):
                 self.skipTest(f"{model_class.__name__} does not support SDPA")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -4065,7 +4070,9 @@ class ModelTesterMixin:
             self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
 
         for model_class in self.all_model_classes:
-            if not model_class._supports_sdpa:
+            if (not self.is_multimodal and not model_class._supports_sdpa) or (
+                self.is_multimodal and not self.supports_sdpa
+            ):
                 self.skipTest(f"{model_class.__name__} does not support SDPA")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -4107,7 +4114,9 @@ class ModelTesterMixin:
             self.skipTest(f"{self.__class__.__name__} tests a model that does support generate: skipping this test")
 
         for model_class in self.all_generative_model_classes:
-            if not model_class._supports_sdpa:
+            if (not self.is_multimodal and not model_class._supports_sdpa) or (
+                self.is_multimodal and not self.supports_sdpa
+            ):
                 self.skipTest(f"{model_class.__name__} does not support SDPA")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -4180,6 +4189,8 @@ class ModelTesterMixin:
             self.skipTest(f"No generative model classes for {self.__class__.__name__}")
 
         for model_class in self.all_generative_model_classes:
+            if model_class._supports_sdpa:
+                self.skipTest(reason="Model architecture does not support attentions")
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
             if config.model_type not in WINDOW_ATTENTION_MODELS:

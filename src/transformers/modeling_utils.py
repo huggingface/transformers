@@ -45,6 +45,7 @@ from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import GenerationConfig, GenerationMixin
 from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled
+from .models.auto.modeling_auto import MODEL_MAPPING
 from .pytorch_utils import (  # noqa: F401
     Conv1D,
     apply_chunking_to_forward,
@@ -1511,6 +1512,42 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             # If a config is passed with a preset attn_implementation, we skip the automatic dispatch and use the user-provided config, with hard checks that the requested attention implementation is available.
             requested_attn_implementation = config._attn_implementation_internal
+
+        # MultiModal LLM related hack: since they consist of two or might be more sub-models
+        # we have to check and dispatch SDPA to each sub-model, in case any of them support it.
+        # If one sub-model supports SDPA while other doesn't, an error will be raised following the
+        # typical SDPA-dispatch path.
+        # Same goes for the `_supports_cache_class` because we cannot know what flag LM has
+        # before knowing which class is that LM
+        if hasattr(config, "text_config") and hasattr(config, "vision_config"):
+            text_model_cls = MODEL_MAPPING.get(type(config.text_config), None)
+            if text_model_cls is not None:
+                cls._supports_cache_class = text_model_cls._supports_cache_class
+
+                config.text_config._attn_implementation = config._attn_implementation
+                config.vision_config._attn_implementation = config._attn_implementation
+                cls._supports_sdpa = text_model_cls._supports_sdpa
+                cls._autoset_attn_implementation(
+                    config.text_config,
+                    use_flash_attention_2=use_flash_attention_2,
+                    torch_dtype=torch_dtype,
+                    device_map=device_map,
+                    check_device_map=check_device_map,
+                )
+
+            vision_model_cls = MODEL_MAPPING.get(type(config.vision_config), None)
+            if vision_model_cls is not None:
+                cls._supports_sdpa = vision_model_cls._supports_sdpa
+                cls._autoset_attn_implementation(
+                    config.vision_config,
+                    use_flash_attention_2=use_flash_attention_2,
+                    torch_dtype=torch_dtype,
+                    device_map=device_map,
+                    check_device_map=check_device_map,
+                )
+
+            if vision_model_cls is not None and text_model_cls is not None:
+                cls._supports_sdpa = vision_model_cls._supports_sdpa or text_model_cls._supports_sdpa
 
         if use_flash_attention_2:
             logger.warning_once(

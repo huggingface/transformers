@@ -1225,7 +1225,9 @@ class Blip2Model(Blip2PreTrainedModel):
     def __init__(self, config: Blip2Config):
         super().__init__(config)
 
-        self.vision_model = Blip2VisionModel(config.vision_config)
+        self.vision_model = Blip2VisionModel(
+            config.vision_config, attn_implementation=config.vision_config._attn_implementation
+        )
 
         self.query_tokens = nn.Parameter(torch.zeros(1, config.num_query_tokens, config.qformer_config.hidden_size))
         self.qformer = Blip2QFormerModel(config.qformer_config)
@@ -1233,11 +1235,11 @@ class Blip2Model(Blip2PreTrainedModel):
         self.language_projection = nn.Linear(config.qformer_config.hidden_size, config.text_config.hidden_size)
         if config.use_decoder_only_language_model:
             language_model = AutoModelForCausalLM.from_config(
-                config.text_config, attn_implementation=config._attn_implementation
+                config.text_config, attn_implementation=config.text_config._attn_implementation
             )
         else:
             language_model = AutoModelForSeq2SeqLM.from_config(
-                config.text_config, attn_implementation=config._attn_implementation
+                config.text_config, attn_implementation=config.text_config._attn_implementation
             )
 
         # Update _tied_weights_keys using the base model used.
@@ -1590,7 +1592,9 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
     def __init__(self, config: Blip2Config):
         super().__init__(config)
 
-        self.vision_model = Blip2VisionModel(config.vision_config)
+        self.vision_model = Blip2VisionModel(
+            config.vision_config, attn_implementation=config.vision_config._attn_implementation
+        )
 
         self.query_tokens = nn.Parameter(torch.zeros(1, config.num_query_tokens, config.qformer_config.hidden_size))
         self.qformer = Blip2QFormerModel(config.qformer_config)

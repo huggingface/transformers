@@ -172,6 +172,12 @@ class Idefics2ModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = True
     test_head_masking = False
 
+    is_multimodal = True
+    # We define thsi flag here because in VLMs these flags depend on which LM/vision models are used
+    # So we can't know if SDPA is supported before starting to load the model
+    # This flag is used by tests and is set to False because LM/vision models used in tests dont support SDPA
+    supports_sdpa = False
+
     def setUp(self):
         self.model_tester = Idefics2VisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Idefics2Config, has_text_modality=False)
@@ -331,6 +337,12 @@ class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
     test_resize_embeddings = True
     test_head_masking = False
     test_torchscript = False
+
+    is_multimodal = True
+    # We define thsi flag here because in VLMs these flags depend on which LM/vision models are used
+    # So we can't know if SDPA is supported before starting to load the model
+    # This flag is used by tests and is set to False because LM/vision models used in tests dont support SDPA
+    supports_sdpa = False
 
     def setUp(self):
         self.model_tester = Idefics2VisionText2TextModelTester(self)

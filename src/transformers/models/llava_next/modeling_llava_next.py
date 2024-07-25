@@ -345,7 +345,9 @@ LLAVA_NEXT_INPUTS_DOCSTRING = r"""
 class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
     def __init__(self, config: LlavaNextConfig):
         super().__init__(config)
-        self.vision_tower = AutoModel.from_config(config.vision_config)
+        self.vision_tower = AutoModel.from_config(
+            config.vision_config, attn_implementation=config.vision_config._attn_implementation
+        )
 
         self.multi_modal_projector = LlavaNextMultiModalProjector(config)
         embed_std = 1 / math.sqrt(config.text_config.hidden_size)
@@ -353,7 +355,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
 
         self.vocab_size = config.text_config.vocab_size
         self.language_model = AutoModelForCausalLM.from_config(
-            config.text_config, attn_implementation=config._attn_implementation
+            config.text_config, attn_implementation=config.text_config._attn_implementation
         )
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self._padding_side = "left"  # set it to left by default, user can use setter to change padding_sides

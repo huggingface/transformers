@@ -446,6 +446,12 @@ class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_attention_outputs = False
 
+    is_multimodal = True
+    # We define thsi flag here because in VLMs these flags depend on which LM/vision models are used
+    # So we can't know if SDPA is supported before starting to load the model
+    # This flag is used by tests and is set to False because vision models used in tests don't support SDPA
+    supports_sdpa = False
+
     def setUp(self):
         self.model_tester = BlipModelTester(self)
 
@@ -805,6 +811,12 @@ class BlipVQAModelTest(ModelTesterMixin, unittest.TestCase):
     test_attention_outputs = False
     test_torchscript = False
 
+    is_multimodal = True
+    # We define thsi flag here because in VLMs these flags depend on which LM/vision models are used
+    # So we can't know if SDPA is supported before starting to load the model
+    # This flag is used by tests and is set to False because vision models used in tests don't support SDPA
+    supports_sdpa = False
+
     def setUp(self):
         self.model_tester = BlipVQAModelTester(self)
 
@@ -884,6 +896,12 @@ class BlipTextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_attention_outputs = False
     test_torchscript = False
+
+    is_multimodal = True
+    # We define thsi flag here because in VLMs these flags depend on which LM/vision models are used
+    # So we can't know if SDPA is supported before starting to load the model
+    # This flag is used by tests and is set to False because vision models used in tests don't support SDPA
+    supports_sdpa = False
 
     def setUp(self):
         self.model_tester = BlipTextRetrievalModelTester(self)
@@ -1112,6 +1130,12 @@ class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_attention_outputs = False
     test_torchscript = False
+
+    is_multimodal = True
+    # We define thsi flag here because in VLMs these flags depend on which LM/vision models are used
+    # So we can't know if SDPA is supported before starting to load the model
+    # This flag is used by tests and is set to False because vision models used in tests don't support SDPA
+    supports_sdpa = False
 
     def setUp(self):
         self.model_tester = BlipTextImageModelsModelTester(self)

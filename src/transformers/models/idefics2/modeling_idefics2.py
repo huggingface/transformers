@@ -1123,14 +1123,15 @@ class Idefics2PreTrainedModel(PreTrainedModel):
         """
         Overrides the method in `PreTrainedModel` to update the vision config with the correct attention implementation
         """
-        config = super()._autoset_attn_implementation(
-            config=config,
-            use_flash_attention_2=use_flash_attention_2,
-            torch_dtype=torch_dtype,
-            device_map=device_map,
-            check_device_map=check_device_map,
-            **kwargs,
-        )
+        config._attn_implementation = "eager"
+        #  = super()._autoset_attn_implementation(
+        #     config=config,
+        #     use_flash_attention_2=use_flash_attention_2,
+        #     torch_dtype=torch_dtype,
+        #     device_map=device_map,
+        #     check_device_map=check_device_map,
+        #     **kwargs,
+        # )
         config.vision_config._attn_implementation = config._attn_implementation
         return config
 

@@ -1281,7 +1281,9 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
     def __init__(self, config: InstructBlipConfig):
         super().__init__(config)
 
-        self.vision_model = InstructBlipVisionModel(config.vision_config)
+        self.vision_model = InstructBlipVisionModel(
+            config.vision_config, attn_implementation=config.vision_config._attn_implementation
+        )
 
         self.query_tokens = nn.Parameter(torch.zeros(1, config.num_query_tokens, config.qformer_config.hidden_size))
         self.qformer = InstructBlipQFormerModel(config.qformer_config)
@@ -1290,11 +1292,11 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
 
         if config.use_decoder_only_language_model:
             language_model = AutoModelForCausalLM.from_config(
-                config.text_config, attn_implementation=config._attn_implementation
+                config.text_config, attn_implementation=config.text_config._attn_implementation
             )
         else:
             language_model = AutoModelForSeq2SeqLM.from_config(
-                config.text_config, attn_implementation=config._attn_implementation
+                config.text_config, attn_implementation=config.text_config._attn_implementation
             )
 
         if language_model._no_split_modules is not None:
