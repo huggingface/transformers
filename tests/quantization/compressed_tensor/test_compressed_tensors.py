@@ -4,8 +4,10 @@ import unittest
 import torch
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers.testing_utils import require_compressed_tensors
 
 
+@require_compressed_tensors
 class CompressedTensorsTest(unittest.TestCase):
     quantized_model_name = "nm-testing/tinyllama-oneshot-w8a8-test-static-shape-change-v3"
 
