@@ -576,6 +576,14 @@ class Trainer:
             )
         default_callbacks = DEFAULT_CALLBACKS + get_reporting_integration_callbacks(self.args.report_to)
         callbacks = default_callbacks if callbacks is None else default_callbacks + callbacks
+
+        # Add a reference to the trainer in case callbacks need it
+        def init_callback(cb):
+            cb.trainer = self
+            return cb
+
+        callbacks = [init_callback(cb) for cb in callbacks]
+
         self.callback_handler = CallbackHandler(
             callbacks, self.model, self.tokenizer, self.optimizer, self.lr_scheduler
         )
@@ -3687,6 +3695,7 @@ class Trainer:
             )
         )
 
+        self.eval_loop_output = output
         self.log(output.metrics)
 
         if DebugOption.TPU_METRICS_DEBUG in self.args.debug:
@@ -3974,7 +3983,9 @@ class Trainer:
             if not key.startswith(f"{metric_key_prefix}_"):
                 metrics[f"{metric_key_prefix}_{key}"] = metrics.pop(key)
 
-        return EvalLoopOutput(predictions=all_preds, label_ids=all_labels, metrics=metrics, num_samples=num_samples)
+        return EvalLoopOutput(
+            predictions=all_preds, label_ids=all_labels, metrics=metrics, num_samples=num_samples, inputs=all_inputs
+        )
 
     def _nested_gather(self, tensors, name=None):
         """
