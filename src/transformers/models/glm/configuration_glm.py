@@ -78,10 +78,11 @@ class GLMConfig(PretrainedConfig):
         num_hidden_layers=40,
         vocab_size=151552,
         hidden_size=4096,
-        ffn_hidden_size=13696,
+        intermediate_size=13696,
         kv_channels=128,
         num_attention_heads=32,
         num_key_value_heads=32,
+        hidden_act="gelu",
         seq_length=131072,
         hidden_dropout=0.0,
         classifier_dropout=None,
@@ -110,13 +111,14 @@ class GLMConfig(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.initializer_range = initializer_range
         self.hidden_size = hidden_size
-        self.ffn_hidden_size = ffn_hidden_size
+        self.intermediate_size = intermediate_size
         self.kv_channels = kv_channels
 
         if num_key_value_heads is None:
             num_key_value_heads = num_attention_heads
 
         self.num_key_value_heads = num_key_value_heads
+        self.hidden_act = hidden_act
         self.seq_length = seq_length
         self.hidden_dropout = hidden_dropout
         self.classifier_dropout = classifier_dropout
