@@ -1835,7 +1835,9 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
             # create artificial long-form inputs
             inputs["input_features"] = torch.cat([inputs["input_features"], inputs["input_features"]], dim=-1)
-            inputs["attention_mask"] = torch.ones(inputs["input_features"].shape[:2], dtype=torch.int, device=inputs["input_features"].device)
+            inputs["attention_mask"] = torch.ones(
+                inputs["input_features"].shape[:2], dtype=torch.int, device=inputs["input_features"].device
+            )
             model.generation_config.no_timestamps_token_id = model.generation_config.decoder_start_token_id
 
             # long-form generation without fallback
@@ -1845,6 +1847,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             # short-form generation with fallback
             pred_ids = model.generate(**inputs, logprob_threshold=-1.0, temperature=[0.0, 0.1])
             assert isinstance(pred_ids, torch.Tensor)
+
 
 @require_torch
 @require_torchaudio
