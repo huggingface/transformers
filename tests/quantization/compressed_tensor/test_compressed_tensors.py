@@ -35,11 +35,11 @@ class CompressedTensorsTest(unittest.TestCase):
         )
         self.assertTrue(
             any(
-                key for key, tensor
-                in self.quantized_model.state_dict().items()
+                key
+                for key, tensor in self.quantized_model.state_dict().items()
                 if "scale" in key and not torch.all(tensor == 1.0)
             ),
-            "quantized model should load a non-trivail scale into the state dict"
+            "quantized model should load a non-trivail scale into the state dict",
         )
         inputs = self.tokenizer(self.prompt, return_tensors="pt").to(self.device)
         generated_ids = self.quantized_model.generate(**inputs, max_length=50)

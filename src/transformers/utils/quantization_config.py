@@ -18,12 +18,11 @@ import copy
 import importlib.metadata
 import json
 import os
-from dataclasses import asdict, dataclass, is_dataclass
+from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, List, Optional, Union
 
 from packaging import version
-from pydantic import BaseModel
 
 from ..utils import is_auto_awq_available, is_hqq_available, is_torch_available, logging
 
@@ -68,23 +67,6 @@ class AWQLinearVersion(str, Enum):
 class AwqBackendPackingMethod(str, Enum):
     AUTOAWQ = "autoawq"
     LLMAWQ = "llm-awq"
-
-
-def convert_to_dict(obj):
-    if is_dataclass(obj):
-        return asdict(obj)
-    elif isinstance(obj, BaseModel):
-        return obj.dict()
-    elif isinstance(obj, Enum):
-        return obj.value
-    elif isinstance(obj, dict):
-        return {k: convert_to_dict(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [convert_to_dict(i) for i in obj]
-    elif isinstance(obj, tuple):
-        return tuple(convert_to_dict(i) for i in obj)
-    else:
-        return obj
 
 
 @dataclass
@@ -150,7 +132,7 @@ class QuantizationConfigMixin:
         Serializes this instance to a Python dictionary. Returns:
             `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
         """
-        return convert_to_dict(copy.deepcopy(self.__dict__))
+        return copy.deepcopy(self.__dict__)
 
     def __iter__(self):
         """allows `dict(obj)` for situations where obj may be a dict or QuantizationConfigMixin"""
@@ -1083,10 +1065,10 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
 
     def __init__(
         self,
-        config_groups: Dict[str, Union["QuantizationScheme", List[str]]] = None,
+        config_groups: Dict[str, Union["QuantizationScheme", List[str]]] = None,  # noqa: F821
         quant_method: str = "compressed-tensors",
         format: str = "dense",
-        quantization_status: "QuantizationStatus" = "initialized",
+        quantization_status: "QuantizationStatus" = "initialized",  # noqa: F821
         global_compression_ratio: Optional[float] = None,
         ignore: Optional[List[str]] = None,
         sparsity_config: Dict[str, Any] = None,
@@ -1118,7 +1100,17 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
 
         super().__init__(quant_method=QuantizationMethod.COMPRESSED_TENSORS)
 
-        
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Serializes this instance to a Python dictionary. Returns:
+            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
+        """
+        return {
+            "quantization_config": self.quantization_config.dict(),
+            "sparsity_config": self.sparsity_config.dict(),
+        }
+
+
 class FbgemmFp8Config(QuantizationConfigMixin):
     """
     This is a wrapper class about all possible attributes and features that you can play with a model that has been
