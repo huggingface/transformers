@@ -296,15 +296,18 @@ class MSClapTextModelTester:
         parent,
         batch_size=12,
         seq_length=7,
-        projection_dim=24,
         hidden_size=24,
         projection_dropout_prob=0,
         initializer_factor=1.0,
-        vocab_size=99,
-        n_embd=24,
-        n_layer=2,
-        n_head=2,
-        initializer_range=0.02,
+        projection_dim=24,
+        text_encoder={
+            "model_type": "gpt2",
+            "n_embd": 24,
+            "n_layer": 2,
+            "n_head": 2,
+            "vocab_size": 99,
+            "initializer_range": 0.02,
+        },
         use_input_mask=True,
     ):
         self.parent = parent
@@ -312,17 +315,15 @@ class MSClapTextModelTester:
         self.seq_length = seq_length
         self.projection_dropout_prob = projection_dropout_prob
         self.initializer_factor = initializer_factor
-        self.n_embd = n_embd
-        self.n_layer = n_layer
-        self.num_hidden_layers = n_layer
-        self.num_attention_heads = n_head
+        self.text_encoder = text_encoder
 
-        self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.projection_dim = projection_dim
+        self.num_hidden_layers = text_encoder["n_layer"]
 
-        self.initializer_range = initializer_range
         self.use_input_mask = use_input_mask
+        self.vocab_size = text_encoder["vocab_size"]
+        self.num_attention_heads = text_encoder["n_head"]
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -348,12 +349,8 @@ class MSClapTextModelTester:
             hidden_size=self.hidden_size,
             projection_dropout_prob=self.projection_dropout_prob,
             initializer_factor=self.initializer_factor,
-            vocab_size=self.vocab_size,
-            n_embd=self.n_embd,
-            n_layer=self.n_layer,
-            num_attention_heads=self.num_attention_heads,
-            initializer_range=self.initializer_range,
-            num_hidden_layers=self.num_hidden_layers,
+            text_encoder=self.text_encoder,
+            num_hidden_layers=self.text_encoder["n_layer"],
         )
 
     def create_and_check_model_with_projection(self, config, input_ids, input_mask):

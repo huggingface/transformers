@@ -118,15 +118,16 @@ class MSClapTextConfig(PretrainedConfig):
         initializer_factor=1.0,
         projection_dim=768,
         projection_hidden_act="gelu",
+        num_hidden_layers=None,
+        num_attention_heads=None,
+        vocab_size=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
         if "text_encoder" not in kwargs:
-            # text_encoder_model_type = "gpt2"
             text_encoder_config = {"model_type": "gpt2"}
         else:
             text_encoder_config = kwargs.pop("text_encoder")
-            # text_encoder_model_type = text_encoder_config.pop("model_type")
 
         self.text_model_config = AutoConfig.for_model(**text_encoder_config)
 
@@ -135,6 +136,9 @@ class MSClapTextConfig(PretrainedConfig):
         self.projection_dropout_prob = projection_dropout_prob
         self.initializer_factor = initializer_factor
         self.projection_hidden_act = projection_hidden_act
+        self.num_hidden_layers = num_hidden_layers if num_hidden_layers else self.text_model_config.n_layer
+        self.num_attention_heads = num_attention_heads if num_attention_heads else self.text_model_config.n_head
+        self.vocab_size = vocab_size if vocab_size else self.text_model_config.vocab_size
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
