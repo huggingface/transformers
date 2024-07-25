@@ -84,7 +84,7 @@ class TokenizerUtilTester(unittest.TestCase):
     def test_legacy_load_from_one_file(self):
         # This test is for deprecated behavior and can be removed in v5
         try:
-            tmp_file = tempfile.mktemp()
+            tmp_file = tempfile.NamedTemporaryFile(delete=False).name
             with open(tmp_file, "wb") as f:
                 http_get("https://huggingface.co/albert/albert-base-v1/resolve/main/spiece.model", f)
 

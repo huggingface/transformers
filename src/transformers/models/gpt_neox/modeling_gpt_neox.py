@@ -824,25 +824,23 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
             inputs_embeds = self.embed_in(input_ids)
 
         # Attention mask.
-        if attention_mask is not None:
-            assert batch_size > 0, "batch_size has to be defined and > 0"
-            attention_mask = attention_mask.view(batch_size, -1)
-            if self._attn_implementation == "flash_attention_2":
-                attention_mask = attention_mask if 0 in attention_mask else None
-            elif self._attn_implementation == "sdpa" and not output_attentions and head_mask is None:
-                attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
-                    attention_mask=attention_mask,
-                    input_shape=(batch_size, seq_length),
-                    inputs_embeds=inputs_embeds,
-                    past_key_values_length=past_length,
-                )
-            else:
-                attention_mask = _prepare_4d_causal_attention_mask(
-                    attention_mask=attention_mask,
-                    input_shape=(batch_size, seq_length),
-                    inputs_embeds=inputs_embeds,
-                    past_key_values_length=past_length,
-                )
+        attention_mask = attention_mask.view(batch_size, -1) if attention_mask is not None else None
+        if self._attn_implementation == "flash_attention_2":
+            attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
+        elif self._attn_implementation == "sdpa" and not output_attentions and head_mask is None:
+            attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
+                attention_mask=attention_mask,
+                input_shape=(batch_size, seq_length),
+                inputs_embeds=inputs_embeds,
+                past_key_values_length=past_length,
+            )
+        else:
+            attention_mask = _prepare_4d_causal_attention_mask(
+                attention_mask=attention_mask,
+                input_shape=(batch_size, seq_length),
+                inputs_embeds=inputs_embeds,
+                past_key_values_length=past_length,
+            )
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head

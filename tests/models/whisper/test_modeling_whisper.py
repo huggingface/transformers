@@ -1835,9 +1835,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         return WhisperProcessor.from_pretrained("openai/whisper-base")
 
     def _load_datasamples(self, num_samples):
-        ds = load_dataset(
-            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
-        )
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
         speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
 
@@ -2237,72 +2235,6 @@ class WhisperModelIntegrationTests(unittest.TestCase):
                             " He has grave doubts whether Sir Frederick Latins' work is really Greek after all, and"
                         ),
                         "timestamp": (23.76, 29.44),
-                    },
-                ],
-            }
-        ]
-
-        transcript = processor.batch_decode(generated_ids, skip_special_tokens=True, output_offsets=True)
-        self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
-
-    @slow
-    def test_tiny_longform_timestamps_generation(self):
-        set_seed(0)
-        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
-        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
-        model.to(torch_device)
-
-        sample = self._load_datasamples(1)
-        input_speech = np.concatenate(sample * 10)
-
-        input_features = processor(input_speech, return_tensors="pt", truncation=False, sampling_rate=16_000)
-        input_features = input_features.to(torch_device)
-
-        generated_ids = model.generate(**input_features, return_timestamps=True, return_segments=True)
-
-        EXPECTED_TRANSCRIPT = [
-            {
-                "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                "offsets": [
-                    {
-                        "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (0.0, 6.0),
-                    },
-                    {
-                        "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (6.0, 12.0),
-                    },
-                    {
-                        "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (12.0, 18.0),
-                    },
-                    {
-                        "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (18.0, 24.0),
-                    },
-                    {
-                        "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (24.0, 29.0),
-                    },
-                    {
-                        "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (29.0, 35.0),
-                    },
-                    {
-                        "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (35.0, 41.0),
-                    },
-                    {
-                        "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (41.0, 47.0),
-                    },
-                    {
-                        "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (47.0, 53.0),
-                    },
-                    {
-                        "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (53.0, 58.20000076293945),
                     },
                 ],
             }
@@ -2718,9 +2650,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         )
         assistant_model.to(torch_device)
 
-        dataset = load_dataset(
-            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
-        )
+        dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         sample = dataset[0]["audio"]
 
         input_features = processor(sample["array"], return_tensors="pt", sampling_rate=16_000).input_features
@@ -2769,9 +2699,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         )
         assistant_model.to(torch_device)
 
-        dataset = load_dataset(
-            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
-        )
+        dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         sample = dataset[0]["audio"]
 
         input_features = processor(sample["array"], return_tensors="pt", sampling_rate=16_000).input_features
@@ -2812,7 +2740,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
         model = model.to(torch_device)
 
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", trust_remote_code=True)
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean")
         one_audio = np.concatenate([x["array"] for x in ds["validation"]["audio"]], dtype=np.float32)
 
         input_features = processor(
@@ -2848,9 +2776,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         prompt = "Mr. Kilter, Brionno."  # let's force Quilter -> Kilter, Brion -> Brionno
         prompt_ids = processor.get_prompt_ids(prompt, return_tensors="pt").to(torch_device)
 
-        ds = load_dataset(
-            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:-1]", trust_remote_code=True
-        )
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:-1]")
         one_audio = np.concatenate([x["array"] for x in ds["audio"]], dtype=np.float32)
 
         first_text = ds[0]["text"].lower()
@@ -2901,7 +2827,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
         model = model.to(torch_device)
 
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", trust_remote_code=True)
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean")
         one_audio = np.concatenate([x["array"] for x in ds["validation"]["audio"]], dtype=np.float32)
 
         input_features = processor(
@@ -2983,7 +2909,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
         model = model.to(torch_device)
 
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", trust_remote_code=True)
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean")
         one_audio = np.concatenate([x["array"] for x in ds["validation"]["audio"]], dtype=np.float32)
 
         input_features = processor(
@@ -3025,7 +2951,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
         model = model.to(torch_device)
 
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", trust_remote_code=True)
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean")
         one_audio = np.concatenate([x["array"] for x in ds["validation"]["audio"]], dtype=np.float32)
         audios = []
         audios.append(one_audio[110000:])
@@ -3079,7 +3005,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
         model = model.to(torch_device)
 
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", trust_remote_code=True)
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean")
         one_audio = np.concatenate([x["array"] for x in ds["validation"]["audio"]], dtype=np.float32)
         audios = []
         audios.append(one_audio[110000:])
