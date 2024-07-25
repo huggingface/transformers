@@ -18,7 +18,6 @@ from pathlib import Path
 
 import numpy as np
 from huggingface_hub import HfFolder, delete_repo, snapshot_download
-from requests.exceptions import HTTPError
 
 from transformers import BertConfig, BertModel, is_flax_available, is_torch_available
 from transformers.testing_utils import (
@@ -140,9 +139,7 @@ class FlaxModelPushToHubTester(unittest.TestCase):
                 )
                 model = FlaxBertModel(config)
                 # Push to hub via save_pretrained
-                model.save_pretrained(
-                    tmp_dir, repo_id=tmp_repo, push_to_hub=True, token=self._token
-                )
+                model.save_pretrained(tmp_dir, repo_id=tmp_repo, push_to_hub=True, token=self._token)
 
                 new_model = FlaxBertModel.from_pretrained(tmp_repo)
 
