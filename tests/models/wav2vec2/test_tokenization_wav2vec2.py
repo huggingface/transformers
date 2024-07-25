@@ -147,8 +147,8 @@ class Wav2Vec2TokenizerTest(unittest.TestCase):
         batch_tokens = tokenizer.batch_decode(sample_ids)
         batch_tokens_2 = tokenizer.batch_decode(sample_ids, skip_special_tokens=True)
 
-        self.assertEqual(batch_tokens, ["HELLO<unk>!?!?$$$", "BYE BYE<unk>$$$"])
-        self.assertEqual(batch_tokens_2, ["HELO!?!?", "BYE BYE"])
+        self.assertEqual(batch_tokens, ["HELLO<unk>!? !?$$$", "BYE BYE<unk>$$$"])
+        self.assertEqual(batch_tokens_2, ["HELO!? !?", "BYE BYE"])
 
     def test_call(self):
         # Tests that all call wrap to encode_plus and batch_encode_plus

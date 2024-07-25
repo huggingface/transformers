@@ -128,6 +128,7 @@ class MPNetTokenizer(PreTrainedTokenizer):
         mask_token="<mask>",
         tokenize_chinese_chars=True,
         strip_accents=None,
+        clean_up_tokenization_spaces=True,
         **kwargs,
     ):
         bos_token = AddedToken(bos_token, special=True) if isinstance(bos_token, str) else bos_token
@@ -170,6 +171,7 @@ class MPNetTokenizer(PreTrainedTokenizer):
             mask_token=mask_token,
             tokenize_chinese_chars=tokenize_chinese_chars,
             strip_accents=strip_accents,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             **kwargs,
         )
 
