@@ -13,23 +13,24 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-# Knowledge Distillation for Computer Vision
+# 컴퓨터 비전을 위한 지식 증류[[Knowledge-Distillation-for-Computer-Vision]]
 
 [[open-in-colab]]
 
-Knowledge distillation is a technique used to transfer knowledge from a larger, more complex model (teacher) to a smaller, simpler model (student). To distill knowledge from one model to another, we take a pre-trained teacher model trained on a certain task (image classification for this case) and randomly initialize a student model to be trained on image classification. Next, we train the student model to minimize the difference between it's outputs and the teacher's outputs, thus making it mimic the behavior. It was first introduced in [Distilling the Knowledge in a Neural Network by Hinton et al](https://arxiv.org/abs/1503.02531). In this guide, we will do task-specific knowledge distillation. We will use the [beans dataset](https://huggingface.co/datasets/beans) for this.
+지식 증류(Knowledge distillation)는 더 크고 복잡한 모델(교사)에서 더 작고 간단한 모델(학생)로 지식을 전달하는 기술입니다. 지식을 한 모델에서 다른 모델로 증류하기 위해서는, 특정 작업(이 경우 이미지 분류)에 대해 학습된 사전 훈련된 교사 모델을 사용하고, 이미지 분류 작업을 학습할 학생 모델을 무작위로 초기화합니다. 다음으로, 학생 모델이 교사 모델의 출력을 모방하도록 하기 위해 학생 모델의 출력과 교사 모델의 출력 간의 차이를 최소화하도록 훈련합니다. 이 방법은 Hinton 등이 발표한 논문 [Neural Network에서 지식 증류](https://arxiv.org/abs/1503.02531)에서 처음 소개되었습니다. 이 가이드에서는 특정 작업에 맞춘 지식 증류를 수행할 것입니다. 우리는 [beans dataset](https://huggingface.co/datasets/beans)을 사용할 것입니다.
 
-This guide demonstrates how you can distill a [fine-tuned ViT model](https://huggingface.co/merve/vit-mobilenet-beans-224) (teacher model) to a [MobileNet](https://huggingface.co/google/mobilenet_v2_1.4_224) (student model) using the [Trainer API](https://huggingface.co/docs/transformers/en/main_classes/trainer#trainer) of 🤗 Transformers. 
+이 가이드는 [미세 조정된 ViT 모델](https://huggingface.co/merve/vit-mobilenet-beans-224) (교사 모델)을 [MobileNet](https://huggingface.co/google/mobilenet_v2_1.4_224) (학생 모델)으로 증류하는 방법을 🤗 Transformers의 [Trainer API](https://huggingface.co/docs/transformers/en/main_classes/trainer#trainer) 를 사용하여 보여줍니다.
 
-Let's install the libraries needed for distillation and evaluating the process. 
+증류 및 평가 과정을 위해 필요한 라이브러리를 설치해 봅시다.
+
 
 ```bash
 pip install transformers datasets accelerate tensorboard evaluate --upgrade
 ```
 
-In this example, we are using the `merve/beans-vit-224` model as teacher model. It's an image classification model, based on `google/vit-base-patch16-224-in21k` fine-tuned on beans dataset. We will distill this model to a randomly initialized MobileNetV2.
+이 예제에서는 `merve/beans-vit-224` 모델을 교사 모델로 사용하고 있습니다. 이 모델은 `google/vit-base-patch16-224-in21k`를 기반으로 하여 beans 데이터셋에 대해 미세 조정된 이미지 분류 모델입니다. 우리는 이 모델을 무작위로 초기화된 MobileNetV2로 증류할 것입니다.
 
-We will now load the dataset. 
+이제 데이터셋을 로드하겠습니다.
 
 ```python
 from datasets import load_dataset
@@ -37,7 +38,8 @@ from datasets import load_dataset
 dataset = load_dataset("beans")
 ```
 
-We can use an image processor from either of the models, as in this case they return the same output with same resolution. We will use the `map()` method of `dataset` to apply the preprocessing to every split of the dataset. 
+이 경우 두 모델의 이미지 프로세서를 사용할 수 있습니다. 이들은 동일한 해상도로 동일한 출력을 반환하기 때문입니다. 우리는 `dataset`의 `map()` 메서드를 사용하여 데이터셋의 모든 분할에 전처리를 적용할 것입니다.
+
 
 ```python
 from transformers import AutoImageProcessor
@@ -50,7 +52,7 @@ def process(examples):
 processed_datasets = dataset.map(process, batched=True)
 ```
 
-Essentially, we want the student model (a randomly initialized MobileNet) to mimic the teacher model (fine-tuned vision transformer). To achieve this, we first get the logits output from the teacher and the student. Then, we divide each of them by the parameter `temperature` which controls the importance of each soft target. A parameter called `lambda` weighs the importance of the distillation loss. In this example, we will use `temperature=5` and `lambda=0.5`. We will use the Kullback-Leibler Divergence loss to compute the divergence between the student and teacher. Given two data P and Q, KL Divergence explains how much extra information we need to represent P using Q. If two are identical, their KL divergence is zero, as there's no other information needed to explain P from Q. Thus, in the context of knowledge distillation, KL divergence is useful.
+본질적으로, 우리는 학생 모델(무작위로 초기화된 MobileNet)이 교사 모델(미세 조정된 비전 트랜스포머)을 모방하도록 만들고자 합니다. 이를 위해 먼저 교사와 학생 모델의 로짓 출력을 얻습니다. 그런 다음 각 출력을 매개변수 `temperature`로 나누는데, 이는 각 소프트 타겟의 중요성을 조절합니다. `lambda`라는 매개변수는 증류 손실의 중요성을 가중합니다. 이 예제에서는 `temperature=5`와 `lambda=0.5`를 사용할 것입니다. 우리는 학생과 교사 간의 발산을 계산하기 위해 Kullback-Leibler Divergence 손실을 사용할 것입니다. 두 데이터 P와 Q가 주어졌을 때, KL Divergence는 Q를 사용하여 P를 표현하는 데 필요한 추가 정보를 설명합니다. 두 데이터가 동일하다면, KL Divergence는 0이며, Q로 P를 설명하는 데 추가 정보가 필요하지 않음을 의미합니다. 따라서 지식 증류의 맥락에서 KL Divergence는 유용합니다.
 
 
 ```python
@@ -93,7 +95,8 @@ class ImageDistilTrainer(Trainer):
         return (loss, student_output) if return_outputs else loss
 ```
 
-We will now login to Hugging Face Hub so we can push our model to the Hugging Face Hub through the `Trainer`. 
+이제 Hugging Face Hub에 로그인하여 `Trainer`를 통해 Hugging Face Hub에 모델을 푸시할 수 있도록 하겠습니다.
+
 
 ```python
 from huggingface_hub import notebook_login
@@ -101,7 +104,8 @@ from huggingface_hub import notebook_login
 notebook_login()
 ```
 
-Let's set the `TrainingArguments`, the teacher model and the student model. 
+이제 `TrainingArguments`, 교사 모델과 학생 모델을 설정해봅시다.
+
 
 ```python
 from transformers import AutoModelForImageClassification, MobileNetV2Config, MobileNetV2ForImageClassification
@@ -137,7 +141,8 @@ student_config.num_labels = num_labels
 student_model = MobileNetV2ForImageClassification(student_config)
 ```
 
-We can use `compute_metrics` function to evaluate our model on the test set. This function will be used during the training process to compute the `accuracy` & `f1` of our model.
+`compute_metrics` 함수를 사용하여 테스트 세트에서 모델을 평가할 수 있습니다. 이 함수는 훈련 과정에서 모델의 `accuracy`와 `f1`을 계산하는 데 사용됩니다.
+
 
 ```python
 import evaluate
@@ -151,7 +156,7 @@ def compute_metrics(eval_pred):
     return {"accuracy": acc["accuracy"]}
 ```
 
-Let's initialize the `Trainer` with the training arguments we defined. We will also initialize our data collator.
+정의한 훈련 인수로 `Trainer`를 초기화해봅시다. 또한 데이터 콜레이터(data collator)를 초기화하겠습니다.
 
 ```python
 from transformers import DefaultDataCollator
@@ -171,16 +176,17 @@ trainer = ImageDistilTrainer(
 )
 ```
 
-We can now train our model.
+이제 모델을 훈련할 수 있습니다.
 
 ```python
 trainer.train()
 ```
 
-We can evaluate the model on the test set.
+모델을 테스트 세트에서 평가할 수 있습니다.
 
 ```python
 trainer.evaluate(processed_datasets["test"])
 ```
 
-On test set, our model reaches 72 percent accuracy. To have a sanity check over efficiency of distillation, we also trained MobileNet on the beans dataset from scratch with the same hyperparameters and observed 63 percent accuracy on the test set. We invite the readers to try different pre-trained teacher models, student architectures, distillation parameters and report their findings. The training logs and checkpoints for distilled model can be found in [this repository](https://huggingface.co/merve/vit-mobilenet-beans-224), and MobileNetV2 trained from scratch can be found in this [repository](https://huggingface.co/merve/resnet-mobilenet-beans-5).
+
+테스트 세트에서 우리 모델은 72%의 정확도에 도달했습니다. 증류의 효율성을 검증하기 위해 동일한 하이퍼파라미터로 beans 데이터셋에서 MobileNet을 처음부터 훈련했을 때 테스트 세트에서 63%의 정확도를 관찰했습니다. 독자들이 다양한 사전 훈련된 교사 모델, 학생 구조, 증류 매개변수를 시도하고 그 결과를 보고하도록 권장합니다. 증류된 모델의 훈련 로그와 체크포인트는 [이 저장소](https://huggingface.co/merve/vit-mobilenet-beans-224)에서 찾을 수 있으며, 처음부터 훈련된 MobileNetV2는 이 [저장소](https://huggingface.co/merve/resnet-mobilenet-beans-5)에서 찾을 수 있습니다.
