@@ -2568,13 +2568,10 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
         outputs: ModelOutput,
         model_kwargs: Dict[str, Any],
         is_encoder_decoder: bool = False,
-        standardize_cache_format: bool = False,
         model_inputs: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         # update past_key_values
-        cache_name, cache = self._extract_past_from_model_output(
-            outputs, standardize_cache_format=standardize_cache_format
-        )
+        cache_name, cache = self._extract_past_from_model_output(outputs)
         model_kwargs[cache_name] = cache
 
         if getattr(outputs, "state", None) is not None:
