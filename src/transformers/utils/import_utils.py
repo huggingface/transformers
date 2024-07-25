@@ -1625,22 +1625,16 @@ class _LazyModule(ModuleType):
     def __init__(self, name, module_file, import_structure, module_spec=None, extra_objects=None):
         super().__init__(name)
 
-        if any(isinstance(key, frozenset) for key in import_structure.keys()):
-            PER_BACKEND_SPLIT = True
-        else:
-            PER_BACKEND_SPLIT = False
-
         self._object_missing_backend = {}
-
-        if PER_BACKEND_SPLIT:
+        if any(isinstance(key, frozenset) for key in import_structure.keys()):
             self._modules = set()
             self._class_to_module = {}
             self.__all__ = []
 
             _import_structure = {}
 
-            for backends, item in import_structure.items():
-                lacking_backends = []
+            for backends, module in import_structure.items():
+                missing_backends = []
                 for backend in backends:
                     if backend not in BACKENDS_MAPPING:
                         raise ValueError(
@@ -1648,26 +1642,22 @@ class _LazyModule(ModuleType):
                         )
                     callable, error = BACKENDS_MAPPING[backend]
                     if not callable():
-                        lacking_backends.append(backend)
+                        missing_backends.append(backend)
+                self._modules.union(set(module.keys()))
 
-                self._modules.union(set(item.keys()))
-                for key, values in item.items():
+                for key, values in module.items():
+                    if len(missing_backends):
+                        self._object_missing_backend[key] = missing_backends
+
                     for value in values:
                         self._class_to_module[value] = key
-
-                    if key not in _import_structure:
-                        _import_structure[key] = values
-                    else:
-                        _import_structure[key].update(values)
+                        if len(missing_backends):
+                            self._object_missing_backend[value] = missing_backends
+                    _import_structure.setdefault(key, []).extend(values)
 
                 # Needed for autocompletion in an IDE
-                self.__all__.extend(list(item.keys()) + list(chain(*item.values())))
+                self.__all__.extend(list(module.keys()) + list(chain(*module.values())))
 
-                if len(lacking_backends):
-                    for module, objects in item.items():
-                        for obj in objects:
-                            self._object_missing_backend[obj] = lacking_backends
-                        self._object_missing_backend[module] = lacking_backends
 
             self.__file__ = module_file
             self.__spec__ = module_spec
@@ -1677,7 +1667,7 @@ class _LazyModule(ModuleType):
             self._import_structure = _import_structure
 
         # This can be removed once every exportable object has a `export()` export.
-        if not PER_BACKEND_SPLIT:
+        else:
             self._modules = set(import_structure.keys())
             self._class_to_module = {}
             for key, values in import_structure.items():
@@ -1716,7 +1706,6 @@ class _LazyModule(ModuleType):
                 def __init__(self, *args, **kwargs):
                     requires_backends(self, missing_backends)
 
-            # Placeholder.__class__.__name__ = name
             Placeholder.__name__ = name
             Placeholder.__module__ = self.__spec__
 
@@ -1768,7 +1757,7 @@ def direct_transformers_import(path: str, file="__init__.py") -> ModuleType:
 
 def export(*, backends=()):
     """
-    This method enables two things:
+    This decorator enables two things:
     - Attaching a `__backends` tuple to an object to see what are the necessary backends for it
       to execute correctly without instantiating it
     - The '@export' string is used to dynamically import objects
@@ -1951,16 +1940,15 @@ def define_import_structure(module_path):
         # All objects that are in __all__ should be exported by default.
         # These objects are exported with the file backends.
         if '__all__' in file_content:
-            _all = fetch__all__(file_content)
-
-            backends = frozenset(base_requirements)
-            if backends not in module_requirements:
-                module_requirements[backends] = {}
-            if module_name not in module_requirements[backends]:
-                module_requirements[backends][module_name] = set()
-
-            for _all_object in _all:
+            for _all_object in fetch__all__(file_content):
                 if _all_object not in registered_objects:
+
+                    backends = frozenset(base_requirements)
+                    if backends not in module_requirements:
+                        module_requirements[backends] = {}
+                    if module_name not in module_requirements[backends]:
+                        module_requirements[backends][module_name] = set()
+
                     module_requirements[backends][module_name].add(_all_object)
 
     import_structure = {**module_requirements, **import_structure}
@@ -1968,22 +1956,67 @@ def define_import_structure(module_path):
 
 
 def spread_import_structure(nested_import_structure):
-    def propagate_tuple(unordered_import_structure):
+    """
+    This method takes as input an unordered import structure and brings the required backends at the top-level,
+    aggregating modules and objects under their required backends.
+
+    Here's an example of an input import structure at the src.transformers.models level:
+
+    {
+        'albert': {
+            frozenset(): {
+                'configuration_albert': {'AlbertConfig', 'AlbertOnnxConfig'}
+            },
+            frozenset({'tokenizers'}): {
+                'tokenization_albert_fast': {'AlbertTokenizerFast'}
+            },
+        },
+        'align': {
+            frozenset(): {
+                'configuration_align': {'AlignConfig', 'AlignTextConfig', 'AlignVisionConfig'},
+                'processing_align': {'AlignProcessor'}
+            },
+        },
+        'altclip': {
+            frozenset(): {
+                'configuration_altclip': {'AltCLIPConfig', 'AltCLIPTextConfig', 'AltCLIPVisionConfig'},
+                'processing_altclip': {'AltCLIPProcessor'},
+            }
+        }
+    }
+
+    Here's an example of an output import structure at the src.transformers.models level:
+
+    {
+        frozenset({'tokenizers'}): {
+            'albert.tokenization_albert_fast': {'AlbertTokenizerFast'}
+        },
+        frozenset(): {
+            'albert.configuration_albert': {'AlbertConfig', 'AlbertOnnxConfig'},
+            'align.processing_align': {'AlignProcessor'},
+            'align.configuration_align': {'AlignConfig', 'AlignTextConfig', 'AlignVisionConfig'},
+            'altclip.configuration_altclip': {'AltCLIPConfig', 'AltCLIPTextConfig', 'AltCLIPVisionConfig'},
+            'altclip.processing_altclip': {'AltCLIPProcessor'}
+        }
+    }
+
+    """
+    def propagate_frozenset(unordered_import_structure):
         tuple_first_import_structure = {}
         for _key, _value in unordered_import_structure.items():
             if not isinstance(_value, dict):
                 tuple_first_import_structure[_key] = _value
 
-            elif any(isinstance(v, tuple) for v in _value.keys()):
+            elif any(isinstance(v, frozenset) for v in _value.keys()):
                 # Here we want to switch around key and v
                 for k, v in _value.items():
-                    if isinstance(k, tuple):
+                    if isinstance(k, frozenset):
                         if k not in tuple_first_import_structure:
                             tuple_first_import_structure[k] = {}
                         tuple_first_import_structure[k][_key] = v
 
             else:
-                tuple_first_import_structure[_key] = propagate_tuple(_value)
+                tuple_first_import_structure[_key] = propagate_frozenset(_value)
 
         return tuple_first_import_structure
 
@@ -2000,8 +2033,11 @@ def spread_import_structure(nested_import_structure):
     # The tuples contain the necessary backends. We want these first, so we propagate them up the
     # import structure.
     ordered_import_structure = nested_import_structure
+
+    # 6 is a number that gives us sufficient depth to go through all files and foreseeable folder depths
+    # while not taking too long to parse.
     for i in range(6):
-        ordered_import_structure = propagate_tuple(ordered_import_structure)
+        ordered_import_structure = propagate_frozenset(ordered_import_structure)
 
     # We then flatten the dict so that it references a module path.
     flattened_import_structure = {}
