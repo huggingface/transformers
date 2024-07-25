@@ -32,6 +32,8 @@ class GgufIntegrationTests(unittest.TestCase):
     model_id = "TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF"
     mistral_model_id = "TheBloke/Mistral-7B-Instruct-v0.2-GGUF"
     qwen2_model_id = "Qwen/Qwen1.5-0.5B-Chat-GGUF"
+    llama3_model_id = "NousResearch/Meta-Llama-3-8B-GGUF"
+    tinyllama_model_id = "PenutChen/TinyLlama-1.1B-Chat-v1.0-GGUF"
 
     q4_0_gguf_model_id = "tinyllama-1.1b-chat-v1.0.Q4_0.gguf"
     q4_k_gguf_model_id = "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
@@ -43,6 +45,8 @@ class GgufIntegrationTests(unittest.TestCase):
 
     q4_0_mistral_model_id = "mistral-7b-instruct-v0.2.Q4_0.gguf"
     q4_0_qwen2_model_id = "qwen1_5-0_5b-chat-q4_0.gguf"
+    q4_llama3_model_id = "Meta-Llama-3-8B-Q4_K_M.gguf"
+    f16_tinyllama_model_id = "TinyLlama-1.1B-Chat-v1.0.FP16.gguf"
 
     example_text = "Hello"
 
@@ -147,6 +151,18 @@ class GgufIntegrationTests(unittest.TestCase):
         EXPECTED_TEXT = "Hello, World!\n\n5. Use a library"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
+    def test_f16(self):
+        tokenizer = AutoTokenizer.from_pretrained(self.tinyllama_model_id, gguf_file=self.f16_tinyllama_model_id)
+        model = AutoModelForCausalLM.from_pretrained(
+            self.tinyllama_model_id, gguf_file=self.f16_tinyllama_model_id
+        ).to(torch_device)
+
+        text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
+        out = model.generate(**text, max_new_tokens=10)
+
+        EXPECTED_TEXT = "Hello, World!\n\n5. Node.js"
+        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
+
     def test_mistral_q4_0(self):
         tokenizer = AutoTokenizer.from_pretrained(self.mistral_model_id, gguf_file=self.q4_0_mistral_model_id)
         model = AutoModelForCausalLM.from_pretrained(
@@ -171,6 +187,27 @@ class GgufIntegrationTests(unittest.TestCase):
         EXPECTED_TEXT = "Hello.jsoup\n\nI am a beginner"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
+    def test_llama3_q4_0_tokenizer(self):
+        tokenizer = AutoTokenizer.from_pretrained(self.llama3_model_id, gguf_file=self.q4_llama3_model_id)
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            tokenizer.save_pretrained(tmpdirname)
+            tokenizer = AutoTokenizer.from_pretrained(tmpdirname)
+            special_sentence = "สวัสดี"
+            predicted_text = tokenizer.decode(tokenizer.encode(special_sentence, return_tensors="pt")[0])
+            self.assertEqual(predicted_text, "<|begin_of_text|>" + special_sentence)
+
+    def test_llama3_q4_0(self):
+        tokenizer = AutoTokenizer.from_pretrained(self.llama3_model_id, gguf_file=self.q4_llama3_model_id)
+        model = AutoModelForCausalLM.from_pretrained(
+            self.llama3_model_id, gguf_file=self.q4_llama3_model_id, device_map="auto", torch_dtype=torch.float16
+        )
+
+        text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
+        out = model.generate(**text, max_new_tokens=10)
+
+        EXPECTED_TEXT = "Hello, I am interested in [The Park]\nThe"
+        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
+
     def test_tokenization_xnli(self):
         import tqdm
         from datasets import load_dataset
@@ -178,7 +215,7 @@ class GgufIntegrationTests(unittest.TestCase):
         gguf_tokenizer = AutoTokenizer.from_pretrained(self.model_id, gguf_file=self.q8_0_gguf_model_id)
         original_tokenizer = AutoTokenizer.from_pretrained(self.original_model_id)
 
-        dataset = load_dataset("code_x_glue_ct_code_to_text", "go")
+        dataset = load_dataset("google/code_x_glue_ct_code_to_text", "go")
         for item in tqdm.tqdm(dataset["validation"]):
             string = item["code"]
             encoded1 = gguf_tokenizer.encode(string)
@@ -191,7 +228,7 @@ class GgufIntegrationTests(unittest.TestCase):
 
             self.assertEqual(decoded1, decoded2)
 
-        dataset = load_dataset("xnli", "all_languages")
+        dataset = load_dataset("facebook/xnli", "all_languages")
 
         for i, item in enumerate(tqdm.tqdm(dataset["train"].select(range(100)))):
             for string in item["premise"].values():

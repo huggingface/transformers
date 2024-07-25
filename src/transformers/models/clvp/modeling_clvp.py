@@ -1513,19 +1513,19 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
         super().__init__(config)
 
         if not isinstance(config.text_config, ClvpEncoderConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.text_config is expected to be of type `ClvpEncoderConfig` but is of type"
                 f" {type(config.text_config)}."
             )
 
         if not isinstance(config.speech_config, ClvpEncoderConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.speech_config is expected to be of type `ClvpEncoderConfig` but is of type"
                 f" {type(config.speech_config)}."
             )
 
         if not isinstance(config.decoder_config, ClvpDecoderConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.decoder_config is expected to be of type `ClvpDecoderConfig` but is of type"
                 f" {type(config.decoder_config)}."
             )

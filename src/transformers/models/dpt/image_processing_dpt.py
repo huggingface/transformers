@@ -58,7 +58,7 @@ def get_resize_output_image_size(
     multiple: int,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ) -> Tuple[int, int]:
-    def constraint_to_multiple_of(val, multiple, min_val=0, max_val=None):
+    def constrain_to_multiple_of(val, multiple, min_val=0, max_val=None):
         x = round(val / multiple) * multiple
 
         if max_val is not None and x > max_val:
@@ -87,8 +87,8 @@ def get_resize_output_image_size(
             # fit height
             scale_width = scale_height
 
-    new_height = constraint_to_multiple_of(scale_height * input_height, multiple=multiple)
-    new_width = constraint_to_multiple_of(scale_width * input_width, multiple=multiple)
+    new_height = constrain_to_multiple_of(scale_height * input_height, multiple=multiple)
+    new_width = constrain_to_multiple_of(scale_width * input_width, multiple=multiple)
 
     return (new_height, new_width)
 

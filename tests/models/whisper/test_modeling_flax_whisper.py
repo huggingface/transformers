@@ -561,7 +561,7 @@ class FlaxWhisperModelIntegrationTest(unittest.TestCase):
         processor = WhisperProcessor.from_pretrained("openai/whisper-large")
         model = FlaxWhisperForConditionalGeneration.from_pretrained("openai/whisper-large", from_pt=True)
 
-        ds = load_dataset("common_voice", "ja", split="test", streaming=True)
+        ds = load_dataset("legacy-datasets/common_voice", "ja", split="test", streaming=True, trust_remote_code=True)
         ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
         input_speech = next(iter(ds))["audio"]["array"]
         input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="np")
