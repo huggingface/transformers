@@ -35,6 +35,7 @@ import numpy as np
 import torch
 import torch.distributed as dist
 from torch import nn
+from torch.optim.lr_scheduler import SAVE_STATE_WARNING
 from torch.utils.data import Dataset, IterableDataset, RandomSampler, Sampler
 from torch.utils.data.distributed import DistributedSampler
 
@@ -63,12 +64,6 @@ if is_torch_available():
     else:
         from torch.optim.lr_scheduler import _LRScheduler as LRScheduler
 
-
-# this is used to suppress an undesired warning emitted by pytorch versions 1.4.2-1.7.0
-try:
-    from torch.optim.lr_scheduler import SAVE_STATE_WARNING
-except ImportError:
-    SAVE_STATE_WARNING = ""
 
 logger = logging.get_logger(__name__)
 
