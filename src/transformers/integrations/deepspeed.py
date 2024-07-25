@@ -56,7 +56,7 @@ else:
     from builtins import object as DeepSpeedConfig
 
 
-class HfDeepSpeedConfig(DeepSpeedConfig):
+class HfDeepSpeedConfig:
     """
     This object contains a DeepSpeed configuration dictionary and can be quickly queried for things like zero stage.
 
