@@ -29,7 +29,6 @@ from itertools import chain
 from types import ModuleType
 from typing import Any, Optional, Tuple, Union, List
 
-from nltk.downloader import update
 from packaging import version
 
 from . import logging
@@ -1638,7 +1637,7 @@ class _LazyModule(ModuleType):
                 for backend in backends:
                     if backend not in BACKENDS_MAPPING:
                         raise ValueError(
-                            f"Error: the following backend: '{backend}' was specified around object {item} but isn't specified in the backends mapping."
+                            f"Error: the following backend: '{backend}' was specified around object {module} but isn't specified in the backends mapping."
                         )
                     callable, error = BACKENDS_MAPPING[backend]
                     if not callable():

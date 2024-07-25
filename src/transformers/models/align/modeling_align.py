@@ -20,7 +20,6 @@ from typing import Any, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
-from IPython.terminal.pt_inputhooks import backends
 from torch import nn
 
 from ...activations import ACT2FN
