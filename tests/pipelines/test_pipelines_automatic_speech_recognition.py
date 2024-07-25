@@ -558,14 +558,12 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             framework="pt",
         )
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:2]")
-        sample = ds[:2]["audio"]
-
         EXPECTED_OUTPUT = [
             {"text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel."},
             {"text": " Nor is Mr. Quilters' manner less interesting than his matter."},
         ]
 
-        output = speech_recognizer(sample, batch_size=2)
+        output = speech_recognizer(ds["audio"], batch_size=2)
         self.assertEqual(output, EXPECTED_OUTPUT)
 
     @slow
