@@ -103,9 +103,7 @@ class GLMModelTester:
         self.bos_token_id = bos_token_id
         self.scope = scope
 
-    # Copied from
-    # tests.models.llama.test_modeling_llama.LlamaModelTester.prepare_config_and_inputs
-
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.prepare_config_and_inputs
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
@@ -164,9 +162,7 @@ class GLMModelTester:
             output_attentions=False,
         )
 
-    # Copied from
-    # tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model
-    # with Llama->GLM
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model with Llama->GLM
     def create_and_check_model(
         self,
         config,
@@ -187,9 +183,7 @@ class GLMModelTester:
             (self.batch_size, self.seq_length, self.hidden_size),
         )
 
-    # Copied from
-    # tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model_as_decoder
-    # with Llama->GLM
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model_as_decoder with Llama->GLM
     def create_and_check_model_as_decoder(
         self,
         config,
@@ -223,9 +217,7 @@ class GLMModelTester:
             (self.batch_size, self.seq_length, self.hidden_size),
         )
 
-    # Copied from
-    # tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_for_causal_lm
-    # with Llama->GLM
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_for_causal_lm with Llama->GLM
     def create_and_check_for_causal_lm(
         self,
         config,
@@ -246,9 +238,7 @@ class GLMModelTester:
             result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
         )
 
-    # Copied from
-    # tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_decoder_model_past_large_inputs
-    # with Llama->GLM
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_decoder_model_past_large_inputs with Llama->GLM
     def create_and_check_decoder_model_past_large_inputs(
         self,
         config,
@@ -315,8 +305,7 @@ class GLMModelTester:
             torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
         )
 
-    # Copied from
-    # tests.models.llama.test_modeling_llama.LlamaModelTester.prepare_config_and_inputs_for_common
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.prepare_config_and_inputs_for_common
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -333,8 +322,7 @@ class GLMModelTester:
 
 
 @require_torch
-# Copied from tests.models.mistral.test_modeling_mistral.MistralModelTest
-# with Mistral->GLM
+# Copied from tests.models.mistral.test_modeling_mistral.MistralModelTest with Mistral->GLM
 class GLMModelTest(
     ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
 ):
@@ -450,9 +438,7 @@ class GLMModelTest(
             (self.model_tester.batch_size, self.model_tester.num_labels),
         )
 
-    # Copied from
-    # tests.models.llama.test_modeling_llama.LlamaModelTest.test_llama_token_classification_model
-    # with Llama->GLM,llama->GLM
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_llama_token_classification_model with Llama->GLM,llama->GLM
     def test_GLM_token_classification_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3

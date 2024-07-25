@@ -22,6 +22,7 @@ from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
 from .tokenization_glm import GLMTokenizer
 
+
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {
@@ -133,9 +134,6 @@ class GLMTokenizerFast(PreTrainedTokenizerFast):
             pad_token=pad_token,
             **kwargs,
         )
-
-    # Copied from
-    # transformers.models.gpt2.tokenization_gpt2_fast.GPT2TokenizerFast.save_vocabulary
     def save_vocabulary(
         self, save_directory: str, filename_prefix: Optional[str] = None
     ) -> Tuple[str]:
