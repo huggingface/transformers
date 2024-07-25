@@ -30,6 +30,7 @@ from transformers.models.kosmos2_5.configuration_kosmos2_5 import (
     Kosmos2_5VisionConfig,
 )
 from transformers.testing_utils import (
+    require_flash_attn,
     require_torch,
     require_torch_gpu,
     require_torch_sdpa,
@@ -719,6 +720,10 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
         ]
         self.assertListEqual(generated_text, EXPECTED_TEXT)
 
+    @require_flash_attn
+    @require_torch_gpu
+    @pytest.mark.flash_attn_test
+    @slow
     def test_sdpa(self):
         url = (
             "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
