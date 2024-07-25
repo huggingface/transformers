@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Union
+from typing import Dict, List, Union
 
 from ..utils import (
     add_end_docstrings,
@@ -35,6 +35,38 @@ if is_torch_available():
     from ..models.auto.modeling_auto import MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES
 
 logger = logging.get_logger(__name__)
+
+
+class Chat:
+    """This class is intended to just be used internally in this pipeline and not exposed to users. We convert chats
+    to this format because the rest of the pipeline code tends to assume that lists of messages are
+    actually a batch of samples rather than messages in the same conversation."""
+
+    def __init__(self, messages: Dict, images: Union[str, List[str], "Image.Image", List["Image.Image"]]):
+        for message in messages:
+            if not ("role" in message and "content" in message):
+                raise ValueError("When passing chat dicts as input, each dict must have a 'role' and 'content' key.")
+        if count_images_in_chat(messages) != len(images):
+            raise ValueError("The number of images should be the same as the number of images in the chat.")
+
+        self.messages = messages
+        self.images = images
+
+
+class ImageText:
+    """This class is intended to just be used internally in this pipeline and not exposed to users. We used this class
+    as the base pipeline does not support multiple inputs, so we need to convert multiple inputs to a single input."""
+
+    def __init__(self, images: List, text: Union[str, List[str]]):
+        self.images = images
+        self.text = text
+
+
+def count_images_in_chat(chat):
+    num_images = 0
+    for message in chat:
+        num_images += sum(1 for content in message["content"] if content.get("type") == "image")
+    return num_images
 
 
 @add_end_docstrings(build_pipeline_init_args(has_processor=True))
@@ -71,9 +103,6 @@ class ImageTextToTextPipeline(Pipeline):
         preprocess_params = {}
         post_process_params = {}
 
-        if text is not None:
-            preprocess_params["text"] = text
-            post_process_params["text"] = text
         if timeout is not None:
             preprocess_params["timeout"] = timeout
 
@@ -91,7 +120,7 @@ class ImageTextToTextPipeline(Pipeline):
 
         return preprocess_params, forward_kwargs, post_process_params
 
-    def __call__(self, images: Union[str, List[str], "Image.Image", List["Image.Image"]] = None, **kwargs):
+    def __call__(self, images: Union[str, List[str], "Image.Image", List["Image.Image"]], **kwargs):
         """
         Generate a text given text and the image(s) passed as inputs.
 
@@ -105,28 +134,72 @@ class ImageTextToTextPipeline(Pipeline):
 
                 The pipeline accepts either a single image or a batch of images.
 
-            text (`str`):
-                The text to be used as a prompt for the generation.
-
+            text (str, List[str], `List[Dict[str, Union[str, PIL.Image]]]`):
+                The text to be used for generation. If a list of strings is passed, the length of the list should be the
+                same as the number of images. Text can also follow the chat format: a list of dictionaries where each
+                dictionary represents a message in a conversation. Each dictionary should have two keys: 'role' and
+                'content'. 'role' should be one of 'user', 'system' or 'assistant'. 'content' should be a dictionary
+                containing the text of the message and the type of the message. The type of the message can be either
+                'text' or 'image'. If the type is 'image', no text is needed.
 
         Return:
             A list or a list of list of `dict`: Each result comes as a dictionary with the following key:
 
             - **generated_text** (`str`) -- The generated text.
         """
-        return super().__call__(images, **kwargs)
+        text = kwargs.pop("text")
 
-    def preprocess(self, image=None, text=None, timeout=None):
-        if image is not None:
-            image = load_image(image, timeout=timeout)
+        if images is None or text is None:
+            raise ValueError("You have to specify both `images` and `text`")
 
+        if not isinstance(images, (list, tuple)):
+            images = [images]
+
+        if isinstance(text, (list, tuple, text) if is_torch_available() else (list, tuple)) and isinstance(
+            text[0], (list, tuple, dict)
+        ):
+            # We have one or more prompts in list-of-dicts format, so this is chat mode
+            if isinstance(text[0], dict):
+                return super().__call__(Chat(text, images), **kwargs)
+            else:
+                chats = [Chat(chat, image) for chat, image in zip(text, images)]  # 🐈 🐈 🐈
+                return super().__call__(chats, **kwargs)
+
+        if isinstance(text, str):
+            text = [text] * len(images)
+        if len(images) != len(text):
+            raise ValueError("The number of images and text should be the same.")
+
+        return super().__call__([ImageText(image, text_single) for image, text_single in zip(images, text)], **kwargs)
+
+    def preprocess(self, inputs=None, timeout=None):
         kwargs = {"legacy": False}
+        images = inputs.images
+        if isinstance(inputs, Chat):
+            kwargs["chats"] = inputs.messages
+            text = self.processor.apply_chat_template(
+                inputs.messages,
+                add_generation_prompt=True,
+                return_tensors=self.framework,
+                **kwargs,
+            )
+        else:
+            text = inputs.text
+
+        if not isinstance(images, (list, tuple)):
+            images = load_image(images, timeout=timeout)
+        else:
+            images = [load_image(image, timeout=timeout) for image in images]
 
         try:
-            model_inputs = self.processor(images=image, text=text, return_tensors=self.framework, **kwargs)
+            kwargs["padding"] = True
+            model_inputs = self.processor(images=images, text=text, return_tensors=self.framework, **kwargs)
         except TypeError:
             kwargs = {}
-            model_inputs = self.processor(images=image, text=text, return_tensors=self.framework, **kwargs)
+            kwargs["padding"] = True
+            model_inputs = self.processor(images=images, text=text, return_tensors=self.framework, **kwargs)
+
+        model_inputs["text"] = text
 
         return model_inputs
 
@@ -134,22 +207,30 @@ class ImageTextToTextPipeline(Pipeline):
         if generate_kwargs is None:
             generate_kwargs = {}
 
+        input_text = model_inputs.pop("text")
         model_outputs = self.model.generate(**model_inputs, **generate_kwargs)
-        return model_outputs
+        return {"outputs": model_outputs, "input_text": input_text}
 
-    def postprocess(self, model_outputs, text=None):
+    def postprocess(self, model_outputs):
         records = []
-        generated_texts = self.processor.post_process_image_text_to_text(model_outputs)
-        print("generated_texts", generated_texts)
+        input_text = model_outputs["input_text"]
+        outputs = model_outputs["outputs"]
+        generated_texts = self.processor.post_process_image_text_to_text(outputs)
         # cleanup the generated text
         generated_texts = [text.strip() for text in generated_texts]
-        print("text", text)
-        if text is not None:
+        if isinstance(input_text, str):
+            input_text = [input_text]
+        if input_text is not None:
             # remove the input text from the generated text if the generated text starts with the input text
             generated_texts = [
-                text_generated[len(text) :].strip() if text_generated.startswith(text) else text_generated
-                for text_generated in generated_texts
+                text_generated[len(input_text[i]) :].strip()
+                if text_generated.startswith(input_text[i])
+                else text_generated
+                for i, text_generated in enumerate(generated_texts)
             ]
-        records = [{"input_text": text, "generated_text": generated_text} for generated_text in generated_texts]
+        records = [
+            {"input_text": input_text[i], "generated_text": generated_text}
+            for i, generated_text in enumerate(generated_texts)
+        ]
 
         return records
