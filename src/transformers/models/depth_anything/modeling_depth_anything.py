@@ -339,6 +339,7 @@ class DepthAnythingDepthEstimationHead(nn.Module):
             self.activation2 = nn.Sigmoid()
         else:
             raise ValueError(f"Unknown depth estimation type: {config.depth_estimation}")
+        self.max_depth = config.max_depth
 
     def forward(self, hidden_states: List[torch.Tensor], patch_height, patch_width) -> torch.Tensor:
         hidden_states = hidden_states[self.head_in_index]
@@ -353,7 +354,7 @@ class DepthAnythingDepthEstimationHead(nn.Module):
         predicted_depth = self.conv2(predicted_depth)
         predicted_depth = self.activation1(predicted_depth)
         predicted_depth = self.conv3(predicted_depth)
-        predicted_depth = self.activation2(predicted_depth)
+        predicted_depth = self.activation2(predicted_depth) * self.max_depth
         predicted_depth = predicted_depth.squeeze(dim=1)  # shape (batch_size, height, width)
 
         return predicted_depth

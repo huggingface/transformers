@@ -57,6 +57,12 @@ def get_dpt_config(model_name):
         raise NotImplementedError(f"Model not supported: {model_name}")
 
     depth_estimation = "metric" if "metric" in model_name else "relative"
+    if "indoor" in model_name:
+        max_depth = 20
+    elif "outdoor" in model_name:
+        max_depth = 80
+    else:
+        max_depth = 1
 
     config = DepthAnythingConfig(
         reassemble_hidden_size=backbone_config.hidden_size,
@@ -65,6 +71,7 @@ def get_dpt_config(model_name):
         fusion_hidden_size=fusion_hidden_size,
         neck_hidden_sizes=neck_hidden_sizes,
         depth_estimation=depth_estimation,
+        max_depth=max_depth,
     )
 
     return config
