@@ -591,6 +591,9 @@ src/transformers/models/git/configuration_git.py
 src/transformers/models/git/convert_git_to_pytorch.py
 src/transformers/models/glpn/configuration_glpn.py
 src/transformers/models/glpn/convert_glpn_to_pytorch.py
+src/transformers/models/glm/configuration_glm.py
+src/transformers/models/glm/modeling_glm.py
+src/transformers/models/glm/tokenization_glm.py
 src/transformers/models/gpt2/CONVERSION.md
 src/transformers/models/gpt2/convert_gpt2_original_tf_checkpoint_to_pytorch.py
 src/transformers/models/gpt2/modeling_flax_gpt2.py

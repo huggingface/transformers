@@ -22,8 +22,8 @@ import pytest
 
 from transformers import AutoTokenizer, GLMConfig, is_torch_available
 from transformers.testing_utils import (
-    is_flaky,
     backend_empty_cache,
+    is_flaky,
     require_flash_attn,
     require_torch,
     require_torch_gpu,
@@ -39,6 +39,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 if is_torch_available():
     import torch
+
     from transformers import (
         GLMForCausalLM,
         GLMForSequenceClassification,
@@ -49,32 +50,32 @@ if is_torch_available():
 
 class GLMModelTester:
     def __init__(
-            self,
-            parent,
-            batch_size=13,
-            seq_length=7,
-            is_training=True,
-            use_input_mask=True,
-            use_token_type_ids=True,
-            use_labels=True,
-            vocab_size=99,
-            hidden_size=8,
-            num_hidden_layers=2,
-            num_attention_heads=4,
-            num_key_value_heads=2,
-            intermediate_size=37,
-            hidden_act="gelu",
-            hidden_dropout_prob=0.1,
-            attention_probs_dropout_prob=0.1,
-            max_position_embeddings=512,
-            type_vocab_size=16,
-            type_sequence_label_size=2,
-            initializer_range=0.02,
-            num_labels=3,
-            num_choices=4,
-            pad_token_id=0,
-            bos_token_id=1,
-            scope=None,
+        self,
+        parent,
+        batch_size=13,
+        seq_length=7,
+        is_training=True,
+        use_input_mask=True,
+        use_token_type_ids=True,
+        use_labels=True,
+        vocab_size=99,
+        hidden_size=8,
+        num_hidden_layers=2,
+        num_attention_heads=4,
+        num_key_value_heads=2,
+        intermediate_size=37,
+        hidden_act="gelu",
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        max_position_embeddings=512,
+        type_vocab_size=16,
+        type_sequence_label_size=2,
+        initializer_range=0.02,
+        num_labels=3,
+        num_choices=4,
+        pad_token_id=0,
+        bos_token_id=1,
+        scope=None,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -106,34 +107,43 @@ class GLMModelTester:
     # tests.models.llama.test_modeling_llama.LlamaModelTester.prepare_config_and_inputs
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor(
-            [self.batch_size, self.seq_length], self.vocab_size)
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = torch.tril(
-                torch.ones(
-                    self.batch_size,
-                    self.seq_length)).to(torch_device)
+            input_mask = torch.tril(torch.ones(self.batch_size, self.seq_length)).to(
+                torch_device
+            )
 
         token_type_ids = None
         if self.use_token_type_ids:
             token_type_ids = ids_tensor(
-                [self.batch_size, self.seq_length], self.type_vocab_size)
+                [self.batch_size, self.seq_length], self.type_vocab_size
+            )
 
         sequence_labels = None
         token_labels = None
         choice_labels = None
         if self.use_labels:
             sequence_labels = ids_tensor(
-                [self.batch_size], self.type_sequence_label_size)
+                [self.batch_size], self.type_sequence_label_size
+            )
             token_labels = ids_tensor(
-                [self.batch_size, self.seq_length], self.num_labels)
+                [self.batch_size, self.seq_length], self.num_labels
+            )
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
         config = self.get_config()
 
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        return (
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        )
 
     def get_config(self):
         return GLMConfig(
@@ -158,14 +168,15 @@ class GLMModelTester:
     # tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model
     # with Llama->GLM
     def create_and_check_model(
-            self,
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels):
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+    ):
         model = GLMModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -173,24 +184,23 @@ class GLMModelTester:
         result = model(input_ids)
         self.parent.assertEqual(
             result.last_hidden_state.shape,
-            (self.batch_size,
-             self.seq_length,
-             self.hidden_size))
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
     # Copied from
     # tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model_as_decoder
     # with Llama->GLM
     def create_and_check_model_as_decoder(
-            self,
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+        encoder_hidden_states,
+        encoder_attention_mask,
     ):
         config.add_cross_attention = True
         model = GLMModel(config)
@@ -210,52 +220,46 @@ class GLMModelTester:
         result = model(input_ids, attention_mask=input_mask)
         self.parent.assertEqual(
             result.last_hidden_state.shape,
-            (self.batch_size,
-             self.seq_length,
-             self.hidden_size))
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
     # Copied from
     # tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_for_causal_lm
     # with Llama->GLM
     def create_and_check_for_causal_lm(
-            self,
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+        encoder_hidden_states,
+        encoder_attention_mask,
     ):
         model = GLMForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            labels=token_labels)
+        result = model(input_ids, attention_mask=input_mask, labels=token_labels)
         self.parent.assertEqual(
-            result.logits.shape,
-            (self.batch_size,
-             self.seq_length,
-             self.vocab_size))
+            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
 
     # Copied from
     # tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_decoder_model_past_large_inputs
     # with Llama->GLM
     def create_and_check_decoder_model_past_large_inputs(
-            self,
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+        encoder_hidden_states,
+        encoder_attention_mask,
     ):
         config.is_decoder = True
         config.add_cross_attention = True
@@ -299,20 +303,17 @@ class GLMModelTester:
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -
-                                                        3:, random_slice_idx].detach()
-        output_from_past_slice = output_from_past[:,
-                                                  :, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[
+            :, -3:, random_slice_idx
+        ].detach()
+        output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
 
-        self.parent.assertTrue(
-            output_from_past_slice.shape[1] == next_tokens.shape[1])
+        self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
 
         # test that outputs are equal for slice
         self.parent.assertTrue(
-            torch.allclose(
-                output_from_past_slice,
-                output_from_no_past_slice,
-                atol=1e-3))
+            torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+        )
 
     # Copied from
     # tests.models.llama.test_modeling_llama.LlamaModelTester.prepare_config_and_inputs_for_common
@@ -335,17 +336,19 @@ class GLMModelTester:
 # Copied from tests.models.mistral.test_modeling_mistral.MistralModelTest
 # with Mistral->GLM
 class GLMModelTest(
-        ModelTesterMixin,
-        GenerationTesterMixin,
-        PipelineTesterMixin,
-        unittest.TestCase):
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     all_model_classes = (
-        (GLMModel,
-         GLMForCausalLM,
-         GLMForSequenceClassification,
-         GLMForTokenClassification) if is_torch_available() else ())
-    all_generative_model_classes = (
-        GLMForCausalLM,) if is_torch_available() else ()
+        (
+            GLMModel,
+            GLMForCausalLM,
+            GLMForSequenceClassification,
+            GLMForTokenClassification,
+        )
+        if is_torch_available()
+        else ()
+    )
+    all_generative_model_classes = (GLMForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": GLMModel,
@@ -365,12 +368,13 @@ class GLMModelTest(
     # TODO (ydshieh): Check this. See
     # https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
     def is_pipeline_test_to_skip(
-            self,
-            pipeline_test_casse_name,
-            config_class,
-            model_architecture,
-            tokenizer_name,
-            processor_name):
+        self,
+        pipeline_test_casse_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        processor_name,
+    ):
         return True
 
     # Ignore copy
@@ -383,8 +387,7 @@ class GLMModelTest(
 
     def setUp(self):
         self.model_tester = GLMModelTester(self)
-        self.config_tester = ConfigTester(
-            self, config_class=GLMConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=GLMConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -399,18 +402,16 @@ class GLMModelTest(
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         sequence_labels = ids_tensor(
-            [self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
+            [self.model_tester.batch_size], self.model_tester.type_sequence_label_size
+        )
         model = GLMForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
-        result = model(
-            input_ids,
-            attention_mask=attention_mask,
-            labels=sequence_labels)
+        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(
             result.logits.shape,
-            (self.model_tester.batch_size,
-             self.model_tester.num_labels))
+            (self.model_tester.batch_size, self.model_tester.num_labels),
+        )
 
     def test_GLM_sequence_classification_model_for_single_label(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -419,18 +420,16 @@ class GLMModelTest(
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         sequence_labels = ids_tensor(
-            [self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
+            [self.model_tester.batch_size], self.model_tester.type_sequence_label_size
+        )
         model = GLMForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
-        result = model(
-            input_ids,
-            attention_mask=attention_mask,
-            labels=sequence_labels)
+        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(
             result.logits.shape,
-            (self.model_tester.batch_size,
-             self.model_tester.num_labels))
+            (self.model_tester.batch_size, self.model_tester.num_labels),
+        )
 
     def test_GLM_sequence_classification_model_for_multi_label(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -439,22 +438,17 @@ class GLMModelTest(
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         sequence_labels = ids_tensor(
-            [
-                self.model_tester.batch_size,
-                config.num_labels],
-            self.model_tester.type_sequence_label_size).to(
-            torch.float)
+            [self.model_tester.batch_size, config.num_labels],
+            self.model_tester.type_sequence_label_size,
+        ).to(torch.float)
         model = GLMForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
-        result = model(
-            input_ids,
-            attention_mask=attention_mask,
-            labels=sequence_labels)
+        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(
             result.logits.shape,
-            (self.model_tester.batch_size,
-             self.model_tester.num_labels))
+            (self.model_tester.batch_size, self.model_tester.num_labels),
+        )
 
     # Copied from
     # tests.models.llama.test_modeling_llama.LlamaModelTest.test_llama_token_classification_model
@@ -465,19 +459,20 @@ class GLMModelTest(
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         token_labels = ids_tensor(
-            [self.model_tester.batch_size, self.model_tester.seq_length], config.num_labels)
+            [self.model_tester.batch_size, self.model_tester.seq_length],
+            config.num_labels,
+        )
         model = GLMForTokenClassification(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(
-            input_ids,
-            attention_mask=attention_mask,
-            labels=token_labels)
+        result = model(input_ids, attention_mask=attention_mask, labels=token_labels)
         self.assertEqual(
             result.logits.shape,
-            (self.model_tester.batch_size,
-             self.model_tester.seq_length,
-             self.model_tester.num_labels),
+            (
+                self.model_tester.batch_size,
+                self.model_tester.seq_length,
+                self.model_tester.num_labels,
+            ),
         )
 
     def test_hidden_states_output(self):
@@ -487,24 +482,29 @@ class GLMModelTest(
             model.eval()
 
             with torch.no_grad():
-                outputs = model(
-                    **self._prepare_for_class(inputs_dict, model_class))
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+            hidden_states = (
+                outputs.encoder_hidden_states
+                if config.is_encoder_decoder
+                else outputs.hidden_states
+            )
 
             expected_num_layers = getattr(
                 self.model_tester,
                 "expected_num_hidden_layers",
-                self.model_tester.num_hidden_layers + 1)
+                self.model_tester.num_hidden_layers + 1,
+            )
 
             # GLM block start with id 1 not 0
             self.assertEqual(len(hidden_states), expected_num_layers + 1)
 
             if hasattr(self.model_tester, "encoder_seq_length"):
                 seq_length = self.model_tester.encoder_seq_length
-                if hasattr(
-                        self.model_tester,
-                        "chunk_length") and self.model_tester.chunk_length > 1:
+                if (
+                    hasattr(self.model_tester, "chunk_length")
+                    and self.model_tester.chunk_length > 1
+                ):
                     seq_length = seq_length * self.model_tester.chunk_length
             else:
                 seq_length = self.model_tester.seq_length
@@ -520,7 +520,8 @@ class GLMModelTest(
                 self.assertEqual(len(hidden_states), expected_num_layers + 1)
                 seq_len = getattr(self.model_tester, "seq_length", None)
                 decoder_seq_length = getattr(
-                    self.model_tester, "decoder_seq_length", seq_len)
+                    self.model_tester, "decoder_seq_length", seq_len
+                )
 
                 self.assertListEqual(
                     list(hidden_states[0].shape[-2:]),
@@ -553,20 +554,22 @@ class GLMModelTest(
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model = model_class.from_pretrained(
-                    tmpdirname,
-                    torch_dtype=torch.float16,
-                    low_cpu_mem_usage=True).to(torch_device)
+                    tmpdirname, torch_dtype=torch.float16, low_cpu_mem_usage=True
+                ).to(torch_device)
 
-                dummy_input = torch.LongTensor(
-                    [[0, 2, 3, 4], [0, 2, 3, 4]]).to(torch_device)
+                dummy_input = torch.LongTensor([[0, 2, 3, 4], [0, 2, 3, 4]]).to(
+                    torch_device
+                )
                 dummy_attention_mask = torch.LongTensor(
-                    [[1, 1, 1, 1], [1, 1, 1, 0]]).to(torch_device)
+                    [[1, 1, 1, 1], [1, 1, 1, 0]]
+                ).to(torch_device)
 
                 model.generate(
                     dummy_input,
                     attention_mask=dummy_attention_mask,
                     max_new_tokens=1,
-                    do_sample=False)
+                    do_sample=False,
+                )
 
                 model = model_class.from_pretrained(
                     tmpdirname,
@@ -580,7 +583,8 @@ class GLMModelTest(
                         dummy_input,
                         attention_mask=dummy_attention_mask,
                         max_new_tokens=1,
-                        do_sample=False)
+                        do_sample=False,
+                    )
 
     @require_flash_attn
     @require_torch_gpu
@@ -592,7 +596,9 @@ class GLMModelTest(
         max_new_tokens = 30
 
         for model_class in self.all_generative_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = (
+                self.model_tester.prepare_config_and_inputs_for_common()
+            )
 
             dummy_input = inputs_dict[model_class.main_input_name]
             if dummy_input.dtype in [torch.float32, torch.bfloat16]:
@@ -600,8 +606,9 @@ class GLMModelTest(
 
             # make sure that all models have enough positions for generation
             if hasattr(config, "max_position_embeddings"):
-                config.max_position_embeddings = max_new_tokens + \
-                    dummy_input.shape[1] + 1
+                config.max_position_embeddings = (
+                    max_new_tokens + dummy_input.shape[1] + 1
+                )
 
             model = model_class(config)
 
@@ -609,7 +616,8 @@ class GLMModelTest(
                 model.save_pretrained(tmpdirname)
 
                 dummy_attention_mask = inputs_dict.get(
-                    "attention_mask", torch.ones_like(dummy_input))
+                    "attention_mask", torch.ones_like(dummy_input)
+                )
                 # NOTE: GLM apparently does not support right padding +
                 # use_cache with FA2.
                 dummy_attention_mask[:, -1] = 1
@@ -635,8 +643,7 @@ class GLMModelTest(
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest(
-            reason="GLM flash attention does not support right padding")
+        self.skipTest(reason="GLM flash attention does not support right padding")
 
     @unittest.skip("GLM KV cache is a non standard format")
     def test_past_key_values_format(self):
@@ -647,29 +654,99 @@ class GLMModelTest(
     class GLMIntegrationTest(unittest.TestCase):
 
         def test_glm_instruct_logits(self):
-            input_ids = [151331, 151333, 151336, 198, 102162, 220, 16, 10, 16,
-                         100694, 99312, 3837, 99558, 104559, 100295, 151337]
-            model = GLMForCausalLM.from_pretrained(
-                "THUDM/glm-4-9b-chat").to(torch_device)
+            input_ids = [
+                151331,
+                151333,
+                151336,
+                198,
+                102162,
+                220,
+                16,
+                10,
+                16,
+                100694,
+                99312,
+                3837,
+                99558,
+                104559,
+                100295,
+                151337,
+            ]
+            model = GLMForCausalLM.from_pretrained("THUDM/glm-4-9b-chat").to(
+                torch_device
+            )
             input_ids = torch.tensor([input_ids]).to(
-                model.model.embed_tokens.weight.device)
+                model.model.embed_tokens.weight.device
+            )
             with torch.no_grad():
                 out = model(input_ids).logits.cpu()
 
             # Expected mean on dim = -1
-            EXPECTED_MEAN = torch.tensor([[-2.6504, -0.0175, -1.7773, -1.9961, -2.2734, -2.8457, -2.4512, -2.6133,
-                                           -2.4199, -2.3535, -2.8203, -2.5664, -1.9512, -3.4766, -3.4395, -3.0156]])
+            EXPECTED_MEAN = torch.tensor(
+                [
+                    [
+                        -2.6504,
+                        -0.0175,
+                        -1.7773,
+                        -1.9961,
+                        -2.2734,
+                        -2.8457,
+                        -2.4512,
+                        -2.6133,
+                        -2.4199,
+                        -2.3535,
+                        -2.8203,
+                        -2.5664,
+                        -1.9512,
+                        -3.4766,
+                        -3.4395,
+                        -3.0156,
+                    ]
+                ]
+            )
             torch.testing.assert_close(
-                out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
+                out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2
+            )
 
             # slicing logits[0, 0, 0:30]
-            EXPECTED_SLICE = torch.tensor([3.9199, 6.3906, 4.7812, 4.1914, -1.0078, -1.2148, 4.2109, 5.5625,
-                                           2.4121, 2.2910, 4.3438, 5.7969, 7.0859, 4.5273, 0.9565, -1.8076,
-                                           3.1582, 3.7305, 4.5977, 5.7500, 4.1211, 4.2461, 4.4883, 2.9395,
-                                           4.0703, 7.1953, 3.5430, 2.4707, 0.0379, 2.0449])
+            EXPECTED_SLICE = torch.tensor(
+                [
+                    3.9199,
+                    6.3906,
+                    4.7812,
+                    4.1914,
+                    -1.0078,
+                    -1.2148,
+                    4.2109,
+                    5.5625,
+                    2.4121,
+                    2.2910,
+                    4.3438,
+                    5.7969,
+                    7.0859,
+                    4.5273,
+                    0.9565,
+                    -1.8076,
+                    3.1582,
+                    3.7305,
+                    4.5977,
+                    5.7500,
+                    4.1211,
+                    4.2461,
+                    4.4883,
+                    2.9395,
+                    4.0703,
+                    7.1953,
+                    3.5430,
+                    2.4707,
+                    0.0379,
+                    2.0449,
+                ]
+            )
 
             torch.testing.assert_close(
-                out[0, 0, :30], EXPECTED_SLICE, atol=1e-4, rtol=1e-4)
+                out[0, 0, :30], EXPECTED_SLICE, atol=1e-4, rtol=1e-4
+            )
 
             del model
             backend_empty_cache(torch_device)
@@ -686,7 +763,8 @@ class GLMModelTest(
                 {"role": "user", "content": "Tell me the answer of 1 plus 1?"},
             ]
             inputs = tokenizer.apply_chat_template(
-                messages, add_generation_prompt=True, return_tensors="pt")
+                messages, add_generation_prompt=True, return_tensors="pt"
+            )
             outputs = model.generate(inputs, max_new_tokens=32)
             output_text = tokenizer.batch_decode(outputs)
             EXPECTED_OUTPUT = [
@@ -695,20 +773,21 @@ class GLMModelTest(
             self.assertListEqual(output_text, EXPECTED_OUTPUT)
 
     def _check_attentions_for_generate(
-            self,
-            batch_size,
-            attentions,
-            min_length,
-            max_length,
-            config,
-            use_cache=False,
-            num_beam_groups=1):
+        self,
+        batch_size,
+        attentions,
+        min_length,
+        max_length,
+        config,
+        use_cache=False,
+        num_beam_groups=1,
+    ):
         self.assertIsInstance(attentions, tuple)
-        self.assertListEqual([isinstance(iter_attentions, tuple)
-                              for iter_attentions in attentions], [True] * len(attentions))
-        self.assertEqual(
-            len(attentions),
-            (max_length - min_length) * num_beam_groups)
+        self.assertListEqual(
+            [isinstance(iter_attentions, tuple) for iter_attentions in attentions],
+            [True] * len(attentions),
+        )
+        self.assertEqual(len(attentions), (max_length - min_length) * num_beam_groups)
 
         for idx, iter_attentions in enumerate(attentions):
             tgt_len = min_length + idx if not use_cache else 1
@@ -720,36 +799,46 @@ class GLMModelTest(
             )
 
             # check attn size
-            self.assertListEqual([layer_attention.shape for layer_attention in iter_attentions],
-                                 [expected_shape] * len(iter_attentions))
+            self.assertListEqual(
+                [layer_attention.shape for layer_attention in iter_attentions],
+                [expected_shape] * len(iter_attentions),
+            )
 
     def _check_past_key_values_for_generate(
-            self,
-            batch_size,
-            past_key_values,
-            seq_length,
-            config,
-            num_beam_groups=1):
+        self, batch_size, past_key_values, seq_length, config, num_beam_groups=1
+    ):
         self.assertIsInstance(past_key_values, tuple)
         self.assertListEqual(
-            [isinstance(iter_past_key_values, tuple) for iter_past_key_values in past_key_values],
+            [
+                isinstance(iter_past_key_values, tuple)
+                for iter_past_key_values in past_key_values
+            ],
             [True] * len(past_key_values),
         )
 
         # (batch, head, seq_length, kv_channels)
         expected_shape = (
             batch_size * num_beam_groups,
-            config.num_key_value_heads if hasattr(
-                config,
-                "num_key_value_heads") else config.num_attention_heads,
+            (
+                config.num_key_value_heads
+                if hasattr(config, "num_key_value_heads")
+                else config.num_attention_heads
+            ),
             seq_length,
-            config.kv_channels)
+            config.kv_channels,
+        )
         # check shape key, value
         self.assertListEqual(
-            [layer_past_key_values[0].shape for layer_past_key_values in past_key_values],
+            [
+                layer_past_key_values[0].shape
+                for layer_past_key_values in past_key_values
+            ],
             [expected_shape] * len(past_key_values),
         )
         self.assertListEqual(
-            [layer_past_key_values[1].shape for layer_past_key_values in past_key_values],
+            [
+                layer_past_key_values[1].shape
+                for layer_past_key_values in past_key_values
+            ],
             [expected_shape] * len(past_key_values),
         )

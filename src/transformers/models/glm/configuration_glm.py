@@ -74,35 +74,35 @@ class GLMConfig(PretrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
-            self,
-            num_hidden_layers=40,
-            vocab_size=151552,
-            hidden_size=4096,
-            ffn_hidden_size=13696,
-            kv_channels=128,
-            num_attention_heads=32,
-            num_key_value_heads=32,
-            seq_length=131072,
-            hidden_dropout=0.0,
-            classifier_dropout=None,
-            attention_dropout=0.0,
-            max_position_embeddings=32768,
-            initializer_range=0.02,
-            rms_norm_eps=1.5625e-07,
-            rmsnorm=True,
-            apply_residual_connection_post_layernorm=False,
-            post_layer_norm=True,
-            add_bias_linear=False,
-            add_qkv_bias=False,
-            bias_dropout_fusion=True,
-            multi_query_attention=False,
-            multi_query_group_num=2,
-            rope_ratio=1,
-            apply_query_key_layer_scaling=True,
-            attention_softmax_in_fp32=True,
-            fp32_residual_connection=False,
-            use_cache=True,
-            **kwargs
+        self,
+        num_hidden_layers=40,
+        vocab_size=151552,
+        hidden_size=4096,
+        ffn_hidden_size=13696,
+        kv_channels=128,
+        num_attention_heads=32,
+        num_key_value_heads=32,
+        seq_length=131072,
+        hidden_dropout=0.0,
+        classifier_dropout=None,
+        attention_dropout=0.0,
+        max_position_embeddings=32768,
+        initializer_range=0.02,
+        rms_norm_eps=1.5625e-07,
+        rmsnorm=True,
+        apply_residual_connection_post_layernorm=False,
+        post_layer_norm=True,
+        add_bias_linear=False,
+        add_qkv_bias=False,
+        bias_dropout_fusion=True,
+        multi_query_attention=False,
+        multi_query_group_num=2,
+        rope_ratio=1,
+        apply_query_key_layer_scaling=True,
+        attention_softmax_in_fp32=True,
+        fp32_residual_connection=False,
+        use_cache=True,
+        **kwargs
     ):
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -123,7 +123,9 @@ class GLMConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.rms_norm_eps = rms_norm_eps
         self.rmsnorm = rmsnorm
-        self.apply_residual_connection_post_layernorm = apply_residual_connection_post_layernorm
+        self.apply_residual_connection_post_layernorm = (
+            apply_residual_connection_post_layernorm
+        )
         self.post_layer_norm = post_layer_norm
         self.add_bias_linear = add_bias_linear
         self.add_qkv_bias = add_qkv_bias

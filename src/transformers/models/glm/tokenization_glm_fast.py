@@ -78,15 +78,15 @@ class GLMTokenizerFast(PreTrainedTokenizerFast):
     slow_tokenizer_class = GLMTokenizer
 
     def __init__(
-            self,
-            vocab_file=None,
-            merges_file=None,
-            tokenizer_file=None,
-            unk_token="<|endoftext|>",
-            bos_token=None,
-            eos_token="<|endoftext|>",
-            pad_token="<|endoftext|>",
-            **kwargs,
+        self,
+        vocab_file=None,
+        merges_file=None,
+        tokenizer_file=None,
+        unk_token="<|endoftext|>",
+        bos_token=None,
+        eos_token="<|endoftext|>",
+        pad_token="<|endoftext|>",
+        **kwargs,
     ):
         # We need to at least pass vocab_file and merges_file to base class
         # in case a slow tokenizer needs to be initialized; other can be
@@ -96,40 +96,32 @@ class GLMTokenizerFast(PreTrainedTokenizerFast):
 
         bos_token = (
             AddedToken(
-                bos_token,
-                lstrip=False,
-                rstrip=False,
-                special=True,
-                normalized=False) if isinstance(
-                bos_token,
-                str) else bos_token)
+                bos_token, lstrip=False, rstrip=False, special=True, normalized=False
+            )
+            if isinstance(bos_token, str)
+            else bos_token
+        )
         eos_token = (
             AddedToken(
-                eos_token,
-                lstrip=False,
-                rstrip=False,
-                special=True,
-                normalized=False) if isinstance(
-                eos_token,
-                str) else eos_token)
+                eos_token, lstrip=False, rstrip=False, special=True, normalized=False
+            )
+            if isinstance(eos_token, str)
+            else eos_token
+        )
         unk_token = (
             AddedToken(
-                unk_token,
-                lstrip=False,
-                rstrip=False,
-                special=True,
-                normalized=False) if isinstance(
-                unk_token,
-                str) else unk_token)
+                unk_token, lstrip=False, rstrip=False, special=True, normalized=False
+            )
+            if isinstance(unk_token, str)
+            else unk_token
+        )
         pad_token = (
             AddedToken(
-                pad_token,
-                lstrip=False,
-                rstrip=False,
-                special=True,
-                normalized=False) if isinstance(
-                pad_token,
-                str) else pad_token)
+                pad_token, lstrip=False, rstrip=False, special=True, normalized=False
+            )
+            if isinstance(pad_token, str)
+            else pad_token
+        )
 
         super().__init__(
             vocab_file=vocab_file,
@@ -145,9 +137,7 @@ class GLMTokenizerFast(PreTrainedTokenizerFast):
     # Copied from
     # transformers.models.gpt2.tokenization_gpt2_fast.GPT2TokenizerFast.save_vocabulary
     def save_vocabulary(
-            self,
-            save_directory: str,
-            filename_prefix: Optional[str] = None) -> Tuple[str]:
-        files = self._tokenizer.model.save(
-            save_directory, name=filename_prefix)
+        self, save_directory: str, filename_prefix: Optional[str] = None
+    ) -> Tuple[str]:
+        files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
