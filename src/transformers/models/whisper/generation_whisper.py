@@ -464,7 +464,7 @@ class WhisperGenerationMixin:
         >>> processor = AutoProcessor.from_pretrained("openai/whisper-tiny.en")
         >>> model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
 
-        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True)
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
         >>> inputs = processor(ds[0]["audio"]["array"], return_tensors="pt")
         >>> input_features = inputs.input_features
@@ -498,7 +498,7 @@ class WhisperGenerationMixin:
 
         # 3. Make sure generation config is correctly set
         # Make sure the generation config is correctly set depending on whether timestamps are to be returned or not
-        self._set_return_outputs(
+        return_dict_in_generate = self._set_return_outputs(
             return_dict_in_generate=return_dict_in_generate,
             return_token_timestamps=return_token_timestamps,
             logprob_threshold=logprob_threshold,
@@ -732,7 +732,7 @@ class WhisperGenerationMixin:
             else:
                 outputs = sequences
 
-            if generation_config.return_dict_in_generate:
+            if return_dict_in_generate and generation_config.return_dict_in_generate:
                 dict_outputs = self._stack_split_outputs(seek_outputs, model_output_type, sequences.device, kwargs)
 
                 if num_return_sequences > 1:
@@ -1109,18 +1109,20 @@ class WhisperGenerationMixin:
     def _set_return_outputs(return_dict_in_generate, return_token_timestamps, logprob_threshold, generation_config):
         if return_dict_in_generate is None:
             return_dict_in_generate = generation_config.return_dict_in_generate
+        else:
+            generation_config.return_dict_in_generate = return_dict_in_generate
 
         generation_config.return_token_timestamps = return_token_timestamps
         if return_token_timestamps:
-            return_dict_in_generate = True
+            generation_config.return_dict_in_generate = True
             generation_config.output_attentions = True
             generation_config.output_scores = True
 
         if logprob_threshold is not None:
-            return_dict_in_generate = True
+            generation_config.return_dict_in_generate = True
             generation_config.output_scores = True
 
-        generation_config.return_dict_in_generate = return_dict_in_generate
+        return return_dict_in_generate
 
     def _set_return_timestamps(self, return_timestamps, is_shortform, generation_config):
         if not is_shortform:

@@ -94,7 +94,7 @@ def get_tiny_model_summary_from_hub(output_path):
     )
     _models = set()
     for x in models:
-        model = x.modelId
+        model = x.id
         org, model = model.split("/")
         if not model.startswith("tiny-random-"):
             continue

@@ -80,7 +80,8 @@ class ChameleonRMSNorm(nn.Module):
 ALL_LAYERNORM_LAYERS.append(ChameleonRMSNorm)
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Chameleon
+# copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Chameleon
+# TODO(joao): add me back asap :)
 class ChameleonRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
         super().__init__()
@@ -110,7 +111,8 @@ class ChameleonRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaLinearScalingRotaryEmbedding with Llama->Chameleon
+# copied from transformers.models.llama.modeling_llama.LlamaLinearScalingRotaryEmbedding with Llama->Chameleon
+# TODO(joao): add me back asap :)
 class ChameleonLinearScalingRotaryEmbedding(ChameleonRotaryEmbedding):
     """ChameleonRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
 
@@ -121,7 +123,8 @@ class ChameleonLinearScalingRotaryEmbedding(ChameleonRotaryEmbedding):
         return cos, sin
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaDynamicNTKScalingRotaryEmbedding with Llama->Chameleon
+# copied from transformers.models.llama.modeling_llama.LlamaDynamicNTKScalingRotaryEmbedding with Llama->Chameleon
+# TODO(joao): add me back asap :)
 class ChameleonDynamicNTKScalingRotaryEmbedding(ChameleonRotaryEmbedding):
     """ChameleonRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
 
@@ -265,7 +268,8 @@ class ChameleonAttention(nn.Module):
         self.k_norm = ChameleonLayerNorm((self.num_key_value_heads, self.head_dim))
         self._init_rope()
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaAttention._init_rope with Llama->Chameleon
+    # copied from transformers.models.llama.modeling_llama.LlamaAttention._init_rope with Llama->Chameleon
+    # TODO(joao): add me back asap :)
     def _init_rope(self):
         if self.config.rope_scaling is None:
             self.rotary_emb = ChameleonRotaryEmbedding(
@@ -358,7 +362,8 @@ class ChameleonAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2 with Llama->Chameleon
+# copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2 with Llama->Chameleon
+# TODO(joao): add me back asap :)
 class ChameleonFlashAttention2(ChameleonAttention):
     """
     Chameleon flash attention module. This module inherits from `ChameleonAttention` as the weights of the module stays
@@ -576,7 +581,8 @@ CHAMELEON_ATTENTION_CLASSES = {
 }
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer with Llama->Chameleon, LLAMA->CHAMELEON
+# copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer with Llama->Chameleon, LLAMA->CHAMELEON
+# TODO(joao): add me back asap :)
 class ChameleonDecoderLayer(nn.Module):
     def __init__(self, config: ChameleonConfig, layer_idx: int):
         super().__init__()
