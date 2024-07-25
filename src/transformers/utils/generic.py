@@ -214,7 +214,7 @@ def _is_tf_symbolic_tensor(x):
     # the `is_symbolic_tensor` predicate is only available starting with TF 2.14
     if hasattr(tf, "is_symbolic_tensor"):
         return tf.is_symbolic_tensor(x)
-    return type(x) == tf.Tensor
+    return isinstance(x, tf.Tensor)
 
 
 def is_tf_symbolic_tensor(x):
