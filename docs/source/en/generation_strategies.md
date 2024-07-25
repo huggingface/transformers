@@ -218,9 +218,9 @@ It does so by moving the KV cache for most layers to the CPU.
 As the model's `forward()` method iterates over the layers, this strategy maintains the current layer cache on the GPU.
 At the same time it asynchronously prefetches the next layer cache as well as sending the previous layer cache back to the CPU.
 Unlike KV cache quantization, this strategy always produces the same result as the default KV cache implementation.
-Thus it can serve as a drop-in replacement or a fallback for it.
+Thus, it can serve as a drop-in replacement or a fallback for it.
 
-Depending on your model and the characteristics of your generation task (size of context, number of generated tokens, beam size, etc.)
+Depending on your model and the characteristics of your generation task (size of context, number of generated tokens, number of beams, etc.)
 you may notice a small degradation in generation throughput compared to the default KV cache implementation.
 
 To enable KV cache offloading, pass `cache_implementation="offloaded"` in the `generation_config`.
@@ -249,7 +249,7 @@ Cache offloading requires a GPU and can be slower than the default KV cache. Use
 
 </Tip>
 
-The example below shows how KV Cache Offloading can be used as a fallback strategy.
+The example below shows how KV cache offloading can be used as a fallback strategy.
 ```python
 >>> import torch
 >>> from transformers import AutoTokenizer, AutoModelForCausalLM
@@ -259,7 +259,7 @@ The example below shows how KV Cache Offloading can be used as a fallback strate
 ...         return model.generate(*args, **kwargs)
 ...     except torch.cuda.OutOfMemoryError as e:
 ...         print(e)
-...         print("retrying with cache_implmenetation='offloaded'")
+...         print("retrying with cache_implementation='offloaded'")
 ...         oom = True
 ...     if oom:
 ...         torch.cuda.empty_cache()
@@ -280,7 +280,7 @@ The example below shows how KV Cache Offloading can be used as a fallback strate
 On a GPU with 50 GB of RAM, running this code will print
 ```
 CUDA out of memory. Tried to allocate 4.83 GiB. GPU
-retrying with cache_implmenetation='offloaded'
+retrying with cache_implementation='offloaded'
 ```
 before successfully generating 40 beams.
 
