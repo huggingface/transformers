@@ -36,6 +36,8 @@ class IrisConfig(PretrainedConfig):
             The number of actions or size of the output action space for the Atari environment
         vocab_size (`int`, *optional*, defaults to 512):
             Vocabulary size of Discrete Autoencoder and World Model
+        device (`str`, *optional*, defaults to `"cuda:0"`):
+            The device on which the model is (assuming that all the module parameters are on the samedevice)
         embed_dim_discrete_autoencoder (`int`, *optional*, defaults to 512):
             The embedding dim of Discrete Autoencoder
         resolution (`int`, *optional*, defaults to 64):
