@@ -347,7 +347,7 @@ def _prepare_4D_causal_attention_mask_with_cache_position(
     target_length: int,
     dtype: torch.dtype,
     device: torch.device,
-    min_dtype,
+    min_dtype: float,
     cache_position: torch.Tensor,
     batch_size: int,
 ):
@@ -364,9 +364,9 @@ def _prepare_4D_causal_attention_mask_with_cache_position(
             The target length.
         dtype (`torch.dtype`):
             The dtype to use for the 4D attention mask.
-        device (`device`):
+        device (`torch.device`):
             The device to plcae the 4D attention mask on.
-        min_dtype:
+        min_dtype (`float`):
             The minimum value representable with the dtype `dtype`.
         cache_position (`torch.Tensor`):
             Indices depicting the position of the input sequence tokens in the sequence.
