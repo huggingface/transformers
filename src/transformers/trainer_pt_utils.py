@@ -64,12 +64,6 @@ if is_torch_available():
         from torch.optim.lr_scheduler import _LRScheduler as LRScheduler
 
 
-# this is used to suppress an undesired warning emitted by pytorch versions 1.4.2-1.7.0
-try:
-    from torch.optim.lr_scheduler import SAVE_STATE_WARNING
-except ImportError:
-    SAVE_STATE_WARNING = ""
-
 logger = logging.get_logger(__name__)
 
 
@@ -251,10 +245,10 @@ def distributed_broadcast_scalars(
 
 
 def reissue_pt_warnings(caught_warnings):
-    # Reissue warnings that are not the SAVE_STATE_WARNING
+    # Reissue warnings
     if len(caught_warnings) > 1:
         for w in caught_warnings:
-            if w.category is not UserWarning or w.message != SAVE_STATE_WARNING:
+            if w.category is not UserWarning:
                 warnings.warn(w.message, w.category)
 
 
