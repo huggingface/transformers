@@ -467,8 +467,8 @@ class Wav2Vec2CTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         batch_tokens = tokenizer.batch_decode(sample_ids)
         batch_tokens_2 = tokenizer.batch_decode(sample_ids, skip_special_tokens=True)
 
-        self.assertEqual(batch_tokens, ["HELLO<unk>!?!?<new_tokens>$$$", "BYE BYE<unk><new_tokens>$$$"])
-        self.assertEqual(batch_tokens_2, ["HELO!?!?<new_tokens>", "BYE BYE<new_tokens>"])
+        self.assertEqual(batch_tokens, ["HELLO<unk>!? !?<new_tokens>$$$", "BYE BYE<unk><new_tokens>$$$"])
+        self.assertEqual(batch_tokens_2, ["HELO!? !?<new_tokens>", "BYE BYE<new_tokens>"])
 
     def test_special_characters_in_vocab(self):
         sent = "ʈʰ æ æ̃ ˧ kʰ"
