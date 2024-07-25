@@ -79,18 +79,6 @@ class ImageProcessorPushToHubTester(unittest.TestCase):
         except:  # noqa E722
             pass
 
-    @classmethod
-    def tearDownClass(cls):
-        try:
-            delete_repo(token=cls._token, repo_id="valid_org/test-image-processor-org")
-        except HTTPError:
-            pass
-
-        try:
-            delete_repo(token=cls._token, repo_id="test-dynamic-image-processor")
-        except HTTPError:
-            pass
-
     def test_push_to_hub(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             try:
