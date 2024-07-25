@@ -69,9 +69,11 @@ class ImageTextToTextPipeline(Pipeline):
     def _sanitize_parameters(self, max_new_tokens=None, generate_kwargs=None, text=None, timeout=None):
         forward_kwargs = {}
         preprocess_params = {}
+        post_process_params = {}
 
         if text is not None:
             preprocess_params["text"] = text
+            post_process_params["text"] = text
         if timeout is not None:
             preprocess_params["timeout"] = timeout
 
@@ -87,7 +89,7 @@ class ImageTextToTextPipeline(Pipeline):
                 )
             forward_kwargs["generate_kwargs"]["max_new_tokens"] = max_new_tokens
 
-        return preprocess_params, forward_kwargs, {}
+        return preprocess_params, forward_kwargs, post_process_params
 
     def __call__(self, images: Union[str, List[str], "Image.Image", List["Image.Image"]] = None, **kwargs):
         """
@@ -135,13 +137,19 @@ class ImageTextToTextPipeline(Pipeline):
         model_outputs = self.model.generate(**model_inputs, **generate_kwargs)
         return model_outputs
 
-    def postprocess(self, model_outputs):
+    def postprocess(self, model_outputs, text=None):
         records = []
-        generated_texts = self.processor.batch_decode(
-            model_outputs,
-            skip_special_tokens=True,
-        )
-
-        records = [{"generated_text": text} for text in generated_texts]
+        generated_texts = self.processor.post_process_image_text_to_text(model_outputs)
+        print("generated_texts", generated_texts)
+        # cleanup the generated text
+        generated_texts = [text.strip() for text in generated_texts]
+        print("text", text)
+        if text is not None:
+            # remove the input text from the generated text if the generated text starts with the input text
+            generated_texts = [
+                text_generated[len(text) :].strip() if text_generated.startswith(text) else text_generated
+                for text_generated in generated_texts
+            ]
+        records = [{"input_text": text, "generated_text": generated_text} for generated_text in generated_texts]
 
         return records

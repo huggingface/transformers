@@ -681,6 +681,30 @@ class FuyuProcessor(ProcessorMixin):
 
         return results
 
+    def post_process_image_text_to_text(self, generated_outputs):
+        """
+        Post-processes the output of `FuyuForConditionalGeneration` to only return the text output.
+
+        Args:
+            generated_outputs (`torch.Tensor` or `np.ndarray`):
+                The output of the model. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
+                containing the token ids of the generated sequences.
+
+        Returns:
+            `List[str]`: The decoded text output.
+        """
+        boa = self.tokenizer.vocab[BEGINNING_OF_ANSWER_STRING]
+        # get boa index for each outputted sequence tensor
+        # start all generated sequences from the beginning of the answer token, pad to have consistent length
+        unpadded_output_sequences = [seq[(seq == boa).nonzero(as_tuple=True)[0] + 1 :] for seq in generated_outputs]
+        max_len = max(len(seq) for seq in unpadded_output_sequences)
+        # convert to torch and pad sequences
+        padded_output_sequences = torch.full((len(unpadded_output_sequences), max_len), self.pad_token_id)
+        for i, seq in enumerate(unpadded_output_sequences):
+            padded_output_sequences[i, : len(seq)] = torch.tensor(seq)
+
+        return self.batch_decode(padded_output_sequences, skip_special_tokens=True)
+
     def batch_decode(self, *args, **kwargs):
         """
         This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
