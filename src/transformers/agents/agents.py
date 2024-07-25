@@ -48,7 +48,7 @@ from .tools import (
 
 
 DEFAULT_JSON_GRAMMAR = '^(Thought: .+?\nAction:\\s*\\{\\s*"action":\\s*"\\w+",\\s*"action_input":\\s*\\{(?:.|\\s)+?\\}\\s*\\}<end_action>)$'
-DEFAULT_CODE_GRAMMAR = "/^(Thought: .+?\nCode:\n```py\n(?:.|\\s)+?\n```<end_action>)$"
+DEFAULT_CODE_GRAMMAR = "^(Thought: .+?\nCode:\n```(?:py|python)?\n(?:.|\\s)+?\n```<end_action>)$"
 
 
 if is_pygments_available():
