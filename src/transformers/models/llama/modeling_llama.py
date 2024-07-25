@@ -28,7 +28,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
-from ...modeling_attn_mask_utils import AttentionMaskConverter, _prepare_4D_causal_attention_mask_clean
+from ...modeling_attn_mask_utils import AttentionMaskConverter, _prepare_4D_causal_attention_mask_with_cache_position
 from ...modeling_flash_attention_utils import _flash_attention_forward
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
@@ -1027,7 +1027,16 @@ class LlamaModel(LlamaPreTrainedModel):
             )
 
         # In case the provided `attention` mask is 2D, we generate a causal mask here (4D).
-        causal_mask = _prepare_4D_causal_attention_mask_clean(attention_mask, sequence_length=sequence_length, target_length=target_length, dtype=dtype, device=device, min_dtype=min_dtype, cache_position=cache_position, batch_size=input_tensor.shape[0])
+        causal_mask = _prepare_4D_causal_attention_mask_with_cache_position(
+            attention_mask,
+            sequence_length=sequence_length,
+            target_length=target_length,
+            dtype=dtype,
+            device=device,
+            min_dtype=min_dtype,
+            cache_position=cache_position,
+            batch_size=input_tensor.shape[0],
+        )
 
         if (
             self.config._attn_implementation == "sdpa"
@@ -1212,7 +1221,16 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
             dtype = self.lm_head.weight.dtype
             min_dtype = torch.finfo(dtype).min
 
-            attention_mask = _prepare_4D_causal_attention_mask_clean(attention_mask, sequence_length=sequence_length, target_length=past_key_values.get_max_length(), dtype=dtype, device=device, min_dtype=min_dtype, cache_position=cache_position, batch_size=batch_size)
+            attention_mask = _prepare_4D_causal_attention_mask_with_cache_position(
+                attention_mask,
+                sequence_length=sequence_length,
+                target_length=past_key_values.get_max_length(),
+                dtype=dtype,
+                device=device,
+                min_dtype=min_dtype,
+                cache_position=cache_position,
+                batch_size=batch_size,
+            )
 
         model_inputs.update(
             {
