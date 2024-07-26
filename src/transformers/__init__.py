@@ -5134,6 +5134,10 @@ if TYPE_CHECKING:
         GitVisionConfig,
     )
     from .models.glpn import GLPNConfig
+    from .models.glm import (
+        GLMConfig,
+        GLMTokenizer,
+    )
     from .models.gpt2 import (
         GPT2Config,
         GPT2Tokenizer,
@@ -5874,7 +5878,6 @@ if TYPE_CHECKING:
             FlavaProcessor,
         )
         from .models.fuyu import FuyuImageProcessor, FuyuProcessor
-        from .models.glm import GLMConfig, GLMTokenizer
         from .models.glpn import GLPNFeatureExtractor, GLPNImageProcessor
         from .models.grounding_dino import GroundingDinoImageProcessor
         from .models.idefics import IdeficsImageProcessor
