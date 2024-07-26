@@ -39,7 +39,7 @@ def _get_unpad_data(attention_mask: torch.Tensor) -> Tuple[torch.Tensor, torch.T
             Boolean or int tensor of shape (batch_size, sequence_length), 1 means valid and 0 means not valid.
 
     Return:
-        indices (`torch.Tensor):
+        indices (`torch.Tensor`):
             The indices of non-masked tokens from the flattened input sequence.
         cu_seqlens (`torch.Tensor`):
             The cumulative sequence lengths, used to index into ragged (unpadded) tensors. `cu_seqlens` shape is (batch_size + 1,).
@@ -83,7 +83,7 @@ def _upad_input(
             Target length.
 
     Return:
-        query_layer (`torch.Tensor):
+        query_layer (`torch.Tensor`):
             Query state without padding. Shape: (total_target_length, num_heads, head_dim).
         key_layer (`torch.Tensor`):
             Key state with padding. Shape: (total_source_length, num_key_value_heads, head_dim).
@@ -149,7 +149,7 @@ def prepare_fa2_from_position_ids(query, key, value, position_ids):
             Boolean or int tensor of shape (batch_size, sequence_length), 1 means valid and 0 means not valid.
 
     Return:
-        query (`torch.Tensor):
+        query (`torch.Tensor`):
             Query state without padding. Shape: (total_target_length, num_heads, head_dim).
         key (`torch.Tensor`):
             Key state with padding. Shape: (total_source_length, num_key_value_heads, head_dim).

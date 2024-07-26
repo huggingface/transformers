@@ -378,7 +378,7 @@ pytest -p no:sugar
 
 #### Report each sub-test name and its progress
 
-`pytest` による単一またはグループのテストの場合 (`pip install pytest-pspec` の後):
+`pytest` による単一またはグループのテストの場合 ( `pip install pytest-pspec` の後):
 
 
 ```bash

@@ -1389,7 +1389,7 @@ class NeptuneCallback(TrainerCallback):
             You can find and copy the name in Neptune from the project settings -> Properties. If None (default), the
             value of the `NEPTUNE_PROJECT` environment variable is used.
         name (`str`, *optional*): Custom name for the run.
-        base_namespace (`str`, optional, defaults to "finetuning"): In the Neptune run, the root namespace
+        base_namespace (`str`, *optional*, defaults to "finetuning"): In the Neptune run, the root namespace
             that will contain all of the metadata logged by the callback.
         log_parameters (`bool`, *optional*, defaults to `True`):
             If True, logs all Trainer arguments and model parameters provided by the Trainer.

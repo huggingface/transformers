@@ -173,7 +173,7 @@ class ClvpFeatureExtractor(SequenceFeatureExtractor):
                 - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
-            padding_value (`float`, defaults to 0.0):
+            padding_value (`float`, *optional*, defaults to 0.0):
                 The value that is used to fill the padding values / vectors.
             max_length (`int`, *optional*):
                 The maximum input length of the inputs.

@@ -243,7 +243,7 @@ class ViltImageProcessor(BaseImageProcessor):
                 Image to resize.
             size (`Dict[str, int]`):
                 Controls the size of the output image. Should be of the form `{"shortest_edge": int}`.
-            size_divisor (`int`, defaults to 32):
+            size_divisor (`int`, *optional*, defaults to 32):
                 The image is resized to a size that is a multiple of this value.
             resample (`PILImageResampling` filter, *optional*, defaults to `PILImageResampling.BICUBIC`):
                 Resampling filter to use when resiizing the image.

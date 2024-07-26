@@ -176,7 +176,7 @@ class FlavaForPreTrainingOutput(ModelOutput):
             The output of the [`FlavaTextModel`].
         multimodal_masked_embeddings (`torch.FloatTensor` of shape `(batch_size, output_dim)`, *optional*, returned when `input_ids` and `pixel_values` are present):
             The multimodal embeddings which are basically the pooled output of [`FlavaTextModel`].
-        multimodal_masked_output (`BaseModelOutputWithPooling`, returned when `input_ids_masked` and `pixel_values` are present):
+        multimodal_masked_output (`BaseModelOutputWithPooling`, *optional*, returned when `input_ids_masked` and `pixel_values` are present):
             The output of the [`FlavaMultimodalModel`].
 
         mim_logits (`torch.FloatTensor` of shape `(batch_size, num_image_patches, image_vocab_size)` or of shape `(total_masked_patches, image_vocab_size)` , *optional*, returned when `pixel_values` are present and `input_ids_masked` are not):

@@ -165,7 +165,7 @@ class IdeficsConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        additional_vocab_size (`int`, *optional`, defaults to 0):
+        additional_vocab_size (`int`, *optional*, defaults to 0):
             Additional vocabulary size of the model, typically for the special "<img>" token. Additional vocab tokens
             are always trainable whereas regular vocab tokens can be frozen or not.
         vocab_size (`int`, *optional*, defaults to 32000):

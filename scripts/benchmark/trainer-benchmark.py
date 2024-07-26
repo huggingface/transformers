@@ -147,7 +147,7 @@ def get_original_command(max_width=80, full_python_path=False):
     Return the original command line string that can be replayed nicely and wrapped for 80 char width.
 
     Args:
-        max_width (`int`, `optional`, defaults to 80):
+        max_width (`int`, *optional*, defaults to 80):
             The width to wrap for.
         full_python_path (`bool`, `optional`, defaults to `False`):
              Whether to replicate the full path or just the last segment (i.e. `python`).

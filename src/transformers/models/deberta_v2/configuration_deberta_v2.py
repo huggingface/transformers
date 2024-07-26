@@ -80,7 +80,7 @@ class DebertaV2Config(PretrainedConfig):
         pos_att_type (`List[str]`, *optional*):
             The type of relative position attention, it can be a combination of `["p2c", "c2p"]`, e.g. `["p2c"]`,
             `["p2c", "c2p"]`, `["p2c", "c2p"]`.
-        layer_norm_eps (`float`, optional, defaults to 1e-12):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
 
     Example:

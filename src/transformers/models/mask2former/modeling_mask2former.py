@@ -1810,7 +1810,7 @@ class Mask2FormerMaskedAttentionDecoder(nn.Module):
             encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`):
                 Sequence of hidden-states at the output of the last layer of the encoder. Used in the
                 cross(masked)-attention of the decoder.
-            feature_size_list (`List[torch.Size]` ):
+            feature_size_list (`List[torch.Size]`):
                 This is a list containing shapes (height & width) of multi-scale features from the Pixel Decoder.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under

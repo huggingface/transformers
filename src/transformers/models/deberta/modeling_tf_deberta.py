@@ -669,10 +669,10 @@ class TFDebertaDisentangledSelfAttention(keras.layers.Layer):
                 sequence length in which element [i,j] = *1* means the *i* th token in the input can attend to the *j*
                 th token.
 
-            return_att (`bool`, optional):
+            return_att (`bool`, *optional*):
                 Whether return the attention matrix.
 
-            query_states (`tf.Tensor`, optional):
+            query_states (`tf.Tensor`, *optional*):
                 The *Q* state in *Attention(Q,K,V)*.
 
             relative_pos (`tf.Tensor`):

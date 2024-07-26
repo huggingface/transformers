@@ -31,7 +31,7 @@ class PipelineIterator(IterableDataset):
         ```
 
                 Arguments:
-                    loader (`torch.utils.data.DataLoader` or any iterator):
+                    loader (`torch.utils.data.DataLoader` or `Iterable`):
                         The iterator that will be used to apply `infer` on.
                     infer (any function):
                         The function to apply of each element of `loader`.
@@ -163,7 +163,7 @@ class PipelineChunkIterator(PipelineIterator):
         ```
 
                 Arguments:
-                    loader (`torch.utils.data.DataLoader` or any iterator):
+                    loader (`torch.utils.data.DataLoader` or `Iterable`):
                         The iterator that will be used to apply `infer` on.
                     infer (any function):
                         The function to apply of each element of `loader`.
@@ -224,7 +224,7 @@ class PipelinePackIterator(PipelineIterator):
     ```
 
         Arguments:
-            loader (`torch.utils.data.DataLoader` or any iterator):
+            loader (`torch.utils.data.DataLoader` or `Iterable`):
                 The iterator that will be used to apply `infer` on.
             infer (any function):
                 The function to apply of each element of `loader`.

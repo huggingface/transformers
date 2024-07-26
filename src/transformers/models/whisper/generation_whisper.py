@@ -1368,7 +1368,7 @@ class WhisperGenerationMixin:
                 priority: 1) from the `generation_config.json` model file, if it exists; 2) from the model
                 configuration. Please note that unspecified parameters will inherit [`~generation.GenerationConfig`]'s
                 default values, whose documentation should be checked to parameterize generation.
-            num_segment_frames (`int`, defaults to 3000):
+            num_segment_frames (`int`, *optional*, defaults to 3000):
                 The number of log-mel frames the model expects
 
         Return:
