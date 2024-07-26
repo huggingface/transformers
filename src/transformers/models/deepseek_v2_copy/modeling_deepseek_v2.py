@@ -90,6 +90,7 @@ def _get_unpad_data(attention_mask):
 
 
 class DeepseekV2RMSNorm(nn.Module):
+    # TODO: no diff confirmed
     def __init__(self, hidden_size, eps=1e-6):
         """
         DeepseekV2RMSNorm is equivalent to T5LayerNorm
@@ -110,9 +111,9 @@ ALL_LAYERNORM_LAYERS.append(DeepseekV2RMSNorm)
 
 
 class DeepseekV2RotaryEmbedding(nn.Module):
+    # TODO: copied from Persimmon
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
-
         self.dim = dim
         self.max_position_embeddings = max_position_embeddings
         self.base = base
@@ -121,9 +122,7 @@ class DeepseekV2RotaryEmbedding(nn.Module):
 
         # Build here to make `torch.jit.trace` work.
         self._set_cos_sin_cache(
-            seq_len=max_position_embeddings,
-            device=self.inv_freq.device,
-            dtype=torch.get_default_dtype(),
+            seq_len=max_position_embeddings, device=self.inv_freq.device, dtype=torch.get_default_dtype(),
         )
         self.max_seq_len_cached = None
 
@@ -151,7 +150,7 @@ class DeepseekV2RotaryEmbedding(nn.Module):
 # Copied from transformers.models.llama.modeling_llama.LlamaLinearScalingRotaryEmbedding with Llama->DeepseekV2
 class DeepseekV2LinearScalingRotaryEmbedding(DeepseekV2RotaryEmbedding):
     """DeepseekV2RotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
-
+    # TODO: copied from Persimmon
     def __init__(
         self,
         dim,
@@ -178,7 +177,7 @@ class DeepseekV2LinearScalingRotaryEmbedding(DeepseekV2RotaryEmbedding):
 # Copied from transformers.models.llama.modeling_llama.LlamaDynamicNTKScalingRotaryEmbedding with Llama->DeepseekV2
 class DeepseekV2DynamicNTKScalingRotaryEmbedding(DeepseekV2RotaryEmbedding):
     """DeepseekV2RotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
-
+    #TODO: copied from Persimmon
     def __init__(
         self,
         dim,
@@ -237,6 +236,7 @@ def yarn_linear_ramp_mask(min, max, dim):
 
 
 class DeepseekV2YarnRotaryEmbedding(DeepseekV2RotaryEmbedding):
+    #TODO: DIFF NEW added
     def __init__(
         self,
         dim,
@@ -294,6 +294,7 @@ class DeepseekV2YarnRotaryEmbedding(DeepseekV2RotaryEmbedding):
 
 # Copied from transformers.models.llama.modeling_llama.rotate_half
 def rotate_half(x):
+    #TODO: no diff
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
     x2 = x[..., x.shape[-1] // 2 :]
@@ -302,6 +303,7 @@ def rotate_half(x):
 
 # Copied from transformers.models.llama.modeling_llama.apply_rotary_pos_emb
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
+    #TODO: diff
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
@@ -337,12 +339,12 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
 
 
 class DeepseekV2MLP(nn.Module):
+    #TODO: diff new added
     def __init__(self, config, hidden_size=None, intermediate_size=None):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size if hidden_size is None else hidden_size
         self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
-
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
@@ -354,6 +356,7 @@ class DeepseekV2MLP(nn.Module):
 
 
 class MoEGate(nn.Module):
+    #TODO: diff
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -437,6 +440,7 @@ class MoEGate(nn.Module):
 
 
 class AddAuxiliaryLoss(torch.autograd.Function):
+    #TODO: diff
     """
     The trick function of adding auxiliary (aux) loss,
     which includes the gradient of the aux loss during backpropagation.
@@ -458,6 +462,7 @@ class AddAuxiliaryLoss(torch.autograd.Function):
 
 
 class DeepseekV2MoE(nn.Module):
+    #TODO: diff
     """
     A mixed expert module containing shared experts.
     """
@@ -588,6 +593,7 @@ class DeepseekV2MoE(nn.Module):
 
 # Copied from transformers.models.llama.modeling_llama.repeat_kv
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    #TODO: no diff
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
     num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
@@ -601,6 +607,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 
 # Copied from transformers.models.llama.modeling_llama.LlamaAttention with Llama->DeepseekV2
 class DeepseekV2Attention(nn.Module):
+    #TODO: diff
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config: DeepseekV2Config, layer_idx: Optional[int] = None):
@@ -617,7 +624,6 @@ class DeepseekV2Attention(nn.Module):
         self.attention_dropout = config.attention_dropout
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
-
         self.max_position_embeddings = config.max_position_embeddings
         self.rope_theta = config.rope_theta
         self.q_lora_rank = config.q_lora_rank
@@ -626,7 +632,6 @@ class DeepseekV2Attention(nn.Module):
         self.v_head_dim = config.v_head_dim
         self.qk_nope_head_dim = config.qk_nope_head_dim
         self.q_head_dim = config.qk_nope_head_dim + config.qk_rope_head_dim
-
         self.is_causal = True
 
         if self.q_lora_rank is None:
@@ -787,6 +792,7 @@ class DeepseekV2Attention(nn.Module):
         # upcast attention to fp32
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
         attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
+
         attn_output = torch.matmul(attn_weights, value_states)
 
         if attn_output.size() != (bsz, self.num_heads, q_len, self.v_head_dim):
@@ -809,6 +815,7 @@ class DeepseekV2Attention(nn.Module):
 
 # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2 with Llama->DeepseekV2
 class DeepseekV2FlashAttention2(DeepseekV2Attention):
+    #TODO: diff
     """
     DeepseekV2 flash attention module. This module inherits from `DeepseekV2Attention` as the weights of the module stays
     untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
@@ -982,14 +989,8 @@ class DeepseekV2FlashAttention2(DeepseekV2Attention):
         # Contains at least one padding token in the sequence
         if attention_mask is not None:
             batch_size = query_states.shape[0]
-            (
-                query_states,
-                key_states,
-                value_states,
-                indices_q,
-                cu_seq_lens,
-                max_seq_lens,
-            ) = self._upad_input(query_states, key_states, value_states, attention_mask, query_length)
+            query_states, key_states,value_states,indices_q,cu_seq_lens,max_seq_lens = self._upad_input(
+            query_states, key_states, value_states, attention_mask, query_length)
 
             cu_seqlens_q, cu_seqlens_k = cu_seq_lens
             max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
@@ -1010,12 +1011,7 @@ class DeepseekV2FlashAttention2(DeepseekV2Attention):
             attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
         else:
             attn_output = flash_attn_func(
-                query_states,
-                key_states,
-                value_states,
-                dropout,
-                softmax_scale=softmax_scale,
-                causal=causal,
+                query_states, key_states, value_states,dropout, softmax_scale=softmax_scale, causal=causal,
             )
 
         return attn_output
@@ -1024,19 +1020,10 @@ class DeepseekV2FlashAttention2(DeepseekV2Attention):
         indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
         batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
 
-        key_layer = index_first_axis(
-            key_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim),
-            indices_k,
-        )
-        value_layer = index_first_axis(
-            value_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim),
-            indices_k,
-        )
+        key_layer = index_first_axis(key_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k)
+        value_layer = index_first_axis(value_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k)
         if query_length == kv_seq_len:
-            query_layer = index_first_axis(
-                query_layer.reshape(batch_size * kv_seq_len, self.num_heads, head_dim),
-                indices_k,
-            )
+            query_layer = index_first_axis(query_layer.reshape(batch_size * kv_seq_len, self.num_heads, head_dim), indices_k)
             cu_seqlens_q = cu_seqlens_k
             max_seqlen_in_batch_q = max_seqlen_in_batch_k
             indices_q = indices_k
@@ -1069,6 +1056,7 @@ ATTENTION_CLASSES = {
 
 
 class DeepseekV2DecoderLayer(nn.Module):
+    #TODO: diff
     def __init__(self, config: DeepseekV2Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -1097,6 +1085,7 @@ class DeepseekV2DecoderLayer(nn.Module):
         use_cache: Optional[bool] = False,
         **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+        # TODO: no diff
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -1170,6 +1159,7 @@ DeepseekV2_START_DOCSTRING = r"""
     DeepseekV2_START_DOCSTRING,
 )
 class DeepseekV2PreTrainedModel(PreTrainedModel):
+    #TODO: diff
     config_class = DeepseekV2Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
@@ -1179,6 +1169,7 @@ class DeepseekV2PreTrainedModel(PreTrainedModel):
     _supports_cache_class = True
 
     def _init_weights(self, module):
+        #TODO: no diff
         std = self.config.initializer_range
         if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=std)
@@ -1295,6 +1286,7 @@ class DeepseekV2Model(DeepseekV2PreTrainedModel):
         self.embed_tokens = value
 
     @add_start_docstrings_to_model_forward(DeepseekV2_INPUTS_DOCSTRING)
+    #TODO: diff
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1312,7 +1304,6 @@ class DeepseekV2Model(DeepseekV2PreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # retrieve input_ids and inputs_embeds
@@ -1424,6 +1415,7 @@ class DeepseekV2Model(DeepseekV2PreTrainedModel):
 
 
 class DeepseekV2ForCausalLM(DeepseekV2PreTrainedModel):
+    #TODO: no diff
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
@@ -1455,6 +1447,7 @@ class DeepseekV2ForCausalLM(DeepseekV2PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(DeepseekV2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    #TODO: diff
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1628,6 +1621,7 @@ class DeepseekV2ForCausalLM(DeepseekV2PreTrainedModel):
     DeepseekV2_START_DOCSTRING,
 )
 class DeepseekV2ForSequenceClassification(DeepseekV2PreTrainedModel):
+    #TODO: no diff
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1691,7 +1685,7 @@ class DeepseekV2ForSequenceClassification(DeepseekV2PreTrainedModel):
         else:
             if input_ids is not None:
                 sequence_lengths = (torch.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1).to(
-                    logits.device
+                    logits.device #TODO: diff skipped
                 )
             else:
                 sequence_lengths = -1

@@ -112,7 +112,7 @@ class DeepseekV2Config(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "deepseek_v2"
+    model_type = "deepseek_v2_copy"
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
