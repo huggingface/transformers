@@ -72,7 +72,6 @@ class DonutProcessor(ProcessorMixin):
         """
         # For backward compatibility
         legacy = kwargs.pop("legacy", True)
-        print("legacy: ", legacy)
         if legacy:
             warnings.warn(
                 "The use of legacy will be deprecated in the future. Please use the new processing behavior by setting legacy=False."
@@ -193,6 +192,20 @@ class DonutProcessor(ProcessorMixin):
             return [output] if is_inner_value else output
         else:
             return [] if is_inner_value else {"text_sequence": tokens}
+
+    def post_process_image_text_to_text(self, generated_outputs):
+        """
+        Post-process the output of the model to decode the text.
+
+        Args:
+            generated_outputs (`torch.Tensor` or `np.ndarray`):
+                The output of the model `generate` function. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
+                or `(sequence_length,)`.
+
+        Returns:
+            `List[str]`: The decoded text.
+        """
+        return self.tokenizer.batch_decode(generated_outputs, skip_special_tokens=True)
 
     @property
     def feature_extractor_class(self):

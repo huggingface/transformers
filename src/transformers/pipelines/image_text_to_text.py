@@ -142,7 +142,12 @@ class ImageTextToTextPipeline(Pipeline):
 
         return preprocess_params, forward_kwargs, post_process_params
 
-    def __call__(self, images: Union[str, List[str], "Image.Image", List["Image.Image"]], **kwargs):
+    def __call__(
+        self,
+        images: Union[str, List[str], List[List[str]], "Image.Image", List["Image.Image"], List[List["Image.Image"]]],
+        text: Union[str, List[str], List[dict]],
+        **kwargs,
+    ):
         """
         Generate a text given text and the image(s) passed as inputs.
 
@@ -170,11 +175,7 @@ class ImageTextToTextPipeline(Pipeline):
             - **generated_text** (`str`) -- The generated text.
             - **input_text** (`str`) -- The input text.
         """
-        text = kwargs.pop("text")
         batch_size = kwargs.get("batch_size", 1)
-
-        if images is None or text is None:
-            raise ValueError("You have to specify both `images` and `text`")
 
         if not isinstance(images, (list, tuple)):
             images = [images]
@@ -227,7 +228,7 @@ class ImageTextToTextPipeline(Pipeline):
 
         return super().__call__([ImageText(image, text_single) for image, text_single in zip(images, text)], **kwargs)
 
-    def preprocess(self, inputs=None, truncation=None, padding="longest", max_length=None, timeout=None):
+    def preprocess(self, inputs=None, truncation=None, padding=False, max_length=None, timeout=None):
         kwargs = {
             "legacy": False,
             "truncation": truncation,
@@ -237,7 +238,7 @@ class ImageTextToTextPipeline(Pipeline):
         images = inputs.images
 
         if isinstance(inputs, Chat):
-            kwargs["chats"] = inputs.messages
+            # kwargs["chats"] = inputs.messages
             text = self.processor.apply_chat_template(
                 inputs.messages,
                 add_generation_prompt=True,
@@ -246,7 +247,6 @@ class ImageTextToTextPipeline(Pipeline):
             )
         else:
             text = inputs.text
-
         if not isinstance(images, (list, tuple)):
             images = load_image(images, timeout=timeout)
         else:
@@ -266,8 +266,11 @@ class ImageTextToTextPipeline(Pipeline):
         if generate_kwargs is None:
             generate_kwargs = {}
         input_text = model_inputs.pop("text")
+        input_ids = (
+            model_inputs["input_ids"] if "input_ids" in model_inputs else model_inputs["decoder_input_ids"]
+        )  # for decoder-only models
         model_outputs = self.model.generate(**model_inputs, **generate_kwargs)
-        return {"outputs": model_outputs, "input_text": input_text, "input_ids": model_inputs["input_ids"]}
+        return {"outputs": model_outputs, "input_text": input_text, "input_ids": input_ids}
 
     def postprocess(self, model_outputs):
         input_text = model_outputs["input_text"]
