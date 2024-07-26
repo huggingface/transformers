@@ -408,7 +408,7 @@ pytest -p no:sugar
 
 #### 각 하위 테스트 이름과 진행 상황 보고[[report-each-sub-test-name-and-its-progress]]
 
-`pytest`를 통해 단일 또는 그룹의 테스트를 실행하는 경우 ( `pip install pytest-pspec` 이후):
+`pytest`를 통해 단일 또는 그룹의 테스트를 실행하는 경우(`pip install pytest-pspec` 이후):
 
 ```bash
 pytest --pspec tests/test_optimization.py

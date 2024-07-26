@@ -53,7 +53,7 @@ Files are also easily edited in a repository, and you can view the commit histor
 
 ## Setup
 
-Before sharing a model to the Hub, you will need your Hugging Face credentials. If you have access to a terminal, run the following command in the virtual environment where 🤗 Transformers is installed. This will store your access token in your Hugging Face cache folder (by default `~/.cache/`):
+Before sharing a model to the Hub, you will need your Hugging Face credentials. If you have access to a terminal, run the following command in the virtual environment where 🤗 Transformers is installed. This will store your access token in your Hugging Face cache folder (`~/.cache/` by default):
 
 ```bash
 huggingface-cli login
