@@ -261,20 +261,6 @@ class FuyuProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
-class GLMConfig(metaclass=DummyObject):
-    _backends = ["vision"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["vision"])
-
-
-class GLMTokenizer(metaclass=DummyObject):
-    _backends = ["vision"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["vision"])
-
-
 class GLPNFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
