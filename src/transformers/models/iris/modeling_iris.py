@@ -1721,6 +1721,10 @@ class IrisModel(IrisPreTrainedModel):
             (),
             (),
         )
+        all_attentions_discrete_autoencoder, all_attentions_world_model = (
+            (),
+            (),
+        )
 
         component_losses = IrisComponentLosses()
 
