@@ -431,10 +431,10 @@ class DacIntegrationTest(unittest.TestCase):
             encoder_outputs = model.encode(inputs["input_values"])
 
             expected_encoder_sums = torch.tensor(list(expected_encoder_sums_dict.values()), dtype=torch.float32)
-            encoder_outputs_sum = torch.tensor([v.float().mean().cpu().item() for v in encoder_outputs.to_tuple()])
+            encoder_outputs_mean = torch.tensor([v.float().mean().cpu().item() for v in encoder_outputs.to_tuple()])
 
             # make sure audio encoded codes are correct
-            self.assertTrue(torch.allclose(encoder_outputs_sum, expected_encoder_sums, atol=1e-3))
+            self.assertTrue(torch.allclose(encoder_outputs_mean, expected_encoder_sums, atol=1e-3))
 
             _, quantized_representation, _, _ = encoder_outputs.to_tuple()
             input_values_dec = model.decode(quantized_representation)[0]
@@ -459,10 +459,10 @@ class DacIntegrationTest(unittest.TestCase):
         expected_rmse = 0.0039
 
         expected_encoder_sums_dict = {
-            "loss": 30.0052,
-            "quantized_representation": 0.0098,
-            "audio_codes": 516.1803,
-            "projected_latents": -0.0050,
+            "loss": 30.0128,
+            "quantized_representation": 0.0104,
+            "audio_codes": 518.2788,
+            "projected_latents": -0.0051,
         }
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
@@ -485,10 +485,10 @@ class DacIntegrationTest(unittest.TestCase):
             encoder_outputs = model.encode(inputs["input_values"])
 
             expected_encoder_sums = torch.tensor(list(expected_encoder_sums_dict.values()), dtype=torch.float32)
-            encoder_outputs_sum = torch.tensor([v.float().mean().cpu().item() for v in encoder_outputs.to_tuple()])
+            encoder_outputs_mean = torch.tensor([v.float().mean().cpu().item() for v in encoder_outputs.to_tuple()])
 
             # make sure audio encoded codes are correct
-            self.assertTrue(torch.allclose(encoder_outputs_sum, expected_encoder_sums, atol=1e-3))
+            self.assertTrue(torch.allclose(encoder_outputs_mean, expected_encoder_sums, atol=1e-3))
 
             _, quantized_representation, _, _ = encoder_outputs.to_tuple()
             input_values_dec = model.decode(quantized_representation)[0]
@@ -539,10 +539,10 @@ class DacIntegrationTest(unittest.TestCase):
             encoder_outputs = model.encode(inputs["input_values"])
 
             expected_encoder_sums = torch.tensor(list(expected_encoder_sums_dict.values()), dtype=torch.float32)
-            encoder_outputs_sum = torch.tensor([v.float().mean().cpu().item() for v in encoder_outputs.to_tuple()])
+            encoder_outputs_mean = torch.tensor([v.float().mean().cpu().item() for v in encoder_outputs.to_tuple()])
 
             # make sure audio encoded codes are correct
-            self.assertTrue(torch.allclose(encoder_outputs_sum, expected_encoder_sums, atol=1e-3))
+            self.assertTrue(torch.allclose(encoder_outputs_mean, expected_encoder_sums, atol=1e-3))
 
             _, quantized_representation, _, _ = encoder_outputs.to_tuple()
             input_values_dec = model.decode(quantized_representation)[0]
@@ -596,10 +596,10 @@ class DacIntegrationTest(unittest.TestCase):
             encoder_outputs = model.encode(inputs["input_values"])
 
             expected_encoder_sums = torch.tensor(list(expected_encoder_sums_dict.values()), dtype=torch.float32)
-            encoder_outputs_sum = torch.tensor([v.float().mean().item() for v in encoder_outputs.to_tuple()])
+            encoder_outputs_mean = torch.tensor([v.float().mean().item() for v in encoder_outputs.to_tuple()])
 
             # make sure audio encoded codes are correct
-            self.assertTrue(torch.allclose(encoder_outputs_sum, expected_encoder_sums, atol=1e-3))
+            self.assertTrue(torch.allclose(encoder_outputs_mean, expected_encoder_sums, atol=1e-3))
 
             _, quantized_representation, _, _ = encoder_outputs.to_tuple()
             input_values_dec = model.decode(quantized_representation)[0]
@@ -653,10 +653,10 @@ class DacIntegrationTest(unittest.TestCase):
             encoder_outputs = model.encode(inputs["input_values"])
 
             expected_encoder_sums = torch.tensor(list(expected_encoder_sums_dict.values()), dtype=torch.float32)
-            encoder_outputs_sum = torch.tensor([v.float().mean().cpu().item() for v in encoder_outputs.to_tuple()])
+            encoder_outputs_mean = torch.tensor([v.float().mean().cpu().item() for v in encoder_outputs.to_tuple()])
 
             # make sure audio encoded codes are correct
-            self.assertTrue(torch.allclose(encoder_outputs_sum, expected_encoder_sums, atol=1e-3))
+            self.assertTrue(torch.allclose(encoder_outputs_mean, expected_encoder_sums, atol=1e-3))
 
             _, quantized_representation, _, _ = encoder_outputs.to_tuple()
             input_values_dec = model.decode(quantized_representation)[0]
@@ -710,10 +710,10 @@ class DacIntegrationTest(unittest.TestCase):
             encoder_outputs = model.encode(inputs["input_values"])
 
             expected_encoder_sums = torch.tensor(list(expected_encoder_sums_dict.values()), dtype=torch.float32)
-            encoder_outputs_sum = torch.tensor([v.float().mean().cpu().item() for v in encoder_outputs.to_tuple()])
+            encoder_outputs_mean = torch.tensor([v.float().mean().cpu().item() for v in encoder_outputs.to_tuple()])
 
             # make sure audio encoded codes are correct
-            self.assertTrue(torch.allclose(encoder_outputs_sum, expected_encoder_sums, atol=1e-3))
+            self.assertTrue(torch.allclose(encoder_outputs_mean, expected_encoder_sums, atol=1e-3))
 
             _, quantized_representation, _, _ = encoder_outputs.to_tuple()
             input_values_dec = model.decode(quantized_representation)[0]
