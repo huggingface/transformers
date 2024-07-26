@@ -713,6 +713,7 @@ class UniSpeechFlashAttention2(UniSpeechAttention):
 
         return attn_output, attn_weights, past_key_value
 
+
 class UniSpeechSdpaAttention(UniSpeechAttention):
     # Copied from transformers.models.bart.modeling_bart.BartSdpaAttention.forward with Bart->UniSpeech
     def forward(

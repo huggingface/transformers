@@ -438,6 +438,7 @@ class MusicgenFlashAttention2(MusicgenAttention):
 
         return attn_output, attn_weights, past_key_value
 
+
 class MusicgenSdpaAttention(MusicgenAttention):
     def forward(
         self,
