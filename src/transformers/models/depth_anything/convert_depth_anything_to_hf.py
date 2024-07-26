@@ -294,6 +294,30 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
             expected_slice = torch.tensor(
                 [[162.2751, 161.8504, 162.8788], [160.3138, 160.8050, 161.9835], [159.3812, 159.9884, 160.0768]]
             )
+        elif model_name == "depth-anything-v2-metric-indoor-small":
+            expected_slice = torch.tensor(
+                [[1.3349, 1.2946, 1.2801], [1.2793, 1.2337, 1.2899], [1.2629, 1.2218, 1.2476]]
+            )
+        elif model_name == "depth-anything-v2-metric-indoor-base":
+            expected_slice = torch.tensor(
+                [[1.4601, 1.3824, 1.4904], [1.5031, 1.4349, 1.4274], [1.4570, 1.4578, 1.4200]]
+            )
+        elif model_name == "depth-anything-v2-metric-indoor-large":
+            expected_slice = torch.tensor(
+                [[1.5040, 1.5019, 1.5218], [1.5087, 1.5195, 1.5149], [1.5437, 1.5128, 1.5252]]
+            )
+        elif model_name == "depth-anything-v2-metric-outdoor-small":
+            expected_slice = torch.tensor(
+                [[9.5804, 8.0339, 7.7386], [7.9890, 7.2464, 7.7149], [7.7021, 7.2330, 7.3304]]
+            )
+        elif model_name == "depth-anything-v2-metric-outdoor-base":
+            expected_slice = torch.tensor(
+                [[10.2916, 9.0933, 8.8622], [9.1964, 9.3393, 9.0644], [8.9618, 9.4201, 9.2262]]
+            )
+        elif model_name == "depth-anything-v2-metric-outdoor-large":
+            expected_slice = torch.tensor(
+                [[14.0137, 13.3627, 13.1080], [13.2522, 13.3943, 13.3705], [13.0581, 13.4505, 13.3925]]
+            )
         else:
             raise ValueError("Not supported")
 
