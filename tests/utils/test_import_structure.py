@@ -92,3 +92,7 @@ class TestImportStructures(unittest.TestCase):
                             f"Defined in __all__: {sorted(_all)}\nDefined with register: {sorted(objects)}"
                         )
                         self.assertListEqual(sorted(objects), sorted(_all), msg=error_message)
+
+    def test_export_backend_should_be_defined(self):
+        with self.assertRaisesRegex(ValueError, "Backend should be defined in the BACKENDS_MAPPING"):
+            pass

@@ -1761,6 +1761,9 @@ def export(*, backends=()):
       to execute correctly without instantiating it
     - The '@export' string is used to dynamically import objects
     """
+    for backend in backends:
+        if backend not in BACKENDS_MAPPING:
+            raise ValueError(f"Backend should be defined in the BACKENDS_MAPPING. Offending backend: {backend}")
 
     if not isinstance(backends, tuple):
         raise ValueError("Backends should be a tuple.")
@@ -1915,7 +1918,7 @@ def define_import_structure(module_path):
 
         # Objects that have a `@export` assigned to them will get exported
         # with the backends specified in the decorator as well as the file backends.
-        registered_objects = set()
+        exported_objects = set()
         if '@export' in file_content:
             lines = file_content.split("\n")
             for index, line in enumerate(lines):
@@ -1986,7 +1989,7 @@ def define_import_structure(module_path):
                         start_index = 6 if line.startswith("class") else 4
                         object_name = line[start_index:].split("(")[0].strip(":")
                         module_requirements[backends][module_name].add(object_name)
-                        registered_objects.add(object_name)
+                        exported_objects.add(object_name)
 
                 if not skip_line:
                     previous_line = line
@@ -1996,7 +1999,7 @@ def define_import_structure(module_path):
         # These objects are exported with the file backends.
         if '__all__' in file_content:
             for _all_object in fetch__all__(file_content):
-                if _all_object not in registered_objects:
+                if _all_object not in exported_objects:
 
                     backends = frozenset(base_requirements)
                     if backends not in module_requirements:
