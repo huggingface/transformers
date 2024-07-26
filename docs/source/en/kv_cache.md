@@ -20,7 +20,7 @@ Efficient caching is crucial for optimizing the performance of models in various
 including text generation, translation, summarization and other transformer-based applications.
 Effective caching helps reduce computation time and improve response rates, especially in real-time or resource-intensive applications.
 
-Transformers support various caching methods, leveraging `Cache` classes to abstract and manage the caching logic.
+Transformers support various caching methods, leveraging [`~Cache`] classes to abstract and manage the caching logic.
 This document outlines best practices for using these classes to maximize performance and efficiency.
 Check out all the available `Cache` classes in the [API documentation](./internal/generation_utils.md).
 
