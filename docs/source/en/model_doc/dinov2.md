@@ -72,6 +72,9 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] Dinov2Config
 
+<frameworkcontent>
+<pt>
+
 ## Dinov2Model
 
 [[autodoc]] Dinov2Model
@@ -82,12 +85,19 @@ If you're interested in submitting a resource to be included here, please feel f
 [[autodoc]] Dinov2ForImageClassification
     - forward
 
+</pt>
+<jax>
+
 ## FlaxDinov2Model
 
 [[autodoc]] FlaxDinov2Model
-    - forward
+    - __call__
+
 
 ## FlaxDinov2ForImageClassification
 
 [[autodoc]] FlaxDinov2ForImageClassification
-    - forward
+    - __call__
+
+</jax>
+</frameworkcontent>
