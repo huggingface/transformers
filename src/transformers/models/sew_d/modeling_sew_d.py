@@ -555,7 +555,7 @@ class XSoftmax(torch.autograd.Function):
 
 
 # Copied from transformers.models.deberta.modeling_deberta.DropoutContext
-class DropoutContext(object):
+class DropoutContext:
     def __init__(self):
         self.dropout = 0
         self.mask = None
