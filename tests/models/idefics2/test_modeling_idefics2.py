@@ -500,7 +500,6 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
             torch_dtype=torch.bfloat16,
             device_map="auto",
         )
-        model.to(torch_device)
 
         # Create inputs
         text = "<image>In this image, we see"
