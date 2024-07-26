@@ -295,7 +295,8 @@ class CohereAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2 with Llama->Cohere
+# copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2 with Llama->Cohere
+# TODO(joao): add me back asap :)
 class CohereFlashAttention2(CohereAttention):
     """
     Cohere flash attention module. This module inherits from `CohereAttention` as the weights of the module stays
@@ -409,7 +410,8 @@ class CohereFlashAttention2(CohereAttention):
         return attn_output, attn_weights, past_key_value
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaSdpaAttention Llama->Cohere
+# copied from transformers.models.llama.modeling_llama.LlamaSdpaAttention Llama->Cohere
+# TODO(joao): add me back asap :)
 class CohereSdpaAttention(CohereAttention):
     """
     Cohere attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
@@ -697,7 +699,8 @@ COHERE_INPUTS_DOCSTRING = r"""
     "The bare Cohere Model outputting raw hidden-states without any specific head on top.",
     COHERE_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_llama.LlamaModel with Llama->Cohere
+# copied from transformers.models.llama.modeling_llama.LlamaModel with Llama->Cohere
+# TODO(joao): add me back asap :)
 class CohereModel(CoherePreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`CohereDecoderLayer`]
@@ -766,7 +769,9 @@ class CohereModel(CoherePreTrainedModel):
 
         past_seen_tokens = 0
         return_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache):  # kept for BC (non `Cache` `past_key_values` inputs)
+        if (
+            use_cache and not isinstance(past_key_values, Cache) and not self.training
+        ):  # kept for BC (non `Cache` `past_key_values` inputs)
             return_legacy_cache = True
             past_key_values = DynamicCache.from_legacy_cache(past_key_values)
 

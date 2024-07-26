@@ -77,6 +77,7 @@ if is_torch_available():
         MaxLengthCriteria,
         MinLengthLogitsProcessor,
         PhrasalConstraint,
+        PromptLookupCandidateGenerator,
         SampleDecoderOnlyOutput,
         SampleEncoderDecoderOutput,
         StoppingCriteria,
@@ -1371,6 +1372,34 @@ class GenerationTesterMixin:
             output_assisted = model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
 
             self._check_outputs(output_assisted, input_ids, model.config, use_cache=True)
+
+    def test_prompt_lookup_decoding_stops_at_eos(self):
+        # This test ensures that the prompt lookup generation stops at eos token and does not suggest more tokens
+        # (see https://github.com/huggingface/transformers/pull/31301)
+
+        # The main idea is to have an ngram (unigram in our case) that is repeated twice in the input ids.
+        # First time at the very end, so input ends with the unigrams, and second any arbitrary location.
+        # Also, we need an EOS token which will be injected just after the arbitrary located ngram.
+        # We verify that PLD will not copy and propose candidated that contain an EOS token, even if there are overlapping ngrams
+        # in input ids. Otherwise a proposed EOS along with the trailing (ngrams-1) tokens might be accepted by the target model.
+        # That seems as if the model "generated" and EOS but didn't stop from user's perspective
+
+        input_ids = torch.randint(1, 50, (1, 10), device=torch_device)  # generate inputs in range from 1-50
+        arbitrary_ngram = 51  # this is the arbitrary ngram, specifically chosen OOV to prevent flaky tests
+        input_ids[:, 3] = arbitrary_ngram  # set pre-eos to arbitrary_ngram which is for sure not present in inputs
+        input_ids[:, -1] = arbitrary_ngram  # put arbitrary_ngram in the end for the necessary match to happen
+
+        eos_token_id = torch.tensor([0], device=torch_device)
+        input_ids[:, 4] = eos_token_id  # inject eos-token-id in input ids so that it is located after arbitrary_ngram
+
+        # init cand geenerator with max_matching_ngram_size=1 to match per-token
+        candidate_generator = PromptLookupCandidateGenerator(
+            eos_token_id=eos_token_id, num_output_tokens=4, max_matching_ngram_size=1
+        )
+        output_prompt_lookup = candidate_generator.get_candidates(input_ids)[0]
+
+        # PLD shouldn't propose any new tokens based on eos-match
+        self.assertTrue(output_prompt_lookup.shape[-1] == 10)
 
     def test_generate_with_head_masking(self):
         """Test designed for encoder-decoder models to ensure the attention head masking is used."""
@@ -3195,6 +3224,40 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
             max_new_tokens=20,
         )
         self.assertTrue(input_length <= out.shape[-1] <= input_length + 20)
+
+    def test_special_tokens_fall_back_to_model_default(self):
+        # PT-only test: TF doesn't support assisted decoding yet.
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM").to(
+            torch_device
+        )
+        test_bos_id = 50
+
+        # Sanity-check: the model has a BOS token set, and the first generated token is a BOS token
+        gen_output = model.generate()
+        self.assertTrue(model.generation_config.bos_token_id is not None)
+        self.assertTrue(model.generation_config.bos_token_id == gen_output[0, 0])
+
+        # If we pass a generation config **with** a BOS token, `generate` will use it
+        generation_config = GenerationConfig(bos_token_id=test_bos_id)
+        gen_output = model.generate(generation_config=generation_config)
+        self.assertFalse(model.generation_config.bos_token_id == gen_output[0, 0])
+        self.assertTrue(generation_config.bos_token_id == gen_output[0, 0])
+        self.assertTrue(test_bos_id == gen_output[0, 0])
+
+        # If we pass a generation config **without** a BOS token, `generate` will fetch the BOS token from
+        # `model.generation_config`
+        generation_config = GenerationConfig(bos_token_id=None)
+        gen_output = model.generate(generation_config=generation_config)
+        self.assertTrue(model.generation_config.bos_token_id == gen_output[0, 0])
+        self.assertFalse(test_bos_id == gen_output[0, 0])
+        self.assertTrue(generation_config.bos_token_id is None)
+
+        # Changing `model.generation_config` will affect fallback behavior
+        model.generation_config.bos_token_id = test_bos_id
+        gen_output = model.generate(generation_config=generation_config)
+        self.assertTrue(model.generation_config.bos_token_id == gen_output[0, 0])
+        self.assertTrue(test_bos_id == gen_output[0, 0])
+        self.assertTrue(generation_config.bos_token_id is None)
 
 
 @require_torch

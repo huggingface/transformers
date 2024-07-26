@@ -33,6 +33,7 @@ class GgufIntegrationTests(unittest.TestCase):
     mistral_model_id = "TheBloke/Mistral-7B-Instruct-v0.2-GGUF"
     qwen2_model_id = "Qwen/Qwen1.5-0.5B-Chat-GGUF"
     llama3_model_id = "NousResearch/Meta-Llama-3-8B-GGUF"
+    tinyllama_model_id = "PenutChen/TinyLlama-1.1B-Chat-v1.0-GGUF"
 
     q4_0_gguf_model_id = "tinyllama-1.1b-chat-v1.0.Q4_0.gguf"
     q4_k_gguf_model_id = "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
@@ -45,6 +46,7 @@ class GgufIntegrationTests(unittest.TestCase):
     q4_0_mistral_model_id = "mistral-7b-instruct-v0.2.Q4_0.gguf"
     q4_0_qwen2_model_id = "qwen1_5-0_5b-chat-q4_0.gguf"
     q4_llama3_model_id = "Meta-Llama-3-8B-Q4_K_M.gguf"
+    f16_tinyllama_model_id = "TinyLlama-1.1B-Chat-v1.0.FP16.gguf"
 
     example_text = "Hello"
 
@@ -149,6 +151,18 @@ class GgufIntegrationTests(unittest.TestCase):
         EXPECTED_TEXT = "Hello, World!\n\n5. Use a library"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
+    def test_f16(self):
+        tokenizer = AutoTokenizer.from_pretrained(self.tinyllama_model_id, gguf_file=self.f16_tinyllama_model_id)
+        model = AutoModelForCausalLM.from_pretrained(
+            self.tinyllama_model_id, gguf_file=self.f16_tinyllama_model_id
+        ).to(torch_device)
+
+        text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
+        out = model.generate(**text, max_new_tokens=10)
+
+        EXPECTED_TEXT = "Hello, World!\n\n5. Node.js"
+        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
+
     def test_mistral_q4_0(self):
         tokenizer = AutoTokenizer.from_pretrained(self.mistral_model_id, gguf_file=self.q4_0_mistral_model_id)
         model = AutoModelForCausalLM.from_pretrained(
@@ -174,10 +188,13 @@ class GgufIntegrationTests(unittest.TestCase):
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_llama3_q4_0_tokenizer(self):
-        tokenizer_gguf = AutoTokenizer.from_pretrained(self.llama3_model_id, gguf_file=self.q4_llama3_model_id)
-        special_sentence = "สวัสดี"
-        predicted_text = tokenizer_gguf.decode(tokenizer_gguf.encode(special_sentence, return_tensors="pt")[0])
-        self.assertEqual(predicted_text, "<|begin_of_text|>" + special_sentence)
+        tokenizer = AutoTokenizer.from_pretrained(self.llama3_model_id, gguf_file=self.q4_llama3_model_id)
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            tokenizer.save_pretrained(tmpdirname)
+            tokenizer = AutoTokenizer.from_pretrained(tmpdirname)
+            special_sentence = "สวัสดี"
+            predicted_text = tokenizer.decode(tokenizer.encode(special_sentence, return_tensors="pt")[0])
+            self.assertEqual(predicted_text, "<|begin_of_text|>" + special_sentence)
 
     def test_llama3_q4_0(self):
         tokenizer = AutoTokenizer.from_pretrained(self.llama3_model_id, gguf_file=self.q4_llama3_model_id)
