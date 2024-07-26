@@ -39,6 +39,7 @@ from ...utils import (
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
     logging,
+    replace_return_docstrings,
 )
 from .configuration_glm import GLMConfig
 
@@ -648,7 +649,7 @@ class GLMPreTrainedModel(PreTrainedModel):
     config_class = GLMConfig
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["GLMDecoderLayer"]
+    _no_split_modules = ["GLMBlock"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
     _supports_sdpa = False
@@ -994,10 +995,12 @@ GLM_INPUTS_DOCSTRING = r"""
 )
 class GLMModel(GLMPreTrainedModel):
     """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`GLMDecoderLayer`]
+    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`GLMBlock`]
 
     Args:
         config: GLMConfig
+        device (optional): The device on which the model should be run.
+        add_lm_head (bool, optional): Whether to add a language modeling head on top of the model.
     """
 
     def __init__(self, config: GLMConfig, device=None, add_lm_head=False):
@@ -1151,10 +1154,6 @@ class GLMModel(GLMPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    "The bare GLM Model outputting raw hidden-states without any specific head on top.",
-    GLM_START_DOCSTRING,
-)
 class GLMForCausalLM(GLMPreTrainedModel):
     _tied_weights_keys = ["transformer.output_layer.weight"]
 
@@ -1186,6 +1185,7 @@ class GLMForCausalLM(GLMPreTrainedModel):
         return self.transformer
 
     @add_start_docstrings_to_model_forward(GLM_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: torch.LongTensor = None,

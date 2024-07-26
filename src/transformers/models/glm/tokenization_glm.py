@@ -121,14 +121,17 @@ class GLMTokenizer(PreTrainedTokenizer):
         clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
             Whether or not the model should cleanup the spaces that were added when splitting the input text during the
             tokenization process. Not applicable to this tokenizer, since tokenization does not add spaces.
-        use_default_system_prompt (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+        use_default_system_prompt (`bool`, *optional*, defaults to `False`):
+            Whether or not the default system prompt for Cohere tokenizer should be used.
         split_special_tokens (`bool`, *optional*, defaults to `False`):
             Whether or not the special tokens should be split during the tokenization process. The default behavior is
             to not split special tokens. This means that if `<|endoftext|>` is the `eos_token`, then `tokenizer.tokenize("<|endoftext|>") =
             ['<|endoftext|>`]. Otherwise, if `split_special_tokens=True`, then `tokenizer.tokenize("<|endoftext|>")` will be give `['<',
             '|', 'endo', 'ft', 'ext', '|', '>']`. This argument is only supported for `slow` tokenizers for the moment.
-        spaces_between_special_tokens (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
-        add_prefix_space (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+        spaces_between_special_tokens (`bool`, *optional*, defaults to `False`):
+            Whether or not to add spaces between special tokens.
+        add_prefix_space (`bool`, *optional*, defaults to `True`):
+            Whether or not to add a space to the beginning of the text. This allows to treat the leading word just as any other word.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

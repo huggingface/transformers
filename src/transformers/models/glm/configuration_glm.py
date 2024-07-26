@@ -72,7 +72,8 @@ class GLMConfig(PretrainedConfig):
         attention_softmax_in_fp32 (`bool`, *optional*, defaults to `True`):
             Whether to use fp32 for softmax in attention.
             Whether to use fp32 for residual connection.
-        fp32_residual_connection (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+        fp32_residual_connection (`bool`, *optional*, defaults to `False`):
+            Whether to use fp32 for residual connection.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`. Whether to tie weight embeddings or not.
