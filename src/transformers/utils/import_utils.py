@@ -1887,14 +1887,20 @@ def create_import_structure_from_path(module_path):
     """
     import_structure = {}
     if os.path.isdir(module_path):
+
+        directory = module_path
+        adjacent_modules = []
+
         for f in os.listdir(module_path):
             if f != "__pycache__" and os.path.isdir(os.path.join(module_path, f)):
-                import_structure[f] = define_import_structure(os.path.join(module_path, f))
-        directory = module_path
+                import_structure[f] = create_import_structure_from_path(os.path.join(module_path, f))
+
+            elif not os.path.isdir(os.path.join(directory, f)):
+                adjacent_modules.append(f)
+
     else:
         directory = os.path.dirname(module_path)
-
-    adjacent_modules = [f for f in os.listdir(directory) if not os.path.isdir(os.path.join(directory, f))]
+        adjacent_modules = [f for f in os.listdir(directory) if not os.path.isdir(os.path.join(directory, f))]
 
     # We're only taking a look at files different from __init__.py
     # We could theoretically export things directly from the __init__.py
