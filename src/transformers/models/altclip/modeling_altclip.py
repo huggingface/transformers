@@ -1466,12 +1466,12 @@ class AltCLIPModel(AltCLIPPreTrainedModel):
         super().__init__(config)
 
         if not isinstance(config.vision_config, AltCLIPVisionConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.vision_config is expected to be of type AltCLIPVisionConfig but is of type"
                 f" {type(config.vision_config)}."
             )
         if not isinstance(config.text_config, AltCLIPTextConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.text_config is expected to be of type AltCLIPTextConfig but is of type"
                 f" {type(config.text_config)}."
             )
