@@ -17,6 +17,7 @@ Import utilities: Utilities related to imports and our lazy inits.
 
 import importlib.metadata
 import importlib.util
+import importlib.machinery
 import json
 import os
 import shutil
@@ -27,7 +28,7 @@ from collections import OrderedDict
 from functools import lru_cache
 from itertools import chain
 from types import ModuleType
-from typing import Any, Optional, Tuple, Union, List
+from typing import Any, Tuple, Union, Dict, Set, FrozenSet
 
 from packaging import version
 
@@ -1614,6 +1615,9 @@ def is_torch_fx_proxy(x):
     return False
 
 
+BACKENDS_T = FrozenSet[str]
+IMPORT_STRUCTURE_T = Dict[BACKENDS_T, Dict[str, Set[str]]]
+
 class _LazyModule(ModuleType):
     """
     Module class that surfaces all objects but only performs associated imports when the objects are requested.
@@ -1621,7 +1625,14 @@ class _LazyModule(ModuleType):
 
     # Very heavily inspired by optuna.integration._IntegrationModule
     # https://github.com/optuna/optuna/blob/master/optuna/integration/__init__.py
-    def __init__(self, name, module_file, import_structure, module_spec=None, extra_objects=None):
+    def __init__(
+        self,
+        name: str,
+        module_file: str,
+        import_structure: IMPORT_STRUCTURE_T,
+        module_spec: importlib.machinery.ModuleSpec = None,
+        extra_objects: Dict[str, object] = None
+    ):
         super().__init__(name)
 
         self._object_missing_backend = {}
@@ -1821,7 +1832,7 @@ def fetch__all__(file_content):
 
 
 @lru_cache()
-def define_import_structure(module_path):
+def create_import_structure_from_path(module_path):
     """
     This method takes the path to a file/a folder and returns the import structure.
     If a file is given, it will return the import structure of the parent folder.
@@ -2106,3 +2117,28 @@ def spread_import_structure(nested_import_structure):
             flattened_import_structure[key] = flatten_dict(value)
 
     return flattened_import_structure
+
+
+def define_import_structure(module_path: str) -> IMPORT_STRUCTURE_T:
+    """
+    This method takes a module_path as input and creates an import structure digestible by a _LazyModule.
+
+    Here's an example of an output import structure at the src.transformers.models level:
+
+    {
+        frozenset({'tokenizers'}): {
+            'albert.tokenization_albert_fast': {'AlbertTokenizerFast'}
+        },
+        frozenset(): {
+            'albert.configuration_albert': {'AlbertConfig', 'AlbertOnnxConfig'},
+            'align.processing_align': {'AlignProcessor'},
+            'align.configuration_align': {'AlignConfig', 'AlignTextConfig', 'AlignVisionConfig'},
+            'altclip.configuration_altclip': {'AltCLIPConfig', 'AltCLIPTextConfig', 'AltCLIPVisionConfig'},
+            'altclip.processing_altclip': {'AltCLIPProcessor'}
+        }
+    }
+
+    The import structure is a dict defined with frozensets as keys, and dicts of strings to sets of objects.
+    """
+    import_structure = create_import_structure_from_path(module_path)
+    return spread_import_structure(import_structure)
