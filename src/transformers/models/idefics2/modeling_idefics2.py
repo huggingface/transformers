@@ -921,7 +921,9 @@ class Idefics2PerceiverLayer(nn.Module):
 
         self.input_latents_norm = Idefics2RMSNorm(self.hidden_size, eps=self.rms_norm_eps)
         self.input_context_norm = Idefics2RMSNorm(self.hidden_size, eps=self.rms_norm_eps)
-        self.self_attn = IDEFICS2_PERCEIVER_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx=layer_idx)
+        self.self_attn = IDEFICS2_PERCEIVER_ATTENTION_CLASSES[config.perceiver_config._attn_implementation](
+            config, layer_idx=layer_idx
+        )
         self.post_attention_layernorm = Idefics2RMSNorm(self.hidden_size, eps=self.rms_norm_eps)
         self.mlp = Idefics2MLP(
             hidden_size=config.text_config.hidden_size,
@@ -1123,16 +1125,26 @@ class Idefics2PreTrainedModel(PreTrainedModel):
         """
         Overrides the method in `PreTrainedModel` to update the vision config with the correct attention implementation
         """
-        config._attn_implementation = "eager"
-        #  = super()._autoset_attn_implementation(
-        #     config=config,
-        #     use_flash_attention_2=use_flash_attention_2,
-        #     torch_dtype=torch_dtype,
-        #     device_map=device_map,
-        #     check_device_map=check_device_map,
-        #     **kwargs,
-        # )
-        config.vision_config._attn_implementation = config._attn_implementation
+        config = super()._autoset_attn_implementation(
+            config=config,
+            use_flash_attention_2=use_flash_attention_2,
+            torch_dtype=torch_dtype,
+            device_map=device_map,
+            check_device_map=check_device_map,
+            **kwargs,
+        )
+        # autoset-attn calls recursively all sub-configs (text-config, vision-config)
+        # and sets attn implementation if the config can be mapped bu auto-model
+        # Idefics2 vision config can't be mapped automcatically so we set it manually here
+        # We cant set vision attn same as general attn, because the general one can be sdpa if at
+        # least one sub-module (in this case LLM) supports sdpa
+        if hasattr(config, "vision_config"):
+            config.vision_config._attn_implementation = (
+                config._attn_implementation if config._attn_implementation != "sdpa" else "eager"
+            )
+            config.perceiver_config._attn_implementation = (
+                config._attn_implementation if config._attn_implementation != "sdpa" else "eager"
+            )
         return config
 
 
