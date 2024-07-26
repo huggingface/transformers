@@ -275,7 +275,7 @@ class BloomAttention(nn.Module):
         key_layer = key_layer.reshape(batch_size * self.num_heads, -1, self.head_dim).transpose(1, 2)
         value_layer = value_layer.reshape(batch_size * self.num_heads, -1, self.head_dim)
 
-        kv_length = key_layer.shape[-1]
+        kv_length = cache_position[-1] + 1  # cache position is 0-indexed while length should start from 1
 
         # [batch_size * num_heads, q_length, kv_length]
         # we use `torch.Tensor.baddbmm` instead of `torch.baddbmm` as the latter isn't supported by TorchScript v1.11
