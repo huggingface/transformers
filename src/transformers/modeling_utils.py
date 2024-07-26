@@ -1522,8 +1522,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if hasattr(config, "text_config") and hasattr(config, "vision_config"):
             text_model_cls = MODEL_MAPPING.get(type(config.text_config), None)
             if text_model_cls is not None:
-                cls._supports_cache_class = text_model_cls._supports_cache_class
-
                 config.text_config._attn_implementation = config._attn_implementation
                 config.vision_config._attn_implementation = config._attn_implementation
                 cls._supports_sdpa = text_model_cls._supports_sdpa

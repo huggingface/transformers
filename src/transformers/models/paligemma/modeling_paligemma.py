@@ -126,7 +126,6 @@ class PaliGemmaPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["PaliGemmaMultiModalProjector"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = False
-    _supports_sdpa = True
 
     def _init_weights(self, module):
         # important: this ported version of PaliGemmaisn't meant for training from scratch - only
@@ -148,14 +147,6 @@ class PaliGemmaPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-
-    @property
-    def _supports_sdpa(self):
-        """
-        Retrieve language_model's attribute to check whether the model supports
-        SDPA or not.
-        """
-        return self.language_model._supports_sdpa
 
 
 PALIGEMMA_INPUTS_DOCSTRING = r"""
@@ -239,7 +230,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
         self._attn_implementation = config._attn_implementation
 
         language_model = AutoModelForCausalLM.from_config(
-            config=config.text_config, attn_implementation=self.text_config._attn_implementation
+            config=config.text_config, attn_implementation=config.text_config._attn_implementation
         )
 
         if language_model._tied_weights_keys is not None:
