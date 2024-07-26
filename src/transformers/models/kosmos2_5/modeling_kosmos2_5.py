@@ -2595,6 +2595,7 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel):
             vision_model_output=vision_model_output,
         )
 
+    @torch.no_grad()
     def generate(
         self,
         flattened_patches: Optional[torch.Tensor] = None,
