@@ -1523,7 +1523,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             text_model_cls = MODEL_MAPPING.get(type(config.text_config), None)
             if text_model_cls is not None:
                 config.text_config._attn_implementation = config._attn_implementation
-                config.vision_config._attn_implementation = config._attn_implementation
                 cls._supports_sdpa = text_model_cls._supports_sdpa
                 cls._autoset_attn_implementation(
                     config.text_config,
@@ -1535,6 +1534,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             vision_model_cls = MODEL_MAPPING.get(type(config.vision_config), None)
             if vision_model_cls is not None:
+                config.vision_config._attn_implementation = config._attn_implementation
                 cls._supports_sdpa = vision_model_cls._supports_sdpa
                 cls._autoset_attn_implementation(
                     config.vision_config,
