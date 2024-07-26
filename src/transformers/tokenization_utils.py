@@ -494,10 +494,17 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
     def __len__(self):
         """
-        Size of the full vocabulary with the added tokens. Counts the `keys` and not the `values` because otherwise if
-        there is a hole in the vocab, we will add tokenizers at a wrong index.
+        Size of the full vocabulary with the added tokens.
         """
-        return len(set(self.get_vocab().keys()))
+        return self.total_vocab_size
+
+    def _update_total_vocab_size(self):
+        """
+        Update the size of the full vocabulary with the added tokens. Counts the `keys` and not the `values` because
+        otherwise if there is a hole in the vocab, we will add tokenizers at a wrong index. This operation is slow and
+        is only updated when adding tokens.
+        """
+        self.total_vocab_size = len(self.get_vocab())
 
     def _add_tokens(self, new_tokens: Union[List[str], List[AddedToken]], special_tokens: bool = False) -> int:
         """
@@ -574,6 +581,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 logger.info(f"Adding {token} to the vocabulary")
 
         self._update_trie()
+        self._update_total_vocab_size()
         return added_tokens
 
     def _update_trie(self, unique_no_split_tokens: Optional[str] = []):
