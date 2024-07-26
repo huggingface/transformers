@@ -27,7 +27,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache
+from ...cache_utils import Cache, DynamicCache
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -744,7 +744,23 @@ class Gemma2Model(Gemma2PreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if cache_position is None:
+            if past_key_values is not None and not past_key_values.empty:
+                logger.warning(
+                    "You are calling the model with non-empty `past_key_values` but didn't pass `cache_position`. ",
+                    "This will results in incorrect logits. Please pass `cache_position` that indicates indicates "
+                    "input's positions in the sequence.",
+                )
             cache_position = torch.arange(0, inputs_embeds.shape[1], device=inputs_embeds.device)
+
+        # Probably a forward call with caching, so we set up cache for one call only
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache()
+            logger.warning(
+                "You are calling the model with `use_cache=True` but didn't pass `past_key_values`. ",
+                "Be default the model will use a dynamic cache, which doesn't support sliding window. "
+                "In case you are calling iteratively to generate, please initiate `past_key_values` "
+                "outside as `HybridCache` class.",
+            )
 
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
@@ -829,7 +845,7 @@ class Gemma2Model(Gemma2PreTrainedModel):
         dtype, device = input_tensor.dtype, input_tensor.device
         min_dtype = torch.finfo(dtype).min
         sequence_length = input_tensor.shape[1]
-        if past_key_values is not None:
+        if past_key_values is not None and past_key_values.get_max_length() is not None:
             target_length = past_key_values.get_max_length()
         else:
             target_length = attention_mask.shape[-1] if attention_mask is not None else input_tensor.shape[1]
