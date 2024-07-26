@@ -577,15 +577,15 @@ class SpmConverter(Converter):
     def tokenizer(self, proto):
         model_type = proto.trainer_spec.model_type
         vocab_scores = self.vocab(proto)
-        unk_id = self.unk_id(proto)
 
         if model_type == 1:
-            import tokenizers
-
-            if version.parse(tokenizers.__version__) >= version.parse("0.14.0"):
-                tokenizer = Tokenizer(Unigram(vocab_scores, unk_id, byte_fallback=self.handle_byte_fallback))
-            else:
-                tokenizer = Tokenizer(Unigram(vocab_scores, unk_id))
+            tokenizer = Tokenizer(
+                Unigram(
+                    vocab_scores,
+                    unk_id=self.unk_id(proto),
+                    byte_fallback=self.handle_byte_fallback,
+                )
+            )
 
         elif model_type == 2:
             _, merges = self.SpmExtractor(self.original_tokenizer.vocab_file).extract(vocab_scores)
