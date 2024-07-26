@@ -410,6 +410,8 @@ class GraniteMoeMoE(nn.Module):
         self.activation = ACT2FN[config.activation_function]
         if config.mlp_bias:
             self.bias = torch.nn.Parameter(torch.empty(self.input_size))
+        else:
+            self.register_parameter('bias', None)
         self.input_linear = GraniteMoeParallelExperts(config.num_local_experts, self.input_size, self.hidden_size * 2)
         self.output_linear = GraniteMoeParallelExperts(config.num_local_experts, self.hidden_size, self.input_size)
 
@@ -448,7 +450,7 @@ class GraniteMoeMoE(nn.Module):
         zeros = torch.zeros((bsz * length, self.input_size), dtype=expert_outputs.dtype, device=expert_outputs.device)
         layer_output = zeros.index_add(0, batch_index, expert_outputs)
         layer_output = layer_output.view(bsz, length, self.input_size)
-        if hasattr(self, "bias"):
+        if self.bias is not None:
             layer_output = layer_output + self.bias
         return layer_output, router_logits
 
@@ -924,6 +926,14 @@ class GraniteMoePreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+        elif isinstance(module, GraniteMoeParallelExperts):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, GraniteMoeMoE):
+            if module.bias is not None:
+                module.bias.data.zero_()
 
 
 GRANITEMOE_INPUTS_DOCSTRING = r"""
@@ -1252,7 +1262,7 @@ class GraniteMoeForCausalLM(GraniteMoePreTrainedModel):
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
-        self.aux_loss_coef = config.aux_loss_coef
+        self.router_aux_loss_coef = config.router_aux_loss_coef
         self.num_experts = config.num_local_experts
         self.num_experts_per_tok = config.num_experts_per_tok
 

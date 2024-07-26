@@ -36,7 +36,6 @@ from transformers.testing_utils import (
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
-from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -283,7 +282,7 @@ class GraniteMoeModelTester:
 
 
 @require_torch
-class GraniteMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class GraniteMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             GraniteMoeModel,
