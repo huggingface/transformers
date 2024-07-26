@@ -166,14 +166,6 @@ class VipLlavaPreTrainedModel(PreTrainedModel):
         """
         return self.language_model._supports_sdpa
 
-    @property
-    def _supports_cache_class(self):
-        """
-        Retrieve language_model's attribute to check whether the model supports
-        cache class or not.
-        """
-        return self.language_model._supports_cache_class
-
 
 VIPLLAVA_INPUTS_DOCSTRING = r"""
     Args:
