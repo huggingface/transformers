@@ -431,6 +431,9 @@ class IdeficsRMSNorm(nn.Module):
 
         return self.weight * hidden_states
 
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
 
 ALL_LAYERNORM_LAYERS.append(IdeficsRMSNorm)
 
