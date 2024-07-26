@@ -663,7 +663,7 @@ class JambaModelIntegrationTest(unittest.TestCase):
             # 8 is for A100 / A10 and 7 for T4
             cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
 
-    # @slow
+    @slow
     def test_simple_generate(self):
         # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
         #
@@ -690,7 +690,7 @@ class JambaModelIntegrationTest(unittest.TestCase):
         EXPECTED_LOGITS_NO_GRAD = torch.tensor(
             [
                 0.0134, -0.2197,  0.0396, -0.1011,  0.0459,  0.2793, -0.1465,  0.1660,
-                -0.2930, -0.0278,  0.0269, -0.5586, -0.2109, -0.1426, -0.1553,  0.1279,
+               -0.2930, -0.0278,  0.0269, -0.5586, -0.2109, -0.1426, -0.1553,  0.1279,
                 0.0713,  0.2246,  0.1660, -0.2314, -0.1187, -0.1162, -0.1377,  0.0292,
                 0.1245,  0.2275,  0.0374,  0.1089, -0.1348, -0.2305,  0.1484, -0.3906,
                 0.1709, -0.4590, -0.0447,  0.2422,  0.1592, -0.1855,  0.2441, -0.0562
@@ -699,7 +699,7 @@ class JambaModelIntegrationTest(unittest.TestCase):
 
         torch.testing.assert_close(logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD, rtol=1e-3, atol=1e-3)
 
-    # @slow
+    @slow
     def test_simple_batched_generate_with_padding(self):
         # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
         #
@@ -707,16 +707,16 @@ class JambaModelIntegrationTest(unittest.TestCase):
         # considering differences in hardware processing and potential deviations in generated text.
         EXPECTED_TEXTS = {
             7: [
-                "<|startoftext|>Hey how are you doing on this lovely evening? Canyon rins hugaughter glamour Rutgers Singh<|reserved_797|>cw algunas",
-                "<|pad|><|pad|><|pad|><|pad|><|pad|><|pad|><|startoftext|>Tell me a storyptus Nets Madison El chamadamodern updximVaparsed"
+                "<|startoftext|>Hey how are you doing on this lovely evening? Canyon rins hugaughter glamour Rutgers Singh Hebrew cases Cats",
+                "<|pad|><|pad|><|pad|><|pad|><|pad|><|pad|><|startoftext|>Tell me a storyptus Nets Madison El chamadamodern updximVaparsed",
             ],
             8: [
                 "<|startoftext|>Hey how are you doing on this lovely evening? Canyon rins hugaughter glamour Rutgers Singh<|reserved_797|>cw algunas",
-                "<|pad|><|pad|><|pad|><|pad|><|pad|><|pad|><|startoftext|>Tell me a storyptus Nets Madison El chamadamodern updximVaparsed"
+                "<|pad|><|pad|><|pad|><|pad|><|pad|><|pad|><|startoftext|>Tell me a storyptus Nets Madison El chamadamodern updximVaparsed",
             ],
             9: [
                 "<|startoftext|>Hey how are you doing on this lovely evening? Canyon rins hugaughter glamour Rutgers Singh<|reserved_797|>cw algunas",
-                "<|pad|><|pad|><|pad|><|pad|><|pad|><|pad|><|startoftext|>Tell me a storyptus Nets Madison El chamadamodern updximVaparsed"
+                "<|pad|><|pad|><|pad|><|pad|><|pad|><|pad|><|startoftext|>Tell me a storyptus Nets Madison El chamadamodern updximVaparsed",
             ],
         }
 
@@ -736,7 +736,7 @@ class JambaModelIntegrationTest(unittest.TestCase):
         EXPECTED_LOGITS_NO_GRAD_0 = torch.tensor(
             [
                 0.0166, -0.2227,  0.0396, -0.1035,  0.0459,  0.2754, -0.1445,  0.1641,
-                -0.2910, -0.0273,  0.0227, -0.5547, -0.2139, -0.1396, -0.1582,  0.1289,
+               -0.2910, -0.0273,  0.0227, -0.5547, -0.2139, -0.1396, -0.1582,  0.1289,
                 0.0713,  0.2256,  0.1699, -0.2295, -0.1182, -0.1167, -0.1387,  0.0261,
                 0.1270,  0.2285,  0.0403,  0.1108, -0.1318, -0.2334,  0.1455, -0.3945,
                 0.1729, -0.4609, -0.0410,  0.2412,  0.1572, -0.1895,  0.2402, -0.0583
@@ -745,7 +745,7 @@ class JambaModelIntegrationTest(unittest.TestCase):
 
         EXPECTED_LOGITS_NO_GRAD_1 = torch.tensor(
             [
-                -0.1318,  0.2354, -0.4160, -0.0325, -0.0461,  0.0342,  0.2578,  0.0874,
+               -0.1318,  0.2354, -0.4160, -0.0325, -0.0461,  0.0342,  0.2578,  0.0874,
                 0.1484,  0.2266, -0.1182, -0.1396, -0.1494, -0.1089, -0.0019, -0.2852,
                 0.1973, -0.2676,  0.0586, -0.1992, -0.2520, -0.1147, -0.1973,  0.2129,
                 0.0520,  0.1699,  0.1816,  0.1289,  0.1699, -0.1216, -0.2656, -0.2891,
