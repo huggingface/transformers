@@ -310,7 +310,7 @@ class DynamicCache(Cache):
         >>> # Prepare a cache class and pass it to model's forward
         >>> past_key_values = DynamicCache()
         >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-        >>> past_kv_length = outputs.past_key_values.get_seq_length()
+        >>> past_kv_length = outputs.past_key_values # access cache filled with key/values from generation
         ```
     """
 
@@ -573,7 +573,7 @@ class QuantoQuantizedCache(QuantizedCache):
         >>> cache_config = QuantizedCacheConfig(nbits=4)
         >>> past_key_values = QuantoQuantizedCache(cache_config=cache_config)
         >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-        >>> past_kv_length = outputs.past_key_values.get_seq_length()
+        >>> past_kv_length = outputs.past_key_values # access cache filled with key/values from generation
         ```
     """
 
@@ -632,7 +632,7 @@ class HQQQuantizedCache(QuantizedCache):
         >>> cache_config = QuantizedCacheConfig(nbits=4, axis_key=1, axis_value=1)
         >>> past_key_values = HQQQuantizedCache(cache_config=cache_config)
         >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-        >>> past_kv_length = outputs.past_key_values.get_seq_length()
+        >>> past_kv_length = outputs.past_key_values # access cache filled with key/values from generation
         ```
     """
 
@@ -698,7 +698,7 @@ class SinkCache(Cache):
         >>> # Prepare a cache class and pass it to model's forward
         >>> past_key_values = SinkCache(window_length=256, num_sink_tokens=4)
         >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-        >>> past_kv_length = outputs.past_key_values.get_seq_length()
+        >>> past_kv_length = outputs.past_key_values # access cache filled with key/values from generation
         ```
     """
 
@@ -884,7 +884,7 @@ class StaticCache(Cache):
         >>> max_generated_length = inputs.input_ids.shape[1] + 10
         >>> past_key_values = StaticCache(config=model.config, max_batch_size=1, max_cache_len=max_generated_length, device=model.device, dtype=model.dtype)
         >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-        >>> past_kv_length = outputs.past_key_values.get_seq_length()
+        >>> past_kv_length = outputs.past_key_values # access cache filled with key/values from generation
         ```
     """
 
@@ -1026,7 +1026,7 @@ class SlidingWindowCache(StaticCache):
         >>> max_generated_length = inputs.input_ids.shape[1] + 10
         >>> past_key_values = SlidingWindowCache(config=model.config, max_batch_size=1, max_cache_len=max_generated_length, device=model.device, dtype=model.dtype)
         >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-        >>> past_kv_length = outputs.past_key_values.get_seq_length()
+        >>> past_kv_length = outputs.past_key_values # access cache filled with key/values from generation
         ```
     """
 
@@ -1121,7 +1121,7 @@ class EncoderDecoderCache(Cache):
         >>> cross_attention_cache = DynamicCache()
         >>> past_key_values = EncoderDecoderCache(self_attention_cache, cross_attention_cache)
         >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-        >>> past_kv_length = outputs.past_key_values.get_seq_length()
+        >>> past_kv_length = outputs.past_key_values # access cache filled with key/values from generation
         ```
 
     """
@@ -1301,7 +1301,7 @@ class HybridCache(Cache):
         >>> max_generated_length = inputs.input_ids.shape[1] + 10
         >>> past_key_values = HybridCache(config=model.config, max_batch_size=1, max_cache_len=max_generated_length, device=model.device, dtype=model.dtype)
         >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-        >>> past_kv_length = outputs.past_key_values.get_seq_length()
+        >>> past_kv_length = outputs.past_key_values # access cache filled with key/values from generation
         ```
     """
 
