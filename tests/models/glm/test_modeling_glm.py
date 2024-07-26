@@ -64,7 +64,6 @@ class GLMModelTester:
         hidden_size=8,
         num_hidden_layers=2,
         num_attention_heads=4,
-        num_key_value_heads=2,
         intermediate_size=37,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
@@ -90,7 +89,6 @@ class GLMModelTester:
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
@@ -135,7 +133,6 @@ class GLMModelTester:
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
-            num_key_value_heads=self.num_key_value_heads,
             intermediate_size=self.intermediate_size,
             hidden_act=self.hidden_act,
             hidden_dropout_prob=self.hidden_dropout_prob,
@@ -649,7 +646,7 @@ class GLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         # (batch, head, seq_length, kv_channels)
         expected_shape = (
             batch_size * num_beam_groups,
-            (config.num_key_value_heads if hasattr(config, "num_key_value_heads") else config.num_attention_heads),
+            config.num_attention_heads,
             seq_length,
             config.kv_channels,
         )

@@ -46,13 +46,6 @@ class GLMConfig(PretrainedConfig):
             Defines the number of channels for the key and value tensors.
         num_attention_heads (`int`, *optional*, defaults to 32):
             Number of attention heads for each attention layer in the Transformer decoder.
-        num_key_value_heads (`int`, *optional*, defaults to 32):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `32`.
         max_position_embeddings (`int`, *optional*, defaults to 131072):
             The maximum sequence length that this model might ever be used with.
         hidden_dropout (`float`, *optional*, defaults to 0.0):
@@ -103,7 +96,6 @@ class GLMConfig(PretrainedConfig):
         intermediate_size=13696,
         kv_channels=128,
         num_attention_heads=32,
-        num_key_value_heads=32,
         max_position_embeddings=131072,
         hidden_dropout=0.0,
         classifier_dropout=None,
@@ -129,10 +121,6 @@ class GLMConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.kv_channels = kv_channels
 
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
-
-        self.num_key_value_heads = num_key_value_heads
         self.add_qkv_bias = add_qkv_bias
         self.hidden_dropout = hidden_dropout
         self.classifier_dropout = classifier_dropout

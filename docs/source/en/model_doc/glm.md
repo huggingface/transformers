@@ -1,4 +1,4 @@
-<!--Copyright 2024 The HuggingFace Team. All rights reserved.
+<!--Copyright 2024 The GLM & ZhipuAI team and The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -45,24 +45,64 @@ Tips:
 - This model was contributed by [THUDM](https://huggingface.co/THUDM). The most recent code can be
   found [here](https://github.com/thudm/GLM-4).
 
+  
+## Usage tips
+
+`GLM-4` can be found on the [Huggingface Hub](https://huggingface.co/collections/THUDM/glm-4-665fcf188c414b03c2f7e3b7)
+
+In the following, we demonstrate how to use `glm-4-9b-chat` for the inference. Note that we have used the ChatML format for dialog, in this demo we show how to leverage `apply_chat_template` for this purpose.
+
+```python
+>>> from transformers import AutoModelForCausalLM, AutoTokenizer
+>>> device = "cuda" # the device to load the model onto
+
+>>> model = AutoModelForCausalLM.from_pretrained("THUDM/glm-4-9b-chat", device_map="auto")
+>>> tokenizer = AutoTokenizer.from_pretrained("THUDM/glm-4-9b-chat")
+
+>>> prompt = "Give me a short introduction to large language model."
+
+>>> messages = [{"role": "user", "content": prompt}]
+
+>>> text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+
+>>> model_inputs = tokenizer([text], return_tensors="pt").to(device)
+
+>>> generated_ids = model.generate(model_inputs.input_ids, max_new_tokens=512, do_sample=True)
+
+>>> generated_ids = [output_ids[len(input_ids):] for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)]
+
+>>> response = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+```
+
 ## GLMConfig
 
-[[autodoc]] GlmConfig
+[[autodoc]] GLMConfig
+
+## GLMTokenizer
+
+[[autodoc]] GLMTokenizer
+    - save_vocabulary
+
+## GLMTokenizerFast
+
+[[autodoc]] GLMTokenizerFast
 
 ## GLMModel
 
 [[autodoc]] GLMModel
-
-- forward
+    - forward
 
 ## GLMForCausalLM
 
 [[autodoc]] GLMForCausalLM
-
-- forward
+    - forward
 
 ## GLMForSequenceClassification
 
 [[autodoc]] GLMForSequenceClassification
+    - forward
 
-- forward
+## GLMForTokenClassification
+
+[[autodoc]] GLMForTokenClassification
+    - forward
