@@ -168,7 +168,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
                     "Please pass in `min_length` into `.generate()` instead"
                 )
 
-    def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
+    def get_candidates(self, input_ids: torch.LongTensor, position_ids, attention_mask) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
         """
         Fetches the candidates to be tried for the current input.
 
@@ -198,7 +198,9 @@ class AssistedCandidateGenerator(CandidateGenerator):
             self.assistant_kwargs["past_key_values"] = _crop_past_key_values(
                 self.assistant_model, self.assistant_kwargs["past_key_values"], new_cache_size - 1
             )  # the assistant does not have the token after the last match, hence the -1
-
+                
+            self.assistant_kwargs['position_ids'] = position_ids[:, new_cache_size : new_cur_len + self.num_assistant_tokens]
+            self.assistant_kwargs['attention_mask'] = attention_mask[:,:new_cur_len + self.num_assistant_tokens]
             self.assistant_kwargs = _prepare_attention_mask(
                 self.assistant_kwargs, new_cur_len, self.assistant_model.config.is_encoder_decoder
             )

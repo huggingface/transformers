@@ -1674,6 +1674,8 @@ class GenerationMixin:
         self._validate_model_class()
         tokenizer = kwargs.pop("tokenizer", None)  # Pull this out first, we only use it for stopping criteria
         generation_config, model_kwargs = self._prepare_generation_config(generation_config, **kwargs)
+        
+        position_ids = model_kwargs.pop('position_ids')
         self._validate_model_kwargs(model_kwargs.copy())
         self._validate_assistant(assistant_model)
 
@@ -3994,7 +3996,7 @@ class GenerationMixin:
             cur_len = input_ids.shape[-1]
 
             #  1. Fetch candidate sequences from a `CandidateGenerator`
-            candidate_input_ids, candidate_logits = candidate_generator.get_candidates(input_ids)
+            candidate_input_ids, candidate_logits = candidate_generator.get_candidates(input_ids, position_ids, attention_mask)
             candidate_input_ids = candidate_input_ids.to(self.device)
             if candidate_logits is not None:
                 candidate_logits = candidate_logits.to(self.device)
@@ -4129,7 +4131,7 @@ class GenerationMixin:
                     # set it to false for other iterations
                     start_from_empty_dynamic_cache = False
                 else:
-                    added_len = n_matches + 1
+                    added_len = n_matches.max() + 1
 
                 if output_attentions:
                     if self.config.is_encoder_decoder:
