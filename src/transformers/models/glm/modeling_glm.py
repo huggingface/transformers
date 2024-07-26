@@ -992,6 +992,13 @@ GLM_INPUTS_DOCSTRING = r"""
 @add_start_docstrings(
     "The bare GLM Model outputting raw hidden-states without any specific head on top.",
     GLM_START_DOCSTRING,
+    """
+        device ([`str`], *optional*):
+            The device on which this model will be run.
+        add_lm_head ([`bool`], *optional*, defaults to `False`):
+            Whether or not to add a language modeling head on top of the model. The language modeling head is composed
+            of two dense layers.
+"""
 )
 class GLMModel(GLMPreTrainedModel):
     """
@@ -999,11 +1006,11 @@ class GLMModel(GLMPreTrainedModel):
 
     Args:
         config: GLMConfig
-        device (optional): The device on which the model should be run.
-        add_lm_head (bool, optional): Whether to add a language modeling head on top of the model.
+        device: The device on which the model should be run.
+        add_lm_head: Whether to add a language modeling head on top of the model.
     """
 
-    def __init__(self, config: GLMConfig, device=None, add_lm_head=False):
+    def __init__(self, config: GLMConfig, device: str = None, add_lm_head: bool = False):
         super().__init__(config)
 
         def default_init(cls, *args, **kwargs):
@@ -1051,27 +1058,23 @@ class GLMModel(GLMPreTrainedModel):
     @add_start_docstrings_to_model_forward(GLM_INPUTS_DOCSTRING)
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-    ):
+    ) -> Union[Tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         return_legacy_cache = False
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError(
@@ -1163,6 +1166,7 @@ class GLMForCausalLM(GLMPreTrainedModel):
         self.max_sequence_length = config.max_length
         self.transformer = GLMModel(config, add_lm_head=True, device=device)
         self.config = config
+
         # Initialize weights and apply final processing
         self.post_init()
 
