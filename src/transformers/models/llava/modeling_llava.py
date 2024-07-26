@@ -125,6 +125,7 @@ class LlavaPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["LlavaVisionAttention"]
     _skip_keys_device_placement = "past_key_values"
+    _supports_flash_attn_2 = True
 
     def _init_weights(self, module):
         # important: this ported version of Llava isn't meant for training from scratch - only

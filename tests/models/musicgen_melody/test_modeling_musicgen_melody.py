@@ -629,7 +629,9 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
-        if not self.all_model_classes[0]._supports_sdpa:
+        if (not self.is_multimodal and not self.all_model_classes[0]._supports_sdpa) or (
+            self.is_multimodal and not self.supports_sdpa
+        ):
             self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
 
         if torch_dtype == "float16" and not is_torch_fp16_available_on_device(torch_device):
