@@ -68,8 +68,8 @@ More concretely, key-value cache acts as a memory bank for these generative mode
 
 ## Generate with Cache
 
-In 🤗 Transformers, we support various Cache types to optimize the performance across different models and tasks. By default all models generate with caching
-and for that we use the ["DynamicCache"] class. It allows us to dynamically grow cache size, by saving more and more keys and values as we generate. Usually all you have to do to enable or disable it is to pass in `use_cache=True` or `use_cache=False` into the `generate()` method.
+In 🤗 Transformers, we support various Cache types to optimize the performance across different models and tasks. By default, all models generate with caching,
+with the ["DynamicCache"] class being the default cache for most models. It allows us to dynamically grow cache size, by saving more and more keys and values as we generate. If for some reason you don't want to use caches, you can pass `use_cache=False` into the `generate()` method.
 
 Apart from that we support many cache classes, which can be set with a `cache_implementation` argument. It can be set to one of `["static", "quantized", "sliding_window", "hybrid"]`. Let's look into each cache type in more details.
 
