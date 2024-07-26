@@ -32,14 +32,19 @@ class Qwen2AudioProcessor(ProcessorMixin):
             The feature extractor is a required input.
         tokenizer ([`Qwen2TokenizerFast`], *optional*):
             The tokenizer is a required input.
+        chat_template (`Optional[str]`, *optional*):
+                The Jinja template to use for formatting the conversation. If not provided, the default chat template
+                is used.
     """
 
     attributes = ["feature_extractor", "tokenizer"]
     feature_extractor_class = "WhisperFeatureExtractor"
     tokenizer_class = "AutoTokenizer"
 
-    def __init__(self, feature_extractor=None, tokenizer=None):
-        super().__init__(feature_extractor, tokenizer)
+    def __init__(self, feature_extractor=None, tokenizer=None, chat_template=None):
+        if chat_template is None:
+            chat_template = self.default_chat_template
+        super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
 
     def __call__(self, *args, **kwargs) -> BatchFeature:
         """
@@ -92,3 +97,62 @@ class Qwen2AudioProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         feature_extractor_input_names = self.feature_extractor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + feature_extractor_input_names + ["feature_attention_mask"]))
+
+    @property
+    def default_chat_template(self):
+        """
+        This default vicuna template formats inputs in the form of a chat history. For each message in the chat history:
+        * the template will output the role of the speaker followed by the content of the message.
+        * content is a list of strings and audios.
+        * If the content element is an audio, the template will output a sequence of <|AUDIO|> tokens
+
+        Example:
+
+        ```python
+        messages = [
+            {'role': 'system', 'content': 'You are a helpful assistant.'},
+            {"role": "user", "content": [
+                {"type": "audio", "audio_url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3"},
+                {"type": "text", "text": "What's that sound?"},
+            ]},
+            {"role": "assistant", "content": "It is the sound of glass shattering."},
+            {"role": "user", "content": [
+                {"type": "audio", "audio_url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/f2641_0_throatclearing.wav"},
+                {"type": "text", "text": "How about this one?"},
+            ]},
+        ]
+
+        result_with_id = template.render(messages=messages, add_generation_prompt=True, add_audio_id=True)
+        result_without_id = template.render(messages=messages, add_generation_prompt=True, add_audio_id=False)
+        ```
+        """
+        # fmt: off
+        return (
+            "{% set audio_count = namespace(value=0) %}"
+            "{% for message in messages %}"
+                "{% if loop.first and message['role'] != 'system' %}"
+                    "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n"
+                "{% endif %}"
+                "<|im_start|>{{ message['role'] }}\n"
+                "{% if message['content'] is string %}"
+                    "{{ message['content'] }}<|im_end|>\n"
+                "{% else %}"
+                    "{% for content in message['content'] %}"
+                        "{% if 'audio' in content or 'audio_url' in content %}"
+                            "{% set audio_count.value = audio_count.value + 1 %}"
+                            "{% if add_audio_id %}"
+                                "Audio {{ audio_count.value }}: "
+                            "{% endif %}"
+                            "<|audio_bos|><|AUDIO|><|audio_eos|>\n"
+                        "{% elif 'text' in content %}"
+                            "{{ content['text'] }}"
+                        "{% endif %}"
+                    "{% endfor %}"
+                    "<|im_end|>\n"
+                "{% endif %}"
+            "{% endfor %}"
+            "{% if add_generation_prompt %}"
+                "<|im_start|>assistant\n"
+            "{% endif %}"
+        )
+        # fmt: on
