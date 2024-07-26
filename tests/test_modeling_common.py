@@ -4270,6 +4270,18 @@ class ModelTesterMixin:
                     use_cache=True,
                 )
 
+                # Generate with one batch only to test generation when attention mask will be None
+                # when real inputs are used, because there is no padding. See issue #32237 for more
+                dummy_input = dummy_input[:1, ...]
+                dummy_attention_mask = torch.ones_like(dummy_attention_mask[:1, ...])
+                _ = model.generate(
+                    dummy_input,
+                    attention_mask=dummy_attention_mask,
+                    max_new_tokens=max_new_tokens,
+                    do_sample=False,
+                    use_cache=True,
+                )
+
     @require_flash_attn
     @require_torch_gpu
     @require_bitsandbytes
