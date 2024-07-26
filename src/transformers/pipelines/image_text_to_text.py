@@ -75,7 +75,7 @@ def count_images_in_chat(chat):
 @add_end_docstrings(build_pipeline_init_args(has_processor=True))
 class ImageTextToTextPipeline(Pipeline):
     """
-    Image-text-to-text pipeline. This pipeline generates text given an image and text.
+    Image-text-to-text pipeline using an `AutoModelForImageTextToText`. This pipeline generates text given an image and text.
 
     Example:
 

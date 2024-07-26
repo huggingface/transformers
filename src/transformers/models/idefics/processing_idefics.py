@@ -207,7 +207,7 @@ class IdeficsProcessor(ProcessorMixin):
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        return_tensors: Optional[Union[str, TensorType]] = "pt",
         legacy=True,
         prompts: Optional[Union[List[TextInput], List[List[TextInput]]]] = None,
         transform: Callable = None,

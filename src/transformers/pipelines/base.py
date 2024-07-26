@@ -1204,6 +1204,8 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
             feature_extractor = self.image_processor
         elif self.processor is not None:
             feature_extractor = self.processor
+        else:
+            feature_extractor = None
         collate_fn = no_collate_fn if batch_size == 1 else pad_collate_fn(self.tokenizer, feature_extractor)
         dataloader = DataLoader(dataset, num_workers=num_workers, batch_size=batch_size, collate_fn=collate_fn)
         model_iterator = PipelineIterator(dataloader, self.forward, forward_params, loader_batch_size=batch_size)
