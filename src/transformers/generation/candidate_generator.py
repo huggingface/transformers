@@ -246,10 +246,10 @@ class AssistedCandidateGenerator(CandidateGenerator):
             "heuristic",
             "heuristic_transient",
         }:
-            if num_matches == int(self.num_assistant_tokens):
+            if num_matches.min() == int(self.num_assistant_tokens):
                 self.num_assistant_tokens += 2.0
             else:
-                self.num_assistant_tokens = max(1.0, self.num_assistant_tokens - 1.0)
+                self.num_assistant_tokens = max(1, self.num_assistant_tokens - 1)
 
 
 class PromptLookupCandidateGenerator(CandidateGenerator):
@@ -364,15 +364,32 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
         return
 
 
-def _crop_past_key_values(model, past_key_values, max_length):
+def _crop_past_key_values(model, past_key_values, max_length, n_matches=None, left_cut=None):
     """Crops the past key values up to a certain maximum length."""
     new_past = []
     if model.config.is_encoder_decoder:
         for idx in range(len(past_key_values)):
+            if left_cut is None:
+                k_cache = past_key_values[idx][0][:, :, :max_length, :]
+                v_cache = past_key_values[idx][1][:, :, :max_length, :]
+            else:
+                k_cache = past_key_values[idx][0][:, :, left_cut:, :]
+                v_cache = past_key_values[idx][1][:, :, left_cut:, :]
+
+            if n_matches is not None:
+                for batch_idx in range(len(n_matches)):
+                    num_roll_left = n_matches.max() - n_matches[batch_idx]
+                    if num_roll_left > 0:
+                        # TODO(PVP) - check mem usage
+                        # k_cache[batch_idx].index_copy_(1, torch.arange(num_roll_left, maximum_length, device=k_cache.device), k_cache[batch_idx][:, :-num_roll_left].clone())
+                        # v_cache[batch_idx].index_copy_(1, torch.arange(num_roll_left, maximum_length, device=v_cache.device), v_cache[batch_idx][:, :-num_roll_left].clone())
+                        k_cache[batch_idx][:, num_roll_left:] = k_cache[batch_idx][:, :-num_roll_left].clone()
+                        v_cache[batch_idx][:, num_roll_left:] = v_cache[batch_idx][:, :-num_roll_left].clone()
+
             new_past.append(
                 (
-                    past_key_values[idx][0][:, :, :max_length, :],
-                    past_key_values[idx][1][:, :, :max_length, :],
+                    k_cache,
+                    v_cache,
                     past_key_values[idx][2],
                     past_key_values[idx][3],
                 )
