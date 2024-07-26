@@ -685,7 +685,7 @@ class JambaModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output_sentence, EXPECTED_TEXTS[self.cuda_compute_capability_major_version])
 
         # TODO: there are significant differences in the logits across major cuda versions, which shouldn't exist
-        if self.cuda_compute_capability_major_version != 8:
+        if self.cuda_compute_capability_major_version == 8:
             with torch.no_grad():
                 logits = self.model(input_ids=input_ids).logits
 
@@ -733,7 +733,7 @@ class JambaModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output_sentences[1], EXPECTED_TEXTS[self.cuda_compute_capability_major_version][1])
 
         # TODO: there are significant differences in the logits across major cuda versions, which shouldn't exist
-        if self.cuda_compute_capability_major_version != 8:
+        if self.cuda_compute_capability_major_version == 8:
             with torch.no_grad():
                 logits = self.model(input_ids=inputs["input_ids"]).logits
 
