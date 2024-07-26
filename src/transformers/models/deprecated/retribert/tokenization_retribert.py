@@ -283,7 +283,7 @@ class RetriBertTokenizer(PreTrainedTokenizer):
         return (vocab_file,)
 
 
-class BasicTokenizer(object):
+class BasicTokenizer:
     """
     Constructs a BasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.).
 
@@ -444,7 +444,7 @@ class BasicTokenizer(object):
         return "".join(output)
 
 
-class WordpieceTokenizer(object):
+class WordpieceTokenizer:
     """Runs WordPiece tokenization."""
 
     def __init__(self, vocab, unk_token, max_input_chars_per_word=100):
