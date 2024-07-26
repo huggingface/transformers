@@ -264,9 +264,11 @@ def _flash_attention_forward(
         )
         attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
 
-    # if position_ids is provided and check not all examples (row) contain only 1 sequence,
+    # if position_ids is provided and check not all examples (row) contain only 1 sequence, and is in pre-fill/training stage
     # then use `flash_attn_varlen_func` to prevent cross-example attention and also allow padding free approach
-    elif position_ids is not None and not (position_ids[:, -1] == position_ids.size(1) - 1).all():
+    elif (
+        position_ids is not None and not (position_ids[:, -1] == position_ids.size(1) - 1).all() and query_length != 1
+    ):
         batch_size = query_states.size(0)
         query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = prepare_fa2_from_position_ids(
             query_states, key_states, value_states, position_ids
