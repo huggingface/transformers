@@ -1225,7 +1225,7 @@ class Blip2Model(Blip2PreTrainedModel):
     def __init__(self, config: Blip2Config):
         super().__init__(config)
 
-        self.vision_model = Blip2VisionModel(
+        self.vision_model = Blip2VisionModel._from_config(
             config.vision_config, attn_implementation=config.vision_config._attn_implementation
         )
 
@@ -1592,7 +1592,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
     def __init__(self, config: Blip2Config):
         super().__init__(config)
 
-        self.vision_model = Blip2VisionModel(
+        self.vision_model = Blip2VisionModel._from_config(
             config.vision_config, attn_implementation=config.vision_config._attn_implementation
         )
 
