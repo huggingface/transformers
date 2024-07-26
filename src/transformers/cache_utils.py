@@ -452,11 +452,17 @@ class OffloadedCache(DynamicCache):
     A drop-in replacement for DynamicCache that conserves GPU memory at the expense of more CPU memory.
     Useful for generating from models with very long context.
 
-    When layer k is executing it moves the cache of layer k-1 to the CPU and prefetches the KV cache of layer k+1.
+    In addition to the default CUDA stream, where all forward() computations happen,
+    this class uses another stream, the prefetch stream, which it creates itself.
+    Since scheduling of operations on separate streams happens independently, this class uses
+    the prefetch stream to asynchronously prefetch the KV cache of layer k+1 when layer k is executing.
+    The movement of the layer k-1 cache to the CPU is handled by the default stream as a simple way to
+    ensure the eviction is scheduled after all computations on that cache are finished.
     """
 
     def __init__(self) -> None:
-        assert torch.cuda.is_available(), "OffloadedCache can only be used with a GPU"
+        if not torch.cuda.is_available():
+            raise RuntimeError("OffloadedCache can only be used with a GPU")
         super().__init__()
         self.original_device = []
         self.prefetch_stream = torch.cuda.Stream()
@@ -474,6 +480,7 @@ class OffloadedCache(DynamicCache):
     def evict_previous_layer(self, layer_idx: int):
         "Moves the previous layer cache to the CPU"
         if len(self) > 2:
+            # We do it on the default stream so it occurs after all earlier computations on these tensors are done
             prev_layer_idx = (layer_idx - 1) % len(self)
             self.key_cache[prev_layer_idx] = self.key_cache[prev_layer_idx].to("cpu", non_blocking=True)
             self.value_cache[prev_layer_idx] = self.value_cache[prev_layer_idx].to("cpu", non_blocking=True)
