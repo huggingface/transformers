@@ -318,7 +318,7 @@ class DepthAnythingDepthEstimationHead(nn.Module):
     Output head consisting of 3 convolutional layers. It progressively halves the feature dimension and upsamples
     the predictions to the input resolution after the first convolutional layer (details can be found in the DPT paper's
     supplementary material). The final activation function is either ReLU or Sigmoid, depending on the depth estimation
-    type (relative or metric).
+    type (relative or metric). For metric depth estimation, the output is scaled by the maximum depth used during pretraining.
     """
 
     def __init__(self, config):
