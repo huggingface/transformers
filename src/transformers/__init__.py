@@ -5133,11 +5133,11 @@ if TYPE_CHECKING:
         GitProcessor,
         GitVisionConfig,
     )
-    from .models.glpn import GLPNConfig
     from .models.glm import (
         GLMConfig,
         GLMTokenizer,
     )
+    from .models.glpn import GLPNConfig
     from .models.gpt2 import (
         GPT2Config,
         GPT2Tokenizer,
