@@ -998,7 +998,7 @@ GLM_INPUTS_DOCSTRING = r"""
         add_lm_head ([`bool`], *optional*, defaults to `False`):
             Whether or not to add a language modeling head on top of the model. The language modeling head is composed
             of two dense layers.
-"""
+""",
 )
 class GLMModel(GLMPreTrainedModel):
     """
