@@ -55,7 +55,6 @@ class Kosmos2_5Processor(ProcessorMixin):
         self,
         images=None,
         text: Union[TextInput, List[TextInput]] = None,
-        add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = True,
         truncation: Union[bool, str, TruncationStrategy] = True,
         max_length: Optional[int] = None,
@@ -91,7 +90,6 @@ class Kosmos2_5Processor(ProcessorMixin):
             # use updates or pop
             input = self.tokenizer(
                 text,
-                add_special_tokens=add_special_tokens,
                 padding=padding,
                 truncation=truncation,
                 max_length=max_length,
