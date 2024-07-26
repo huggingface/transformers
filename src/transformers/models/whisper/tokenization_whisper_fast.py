@@ -539,14 +539,6 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
             return prefix_ones + ([0] * len(token_ids_0)) + suffix_ones
         return prefix_ones + ([0] * len(token_ids_0)) + ([0] * len(token_ids_1)) + suffix_ones
 
-    @property
-    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.default_chat_template
-    def default_chat_template(self):
-        """
-        A simple chat template that ignores role information and just concatenates messages with EOS tokens.
-        """
-        return "{% for message in messages %}" "{{ message.content }}{{ eos_token }}" "{% endfor %}"
-
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer.get_decoder_prompt_ids
     def get_decoder_prompt_ids(self, task=None, language=None, no_timestamps=True):
         self.set_prefix_tokens(task=task, language=language, predict_timestamps=not no_timestamps)
@@ -582,14 +574,35 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         batch_encoding.convert_to_tensors(tensor_type=return_tensors)
         return batch_encoding["input_ids"]
 
-    @staticmethod
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._strip_prompt
-    def _strip_prompt(token_ids: List[int], prompt_token_id: int, decoder_start_token_id: int):
-        has_prompt = isinstance(token_ids, list) and token_ids and token_ids[0] == prompt_token_id
+    def _strip_prompt(self, token_ids: List[int], prompt_token_id: int, decoder_start_token_id: int):
+        if not isinstance(token_ids, list):
+            token_ids = self._convert_to_list(token_ids)
+
+        # handle case of empty token_ids for decoding with timestamps.
+        # at this point token_ids is a list, so it is safe to use if not check.
+        if not token_ids:
+            return token_ids
+
+        has_prompt = token_ids[0] == prompt_token_id
         if has_prompt:
             if decoder_start_token_id in token_ids:
                 return token_ids[token_ids.index(decoder_start_token_id) :]
             else:
                 return []
 
+        return token_ids
+
+    @staticmethod
+    # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._convert_to_list
+    def _convert_to_list(token_ids):
+        # convert type to ndarray if necessary
+        if hasattr(token_ids, "numpy"):
+            if "torch" in str(type(token_ids)):
+                token_ids = token_ids.cpu().numpy()
+            elif "tensorflow" in str(type(token_ids)):
+                token_ids = token_ids.numpy()
+        # now the token ids are either a numpy array, or a list of lists
+        if isinstance(token_ids, np.ndarray):
+            token_ids = token_ids.tolist()
         return token_ids

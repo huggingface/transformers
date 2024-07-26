@@ -60,12 +60,12 @@ def get_anyres_image_grid_shape(image_size, grid_pinpoints, patch_size):
         tuple: The shape of the image patch grid in the format (width, height).
     """
     if not isinstance(grid_pinpoints, list):
-        raise ValueError("grid_pinpoints should be a list of tuples or lists")
+        raise TypeError("grid_pinpoints should be a list of tuples or lists")
 
     # ! VERY IMPORTANT if image_size is tensor, must convert to into tuple, otherwise it will cause wrong calculate
     if not isinstance(image_size, (list, tuple)):
         if not isinstance(image_size, (torch.Tensor, np.ndarray)):
-            raise ValueError(
+            raise TypeError(
                 f"image_size invalid type: {type(image_size)} not valid, should be either list, tuple, np.ndarray or tensor"
             )
         image_size = image_size.tolist()
@@ -91,12 +91,12 @@ def image_size_to_num_patches(image_size, grid_pinpoints, patch_size: int):
         int: the number of patches
     """
     if not isinstance(grid_pinpoints, list):
-        raise ValueError("grid_pinpoints should be a list of tuples or lists")
+        raise TypeError("grid_pinpoints should be a list of tuples or lists")
 
     # ! VERY IMPORTANT if image_size is tensor, must convert to into tuple, otherwise it will cause wrong calculate
     if not isinstance(image_size, (list, tuple)):
         if not isinstance(image_size, (torch.Tensor, np.ndarray)):
-            raise ValueError(f"image_size invalid type {type(image_size)} with value {image_size}")
+            raise TypeError(f"image_size invalid type {type(image_size)} with value {image_size}")
         image_size = image_size.tolist()
 
     best_resolution = select_best_resolution(image_size, grid_pinpoints)
@@ -518,8 +518,8 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
             _left_padding = torch.any(attention_mask[:, 0] == 0)
             _right_padding = torch.any(attention_mask[:, -1] == 0)
 
-            left_padding = True
-            if batch_size > 1:
+            left_padding = True if not self.training else False
+            if batch_size > 1 and not self.training:
                 if _left_padding and not _right_padding:
                     left_padding = True
                 elif not _left_padding and _right_padding:

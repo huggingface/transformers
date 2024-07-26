@@ -190,7 +190,7 @@ class AudioClassificationPipeline(Pipeline):
                 ).numpy()
 
         if not isinstance(inputs, np.ndarray):
-            raise ValueError("We expect a numpy ndarray as input")
+            raise TypeError("We expect a numpy ndarray as input")
         if len(inputs.shape) != 1:
             raise ValueError("We expect a single channel audio input for AudioClassificationPipeline")
 

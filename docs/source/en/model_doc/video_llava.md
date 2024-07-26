@@ -98,7 +98,7 @@ indices = np.arange(0, total_frames, total_frames / 8).astype(int)
 video = read_video_pyav(container, indices)
 
 # For better results, we recommend to prompt the model in the following format
-prompt = "USER: <video>Why is this funny? ASSISTANT:"
+prompt = "USER: <video>\nWhy is this funny? ASSISTANT:"
 inputs = processor(text=prompt, videos=video, return_tensors="pt")
 
 out = model.generate(**inputs, max_new_tokens=60)
@@ -108,7 +108,7 @@ processor.batch_decode(out, skip_special_tokens=True, clean_up_tokenization_spac
 For multiple turns conversation change the prompt format to:
 
 ```bash
-"USER: <video>What do you see in this video? ASSISTANT: A baby reading a book. USER: Why is the it funny? ASSISTANT:"
+"USER: <video>\nWhat do you see in this video? ASSISTANT: A baby reading a book. USER: Why is the it funny? ASSISTANT:"
 ```
 
 ### Mixed Media Mode
@@ -123,7 +123,7 @@ import requests
 # Load and image and write a new prompt
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
-prompt = "USER: <image> How many cats are there in the image? ASSISTANT: There are two cats. USER: <video>Why is this video funny? ASSISTANT:"
+prompt = "USER: <image>\nHow many cats are there in the image? ASSISTANT: There are two cats. USER: <video>\nWhy is this video funny? ASSISTANT:"
 
 inputs = processor(text=prompt, images=image, videos=clip, padding=True, return_tensors="pt")
 

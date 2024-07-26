@@ -506,6 +506,12 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
+    @unittest.skip(
+        reason="This architecure has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
+    )
+    def test_load_save_without_tied_weights(self):
+        pass
+
     def test_attention_outputs(self):
         # expected length is subsampled so need to change a bit this test
         if not self.has_attentions:
@@ -756,6 +762,12 @@ class SeamlessM4TModelWithTextInputTest(
         reason="In training model, the first encoder layer is sometimes skipped. Training is not supported yet, so the test is ignored."
     )
     def test_retain_grad_hidden_states_attentions(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
+    )
+    def test_load_save_without_tied_weights(self):
         pass
 
 

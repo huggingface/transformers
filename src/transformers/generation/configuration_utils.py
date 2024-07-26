@@ -60,6 +60,7 @@ class GenerationMode(ExplicitEnum):
     GREEDY_SEARCH = "greedy_search"
     SAMPLE = "sample"
     ASSISTED_GENERATION = "assisted_generation"
+    DOLA_GENERATION = "dola_generation"
     # Beam methods
     BEAM_SEARCH = "beam_search"
     BEAM_SAMPLE = "beam_sample"
@@ -81,6 +82,7 @@ class GenerationConfig(PushToHubMixin):
         - *diverse beam-search decoding* if `num_beams>1` and `num_beam_groups>1`
         - *constrained beam-search decoding* if `constraints!=None` or `force_words_ids!=None`
         - *assisted decoding* if `assistant_model` or `prompt_lookup_num_tokens` is passed to `.generate()`
+        - *dola decoding* if `dola_layers` is passed to `.generate()`
 
     To learn more about decoding strategies refer to the [text generation strategies guide](../generation_strategies).
 
@@ -111,10 +113,10 @@ class GenerationConfig(PushToHubMixin):
             heuristic is applied and the generation stops when is it very unlikely to find better candidates;
             `"never"`, where the beam search procedure only stops when there cannot be better candidates (canonical
             beam search algorithm).
-        max_time(`float`, *optional*):
+        max_time (`float`, *optional*):
             The maximum amount of time you allow the computation to run for in seconds. generation will still finish
             the current pass after allocated time has been passed.
-        stop_strings(`str or List[str]`, *optional*):
+        stop_strings (`str or List[str]`, *optional*):
             A string or a list of strings that should terminate generation if the model outputs them.
 
         > Parameters that control the generation strategy used
@@ -179,10 +181,10 @@ class GenerationConfig(PushToHubMixin):
             `length_penalty` < 0.0 encourages shorter sequences.
         no_repeat_ngram_size (`int`, *optional*, defaults to 0):
             If set to int > 0, all ngrams of that size can only occur once.
-        bad_words_ids(`List[List[int]]`, *optional*):
+        bad_words_ids (`List[List[int]]`, *optional*):
             List of list of token ids that are not allowed to be generated. Check
             [`~generation.NoBadWordsLogitsProcessor`] for further documentation and examples.
-        force_words_ids(`List[List[int]]` or `List[List[List[int]]]`, *optional*):
+        force_words_ids (`List[List[int]]` or `List[List[List[int]]]`, *optional*):
             List of token ids that must be generated. If given a `List[List[int]]`, this is treated as a simple list of
             words that must be included, the opposite to `bad_words_ids`. If given `List[List[List[int]]]`, this
             triggers a [disjunctive constraint](https://github.com/huggingface/transformers/issues/14081), where one
@@ -198,7 +200,7 @@ class GenerationConfig(PushToHubMixin):
             The id of the token to force as the first generated token after the `decoder_start_token_id`. Useful for
             multilingual models like [mBART](../model_doc/mbart) where the first generated token needs to be the target
             language token.
-        forced_eos_token_id (`Union[int, List[int]]`, *optional*, defaults to `model.config.forced_eos_token_id`):
+        forced_eos_token_id (`int` or List[int]`, *optional*, defaults to `model.config.forced_eos_token_id`):
             The id of the token to force as the last generated token when `max_length` is reached. Optionally, use a
             list to set multiple *end-of-sequence* tokens.
         remove_invalid_values (`bool`, *optional*, defaults to `model.config.remove_invalid_values`):
@@ -208,7 +210,7 @@ class GenerationConfig(PushToHubMixin):
             This Tuple adds an exponentially increasing length penalty, after a certain amount of tokens have been
             generated. The tuple shall consist of: `(start_index, decay_factor)` where `start_index` indicates where
             penalty starts and `decay_factor` represents the factor of exponential decay
-        suppress_tokens  (`List[int]`, *optional*):
+        suppress_tokens (`List[int]`, *optional*):
             A list of tokens that will be suppressed at generation. The `SupressTokens` logit processor will set their
             log probs to `-inf` so that they are not sampled.
         begin_suppress_tokens  (`List[int]`, *optional*):
@@ -232,7 +234,7 @@ class GenerationConfig(PushToHubMixin):
         low_memory (`bool`, *optional*):
             Switch to sequential beam search and sequential topk for contrastive search to reduce peak memory.
             Used with beam search and contrastive search.
-        watermarking_config (Union[`WatermarkingConfig`, `dict`], *optional*):
+        watermarking_config (`WatermarkingConfig` or `dict`, *optional*):
             Arguments used to watermark the model outputs by adding a small bias to randomly selected set of "green" tokens.
             If passed as `Dict`, it will be converted to a `WatermarkingConfig` internally.
             See [this paper](https://arxiv.org/abs/2306.04634) for more details. Accepts the following keys:
@@ -247,12 +249,12 @@ class GenerationConfig(PushToHubMixin):
                     - "lefthash" (default): "green" tokens selection depend on the last token (Algorithm 2 from the paper)
                     - "selfhash": "green" tokens selection depends on the current token itself (Algorithm 3 from the paper)
                         The downside of this scheme is that it considers all possible next tokens and can be slower than "lefthash".
-            - context_width(`int`):
+            - context_width (`int`):
                 The context length of previous tokens to use in seeding. Higher context length makes watermarking more robust.
 
         > Parameters that define the output variables of generate
 
-        num_return_sequences(`int`, *optional*, defaults to 1):
+        num_return_sequences (`int`, *optional*, defaults to 1):
             The number of independently computed returned sequences for each element in the batch.
         output_attentions (`bool`, *optional*, defaults to `False`):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
@@ -282,7 +284,7 @@ class GenerationConfig(PushToHubMixin):
         encoder_no_repeat_ngram_size (`int`, *optional*, defaults to 0):
             If set to int > 0, all ngrams of that size that occur in the `encoder_input_ids` cannot occur in the
             `decoder_input_ids`.
-        decoder_start_token_id (`Union[int, List[int]]`, *optional*):
+        decoder_start_token_id (`int` or `List[int]`, *optional*):
             If an encoder-decoder model starts decoding with a different token than *bos*, the id of that token or a list of length
             `batch_size`. Indicating a list enables different start ids for each element in the batch
             (e.g. multilingual models with different target languages in one batch)
@@ -305,11 +307,23 @@ class GenerationConfig(PushToHubMixin):
         max_matching_ngram_size (`int`, *optional*, default to `None`):
             The maximum ngram size to be considered for matching in the prompt. Default to 2 if not provided.
 
+        > Generation parameters exclusive to [DoLa decoding](https://arxiv.org/abs/2309.03883)
+
+        dola_layers (`str` or `List[int]`, *optional*):
+            The layers to use for DoLa decoding. If `None`, DoLa decoding is not used. If a string, it must
+            be one of "low" or "high", which means using the lower part or higher part of the model layers, respectively.
+            "low" means the first half of the layers up to the first 20 layers, and "high" means the last half of the
+            layers up to the last 20 layers.
+            If a list of integers, it must contain the indices of the layers to use for candidate premature layers in DoLa.
+            The 0-th layer is the word embedding layer of the model. Set to `'low'` to improve long-answer reasoning tasks,
+            `'high'` to improve short-answer tasks. Check the [documentation](https://github.com/huggingface/transformers/blob/main/docs/source/en/generation_strategies.md)
+            or [the paper](https://arxiv.org/abs/2309.03883) for more details.
+
         > Parameters specific to the caching mechanism:
 
         cache_implementation (`str`, *optional*, default to `None`):
             Cache class that should be used when generating.
-        cache_config (`Union[CacheConfig, dict]`, *optional*, default to `None`):
+        cache_config (`CacheConfig` or `dict`, *optional*, default to `None`):
             Arguments used in the key-value cache class can be passed in `cache_config`. Can be passed as a `Dict` and
             it will be converted to its repsective `CacheConfig` internally.
             Otherwise can be passed as a `CacheConfig` class matching the indicated `cache_implementation`.
@@ -396,6 +410,9 @@ class GenerationConfig(PushToHubMixin):
         # Assistant generation
         self.num_assistant_tokens = kwargs.pop("num_assistant_tokens", 5)
         self.num_assistant_tokens_schedule = kwargs.pop("num_assistant_tokens_schedule", "heuristic")
+
+        # DoLa generation
+        self.dola_layers = kwargs.pop("dola_layers", None)
 
         # Cache implementation
         self.cache_implementation = kwargs.pop("cache_implementation", None)
@@ -493,6 +510,16 @@ class GenerationConfig(PushToHubMixin):
             else:
                 raise ValueError(
                     "You've set `assistant_model`, which triggers assisted generate. Currently, assisted generate "
+                    "is only supported with Greedy Search and Sample."
+                )
+
+        # DoLa generation may extend some generation modes
+        if self.dola_layers is not None:
+            if generation_mode in ("greedy_search", "sample"):
+                generation_mode = GenerationMode.DOLA_GENERATION
+            else:
+                raise ValueError(
+                    "You've set `dola_layers`, which triggers DoLa generate. Currently, DoLa generate "
                     "is only supported with Greedy Search and Sample."
                 )
         return generation_mode
@@ -699,6 +726,17 @@ class GenerationConfig(PushToHubMixin):
                     f"Argument `{arg}` is not a valid argument of `GenerationConfig`. It should be passed to "
                     "`generate()` (or a pipeline) directly."
                 )
+
+        # 6. if dola_layers is set, check if repetition_penalty is set to >= 1.2
+        if self.dola_layers is not None and (self.repetition_penalty is None or self.repetition_penalty < 1.2):
+            dola_decoding_wrong_parameter_msg = (
+                "`dola_layers` is set to trigger DoLa decoding, but `repetition_penalty` is set to a value of {repetition_penalty}, "
+                "which could induce unwanted repetition. The recommended value for DoLa decoding is `repetition_penalty>=1.2`."
+            )
+            warnings.warn(
+                dola_decoding_wrong_parameter_msg.format(repetition_penalty=self.repetition_penalty),
+                UserWarning,
+            )
 
     def save_pretrained(
         self,
