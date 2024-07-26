@@ -44,7 +44,7 @@ class MSClapTextConfig(PretrainedConfig):
             A factor for initializing the model parameters.
         projection_dim (`int`, *optional*, defaults to 768):
             Dimension of the projection head of the `MSClapTextModelWithProjection`.
-        projection_hidden_act (`str`, *optional*, defaults to `"gelu"`): 
+        projection_hidden_act (`str`, *optional*, defaults to `"gelu"`):
             Activation function used in projection layer
         num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.

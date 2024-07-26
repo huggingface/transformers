@@ -44,7 +44,7 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
 # Copied from tests.models.clap.test_processor_clap.ClapProcessorTest with ClapProcessor->MSClapProcessor, laion/clap-htsat-fused->kamilakesbi/ms_clap, Roberta->GPT2
 class MSClapProcessorTest(unittest.TestCase):
     def setUp(self):
-        self.checkpoint = "kamilakesbi/ms_clap"
+        self.checkpoint = "laion/clap-htsat-unfused"
         self.tmpdirname = tempfile.mkdtemp()
 
     def get_tokenizer(self, **kwargs):
@@ -117,13 +117,14 @@ class MSClapProcessorTest(unittest.TestCase):
         for key in encoded_tok.keys():
             self.assertListEqual(encoded_tok[key], encoded_processor[key])
 
+    # Ignore copy
     def test_tokenizer_decode(self):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
 
         processor = MSClapProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
-        predicted_ids = [[1, 4, 5, 8, 1, 0, 8], [3, 4, 3, 1, 1, 8, 9]]
+        predicted_ids = [[40, 423, 257, 3797, 220, 0, 220], [40, 588, 616, 3290, 764, 220]]
 
         decoded_processor = processor.batch_decode(predicted_ids)
         decoded_tok = tokenizer.batch_decode(predicted_ids)

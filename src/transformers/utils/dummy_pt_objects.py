@@ -6268,13 +6268,6 @@ class MSClapPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class MSClapTextModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class MSClapTextModelWithProjection(metaclass=DummyObject):
     _backends = ["torch"]
 

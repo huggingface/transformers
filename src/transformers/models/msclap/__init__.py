@@ -34,7 +34,6 @@ else:
     _import_structure["modeling_msclap"] = [
         "MSClapModel",
         "MSClapPreTrainedModel",
-        "MSClapTextModel",
         "MSClapTextModelWithProjection",
         "MSClapAudioModel",
         "MSClapAudioModelWithProjection",

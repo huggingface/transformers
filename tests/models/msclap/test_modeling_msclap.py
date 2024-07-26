@@ -642,6 +642,7 @@ class MSClapModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 class MSClapModelIntegrationTest(unittest.TestCase):
     def test_integration(self):
         EXPECTED_MEANS = 6.15e-05
+        EXPECTED_SLICE = [-0.0223, -0.0219, -0.0563, -0.0188, 0.0186, 0.0180, 0.0725, 0.0535, 0.0004, -0.0528]
 
         librispeech_dummy = load_dataset(
             "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
@@ -656,12 +657,13 @@ class MSClapModelIntegrationTest(unittest.TestCase):
         inputs = processor(audios=audio_sample["audio"]["array"], return_tensors="pt").to(torch_device)
 
         audio_embed = model.get_audio_features(**inputs)
-        expected_mean = EXPECTED_MEANS
 
-        self.assertTrue(torch.allclose(audio_embed.cpu().mean(), torch.tensor([expected_mean]), atol=1e-7, rtol=1e-7))
+        self.assertTrue(torch.allclose(audio_embed.cpu().mean(), torch.tensor([EXPECTED_MEANS]), atol=1e-7, rtol=1e-7))
+        self.assertTrue(torch.allclose(audio_embed[0, :10].cpu(), torch.tensor(EXPECTED_SLICE), atol=1e-4, rtol=1e-7))
 
     def test_batched(self):
         EXPECTED_MEANS = 6.62e-05
+        EXPECTED_SLICE = [[-0.0107, -0.0122], [-0.0068, -0.0298], [-0.0076, -0.0184], [-0.0108, -0.0248]]
 
         librispeech_dummy = load_dataset(
             "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
@@ -676,6 +678,6 @@ class MSClapModelIntegrationTest(unittest.TestCase):
         inputs = processor(audios=audio_samples, return_tensors="pt").to(torch_device)
 
         audio_embed = model.get_audio_features(**inputs)
-        expected_mean = EXPECTED_MEANS
 
-        self.assertTrue(torch.allclose(audio_embed.cpu().mean(), torch.tensor([expected_mean]), atol=1e-7, rtol=1e-7))
+        self.assertTrue(torch.allclose(audio_embed.cpu().mean(), torch.tensor([EXPECTED_MEANS]), atol=1e-7, rtol=1e-7))
+        self.assertTrue(torch.allclose(audio_embed[:, 0:2].cpu(), torch.tensor(EXPECTED_SLICE), atol=1e-4, rtol=1e-7))

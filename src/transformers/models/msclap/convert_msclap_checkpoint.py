@@ -203,4 +203,3 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     convert_msclap_checkpoint(args.version, args.pytorch_dump_folder_path, repo_id=args.repo_id)
-
