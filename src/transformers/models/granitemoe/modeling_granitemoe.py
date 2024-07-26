@@ -37,6 +37,7 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
+    MoESequenceClassifierOutputWithPast
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import PreTrainedModel
@@ -54,6 +55,80 @@ from .configuration_granitemoe import GraniteMoeConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "GraniteMoeConfig"
+
+
+# Copied from transformers.models.jetmoe.modeling_jetmoe.load_balancing_loss_func
+def load_balancing_loss_func(
+    gate_logits: torch.Tensor, num_experts: torch.Tensor = None, top_k=2, attention_mask: Optional[torch.Tensor] = None
+) -> float:
+    r"""
+    Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
+    See Switch Transformer (https://arxiv.org/abs/2101.03961) for more details. This function implements the loss
+    function presented in equations (4) - (6) of the paper. It aims at penalizing cases where the routing between
+    experts is too unbalanced.
+    Args:
+        gate_logits (Union[`torch.Tensor`, Tuple[torch.Tensor]):
+            Logits from the `gate`, should be a tuple of model.config.num_hidden_layers tensors of
+            shape [batch_size X sequence_length, num_experts].
+        attention_mask (`torch.Tensor`, None):
+            The attention_mask used in forward function
+            shape [batch_size X sequence_length] if not None.
+        num_experts (`int`, *optional*):
+            Number of experts
+    Returns:
+        The auxiliary loss.
+    """
+    if gate_logits is None or not isinstance(gate_logits, tuple):
+        return 0
+
+    if isinstance(gate_logits, tuple):
+        compute_device = gate_logits[0].device
+        concatenated_gate_logits = torch.cat([layer_gate.to(compute_device) for layer_gate in gate_logits], dim=0)
+
+    routing_weights = torch.nn.functional.softmax(concatenated_gate_logits, dim=-1)
+
+    _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
+
+    expert_mask = torch.nn.functional.one_hot(selected_experts, num_experts)
+
+    if attention_mask is None:
+        # Compute the percentage of tokens routed to each experts
+        tokens_per_expert = torch.mean(expert_mask.float(), dim=0)
+
+        # Compute the average probability of routing to these experts
+        router_prob_per_expert = torch.mean(routing_weights, dim=0)
+    else:
+        batch_size, sequence_length = attention_mask.shape
+        num_hidden_layers = concatenated_gate_logits.shape[0] // (batch_size * sequence_length)
+
+        # Compute the mask that masks all padding tokens as 0 with the same shape of expert_mask
+        expert_attention_mask = (
+            attention_mask[None, :, :, None, None]
+            .expand((num_hidden_layers, batch_size, sequence_length, top_k, num_experts))
+            .reshape(-1, top_k, num_experts)
+            .to(compute_device)
+        )
+
+        # Compute the percentage of tokens routed to each experts
+        tokens_per_expert = torch.sum(expert_mask.float() * expert_attention_mask, dim=0) / torch.sum(
+            expert_attention_mask, dim=0
+        )
+
+        # Compute the mask that masks all padding tokens as 0 with the same shape of tokens_per_expert
+        router_per_expert_attention_mask = (
+            attention_mask[None, :, :, None]
+            .expand((num_hidden_layers, batch_size, sequence_length, num_experts))
+            .reshape(-1, num_experts)
+            .to(compute_device)
+        )
+
+        # Compute the average probability of routing to these experts
+        router_prob_per_expert = torch.sum(routing_weights * router_per_expert_attention_mask, dim=0) / torch.sum(
+            router_per_expert_attention_mask, dim=0
+        )
+
+    overall_loss = torch.sum(tokens_per_expert * router_prob_per_expert.unsqueeze(0))
+    return overall_loss * num_experts
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->GraniteMoe
@@ -334,7 +409,8 @@ class GraniteMoeMoE(nn.Module):
         self.input_size = config.hidden_size
         self.hidden_size = config.intermediate_size
         self.activation = ACT2FN[config.activation_function]
-        # self.bias = torch.nn.Parameter(torch.empty(self.input_size))
+        if config.mlp_bias:
+            self.bias = torch.nn.Parameter(torch.empty(self.input_size))
         self.input_linear = GraniteMoeParallelExperts(config.num_local_experts, self.input_size, self.hidden_size * 2)
         self.output_linear = GraniteMoeParallelExperts(config.num_local_experts, self.hidden_size, self.input_size)
 
@@ -373,7 +449,8 @@ class GraniteMoeMoE(nn.Module):
         zeros = torch.zeros((bsz * length, self.input_size), dtype=expert_outputs.dtype, device=expert_outputs.device)
         layer_output = zeros.index_add(0, batch_index, expert_outputs)
         layer_output = layer_output.view(bsz, length, self.input_size)
-        # layer_output = layer_output + self.bias
+        if hasattr(self, "bias"):
+            layer_output = layer_output + self.bias
         return layer_output, router_logits
 
 
@@ -740,6 +817,7 @@ class GraniteMoeDecoderLayer(nn.Module):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
+        output_router_logits: Optional[bool] = False,
         **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
@@ -757,6 +835,9 @@ class GraniteMoeDecoderLayer(nn.Module):
             past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
             cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
                 Indices depicting the position of the input sequence tokens in the sequence
+            output_router_logits (`bool`, *optional*):
+                Whether or not to return the logits of all the routers. They are useful for computing the router loss, and
+                should not be returned during inference.
             kwargs (`dict`, *optional*):
                 Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
                 into the model
@@ -782,7 +863,7 @@ class GraniteMoeDecoderLayer(nn.Module):
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states, _ = self.block_sparse_moe(hidden_states)
+        hidden_states, router_logits = self.block_sparse_moe(hidden_states)
 
         hidden_states = residual + hidden_states * self.residual_multiplier
 
@@ -793,6 +874,9 @@ class GraniteMoeDecoderLayer(nn.Module):
 
         if use_cache:
             outputs += (present_key_value,)
+
+        if output_router_logits:
+            outputs += (router_logits,)
 
         return outputs
 
@@ -964,6 +1048,7 @@ class GraniteMoeModel(GraniteMoePreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        output_router_logits: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
@@ -1017,6 +1102,7 @@ class GraniteMoeModel(GraniteMoePreTrainedModel):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
+        all_router_logits = () if output_router_logits else None
         next_decoder_cache = None
 
         for decoder_layer in self.layers:
@@ -1053,6 +1139,9 @@ class GraniteMoeModel(GraniteMoePreTrainedModel):
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
+            if output_router_logits:
+                all_router_logits += (layer_outputs[-1],)
+
         hidden_states = self.norm(hidden_states)
 
         # add hidden states from the last decoder layer
@@ -1065,11 +1154,12 @@ class GraniteMoeModel(GraniteMoePreTrainedModel):
 
         if not return_dict:
             return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
-        return BaseModelOutputWithPast(
+        return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=next_cache,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
+            router_logits=all_router_logits,
         )
 
     def _update_causal_mask(
@@ -1157,11 +1247,15 @@ class GraniteMoeModel(GraniteMoePreTrainedModel):
 class GraniteMoeForCausalLM(GraniteMoePreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
-    def __init__(self, config):
+    def __init__(self, config: GraniteMoeConfig):
         super().__init__(config)
         self.model = GraniteMoeModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+
+        self.aux_loss_coef = config.aux_loss_coef
+        self.num_experts = config.num_local_experts
+        self.num_experts_per_tok = config.num_experts_per_tok
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1197,6 +1291,7 @@ class GraniteMoeForCausalLM(GraniteMoePreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        output_router_logits: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
@@ -1226,6 +1321,9 @@ class GraniteMoeForCausalLM(GraniteMoePreTrainedModel):
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_router_logits = (
+            output_router_logits if output_router_logits is not None else self.config.output_router_logits
+        )
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -1241,6 +1339,7 @@ class GraniteMoeForCausalLM(GraniteMoePreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            output_router_logits=output_router_logits,
             return_dict=return_dict,
             cache_position=cache_position,
         )
@@ -1263,16 +1362,31 @@ class GraniteMoeForCausalLM(GraniteMoePreTrainedModel):
             shift_labels = shift_labels.to(shift_logits.device)
             loss = loss_fct(shift_logits, shift_labels)
 
+        aux_loss = None
+        if output_router_logits:
+            aux_loss = load_balancing_loss_func(
+                outputs.router_logits if return_dict else outputs[-1],
+                self.num_experts,
+                self.num_experts_per_tok,
+                attention_mask,
+            )
+            if labels is not None:
+                loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
+
         if not return_dict:
             output = (logits,) + outputs[1:]
+            if output_router_logits:
+                output = (aux_loss,) + output
             return (loss,) + output if loss is not None else output
 
-        return CausalLMOutputWithPast(
+        return MoeCausalLMOutputWithPast(
             loss=loss,
+            aux_loss=aux_loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            router_logits=outputs.router_logits,
         )
 
     def prepare_inputs_for_generation(
@@ -1281,6 +1395,7 @@ class GraniteMoeForCausalLM(GraniteMoePreTrainedModel):
         past_key_values=None,
         attention_mask=None,
         inputs_embeds=None,
+        output_router_logits=False,
         cache_position=None,
         position_ids=None,
         use_cache=True,
@@ -1315,6 +1430,7 @@ class GraniteMoeForCausalLM(GraniteMoePreTrainedModel):
                 "past_key_values": past_key_values,
                 "use_cache": use_cache,
                 "attention_mask": attention_mask,
+                "output_router_logits": output_router_logits,
             }
         )
         return model_inputs
@@ -1346,11 +1462,16 @@ class GraniteMoeForCausalLM(GraniteMoePreTrainedModel):
 )
 # Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with LLAMA->GRANITEMOE,Llama->GraniteMoe
 class GraniteMoeForSequenceClassification(GraniteMoePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GraniteMoeConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = GraniteMoeModel(config)
         self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
+
+        # Save arguments to member variables
+        self.aux_loss_coef = config.aux_loss_coef
+        self.num_experts = config.num_local_experts
+        self.num_experts_per_tok = config.num_experts_per_tok
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1373,8 +1494,9 @@ class GraniteMoeForSequenceClassification(GraniteMoePreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        output_router_logits: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SequenceClassifierOutputWithPast]:
+    ) -> Union[Tuple, MoESequenceClassifierOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1392,6 +1514,7 @@ class GraniteMoeForSequenceClassification(GraniteMoePreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            output_router_logits=output_router_logits,
             return_dict=return_dict,
         )
         hidden_states = transformer_outputs[0]
@@ -1440,12 +1563,28 @@ class GraniteMoeForSequenceClassification(GraniteMoePreTrainedModel):
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(pooled_logits, labels)
+
+        # calculate aux_loss
+        aux_loss = None
+        if output_router_logits:
+            aux_loss = load_balancing_loss_func(
+                transformer_outputs.router_logits if return_dict else transformer_outputs[-1],
+                self.num_experts,
+                self.num_experts_per_tok,
+                attention_mask,
+            )
+            if labels is not None:
+                loss += self.aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
+
         if not return_dict:
             output = (pooled_logits,) + transformer_outputs[1:]
+            if output_router_logits:
+                output = (aux_loss,) + output
             return ((loss,) + output) if loss is not None else output
 
-        return SequenceClassifierOutputWithPast(
+        return MoESequenceClassifierOutputWithPast(
             loss=loss,
+            aux_loss=aux_loss,
             logits=pooled_logits,
             past_key_values=transformer_outputs.past_key_values,
             hidden_states=transformer_outputs.hidden_states,

@@ -140,6 +140,9 @@ class GraniteMoeConfig(PretrainedConfig):
         attention_multiplier=1.0,
         num_local_experts=8,
         num_experts_per_tok=2,
+        output_router_logits=False,
+        router_aux_loss_coef=0.001,
+        router_jitter_noise=0.0,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -172,6 +175,9 @@ class GraniteMoeConfig(PretrainedConfig):
 
         self.num_local_experts = num_local_experts
         self.num_experts_per_tok = num_experts_per_tok
+        self.output_router_logits = output_router_logits
+        self.router_aux_loss_coef = router_aux_loss_coef
+        self.router_jitter_noise = router_jitter_noise
 
         super().__init__(
             pad_token_id=pad_token_id,
