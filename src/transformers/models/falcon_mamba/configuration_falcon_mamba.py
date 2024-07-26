@@ -23,7 +23,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-# Copied from transformers.models.mamba.configuration_mamba.MambaConfig with mamba->falcon_mamba,Mamba->FalconMamba,MAMBA->FALCON_MAMBA,state-spaces/falcon_mamba-2.8b->tiiuae/falcon-mamba-7b
+# Copied from transformers.models.mamba.configuration_mamba.MambaConfig with mamba->falcon_mamba,Mamba->FalconMamba,MAMBA->FALCON_MAMBA,state-spaces/falcon_mamba-2.8b->tiiuae/falcon-mamba-7b,use_falcon_mambapy->use_mambapy
 class FalconMambaConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`FalconMambaModel`]. It is used to instantiate a FALCON_MAMBA
@@ -80,6 +80,8 @@ class FalconMambaConfig(PretrainedConfig):
             Whether or not to rescale `out_proj` weights when initializing.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the cache should be used.
+        use_mambapy (`bool`, *optional*, defaults to `False`):
+            Determines the fallback strategy during training if the CUDA-based official implementation of FalconMamba is not avaiable. If `True`, the falcon_mamba.py implementation is used. If `False`, the naive and slower implementation is used. Consider switching to the naive version if memory is limited.
 
 
     Example:
@@ -124,6 +126,7 @@ class FalconMambaConfig(PretrainedConfig):
         time_step_floor=1e-4,
         rescale_prenorm_residual=False,
         use_cache=True,
+        use_mambapy=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -150,5 +153,6 @@ class FalconMambaConfig(PretrainedConfig):
         self.rescale_prenorm_residual = rescale_prenorm_residual
         self.residual_in_fp32 = residual_in_fp32
         self.use_cache = use_cache
+        self.use_mambapy = use_mambapy
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, pad_token_id=pad_token_id, **kwargs)
