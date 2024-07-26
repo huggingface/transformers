@@ -701,6 +701,25 @@ class JambaModelIntegrationTest(unittest.TestCase):
 
     # @slow
     def test_simple_batched_generate_with_padding(self):
+        # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
+        #
+        # Note: Key 9 is currently set for MI300, but may need potential future adjustments for H100s,
+        # considering differences in hardware processing and potential deviations in generated text.
+        EXPECTED_TEXTS = {
+            7: [
+                "<|startoftext|>Hey how are you doing on this lovely evening? Canyon rins hugaughter glamour Rutgers Singh<|reserved_797|>cw algunas",
+                "<|pad|><|pad|><|pad|><|pad|><|pad|><|pad|><|startoftext|>Tell me a storyptus Nets Madison El chamadamodern updximVaparsed"
+            ],
+            8: [
+                "<|startoftext|>Hey how are you doing on this lovely evening? Canyon rins hugaughter glamour Rutgers Singh<|reserved_797|>cw algunas",
+                "<|pad|><|pad|><|pad|><|pad|><|pad|><|pad|><|startoftext|>Tell me a storyptus Nets Madison El chamadamodern updximVaparsed"
+            ],
+            9: [
+                "<|startoftext|>Hey how are you doing on this lovely evening? Canyon rins hugaughter glamour Rutgers Singh<|reserved_797|>cw algunas",
+                "<|pad|><|pad|><|pad|><|pad|><|pad|><|pad|><|startoftext|>Tell me a storyptus Nets Madison El chamadamodern updximVaparsed"
+            ],
+        }
+
         self.model.to(torch_device)
 
         inputs = self.tokenizer(
@@ -708,14 +727,8 @@ class JambaModelIntegrationTest(unittest.TestCase):
         ).to(torch_device)
         out = self.model.generate(**inputs, do_sample=False, max_new_tokens=10)
         output_sentences = self.tokenizer.batch_decode(out)
-        self.assertEqual(
-            output_sentences[0],
-            "<|startoftext|>Hey how are you doing on this lovely evening? Canyon rins hugaughter glamour Rutgers Singh<|reserved_797|>cw algunas",
-        )
-        self.assertEqual(
-            output_sentences[1],
-            "<|pad|><|pad|><|pad|><|pad|><|pad|><|pad|><|startoftext|>Tell me a storyptus Nets Madison El chamadamodern updximVaparsed",
-        )
+        self.assertEqual(output_sentences[0], EXPECTED_TEXTS[self.cuda_compute_capability_major_version][0])
+        self.assertEqual(output_sentences[1], EXPECTED_TEXTS[self.cuda_compute_capability_major_version][1])
 
         with torch.no_grad():
             logits = self.model(input_ids=inputs["input_ids"]).logits
