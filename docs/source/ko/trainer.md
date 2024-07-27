@@ -595,7 +595,7 @@ accelerate launch \
     --overwrite_output_dir
 ```
 
-명령줄에서 `config_file.yaml` 파일의 매개변수를 직접 지정할 수도 있습니다:
+`config_file.yaml` 파일의 매개변수를 직접 지정할 수도 있습니다:
 
 ```bash
 accelerate launch --num_processes=2 \
