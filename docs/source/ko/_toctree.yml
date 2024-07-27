@@ -143,8 +143,8 @@
     title: (번역중) Getting started
   - local: in_translation
     title: (번역중) bitsandbytes
-  - local: in_translation
-    title: (번역중) GPTQ
+  - local: quantization/gptq
+    title: GPTQ
   - local: in_translation
     title: (번역중) AWQ
   - local: in_translation
