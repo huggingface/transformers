@@ -151,7 +151,7 @@ class Kosmos2_5VisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Kosmos2_5VisionModel`]. It is used to
     instantiate a KOSMOS-2.5 vision encoder according to the specified arguments, defining the model architecture.
-    Instantiating a configuration defaults will yield a similar configuration to that of the kosmos-2.5
+    Instantiating a configuration defaults will yield a similar configuration to that of the vision encoder of the KOSMOS-2.5
     [microsoft/kosmos-2.5](https://huggingface.co/microsoft/kosmos-2.5) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
