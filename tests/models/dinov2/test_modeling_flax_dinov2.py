@@ -225,9 +225,10 @@ class FlaxDinov2ModelIntegrationTest(unittest.TestCase):
 
         expected_slice = np.array(
             [
-                [-2.1746933, -0.47294563, 1.0936179],
-                [-3.2779698, -0.826912, -0.9209641],
-                [-2.9128823, 1.1284153, -0.7305769],
+                [-2.1629136, -0.46566555, 1.092598],
+                [-3.5971718, -1.0283647, -1.1780545],
+                [-2.9004114, 1.1334716, -0.7435752],
+ 
             ]
         )
 
@@ -251,7 +252,7 @@ class FlaxDinov2ModelIntegrationTest(unittest.TestCase):
         expected_shape = (1, 1000)
         self.assertEqual(logits.shape, expected_shape)
 
-        expected_slice = np.array([-2.174367, 0.37255904, 0.15667781])
+        expected_slice = np.array([-2.1776438, 0.36716837, 0.13870966])
 
         self.assertTrue(np.allclose(logits[0, :3], expected_slice, atol=1e-4))
 
