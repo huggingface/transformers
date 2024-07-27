@@ -16,17 +16,14 @@
 
 import collections.abc
 import math
-import os
 from typing import Optional, Tuple
 
-# from transformers import BitImageProcessor
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen.attention import dot_product_attention_weights
 from flax.traverse_util import flatten_dict, unflatten_dict
-from safetensors.flax import load_file
 
 from ...modeling_flax_outputs import FlaxBaseModelOutput, FlaxBaseModelOutputWithPooling, FlaxSequenceClassifierOutput
 from ...modeling_flax_utils import (
@@ -96,19 +93,19 @@ class FlaxDinov2PatchEmbeddings(nn.Module):
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
-        image_size = self.config.image_size                                                         # ? 518
-        patch_size = self.config.patch_size                                                         # ? 14
+        image_size = self.config.image_size  # ? 518
+        patch_size = self.config.patch_size  # ? 14
         image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
         patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (
             image_size[0] // patch_size[0]
-        )                                                                                           # ? 518//14 * 518//14 = 37*37 = 1369
+        )  # ? 518//14 * 518//14 = 37*37 = 1369
 
         self.num_patches = num_patches
         self.num_channels = self.config.num_channels
         self.projection = nn.Conv(
             self.config.hidden_size,
-            kernel_size=(patch_size[0], patch_size[1]),                                             # ? (14, 14)
+            kernel_size=(patch_size[0], patch_size[1]),  # ? (14, 14)
             strides=(patch_size[0], patch_size[1]),
             padding="VALID",
             dtype=self.dtype,
@@ -118,37 +115,39 @@ class FlaxDinov2PatchEmbeddings(nn.Module):
         )
 
     def __call__(self, pixel_values):
-        num_channels = pixel_values.shape[-1]                                                       # ? jax convention is NHWC
+        num_channels = pixel_values.shape[-1]  # ? jax convention is NHWC
         if num_channels != self.num_channels:
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
                 f" Expected {self.num_channels} but got {num_channels}."
             )
-        embeddings = self.projection(pixel_values)                                                  # ? (batch_size,224,224,3) -> (batch_size, 16, 16, 768)
+        embeddings = self.projection(pixel_values)  # ? (batch_size,224,224,3) -> (batch_size, 16, 16, 768)
         batch_size, _, _, channels = embeddings.shape
-        return jnp.reshape(embeddings, (batch_size, -1, channels))                                  # ? (batch_size, 16*16, 768) = (batch_size, 256, 768)
+        return jnp.reshape(
+            embeddings, (batch_size, -1, channels)
+        )  # ? (batch_size, 16*16, 768) = (batch_size, 256, 768)
 
 
 def interpolate_pos_encoding(config, hidden_states, height, width, position_embeddings):
-    num_patches = hidden_states.shape[1] - 1                                                        # ? 256
-    num_positions = position_embeddings.shape[1] - 1                                                # ? 1369
+    num_patches = hidden_states.shape[1] - 1  # ? 256
+    num_positions = position_embeddings.shape[1] - 1  # ? 1369
     if num_patches == num_positions and height == width:
         return position_embeddings
     class_pos_embed = position_embeddings[:, 0]
     patch_pos_embed = position_embeddings[:, 1:]
     dim = hidden_states.shape[-1]
 
-    height = height // config.patch_size                                                            # ? 224//14 = 16
-    width = width // config.patch_size                                                              # ? 224//14 = 16
+    height = height // config.patch_size  # ? 224//14 = 16
+    width = width // config.patch_size  # ? 224//14 = 16
     height, width = height + 0.1, width + 0.1
 
     patch_pos_embed = patch_pos_embed.reshape(
         (1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim)
     )  # ? (1, 37, 37, 768)
-    patch_pos_embed = jnp.transpose(patch_pos_embed, (0, 3, 1, 2))                                  
+    patch_pos_embed = jnp.transpose(patch_pos_embed, (0, 3, 1, 2))
 
-    new_height_ratio = jnp.float32(height / math.sqrt(num_positions))                               # ? 16/37
-    new_width_ratio = jnp.float32(width / math.sqrt(num_positions))                                 # ? 16/37
+    new_height_ratio = jnp.float32(height / math.sqrt(num_positions))  # ? 16/37
+    new_width_ratio = jnp.float32(width / math.sqrt(num_positions))  # ? 16/37
 
     # patch_pos_embed = jax.image.resize(patch_pos_embed, shape=(hidden_states.shape[0], dim, height, width), method='bicubic', antialias=False)
     scale, translation = (
@@ -193,23 +192,23 @@ class FlaxDinov2Embeddings(nn.Module):
             (1, self.config.hidden_size),
         )
         self.patch_embeddings = FlaxDinov2PatchEmbeddings(self.config, dtype=self.dtype)
-        num_patches = self.patch_embeddings.num_patches                                             # ? 1369
+        num_patches = self.patch_embeddings.num_patches  # ? 1369
         self.position_embeddings = self.param(
             "position_embeddings",
             jax.nn.initializers.variance_scaling(self.config.initializer_range**2, "fan_in", "truncated_normal"),
-            (1, num_patches + 1, self.config.hidden_size),                                          # ? (1, 1370, 768)
+            (1, num_patches + 1, self.config.hidden_size),  # ? (1, 1370, 768)
         )
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
 
     def __call__(self, pixel_values, deterministic=True):
         batch_size = pixel_values.shape[0]
-        height, width = pixel_values.shape[1], pixel_values.shape[2]                                # ? 224, 224
+        height, width = pixel_values.shape[1], pixel_values.shape[2]  # ? 224, 224
 
         embeddings = self.patch_embeddings(pixel_values)
 
         cls_tokens = jnp.broadcast_to(
             self.cls_token, (batch_size, 1, self.config.hidden_size)
-        )                                                                                           # ? (batch_size, 1, 768)
+        )  # ? (batch_size, 1, 768)
         embeddings = jnp.concatenate((cls_tokens, embeddings), axis=1)
 
         embeddings = embeddings + interpolate_pos_encoding(
@@ -217,7 +216,7 @@ class FlaxDinov2Embeddings(nn.Module):
         )
 
         embeddings = self.dropout(embeddings, deterministic=deterministic)
-        return embeddings                                                                           # ? (batch_size, 257, 768)
+        return embeddings  # ? (batch_size, 257, 768)
 
 
 # Copied from transformers.models.vit.modeling_flax_vit.FlaxViTSelfAttention with ViT->Dinov2
