@@ -691,6 +691,10 @@ class Qwen2AudioEncoder(Qwen2AudioPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        # Ignore copy
+        input_features = input_features.to(dtype=self.conv1.weight.dtype, device=self.conv1.weight.device)
+
         inputs_embeds = nn.functional.gelu(self.conv1(input_features))
         inputs_embeds = nn.functional.gelu(self.conv2(inputs_embeds))
 
@@ -719,6 +723,7 @@ class Qwen2AudioEncoder(Qwen2AudioPreTrainedModel):
                 if dropout_probability < self.layerdrop:  # skip the layer
                     to_drop = True
 
+            # Ignore copy
             if to_drop:
                 layer_outputs = (None, None)
             else:
@@ -726,14 +731,14 @@ class Qwen2AudioEncoder(Qwen2AudioPreTrainedModel):
                     layer_outputs = self._gradient_checkpointing_func(
                         encoder_layer.__call__,
                         hidden_states,
-                        None,
+                        attention_mask,
                         (head_mask[idx] if head_mask is not None else None),
                         output_attentions,
                     )
                 else:
                     layer_outputs = encoder_layer(
                         hidden_states,
-                        None,
+                        attention_mask,
                         layer_head_mask=(head_mask[idx] if head_mask is not None else None),
                         output_attentions=output_attentions,
                     )
@@ -868,6 +873,16 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel):
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self._padding_side = "left"  # set it to left by default, user can use setter to change padding_sides
         self.post_init()
+
+    @property
+    def padding_side(self):
+        return self._padding_side
+
+    @padding_side.setter
+    def padding_side(self, padding_side: str):
+        if padding_side not in ["left", "right"]:
+            raise ValueError(f"{padding_side} is not `left` or `right`.")
+        self._padding_side = padding_side
 
     # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.get_input_embeddings
     def get_input_embeddings(self):
