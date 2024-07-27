@@ -31,7 +31,7 @@ pip install auto-gptq
 pip install --upgrade accelerate optimum transformers
 ```
 
-모델을 양자화하려면(현재 텍스트 모델만 지원됨) [`GPTQConfig`] 클래스를 생성하고 양자화할 비트 수, 가중치 양자화를 위해 교정할 데이터셋, 그리고 데이터셋을 준비할 토크나이저를 설정해야 합니다.
+모델을 양자화하려면(현재 텍스트 모델만 지원됨) [`GPTQConfig`] 클래스를 생성하고 양자화할 비트 수, 양자화를 위한 가중치 교정 데이터셋, 그리고 데이터셋을 준비하기 위한 토크나이저를 설정해야 합니다.
 
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer, GPTQConfig
