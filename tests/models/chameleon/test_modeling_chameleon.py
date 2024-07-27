@@ -375,6 +375,7 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_generate_compile_fullgraph(self):
         pass
 
+
 @require_torch
 class ChameleonIntegrationTest(unittest.TestCase):
     @slow
