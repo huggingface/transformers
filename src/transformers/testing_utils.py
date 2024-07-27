@@ -68,6 +68,7 @@ from .utils import (
     is_eetq_available,
     is_essentia_available,
     is_faiss_available,
+    is_fbgemm_gpu_available,
     is_flash_attn_2_available,
     is_flax_available,
     is_fsdp_available,
@@ -1114,6 +1115,13 @@ def require_quanto(test_case):
     Decorator for quanto dependency
     """
     return unittest.skipUnless(is_quanto_available(), "test requires quanto")(test_case)
+
+
+def require_fbgemm_gpu(test_case):
+    """
+    Decorator for fbgemm_gpu dependency
+    """
+    return unittest.skipUnless(is_fbgemm_gpu_available(), "test requires fbgemm-gpu")(test_case)
 
 
 def require_phonemizer(test_case):

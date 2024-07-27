@@ -81,8 +81,6 @@ class MambaConfig(PretrainedConfig):
             Whether or not the cache should be used.
         use_mambapy (`bool`, *optional*, defaults to `False`):
             Determines the fallback strategy during training if the CUDA-based official implementation of Mamba is not avaiable. If `True`, the mamba.py implementation is used. If `False`, the naive and slower implementation is used. Consider switching to the naive version if memory is limited.
-        classifier_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout ratio for the classification head in [`MambaForSequenceClassification`] model.
 
 
     Example:
@@ -128,7 +126,6 @@ class MambaConfig(PretrainedConfig):
         rescale_prenorm_residual=False,
         use_cache=True,
         use_mambapy=False,
-        classifier_dropout=0.1,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -156,6 +153,5 @@ class MambaConfig(PretrainedConfig):
         self.residual_in_fp32 = residual_in_fp32
         self.use_cache = use_cache
         self.use_mambapy = use_mambapy
-        self.classifier_dropout = classifier_dropout
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, pad_token_id=pad_token_id, **kwargs)
