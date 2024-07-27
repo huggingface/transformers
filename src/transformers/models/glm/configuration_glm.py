@@ -24,7 +24,7 @@ logger = logging.get_logger(__name__)
 
 class GLMConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`GLMModel`]. It is used to instantiate a Phi-3
+    This is the configuration class to store the configuration of a [`GLMModel`]. It is used to instantiate a GLM
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the
     [THUDM/glm-4-9b-chat](https://huggingface.co/THUDM/glm-4-9b-chat).
