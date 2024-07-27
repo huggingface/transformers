@@ -324,21 +324,16 @@ def _compute_llama3_parameters(
 
     low_freq_wavelen = old_context_len / low_freq_factor
     high_freq_wavelen = old_context_len / high_freq_factor
-    assert low_freq_wavelen != high_freq_wavelen
 
+    wavelen = 2 * math.pi / inv_freq
     # wavelen < high_freq_wavelen: do nothing
     # wavelen > low_freq_wavelen: divide by factor
-    # otherwise: interpolate between the two, using a smooth factor
-    wavelen = 2 * math.pi / inv_freq
-
     inv_freq_new = torch.where(wavelen > low_freq_wavelen, inv_freq / factor, inv_freq)
-
-    smooth = (old_context_len / wavelen - low_freq_factor) / (high_freq_factor - low_freq_factor)
-    inv_freq_new = torch.where(
-        ~(wavelen < high_freq_wavelen) * ~(wavelen > low_freq_wavelen),
-        (1 - smooth) * inv_freq_new / factor + smooth * inv_freq_new,
-        inv_freq_new,
-    )
+    # otherwise: interpolate between the two, using a smooth factor
+    smooth_factor = (old_context_len / wavelen - low_freq_factor) / (high_freq_factor - low_freq_factor)
+    smoothed_inv_freq = (1 - smooth_factor) * inv_freq_new / factor + smooth_factor * inv_freq_new
+    is_medium_freq = ~(wavelen < high_freq_wavelen) * ~(wavelen > low_freq_wavelen)
+    inv_freq_new = torch.where(is_medium_freq, smoothed_inv_freq, inv_freq_new)
 
     return inv_freq, attention_factor
 
@@ -505,7 +500,7 @@ def _validate_llama3_parameters(config: PretrainedConfig):
         logger.warning(f"`rope_scaling`'s low_freq_factor field must be a float, got {low_freq_factor}")
     if high_freq_factor is None or not isinstance(high_freq_factor, float):
         logger.warning(f"`rope_scaling`'s high_freq_factor field must be a float, got {high_freq_factor}")
-    if high_freq_factor < low_freq_factor:
+    if high_freq_factor <= low_freq_factor:
         logger.warning(
             "`rope_scaling`'s high_freq_factor field must be greater than low_freq_factor, got high_freq_factor="
             f"{high_freq_factor} and low_freq_factor={low_freq_factor}"
