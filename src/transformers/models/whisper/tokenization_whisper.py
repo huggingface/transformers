@@ -810,14 +810,6 @@ class WhisperTokenizer(PreTrainedTokenizer):
             text = " " + text
         return (text, kwargs)
 
-    @property
-    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.default_chat_template
-    def default_chat_template(self):
-        """
-        A simple chat template that ignores role information and just concatenates messages with EOS tokens.
-        """
-        return "{% for message in messages %}" "{{ message.content }}{{ eos_token }}" "{% endfor %}"
-
     def get_decoder_prompt_ids(self, task=None, language=None, no_timestamps=True):
         self.set_prefix_tokens(task=task, language=language, predict_timestamps=not no_timestamps)
         # prefix tokens are of the form: <|startoftranscript|> <|lang_id|> <|task|> <|notimestamps|>
