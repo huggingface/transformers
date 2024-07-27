@@ -923,6 +923,87 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel):
     def _merge_input_ids_with_audio_features(
         self, audio_features, num_audio_tokens, inputs_embeds, input_ids, attention_mask, labels
     ):
+        """
+        Merge input_ids with with audio features into final embeddings
+
+        Args:
+            audio_features (`torch.Tensor` of shape `(num_audios, max_audio_tokens, embed_dim)`):
+                All audio vectors of all audios in the batch
+            num_audio_tokens (`torch.LongTensor` of shape `(num_audios)`):
+                The length of audio embeddings of each audio as stacked in `audio_features`
+            inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, embed_dim)`):
+                Token embeddings before merging with audio embeddings
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Input_ids of tokens, possibly filled with audio token
+            attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Mask to avoid performing attention on padding token indices.
+            labels (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*)
+                labels need to be recalculated to support training (if provided)
+        Returns:
+            final_embedding, final_attention_mask, final_labels, position_ids, final_input_ids
+
+        Explanation:
+            each audio has variable length embeddings, with length specified by num_audio_tokens
+            audio_features is concatenation of all audio embed vectors
+            task: fill each <|AUDIO|> with the correct number of audio embeddings
+            Example:
+                X (5 tokens), Y (3 tokens), Z (8 tokens)
+                X, Y are in the same sequence (in-context learning)
+            if right padding
+                input_ids: [
+                    a b c d e f X g h i j k Y l m
+                    o p q r Z s t u v _ _ _ _ _ _
+                ]
+                input_ids should be: [
+                    a b c d e f X X X X X g h i j k Y Y Y l m
+                    o p q r Z Z Z Z Z Z Z Z s t u v _ _ _ _ _
+                ]
+                labels should be: [
+                    a b c d e f _ _ _ _ _ g h i j k _ _ _ l m
+                    o p q r _ _ _ _ _ _ _ _ s t u v _ _ _ _ _
+                ]
+            elif left padding
+                input_ids: [
+                    a b c d e f X g h i j k Y l m
+                    _ _ _ _ _ _ o p q r Z s t u v
+                ]
+                input_ids should be: [
+                    a b c d e f X X X X X g h i j k Y Y Y l m
+                    _ _ _ _ _ o p q r Z Z Z Z Z Z Z Z s t u v
+                ]
+                labels should be: [
+                    a b c d e f _ _ _ _ _ g h i j k _ _ _ l m
+                    _ _ _ _ _ o p q r _ _ _ _ _ _ _ _ s t u v
+                ]
+            Edge cases:
+                * If tokens are same but audio token sizes are different, then cannot infer left or right padding
+                ```python
+                audio1 = ffmpeg_read(requests.get("https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3").content, sampling_rate=processor.feature_extractor.sampling_rate)
+                audio2 = ffmpeg_read(requests.get("https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/f2641_0_throatclearing.wav").content, sampling_rate=processor.feature_extractor.sampling_rate)
+                prompts = [
+                    "[INST] <|AUDIO|>\nWhat is that in this audio? [/INST]",
+                    "[INST] <|AUDIO|>\nWhat is that in this audio? [/INST]",
+                ]
+                inputs = processor(text=prompts, [audio1, audio2], return_tensors='pt', padding=True).to("cuda")
+                    audio1 has 101 tokens, while audio2 has 72 tokens
+                ```
+
+                input_ids: [
+                    a b c d X g h
+                    i j Y k l m n
+                ]
+                where X is 3 tokens while Y is 5, this mean after merge
+                if left-padding (batched generation)
+                    input_ids should be: [
+                        _ _ a b c d X X X g h
+                        i j Y Y Y Y Y k l m n
+                    ]
+                elif (right padding) (training)
+                    input_ids should be: [
+                        a b c d X X X g h _ _
+                        i j Y Y Y Y Y k l m n
+                    ]
+        """
         num_audios, max_audio_tokens, embed_dim = audio_features.shape  # [3, 750, 4096]
         audio_features_mask = torch.arange(max_audio_tokens).expand(num_audios, max_audio_tokens).to(
             num_audio_tokens.device
