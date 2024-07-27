@@ -16,19 +16,19 @@ rendered properly in your Markdown viewer.
 
 # Trainer [[trainer]]
 
-[`Trainer`]는 Transformers 라이브러리에서 구현된 PyTorch 모델을 위한 완전한 훈련 및 평가 루프입니다. 훈련에 필요한 요소(모델, 토크나이저, 데이터셋, 평가 함수, 훈련 하이퍼파라미터 등)만 제공하면 [`Trainer`] 클래스가 나머지를 처리합니다. 이를 통해 직접 훈련 루프를 작성하지 않고도 빠르게 훈련을 시작할 수 있습니다. 동시에 [`Trainer`]는 매우 커스터마이징이 가능하며, 다양한 훈련 옵션을 제공하여 사용자가 정확한 훈련 요구에 맞출 수 있습니다.
+[`Trainer`]는 Transformers 라이브러리에 구현된 PyTorch 모델을 위한 완전한 훈련 및 평가 루프입니다. 훈련에 필요한 요소(모델, 토크나이저, 데이터셋, 평가 함수, 훈련 하이퍼파라미터 등)만 제공하면 [`Trainer`]가 필요한 나머지 작업을 처리합니다. 이를 통해 직접 훈련 루프를 작성하지 않고도 빠르게 훈련을 시작할 수 있습니다. 동시에 [`Trainer`]는 강력한 맞춤 설정과 다양한 훈련 옵션을 제공하여 사용자에게 필요한 훈련 요소를 맞출 수 있습니다.
 
 <Tip>
 
-[`Trainer`] 클래스 외에도 번역이나 요약과 같은 시퀀스-투-시퀀스 작업을 위한 [`Seq2SeqTrainer`] 클래스도 Transformers에서 제공합니다. 또한 [TRL](https://hf.co/docs/trl) 라이브러리에서 [`Trainer`] 클래스를 래핑하여 Llama-2 및 Mistral과 같은 언어 모델을 자동 회귀 기법으로 훈련하는 데 최적화된 [`~trl.SFTTrainer`] 클래스도 있습니다. [`~trl.SFTTrainer`]는 시퀀스 패킹, LoRA, 양자화 및 DeepSpeed와 같은 기능을 지원하여 모든 모델 크기로 효율적으로 확장할 수 있습니다.
+[`Trainer`] 클래스 외에도 번역이나 요약과 같은 시퀀스-투-시퀀스 작업을 위한 [`Seq2SeqTrainer`] 클래스도 Transformers에서 제공합니다. 또한 [TRL](https://hf.co/docs/trl) 라이브러리에서 [`Trainer`] 클래스를 래핑하여 Llama-2 및 Mistral과 같은 언어 모델을 자동 회귀 기법으로 훈련하는 데 최적화된 [`~trl.SFTTrainer`] 클래스도 있습니다. [`~trl.SFTTrainer`]는 시퀀스 패킹, LoRA, 양자화 및 DeepSpeed와 같은 기능을 지원하여 크기 상관없이 모델 효율적으로 확장할 수 있습니다.
 
 <br>
 
-이들 [`Trainer`] 유형 클래스에 대해 더 알고 싶다면 [API 참조](./main_classes/trainer)를 확인하여 언제 어떤 것을 사용할지 알아보세요. 일반적으로 [`Trainer`]는 가장 다재다능한 옵션으로, 다양한 작업에 적합합니다. [`Seq2SeqTrainer`]는 시퀀스-투-시퀀스 작업을 위해 설계되었고, [`~trl.SFTTrainer`]는 언어 모델 훈련을 위해 설계되었습니다.
+이들 [`Trainer`] 유형 클래스에 대해 더 알고 싶다면 [API 참조](./main_classes/trainer)를 확인하여 언제 어떤 클래스를 사용할지 알아보세요. 일반적으로 [`Trainer`]는 가장 다재다능한 옵션으로, 다양한 작업에 적합합니다. [`Seq2SeqTrainer`]는 시퀀스-투-시퀀스 작업을 위해 설계되었고, [`~trl.SFTTrainer`]는 언어 모델 훈련을 위해 설계되었습니다.
 
 </Tip>
 
-시작하기 전에, [Accelerate](https://hf.co/docs/accelerate) - 분산 환경에서 PyTorch 훈련을 가능하게 하고 실행할 수 있게 하는 라이브러리 - 를 설치하세요.
+시작하기 전에, [Accelerate](https://hf.co/docs/accelerate)를 사용해 분산 환경에서 PyTorch 훈련과 실행을 할 수 있게 하는 라이브러리를 설치하세요.
 
 ```bash
 pip install accelerate
@@ -44,13 +44,13 @@ pip install accelerate --upgrade
 [`Trainer`]는 기본적인 훈련 루프에 포함된 모든 코드를 포함합니다:
 
 1. 손실을 계산하는 훈련 단계를 수행합니다.
-2. [`~accelerate.Accelerator.backward`] 메서드로 그래디언트를 계산합니다.
-3. 그래디언트를 기반으로 가중치를 업데이트합니다.
-4. 정해진 에포크 수에 도달할 때까지 이 과정을 반복합니다.
+2. [`~accelerate.Accelerator.backward`] 메소드로 그레이디언트를 계산합니다.
+3. 그레이디언트를 기반으로 가중치를 업데이트합니다.
+4. 정해진 에폭 수에 도달할 때까지 이 과정을 반복합니다.
 
-[`Trainer`] 클래스는 이러한 모든 코드를 추상화하여, PyTorch와 훈련을 처음 시작하는 경우에도 매번 훈련 루프를 직접 작성할 필요가 없게 합니다. 모델과 데이터셋과 같은 필수 구성 요소만 제공하면, [`Trainer`] 클래스가 나머지를 처리합니다.
+[`Trainer`] 클래스는 이러한 모든 코드를 추상화하여, 처음으로 PyTorch를 이용해 훈련을 하는 경우에도, 매번 훈련 루프를 직접 작성할 필요가 없습니다. 모델과 데이터셋과 같은 필수 구성 요소만 제공하면, [`Trainer`] 클래스가 나머지를 처리합니다.
 
-훈련 옵션이나 하이퍼파라미터를 지정하려면, [`TrainingArguments`] 클래스에서 찾을 수 있습니다. 예를 들어, 모델을 저장할 디렉토리를 `output_dir`에 정의하고, 훈련 후에 허브로 모델을 푸시하려면 `push_to_hub=True`로 설정합니다.
+훈련 옵션이나 하이퍼파라미터를 지정하려면, [`TrainingArguments`] 클래스에서 확인 할 수 있습니다. 예를 들어, 모델을 저장할 디렉토리를 `output_dir`에 정의하고, 훈련 후에 Hub로 모델을 푸시하려면 `push_to_hub=True`로 설정합니다.
 
 ```py
 from transformers import TrainingArguments
@@ -69,7 +69,7 @@ training_args = TrainingArguments(
 )
 ```
 
-`training_args`를 [`Trainer`]에 모델, 데이터셋, 데이터셋을 전처리할 수 있는 도구(데이터 유형에 따라 토크나이저, 특징 추출기 또는 이미지 프로세서일 수 있음), 데이터 콜레이터 및 훈련 중 추적할 메트릭을 계산할 함수를 함께 전달하세요.
+`training_args`를 [`Trainer`]에 모델, 데이터셋, 데이터셋 전처리할 수 있는 도구(데이터 유형에 따라 토크나이저, 특징 추출기 또는 이미지 프로세서일 수 있음), 데이터 콜레이터 및 훈련 중 확인할 지표를 계산할 함수를 함께 전달하세요.
 
 마지막으로, [`~Trainer.train`]를 호출하여 훈련을 시작하세요!
 
@@ -101,29 +101,29 @@ trainer.train(resume_from_checkpoint=True)
 trainer.train(resume_from_checkpoint="your-model/checkpoint-1000")
 ```
 
-체크포인트를 허브에 푸시하려면 [`TrainingArguments`]에서 `push_to_hub=True`로 설정하여 커밋하고 푸시할 수 있습니다. 체크포인트를 저장하는 방법을 결정하는 다른 옵션은 [`hub_strategy`](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments.hub_strategy) 매개변수에서 설정합니다:
+체크포인트를 Hub에 푸시하려면 [`TrainingArguments`]에서 `push_to_hub=True`로 설정하여 커밋하고 푸시할 수 있습니다. 체크포인트를 저장하는 방법을 결정하는 다른 옵션은 [`hub_strategy`](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments.hub_strategy) 매개변수에서 설정합니다:
 
 * `hub_strategy="checkpoint"`는 최신 체크포인트를 "last-checkpoint"라는 하위 폴더에 푸시하여 훈련을 재개할 수 있습니다.
-* `hub_strategy="all_checkpoints"`는 모든 체크포인트를 `output_dir`에 정의된 디렉토리에 푸시합니다(모델 저장소에서 폴더당 하나의 체크포인트를 볼 수 있습니다).
+* `hub_strategy="all_checkpoints"`는 모든 체크포인트를 `output_dir`에 정의된 디렉토리에 푸시합니다(모델 리포지토에서 폴더당 하나의 체크포인트를 볼 수 있습니다).
 
-체크포인트에서 훈련을 재개할 때, [`Trainer`]는 체크포인트가 저장될 때와 동일한 Python, NumPy 및 PyTorch RNG 상태를 유지하려고 합니다. 하지만 PyTorch는 다양한 비결정적 기본 설정을 가지고 있기 때문에, RNG 상태가 동일할 것이라고 보장할 수는 없습니다. 완전한 결정성을 활성화하려면, [랜덤성 제어](https://pytorch.org/docs/stable/notes/randomness#controlling-sources-of-randomness) 가이드를 참고하여 훈련을 완전하게 결정적으로 만들기 위해 활성화할 수 있는 항목을 확인하세요. 다만, 특정 설정을 결정적으로 만들면 훈련이 느려질 수 있습니다.
+체크포인트에서 훈련을 재개할 때, [`Trainer`]는 체크포인트가 저장될 때와 동일한 Python, NumPy 및 PyTorch RNG 상태를 유지하려고 합니다. 하지만 PyTorch는 다양한 비결정적인 기본 설정을 가지고 있기 때문에, RNG 상태가 동일할 것이라고 보장할 수는 없습니다. 완전한 결정성을 활성화하려면, [랜덤성 제어](https://pytorch.org/docs/stable/notes/randomness#controlling-sources-of-randomness) 가이드를 참고하여 훈련을 완전하게 결정적으로 만들기 위해 활성화할 수 있는 항목을 확인하세요. 다만, 특정 설정을 결정적으로 만들면 훈련이 느려질 수 있습니다.
 
-## Trainer 커스터마이징 [[customize-the-trainer]]
+## Trainer 맞춤 설정 [[customize-the-trainer]]
 
-[`Trainer`] 클래스는 접근성과 사용의 용이성을 염두에 두고 설계되었지만, 모험적인 사용자에게는 많은 커스터마이징 옵션을 제공합니다. [`Trainer`]의 많은 메서드는 서브클래스화 및 오버라이드하여 원하는 기능을 지원할 수 있으며, 이를 통해 전체 훈련 루프를 다시 작성할 필요 없이 원하는 기능을 추가할 수 있습니다. 이러한 메서드에는 다음이 포함됩니다:
+[`Trainer`] 클래스는 접근성과 사용의 용이성을 염두에 두고 설계되었지만, 호기심이 많은 사용자에게는 다양한 맞춤 설정 옵션을 제공합니다. [`Trainer`]의 많은 메소드는 서브클래스화 및 오버라이드하여 원하는 기능을 제공할 수 있으며, 이를 통해 전체 훈련 루프를 다시 작성할 필요 없이 원하는 기능을 추가할 수 있습니다. 이러한 메소드에는 다음이 포함됩니다:
 
 * [`~Trainer.get_train_dataloader`]는 훈련 데이터로더를 생성합니다.
 * [`~Trainer.get_eval_dataloader`]는 평가 데이터로더를 생성합니다.
 * [`~Trainer.get_test_dataloader`]는 테스트 데이터로더를 생성합니다.
 * [`~Trainer.log`]는 훈련을 모니터링하는 다양한 객체에 대한 정보를 로그합니다.
-* [`~Trainer.create_optimizer_and_scheduler`]는 `__init__`에서 전달되지 않은 경우 옵티마이저와 학습률 스케줄러를 생성합니다. 이들은 각각 [`~Trainer.create_optimizer`] 및 [`~Trainer.create_scheduler`]로 별도로 커스터마이징할 수 있습니다.
+* [`~Trainer.create_optimizer_and_scheduler`]는 `__init__`에서 전달되지 않은 경우 옵티마이저와 학습률 스케줄러를 생성합니다. 이들은 각각 [`~Trainer.create_optimizer`] 및 [`~Trainer.create_scheduler`]로 별도로 맞춤 설정 할 수 있습니다.
 * [`~Trainer.compute_loss`]는 훈련 입력 배치에 대한 손실을 계산합니다.
 * [`~Trainer.training_step`]는 훈련 단계를 수행합니다.
 * [`~Trainer.prediction_step`]는 예측 및 테스트 단계를 수행합니다.
-* [`~Trainer.evaluate`]는 모델을 평가하고 평가 메트릭을 반환합니다.
-* [`~Trainer.predict`]는 테스트 세트에 대한 예측(레이블이 있는 경우 메트릭 포함)을 수행합니다.
+* [`~Trainer.evaluate`]는 모델을 평가하고 평가 지표을 반환합니다.
+* [`~Trainer.predict`]는 테스트 세트에 대한 예측(레이블이 있는 경우 지표 포함)을 수행합니다.
 
-예를 들어, [`~Trainer.compute_loss`] 메서드를 커스터마이징하여 가중 손실을 사용하려는 경우:
+예를 들어, [`~Trainer.compute_loss`] 메소드를 맞춤 설정하여 가중 손실을 사용하려는 경우:
 
 ```py
 from torch import nn
@@ -137,9 +137,7 @@ class CustomTrainer(Trainer):
         # 순방향 전파
         outputs = model(**inputs)
         logits = outputs.get("logits")
-        # 서로 다른 가중치
-
-로 3개의 레이블에 대한 커스텀 손실을 계산
+        # 서로 다른 가중치로 3개의 레이블에 대한 사용자 정의 손실을 계산
         loss_fct = nn.CrossEntropyLoss(weight=torch.tensor([1.0, 2.0, 3.0], device=model.device))
         loss = loss_fct(logits.view(-1, self.model.config.num_labels), labels.view(-1))
         return (loss, outputs) if return_outputs else loss
@@ -147,7 +145,7 @@ class CustomTrainer(Trainer):
 
 ### 콜백 [[callbacks]]
 
-[`Trainer`]를 커스터마이징하는 또 다른 방법은 [콜백](callbacks)을 사용하는 것입니다. 콜백은 훈련 루프의 상태를 검사한 후 상태에 따라 일부 작업(조기 종료, 결과 로그 등)을 실행합니다. 즉, 콜백은 커스텀 손실 함수와 같은 것을 구현하는 데 사용할 수 없으며, 이를 위해서는 [`~Trainer.compute_loss`] 메서드를 서브클래스화하고 오버라이드해야 합니다.
+[`Trainer`]를 맞춤 설정하는 또 다른 방법은 [콜백](callbacks)을 사용하는 것입니다. 콜백은 훈련 루프의 상태를 검사한 후 상태에 따라 일부 작업(조기 종료, 결과 로그 등)을 실행합니다. 즉, 콜백은 사용자 정의 손실 함수와 같은 것을 구현하는 데 사용할 수 없으며, 이를 위해서는 [`~Trainer.compute_loss`] 메소드를 서브클래스화하고 오버라이드해야 합니다.
 
 예를 들어, 훈련 루프에 10단계 후 조기 종료 콜백을 추가하려면 다음과 같이 합니다.
 
@@ -186,21 +184,21 @@ trainer = Trainer(
 
 <Tip>
 
-로깅 API에 대한 자세한 내용은 [로깅](./main_classes/logging) API 참조를 확인하세요.
+로깅 API에 대한 자세한 내용은 [로깅](./main_classes/logging) API 레퍼런스를 확인하세요.
 
 </Tip>
 
-[`Trainer`]는 기본적으로 `logging.INFO`로 설정되어 있어 오류, 경고 및 기타 기본 정보를 보고합니다. 분산 환경에서는 [`Trainer`] 복제본이 `logging.WARNING`으로 설정되어 오류와 경고만 보고합니다. [`TrainingArguments`]의 [`log_level`](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments.log_level) 및 [`log_level_replica`](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments.log_level_replica) 매개변수로 로깅 수준을 변경할 수 있습니다.
+[`Trainer`]는 기본적으로 `logging.INFO`로 설정되어 있어 오류, 경고 및 기타 기본 정보를 보고합니다. 분산 환경에서는 [`Trainer`] 복제본이 `logging.WARNING`으로 설정되어 오류와 경고만 보고합니다. [`TrainingArguments`]의 [`log_level`](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments.log_level) 및 [`log_level_replica`](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments.log_level_replica) 매개변수로 로그 레벨을 변경할 수 있습니다.
 
-각 노드의 로그 수준 설정을 구성하려면 [`log_on_each_node`](https://huggingface.co/docs/transformers/main/en/main_classes/trainer#transformers.TrainingArguments.log_on_each_node) 매개변수를 사용하여 각 노드에서 로그 수준을 사용할지 아니면 주 노드에서만 사용할지 결정하세요.
+각 노드의 로그 레벨 설정을 구성하려면 [`log_on_each_node`](https://huggingface.co/docs/transformers/main/en/main_classes/trainer#transformers.TrainingArguments.log_on_each_node) 매개변수를 사용하여 각 노드에서 로그 레벨을 사용할지 아니면 주 노드에서만 사용할지 결정하세요.
 
 <Tip>
 
-[`Trainer`]는 [`Trainer.__init__`] 메서드에서 각 노드에 대해 로그 수준을 별도로 설정하므로, [`Trainer`] 객체를 생성하기 전에 다른 Transformers 기능을 사용할 경우 이를 미리 설정하는 것이 좋습니다.
+[`Trainer`]는 [`Trainer.__init__`] 메소드에서 각 노드에 대해 로그 레벨을 별도로 설정하므로, [`Trainer`] 객체를 생성하기 전에 다른 Transformers 기능을 사용할 경우 이를 미리 설정하는 것이 좋습니다.
 
 </Tip>
 
-예를 들어, 메인 코드와 모듈을 각 노드에 따라 동일한 로그 수준을 사용하도록 설정하려면 다음과 같이 합니다.
+예를 들어, 메인 코드와 모듈을 각 노드에 따라 동일한 로그 레벨을 사용하도록 설정하려면 다음과 같이 합니다.
 
 ```py
 logger = logging.getLogger(__name__)
@@ -221,7 +219,7 @@ transformers.utils.logging.set_verbosity(log_level)
 trainer = Trainer(...)
 ```
 
-각 노드에서 로그할 내용을 구성하려면 `log_level`과 `log_level_replica`를 다양한 조합으로 사용하세요.
+`log_level`과 `log_level_replica`를 다양한 조합으로 사용하여, 각 노드에서 로그되는 내용을 구성하세요.
 
 <hfoptions id="logging">
 <hfoption id="single node">
@@ -247,7 +245,7 @@ my_app.py ... --log_level error --log_level_replica error --log_on_each_node 0
 
 ## NEFTune [[neftune]]
 
-[NEFTune](https://hf.co/papers/2310.05914)은 훈련 중 임베딩 벡터에 노이즈를 추가하여 성능을 향상시킬 수 있는 기술입니다. [`Trainer`]에서 이를 활성화하려면 [`TrainingArguments`]의 `neftune_noise_alpha` 매개변수를 설정하여 추가되는 노이즈의 양을 조절합니다.
+[NEFTune](https://hf.co/papers/2310.05914)은 훈련 중 임베딩 벡터에 노이즈를 추가하여 성능을 향상시킬 수 있는 기술입니다. [`Trainer`]에서 이를 활성화하려면 [`TrainingArguments`]의 `neftune_noise_alpha` 매개변수를 설정하여 노이즈의 양을 조절합니다.
 
 ```py
 from transformers import TrainingArguments, Trainer
@@ -256,13 +254,13 @@ training_args = TrainingArguments(..., neftune_noise_alpha=0.1)
 trainer = Trainer(..., args=training_args)
 ```
 
-NEFTune은 예상치 못한 동작을 피하기 위해 훈련 후에 원래 임베딩 레이어를 복원합니다.
+NEFTune은 예상치 못한 동작을 피하기 위해 훈련 후에 처음 임베딩 레이어로 복원합니다.
 
 ## GaLore [[galore]]
 
-Gradient Low-Rank Projection (GaLore)은 전체 매개변수를 학습하면서도 LoRA와 같은 일반적인 저랭크 적응 방법보다 더 메모리 효율적인 저랭크 학습 전략입니다.
+Gradient Low-Rank Projection (GaLore)은 전체 매개변수를 학습하면서도 LoRA와 같은 일반적인 저계수 적응 방법보다 더 메모리 효율적인 저계수 학습 전략입니다.
 
-먼저 GaLore 공식 저장소를 설치합니다:
+먼저 GaLore 공식 리포지토를 설치합니다:
 
 ```bash
 pip install galore-torch
@@ -343,9 +341,9 @@ trainer = trl.SFTTrainer(
 trainer.train()
 ```
 
-해당 방법에 대한 자세한 내용은 [원본 저장소](https://github.com/jiaweizzhao/GaLore) 또는 [논문](https://arxiv.org/abs/2403.03507)을 참고하세요.
+해당 방법에 대한 자세한 내용은 [원본 리포지토리](https://github.com/jiaweizzhao/GaLore) 또는 [논문](https://arxiv.org/abs/2403.03507)을 참고하세요.
 
-현재 Linear 레이어만 GaLore 레이어로 간주되며, 저랭크 분해를 사용하여 훈련되고 나머지 레이어는 기존 방식으로 최적화됩니다.
+현재 Linear 레이어만 GaLore 레이어로 간주되며, 저계수 분해를 사용하여 훈련되고 나머지 레이어는 기존 방식으로 최적화됩니다.
 
 훈련 시작 전에 시간이 조금 걸릴 수 있습니다(NVIDIA A100에서 2B 모델의 경우 약 3분), 하지만 이후 훈련은 원활하게 진행됩니다.
 
@@ -386,12 +384,12 @@ trainer = trl.SFTTrainer(
 trainer.train()
 ```
 
-레이어별 최적화는 다소 실험적이며 DDP(분산 데이터 병렬)를 지원하지 않으므로, 1개의 GPU에서만 훈련 스크립트를 실행할 수 있습니다. 자세한 내용은 [적절한 섹션](https://github.com/jiaweizzhao/GaLore?tab=readme-ov-file#train-7b-model-with-a-single-gpu-with-24gb-memory)을 참조하세요. gradient clipping, DeepSpeed 등 다른 기능은 기본적으로 지원되지 않을 수 있습니다. 이러한 문제가 발생하면 [GitHub에 이슈를 제기](https://github.com/huggingface/transformers/issues)하세요.
+레이어별 최적화는 다소 실험적이며 DDP(분산 데이터 병렬)를 지원하지 않으므로, 1개의 GPU에서만 훈련 스크립트를 실행할 수 있습니다. 자세한 내용은 [적절한 섹션](https://github.com/jiaweizzhao/GaLore?tab=readme-ov-file#train-7b-model-with-a-single-gpu-with-24gb-memory)을 참조하세요. gradient clipping, DeepSpeed 등 다른 기능은 기본적으로 지원되지 않을 수 있습니다. 이러한 문제가 발생하면 [GitHub에 이슈를 올려주세요](https://github.com/huggingface/transformers/issues).
 
 ## LOMO 옵티마이저 [[lomo-optimizer]]
 
 LOMO 옵티마이저는 [제한된 자원으로 대형 언어 모델의 전체 매개변수 미세 조정](https://hf.co/papers/2306.09782)과 [적응형 학습률을 통한 저메모리 최적화(AdaLomo)](https://hf.co/papers/2310.10195)에서 도입되었습니다. 
-이 두 옵티마이저는 메모리 사용량을 줄이기 위해 그래디언트 계산과 매개변수 업데이트를 하나의 단계로 융합하는 효율적인 전체 매개변수 미세 조정 방법입니다. LOMO를 지원하는 옵티마이저는 `"lomo"`와 `"adalomo"`입니다. 먼저 pypi에서 `lomo`를 설치하거나 소스에서 `git+https://github.com/OpenLMLab/LOMO.git`로 설치합니다.
+이 두 옵티마이저는 메모리 사용량을 줄이기 위해 그레디언트 계산과 매개변수 업데이트를 하나의 단계로 융합하는 효율적인 전체 매개변수 미세 조정 방법입니다. LOMO를 지원하는 옵티마이저는 `"lomo"`와 `"adalomo"`입니다. 먼저 pypi에서 `lomo`를 설치하거나 소스에서 `git+https://github.com/OpenLMLab/LOMO.git`로 설치합니다.
 
 <Tip>
 
@@ -440,9 +438,7 @@ trainer.train()
 
 ## Accelerate와 Trainer [[accelerate-and-trainer]]
 
-[`Trainer`] 클래스는 [Accelerate](https://hf.co/docs/accelerate)로 구동되며, 이는 [FullyShardedDataParallel (FSDP)](https://pytorch.org/blog/introducing-pytorch-fully-sharded-data-parallel-api/) 및 [DeepSpeed](https://www.deepspeed.ai/)와 같은 통합을 지원하는 분산 환경에서 PyTorch 모델을 쉽게
-
- 훈련할 수 있는 라이브러리입니다.
+[`Trainer`] 클래스는 [Accelerate](https://hf.co/docs/accelerate)로 구동되며, 이는 [FullyShardedDataParallel (FSDP)](https://pytorch.org/blog/introducing-pytorch-fully-sharded-data-parallel-api/) 및 [DeepSpeed](https://www.deepspeed.ai/)와 같은 통합을 지원하는 분산 환경에서 PyTorch 모델을 쉽게 훈련할 수 있는 라이브러리입니다.
 
 <Tip>
 
