@@ -91,11 +91,11 @@ class GLMConfig(PretrainedConfig):
 
     def __init__(
         self,
-        num_hidden_layers=40,
         vocab_size=151552,
         hidden_size=4096,
         intermediate_size=13696,
         kv_channels=128,
+        num_hidden_layers=40,
         num_attention_heads=32,
         max_position_embeddings=131072,
         hidden_dropout=0.0,
@@ -103,6 +103,7 @@ class GLMConfig(PretrainedConfig):
         attention_dropout=0.0,
         initializer_range=0.02,
         rms_norm_eps=1e-5,
+        use_cache=True,
         add_qkv_bias=True,
         multi_query_attention=False,
         multi_query_group_num=2,
@@ -110,7 +111,6 @@ class GLMConfig(PretrainedConfig):
         apply_query_key_layer_scaling=True,
         attention_softmax_in_fp32=True,
         fp32_residual_connection=False,
-        use_cache=True,
         **kwargs,
     ):
         self.num_hidden_layers = num_hidden_layers
@@ -134,4 +134,5 @@ class GLMConfig(PretrainedConfig):
         self.attention_softmax_in_fp32 = attention_softmax_in_fp32
         self.fp32_residual_connection = fp32_residual_connection
         self.use_cache = use_cache
+
         super().__init__(**kwargs)
