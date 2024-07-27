@@ -192,9 +192,7 @@ text
 </hfoption>
 <hfoption id="advanced usage: end-to-end generate compilation">
 
-Compiling the entire `generate` function, in terms of code, is as simple as in the basic usage:
-1. Access the model's `generation_config` attribute and set the `cache_implementation` to "static";
-2. Call `torch.compile` on `generate` to compile the entire function with the static kv-cache.
+Compiling the entire `generate` function, in terms of code, is even simpler than in the basic usage: call `torch.compile` on `generate` to compile the entire function. No need to specify the use of the static cache: although it is compatible, dynamic cache (default) was faster in our benchmarks.
 
 ```py
 from transformers import AutoTokenizer, AutoModelForCausalLM
@@ -204,8 +202,6 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"  # To prevent long warnings :)
 
 tokenizer = AutoTokenizer.from_pretrained("google/gemma-2b")
 model = AutoModelForCausalLM.from_pretrained("google/gemma-2b", device_map="auto")
-
-model.generation_config.cache_implementation = "static"
 
 model.generate = torch.compile(model.generate, mode="reduce-overhead", fullgraph=True)
 input_text = "The theory of special relativity states "
