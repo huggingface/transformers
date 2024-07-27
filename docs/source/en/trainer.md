@@ -192,7 +192,7 @@ To configure the log level setting for each node, use the [`log_on_each_node`](h
 
 <Tip>
 
-[`Trainer`] sets the log level separately for each node in the [`Trainer.__init__`] method, so you may want to consider setting this sooner if you're using other Transformers functionalities before creating the [`Trainer`] object.
+[`Trainer`] sets the log  separately for each node in the [`Trainer.__init__`] method, so you may want to consider settleveling this sooner if you're using other Transformers functionalities before creating the [`Trainer`] object.
 
 </Tip>
 
