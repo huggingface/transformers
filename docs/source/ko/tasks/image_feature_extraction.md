@@ -58,9 +58,9 @@ outputs = pipe([image_real, image_gen])
 출력에는 두 이미지의 풀링된 임베딩이 포함되어 있습니다.
 
 ```python
-# get the length of a single output
+# 단일 출력의 길이 구하기
 print(len(outputs[0][0]))
-# show outputs
+# 출력 결과 표시하기
 print(outputs)
 
 # 768
