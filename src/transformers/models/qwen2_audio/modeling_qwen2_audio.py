@@ -1255,13 +1255,13 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel):
             state=attention_mask,
         )
 
+    # Copied from transformers.models.llava_next.modeling_llava_next.LlavaNextForConditionalGeneration.prepare_inputs_for_generation with image->audio
     def prepare_inputs_for_generation(
         self,
         input_ids,
         past_key_values=None,
         inputs_embeds=None,
-        input_features=None,
-        feature_attention_mask=None,
+        input_features=None,  # Ignore copy
         attention_mask=None,
         **kwargs,
     ):
@@ -1272,6 +1272,8 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel):
             else:
                 cache_length = past_length = past_key_values[0][0].shape[2]
 
+            # Ignore copy
+            # Here, we get the attention_mask, which was previously stored in the state after _merge_input_ids_with_audio_features.
             if input_features is not None and kwargs.get("state") is not None:
                 attention_mask = kwargs["state"]
                 attention_mask = torch.cat(
@@ -1310,6 +1312,8 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel):
         else:
             model_inputs = {"input_ids": input_ids}
 
+        # Ignore copy
+        feature_attention_mask = kwargs.get("feature_attention_mask", None)
         model_inputs.update(
             {
                 "position_ids": position_ids,
