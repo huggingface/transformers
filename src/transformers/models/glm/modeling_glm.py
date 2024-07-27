@@ -81,6 +81,9 @@ class GLMRMSNorm(nn.Module):
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
         return self.weight * hidden_states.to(input_dtype)
 
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
 
 class GLMRotaryEmbedding(nn.Module):
     def __init__(self, dim, rope_theta=1, original_impl=False, device=None, dtype=None):
@@ -523,9 +526,9 @@ class GLMFlashAttention2(GLMAttention):
             kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_number)
 
         rotary_seq_len = max(kv_seq_len, position_ids[:, -1].max().item()) + 1
-        cos, sin = self.rotary_emb(value_states, seq_len=rotary_seq_len)
+        cos, sin = self.rotary_pos_emb(value_states, seq_len=rotary_seq_len)
 
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states)
 
         if past_key_value is not None:
             cache_has_contents = past_key_value.get_seq_length(self.layer_number) > 0
