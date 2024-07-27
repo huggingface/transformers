@@ -108,9 +108,9 @@ class GLMRotaryEmbedding(nn.Module):
         cache = torch.stack([torch.cos(idx_theta), torch.sin(idx_theta)], dim=-1).to(dtype=dtype)
         return cache
 
-    def forward(self, max_seq_len, offset=0):
+    def forward(self, seq_len):
         return self.forward_impl(
-            max_seq_len,
+            seq_len,
             self.dim,
             dtype=self.inv_freq.dtype,
             device=self.inv_freq.device,
@@ -145,7 +145,7 @@ def split_tensor_along_last_dim(
     return tensor_list
 
 
-class SelfAttention(torch.nn.Module):
+class GLMSelfAttention(torch.nn.Module):
     """Parallel self-attention layer abstract class.
 
     Self-attention layer takes input with size [s, b, h]
@@ -153,7 +153,7 @@ class SelfAttention(torch.nn.Module):
     """
 
     def __init__(self, config: GLMConfig, layer_number, device=None):
-        super(SelfAttention, self).__init__()
+        super(GLMSelfAttention, self).__init__()
         self.layer_number = max(1, layer_number)
         self.num_heads = config.num_attention_heads
         self.projection_size = config.kv_channels * self.num_heads
@@ -655,10 +655,10 @@ class GLMPreTrainedModel(PreTrainedModel):
     config_class = GLMConfig
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["GLMBlock"]
-    _skip_keys_device_placement = "past_key_values"
+    _no_split_modules = ["GLMDecoderLayer"]
+    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn_2 = True
-    _supports_sdpa = False
+    _supports_sdpa = True
     _supports_cache_class = True
 
     _version = "0.0.5"
@@ -781,7 +781,7 @@ class Embedding(torch.nn.Module):
         return embeddings
 
 
-class GLMBlock(torch.nn.Module):
+class GLMDecoderLayer(torch.nn.Module):
     """A single transformer layer.
 
     Transformer layer takes input with size [s, b, h] and returns an
@@ -789,16 +789,16 @@ class GLMBlock(torch.nn.Module):
     """
 
     def __init__(self, config: GLMConfig, layer_number, device=None):
-        super(GLMBlock, self).__init__()
+        super(GLMDecoderLayer, self).__init__()
         self.layer_number = layer_number
-
         self.fp32_residual_connection = config.fp32_residual_connection
-        self.input_layernorm = GLMRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
-        self.self_attention = SelfAttention(config, layer_number, device=device)
+        self.self_attention = GLMSelfAttention(config, layer_number, device=device)
         self.hidden_dropout = config.hidden_dropout
-        self.post_attention_layernorm = GLMRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
         self.mlp = GLMMLP(config)
+        self.input_layernorm = GLMRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = GLMRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
 
     def forward(
         self,
@@ -855,7 +855,7 @@ class GLMTransformer(torch.nn.Module):
 
         # Transformer layers.
         def build_layer(layer_number):
-            return GLMBlock(config, layer_number, device=device)
+            return GLMDecoderLayer(config, layer_number, device=device)
 
         self.layers = torch.nn.ModuleList([build_layer(i + 1) for i in range(self.num_hidden_layers)])
 
