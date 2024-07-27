@@ -626,7 +626,7 @@ class PersimmonModel(PersimmonPreTrainedModel):
                 use_cache = False
 
         use_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache):
+        if use_cache and not isinstance(past_key_values, Cache) and not self.training:
             use_legacy_cache = True
             past_key_values = DynamicCache.from_legacy_cache(past_key_values)
             logger.warning_once(
@@ -999,7 +999,7 @@ class PersimmonForSequenceClassification(PersimmonPreTrainedModel):
     @add_start_docstrings_to_model_forward(PERSIMMON_INPUTS_DOCSTRING)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,

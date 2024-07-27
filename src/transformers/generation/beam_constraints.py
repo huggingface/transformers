@@ -156,7 +156,7 @@ class PhrasalConstraint(Constraint):
 
     def does_advance(self, token_id: int):
         if not isinstance(token_id, int):
-            raise ValueError(f"`token_id` has to be an `int`, but is {token_id} of type {type(token_id)}")
+            raise TypeError(f"`token_id` has to be an `int`, but is {token_id} of type {type(token_id)}")
 
         if self.completed:
             return False
@@ -165,7 +165,7 @@ class PhrasalConstraint(Constraint):
 
     def update(self, token_id: int):
         if not isinstance(token_id, int):
-            raise ValueError(f"`token_id` has to be an `int`, but is {token_id} of type {type(token_id)}")
+            raise TypeError(f"`token_id` has to be an `int`, but is {token_id} of type {type(token_id)}")
 
         stepped = False
         completed = False
@@ -300,7 +300,7 @@ class DisjunctiveConstraint(Constraint):
 
     def does_advance(self, token_id: int):
         if not isinstance(token_id, int):
-            raise ValueError(f"`token_id` is supposed to be type `int`, but is {token_id} of type {type(token_id)}")
+            raise TypeError(f"`token_id` is supposed to be type `int`, but is {token_id} of type {type(token_id)}")
 
         next_tokens = self.trie.next_tokens(self.current_seq)
 
@@ -308,7 +308,7 @@ class DisjunctiveConstraint(Constraint):
 
     def update(self, token_id: int):
         if not isinstance(token_id, int):
-            raise ValueError(f"`token_id` is supposed to be type `int`, but is {token_id} of type {type(token_id)}")
+            raise TypeError(f"`token_id` is supposed to be type `int`, but is {token_id} of type {type(token_id)}")
 
         stepped = False
         completed = False
@@ -432,7 +432,7 @@ class ConstraintListState:
 
     def add(self, token_id: int):
         if not isinstance(token_id, int):
-            raise ValueError(f"`token_id` should be an `int`, but is `{token_id}`.")
+            raise TypeError(f"`token_id` should be an `int`, but is `{token_id}`.")
 
         complete, stepped = False, False
 

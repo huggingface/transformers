@@ -1181,19 +1181,19 @@ class FlavaModel(FlavaPreTrainedModel):
         super().__init__(config)
 
         if not isinstance(config.text_config, FlavaTextConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.text_config is expected to be of type FlavaTextConfig but is of type"
                 f" {type(config.text_config)}."
             )
 
         if not isinstance(config.image_config, FlavaImageConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.image_config is expected to be of type FlavaImageConfig but is of type"
                 f" {type(config.image_config)}."
             )
 
         if not isinstance(config.multimodal_config, FlavaMultimodalConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.multimodal_config is expected to be of type FlavaMultimodalConfig but "
                 + f"is of type {type(config.multimodal_config)}."
             )

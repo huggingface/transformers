@@ -356,7 +356,7 @@ class ProcessorMixin(PushToHubMixin):
                 proper_class = getattr(transformers_module, class_name)
 
             if not isinstance(arg, proper_class):
-                raise ValueError(
+                raise TypeError(
                     f"Received a {type(arg).__name__} for argument {attribute_name}, but a {class_name} was expected."
                 )
 
@@ -971,8 +971,8 @@ class ProcessorMixin(PushToHubMixin):
             conversation (`List[Dict, str, str]`):
                 The conversation to format.
             chat_template (`Optional[str]`, *optional*):
-                The Jinja template to use for formatting the conversation. If not provided, the default chat template
-                is used.
+                The Jinja template to use for formatting the conversation. If not provided, the tokenizer's
+                chat template is used.
             tokenize (`bool`, *optional*, defaults to `False`):
                 Whether to tokenize the output or not.
             **kwargs:
@@ -982,15 +982,6 @@ class ProcessorMixin(PushToHubMixin):
         if chat_template is None:
             if self.chat_template is not None:
                 chat_template = self.chat_template
-            elif getattr(self, "default_chat_template", None) is not None:
-                logger.warning_once(
-                    "No chat template is set for this processor, falling back to a default class-level template. This is "
-                    "very error-prone, because models are often trained with templates different from the class default! "
-                    "Default chat templates are a legacy feature and will be removed in Transformers v4.43, at which "
-                    "point any code depending on them will stop working. We recommend setting a valid chat template before "
-                    "then to ensure that this model continues working without issues."
-                )
-                chat_template = self.default_chat_template
             else:
                 raise ValueError(
                     "No chat template is set for this processor. Please either set the `chat_template` attribute, "

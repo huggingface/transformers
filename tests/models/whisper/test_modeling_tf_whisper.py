@@ -704,7 +704,7 @@ class TFWhisperModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
 
 def _load_datasamples(num_samples):
-    ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True)
+    ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
     # automatic decoding with librispeech
     speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
 

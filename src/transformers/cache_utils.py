@@ -862,8 +862,18 @@ class StaticCache(Cache):
             k_out.copy_(key_states)
             v_out.copy_(value_states)
         else:
-            k_out[:, :, cache_position] = key_states
-            v_out[:, :, cache_position] = value_states
+            # Note: here we use `tensor.index_copy_(dim, index, tensor)` that is equivalent to
+            # `tensor[:, :, index] = tensor`, but the first one is compile-friendly and it does explicitly an in-place
+            # operation, that avoids copies and uses less memory.
+            try:
+                # If using several devices (e.g.: multiple GPUs), we need to ensure everything is on the same one
+                cache_position.to(device=k_out.device)
+                k_out.index_copy_(2, cache_position, key_states)
+                v_out.index_copy_(2, cache_position, value_states)
+            except NotImplementedError:
+                # The operator 'aten::index_copy.out' is not currently implemented for the MPS device.
+                k_out[:, :, cache_position] = key_states
+                v_out[:, :, cache_position] = value_states
 
         return k_out, v_out
 
@@ -958,8 +968,14 @@ class SlidingWindowCache(StaticCache):
         k_out = k_out[:, :, indices]
         v_out = v_out[:, :, indices]
 
-        k_out[:, :, cache_position] = key_states
-        v_out[:, :, cache_position] = value_states
+        try:
+            cache_position.to(device=k_out.device)
+            k_out.index_copy_(2, cache_position, key_states)
+            v_out.index_copy_(2, cache_position, value_states)
+        except NotImplementedError:
+            # The operator 'aten::index_copy.out' is not currently implemented for the MPS device.
+            k_out[:, :, cache_position] = key_states
+            v_out[:, :, cache_position] = value_states
 
         # `_.zero()` followed by `+=` is equivalent `=`, but compile-friendly (without graph breaks due to assignment)
         self.key_cache[layer_idx].zero_()

@@ -404,6 +404,7 @@ class Starcoder2FlashAttention2(Starcoder2Attention):
             value_states,
             attention_mask,
             q_len,
+            position_ids=position_ids,
             dropout=dropout_rate,
             sliding_window=getattr(self.config, "sliding_window", None),
             is_causal=self.is_causal,
@@ -783,7 +784,7 @@ class Starcoder2Model(Starcoder2PreTrainedModel):
                 use_cache = False
 
         use_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache):
+        if use_cache and not isinstance(past_key_values, Cache) and not self.training:
             use_legacy_cache = True
             past_key_values = DynamicCache.from_legacy_cache(past_key_values)
             logger.warning_once(
@@ -1153,7 +1154,7 @@ class Starcoder2ForSequenceClassification(Starcoder2PreTrainedModel):
     @add_start_docstrings_to_model_forward(STARCODER2_INPUTS_DOCSTRING)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
