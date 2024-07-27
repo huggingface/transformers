@@ -768,30 +768,6 @@ class MambaForCausalLM(MambaPreTrainedModel):
         )
 
 
-class MambaClassificationHead(nn.Module):
-    """Head for sentence-level classification tasks."""
-
-    def __init__(self, config):
-        """Initialize the head."""
-        super().__init__()
-        self.activation = ACT2FN[config.hidden_act]
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.dropout = nn.Dropout(config.classifier_dropout)
-        self.out_proj = nn.Linear(config.hidden_size, config.num_labels)
-
-        self.config = config
-
-    def forward(self, inputs, **kwargs):
-        """Forward pass."""
-        # Pooling is done by the forward pass in `MambaForSequenceClassification`
-        hidden_states = self.dropout(inputs)
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.activation(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-
-        return self.out_proj(hidden_states)
-
-
 @add_start_docstrings(
     """
     Mamba Model backbone with a sequence classification/regression head on top
@@ -814,7 +790,7 @@ class MambaForSequenceClassification(MambaPreTrainedModel):
         self.num_labels = config.num_labels
         self.config = config
         self.backbone = MambaModel(config)
-        self.classifier = MambaClassificationHead(config)
+        self.classifier = nn.Linear(config.hidden_size, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
