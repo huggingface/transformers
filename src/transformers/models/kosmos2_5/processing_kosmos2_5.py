@@ -30,10 +30,10 @@ if is_torch_available():
 
 class Kosmos2_5Processor(ProcessorMixin):
     r"""
-    Constructs a Kosmos2_5 processor which wraps a BERT tokenizer and Kosmos2_5 image processor into a single
+    Constructs a Kosmos2_5 processor which wraps a PreTrainedTokenizerFast and Kosmos2_5 image processor into a single
     processor.
 
-    [`Kosmos2_5Processor`] offers all the functionalities of [`Kosmos2_5ImageProcessor`] and [`T5TokenizerFast`]. See
+    [`Kosmos2_5Processor`] offers all the functionalities of [`Kosmos2_5ImageProcessor`] and [`PreTrainedTokenizerFast`]. See
     the docstring of [`~Kosmos2_5Processor.__call__`] and [`~Kosmos2_5Processor.decode`] for more information.
 
     Args:
@@ -75,6 +75,9 @@ class Kosmos2_5Processor(ProcessorMixin):
         """
         if images is None and text is None:
             raise ValueError("You have to specify either images or text.")
+
+        if images is None:
+            raise ValueError("Kosmos2_5Processor requires images to be passed.")
 
         encoding = BatchFeature()
 
