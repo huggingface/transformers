@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""KOSMOS-2.5.5 model configuration"""
+"""KOSMOS-2.5 model configuration"""
 
 import os
 from typing import Union
@@ -253,7 +253,7 @@ class Kosmos2_5Config(PretrainedConfig):
     This is the configuration class to store the configuration of a [`Kosmos2_5Model`]. It is used to instantiate a
     KOSMOS-2.5 model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the KOSMOS-2.5
-    [microsoft/KOSMOS-2.5-patch14-224](https://huggingface.co/microsoft/KOSMOS-2.5-patch14-224) architecture.
+    [microsoft/kosmos-2.5](https://huggingface.co/microsoft/kosmos-2.5) architecture.
 
     Args:
         text_config (`dict`, *optional*):
@@ -270,10 +270,10 @@ class Kosmos2_5Config(PretrainedConfig):
     ```python
     >>> from .. import Kosmos2_5Config, Kosmos2_5Model
 
-    >>> # Initializing a KOSMOS-2.5 KOSMOS-2.5-patch14-224 style configuration
+    >>> # Initializing a KOSMOS-2.5  style configuration
     >>> configuration = Kosmos2_5Config()
 
-    >>> # Initializing a model (with random weights) from the KOSMOS-2.5-patch14-224 style configuration
+    >>> # Initializing a model (with random weights) from the KOSMOS-2.5 style configuration
     >>> model = Kosmos2_5Model(configuration)
 
     >>> # Accessing the model configuration
