@@ -29,7 +29,7 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.testing_utils import require_bitsandbytes, require_torch, slow, torch_device
+from transformers.testing_utils import require_bitsandbytes, require_torch, slow, torch_device, require_torch_gpu, require_flash_attn
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -497,7 +497,6 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
             torch_dtype=torch.bfloat16,
             device_map="auto",
         )
-        model.to(torch_device)
 
         # Create inputs
         text = "<image>In this image, we see"
@@ -517,7 +516,7 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_integration_test_4bit(self):
         # Let' s make sure we test the preprocessing to replace what is used
         model = Idefics2ForConditionalGeneration.from_pretrained(
-            "HuggingFaceM4/idefics2-8b-base", load_in_4bit=True, device_map="auto"
+            "HuggingFaceM4/idefics2-8b-base", load_in_4bit=True,
         )
 
         # Create pixel inputs
@@ -531,7 +530,8 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         expected_generated_text = "In this image, we see the Statue of Liberty, the Hudson River,"
         self.assertEqual(generated_texts[0], expected_generated_text)
 
-    @slow
+    @require_flash_attn
+    @require_torch_gpu
     @require_bitsandbytes
     def test_flash_attn_2_eager_equivalence(self):
         # Create inputs
