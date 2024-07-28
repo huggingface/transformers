@@ -40,7 +40,7 @@ def rename_key(key):
     return key
 
 
-def convert_kosmos2_checkpoint_to_pytorch(checkpoint_path, pytorch_dump_folder_path):
+def convert_kosmos2_5_checkpoint_to_pytorch(checkpoint_path, pytorch_dump_folder_path):
     state = load_checkpoint_to_cpu(checkpoint_path)
     state_dict = state["model"]
     state_dict_keys = list(state_dict.keys())
