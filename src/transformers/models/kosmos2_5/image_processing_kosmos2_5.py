@@ -318,11 +318,7 @@ class Kosmos2_5ImageProcessor(BaseImageProcessor):
             for image in images
         ]
 
-        width = [image[1] for image in images]
-        height = [image[2] for image in images]
-        rows = [image[3] for image in images]
-        cols = [image[4] for image in images]
-        images = [image[0] for image in images]
+        images, width, height, rows, cols = zip(*flattened_images)
 
         # create attention mask in numpy
         attention_masks = [(image.sum(axis=-1) != 0).astype(np.float32) for image in images]
