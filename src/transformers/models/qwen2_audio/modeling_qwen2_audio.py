@@ -1004,7 +1004,7 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel):
                         i j Y Y Y Y Y k l m n
                     ]
         """
-        num_audios, max_audio_tokens, embed_dim = audio_features.shape  # [3, 750, 4096]
+        num_audios, max_audio_tokens, embed_dim = audio_features.shape
         audio_features_mask = torch.arange(max_audio_tokens).expand(num_audios, max_audio_tokens).to(
             num_audio_tokens.device
         ) < num_audio_tokens.unsqueeze(1)
