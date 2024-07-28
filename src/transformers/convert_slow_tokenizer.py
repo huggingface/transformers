@@ -53,6 +53,25 @@ def _get_prepend_scheme(add_prefix_space: bool, original_tokenizer) -> str:
     return prepend_scheme
 
 
+def generate_merges(vocab, vocab_scores):
+    reverse = vocab_scores is not None
+    vocab_scores = dict(vocab_scores) if reverse else vocab
+
+    merges = []
+    for merge, piece_score in vocab_scores.items():
+        local = []
+        for index in range(1, len(merge)):
+            piece_l, piece_r = merge[:index], merge[index:]
+            if piece_l in vocab and piece_r in vocab:
+                local.append((piece_l, piece_r, piece_score))
+        local = sorted(local, key=lambda x: (vocab[x[0]], vocab[x[1]]))
+        merges.extend(local)
+
+    merges = sorted(merges, key=lambda val: val[2], reverse=reverse)
+    merges = [(val[0], val[1]) for val in merges]
+    return merges
+
+
 class SentencePieceExtractor:
     """
     Extractor implementation for SentencePiece trained models. https://github.com/google/sentencepiece
@@ -73,24 +92,8 @@ class SentencePieceExtractor:
         sp = self.sp
         vocab = {sp.id_to_piece(index): index for index in range(sp.GetPieceSize())}
 
-        if vocab_scores is not None:
-            vocab_scores, reverse = dict(vocab_scores), True
-        else:
-            vocab_scores, reverse = vocab, False
+        merges = generate_merges(vocab, vocab_scores)
 
-        # Merges
-        merges = []
-        for merge, piece_score in vocab_scores.items():
-            local = []
-            for index in range(1, len(merge)):
-                piece_l, piece_r = merge[:index], merge[index:]
-                if piece_l in vocab and piece_r in vocab:
-                    local.append((piece_l, piece_r, piece_score))
-            local = sorted(local, key=lambda x: (vocab[x[0]], vocab[x[1]]))
-            merges.extend(local)
-
-        merges = sorted(merges, key=lambda val: val[2], reverse=reverse)
-        merges = [(val[0], val[1]) for val in merges]
         return vocab, merges
 
 
@@ -107,24 +110,7 @@ class GemmaSentencePieceExtractor(SentencePieceExtractor):
         # "<0x09>" is the bytefallback for `\t`
         vocab["\t"] = vocab.get("<0x09>")
 
-        if vocab_scores is not None:
-            vocab_scores, reverse = dict(vocab_scores), True
-        else:
-            vocab_scores, reverse = vocab, False
-
-        # Merges
-        merges = []
-        for merge, piece_score in vocab_scores.items():
-            local = []
-            for index in range(1, len(merge)):
-                piece_l, piece_r = merge[:index], merge[index:]
-                if piece_l in vocab and piece_r in vocab:
-                    local.append((piece_l, piece_r, piece_score))
-            local = sorted(local, key=lambda x: (vocab[x[0]], vocab[x[1]]))
-            merges.extend(local)
-
-        merges = sorted(merges, key=lambda val: val[2], reverse=reverse)
-        merges = [(val[0], val[1]) for val in merges]
+        merges = generate_merges(vocab, vocab_scores)
         return vocab, merges
 
 
