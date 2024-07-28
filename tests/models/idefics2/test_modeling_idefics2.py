@@ -29,7 +29,14 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.testing_utils import require_bitsandbytes, require_torch, slow, torch_device, require_torch_gpu, require_flash_attn
+from transformers.testing_utils import (
+    require_bitsandbytes,
+    require_flash_attn,
+    require_torch,
+    require_torch_gpu,
+    slow,
+    torch_device,
+)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -516,7 +523,8 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_integration_test_4bit(self):
         # Let' s make sure we test the preprocessing to replace what is used
         model = Idefics2ForConditionalGeneration.from_pretrained(
-            "HuggingFaceM4/idefics2-8b-base", load_in_4bit=True,
+            "HuggingFaceM4/idefics2-8b-base",
+            load_in_4bit=True,
         )
 
         # Create pixel inputs
