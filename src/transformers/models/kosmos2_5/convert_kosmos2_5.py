@@ -70,7 +70,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--kosmos2_checkpoint_path",
+        "--kosmos2_5_checkpoint_path",
         default="ckpt.pt",
         type=str,
         required=False,
