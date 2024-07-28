@@ -91,9 +91,25 @@ class Kosmos2_5ProcessorTest(unittest.TestCase):
         )
         EXPECTED_FP_1 = [1.0, 2.0, -2.9527735710144043, -2.672085762023926, -2.9933173656463623, -2.905944585800171, -2.5891761779785156, -2.8751866817474365, -2.962153434753418, -2.588062047958374]
         EXPECTED_FP_200 = [4.0, 45.0, 1.5713728666305542, 1.584628939628601, 1.3589054346084595, 1.6515952348709106, 1.7014952898025513, 1.3731343746185303, 1.6010395288467407, 1.6607422828674316]
-        self.assertTupleEqual(outputs.flattened_patches[0].shape, (4096, 770)) #
+        self.assertTupleEqual(outputs.flattened_patches.shape, (1, 4096, 770))
         np.testing.assert_allclose(outputs.flattened_patches[0][1][:10].numpy().tolist(), EXPECTED_FP_1, atol=1e-9)
         np.testing.assert_allclose(outputs.flattened_patches[0][200][:10].numpy().tolist(), EXPECTED_FP_200, atol=1e-9)
 
+        # test a batch of images and texts, right padding
+        outputs = processor(images=[image, image], text=texts)
+        self.assertListEqual(
+            outputs.input_ids[1].numpy().tolist(),
+            [0, 100283] + [0] * 2048 + [100284] + expected_input_ids[1],
+        )
+        self.assertListEqual(
+            outputs.image_embeds_position_mask[1].numpy().tolist(),
+            [0, -1] + [1] * 2048 + [-1] + [0] * (len(expected_input_ids[1])),
+        )
+        self.assertListEqual(
+            outputs.attention_mask[1].numpy().tolist(),
+           [1, 1] + [1] * 2048 + [1]+ expected_attention_mask[1],
+        )
+        self.assertTupleEqual(outputs.flattened_patches.shape, (2, 4096, 770))
+        np.testing.assert_allclose(outputs.flattened_patches[1][1][:10].numpy().tolist(), EXPECTED_FP_1, atol=1e-9)
+        np.testing.assert_allclose(outputs.flattened_patches[1][200][:10].numpy().tolist(), EXPECTED_FP_200, atol=1e-9)
 
-# pytest tests/models/kosmos2_5/test_processor_kosmos2_5.py::Kosmos2_5ProcessorTest::test_full_processor
