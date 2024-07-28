@@ -70,7 +70,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--kosmos2_checkpoint_path",
+        "--kosmos2_5_checkpoint_path",
         default="ckpt.pt",
         type=str,
         required=False,
@@ -84,4 +84,4 @@ if __name__ == "__main__":
         help="Path to the output PyTorch model.",
     )
     args = parser.parse_args()
-    convert_kosmos2_checkpoint_to_pytorch(args.kosmos2_checkpoint_path, args.pytorch_dump_folder_path)
+    convert_kosmos2_5_checkpoint_to_pytorch(args.kosmos2_5_checkpoint_path, args.pytorch_dump_folder_path)
