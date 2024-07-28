@@ -311,11 +311,11 @@ class Kosmos2_5Config(PretrainedConfig):
         **kwargs,
     ):
         r"""
-        Instantiate a [`Pix2StructConfig`] (or a derived class) from pix2struct text model configuration and pix2struct
+        Instantiate a [`Kosmos2_5Config`] (or a derived class) from Kosmos2_5 text model configuration and Kosmos2_5
         vision model configuration.
 
         Returns:
-            [`Pix2StructConfig`]: An instance of a configuration object
+            [`Kosmos2_5Config`]: An instance of a configuration object
         """
 
         return cls(
