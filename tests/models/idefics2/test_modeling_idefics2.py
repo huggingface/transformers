@@ -560,6 +560,8 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
         generated_ids_flash_attention_2 = model_flash_attention_2.generate(**inputs, max_new_tokens=10)
-        generated_texts_flash_attention_2 = self.processor.batch_decode(generated_ids_flash_attention_2, skip_special_tokens=True)
+        generated_texts_flash_attention_2 = self.processor.batch_decode(
+            generated_ids_flash_attention_2, skip_special_tokens=True
+        )
 
         self.assertEqual(generated_texts_eager[0], generated_texts_flash_attention_2[0])
