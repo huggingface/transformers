@@ -37,10 +37,7 @@ from .prompts import (
     USER_PROMPT_FACTS_UPDATE,
     USER_PROMPT_PLAN,
     USER_PROMPT_PLAN_UPDATE,
-    SYSTEM_PROMPT_PLAN_STRUCTURED,
-    SYSTEM_PROMPT_PLAN_UPDATE_STRUCTURED,
-    USER_PROMPT_PLAN_STRUCTURED,
-    USER_PROMPT_PLAN_UPDATE_STRUCTURED,
+    SUPPORTED_PLAN_TYPES,
     plan_type_to_prompt_first,
     plan_type_to_prompt_other
 )
@@ -51,7 +48,6 @@ from .tools import (
     get_tool_description_with_args,
     load_tool,
 )
-
 
 if is_pygments_available():
     from pygments import highlight
@@ -659,10 +655,11 @@ class ReactAgent(Agent):
         llm_engine: Callable = HfEngine(),
         system_prompt: str = DEFAULT_REACT_CODE_SYSTEM_PROMPT,
         tool_description_template: str = DEFAULT_TOOL_DESCRIPTION_TEMPLATE,
-        plan_type: Literal["default", "structured"] = "default",
+        plan_type: Literal[tuple(SUPPORTED_PLAN_TYPES)] = SUPPORTED_PLAN_TYPES[0],
         planning_interval: Optional[int] = None,
         **kwargs,
     ):
+        assert plan_type in SUPPORTED_PLAN_TYPES, f"plan type {plan_type} is not supported"
         super().__init__(
             tools=tools,
             llm_engine=llm_engine,

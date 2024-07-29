@@ -774,6 +774,8 @@ Here is my new/updated plan of action to solve the task:
 {plan_update}
 ```"""
 
+SUPPORTED_PLAN_TYPES = ["default", "structured"]
+
 plan_type_to_prompt_first = {
     "default": {
         "system": SYSTEM_PROMPT_PLAN,
