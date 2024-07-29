@@ -193,7 +193,7 @@ def _flash_attention_forward(
     sliding_window: Optional[int] = None,
     use_top_left_mask: bool = False,
     softcap: Optional[float] = None,
-    deterministic: bool = os.environ.get("FLASH_ATTENTION_DETERMINISTIC", "0") == "1",
+    deterministic: bool = None,
 ):
     """
     Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
@@ -233,6 +233,8 @@ def _flash_attention_forward(
     flash_kwargs = {"window_size": (sliding_window, sliding_window)} if use_sliding_windows else {}
 
     if is_flash_attn_greater_or_equal("2.4.1"):
+        if deterministic is None:
+            deterministic = os.environ.get("FLASH_ATTENTION_DETERMINISTIC", "0") == "1"
         flash_kwargs["deterministic"] = deterministic
 
     if softcap is not None:
@@ -262,9 +264,11 @@ def _flash_attention_forward(
         )
         attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
 
-    # if position_ids is provided and check not all examples (row) contain only 1 sequence,
+    # if position_ids is provided and check not all examples (row) contain only 1 sequence, and is in pre-fill/training stage
     # then use `flash_attn_varlen_func` to prevent cross-example attention and also allow padding free approach
-    elif position_ids is not None and not (position_ids[:, -1] == position_ids.size(1) - 1).all():
+    elif (
+        position_ids is not None and not (position_ids[:, -1] == position_ids.size(1) - 1).all() and query_length != 1
+    ):
         batch_size = query_states.size(0)
         query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = prepare_fa2_from_position_ids(
             query_states, key_states, value_states, position_ids
