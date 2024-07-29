@@ -101,6 +101,11 @@ Currently, following scales of pretrained Chinese-CLIP models are available on ð
     - get_text_features
     - get_image_features
 
+## ChineseCLIPTextTransformer
+
+[[autodoc]] ChineseCLIPTextTransformer
+    - forward
+
 ## ChineseCLIPTextModel
 
 [[autodoc]] ChineseCLIPTextModel
