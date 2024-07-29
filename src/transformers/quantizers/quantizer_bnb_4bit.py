@@ -209,7 +209,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
                 quantized_stats=quantized_stats,
                 requires_grad=False,
                 device=target_device,
-                **param_kwargs
+                **param_kwargs,
             )
         else:
             new_value = param_value.to("cpu")
