@@ -29,7 +29,7 @@ class Kosmos2_5TextConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`Kosmos2_5TextModel`]. It is used to instantiate a
     KOSMOS-2.5 text decoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the text decoder of the KOSMOS-2.5
-    [microsoft/KOSMOS-2.5](https://huggingface.co/microsoft/kosmos-2.5) architecture.
+    [microsoft/kosmos-2.5](https://huggingface.co/microsoft/kosmos-2.5) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
