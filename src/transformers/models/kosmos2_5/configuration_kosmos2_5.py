@@ -264,20 +264,6 @@ class Kosmos2_5Config(PretrainedConfig):
             The number of latent query tokens that represent the image features used in the text decoder component.
         kwargs (*optional*):
             Dictionary of keyword arguments.
-
-    Example:
-
-    ```python
-    >>> from .. import Kosmos2_5Config, Kosmos2_5Model
-
-    >>> # Initializing a KOSMOS-2.5  style configuration
-    >>> configuration = Kosmos2_5Config()
-
-    >>> # Initializing a model (with random weights) from the KOSMOS-2.5 style configuration
-    >>> model = Kosmos2_5Model(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```"""
 
     model_type = "kosmos-2.5"
