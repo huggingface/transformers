@@ -151,8 +151,6 @@ class ImagesKwargs(TypedDict, total=False):
             Standard deviation to use if normalizing the image.
         do_pad (`bool`, *optional*):
             Whether to pad the image to the `(max_height, max_width)` of the images in the batch.
-        pad_size (`Dict[str, int]`, *optional*):
-            The size `{"height": int, "width" int}` to pad the images to.
         do_center_crop (`bool`, *optional*):
             Whether to center crop the image.
         data_format (`ChannelDimension` or `str`, *optional*):
@@ -172,7 +170,6 @@ class ImagesKwargs(TypedDict, total=False):
     image_mean: Optional[Union[float, List[float]]]
     image_std: Optional[Union[float, List[float]]]
     do_pad: Optional[bool]
-    pad_size: Optional[Dict[str, int]]
     do_center_crop: Optional[bool]
     data_format: Optional[ChannelDimension]
     input_data_format: Optional[Union[str, ChannelDimension]]
@@ -324,6 +321,7 @@ class ProcessorMixin(PushToHubMixin):
     feature_extractor_class = None
     tokenizer_class = None
     _auto_class = None
+    valid_kwargs: List[str] = []
 
     # args have to match the attributes class attribute
     def __init__(self, *args, **kwargs):
@@ -702,14 +700,15 @@ class ProcessorMixin(PushToHubMixin):
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
         chat_template = kwargs.pop("chat_template", None)
 
-        # Unlike image processors or feature extractors whose `__init__` accept `kwargs`, processor don't have `kwargs`.
-        # We have to pop up some unused (but specific) arguments to make it work.
+        # We have to pop up some unused (but specific) kwargs and then validate that it doesn't contain unused kwargs
+        # If we don't pop, some specific kwargs will raise a warning
         if "processor_class" in processor_dict:
             del processor_dict["processor_class"]
 
         if "auto_map" in processor_dict:
             del processor_dict["auto_map"]
 
+        unused_kwargs = cls.validate_init_kwargs(processor_config=processor_dict, valid_kwargs=cls.valid_kwargs)
         processor = cls(*args, **processor_dict)
         if chat_template is not None:
             setattr(processor, "chat_template", chat_template)
@@ -719,6 +718,7 @@ class ProcessorMixin(PushToHubMixin):
             if hasattr(processor, key):
                 setattr(processor, key, kwargs.pop(key))
 
+        kwargs.update(unused_kwargs)
         logger.info(f"Processor {processor}")
         if return_unused_kwargs:
             return processor, kwargs
@@ -796,40 +796,38 @@ class ProcessorMixin(PushToHubMixin):
                 if modality_key in tokenizer_init_kwargs:
                     default_kwargs[modality][modality_key] = tokenizer_init_kwargs[modality_key]
         # now defaults kwargs are updated with the tokenizers defaults.
+        # pass defaults to output dictionary
         output_kwargs.update(default_kwargs)
 
-        # gather common kwargs and remove them from individual kwargs if present
-        common_kwargs = {}
-        for key, value in kwargs.items():
-            if key == "common_kwargs":
-                for common_key, common_value in value.items():
-                    common_kwargs[common_key] = common_value
-            elif key in ["text_kwargs", "images_kwargs", "audio_kwargs", "videos_kwargs"]:
-                pass
-            elif (
-                key not in ModelProcessorKwargs.__annotations__["text_kwargs"].__annotations__
-                and key not in ModelProcessorKwargs.__annotations__["images_kwargs"].__annotations__
-                and key not in ModelProcessorKwargs.__annotations__["audio_kwargs"].__annotations__
-                and key not in ModelProcessorKwargs.__annotations__["videos_kwargs"].__annotations__
-            ):
-                common_kwargs[key] = value
-
-        # ensure common kwargs are propagated to all relevant modalities
-        for key, value in common_kwargs.items():
-            for modality in output_kwargs:
-                if modality != "common_kwargs":
-                    output_kwargs[modality][key] = value
-
-        # remove common kwargs from the kwargs to process the rest
-        kwargs = {k: v for k, v in kwargs.items() if k not in common_kwargs}
-
         # update modality kwargs with passed kwargs
+        non_modality_kwargs = set(kwargs) - set(output_kwargs)
         for modality in output_kwargs:
             for modality_key in ModelProcessorKwargs.__annotations__[modality].__annotations__.keys():
-                if modality_key in kwargs:
-                    output_kwargs[modality][modality_key] = kwargs[modality_key]
-                elif modality in kwargs and modality_key in kwargs[modality]:
-                    output_kwargs[modality][modality_key] = kwargs[modality][modality_key]
+                # check if we received a structured kwarg dict or not to handle it correctly
+                if modality in kwargs:
+                    kwarg_value = kwargs[modality].pop(modality_key, "__empty__")
+                    # check if this key was passed as a flat kwarg.
+                    if kwarg_value != "__empty__" and modality_key in non_modality_kwargs:
+                        raise ValueError(
+                            f"Keyword argument {modality_key} was passed two times: in a dictionary for {modality} and as a **kwarg."
+                        )
+                elif modality_key in kwargs:
+                    kwarg_value = kwargs.pop(modality_key, "__empty__")
+                else:
+                    kwarg_value = "__empty__"
+                if kwarg_value != "__empty__":
+                    output_kwargs[modality][modality_key] = kwarg_value
+        # if something remains in kwargs, it belongs to common after flattening
+        if set(kwargs) & set(default_kwargs):
+            # here kwargs is dictionary-based since it shares keys with default set
+            [output_kwargs["common_kwargs"].update(subdict) for _, subdict in kwargs.items()]
+        else:
+            # here it's a flat dict
+            output_kwargs["common_kwargs"].update(kwargs)
+
+        # all modality-specific kwargs are updated with common kwargs
+        for modality in output_kwargs:
+            output_kwargs[modality].update(output_kwargs["common_kwargs"])
         return output_kwargs
 
     @classmethod
@@ -944,6 +942,19 @@ class ProcessorMixin(PushToHubMixin):
     def model_input_names(self):
         first_attribute = getattr(self, self.attributes[0])
         return getattr(first_attribute, "model_input_names", None)
+
+    @staticmethod
+    def validate_init_kwargs(processor_config, valid_kwargs):
+        kwargs_from_config = processor_config.keys()
+        unused_kwargs = {}
+        unused_keys = set(kwargs_from_config) - set(valid_kwargs)
+        if unused_keys:
+            unused_key_str = ", ".join(unused_keys)
+            logger.warning(
+                f"Some kwargs in processor config are unused and will not have any effect: {unused_key_str}. "
+            )
+            unused_kwargs = {k: processor_config[k] for k in unused_keys}
+        return unused_kwargs
 
     def apply_chat_template(
         self,
