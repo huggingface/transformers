@@ -18,7 +18,7 @@ jobs:
         steps:
             - checkout
             - run: pip uninstall -y numpy
-            - run: uv pip install -U -e .
+            - run: uv pip install -U -e .[torch]
             - run: pip show numpy
             - run: python -c 'import transformers'
 
