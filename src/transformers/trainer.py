@@ -2205,6 +2205,10 @@ class Trainer:
             self._evaluate(trial, ignore_keys_for_eval, skip_scheduler=True)
 
         total_batched_samples = 0
+        if type(epochs_trained) != int:
+            epochs_trained = int(epochs_trained)
+        if type(num_train_epochs) != int:
+            num_train_epochs = int(num_train_epochs)
         for epoch in range(epochs_trained, num_train_epochs):
             epoch_iterator = train_dataloader
             if hasattr(epoch_iterator, "set_epoch"):
