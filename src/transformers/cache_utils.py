@@ -9,7 +9,7 @@ import torch
 from packaging import version
 
 from .configuration_utils import PretrainedConfig
-from .utils import is_hqq_available, is_quanto_available, logging
+from .utils import is_hqq_available, is_quanto_available, is_torchdynamo_compiling, logging
 
 
 if is_quanto_available():
@@ -398,7 +398,6 @@ class DynamicCache(Cache):
     def crop(self, max_length: int):
         """Crop the past key values up to a new `max_length` in terms of tokens. `max_length` can also be
         negative to remove `max_length` tokens. This is used in assisted decoding and contrastive search."""
-
         # In case it is negative
         if max_length < 0:
             max_length = self.get_seq_length() - abs(max_length)
@@ -821,11 +820,13 @@ class StaticCache(Cache):
         cache_shape = (max_batch_size, self.num_key_value_heads, self.max_cache_len, self.head_dim)
         for _ in range(config.num_hidden_layers):
             # Note: `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
-            # breaks when updating the cache.
+            # breaks when updating the cache. It can't be used if the cache code is being compiled (but in that case
+            # it is not needed anyway)
             new_layer_key_cache = torch.zeros(cache_shape, dtype=self.dtype, device=device)
             new_layer_value_cache = torch.zeros(cache_shape, dtype=self.dtype, device=device)
-            torch._dynamo.mark_static_address(new_layer_key_cache)
-            torch._dynamo.mark_static_address(new_layer_value_cache)
+            if not is_torchdynamo_compiling():
+                torch._dynamo.mark_static_address(new_layer_key_cache)
+                torch._dynamo.mark_static_address(new_layer_value_cache)
             self.key_cache.append(new_layer_key_cache)
             self.value_cache.append(new_layer_value_cache)
 
@@ -862,8 +863,18 @@ class StaticCache(Cache):
             k_out.copy_(key_states)
             v_out.copy_(value_states)
         else:
-            k_out[:, :, cache_position] = key_states
-            v_out[:, :, cache_position] = value_states
+            # Note: here we use `tensor.index_copy_(dim, index, tensor)` that is equivalent to
+            # `tensor[:, :, index] = tensor`, but the first one is compile-friendly and it does explicitly an in-place
+            # operation, that avoids copies and uses less memory.
+            try:
+                # If using several devices (e.g.: multiple GPUs), we need to ensure everything is on the same one
+                cache_position.to(device=k_out.device)
+                k_out.index_copy_(2, cache_position, key_states)
+                v_out.index_copy_(2, cache_position, value_states)
+            except NotImplementedError:
+                # The operator 'aten::index_copy.out' is not currently implemented for the MPS device.
+                k_out[:, :, cache_position] = key_states
+                v_out[:, :, cache_position] = value_states
 
         return k_out, v_out
 
@@ -958,8 +969,14 @@ class SlidingWindowCache(StaticCache):
         k_out = k_out[:, :, indices]
         v_out = v_out[:, :, indices]
 
-        k_out[:, :, cache_position] = key_states
-        v_out[:, :, cache_position] = value_states
+        try:
+            cache_position.to(device=k_out.device)
+            k_out.index_copy_(2, cache_position, key_states)
+            v_out.index_copy_(2, cache_position, value_states)
+        except NotImplementedError:
+            # The operator 'aten::index_copy.out' is not currently implemented for the MPS device.
+            k_out[:, :, cache_position] = key_states
+            v_out[:, :, cache_position] = value_states
 
         # `_.zero()` followed by `+=` is equivalent `=`, but compile-friendly (without graph breaks due to assignment)
         self.key_cache[layer_idx].zero_()
