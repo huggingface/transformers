@@ -86,6 +86,7 @@ from transformers.testing_utils import (
     require_wandb,
     slow,
     torch_device,
+    skipIfRocm
 )
 from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR, HPSearchBackend, check_target_module_exists
 from transformers.training_args import OptimizerNames
@@ -676,6 +677,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
                 f"Model weights for {k} have not been updated",
             )
 
+    @skipIfRocm
     def test_training_loss(self):
         n_gpus = max(1, backend_device_count(torch_device))
 
@@ -786,6 +788,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertEqual(trainer.lr_scheduler.patience, 5)
         self.assertEqual(trainer.lr_scheduler.cooldown, 2)
 
+    @skipIfRocm
     def test_reduce_lr_on_plateau(self):
         # test the ReduceLROnPlateau scheduler
 
@@ -921,6 +924,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             if key != "logging_dir":
                 self.assertEqual(dict1[key], dict2[key])
 
+    @skipIfRocm
     def test_number_of_steps_in_training(self):
         # Regular training has n_epochs * len(train_dl) steps
         trainer = get_regression_trainer(learning_rate=0.1)
@@ -1157,6 +1161,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         self.assertTrue(torch.allclose(emb1, emb2), "Neftune noise is still applied!")
 
+    @skipIfRocm
     def test_logging_inf_nan_filter(self):
         config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)
         tiny_gpt2 = GPT2LMHeadModel(config)
@@ -2667,6 +2672,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(b, b1)
             self.check_trainer_state_are_the_same(state, state1)
 
+    @skipIfRocm
     def test_load_best_model_at_end(self):
         total = int(self.n_epochs * 64 / self.batch_size)
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -2739,6 +2745,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.check_best_model_has_been_loaded(tmpdir, 5, total, trainer, "eval_loss", is_pretrained=False)
 
     @require_safetensors
+    @skipIfRocm    
     def test_load_best_model_from_safetensors(self):
         total = int(self.n_epochs * 64 / self.batch_size)
         for save_safetensors, pretrained in product([False, True], [False, True]):

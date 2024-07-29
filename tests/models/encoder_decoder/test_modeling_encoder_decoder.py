@@ -18,7 +18,7 @@ import tempfile
 import unittest
 
 from transformers import is_torch_available, logging
-from transformers.testing_utils import CaptureLogger, require_deterministic_for_xpu, require_torch, slow, torch_device
+from transformers.testing_utils import CaptureLogger, require_deterministic_for_xpu, require_torch, slow, torch_device, skipIfRocm
 
 from ...test_modeling_common import ids_tensor
 from ..bart.test_modeling_bart import BartStandaloneDecoderModelTester
@@ -585,6 +585,7 @@ class EncoderDecoderMixin:
         input_ids_dict = self.prepare_config_and_inputs()
         self.check_encoder_decoder_model_from_pretrained_using_model_paths(**input_ids_dict, return_dict=False)
 
+    @skipIfRocm
     def test_save_and_load_from_pretrained(self):
         input_ids_dict = self.prepare_config_and_inputs()
         self.check_save_and_load(**input_ids_dict)

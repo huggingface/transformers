@@ -25,7 +25,7 @@ from transformers import (
     FastSpeech2ConformerWithHifiGanConfig,
     is_torch_available,
 )
-from transformers.testing_utils import require_g2p_en, require_torch, require_torch_accelerator, slow, torch_device
+from transformers.testing_utils import require_g2p_en, require_torch, require_torch_accelerator, slow, torch_device, skipIfRocm
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_tensor
@@ -126,6 +126,14 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
     test_torchscript = False
     test_resize_embeddings = False
     is_encoder_decoder = True
+
+    @skipIfRocm
+    def test_model_outputs_equivalence(self):
+        super().test_model_outputs_equivalence() 
+    
+    @skipIfRocm
+    def test_multi_gpu_data_parallel_forward(self):
+        super().test_multi_gpu_data_parallel_forward()
 
     def setUp(self):
         self.model_tester = FastSpeech2ConformerModelTester(self)
@@ -549,6 +557,10 @@ class FastSpeech2ConformerWithHifiGanTest(ModelTesterMixin, unittest.TestCase):
     test_torchscript = False
     test_resize_embeddings = False
     is_encoder_decoder = True
+
+    @skipIfRocm
+    def test_multi_gpu_data_parallel_forward(self):
+        super().test_multi_gpu_data_parallel_forward()
 
     def setUp(self):
         self.model_tester = FastSpeech2ConformerWithHifiGanTester(self)

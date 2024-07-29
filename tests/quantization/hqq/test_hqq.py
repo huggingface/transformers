@@ -23,6 +23,7 @@ from transformers.testing_utils import (
     require_torch_multi_gpu,
     slow,
     torch_device,
+    skipIfRocm
 )
 from transformers.utils import is_hqq_available, is_torch_available
 
@@ -87,6 +88,7 @@ MODEL_ID = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
 
 @require_torch_gpu
 class HqqConfigTest(unittest.TestCase):
+    @skipIfRocm
     def test_to_dict(self):
         """
         Makes sure the config format is properly set

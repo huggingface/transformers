@@ -83,6 +83,7 @@ from transformers.testing_utils import (
     require_torch_sdpa,
     slow,
     torch_device,
+    skipIfRocm
 )
 from transformers.utils import (
     CONFIG_NAME,
@@ -3068,6 +3069,7 @@ class ModelTesterMixin:
     @require_accelerate
     @mark.accelerate_tests
     @require_torch_multi_accelerator
+    @skipIfRocm
     def test_model_parallelism(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 

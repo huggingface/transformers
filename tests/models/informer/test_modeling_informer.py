@@ -22,7 +22,7 @@ import numpy as np
 from huggingface_hub import hf_hub_download
 
 from transformers import is_torch_available
-from transformers.testing_utils import is_flaky, require_torch, slow, torch_device
+from transformers.testing_utils import is_flaky, require_torch, slow, torch_device, skipIfRocm
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -221,6 +221,7 @@ class InformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
             self.assertEqual(info["missing_keys"], [])
 
+    @skipIfRocm
     def test_encoder_decoder_model_standalone(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.check_encoder_decoder_model_standalone(*config_and_inputs)

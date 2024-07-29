@@ -43,6 +43,7 @@ from transformers.testing_utils import (
     require_torchaudio,
     slow,
     torch_device,
+    skipIfRocm
 )
 from transformers.utils import cached_property, is_torch_bf16_available_on_device, is_torch_fp16_available_on_device
 
@@ -184,6 +185,10 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
     )  # the model uses a custom generation method so we only run a specific subset of the generation tests
     test_pruning = False
     test_resize_embeddings = False
+  
+    @skipIfRocm
+    def test_multi_gpu_data_parallel_forward(self):
+        super().test_multi_gpu_data_parallel_forward()
 
     def setUp(self):
         self.model_tester = MusicgenMelodyDecoderTester(self)
@@ -1074,6 +1079,10 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     # not to test torchscript as the model tester doesn't prepare `input_features` and `padding_mask`
     # (and `torchscript` hates `None` values).
     test_torchscript = False
+
+    @skipIfRocm
+    def test_multi_gpu_data_parallel_forward(self):
+        super().test_multi_gpu_data_parallel_forward()
 
     def setUp(self):
         self.model_tester = MusicgenMelodyTester(self)

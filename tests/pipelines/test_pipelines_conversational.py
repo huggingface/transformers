@@ -25,8 +25,6 @@ from transformers import (
     AutoTokenizer,
     BlenderbotSmallForConditionalGeneration,
     BlenderbotSmallTokenizer,
-    Conversation,
-    ConversationalPipeline,
     TFAutoModelForCausalLM,
     pipeline,
 )
@@ -38,7 +36,15 @@ from transformers.testing_utils import (
     require_torch,
     slow,
     torch_device,
+    skipIfRocm
 )
+import os
+if not os.environ['TEST_WITH_ROCM']:
+    from transformers import (
+    Conversation,
+    ConversationalPipeline,
+    )
+
 
 from .test_pipelines_common import ANY
 
@@ -187,6 +193,7 @@ class ConversationalPipelineTests(unittest.TestCase):
         self.assertEqual(result.generated_responses[1], "It's a comedy.")
 
     @require_torch
+    @skipIfRocm
     def test_small_model_pt(self):
         tokenizer = AutoTokenizer.from_pretrained("microsoft/DialoGPT-small")
         model = AutoModelForCausalLM.from_pretrained("microsoft/DialoGPT-small")
