@@ -69,7 +69,7 @@ class NemotronModelTester(GemmaModelTester):
 
 
 @require_torch
-class NemotronModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class NemotronModelTest(GemmaModelTest):
     all_model_classes = (
         (
             NemotronModel,
