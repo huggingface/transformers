@@ -49,7 +49,7 @@ RUN python3 -m pip install --no-cache-dir aqlm[gpu]==1.0.2
 RUN python3 -m pip install --no-cache-dir hqq
 
 # For GGUF tests
-RUN python3 -m pip install --no-cache-dir gguf
+RUN python3 -m pip install --no-cache-dir gguf<0.9.1
 
 # Add autoawq for quantization testing
 # >=v0.2.3 needed for compatibility with torch 2.2.1
