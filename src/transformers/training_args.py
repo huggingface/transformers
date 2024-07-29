@@ -1968,7 +1968,9 @@ class TrainingArguments:
             # - must be run very last in arg parsing, since it will use a lot of these settings.
             # - must be run before the model is created.
             if not is_accelerate_available():
-                raise ValueError("--deepspeed requires Accelerate to be installed: `pip install accelerate`.")
+                raise ValueError(
+                    f"--deepspeed requires Accelerate to be installed: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`."
+                )
             from transformers.integrations.deepspeed import HfTrainerDeepSpeedConfig
 
             # will be used later by the Trainer
@@ -2102,7 +2104,7 @@ class TrainingArguments:
             if not is_accelerate_available():
                 raise ImportError(
                     f"Using the `Trainer` with `PyTorch` requires `accelerate>={ACCELERATE_MIN_VERSION}`: "
-                    "Please run `pip install transformers[torch]` or `pip install accelerate -U`"
+                    "Please run `pip install transformers[torch]` or `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
                 )
         # We delay the init of `PartialState` to the end for clarity
         accelerator_state_kwargs = {"enabled": True, "use_configured_state": False}
