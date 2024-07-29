@@ -498,6 +498,7 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         torch.cuda.empty_cache()
 
     @slow
+    @unittest.skip("Test hits OOM on CI - https://github.com/huggingface/transformers/issues/32288")
     def test_integration_test(self):
         model = Idefics2ForConditionalGeneration.from_pretrained(
             "HuggingFaceM4/idefics2-8b-base",
