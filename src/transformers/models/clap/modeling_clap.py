@@ -1928,13 +1928,13 @@ class ClapModel(ClapPreTrainedModel):
         super().__init__(config)
 
         if not isinstance(config.text_config, ClapTextConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.text_config is expected to be of type ClapTextConfig but is of type"
                 f" {type(config.text_config)}."
             )
 
         if not isinstance(config.audio_config, ClapAudioConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.audio_config is expected to be of type ClapAudioConfig but is of type"
                 f" {type(config.audio_config)}."
             )
