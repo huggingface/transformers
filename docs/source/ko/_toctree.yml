@@ -103,7 +103,7 @@
     - local: in_translation
       title: (번역중) Image tasks with IDEFICS
     - local: tasks/prompting
-      title: LLM 프롬프팅 가이드
+      title: 대규모 언어 모델(LLM) 프롬프팅 가이드
     title: (번역중) 프롬프팅
   title: 태스크 가이드
 - sections:
