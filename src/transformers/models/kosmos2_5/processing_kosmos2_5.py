@@ -50,6 +50,11 @@ class Kosmos2_5Processor(ProcessorMixin):
     def __init__(self, image_processor, tokenizer):
         tokenizer.return_token_type_ids = False
         super().__init__(image_processor, tokenizer)
+        self.boi = tokenizer.convert_tokens_to_ids("<image>")
+        self.eoi = tokenizer.convert_tokens_to_ids("</image>")
+        self.pad = tokenizer.convert_tokens_to_ids("<pad>")
+        self.bos = tokenizer.convert_tokens_to_ids("<s>")
+        self.eos = tokenizer.convert_tokens_to_ids("</s>")
 
     def __call__(
         self,
@@ -103,10 +108,12 @@ class Kosmos2_5Processor(ProcessorMixin):
             )
 
             batch_size, seq_len = input.input_ids.shape
-            additional_tokens = [0, 100283] + [0] * 2048 + [100284]
+            
+            additional_tokens = [self.bos, self.boi] + [self.bos] * 2048 + [self.eoi]
             additional_tokens_tensor = torch.tensor(additional_tokens).unsqueeze(0).repeat(batch_size, 1)
             input_ids = torch.cat([additional_tokens_tensor, input.input_ids], dim=1)
 
+            # 1 is image
             image_embeds_position_mask = [0, -1] + [1] * 2048 + [-1] + [0] * seq_len
             image_embeds_position_mask = (
                 torch.LongTensor(image_embeds_position_mask).unsqueeze(0).repeat(batch_size, 1)
