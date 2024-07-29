@@ -178,6 +178,7 @@ _torchvision_available = _is_package_available("torchvision")
 _mlx_available = _is_package_available("mlx")
 _hqq_available = _is_package_available("hqq")
 _tiktoken_available = _is_package_available("tiktoken")
+_blobfile_available = _is_package_available("blobfile")
 
 _torch_version = "N/A"
 _torch_available = False
@@ -1166,6 +1167,10 @@ def is_mlx_available():
 
 def is_tiktoken_available():
     return _tiktoken_available
+
+
+def is_blobfile_available():
+    return _blobfile_available
 
 
 # docstyle-ignore

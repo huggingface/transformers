@@ -54,7 +54,7 @@ logger = logging.get_logger(__name__)
 TOKENIZER_FILE = "tokenizer.json"
 SPECIAL_TOKENS_MAP_FILE = "special_tokens_map.json"
 TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
-TOKENIZER_VOCAB_FILE = "tokenizer.model"
+TIKTOKEN_VOCAB_FILE = "tokenizer.model"
 
 # Slow tokenizers have an additional added tokens files
 ADDED_TOKENS_FILE = "added_tokens.json"
@@ -75,7 +75,7 @@ MODEL_TO_TRAINER_MAPPING = {
     "WordPiece": WordPieceTrainer,
 }
 
-VOCAB_FILES_NAMES = {"tokenizer_file": TOKENIZER_FILE, "vocab_file": TOKENIZER_VOCAB_FILE}
+VOCAB_FILES_NAMES = {"tokenizer_file": TOKENIZER_FILE, "vocab_file": TIKTOKEN_VOCAB_FILE}
 
 
 @add_end_docstrings(INIT_TOKENIZER_DOCSTRING)
@@ -103,11 +103,11 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         from_slow = kwargs.pop("from_slow", False)
         added_tokens_decoder = kwargs.pop("added_tokens_decoder", {})
 
-        if from_slow and slow_tokenizer is None and self.slow_tokenizer_class is None:
-            raise ValueError(
-                "Cannot instantiate this tokenizer from a slow version. If it's based on sentencepiece, make sure you "
-                "have sentencepiece installed."
-            )
+        # if from_slow and slow_tokenizer is None and self.slow_tokenizer_class is None:
+        #     raise ValueError(
+        #         "Cannot instantiate this tokenizer from a slow version. If it's based on sentencepiece, make sure you "
+        #         "have sentencepiece installed."
+        #     )
 
         if tokenizer_object is not None:
             fast_tokenizer = copy.deepcopy(tokenizer_object)
