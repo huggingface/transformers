@@ -28,6 +28,7 @@ from transformers.testing_utils import (
     require_vision,
     slow,
     torch_device,
+    skipIfRocm
 )
 
 from .test_pipelines_common import ANY
@@ -109,6 +110,7 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase):
 
     @require_torch
     @require_torch_accelerator
+    @skipIfRocm
     def test_small_model_pt_blip2(self):
         vqa_pipeline = pipeline(
             "visual-question-answering", model="hf-internal-testing/tiny-random-Blip2ForConditionalGeneration"

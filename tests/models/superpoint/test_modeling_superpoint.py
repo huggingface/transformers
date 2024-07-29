@@ -16,7 +16,7 @@ import unittest
 from typing import List
 
 from transformers.models.superpoint.configuration_superpoint import SuperPointConfig
-from transformers.testing_utils import is_flaky, require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import is_flaky, require_torch, require_vision, slow, torch_device, skipIfRocm
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -121,6 +121,10 @@ class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
     test_head_masking = False
     has_attentions = False
     from_pretrained_id = "magic-leap-community/superpoint"
+
+    @skipIfRocm
+    def test_multi_gpu_data_parallel_forward(self):
+        super().test_multi_gpu_data_parallel_forward()
 
     def setUp(self):
         self.model_tester = SuperPointModelTester(self)

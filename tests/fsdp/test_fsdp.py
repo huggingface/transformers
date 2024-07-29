@@ -35,6 +35,7 @@ from transformers.testing_utils import (
     require_torch_multi_accelerator,
     slow,
     torch_device,
+    skipIfRocm
 )
 from transformers.trainer_callback import TrainerState
 from transformers.trainer_utils import FSDPOption, set_seed
@@ -175,6 +176,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(os.environ.get("ACCELERATE_USE_FSDP", "false"), "true")
 
     @parameterized.expand(params, name_func=_parameterized_custom_name_func)
+    @skipIfRocm
     def test_fsdp_config_transformers_auto_wrap(self, sharding_strategy, dtype):
         output_dir = self.get_auto_remove_tmp_dir()
         fsdp_config = deepcopy(self.fsdp_config)

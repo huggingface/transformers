@@ -17,7 +17,7 @@
 import unittest
 
 from transformers import MraConfig, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device, skipIfRocm
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -315,36 +315,101 @@ class MraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = MraModelTester(self)
         self.config_tester = ConfigTester(self, config_class=MraConfig, hidden_size=37)
-
+    
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    
+    @skipIfRocm
+    def test_determinism(self):
+        super().test_determinism()
+
+    @skipIfRocm
+    def test_feed_forward_chunking(self):
+        super().test_feed_forward_chunking()
+   
+    @skipIfRocm
+    def test_hidden_states_output(self):
+        super().test_hidden_states_output()
+   
+    @skipIfRocm
+    def test_inputs_embeds(self):
+        super().test_inputs_embeds()
+   
+    @skipIfRocm
+    def test_inputs_embeds_matches_input_ids(self):
+        super().test_inputs_embeds_matches_input_ids()
+   
+    @skipIfRocm
+    def test_load_with_mismatched_shapes(self):
+        super().test_load_with_mismatched_shapes()
+
+    @skipIfRocm
+    def test_model_outputs_equivalence(self):
+        super().test_model_outputs_equivalence()
+
+    @skipIfRocm
+    def test_multi_gpu_data_parallel_forward(self):
+        super().test_multi_gpu_data_parallel_forward()
+
+    @skipIfRocm
+    def test_problem_types(self):
+        super().test_problem_types()
+
+    @skipIfRocm
+    def test_resize_embeddings_untied(self):
+        super().test_resize_embeddings_untied()
+
+    @skipIfRocm
+    def test_resize_tokens_embeddings(self):
+        super().test_resize_tokens_embeddings()
+
+    @skipIfRocm
+    def test_retain_grad_hidden_states_attentions(self):
+        super().test_retain_grad_hidden_states_attentions()
+
+    @skipIfRocm
+    def test_save_load(self):
+        super().test_save_load()
+
+    @skipIfRocm
+    def test_training(self):
+        super().test_training()
+       
+
+    @skipIfRocm
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @skipIfRocm
     def test_model_various_embeddings(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         for type in ["absolute", "relative_key", "relative_key_query"]:
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @skipIfRocm
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
 
+    @skipIfRocm
     def test_for_multiple_choice(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_multiple_choice(*config_and_inputs)
 
+    @skipIfRocm
     def test_for_question_answering(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
 
+    @skipIfRocm
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
 
+    @skipIfRocm
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)

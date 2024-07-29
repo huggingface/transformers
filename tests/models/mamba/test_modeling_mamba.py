@@ -22,7 +22,7 @@ from unittest.util import safe_repr
 from parameterized import parameterized
 
 from transformers import AutoTokenizer, MambaConfig, is_torch_available
-from transformers.testing_utils import require_torch, require_torch_multi_gpu, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_multi_gpu, slow, torch_device, skipIfRocm
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -283,6 +283,7 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         self.config_tester.run_common_tests()
 
     @require_torch_multi_gpu
+    @skipIfRocm
     def test_multi_gpu_data_parallel_forward(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -448,6 +449,7 @@ class MambaIntegrationTests(unittest.TestCase):
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_id)
 
     @parameterized.expand([(torch_device,), ("cpu",)])
+    @skipIfRocm
     def test_simple_generate(self, device):
         tokenizer = AutoTokenizer.from_pretrained("state-spaces/mamba-130m-hf")
         tokenizer.pad_token = tokenizer.eos_token

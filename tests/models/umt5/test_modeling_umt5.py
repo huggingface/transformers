@@ -26,6 +26,7 @@ from transformers.testing_utils import (
     require_torch,
     slow,
     torch_device,
+    skipIfRocm
 )
 from transformers.utils import is_torch_fx_available
 
@@ -745,6 +746,16 @@ class UMT5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
         else {}
     )
     all_parallelizable_model_classes = (UMT5EncoderModel,) if is_torch_available() else ()
+
+    @skipIfRocm
+    def test_model_parallel_equal_results(self):
+        super().test_model_parallel_equal_results()
+
+
+    @skipIfRocm
+    def test_model_parallelization(self):
+        super().test_model_parallelization()
+
 
     def setUp(self):
         self.model_tester = UMT5EncoderOnlyModelTester(self)

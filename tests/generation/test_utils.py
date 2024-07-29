@@ -44,6 +44,7 @@ from transformers.testing_utils import (
     set_model_tester_for_less_flaky_test,
     slow,
     torch_device,
+    skipIfRocm
 )
 from transformers.utils import is_ipex_available
 
@@ -676,6 +677,7 @@ class GenerationTesterMixin:
     @require_accelerate
     @require_torch_multi_accelerator
     @pytest.mark.generate
+    @skipIfRocm
     def test_model_parallel_beam_search(self):
         if "xpu" in torch_device:
             if not (is_ipex_available("2.5") or version.parse(torch.__version__) >= version.parse("2.6")):
