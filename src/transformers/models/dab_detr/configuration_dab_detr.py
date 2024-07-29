@@ -107,10 +107,6 @@ class DABDETRConfig(PretrainedConfig):
             Relative weight of the L1 error of the bounding box coordinates in the Hungarian matching cost.
         giou_cost (`float`, *optional*, defaults to 2):
             Relative weight of the generalized IoU loss of the bounding box in the Hungarian matching cost.
-        mask_loss_coefficient (`float`, *optional*, defaults to 1):
-            Relative weight of the Focal loss in the panoptic segmentation loss.
-        dice_loss_coefficient (`float`, *optional*, defaults to 1):
-            Relative weight of the DICE/F-1 loss in the panoptic segmentation loss.
         cls_loss_coefficient (`float`, *optional*, defaults to 2):
             Relative weight of the classification loss in the object detection loss function.
         bbox_loss_coefficient (`float`, *optional*, defaults to 5):
@@ -150,6 +146,10 @@ class DABDETRConfig(PretrainedConfig):
             Number of pattern embeddings.
         normalize_before (`bool`, *optional*, defaults to `False`):
             Whether we use a normalization layer in the Encoder or not.
+        sine_position_embedding_normalize (`bool`, *optional*, defaults to `True`):
+            Whether the positional embeddings are normalized and scaled by sine_position_embedding_scale value.
+        sine_position_embedding_scale (`float`, *optional*, defaults to 'None'):
+            Scaling factor applied to the normalized positional encodings.
 
 
     Examples:
@@ -205,8 +205,6 @@ class DABDETRConfig(PretrainedConfig):
         class_cost=2,
         bbox_cost=5,
         giou_cost=2,
-        mask_loss_coefficient=1,
-        dice_loss_coefficient=1,
         cls_loss_coefficient=2,
         bbox_loss_coefficient=5,
         giou_loss_coefficient=2,
@@ -225,7 +223,6 @@ class DABDETRConfig(PretrainedConfig):
         query_scale_type="cond_elewise",
         num_patterns=0,
         normalize_before=False,
-        return_intermediate_decoder=True,
         sine_position_embedding_normalize=True,
         sine_position_embedding_scale=None,
         **kwargs,
@@ -290,8 +287,6 @@ class DABDETRConfig(PretrainedConfig):
         self.bbox_cost = bbox_cost
         self.giou_cost = giou_cost
         # Loss coefficients
-        self.mask_loss_coefficient = mask_loss_coefficient
-        self.dice_loss_coefficient = dice_loss_coefficient
         self.cls_loss_coefficient = cls_loss_coefficient
         self.bbox_loss_coefficient = bbox_loss_coefficient
         self.giou_loss_coefficient = giou_loss_coefficient
@@ -310,7 +305,6 @@ class DABDETRConfig(PretrainedConfig):
         self.iter_update = iter_update
         self.temperature_width = temperature_width
         self.temperature_height = temperature_height
-        self.return_intermediate_decoder = return_intermediate_decoder
         self.sine_position_embedding_normalize = sine_position_embedding_normalize
         self.sine_position_embedding_scale = sine_position_embedding_scale
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)

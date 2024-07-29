@@ -285,7 +285,7 @@ def convert_dab_detr_checkpoint(model_name, pretrained_model_weights_path, pytor
     # finally, create HuggingFace model and load state dict
     model = DABDETRForObjectDetection(config)
     model.load_state_dict(state_dict)
-    # model.push_to_hub(repo_id=model_name, organization="davidhajdu", commit_message="Add model")
+    model.push_to_hub(repo_id=model_name, organization="davidhajdu", commit_message="Add model")
     model.eval()
     # verify our conversion
     outputs = model(**encoding)

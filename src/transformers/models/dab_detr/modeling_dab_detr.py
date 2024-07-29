@@ -67,7 +67,7 @@ _CHECKPOINT_FOR_DOC = "IDEA/dab_detr-base"
 # Copied from transformers.models.conditional_detr.modeling_conditional_detr.ConditionalDetrDecoderOutput with ConditionalDetr->DABDETR,Conditional DETR->DAB-DETR
 class DABDETRDecoderOutput(BaseModelOutputWithCrossAttentions):
     """
-    Base class for outputs of the DAB-DETR decoder. This class adds one attribute to
+    Base class for outputs of the Conditional DETR decoder. This class adds one attribute to
     BaseModelOutputWithCrossAttentions, namely an optional stack of intermediate decoder activations, i.e. the output
     of each decoder layer, each of them gone through a layernorm. This is useful when training the model with auxiliary
     decoding losses.
@@ -102,7 +102,7 @@ class DABDETRDecoderOutput(BaseModelOutputWithCrossAttentions):
 # Copied from transformers.models.conditional_detr.modeling_conditional_detr.ConditionalDetrModelOutput with ConditionalDetr->DABDETR,Conditional DETR->DAB-DETR
 class DABDETRModelOutput(Seq2SeqModelOutput):
     """
-    Base class for outputs of the DAB-DETR encoder-decoder model. This class adds one attribute to
+    Base class for outputs of the Conditional DETR encoder-decoder model. This class adds one attribute to
     Seq2SeqModelOutput, namely an optional stack of intermediate decoder activations, i.e. the output of each decoder
     layer, each of them gone through a layernorm. This is useful when training the model with auxiliary decoding
     losses.
@@ -140,7 +140,7 @@ class DABDETRModelOutput(Seq2SeqModelOutput):
     """
 
     intermediate_hidden_states: Optional[torch.FloatTensor] = None
-    reference_points: Optional[torch.FloatTensor] = None
+    reference_points: Optional[Tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -161,7 +161,7 @@ class DABDETRObjectDetectionOutput(ModelOutput):
         pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding). You can use [`~ConditionalDetrImageProcessor.post_process_object_detection`] to retrieve the
+            possible padding). You can use [`~DABDETRImageProcessor.post_process_object_detection`] to retrieve the
             unnormalized bounding boxes.
         auxiliary_outputs (`list[Dict]`, *optional*):
             Optional, only returned when auxilary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
@@ -1066,7 +1066,6 @@ class DABDETRDecoder(DABDETRPreTrainedModel):
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
         self.num_layers = config.decoder_layers
-        self.return_intermediate = config.return_intermediate_decoder  # it's default true in the original code
 
         self.layers = nn.ModuleList(
             [DABDETRDecoderLayer(config, is_first=(layer_id == 0)) for layer_id in range(config.decoder_layers)]
@@ -1217,8 +1216,7 @@ class DABDETRDecoder(DABDETRPreTrainedModel):
                     ref_points.append(new_reference_points)
                 reference_points = new_reference_points.detach()
 
-            if self.return_intermediate:
-                intermediate.append(self.layernorm(hidden_states))
+            intermediate.append(self.layernorm(hidden_states))
 
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
@@ -1228,9 +1226,8 @@ class DABDETRDecoder(DABDETRPreTrainedModel):
 
         if self.layernorm is not None:
             hidden_states = self.layernorm(hidden_states)
-            if self.return_intermediate:
-                intermediate.pop()
-                intermediate.append(hidden_states)
+            intermediate.pop()
+            intermediate.append(hidden_states)
 
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
