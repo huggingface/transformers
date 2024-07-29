@@ -1096,7 +1096,6 @@ class GenerationTesterMixin:
             if any(
                 model_name in model_class.__name__.lower()
                 for model_name in [
-                    "bloom",
                     "ctrl",
                     "gptbigcode",
                     "transo_xl",
@@ -1878,7 +1877,7 @@ class GenerationTesterMixin:
         # 2. Some old models still return `output.past_key_values` even without `use_cache=True`
         # 3. TODO (joao): A few models have different formats/types, skipping those until the cache refactor is
         # complete
-        models_without_standard_cache = ("bloom", "ctrl", "fsmt", "gptbigcode", "mega", "reformer", "jamba", "mamba")
+        models_without_standard_cache = ("ctrl", "fsmt", "gptbigcode", "mega", "reformer", "jamba", "mamba")
         has_standard_cache = not any(
             model_name in config.__class__.__name__.lower() for model_name in models_without_standard_cache
         )
