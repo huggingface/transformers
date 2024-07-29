@@ -81,6 +81,7 @@ PRIVATE_MODELS = [
     "SeamlessM4Tv2TextToUnitModel",
     "SeamlessM4Tv2CodeHifiGan",
     "SeamlessM4Tv2TextToUnitForConditionalGeneration",
+    "ChineseCLIPTextTransformer",
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
@@ -88,6 +89,7 @@ PRIVATE_MODELS = [
 IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     # models to ignore for not tested
     "RecurrentGemmaModel",  # Building part of bigger (tested) model.
+    "ChineseCLIPTextModel",  # Building block of a bigger (tested) model.
     "FuyuForCausalLM",  # Not tested fort now
     "InstructBlipQFormerModel",  # Building part of bigger (tested) model.
     "InstructBlipVideoQFormerModel",  # Building part of bigger (tested) model.
@@ -216,6 +218,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "FlaxBeitForMaskedImageModeling",
     "BeitForMaskedImageModeling",
     "ChineseCLIPTextModel",
+    "ChineseCLIPTextTransformer",
     "ChineseCLIPVisionModel",
     "CLIPTextModel",
     "CLIPTextModelWithProjection",
