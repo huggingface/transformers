@@ -25,6 +25,7 @@ from parameterized import parameterized
 
 from transformers import NemotronConfig, StaticCache, is_torch_available, set_seed
 from transformers.testing_utils import (
+    is_flaky,
     require_bitsandbytes,
     require_flash_attn,
     require_read_token,
@@ -70,6 +71,9 @@ class NemotronModelTester(GemmaModelTester):
 
 @require_torch
 class NemotronModelTest(GemmaModelTest):
+    # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
+    # This is because we are hitting edge cases with the causal_mask buffer
+    model_split_percents = [0.5, 0.7, 0.8]
     all_model_classes = (
         (
             NemotronModel,
@@ -384,7 +388,72 @@ class NemotronModelTest(GemmaModelTest):
         output_fa_2 = tokenizer.batch_decode(output_fa_2)
 
         self.assertListEqual(output_native, output_fa_2)
+    
+    @require_torch_sdpa
+    @require_torch_gpu
+    @slow
+    def test_sdpa_equivalence(self):
+        for model_class in self.all_model_classes:
+            if not model_class._supports_sdpa:
+                self.skipTest(reason="Model does not support SDPA")
 
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model_sdpa = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.float16, attn_implementation="sdpa"
+                )
+                model_sdpa.to(torch_device)
+
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, attn_implementation="eager")
+                model.to(torch_device)
+
+                dummy_input = inputs_dict[model_class.main_input_name]
+                dummy_input = dummy_input.to(torch_device)
+                outputs = model(dummy_input, output_hidden_states=True)
+                outputs_sdpa = model_sdpa(dummy_input, output_hidden_states=True)
+
+                logits = outputs.hidden_states[-1]
+                logits_sdpa = outputs_sdpa.hidden_states[-1]
+
+                # nemotron sdpa needs a high tolerance
+                assert torch.allclose(logits_sdpa, logits, atol=1e-2)
+
+    @require_flash_attn
+    @require_torch_gpu
+    @pytest.mark.flash_attn_test
+    @is_flaky()
+    @slow
+    def test_flash_attn_2_equivalence(self):
+        for model_class in self.all_model_classes:
+            if not model_class._supports_flash_attn_2:
+                self.skipTest(reason="Model does not support Flash Attention 2")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model_fa = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.float16, attn_implementation="flash_attention_2"
+                )
+                model_fa.to(torch_device)
+
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, attn_implementation="eager")
+                model.to(torch_device)
+
+                dummy_input = inputs_dict[model_class.main_input_name]
+                dummy_input = dummy_input.to(torch_device)
+                outputs = model(dummy_input, output_hidden_states=True)
+                outputs_fa = model_fa(dummy_input, output_hidden_states=True)
+
+                logits = outputs.hidden_states[-1]
+                logits_fa = outputs_fa.hidden_states[-1]
+
+                # nemotron flash attention 2 needs a high tolerance
+                assert torch.allclose(logits_fa, logits, atol=1e-2)
 
 @require_torch_gpu
 class NemotronIntegrationTest(unittest.TestCase):
