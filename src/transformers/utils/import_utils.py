@@ -302,7 +302,7 @@ def is_accelerate_available(min_version: str = ACCELERATE_MIN_VERSION):
 
 
 if is_accelerate_available():
-    import accelerate.utils.imports as accelerate_import_utils
+    pass
 
 
 def is_torch_deterministic():
@@ -410,9 +410,12 @@ def is_mambapy_available():
 
 
 def is_torch_mps_available(min_version: str = "1.12"):
-    if not _accelerate_available or not hasattr(accelerate_import_utils, "is_mps_available"):
-        return False
-    return accelerate_import_utils.is_mps_available() and version.parse(_torch_version) >= version.parse(min_version)
+    if is_torch_available():
+        import torch
+
+        if hasattr(torch.backends, "mps"):
+            return torch.backends.mps.is_available() and torch.backends.mps.is_built()
+    return False
 
 
 def is_torch_bf16_gpu_available():
@@ -615,20 +618,43 @@ def is_torch_neuroncore_available(check_device=True):
 @lru_cache()
 def is_torch_npu_available(check_device=False):
     "Checks if `torch_npu` is installed and potentially if a NPU is in the environment"
-    if not _accelerate_available or not hasattr(accelerate_import_utils, "is_npu_available"):
+    if importlib.util.find_spec("torch_npu") is None:
         return False
-    return accelerate_import_utils.is_npu_available(check_device=check_device)
+
+    import torch
+    import torch_npu  # noqa: F401
+
+    if check_device:
+        try:
+            # Will raise a RuntimeError if no NPU is found
+            _ = torch.npu.device_count()
+            return torch.npu.is_available()
+        except RuntimeError:
+            return False
+    return hasattr(torch, "npu") and torch.npu.is_available()
 
 
 @lru_cache()
 def is_torch_mlu_available(check_device=False):
     "Checks if `torch_mlu` is installed and potentially if a MLU is in the environment"
-    if not _accelerate_available or not hasattr(accelerate_import_utils, "is_mlu_available"):
+    if importlib.util.find_spec("torch_mlu") is None:
         return False
+
+    import torch
+    import torch_mlu  # noqa: F401
+
     from ..dependency_versions_table import deps
 
     deps["deepspeed"] = "deepspeed-mlu>=0.10.1"
-    return accelerate_import_utils.is_mlu_available(check_device=check_device)
+
+    if check_device:
+        try:
+            # Will raise a RuntimeError if no MLU is found
+            _ = torch.mlu.device_count()
+            return torch.mlu.is_available()
+        except RuntimeError:
+            return False
+    return hasattr(torch, "mlu") and torch.mlu.is_available()
 
 
 def is_torchdynamo_available():
@@ -724,9 +750,20 @@ def is_ninja_available():
 
 
 def is_ipex_available():
-    if not _accelerate_available or not hasattr(accelerate_import_utils, "is_ipex_available"):
+    def get_major_and_minor_from_version(full_version):
+        return str(version.parse(full_version).major) + "." + str(version.parse(full_version).minor)
+
+    if not is_torch_available() or not _ipex_available:
         return False
-    return accelerate_import_utils.is_ipex_available()
+    torch_major_and_minor = get_major_and_minor_from_version(_torch_version)
+    ipex_major_and_minor = get_major_and_minor_from_version(_ipex_version)
+    if torch_major_and_minor != ipex_major_and_minor:
+        warnings.warn(
+            f"Intel Extension for PyTorch {ipex_major_and_minor} needs to work with PyTorch {ipex_major_and_minor}.*,"
+            f" but PyTorch {_torch_version} is found. Please switch to the matching version and run again."
+        )
+        return False
+    return True
 
 
 @lru_cache
@@ -735,10 +772,24 @@ def is_torch_xpu_available(check_device=False):
     Checks if XPU acceleration is available either via `intel_extension_for_pytorch` or
     via stock PyTorch (>=2.4) and potentially if a XPU is in the environment
     """
-    if not _accelerate_available or not hasattr(accelerate_import_utils, "is_xpu_available"):
+    if not is_torch_available():
+        return False
+    torch_version = version.parse(_torch_version)
+    if is_ipex_available():
+        import intel_extension_for_pytorch  # noqa: F401
+    elif torch_version.major < 2 or (torch_version.major == 2 and torch_version.minor < 4):
         return False
 
-    return accelerate_import_utils.is_xpu_available(check_device=check_device)
+    import torch
+
+    if check_device:
+        try:
+            # Will raise a RuntimeError if no XPU  is found
+            _ = torch.xpu.device_count()
+            return torch.xpu.is_available()
+        except RuntimeError:
+            return False
+    return hasattr(torch, "xpu") and torch.xpu.is_available()
 
 
 def is_bitsandbytes_available():
