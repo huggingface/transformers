@@ -100,6 +100,7 @@ from .trainer_pt_utils import (
     get_model_param_count,
     get_module_class_from_name,
     get_parameter_names,
+    is_deepspeed_zero3_enabled,
     nested_concat,
     nested_detach,
     nested_numpify,
@@ -434,6 +435,16 @@ class Trainer:
                     FutureWarning,
                 )
             self.model_init = model_init
+
+        if is_deepspeed_zero3_enabled():
+            # Will reach this branch if the user has
+            # 1. Used `.from_pretrained` or `.from_config` to initialize their model
+            # 2. Did not configure Zero-3 via `TrainingArguments` or `accelerate launch` beforehand
+            # New models init such as `MyModel()` will not hit this step
+            if hasattr(model, "transformers_zero3_init_used") and not model.transformers_zero3_init_used:
+                raise ValueError(
+                    "Model was not initialized with `Zero-3` despite being configured. Please re-initialize your model via `***Model.from_pretrained(...)` or `***Model.from_config(...)` after creating your `TrainingArguments`!"
+                )
 
         if model.__class__.__name__ in MODEL_MAPPING_NAMES:
             raise ValueError(
@@ -4677,10 +4688,6 @@ class Trainer:
 
         if self.is_deepspeed_enabled and getattr(self.args, "hf_deepspeed_config", None) is None:
             self.propagate_args_to_deepspeed()
-
-        if self.is_deepspeed_enabled and is_deepspeed_zero3_enabled():
-            if not getattr(self.model, "transformers_zero3_init_used", False):
-                raise ValueError("Model was not initialized with `Zero-3` despite being configured. Please re-initialize your model via AutoModel.from_pretrained(...) after creating your `TrainingArguments`!")
 
         # `save_only_model` can't be used with DeepSpeed/FSDP along with `load_best_model_at_end`
         if (

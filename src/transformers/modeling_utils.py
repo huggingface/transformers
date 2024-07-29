@@ -1465,8 +1465,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # and memory copying it on CPU or each GPU first
             with deepspeed.zero.Init(config_dict_or_path=deepspeed_config()):
                 model = cls(config, **kwargs)
+
         else:
             model = cls(config, **kwargs)
+
+        # Flag for if we init with `zero3`, add an attr to the model so we can check downstream for issues
+        model.transformers_zero3_init_used = is_deepspeed_zero3_enabled()
 
         # restore default dtype if it was modified
         if dtype_orig is not None:
@@ -3798,8 +3802,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model = cls(config, *model_args, **model_kwargs)
 
         # If we init with `zero3`, add an attr to the model so we can check downstream for issues
-        if is_deepspeed_zero3_enabled():
+        if is_deepspeed_zero3_enabled() and not is_quantized:
             model.transformers_zero3_init_used = True
+        else:
+            model.transformers_zero3_init_used = False
 
         # make sure we use the model's config since the __init__ call might have copied it
         config = model.config
