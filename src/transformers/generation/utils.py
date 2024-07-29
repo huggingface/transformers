@@ -1675,7 +1675,7 @@ class GenerationMixin:
         tokenizer = kwargs.pop("tokenizer", None)  # Pull this out first, we only use it for stopping criteria
         generation_config, model_kwargs = self._prepare_generation_config(generation_config, **kwargs)
         
-        position_ids = model_kwargs.pop('position_ids')
+        # position_ids = model_kwargs.pop('position_ids')
         self._validate_model_kwargs(model_kwargs.copy())
         self._validate_assistant(assistant_model)
 
@@ -3961,6 +3961,7 @@ class GenerationMixin:
         attention_mask = torch.ones_like(position_ids) if position_ids is not None else None
         n_matches = None
         eos_tokens_mask = None
+        left_cut = None
 
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             # Rotate everything for bsz > 1
@@ -3987,16 +3988,12 @@ class GenerationMixin:
                     model_kwargs["past_key_values"] = _crop_past_key_values(
                         self, model_kwargs["past_key_values"], left_cut=left_cut
                     )
-                    model_kwargs["assistant_past_key_values"] = _crop_past_key_values(
-                        candidate_generator.assistant_model,
-                        model_kwargs["assistant_past_key_values"],
-                        left_cut=left_cut,
-                    )  # the assistant does not have the token after the last match, hence the -1
+                    candidate_generator.update_past_key_values(left_cut=left_cut)
 
             cur_len = input_ids.shape[-1]
 
             #  1. Fetch candidate sequences from a `CandidateGenerator`
-            candidate_input_ids, candidate_logits = candidate_generator.get_candidates(input_ids, position_ids, attention_mask)
+            candidate_input_ids, candidate_logits = candidate_generator.get_candidates(input_ids, n_matches)
             candidate_input_ids = candidate_input_ids.to(self.device)
             if candidate_logits is not None:
                 candidate_logits = candidate_logits.to(self.device)
@@ -4111,6 +4108,8 @@ class GenerationMixin:
             # 4.2. Discard past key values relative to unused assistant tokens
             new_cache_size = new_cur_len - 1
             outputs.past_key_values = _crop_past_key_values(self, outputs.past_key_values, new_cache_size, n_matches)
+            
+            # candidate_generator.update_past_key_values(max_lenght = new_cache_size, n_matches = n_matches)
 
             # 5. Update the candidate generation strategy if needed
             candidate_generator.update_candidate_strategy(input_ids, new_logits, n_matches)
