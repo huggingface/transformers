@@ -3211,7 +3211,7 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
                 class_cost=self.config.class_cost, bbox_cost=self.config.bbox_cost, giou_cost=self.config.giou_cost
             )
             # Second: create the criterion
-            losses = ["labels", "boxes"]
+            losses = ["labels", "boxes", "cardinality"]
             criterion = GroundingDinoLoss(
                 matcher=matcher,
                 class_reduction=self.config.class_loss_reduction,
