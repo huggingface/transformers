@@ -409,6 +409,7 @@ class MBartFlashAttention2(MBartAttention):
 
         return attn_output, attn_weights, past_key_value
 
+
 # Copied from transformers.models.bart.modeling_bart.BartSdpaAttention with Bart->MBart
 class MBartSdpaAttention(MBartAttention):
     def forward(
@@ -514,6 +515,7 @@ class MBartSdpaAttention(MBartAttention):
         attn_output = self.out_proj(attn_output)
 
         return attn_output, None, past_key_value
+
 
 MBART_ATTENTION_CLASSES = {
     "eager": MBartAttention,
