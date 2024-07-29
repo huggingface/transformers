@@ -36,6 +36,7 @@ logger = logging.get_logger(__name__)
 # Listed here: https://github.com/ggerganov/ggml/blob/master/docs/gguf.md
 GGML_TYPES = {
     "F32": 0,
+    "F16": 1,
     "Q4_0": 2,
     "Q8_0": 8,
     "Q2_K": 10,
@@ -489,6 +490,8 @@ def dequantize_q5_k(data):
 def load_dequant_gguf_tensor(shape, ggml_type, data):
     if ggml_type == GGML_TYPES["F32"]:
         values = data
+    elif ggml_type == GGML_TYPES["F16"]:
+        values = data
     elif ggml_type == GGML_TYPES["Q8_0"]:
         values = dequantize_q8_0(data)
     elif ggml_type == GGML_TYPES["Q4_0"]:
@@ -609,7 +612,7 @@ class GGUFLlamaConverter(LlamaConverter):
         self.additional_kwargs["bos_token"] = eos_token
 
         if self.is_llama_3_tokenizer:
-            self.additional_kwargs["add_prefix_space"] = False
+            self.additional_kwargs["add_prefix_space"] = None
             self.additional_kwargs["clean_up_tokenization_spaces"] = True
 
             self.additional_kwargs["legacy"] = False
