@@ -1131,7 +1131,7 @@ else:
         ["ConditionalDetrFeatureExtractor", "ConditionalDetrImageProcessor"]
     )
     _import_structure["models.convnext"].extend(["ConvNextFeatureExtractor", "ConvNextImageProcessor"])
-    _import_structure["models.dab_detr"].extend(["DABDETRFeatureExtractor", "DABDETRImageProcessor"])
+    _import_structure["models.dab_detr"].extend(["DABDETRImageProcessor"])
     _import_structure["models.deformable_detr"].extend(
         ["DeformableDetrFeatureExtractor", "DeformableDetrImageProcessor"]
     )
@@ -5817,7 +5817,7 @@ if TYPE_CHECKING:
             ConditionalDetrImageProcessor,
         )
         from .models.convnext import ConvNextFeatureExtractor, ConvNextImageProcessor
-        from .models.dab_detr import DABDETRFeatureExtractor, DABDETRImageProcessor
+        from .models.dab_detr import DABDETRImageProcessor
         from .models.deformable_detr import (
             DeformableDetrFeatureExtractor,
             DeformableDetrImageProcessor,

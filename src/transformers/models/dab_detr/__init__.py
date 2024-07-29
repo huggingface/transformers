@@ -30,7 +30,6 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["feature_extraction_dab_detr"] = ["DABDETRFeatureExtractor"]
     _import_structure["image_processing_dab_detr"] = ["DABDETRImageProcessor"]
 
 
@@ -42,7 +41,6 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_dab_detr"] = [
         "DABDETRForObjectDetection",
-        "DABDETRForSegmentation",
         "DABDETRModel",
         "DABDETRPreTrainedModel",
     ]
@@ -60,7 +58,6 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .feature_extraction_dab_detr import DABDETRFeatureExtractor
         from .image_processing_dab_detr import DABDETRImageProcessor
 
     try:
@@ -71,7 +68,6 @@ if TYPE_CHECKING:
     else:
         from .modeling_dab_detr import (
             DABDETRForObjectDetection,
-            DABDETRForSegmentation,
             DABDETRModel,
             DABDETRPreTrainedModel,
         )

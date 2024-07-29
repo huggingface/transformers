@@ -178,7 +178,6 @@ class DABDETRModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         (
             DABDETRModel,
             DABDETRForObjectDetection,
-            # DABDETRForSegmentation,
         )
         if is_torch_available()
         else ()
@@ -186,7 +185,6 @@ class DABDETRModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     pipeline_model_mapping = (
         {
             "image-feature-extraction": DABDETRModel,
-            # "image-segmentation": DetrForSegmentation,
             "object-detection": DABDETRForObjectDetection,
         }
         if is_torch_available()
@@ -204,7 +202,7 @@ class DABDETRModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
         if return_labels:
-            if model_class.__name__ in ["DABDETRForObjectDetection"]:  # "DABDETRForSegmentation"]:
+            if model_class.__name__ in ["DABDETRForObjectDetection"]:
                 labels = []
                 for i in range(self.model_tester.batch_size):
                     target = {}

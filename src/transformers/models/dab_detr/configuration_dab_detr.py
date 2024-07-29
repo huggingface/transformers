@@ -53,7 +53,7 @@ class DABDETRConfig(PretrainedConfig):
         encoder_layers (`int`, *optional*, defaults to 6):
             Number of encoder layers.
         encoder_ffn_dim (`int`, *optional*, defaults to 2048):
-            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
+            Dimension of the "intermediate" (often named feed-forward) layer in encoder.
         encoder_attention_heads (`int`, *optional*, defaults to 8):
             Number of attention heads for each attention layer in the Transformer encoder.
         decoder_layers (`int`, *optional*, defaults to 6):
@@ -107,25 +107,25 @@ class DABDETRConfig(PretrainedConfig):
             Relative weight of the L1 error of the bounding box coordinates in the Hungarian matching cost.
         giou_cost (`float`, *optional*, defaults to 2):
             Relative weight of the generalized IoU loss of the bounding box in the Hungarian matching cost.
-        mask_loss_coefficient (`int`, *optional*, defaults to 1):
+        mask_loss_coefficient (`float`, *optional*, defaults to 1):
             Relative weight of the Focal loss in the panoptic segmentation loss.
-        dice_loss_coefficient (`int`, *optional*, defaults to 1):
+        dice_loss_coefficient (`float`, *optional*, defaults to 1):
             Relative weight of the DICE/F-1 loss in the panoptic segmentation loss.
-        cls_loss_coefficient (`int`, *optional*, defaults to 2):
+        cls_loss_coefficient (`float`, *optional*, defaults to 2):
             Relative weight of the classification loss in the object detection loss function.
-        bbox_loss_coefficient (`int`, *optional*, defaults to 5):
+        bbox_loss_coefficient (`float`, *optional*, defaults to 5):
             Relative weight of the L1 bounding box loss in the object detection loss.
         giou_loss_coefficient (`float`, *optional*, defaults to 2):
             Relative weight of the generalized IoU loss in the object detection loss.
         focal_alpha (`float`, *optional*, defaults to 0.25):
             Alpha parameter in the focal loss.
-        rm_self_attn_decoder (`bool`, *optional*, defaults to `False`):
+        do_use_self_attn_decoder (`bool`, *optional*, defaults to `False`):
             Whether to use self-attention module in decoder layers.
         decoder_modulate_hw_attn (`bool`, *optional*, defaults to `True`):
             Whether to modulate the positional attention map using the box width and height information.
-        temperatureH (`int`, *optional*, defaults to 20):
+        temperature_height (`int`, *optional*, defaults to 20):
             Temperature parameter to tune the flatness of positional attention (HEIGHT)
-        temperatureW (`int`, *optional*, defaults to 20):
+        temperature_width (`int`, *optional*, defaults to 20):
             Temperature parameter to tune the flatness of positional attention (WIDTH)
         iter_update (`bool`, *optional*, defaults to `True`):
             Whether to use dynamic iterative anchor updates.
@@ -140,7 +140,7 @@ class DABDETRConfig(PretrainedConfig):
         random_refpoints_xy (`bool`, *optional*, defaults to `False`):
             Whether to fix the x and y coordinates of the anchor boxes with random initialization.
         keep_query_pos (`bool`, *optional*, defaults to `False`):
-            ####
+            Whether to concatenate the projected positional embedding from the object query into the original query (key) in every decoder layer.
         query_scale_type (`str`, *optional*, defaults to `"cond_elewise"`):
             Scale type options:
                 # 'cond_elewise' - Conditional element-wise scaling using content information.
@@ -211,11 +211,10 @@ class DABDETRConfig(PretrainedConfig):
         bbox_loss_coefficient=5,
         giou_loss_coefficient=2,
         focal_alpha=0.25,
-        ### TODO DAB DETR special parameters
-        rm_self_attn_decoder=False,
+        do_use_self_attn_decoder=False,
         decoder_modulate_hw_attn=True,
-        temperatureH=20,
-        temperatureW=20,
+        temperature_height=20,
+        temperature_width=20,
         iter_update=True,
         query_dim=4,
         decoder_query_dim=4,
@@ -226,6 +225,9 @@ class DABDETRConfig(PretrainedConfig):
         query_scale_type="cond_elewise",
         num_patterns=0,
         normalize_before=False,
+        return_intermediate_decoder=True,
+        sine_position_embedding_normalize=True,
+        sine_position_embedding_scale=None,
         **kwargs,
     ):
         if not use_timm_backbone and use_pretrained_backbone:
@@ -294,7 +296,7 @@ class DABDETRConfig(PretrainedConfig):
         self.bbox_loss_coefficient = bbox_loss_coefficient
         self.giou_loss_coefficient = giou_loss_coefficient
         self.focal_alpha = focal_alpha
-        self.rm_self_attn_decoder = rm_self_attn_decoder
+        self.do_use_self_attn_decoder = do_use_self_attn_decoder
         self.query_dim = query_dim
         self.bbox_embed_diff_each_layer = bbox_embed_diff_each_layer
         self.random_refpoints_xy = random_refpoints_xy
@@ -306,8 +308,11 @@ class DABDETRConfig(PretrainedConfig):
         self.num_patterns = num_patterns
         self.normalize_before = normalize_before
         self.iter_update = iter_update
-        self.temperatureW = temperatureW
-        self.temperatureH = temperatureH
+        self.temperature_width = temperature_width
+        self.temperature_height = temperature_height
+        self.return_intermediate_decoder = return_intermediate_decoder
+        self.sine_position_embedding_normalize = sine_position_embedding_normalize
+        self.sine_position_embedding_scale = sine_position_embedding_scale
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
     @property

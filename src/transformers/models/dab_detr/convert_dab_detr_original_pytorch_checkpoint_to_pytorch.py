@@ -234,7 +234,7 @@ def prepare_img():
 
 
 @torch.no_grad()
-def convert_dab_detr_checkpoint(model_name, pytorch_dump_folder_path):
+def convert_dab_detr_checkpoint(model_name, pretrained_model_weights_path, pytorch_dump_folder_path):
     """
     Copy/paste/tweak model's weights to our DAB-DETR structure.
     """
@@ -246,59 +246,37 @@ def convert_dab_detr_checkpoint(model_name, pytorch_dump_folder_path):
         config.backbone = "resnet101"
     if "dc5" in model_name:
         config.dilation = True
-    is_panoptic = "panoptic" in model_name
-    if is_panoptic:
-        config.num_labels = 250
-    else:
-        config.num_labels = 91
-        repo_id = "huggingface/label-files"
-        filename = "coco-detection-id2label.json"
-        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
-        id2label = {int(k): v for k, v in id2label.items()}
-        config.id2label = id2label
-        config.label2id = {v: k for k, v in id2label.items()}
+
+    config.num_labels = 91
+    repo_id = "huggingface/label-files"
+    filename = "coco-detection-id2label.json"
+    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = {int(k): v for k, v in id2label.items()}
+    config.id2label = id2label
+    config.label2id = {v: k for k, v in id2label.items()}
 
     # load image processor
-    format = "coco_panoptic" if is_panoptic else "coco_detection"
+    format = "coco_detection"
     image_processor = DABDETRImageProcessor(format=format)
 
     # prepare image
     img = prepare_img()
-    encoding = image_processor(images=img, return_tensors="pt")
+    encoding = image_processor(images=[img, img], return_tensors="pt")
 
     logger.info(f"Converting model {model_name}...")
 
     # load original model from torch hub
-    state_dict = torch.load("/Users/davidhajdu/Desktop/dab_detr_r50.pth", map_location=torch.device("cpu"))["model"]
+    state_dict = torch.load(pretrained_model_weights_path, map_location=torch.device("cpu"))["model"]
     # rename keys
     for src, dest in rename_keys:
-        if is_panoptic:
-            src = "dab_detr." + src
         rename_key(state_dict, src, dest)
     state_dict = rename_backbone_keys(state_dict)
     # important: we need to prepend a prefix to each of the base model keys as the head models use different attributes for them
-    prefix = "dab_detr.model." if is_panoptic else "model."
+    prefix = "model."
     for key in state_dict.copy().keys():
-        if is_panoptic:
-            if (
-                key.startswith("dab_detr")
-                and not key.startswith("class_embed")
-                and not key.startswith("bbox_predictor")
-            ):
-                val = state_dict.pop(key)
-                state_dict["dab_detr.model" + key[4:]] = val
-            elif "class_embed" in key or "bbox_predictor" in key:
-                val = state_dict.pop(key)
-                state_dict["dab_detr." + key] = val
-            elif key.startswith("bbox_attention") or key.startswith("mask_head"):
-                continue
-            else:
-                val = state_dict.pop(key)
-                state_dict[prefix + key] = val
-        else:
-            if not key.startswith("class_embed") and not key.startswith("bbox_predictor"):
-                val = state_dict.pop(key)
-                state_dict[prefix + key] = val
+        if not key.startswith("class_embed") and not key.startswith("bbox_predictor"):
+            val = state_dict.pop(key)
+            state_dict[prefix + key] = val
 
     expected_slice_logits = torch.tensor(
         [[-10.1765, -5.5243, -8.9324], [-9.8138, -5.6721, -7.5161], [-10.3054, -5.6081, -8.5931]]
@@ -307,7 +285,7 @@ def convert_dab_detr_checkpoint(model_name, pytorch_dump_folder_path):
     # finally, create HuggingFace model and load state dict
     model = DABDETRForObjectDetection(config)
     model.load_state_dict(state_dict)
-    model.push_to_hub(repo_id=model_name, organization="davidhajdu", commit_message="Add model")
+    # model.push_to_hub(repo_id=model_name, organization="davidhajdu", commit_message="Add model")
     model.eval()
     # verify our conversion
     outputs = model(**encoding)
@@ -317,7 +295,7 @@ def convert_dab_detr_checkpoint(model_name, pytorch_dump_folder_path):
     # Save model and image processor
     logger.info(f"Saving PyTorch model and image processor to {pytorch_dump_folder_path}...")
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-    model.save_pretrained(pytorch_dump_folder_path, safe_serialization=False)
+    model.save_pretrained(pytorch_dump_folder_path)
     image_processor.save_pretrained(pytorch_dump_folder_path)
 
 
@@ -331,7 +309,13 @@ if __name__ == "__main__":
         help="Name of the DAB_DETR model you'd like to convert.",
     )
     parser.add_argument(
+        "--pretrained_model_weights_path",
+        default="/Users/davidhajdu/Desktop/dab_detr_r50.pth",
+        type=str,
+        help="The path of the original model weights like: Users/username/Desktop/dab_detr_r50.pth",
+    )
+    parser.add_argument(
         "--pytorch_dump_folder_path", default="DAB_DETR", type=str, help="Path to the folder to output PyTorch model."
     )
     args = parser.parse_args()
-    convert_dab_detr_checkpoint(args.model_name, args.pytorch_dump_folder_path)
+    convert_dab_detr_checkpoint(args.model_name, args.pretrained_model_weights_path, args.pytorch_dump_folder_path)

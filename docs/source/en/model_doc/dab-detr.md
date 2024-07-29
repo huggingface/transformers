@@ -30,7 +30,7 @@ The abstract from the paper is the following:
 for DETR (DEtection TRansformer) and offer a deeper understanding of the role
 of queries in DETR. This new formulation directly uses box coordinates as queries
 in Transformer decoders and dynamically updates them layer-by-layer. Using box
-coordinates not only helps using explicit positional priors to improve the queryto-feature similarity and eliminate the slow training convergence issue in DETR,
+coordinates not only helps using explicit positional priors to improve the query-to-feature similarity and eliminate the slow training convergence issue in DETR,
 but also allows us to modulate the positional attention map using the box width
 and height information. Such a design makes it clear that queries in DETR can be
 implemented as performing soft ROI pooling layer-by-layer in a cascade manner.
@@ -42,6 +42,28 @@ experiments to confirm our analysis and verify the effectiveness of our methods.
 This model was contributed by [davidhajdu](https://huggingface.co/davidhajdu).
 The original code can be found [here](https://github.com/IDEA-Research/DAB-DETR).
 
+There are three ways to instantiate a DAB-DETR model (depending on what you prefer):
+
+Option 1: Instantiate DAB-DETR with pre-trained weights for entire model
+```py
+>>> from transformers import DABDETRForObjectDetection
+
+>>> model = DABDETRForObjectDetection.from_pretrained("IDEA-Research/dab_detr_resnet50")
+```
+
+Option 2: Instantiate DAB-DETR with randomly initialized weights for Transformer, but pre-trained weights for backbone
+```py
+>>> from transformers import DABDETRConfig, DABDETRForObjectDetection
+
+>>> config = DABDETRConfig()
+>>> model = DABDETRForObjectDetection(config)
+```
+Option 3: Instantiate DAB-DETR with randomly initialized weights for backbone + Transformer
+```py
+>>> config = DABDETRConfig(use_pretrained_backbone=False)
+>>> model = DABDETRForObjectDetection(config)
+```
+
 
 ## DABDETRConfig
 
@@ -52,7 +74,7 @@ The original code can be found [here](https://github.com/IDEA-Research/DAB-DETR)
 [[autodoc]] DABDETRImageProcessor
     - preprocess
     - post_process_object_detection
-
+ 
 ## DABDETRFeatureExtractor
 
 [[autodoc]] DABDETRFeatureExtractor
