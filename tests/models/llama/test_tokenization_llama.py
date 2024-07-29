@@ -827,6 +827,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
 
     @unittest.skip("@require_read_token does not work? getting gated repo error")
     @require_read_token
+    @unittest.skip
     def test_bos_eos_tokens(self):
         tokenizer = AutoTokenizer.from_pretrained("huggyllama/llama-7b", add_bos_token=False, add_eos_token=True)
         assert tokenizer("hello")["input_ids"][0] != tokenizer.bos_token_id  # no bos token
