@@ -569,7 +569,7 @@ class TFForceTokensLogitsProcessor(TFLogitsProcessor):
             batch_size = scores.shape[0]
             current_token = self.force_token_array[generation_idx]
 
-            new_scores = tf.ones_like(scores, dtype=scores.dtype) * float(-10000)
+            new_scores = tf.ones_like(scores, dtype=scores.dtype) * -10000.0
             indices = tf.stack((tf.range(batch_size), tf.tile([current_token], [batch_size])), axis=1)
             updates = tf.zeros((batch_size,), dtype=scores.dtype)
             new_scores = tf.tensor_scatter_nd_update(new_scores, indices, updates)
