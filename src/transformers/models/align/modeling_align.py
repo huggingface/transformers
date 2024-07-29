@@ -1418,13 +1418,13 @@ class AlignModel(AlignPreTrainedModel):
         super().__init__(config)
 
         if not isinstance(config.text_config, AlignTextConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.text_config is expected to be of type AlignTextConfig but is of type"
                 f" {type(config.text_config)}."
             )
 
         if not isinstance(config.vision_config, AlignVisionConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.vision_config is expected to be of type AlignVisionConfig but is of type"
                 f" {type(config.vision_config)}."
             )

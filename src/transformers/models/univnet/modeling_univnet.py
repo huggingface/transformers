@@ -525,7 +525,7 @@ class UnivNetModel(PreTrainedModel):
          >>> model = UnivNetModel.from_pretrained("dg845/univnet-dev")
          >>> feature_extractor = UnivNetFeatureExtractor.from_pretrained("dg845/univnet-dev")
 
-         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True)
+         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
          >>> # Resample the audio to the feature extractor's sampling rate.
          >>> ds = ds.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
          >>> inputs = feature_extractor(

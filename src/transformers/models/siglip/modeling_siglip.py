@@ -829,7 +829,7 @@ SIGLIP_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPEncoder with CLIP->Siglip
+# Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoder with AltCLIP->Siglip
 class SiglipEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
@@ -1202,13 +1202,13 @@ class SiglipModel(SiglipPreTrainedModel):
         super().__init__(config)
 
         if not isinstance(config.text_config, SiglipTextConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.text_config is expected to be of type SiglipTextConfig but is of type"
                 f" {type(config.text_config)}."
             )
 
         if not isinstance(config.vision_config, SiglipVisionConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.vision_config is expected to be of type SiglipVisionConfig but is of type"
                 f" {type(config.vision_config)}."
             )
@@ -1527,7 +1527,7 @@ class SiglipForImageClassification(SiglipPreTrainedModel):
         sequence_output = outputs[0]
 
         # average pool the patch tokens
-        sequence_output = torch.mean(sequence_output[:, 1:, :], dim=1)
+        sequence_output = torch.mean(sequence_output, dim=1)
         # apply classifier
         logits = self.classifier(sequence_output)
 
