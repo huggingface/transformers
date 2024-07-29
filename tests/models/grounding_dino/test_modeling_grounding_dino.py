@@ -67,24 +67,24 @@ def generate_fake_bounding_boxes(n_boxes):
     # Generate random bounding boxes in the format (cx, cy, w, h)
     bounding_boxes = torch.rand((n_boxes, 4))
 
-    for i in range(n_boxes):
-        cx, cy, w, h = bounding_boxes[i]
+    # Extract the components
+    cx = bounding_boxes[:, 0]
+    cy = bounding_boxes[:, 1]
+    w = bounding_boxes[:, 2]
+    h = bounding_boxes[:, 3]
 
-        # Ensure width and height do not exceed bounds
-        w = min(w, 1.0)
-        h = min(h, 1.0)
+    # Ensure width and height do not exceed bounds
+    w = torch.min(w, torch.tensor(1.0))
+    h = torch.min(h, torch.tensor(1.0))
 
-        # Ensure the bounding box stays within the normalized space
-        if cx - w / 2 < 0:
-            cx = w / 2
-        if cx + w / 2 > 1:
-            cx = 1 - w / 2
-        if cy - h / 2 < 0:
-            cy = h / 2
-        if cy + h / 2 > 1:
-            cy = 1 - h / 2
+    # Ensure the bounding box stays within the normalized space
+    cx = torch.where(cx - w / 2 < 0, w / 2, cx)
+    cx = torch.where(cx + w / 2 > 1, 1 - w / 2, cx)
+    cy = torch.where(cy - h / 2 < 0, h / 2, cy)
+    cy = torch.where(cy + h / 2 > 1, 1 - h / 2, cy)
 
-        bounding_boxes[i] = torch.tensor([cx, cy, w, h])
+    # Combine back into bounding boxes
+    bounding_boxes = torch.stack([cx, cy, w, h], dim=1)
 
     return bounding_boxes
 
