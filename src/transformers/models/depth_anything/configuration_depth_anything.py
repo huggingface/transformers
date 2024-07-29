@@ -67,7 +67,7 @@ class DepthAnythingConfig(PretrainedConfig):
             The index of the features to use in the depth estimation head.
         head_hidden_size (`int`, *optional*, defaults to 32):
             The number of output channels in the second convolution of the depth estimation head.
-        depth_estimation (`str`, *optional*, defaults to `"relative"`):
+        depth_estimation_type (`str`, *optional*, defaults to `"relative"`):
             The type of depth estimation to use. Can be one of `["relative", "metric"]`.
         max_depth (`float`, *optional*):
             The maximum depth to use for the "metric" depth estimation head. 20 should be used for indoor models
@@ -105,7 +105,7 @@ class DepthAnythingConfig(PretrainedConfig):
         fusion_hidden_size=64,
         head_in_index=-1,
         head_hidden_size=32,
-        depth_estimation="relative",
+        depth_estimation_type="relative",
         max_depth=None,
         **kwargs,
     ):
@@ -146,7 +146,7 @@ class DepthAnythingConfig(PretrainedConfig):
         self.fusion_hidden_size = fusion_hidden_size
         self.head_in_index = head_in_index
         self.head_hidden_size = head_hidden_size
-        self.depth_estimation = depth_estimation
+        self.depth_estimation_type = depth_estimation_type
         self.max_depth = max_depth if max_depth else 1
 
     def to_dict(self):

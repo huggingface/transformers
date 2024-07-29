@@ -332,12 +332,12 @@ class DepthAnythingDepthEstimationHead(nn.Module):
         self.conv2 = nn.Conv2d(features // 2, config.head_hidden_size, kernel_size=3, stride=1, padding=1)
         self.activation1 = nn.ReLU()
         self.conv3 = nn.Conv2d(config.head_hidden_size, 1, kernel_size=1, stride=1, padding=0)
-        if config.depth_estimation == "relative":
+        if config.depth_estimation_type == "relative":
             self.activation2 = nn.ReLU()
-        elif config.depth_estimation == "metric":
+        elif config.depth_estimation_type == "metric":
             self.activation2 = nn.Sigmoid()
         else:
-            raise ValueError(f"Unknown depth estimation type: {config.depth_estimation}")
+            raise ValueError(f"Unknown depth estimation type: {config.depth_estimation_type}")
         self.max_depth = config.max_depth
 
     def forward(self, hidden_states: List[torch.Tensor], patch_height, patch_width) -> torch.Tensor:
