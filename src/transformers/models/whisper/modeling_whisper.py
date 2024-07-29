@@ -1888,6 +1888,7 @@ class WhisperForCausalLM(WhisperPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        position_ids = None, 
     ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
         r"""
         Args:
@@ -1997,6 +1998,7 @@ class WhisperForCausalLM(WhisperPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
+            position_ids = position_ids
         )
 
         logits = self.proj_out(outputs[0])
@@ -2030,6 +2032,12 @@ class WhisperForCausalLM(WhisperPreTrainedModel):
         cache_position=None,
         **kwargs,
     ):
+        
+        position_ids = None 
+        
+        if attention_mask is not None: 
+            position_ids = (attention_mask.cumsum(-1) - 1).clamp(min=0)
+        
         past_length = 0
         if past_key_values is not None:
             if isinstance(past_key_values, (Cache, EncoderDecoderCache)):
@@ -2057,6 +2065,7 @@ class WhisperForCausalLM(WhisperPreTrainedModel):
             "input_ids": input_ids,
             "use_cache": use_cache,
             "attention_mask": attention_mask,
+            "position_ids": position_ids, 
             "cache_position": cache_position,
         }
 

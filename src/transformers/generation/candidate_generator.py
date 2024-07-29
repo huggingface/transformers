@@ -169,7 +169,11 @@ class AssistedCandidateGenerator(CandidateGenerator):
                 )
 
     def get_candidates(
-        self, input_ids: torch.LongTensor, n_matches=None, attention_mask=None
+        self,
+        input_ids: torch.LongTensor,
+        n_matches=None,
+        attention_mask=None,
+        position_ids=None,
     ) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
         """
         Fetches the candidates to be tried for the current input.
@@ -204,10 +208,14 @@ class AssistedCandidateGenerator(CandidateGenerator):
             )  # the assistant does not have the token after the last match, hence the -1
 
             if attention_mask is not None:
-                if self.assistant_model.config.is_encoder_decoder: 
-                    self.assistant_kwargs["decoder_attention_mask"] = attention_mask[:, : new_cur_len + self.num_assistant_tokens]
-                else: 
-                    self.assistant_kwargs["attention_mask"] = attention_mask[:, : new_cur_len + self.num_assistant_tokens]
+                if self.assistant_model.config.is_encoder_decoder:
+                    self.assistant_kwargs["decoder_attention_mask"] = attention_mask[
+                        :, : new_cur_len + self.num_assistant_tokens
+                    ]
+                else:
+                    self.assistant_kwargs["attention_mask"] = attention_mask[
+                        :, : new_cur_len + self.num_assistant_tokens
+                    ]
             else:
                 self.assistant_kwargs = _prepare_attention_mask(
                     self.assistant_kwargs,
