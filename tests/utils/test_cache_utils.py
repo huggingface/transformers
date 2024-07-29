@@ -143,7 +143,7 @@ class CacheTest(unittest.TestCase):
         mha_config = LlamaConfig(num_attention_heads=32)
         mha_static_cache = StaticCache(config=mha_config, max_batch_size=1, max_cache_len=10, device=torch_device)
         cached_keys, cached_values = mha_static_cache.update(
-            *_random_kvs(mha_config), 0, cache_kwargs={"cache_position": torch.arange(1)}
+            *_random_kvs(mha_config), 0, cache_kwargs={"cache_position": torch.arange(1).to(torch_device)}
         )
         self.assertTrue(cached_keys.shape == (1, 32, 10, 128))
         self.assertTrue(cached_values.shape == (1, 32, 10, 128))
@@ -151,7 +151,7 @@ class CacheTest(unittest.TestCase):
         gqa_config = LlamaConfig(num_attention_heads=32, num_key_value_heads=4)
         gqa_static_cache = StaticCache(config=gqa_config, max_batch_size=1, max_cache_len=10, device=torch_device)
         cached_keys, cached_values = gqa_static_cache.update(
-            *_random_kvs(gqa_config), 0, cache_kwargs={"cache_position": torch.arange(1)}
+            *_random_kvs(gqa_config), 0, cache_kwargs={"cache_position": torch.arange(1).to(torch_device)}
         )
         self.assertTrue(cached_keys.shape == (1, 4, 10, 128))
         self.assertTrue(cached_values.shape == (1, 4, 10, 128))
@@ -159,7 +159,7 @@ class CacheTest(unittest.TestCase):
         mqa_config = LlamaConfig(num_attention_heads=32, num_key_value_heads=1)
         mqa_static_cache = StaticCache(config=mqa_config, max_batch_size=1, max_cache_len=10, device=torch_device)
         cached_keys, cached_values = mqa_static_cache.update(
-            *_random_kvs(mqa_config), 0, cache_kwargs={"cache_position": torch.arange(1)}
+            *_random_kvs(mqa_config), 0, cache_kwargs={"cache_position": torch.arange(1).to(torch_device)}
         )
         self.assertTrue(cached_keys.shape == (1, 1, 10, 128))
         self.assertTrue(cached_values.shape == (1, 1, 10, 128))
