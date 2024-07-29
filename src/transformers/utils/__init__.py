@@ -208,6 +208,7 @@ from .import_utils import (
     is_torch_tpu_available,
     is_torch_xla_available,
     is_torch_xpu_available,
+    is_torchao_available,
     is_torchaudio_available,
     is_torchdistx_available,
     is_torchdynamo_available,
