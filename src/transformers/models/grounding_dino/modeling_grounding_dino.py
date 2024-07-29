@@ -2440,7 +2440,7 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
                 ).detach()
 
             # Set intermediate topk proposals (coords and class) for loss computation
-            encoder_pred_boxes = topk_coords_logits.sigmoid()
+            encoder_pred_boxes = reference_points
             encoder_logits = self.encoder_output_class_embed(target, text_features, text_token_mask)
         else:
             target = query_embeds.unsqueeze(0).repeat(batch_size, 1, 1)
