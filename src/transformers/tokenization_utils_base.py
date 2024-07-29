@@ -2663,7 +2663,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             tokenizer_config.pop("name_or_path")
             tokenizer_config.pop("special_tokens_map_file", None)
             tokenizer_config.pop("tokenizer_file", None)
-        if tokenizer_config["device_map"] and not isinstance(tokenizer_config["device_map"], str):
+        if "device_map" in tokenizer_config and not isinstance(tokenizer_config["device_map"], str):
             raise ValueError(
                     "`device_map` is not in str type. Please set the value in str format ('cpu'/'cuda') or do not pass it into tokenizer (if you are using TPU/XLA)."
                 )
