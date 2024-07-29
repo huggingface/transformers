@@ -2830,12 +2830,6 @@ class GroundingDinoLoss(nn.Module):
             generalized_box_iou(center_to_corners_format(source_boxes), center_to_corners_format(target_boxes))
         )
         losses["loss_giou"] = loss_giou.sum() / num_boxes
-
-        # calculate the x,y and h,w loss
-        with torch.no_grad():
-            losses["loss_xy"] = loss_bbox[..., :2].sum() / num_boxes
-            losses["loss_hw"] = loss_bbox[..., 2:].sum() / num_boxes
-
         return losses
 
     @torch.no_grad()

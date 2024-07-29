@@ -103,7 +103,7 @@ class GroundingDinoConfig(PretrainedConfig):
             Relative weight of the L1 bounding box loss in the object detection loss.
         giou_loss_coefficient (`float`, *optional*, defaults to 2.0):
             Relative weight of the generalized IoU loss in the object detection loss.
-        class_loss_reduction (`str`, *optional*, defaults to `"mean"`):
+        class_loss_reduction (`str`, *optional*, defaults to `"sum"`):
             The reduction method for the classification loss. One of `"mean"` or `"sum"`.
         focal_alpha (`float`, *optional*, defaults to 0.25):
             Alpha parameter in the focal loss.
