@@ -127,12 +127,12 @@ def uniform_chunk_sampling(
     Uniformly sample `num_chunks` chunks of duration `chunk_duration` from an audio/video of total duration `total_duration`.
 
     Args:
-        total_duration (float): Total duration of the audio/video.
-        chunk_duration (float): Duration of each chunk.
-        num_chunks (int): Number of chunks to sample.
-
-    Returns:
-        List[Tuple[float, float]]: List of tuples where each tuple contains the start and end time of a chunk.
+        total_duration (`float`): s
+            Total duration of the audio/video.
+        chunk_duration (`float`):
+            Duration of each chunk.
+        num_chunks (`int`):
+            Number of chunks to sample.
     """
     chunk_duration_fraction = Fraction(chunk_duration)
     max_possible_clip_start = Fraction(max(total_duration - chunk_duration, 0))

@@ -13,7 +13,8 @@
 # limitations under the License.
 """Image processor class for ImageBind."""
 
-from typing import Dict, List, Optional, Union
+from fractions import Fraction
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -30,8 +31,10 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
+    VideoInput,
     infer_channel_dimension_format,
     is_scaled_image,
+    is_valid_image,
     make_list_of_images,
     to_numpy_array,
     valid_images,
@@ -48,7 +51,73 @@ if is_vision_available():
     import PIL
 
 
-# Copied from models.clip.image_processing_clip.CLIPImageProcessor with CLIP->ImageBind
+# Copy from models.video_llava.image_processing_video_llava.make_batched_videos
+def make_batched_videos(videos) -> List[VideoInput]:
+    if isinstance(videos, (list, tuple)) and isinstance(videos[0], (list, tuple)) and is_valid_image(videos[0][0]):
+        return videos
+
+    elif isinstance(videos, (list, tuple)) and is_valid_image(videos[0]):
+        if isinstance(videos[0], PIL.Image.Image):
+            return [videos]
+        elif len(videos[0].shape) == 4:
+            return [list(video) for video in videos]
+
+    elif is_valid_image(videos) and len(videos.shape) == 4:
+        return [list(videos)]
+
+    raise ValueError(f"Could not make batched video from {videos}")
+
+
+# Copy from models.imagebind.feature_extraction_imagebind.uniform_chunk_sampling
+def uniform_chunk_sampling(
+    total_duration: float, chunk_duration: float, num_chunks: int
+) -> List[Tuple[Fraction, Fraction]]:
+    """
+    Uniformly sample `num_chunks` chunks of duration `chunk_duration` from an audio/video of total duration `total_duration`.
+
+    Args:
+        total_duration (float): Total duration of the audio/video.
+        chunk_duration (float): Duration of each chunk.
+        num_chunks (int): Number of chunks to sample.
+
+    Returns:
+        List[Tuple[float, float]]: List of tuples where each tuple contains the start and end time of a chunk.
+    """
+    chunk_duration_fraction = Fraction(chunk_duration)
+    max_possible_clip_start = Fraction(max(total_duration - chunk_duration, 0))
+    uniform_clip = Fraction(max_possible_clip_start / max(num_chunks - 1, 1))
+
+    result = []
+    for clip_index in range(num_chunks):
+        clip_start_sec = uniform_clip * clip_index
+        clip_end_sec = clip_start_sec + chunk_duration_fraction
+        result.append((clip_start_sec, clip_end_sec))
+
+    return result
+
+
+# Adapted from https://github.com/facebookresearch/pytorchvideo/blob/a0a131e/pytorchvideo/transforms/functional.py#L19
+def uniform_temporal_subsample(video: VideoInput, num_samples: int) -> VideoInput:
+    """
+    Uniformly subsamples num_samples indices from the temporal dimension of the video.
+    When num_samples is larger than the size of temporal dimension of the video, it
+    will sample frames based on nearest neighbor interpolation.
+
+    Args:
+        video (`VideoInput`):
+            Video to subsample.
+        num_samples (`int`):
+            Number of frames to sample.
+    """
+    num_frames = len(video)
+
+    # Sample by nearest neighbor interpolation if num_samples > t.
+    indices = np.linspace(0, num_frames - 1, num_samples)
+    indices = np.clip(indices, 0, num_frames - 1).astype(int)
+
+    return [video[i] for i in indices]
+
+
 class ImageBindImageProcessor(BaseImageProcessor):
     r"""
     Constructs an ImageBind image processor.
@@ -86,6 +155,16 @@ class ImageBindImageProcessor(BaseImageProcessor):
             Can be overridden by the `image_std` parameter in the `preprocess` method.
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Whether to convert the image to RGB.
+        do_chunk (`bool`, *optional*, defaults to `False`):
+            Whether to chunk the video into multiple clips.
+        chunk_duration (`float`, *optional*, defaults to 2.0):
+            Duration of each chunk in seconds.
+        num_chunks (`int`, *optional*, defaults to 5):
+            Number of chunks to sample.
+        num_frames_per_chunk (`int`, *optional*, defaults to 2):
+            Number of frames to sample per chunk.
+        fps (`int`, *optional*, defaults to 30):
+            Frame rate of the video. It's assumed that all videos have the same frame rate.
     """
 
     model_input_names = ["pixel_values"]
@@ -103,6 +182,11 @@ class ImageBindImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_convert_rgb: bool = True,
+        do_chunk: bool = False,
+        chunk_duration: float = 2.0,
+        num_chunks: int = 5,
+        num_frames_per_chunk: int = 2,
+        fps: int = 30,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -122,6 +206,11 @@ class ImageBindImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else OPENAI_CLIP_MEAN
         self.image_std = image_std if image_std is not None else OPENAI_CLIP_STD
         self.do_convert_rgb = do_convert_rgb
+        self.do_chunk = do_chunk
+        self.chunk_duration = chunk_duration
+        self.num_chunks = num_chunks
+        self.num_frames_per_chunk = num_frames_per_chunk
+        self.fps = fps
         self._valid_processor_keys = [
             "images",
             "do_resize",
@@ -135,6 +224,10 @@ class ImageBindImageProcessor(BaseImageProcessor):
             "image_mean",
             "image_std",
             "do_convert_rgb",
+            "do_chunk",
+            "chunk_duration",
+            "num_chunks",
+            "fps",
             "return_tensors",
             "data_format",
             "input_data_format",
@@ -148,6 +241,7 @@ class ImageBindImageProcessor(BaseImageProcessor):
             # `shortest_edge` key.
             delattr(self, "use_square_size")
 
+    # Copied from models.clip.image_processing_clip.CLIPImageProcessor.resize
     def resize(
         self,
         image: np.ndarray,
@@ -197,7 +291,43 @@ class ImageBindImageProcessor(BaseImageProcessor):
             **kwargs,
         )
 
-    def preprocess(
+    def chunk(
+        self, video: VideoInput, fps: int, chunk_duration: float, num_chunks: int, num_frames_per_chunk: int
+    ) -> List[VideoInput]:
+        """
+        Uniformly sample `num_chunks` chunks of duration `chunk_duration` from a video.
+
+        Args:
+            video (`VideoInput`):
+                Video to chunk.
+            fps (`int`):
+                Frame rate of the video
+            chunk_duration (`float`):
+                Duration of each chunk.
+            num_chunks (`int`):
+                Number of chunks to sample.
+            num_frames_per_chunk (`int`):
+                Number of frames to sample per chunk.
+        """
+        video_duration = len(video) / fps
+        if video_duration < chunk_duration:
+            logger.warning_once(
+                "Chunk duration is greater than audio duration. Chunks will be repeated, consider adjusting either `chunk_duration` or `num_chunks`"
+                "to avoid unnecessary memory/compute usage."
+            )
+
+        all_clips_timepoints = uniform_chunk_sampling(video_duration, chunk_duration, num_chunks)
+
+        all_clips = []
+        for clip_timepoints in all_clips_timepoints:
+            video_clip = video[int(clip_timepoints[0] * fps) : int(clip_timepoints[1] * fps)]
+            video_clip = uniform_temporal_subsample(video_clip, num_samples=num_frames_per_chunk)
+            all_clips.append(video_clip)
+
+        return all_clips
+
+    # Copied from models.clip.image_processing_clip.CLIPImageProcessor.preprocess with preprocess->_preprocess_image
+    def _preprocess_image(
         self,
         images: ImageInput,
         do_resize: bool = None,
@@ -211,85 +341,9 @@ class ImageBindImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_convert_rgb: bool = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
-    ) -> PIL.Image.Image:
-        """
-        Preprocess an image or batch of images.
-
-        Args:
-            images (`ImageInput`):
-                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
-                passing in images with pixel values between 0 and 1, set `do_rescale=False`.
-            do_resize (`bool`, *optional*, defaults to `self.do_resize`):
-                Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
-                Size of the image after resizing. Shortest edge of the image is resized to size["shortest_edge"], with
-                the longest edge resized to keep the input aspect ratio.
-            resample (`int`, *optional*, defaults to `self.resample`):
-                Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`. Only
-                has an effect if `do_resize` is set to `True`.
-            do_center_crop (`bool`, *optional*, defaults to `self.do_center_crop`):
-                Whether to center crop the image.
-            crop_size (`Dict[str, int]`, *optional*, defaults to `self.crop_size`):
-                Size of the center crop. Only has an effect if `do_center_crop` is set to `True`.
-            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-                Whether to rescale the image.
-            rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
-                Rescale factor to rescale the image by if `do_rescale` is set to `True`.
-            do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
-                Whether to normalize the image.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
-                Image mean to use for normalization. Only has an effect if `do_normalize` is set to `True`.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
-                Image standard deviation to use for normalization. Only has an effect if `do_normalize` is set to
-                `True`.
-            do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
-                Whether to convert the image to RGB.
-            return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return. Can be one of:
-                - Unset: Return a list of `np.ndarray`.
-                - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
-                - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
-                - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
-            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
-                The channel dimension format for the output image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - Unset: Use the channel dimension format of the input image.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. If unset, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-        """
-        do_resize = do_resize if do_resize is not None else self.do_resize
-        size = size if size is not None else self.size
-        size = get_size_dict(size, param_name="size", default_to_square=False)
-        resample = resample if resample is not None else self.resample
-        do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
-        crop_size = crop_size if crop_size is not None else self.crop_size
-        crop_size = get_size_dict(crop_size, param_name="crop_size", default_to_square=True)
-        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
-        do_normalize = do_normalize if do_normalize is not None else self.do_normalize
-        image_mean = image_mean if image_mean is not None else self.image_mean
-        image_std = image_std if image_std is not None else self.image_std
-        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
-
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
-
-        images = make_list_of_images(images)
-
-        if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+    ) -> np.ndarray:
         validate_preprocess_arguments(
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,
@@ -346,5 +400,210 @@ class ImageBindImageProcessor(BaseImageProcessor):
             to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
         ]
 
-        data = {"pixel_values": images}
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return images
+
+    # Ignore copy
+    def preprocess(
+        self,
+        images: Optional[ImageInput] = None,
+        videos: Optional[VideoInput] = None,
+        do_resize: bool = None,
+        size: Dict[str, int] = None,
+        resample: PILImageResampling = None,
+        do_center_crop: bool = None,
+        crop_size: int = None,
+        do_rescale: bool = None,
+        rescale_factor: float = None,
+        do_normalize: bool = None,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
+        do_convert_rgb: bool = None,
+        do_chunk: bool = None,
+        chunk_duration: float = None,
+        num_chunks: int = None,
+        num_frames_per_chunk: int = None,
+        fps: int = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        **kwargs,
+    ) -> PIL.Image.Image:
+        """
+        Preprocess an image or batch of images.
+
+        Args:
+            images (`ImageInput`, *optional*):
+                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
+                passing in images with pixel values between 0 and 1, set `do_rescale=False`. Either `images` or
+                `videos` must be provided.
+            videos (`VideoInput`, *optional*):
+                Video to preprocess. Expects a single or batch of videos with pixel values ranging from 0 to 255. If
+                passing in videos with pixel values between 0 and 1, set `do_rescale=False`. Either `images` or
+                `videos` must be provided.
+            do_resize (`bool`, *optional*, defaults to `self.do_resize`):
+                Whether to resize the image.
+            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+                Size of the image after resizing. Shortest edge of the image is resized to size["shortest_edge"], with
+                the longest edge resized to keep the input aspect ratio.
+            resample (`int`, *optional*, defaults to `self.resample`):
+                Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`. Only
+                has an effect if `do_resize` is set to `True`.
+            do_center_crop (`bool`, *optional*, defaults to `self.do_center_crop`):
+                Whether to center crop the image.
+            crop_size (`Dict[str, int]`, *optional*, defaults to `self.crop_size`):
+                Size of the center crop. Only has an effect if `do_center_crop` is set to `True`.
+            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
+                Whether to rescale the image.
+            rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
+                Rescale factor to rescale the image by if `do_rescale` is set to `True`.
+            do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
+                Whether to normalize the image.
+            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
+                Image mean to use for normalization. Only has an effect if `do_normalize` is set to `True`.
+            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
+                Image standard deviation to use for normalization. Only has an effect if `do_normalize` is set to
+                `True`.
+            do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
+                Whether to convert the image to RGB.
+            do_chunk (`bool`, *optional*, defaults to `self.do_chunk`):
+                Whether to chunk the video into multiple clips.
+            chunk_duration (`float`, *optional*, defaults to `self.chunk_duration`):
+                Duration of each chunk in seconds.
+            num_chunks (`int`, *optional*, defaults to `self.num_chunks`):
+                Number of chunks to sample.
+            num_frames_per_chunk (`int`, *optional*, defaults to `self.num_frames_per_chunk`):
+                Number of frames to sample per chunk.
+            fps (`int`, *optional*, defaults to `self.fps`):
+                Frame rate of the video. It's assumed that all videos have the same frame rate.
+            return_tensors (`str` or `TensorType`, *optional*):
+                The type of tensors to return. Can be one of:
+                - Unset: Return a list of `np.ndarray`.
+                - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
+                - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
+                - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
+                - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
+            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
+                The channel dimension format for the output image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - Unset: Use the channel dimension format of the input image.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+        """
+        if images is None and videos is None:
+            raise ValueError("Either `images` or `videos` must be provided.")
+
+        if images is not None and videos is not None:
+            raise ValueError("Only one of `images` or `videos` can be provided.")
+
+        do_resize = do_resize if do_resize is not None else self.do_resize
+        size = size if size is not None else self.size
+        size = get_size_dict(size, param_name="size", default_to_square=False)
+        resample = resample if resample is not None else self.resample
+        do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
+        crop_size = crop_size if crop_size is not None else self.crop_size
+        crop_size = get_size_dict(crop_size, param_name="crop_size", default_to_square=True)
+        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
+        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        do_normalize = do_normalize if do_normalize is not None else self.do_normalize
+        image_mean = image_mean if image_mean is not None else self.image_mean
+        image_std = image_std if image_std is not None else self.image_std
+        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        do_chunk = do_chunk if do_chunk is not None else self.do_chunk
+        chunk_duration = chunk_duration if chunk_duration is not None else self.chunk_duration
+        num_chunks = num_chunks if num_chunks is not None else self.num_chunks
+        num_frames_per_chunk = num_frames_per_chunk if num_frames_per_chunk is not None else self.num_frames_per_chunk
+        fps = fps if fps is not None else self.fps
+
+        if images is not None:
+            images = make_list_of_images(images)
+        if videos is not None:
+            videos = make_batched_videos(videos)
+
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
+
+        if (videos is not None and not valid_images(videos)) or (images is not None and not valid_images(images)):
+            raise ValueError(
+                "Invalid input type. Must be of type PIL.Image.Image, numpy.ndarray, "
+                "torch.Tensor, tf.Tensor or jax.ndarray."
+            )
+
+        if images is not None:
+            pixel_values = self._preprocess_image(
+                images=images,
+                do_resize=do_resize,
+                size=size,
+                resample=resample,
+                do_center_crop=do_center_crop,
+                crop_size=crop_size,
+                do_rescale=do_rescale,
+                rescale_factor=rescale_factor,
+                do_normalize=do_normalize,
+                image_mean=image_mean,
+                image_std=image_std,
+                do_convert_rgb=do_convert_rgb,
+                data_format=data_format,
+                input_data_format=input_data_format,
+            )
+        else:
+            pixel_values = []
+            for video in videos:
+                if do_chunk:
+                    clips = self.chunk(
+                        video=video,
+                        fps=fps,
+                        chunk_duration=chunk_duration,
+                        num_chunks=num_chunks,
+                        num_frames_per_chunk=num_frames_per_chunk,
+                    )
+
+                    _pixel_values = [
+                        self._preprocess_image(
+                            images=clip,
+                            do_resize=do_resize,
+                            size=size,
+                            resample=PILImageResampling.BILINEAR,
+                            do_center_crop=do_center_crop,
+                            crop_size=crop_size,
+                            do_rescale=do_rescale,
+                            rescale_factor=rescale_factor,
+                            do_normalize=do_normalize,
+                            image_mean=image_mean,
+                            image_std=image_std,
+                            do_convert_rgb=do_convert_rgb,
+                            data_format=data_format,
+                            input_data_format=input_data_format,
+                        )
+                        for clip in clips
+                    ]
+                else:
+                    _pixel_values = [
+                        self._preprocess_image(
+                            images=video,
+                            do_resize=do_resize,
+                            size=size,
+                            resample=resample,
+                            do_center_crop=do_center_crop,
+                            crop_size=crop_size,
+                            do_rescale=do_rescale,
+                            rescale_factor=rescale_factor,
+                            do_normalize=do_normalize,
+                            image_mean=image_mean,
+                            image_std=image_std,
+                            do_convert_rgb=do_convert_rgb,
+                            data_format=data_format,
+                            input_data_format=input_data_format,
+                        )
+                    ]
+
+                # Avoid List[List[List[np.ndarray]]]
+                _pixel_values = np.stack(_pixel_values)
+                # Make it shape (num_chunks, num_channels, num_frames_per_chunk, height, width)
+                _pixel_values = np.swapaxes(_pixel_values, 1, 2)
+                pixel_values.append(_pixel_values)
+
+        return BatchFeature(data={"pixel_values": pixel_values}, tensor_type=return_tensors)
