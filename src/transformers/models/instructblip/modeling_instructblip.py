@@ -1281,7 +1281,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
     def __init__(self, config: InstructBlipConfig):
         super().__init__(config)
 
-        self.vision_model = InstructBlipVisionModel(
+        self.vision_model = InstructBlipVisionModel._from_config(
             config.vision_config, attn_implementation=config.vision_config._attn_implementation
         )
 
