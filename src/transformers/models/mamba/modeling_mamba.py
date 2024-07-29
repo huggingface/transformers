@@ -327,6 +327,9 @@ class MambaRMSNorm(nn.Module):
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
         return self.weight * hidden_states.to(input_dtype)
 
+    def extra_repr(self):
+        return f"{self.weight.shape[0]}, eps={self.variance_epsilon}"
+
 
 class MambaBlock(nn.Module):
     def __init__(self, config, layer_idx):

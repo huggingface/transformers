@@ -68,6 +68,9 @@ class GemmaRMSNorm(nn.Module):
         output = output * (1.0 + self.weight.float())
         return output.type_as(x)
 
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.eps}"
+
 
 ALL_LAYERNORM_LAYERS.append(GemmaRMSNorm)
 
@@ -393,6 +396,7 @@ class GemmaFlashAttention2(GemmaAttention):
             value_states,
             attention_mask,
             q_len,
+            position_ids=position_ids,
             dropout=dropout_rate,
             sliding_window=getattr(self, "sliding_window", None),
             is_causal=self.is_causal,
@@ -769,7 +773,9 @@ class GemmaModel(GemmaPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         return_legacy_cache = False  # noqa: F841
-        if use_cache and not isinstance(past_key_values, Cache):  # kept for BC (non `Cache` `past_key_values` inputs)
+        if (
+            use_cache and not isinstance(past_key_values, Cache) and not self.training
+        ):  # kept for BC (non `Cache` `past_key_values` inputs)
             return_legacy_cache = True  # noqa: F841
             past_key_values = DynamicCache.from_legacy_cache(past_key_values)
 
@@ -794,7 +800,9 @@ class GemmaModel(GemmaPreTrainedModel):
         # See https://github.com/huggingface/transformers/pull/29402
         normalizer = torch.tensor(self.config.hidden_size**0.5, dtype=hidden_states.dtype)
         hidden_states = hidden_states * normalizer
-        if use_cache and not isinstance(past_key_values, Cache):  # kept for BC (non `Cache` `past_key_values` inputs)
+        if (
+            use_cache and not isinstance(past_key_values, Cache) and not self.training
+        ):  # kept for BC (non `Cache` `past_key_values` inputs)
             return_legacy_cache = True
             past_key_values = DynamicCache.from_legacy_cache(past_key_values)
             logger.warning_once(

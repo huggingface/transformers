@@ -104,14 +104,14 @@ class LlavaProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
         if images is not None:
-            pixel_values = self.image_processor(images, return_tensors=return_tensors)["pixel_values"]
+            image_inputs = self.image_processor(images, return_tensors=return_tensors)
         else:
-            pixel_values = None
+            image_inputs = {}
         text_inputs = self.tokenizer(
             text, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length
         )
 
-        return BatchFeature(data={**text_inputs, "pixel_values": pixel_values})
+        return BatchFeature(data={**text_inputs, **image_inputs})
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):

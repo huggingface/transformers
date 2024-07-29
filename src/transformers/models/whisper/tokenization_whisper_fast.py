@@ -539,14 +539,6 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
             return prefix_ones + ([0] * len(token_ids_0)) + suffix_ones
         return prefix_ones + ([0] * len(token_ids_0)) + ([0] * len(token_ids_1)) + suffix_ones
 
-    @property
-    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.default_chat_template
-    def default_chat_template(self):
-        """
-        A simple chat template that ignores role information and just concatenates messages with EOS tokens.
-        """
-        return "{% for message in messages %}" "{{ message.content }}{{ eos_token }}" "{% endfor %}"
-
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer.get_decoder_prompt_ids
     def get_decoder_prompt_ids(self, task=None, language=None, no_timestamps=True):
         self.set_prefix_tokens(task=task, language=language, predict_timestamps=not no_timestamps)

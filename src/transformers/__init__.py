@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.43.0.dev0"
+__version__ = "4.44.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -103,6 +103,7 @@ _import_structure = {
         "DataCollatorForSOP",
         "DataCollatorForTokenClassification",
         "DataCollatorForWholeWordMask",
+        "DataCollatorWithFlattening",
         "DataCollatorWithPadding",
         "DefaultDataCollator",
         "default_data_collator",
@@ -4785,6 +4786,7 @@ if TYPE_CHECKING:
         DataCollatorForSOP,
         DataCollatorForTokenClassification,
         DataCollatorForWholeWordMask,
+        DataCollatorWithFlattening,
         DataCollatorWithPadding,
         DefaultDataCollator,
         default_data_collator,

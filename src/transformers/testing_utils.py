@@ -513,7 +513,10 @@ def require_read_token(fn):
 
     @wraps(fn)
     def _inner(*args, **kwargs):
-        with patch("huggingface_hub.utils._headers.get_token", return_value=token):
+        if token is not None:
+            with patch("huggingface_hub.utils._headers.get_token", return_value=token):
+                return fn(*args, **kwargs)
+        else:  # Allow running locally with the default token env variable
             return fn(*args, **kwargs)
 
     return _inner

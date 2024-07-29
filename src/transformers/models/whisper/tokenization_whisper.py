@@ -810,14 +810,6 @@ class WhisperTokenizer(PreTrainedTokenizer):
             text = " " + text
         return (text, kwargs)
 
-    @property
-    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.default_chat_template
-    def default_chat_template(self):
-        """
-        A simple chat template that ignores role information and just concatenates messages with EOS tokens.
-        """
-        return "{% for message in messages %}" "{{ message.content }}{{ eos_token }}" "{% endfor %}"
-
     def get_decoder_prompt_ids(self, task=None, language=None, no_timestamps=True):
         self.set_prefix_tokens(task=task, language=language, predict_timestamps=not no_timestamps)
         # prefix tokens are of the form: <|startoftranscript|> <|lang_id|> <|task|> <|notimestamps|>
@@ -1182,7 +1174,22 @@ def _find_longest_common_sequence(sequences, token_timestamp_sequences=None):
                     "There is a bug within whisper `decode_asr` function, please report it. Dropping to prevent bad inference."
                 )
 
-            matches = np.sum(left == right)
+            if token_timestamp_sequences:
+                # Get length of longest subsequence of tokens that match
+                # and have timestamps that are in order
+                matches = sum(
+                    1
+                    for idx, elem in enumerate(left)
+                    if (
+                        elem == right[idx]
+                        and left_token_timestamp_sequence[left_start + idx]
+                        <= token_timestamp_sequences[seq_idx + 1][right_start + idx]
+                    )
+                )
+
+            else:
+                matches = np.sum(left == right)
+
             matching = matches / i + eps
             if matches > 1 and matching > max_:
                 max_ = matching
