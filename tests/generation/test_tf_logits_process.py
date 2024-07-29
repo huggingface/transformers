@@ -405,9 +405,8 @@ class TFLogitsProcessorTest(unittest.TestCase):
         tf.debugging.assert_near(tf.gather(scores, [force_token_map[cur_len]], axis=1), 0.0)
 
         non_forced_inds = [i for i in range(vocab_size) if i != force_token_map[cur_len]]
-        self.assertTrue(
-            tf.math.reduce_all(tf.gather(scores, [non_forced_inds], axis=1) <= -9000.0),
-        )
+        self.assertTrue(tf.math.reduce_all(tf.experimental.numpy.isclose(tf.gather(scores, [non_forced_inds], axis=1), -10000.0)))
+
 
         # check that if the cur_len is not contained in the force_token_map, the logits are not modified
         cur_len = 2
