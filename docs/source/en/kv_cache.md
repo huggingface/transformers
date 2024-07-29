@@ -20,7 +20,7 @@ Efficient caching is crucial for optimizing the performance of models in various
 including text generation, translation, summarization and other transformer-based applications.
 Effective caching helps reduce computation time and improve response rates, especially in real-time or resource-intensive applications.
 
-Transformers support various caching methods, leveraging ["~Cache"] classes to abstract and manage the caching logic.
+Transformers support various caching methods, leveraging "Cache" classes to abstract and manage the caching logic.
 This document outlines best practices for using these classes to maximize performance and efficiency.
 Check out all the available `Cache` classes in the [API documentation](./internal/generation_utils.md).
 
@@ -92,7 +92,7 @@ More concretely, key-value cache acts as a memory bank for these generative mode
 ## Generate with Cache
 
 In 🤗 Transformers, we support various Cache types to optimize the performance across different models and tasks. By default, all models generate with caching,
-with the ["~DynamicCache"] class being the default cache for most models. It allows us to dynamically grow cache size, by saving more and more keys and values as we generate. If for some reason you don't want to use caches, you can pass `use_cache=False` into the `generate()` method.
+with the ["DynamicCache"](./internal/generation_utils#transformers.DynamicCache) class being the default cache for most models. It allows us to dynamically grow cache size, by saving more and more keys and values as we generate. If for some reason you don't want to use caches, you can pass `use_cache=False` into the `generate()` method.
 
 Refer to the table below to see the difference between cache types and choose the one that suits best for your use-case.
 
@@ -105,14 +105,14 @@ Refer to the table below to see the difference between cache types and choose th
 | Sink Cache          |      Yes         |        No                |         Yes                |   Mid    |     Yes                  |
 
 
-These cache classes can be set with a `cache_implementation` argument when generating. To learn about the available options for the cache_implementation flag, please refer to the [API Documentation](./main_classes/text_generation.md#transformers.GenerationConfig). Now, let's explore each cache type in detail and see how to use them. Note that the below examples are for decoder-only Tranformer-based models. Jump directly to ["Model-Specific Cache"]("#model-specific-cache-classes") section to know more about other architectures we support.
+These cache classes can be set with a `cache_implementation` argument when generating. To learn about the available options for the cache_implementation flag, please refer to the [API Documentation](./main_classes/text_generation.md#transformers.GenerationConfig). Now, let's explore each cache type in detail and see how to use them. Note that the below examples are for decoder-only Tranformer-based models. We also support ["Model-Specific Cache"] classes for models such as Mamba or Jamba, keep reading for more details.
 
 ### Quantized Cache
 
 The key and value cache can occupy a large portion of memory, becoming a [bottleneck for long-context generation](https://huggingface.co/blog/llama31#inference-memory-requirements), especially for Large Language Models.
 Quantizing the cache when using `generate()` can significantly reduce memory requirements at the cost of speed.
 
-KV Cache quantization in `transformers` is largely inspired by the paper ["KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache"](https://arxiv.org/abs/2402.02750) and currently supports ["~cache_utils.QuantoQuantizedCache"] and ["~cache_utils.HQQQuantizedCache"] classes. For more information on the inner workings see the paper.
+KV Cache quantization in `transformers` is largely inspired by the paper ["KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache"](https://arxiv.org/abs/2402.02750) and currently supports ["QuantoQuantizedCache"](./internal/generation_utils#transformers.QuantoQuantizedCache) and ["HQQQuantizedCache"](./internal/generation_utils#transformers.HQQQuantizedCache) classes. For more information on the inner workings see the paper.
 
 To enable quantization of the key-value cache, one needs to indicate `cache_implementation="quantized"` in the `generation_config`.
 Quantization related arguments should be passed to the `generation_config` either as a `dict` or an instance of a [`~QuantizedCacheConfig`] class.
@@ -144,10 +144,10 @@ I like rock music because it's loud and energetic. I like to listen to it when I
 
 ### Static Cache
 
-Since the ["~DynamicCache"] dynamically grows with each generation step, it prevents you from taking advantage of JIT optimizations. The ["~StaticCache"] pre-allocates 
+Since the "DynamicCache" dynamically grows with each generation step, it prevents you from taking advantage of JIT optimizations. The ["StaticCache"](./internal/generation_utils#transformers.StaticCache) pre-allocates 
 a specific maximum size for the keys and values, allowing you to generate up to the maximum length without having to modify cache size. Check the below usage example.
 
-For more examples with Static Cache and JIT compilation, take a look at (StaticCache & torchcompile)["./llm_optims.md#static-kv-cache-and-torchcompile"]
+For more examples with Static Cache and JIT compilation, take a look at [StaticCache & torchcompile](./llm_optims.md#static-kv-cache-and-torchcompile)
 
 ```python
 >>> import torch
@@ -208,21 +208,21 @@ Unlike other cache classes, this one can't be used directly by indicating a `cac
 
 ### Encoder-Decoder Cache
 
-The ["~EncoderDecoderCache"] is a wrapper designed to handle the caching needs of encoder-decoder models. This cache type is specifically built to manage both self-attention and cross-attention caches, ensuring storage and retrieval of past key/values required for these complex models. Cool thing about Encoder-Decoder Cache is that you can set different cache types for the encoder and for the decoder, depending on your use case. Currently this cache is only supported in (Whisper)["./model_doc/whisper.md"] models but we will be adding more models soon. 
+The ["EncoderDecoderCache"](./internal/generation_utils#transformers.EncoderDecoderCache) is a wrapper designed to handle the caching needs of encoder-decoder models. This cache type is specifically built to manage both self-attention and cross-attention caches, ensuring storage and retrieval of past key/values required for these complex models. Cool thing about Encoder-Decoder Cache is that you can set different cache types for the encoder and for the decoder, depending on your use case. Currently this cache is only supported in [Whisper](./model_doc/whisper.md) models but we will be adding more models soon. 
 
 In terms of usage, there is nothing special to be done and calling `generate()` or `forward()` will handle everything for you.
 
 
 ### Model-specific Cache Classes
 
-Some models require storing previous keys, values, or states in a specific way, and the above cache classes cannot be used. For such cases, we have several specialized cache classes that are designed for specific models. These models only accept their own dedicated cache classes and do not support using any other cache types. Some examples include ["~HybridCache"] for Gemma2["./model_doc/gemma2.md"] series models or ["~MambaCache"] for Mamba["./model_doc/mamba.md"] architecture models.
+Some models require storing previous keys, values, or states in a specific way, and the above cache classes cannot be used. For such cases, we have several specialized cache classes that are designed for specific models. These models only accept their own dedicated cache classes and do not support using any other cache types. Some examples include ["HybridCache"](./internal/generation_utils#transformers.HybridCache) for [Gemma2](./model_doc/gemma2.md) series models or ["MambaCache"](./internal/generation_utils#transformers.MambaCache) for [Mamba](./model_doc/mamba.md) architecture models.
 
 
 ## Iterative Generation with Cache
 
 We have seen how to use each of the cache types when generating. What if you want to use cache in iterative generation setting, for example in applications like chatbots, where interactions involve multiple turns and continuous back-and-forth exchanges. Iterative generation with cache allows these systems to handle ongoing conversations effectively without reprocessing the entire context at each step. But there are some tips that you should know before you start implementing:
 
-The general format when doing iterative generation is as below. First you have to initialize an empty cache of the type you want, and you can start feeding in new prompts iteratively. Keeping track of dialogues history and formatting can be done with chat templates, read more on that in (chat_templating)["./chat_templating.md"]
+The general format when doing iterative generation is as below. First you have to initialize an empty cache of the type you want, and you can start feeding in new prompts iteratively. Keeping track of dialogues history and formatting can be done with chat templates, read more on that in [chat_templating](./chat_templating.md)
 
 In case you are using Sink Cache, you have to crop your inputs to that maximum length because Sink Cache can generate text longer than its maximum window size, but it expects the first input to not exceed the maximum cache length.  
 
