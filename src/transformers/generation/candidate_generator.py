@@ -168,7 +168,9 @@ class AssistedCandidateGenerator(CandidateGenerator):
                     "Please pass in `min_length` into `.generate()` instead"
                 )
 
-    def get_candidates(self, input_ids: torch.LongTensor, n_matches = None, attention_mask=None) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
+    def get_candidates(
+        self, input_ids: torch.LongTensor, n_matches=None, attention_mask=None
+    ) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
         """
         Fetches the candidates to be tried for the current input.
 
@@ -189,25 +191,25 @@ class AssistedCandidateGenerator(CandidateGenerator):
         min_new_tokens = max(min(max_new_tokens, self.main_model_min_length - new_cur_len), 0)
         if max_new_tokens == 0:
             return input_ids, None
-    
 
         # 1. If it is not the first round of candidate generation, prepare the inputs based on the input_ids length
-        # (which implicitly contains the number of accepted candidates from the previous round) 
+        # (which implicitly contains the number of accepted candidates from the previous round)
         has_past_key_values = self.assistant_kwargs.get("past_key_values", None) is not None
 
         if has_past_key_values:
-            
             new_cache_size = new_cur_len - 1
 
             self.assistant_kwargs["past_key_values"] = _crop_past_key_values(
                 self.assistant_model, self.assistant_kwargs["past_key_values"], new_cache_size - 1, n_matches=n_matches
             )  # the assistant does not have the token after the last match, hence the -1
 
-            if attention_mask is not None: 
-                self.assistant_kwargs['attention_mask'] = attention_mask[:,:new_cur_len + self.num_assistant_tokens]
-            else:  
+            if attention_mask is not None:
+                self.assistant_kwargs["attention_mask"] = attention_mask[:, : new_cur_len + self.num_assistant_tokens]
+            else:
                 self.assistant_kwargs = _prepare_attention_mask(
-                    self.assistant_kwargs, new_cur_len, self.assistant_model.config.is_encoder_decoder,
+                    self.assistant_kwargs,
+                    new_cur_len,
+                    self.assistant_model.config.is_encoder_decoder,
                 )
             self.assistant_kwargs = _prepare_token_type_ids(self.assistant_kwargs, new_cur_len)
 
@@ -219,7 +221,6 @@ class AssistedCandidateGenerator(CandidateGenerator):
             "generation_config": self.generation_config,
             "logits_processor": self.logits_processor,
         }
-
 
         assistant_output = self.assistant_model.generate(**assistant_generation_kwargs, **self.assistant_kwargs)
 
@@ -255,22 +256,18 @@ class AssistedCandidateGenerator(CandidateGenerator):
                 self.num_assistant_tokens += 2.0
             else:
                 self.num_assistant_tokens = max(1, self.num_assistant_tokens - 1)
-                
-    def update_past_key_values(self, max_length = None, left_cut = None, n_matches = None): 
-        
-        has_past_key_values = self.assistant_kwargs.get("past_key_values", None) is not None
-        
-        if has_past_key_values: 
-            
-            self.assistant_kwargs["past_key_values"] = _crop_past_key_values(
-                self.assistant_model, 
-                self.assistant_kwargs["past_key_values"], 
-                max_length = max_length, 
-                left_cut=left_cut, 
-                n_matches=n_matches
-            )
-            
 
+    def update_past_key_values(self, max_length=None, left_cut=None, n_matches=None):
+        has_past_key_values = self.assistant_kwargs.get("past_key_values", None) is not None
+
+        if has_past_key_values:
+            self.assistant_kwargs["past_key_values"] = _crop_past_key_values(
+                self.assistant_model,
+                self.assistant_kwargs["past_key_values"],
+                max_length=max_length,
+                left_cut=left_cut,
+                n_matches=n_matches,
+            )
 
 
 class PromptLookupCandidateGenerator(CandidateGenerator):

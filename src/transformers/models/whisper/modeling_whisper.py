@@ -1766,12 +1766,11 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
         use_cache=None,
         encoder_outputs=None,
         attention_mask=None,
-        decoder_position_ids=None, 
+        decoder_position_ids=None,
         decoder_attention_mask=None,
         cache_position=None,
         **kwargs,
     ):
-
         decoder_position_ids = None
 
         if decoder_attention_mask is not None:

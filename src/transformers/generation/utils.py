@@ -1674,7 +1674,7 @@ class GenerationMixin:
         self._validate_model_class()
         tokenizer = kwargs.pop("tokenizer", None)  # Pull this out first, we only use it for stopping criteria
         generation_config, model_kwargs = self._prepare_generation_config(generation_config, **kwargs)
-        
+
         # position_ids = model_kwargs.pop('position_ids')
         self._validate_model_kwargs(model_kwargs.copy())
         self._validate_assistant(assistant_model)
@@ -3993,7 +3993,9 @@ class GenerationMixin:
             cur_len = input_ids.shape[-1]
 
             #  1. Fetch candidate sequences from a `CandidateGenerator`
-            candidate_input_ids, candidate_logits = candidate_generator.get_candidates(input_ids, n_matches, attention_mask)
+            candidate_input_ids, candidate_logits = candidate_generator.get_candidates(
+                input_ids, n_matches, attention_mask
+            )
             candidate_input_ids = candidate_input_ids.to(self.device)
             if candidate_logits is not None:
                 candidate_logits = candidate_logits.to(self.device)
@@ -4108,7 +4110,7 @@ class GenerationMixin:
             # 4.2. Discard past key values relative to unused assistant tokens
             new_cache_size = new_cur_len - 1
             outputs.past_key_values = _crop_past_key_values(self, outputs.past_key_values, new_cache_size, n_matches)
-            
+
             # 5. Update the candidate generation strategy if needed
             candidate_generator.update_candidate_strategy(input_ids, new_logits, n_matches)
 
