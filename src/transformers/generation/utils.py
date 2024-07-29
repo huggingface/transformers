@@ -4031,6 +4031,9 @@ class GenerationMixin:
                 )
             else:
                 candidate_kwargs["position_ids"] = position_ids[:, : cur_len + candidate_length]
+                candidate_kwargs["attention_mask"] = (
+                    attention_mask[:, : cur_len + candidate_length] if attention_mask is not None else None
+                )
 
             model_inputs = self.prepare_inputs_for_generation(candidate_input_ids, **candidate_kwargs)
             if "num_logits_to_keep" in model_inputs:
