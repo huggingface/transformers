@@ -4678,6 +4678,10 @@ class Trainer:
         if self.is_deepspeed_enabled and getattr(self.args, "hf_deepspeed_config", None) is None:
             self.propagate_args_to_deepspeed()
 
+        if self.is_deepspeed_enabled and is_deepspeed_zero3_enabled():
+            if not getattr(self.model, "transformers_zero3_init_used", False):
+                raise ValueError("Model was not initialized with `Zero-3` despite being configured. Please re-initialize your model via AutoModel.from_pretrained(...) after creating your `TrainingArguments`!")
+
         # `save_only_model` can't be used with DeepSpeed/FSDP along with `load_best_model_at_end`
         if (
             self.args.save_only_model

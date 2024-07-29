@@ -3797,6 +3797,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # Let's make sure we don't run the init function of buffer modules
             model = cls(config, *model_args, **model_kwargs)
 
+        # If we init with `zero3`, add an attr to the model so we can check downstream for issues
+        if is_deepspeed_zero3_enabled():
+            model.transformers_zero3_init_used = True
+
         # make sure we use the model's config since the __init__ call might have copied it
         config = model.config
 

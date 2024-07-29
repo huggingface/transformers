@@ -229,6 +229,27 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                     AutoModel.from_pretrained(T5_TINY)
         self.assertNotIn("Detected DeepSpeed ZeRO-3", cl.out)
 
+    def test_zero3_misconfigured(self):
+        # test that catches if a model was created before `zero.Init()` was called
+        AutoModel.from_pretrained(T5_TINY)
+        
+
+        # Now add in zero optimization
+        ds_config = {
+            "train_batch_size": 1,
+            "zero_optimization": {
+                "stage": 3,
+            },
+        }
+
+        dschf = HfDeepSpeedConfig(ds_config)
+
+        self.assertTrue(dschf.is_zero3())
+        self.assertTrue(is_deepspeed_zero3_enabled())
+
+        with self.assertRaises(ValueError, msg="Model was not initialized with `Zero-3` despite being configured."):
+            AutoModel.from_pretrained(T5_TINY)
+
     def test_init_zero3_missing_params(self):
         # test that zero.Init() for missing parameters works correctly under zero3
         import deepspeed
