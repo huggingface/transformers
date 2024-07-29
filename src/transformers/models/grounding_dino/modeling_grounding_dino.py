@@ -2807,7 +2807,7 @@ class GroundingDinoLoss(nn.Module):
 
         return losses
 
-    # Same as in `DeformableDetrLoss` with the addition of loss_xy and loss_hw to calculate the x,y and h,w loss
+    # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrLoss.loss_boxes
     def loss_boxes(self, outputs, targets, indices, num_boxes):
         """
         Compute the losses related to the bounding boxes, the L1 regression loss and the GIoU loss.
@@ -3142,7 +3142,7 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
                 class_cost=self.config.class_cost, bbox_cost=self.config.bbox_cost, giou_cost=self.config.giou_cost
             )
             # Second: create the criterion
-            losses = ["labels", "boxes"]
+            losses = ["labels", "boxes", "cardinality"]
             criterion = GroundingDinoLoss(
                 matcher=matcher,
                 class_reduction=self.config.class_loss_reduction,
