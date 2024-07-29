@@ -1517,14 +1517,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # we have to check and dispatch SDPA to each sub-model, in case any of them support it.
         # If one sub-model supports SDPA while other doesn't, an error will be raised following the
         # typical SDPA-dispatch path.
-        # Same goes for the `_supports_cache_class` because we cannot know what flag LM has
-        # before knowing which class is that LM
         if hasattr(config, "text_config") and hasattr(config, "vision_config"):
+            # set to None to avoid hard_check errors, because general VLM's `_support_sdpa` attr is always `False` by default
+            requested_attn_implementation = (
+                None if requested_attn_implementation == "sdpa" else requested_attn_implementation
+            )
             text_model_cls = MODEL_MAPPING.get(type(config.text_config), None)
             if text_model_cls is not None:
-                config.text_config._attn_implementation = config._attn_implementation
-                cls._supports_sdpa = text_model_cls._supports_sdpa
-                cls._autoset_attn_implementation(
+                config.text_config._attn_implementation = requested_attn_implementation
+                text_model_cls._autoset_attn_implementation(
                     config.text_config,
                     use_flash_attention_2=use_flash_attention_2,
                     torch_dtype=torch_dtype,
@@ -1534,18 +1535,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             vision_model_cls = MODEL_MAPPING.get(type(config.vision_config), None)
             if vision_model_cls is not None:
-                config.vision_config._attn_implementation = config._attn_implementation
-                cls._supports_sdpa = vision_model_cls._supports_sdpa
-                cls._autoset_attn_implementation(
+                config.vision_config._attn_implementation = requested_attn_implementation
+                vision_model_cls._autoset_attn_implementation(
                     config.vision_config,
                     use_flash_attention_2=use_flash_attention_2,
                     torch_dtype=torch_dtype,
                     device_map=device_map,
                     check_device_map=check_device_map,
                 )
-
-            if vision_model_cls is not None and text_model_cls is not None:
-                cls._supports_sdpa = vision_model_cls._supports_sdpa or text_model_cls._supports_sdpa
 
         if use_flash_attention_2:
             logger.warning_once(
@@ -1738,6 +1735,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 raise ImportError(
                     "PyTorch SDPA requirements in Transformers are not met. Please install torch>=2.1.1."
                 )
+
+        # VLMs have to follow the sdpa attr of its sub-configs
+        if hasattr(config, "text_config") and hasattr(config, "vision_config"):
+            if (
+                config.text_config._attn_implementation == "sdpa"
+                or config.vision_config._attn_implementation == "sdpa"
+            ):
+                config._attn_implementation = "sdpa"
 
         if not is_torch_sdpa_available() or not cls._supports_sdpa:
             return config

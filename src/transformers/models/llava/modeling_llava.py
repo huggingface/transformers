@@ -229,13 +229,13 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
     def __init__(self, config: LlavaConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(
-            config.vision_config, attn_implementation=config.text_config._attn_implementation
+            config.vision_config, attn_implementation=config.vision_config._attn_implementation
         )
 
         self.multi_modal_projector = LlavaMultiModalProjector(config)
         self.vocab_size = config.text_config.vocab_size
         self.language_model = AutoModelForCausalLM.from_config(
-            config.text_config, attn_implementation=config.vision_config._attn_implementation
+            config.text_config, attn_implementation=config.text_config._attn_implementation
         )
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.post_init()
