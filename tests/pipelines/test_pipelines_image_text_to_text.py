@@ -55,7 +55,7 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
         return pipe, examples
 
     def run_pipeline_test(self, pipe, examples):
-        outputs = pipe(examples)
+        outputs = pipe(examples.get("images"), text=examples.get("text"), max_new_tokens=20)
         self.assertEqual(
             outputs,
             [
