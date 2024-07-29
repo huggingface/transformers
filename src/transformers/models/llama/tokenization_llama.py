@@ -250,7 +250,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
             tokens = tokens[1:]
         return tokens
 
-    # Modified from transformers.models.t5.tokenization_t5.T5Tokenizer._tokenize
+    # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer._tokenize
     def _tokenize(self, text, **kwargs):
         """
         Returns a tokenized string.
