@@ -17,7 +17,7 @@
 import json
 import logging
 import re
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union, Literal
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Union
 
 from .. import is_torch_available
 from ..utils import logging as transformers_logging
@@ -30,16 +30,12 @@ from .prompts import (
     DEFAULT_REACT_CODE_SYSTEM_PROMPT,
     DEFAULT_REACT_JSON_SYSTEM_PROMPT,
     PLAN_UPDATE_FINAL_PLAN_REDACTION,
+    SUPPORTED_PLAN_TYPES,
     SYSTEM_PROMPT_FACTS,
     SYSTEM_PROMPT_FACTS_UPDATE,
-    SYSTEM_PROMPT_PLAN,
-    SYSTEM_PROMPT_PLAN_UPDATE,
     USER_PROMPT_FACTS_UPDATE,
-    USER_PROMPT_PLAN,
-    USER_PROMPT_PLAN_UPDATE,
-    SUPPORTED_PLAN_TYPES,
     plan_type_to_prompt_first,
-    plan_type_to_prompt_other
+    plan_type_to_prompt_other,
 )
 from .python_interpreter import LIST_SAFE_MODULES, evaluate_python_code
 from .tools import (
@@ -48,6 +44,7 @@ from .tools import (
     get_tool_description_with_args,
     load_tool,
 )
+
 
 if is_pygments_available():
     from pygments import highlight
@@ -801,7 +798,7 @@ Now begin!""",
 
             message_system_prompt_plan = {
                 "role": MessageRole.SYSTEM,
-                "content": plan_type_to_prompt_first[self.plan_type]["system"]
+                "content": plan_type_to_prompt_first[self.plan_type]["system"],
             }
             message_user_prompt_plan = {
                 "role": MessageRole.USER,
@@ -845,9 +842,7 @@ Now begin!""",
             # Redact updated plan
             plan_update_message = {
                 "role": MessageRole.SYSTEM,
-                "content": plan_type_to_prompt_other[self.plan_type]["system"].format(
-                    task=task
-                )
+                "content": plan_type_to_prompt_other[self.plan_type]["system"].format(task=task),
             }
             plan_update_message_user = {
                 "role": MessageRole.USER,

@@ -471,7 +471,7 @@ After writing the final step of the plan, write the '\n<end_plan>' tag and stop 
 
 Now write your new plan below."""
 
-SYSTEM_PROMPT_PLAN_STRUCTURED = """Output a step-by-step plan to solve the task using the given tools. 
+SYSTEM_PROMPT_PLAN_STRUCTURED = """Output a step-by-step plan to solve the task using the given tools.
 This plan should involve individual tasks based on the avilable tools, that if executed correctly will yield the correct answer. Each step should be structured as follows:
 Step #n: {
   "description": <description of what the step does and its output>
@@ -512,7 +512,7 @@ How many encoder blocks were in the first attention-only ML architecture publish
 ```
 
 [STEP 1 TOOL CALL]: {'tool_name': 'code interpreter', 'tool_arguments': '# Step 1: Identify the title and authors of the paper that first introduced an attention-only ML architecture.\nanswer = ask_search_agent(query="Can you find the title and authors of the paper that first introduced an attention-only machine learning architecture? Please provide the full citation.")\nprint(answer)'}
-[OUTPUT OF STEP 1] Observation: **Title**: Attention Is All You Need  
+[OUTPUT OF STEP 1] Observation: **Title**: Attention Is All You Need
 **Authors**: Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser, Illia Polosukhin
 [STEP 2 TOOL CALL]: {'tool_name': 'code interpreter', 'tool_arguments': '# Step 1: Find the full text of the identified paper on arXiv\\npaper_url = "https://arxiv.org/pdf/1706.03762.pdf"\\nprint(paper_url)'}
 [OUTPUT OF STEP 2] Observation: https://arxiv.org/pdf/1706.03762.pdf
@@ -617,7 +617,7 @@ List of facts that you know:
 Now for the given task, create a plan taking into account the list of facts.
 After writing the final step of the plan, write the '\n<end_plan>' tag and stop there. Output the plan only and nothing else."""
 
-SYSTEM_PROMPT_PLAN_UPDATE_STRUCTURED = """Output a step-by-step plan to solve the task using the given tools. 
+SYSTEM_PROMPT_PLAN_UPDATE_STRUCTURED = """Output a step-by-step plan to solve the task using the given tools.
 This plan should involve individual tasks based on the avilable tools, that if executed correctly will yield the correct answer. Each step should be structured as follows:
 Step #n: {{
   "description": <description of what the step does and its output>
@@ -658,7 +658,7 @@ How many encoder blocks were in the first attention-only ML architecture publish
 ```
 
 [STEP 1 TOOL CALL]: {{'tool_name': 'code interpreter', 'tool_arguments': '# Step 1: Identify the title and authors of the paper that first introduced an attention-only ML architecture.\nanswer = ask_search_agent(query="Can you find the title and authors of the paper that first introduced an attention-only machine learning architecture? Please provide the full citation.")\nprint(answer)'}}
-[OUTPUT OF STEP 1] Observation: **Title**: Attention Is All You Need  
+[OUTPUT OF STEP 1] Observation: **Title**: Attention Is All You Need
 **Authors**: Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser, Illia Polosukhin
 [STEP 2 TOOL CALL]: {{'tool_name': 'code interpreter', 'tool_arguments': '# Step 1: Find the full text of the identified paper on arXiv\\npaper_url = "https://arxiv.org/pdf/1706.03762.pdf"\\nprint(paper_url)'}}
 [OUTPUT OF STEP 2] Observation: https://arxiv.org/pdf/1706.03762.pdf
@@ -777,23 +777,11 @@ Here is my new/updated plan of action to solve the task:
 SUPPORTED_PLAN_TYPES = ["default", "structured"]
 
 plan_type_to_prompt_first = {
-    "default": {
-        "system": SYSTEM_PROMPT_PLAN,
-        "user": USER_PROMPT_PLAN
-    },
-    "structured": {
-        "system": SYSTEM_PROMPT_PLAN_STRUCTURED,
-        "user": USER_PROMPT_PLAN_STRUCTURED
-    }
+    "default": {"system": SYSTEM_PROMPT_PLAN, "user": USER_PROMPT_PLAN},
+    "structured": {"system": SYSTEM_PROMPT_PLAN_STRUCTURED, "user": USER_PROMPT_PLAN_STRUCTURED},
 }
 
 plan_type_to_prompt_other = {
-    "default": {
-        "system": SYSTEM_PROMPT_PLAN_UPDATE,
-        "user": USER_PROMPT_PLAN_UPDATE
-    },
-    "structured": {
-        "system": SYSTEM_PROMPT_PLAN_UPDATE_STRUCTURED,
-        "user": USER_PROMPT_PLAN_UPDATE_STRUCTURED
-    }
+    "default": {"system": SYSTEM_PROMPT_PLAN_UPDATE, "user": USER_PROMPT_PLAN_UPDATE},
+    "structured": {"system": SYSTEM_PROMPT_PLAN_UPDATE_STRUCTURED, "user": USER_PROMPT_PLAN_UPDATE_STRUCTURED},
 }
