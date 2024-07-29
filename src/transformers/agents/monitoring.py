@@ -14,7 +14,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from .agent_types import AgentAudio, AgentImage, AgentText, AgentType
+from .agent_types import AgentAudio, AgentImage, AgentText
 from .agents import ReactAgent
 
 
@@ -54,27 +54,22 @@ def stream_to_gradio(agent: ReactAgent, task: str, **kwargs):
     except ImportError:
         raise ImportError("Gradio should be installed in order to launch a gradio demo.")
 
-    class Output:
-        output: AgentType | str = None
-
     for step_log in agent.run(task, stream=True, **kwargs):
         if isinstance(step_log, dict):
             for message in pull_message(step_log):
-                print("message", message)
                 yield message
 
-    Output.output = step_log
-    if isinstance(Output.output, AgentText):
-        yield ChatMessage(role="assistant", content=f"**Final answer:**\n```\n{Output.output.to_string()}\n```")
-    elif isinstance(Output.output, AgentImage):
+    if isinstance(step_log, AgentText):
+        yield ChatMessage(role="assistant", content=f"**Final answer:**\n```\n{step_log.to_string()}\n```")
+    elif isinstance(step_log, AgentImage):
         yield ChatMessage(
             role="assistant",
-            content={"path": Output.output.to_string(), "mime_type": "image/png"},
+            content={"path": step_log.to_string(), "mime_type": "image/png"},
         )
-    elif isinstance(Output.output, AgentAudio):
+    elif isinstance(step_log, AgentAudio):
         yield ChatMessage(
             role="assistant",
-            content={"path": Output.output.to_string(), "mime_type": "audio/wav"},
+            content={"path": step_log.to_string(), "mime_type": "audio/wav"},
         )
     else:
-        yield ChatMessage(role="assistant", content=Output.output)
+        yield ChatMessage(role="assistant", content=step_log)
