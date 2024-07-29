@@ -20,7 +20,7 @@ Efficient caching is crucial for optimizing the performance of models in various
 including text generation, translation, summarization and other transformer-based applications.
 Effective caching helps reduce computation time and improve response rates, especially in real-time or resource-intensive applications.
 
-Transformers support various caching methods, leveraging [`~Cache`] classes to abstract and manage the caching logic.
+Transformers support various caching methods, leveraging ["~Cache"] classes to abstract and manage the caching logic.
 This document outlines best practices for using these classes to maximize performance and efficiency.
 Check out all the available `Cache` classes in the [API documentation](./internal/generation_utils.md).
 
@@ -53,35 +53,36 @@ More concretely, key-value cache acts as a memory bank for these generative mode
   See an example below for how to implement your own generation loop.
     
   ```python
-  import torch
-  from transformers import AutoTokenizer, AutoModelForCausalLM, DynamicCache
-  
-  model_id = "meta-llama/Llama-2-7b-chat-hf"
-  model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, device_map="cuda:0")
-  tokenizer = AutoTokenizer.from_pretrained(model_id)
+  >>> import torch
+  >>> from transformers import AutoTokenizer, AutoModelForCausalLM, DynamicCache
+ 
+  >>> model_id = "meta-llama/Llama-2-7b-chat-hf"
+  >>> model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, device_map="cuda:0")
+  >>> tokenizer = AutoTokenizer.from_pretrained(model_id)
 
-  past_key_values = DynamicCache()
-  messages = [{"role": "user", "content": "Hello, what's your name."}]
-  inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt", return_dict=True).to("cuda:0")
+  >>> past_key_values = DynamicCache()
+  >>> messages = [{"role": "user", "content": "Hello, what's your name."}]
+  >>> inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt", return_dict=True).to("cuda:0")
 
-  generated_ids = inputs.input_ids
-  cache_position = torch.arange(inputs.input_ids.shape[1], dtype=torch.int64, device="cuda:0")
-  max_new_tokens = 10
+  >>> generated_ids = inputs.input_ids
+  >>> cache_position = torch.arange(inputs.input_ids.shape[1], dtype=torch.int64, device="cuda:0")
+  >>> max_new_tokens = 10
 
-  for _ in range(max_new_tokens):
-      outputs = model(**inputs, cache_position=cache_position, past_key_values=past_key_values, use_cache=True)     
-      # Greedily sample one next token
-      next_token_ids = outputs.logits[:, -1:].argmax(-1)
-      generated_ids = torch.cat([generated_ids, next_token_ids], dim=-1)   
+  >>> for _ in range(max_new_tokens):
+  ...     outputs = model(**inputs, cache_position=cache_position, past_key_values=past_key_values, use_cache=True)     
+  ...     # Greedily sample one next token
+  ...     next_token_ids = outputs.logits[:, -1:].argmax(-1)
+  ...     generated_ids = torch.cat([generated_ids, next_token_ids], dim=-1)   
+  ...
+  ...     # Prepare inputs for the next generation step by leaaving unprocessed tokens, in our case we have only one new token
+  ...     # and expanding attn mask for the new token, as explained above
+  ...     attention_mask = inputs["attention_mask"]
+  ...     attention_mask = torch.cat([attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1))], dim=-1)
+  ...     inputs = {"input_ids": next_token_ids, "attention_mask": attention_mask}
+  ...     cache_position = cache_position[-1:] + 1 # add one more position for the next token
 
-      # Prepare inputs for the next generation step by leaaving unprocessed tokens, in our case we have only one new token
-      # and expanding attn mask for the new token, as explained above
-      attention_mask = torch.cat(inputs.attention_mask)
-      attention_mask = torch.cat([attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1))], dim=-1)
-      inputs = {"input_ids": next_token_ids, "attention_mask": attention_mask}
-      cache_position = cache_position[-1:] + 1 # add one more position for the next token
-
-  print(tokenizer.batch_decode(generated_ids, skip_special_tokens=True))
+  >>> print(tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0])
+  "[INST] Hello, what's your name. [/INST]  Hello! My name is LLaMA,"
   ```
 
 </details>
@@ -111,8 +112,7 @@ These cache classes can be set with a `cache_implementation` argument when gener
 The key and value cache can occupy a large portion of memory, becoming a [bottleneck for long-context generation](https://huggingface.co/blog/llama31#inference-memory-requirements), especially for Large Language Models.
 Quantizing the cache when using `generate()` can significantly reduce memory requirements at the cost of speed.
 
-KV Cache quantization in `transformers` is largely inspired by the paper [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache]
-(https://arxiv.org/abs/2402.02750) and currently supports ["~QuantoQuantizedCache"] and ["~HQQQuantizedCache"] classes. For more information on the inner workings see the paper.
+KV Cache quantization in `transformers` is largely inspired by the paper ["KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache"](https://arxiv.org/abs/2402.02750) and currently supports ["~cache_utils.QuantoQuantizedCache"] and ["~cache_utils.HQQQuantizedCache"] classes. For more information on the inner workings see the paper.
 
 To enable quantization of the key-value cache, one needs to indicate `cache_implementation="quantized"` in the `generation_config`.
 Quantization related arguments should be passed to the `generation_config` either as a `dict` or an instance of a [`~QuantizedCacheConfig`] class.
@@ -160,24 +160,28 @@ For more examples with Static Cache and JIT compilation, take a look at (StaticC
 >>> # simply pass the cache implementation="static"
 >>> out = model.generate(**inputs, do_sample=False, max_new_tokens=20, cache_implementation="static")
 >>> tokenizer.batch_decode(out, skip_special_tokens=True)[0]
+"Hello, my name is [Your Name], and I am a [Your Profession] with [Number of Years] of"
 ```
 
 ### Sliding Window Cache
 
 As the name suggests, this cache type implements a sliding window over previous keys and values, retaining only the last `sliding_window` tokens. It should be used with models like Mistral that support sliding window attention. Additionally, similar to Static Cache, this one is JIT-friendly and can be used with the same compile tecniques as Static Cache.
 
+Note that you can use this cache only for models that support sliding window, e.g. Mistral models. 
+
 
 ```python
 >>> import torch
 >>> from transformers import AutoTokenizer, AutoModelForCausalLM, SinkCache
 
->>> tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
->>> model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", torch_dtype=torch.float16).to("cuda:0")
+>>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1")
+>>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1", torch_dtype=torch.float16).to("cuda:0")
 >>> inputs = tokenizer("Yesterday I was on a rock concert and.", return_tensors="pt").to(model.device)
 
 >>> # can be used by passing in cache implementation
->>> out = model.generate(**inputs, do_sample=False, max_new_tokens=200, cache_implementation="sloding_window")
+>>> out = model.generate(**inputs, do_sample=False, max_new_tokens=30, cache_implementation="sliding_window")
 >>> tokenizer.batch_decode(out, skip_special_tokens=True)[0]
+"Yesterday I was on a rock concert and. I was so excited to see my favorite band. I was so excited that I was jumping up and down and screaming. I was so excited that I"
 ```
 
 ### Sink Cache
@@ -197,8 +201,9 @@ Unlike other cache classes, this one can't be used directly by indicating a `cac
 >>> # get our cache, specify number of sink tokens and window size
 >>> # Note that window size already includes sink tokens, so has to be larger
 >>> past_key_values = SinkCache(window_length=256, num_sink_tokens=4)
->>> out = model.generate(**inputs, do_sample=False, max_new_tokens=500, past_key_values=past_key_values)
+>>> out = model.generate(**inputs, do_sample=False, max_new_tokens=30, past_key_values=past_key_values)
 >>> tokenizer.batch_decode(out, skip_special_tokens=True)[0]
+"This is a long story about unicorns, fairies and magic. It is a fantasy world where unicorns and fairies live together in harmony. The story follows a young girl named Lily"
 ```
 
 ### Encoder-Decoder Cache
@@ -223,40 +228,41 @@ In case you are using Sink Cache, you have to crop your inputs to that maximum l
 
 
 ```python
-import torch
-from transformers import AutoTokenizer,AutoModelForCausalLM
-from transformers.cache_utils import (
-    DynamicCache,
-    SinkCache,
-    StaticCache,
-    SlidingWindowCache,
-    QuantoQuantizedCache,
-    QuantizedCacheConfig,
-)
+>>> import torch
+>>> from transformers import AutoTokenizer,AutoModelForCausalLM
+>>> from transformers.cache_utils import (
+>>>     DynamicCache,
+>>>     SinkCache,
+>>>     StaticCache,
+>>>     SlidingWindowCache,
+>>>     QuantoQuantizedCache,
+>>>     QuantizedCacheConfig,
+>>> )
 
-model_id = "meta-llama/Llama-2-7b-chat-hf"
-model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, device_map='auto')
-tokenizer = AutoTokenizer.from_pretrained(model_id)
+>>> model_id = "meta-llama/Llama-2-7b-chat-hf"
+>>> model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, device_map='auto')
+>>> tokenizer = AutoTokenizer.from_pretrained(model_id)
 
-user_prompts = ["Hello, what's your name?", "Btw, yesterday I was on a rock concert."]
+>>> user_prompts = ["Hello, what's your name?", "Btw, yesterday I was on a rock concert."]
 
-past_key_values = SinkCache(window_length=30, num_sink_tokens=4)
-max_cache_length = past_key_values.get_max_length()
+>>> past_key_values = DynamicCache()
+>>> max_cache_length = past_key_values.get_max_length()
 
-messages = []
-for prompt in user_prompts:
-    messages.append({"role": "user", "content": prompt})
-    inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt", return_dict=True).to(model.device)
-    
-    if isinstance(past_key_values, SinkCache):
-        inputs = {k: v[:, -max_cache_length:] for k, v in inputs.items()}
-    input_length = inputs["input_ids"].shape[1]
-    
-    outputs = model.generate(**inputs, do_sample=False, max_new_tokens=256, past_key_values=past_key_values)
-    completion = tokenizer.decode(outputs[0, input_length: ], skip_special_tokens=True)
-    messages.append({"role": "assistant", "content": completion})
+>>> messages = []
+>>> for prompt in user_prompts:
+...     messages.append({"role": "user", "content": prompt})
+...     inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt", return_dict=True).to(model.device)
+...     if isinstance(past_key_values, SinkCache):
+...         inputs = {k: v[:, -max_cache_length:] for k, v in inputs.items()}
+... 
+...     input_length = inputs["input_ids"].shape[1]
+...     
+...     outputs = model.generate(**inputs, do_sample=False, max_new_tokens=256, past_key_values=past_key_values)
+...     completion = tokenizer.decode(outputs[0, input_length: ], skip_special_tokens=True)
+...     messages.append({"role": "assistant", "content": completion})
 
 print(messages)
+[{'role': 'user', 'content': "Hello, what's your name?"}, {'role': 'assistant', 'content': " Hello! My name is LLaMA, I'm a large language model trained by a team of researcher at Meta AI. 😊"}, {'role': 'user', 'content': 'Btw, yesterday I was on a rock concert.'}, {'role': 'assistant', 'content': ' Oh, cool! That sounds like a lot of fun! 🎉 Did you enjoy the concert? What was the band like? 🤔'}]
 ```
 
 
