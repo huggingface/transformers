@@ -9,7 +9,7 @@ import torch
 from packaging import version
 
 from .configuration_utils import PretrainedConfig
-from .utils import is_hqq_available, is_quanto_available, logging
+from .utils import is_hqq_available, is_quanto_available, is_torchdynamo_compiling, logging
 
 
 if is_quanto_available():
@@ -401,7 +401,6 @@ class DynamicCache(Cache):
     def crop(self, max_length: int):
         """Crop the past key values up to a new `max_length` in terms of tokens. `max_length` can also be
         negative to remove `max_length` tokens. This is used in assisted decoding and contrastive search."""
-
         # In case it is negative
         if max_length < 0:
             max_length = self.get_seq_length() - abs(max_length)
@@ -832,9 +831,11 @@ class StaticCache(Cache):
             key_cache = getattr(self, f"key_cache_{idx}")
             value_cache = getattr(self, f"value_cache_{idx}")
             # Note: `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
-            # breaks when updating the cache.
-            torch._dynamo.mark_static_address(key_cache)
-            torch._dynamo.mark_static_address(value_cache)
+            # breaks when updating the cache. It can't be used if the cache code is being compiled (but in that case
+            # it is not needed anyway)
+            if not is_torchdynamo_compiling():
+                torch._dynamo.mark_static_address(key_cache)
+                torch._dynamo.mark_static_address(value_cache)
             self.key_cache.append(key_cache)
             self.value_cache.append(value_cache)
 
