@@ -1772,6 +1772,8 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
         **kwargs,
     ):
 
+        decoder_position_ids = None
+
         if decoder_attention_mask is not None:
             decoder_position_ids = (decoder_attention_mask.cumsum(-1) - 1).clamp(min=0)
 

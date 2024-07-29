@@ -3993,7 +3993,7 @@ class GenerationMixin:
             cur_len = input_ids.shape[-1]
 
             #  1. Fetch candidate sequences from a `CandidateGenerator`
-            candidate_input_ids, candidate_logits = candidate_generator.get_candidates(input_ids, n_matches)
+            candidate_input_ids, candidate_logits = candidate_generator.get_candidates(input_ids, n_matches, attention_mask)
             candidate_input_ids = candidate_input_ids.to(self.device)
             if candidate_logits is not None:
                 candidate_logits = candidate_logits.to(self.device)
@@ -4109,8 +4109,6 @@ class GenerationMixin:
             new_cache_size = new_cur_len - 1
             outputs.past_key_values = _crop_past_key_values(self, outputs.past_key_values, new_cache_size, n_matches)
             
-            # candidate_generator.update_past_key_values(max_lenght = new_cache_size, n_matches = n_matches)
-
             # 5. Update the candidate generation strategy if needed
             candidate_generator.update_candidate_strategy(input_ids, new_logits, n_matches)
 

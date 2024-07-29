@@ -168,7 +168,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
                     "Please pass in `min_length` into `.generate()` instead"
                 )
 
-    def get_candidates(self, input_ids: torch.LongTensor, n_matches = None) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
+    def get_candidates(self, input_ids: torch.LongTensor, n_matches = None, attention_mask=None) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
         """
         Fetches the candidates to be tried for the current input.
 
@@ -202,12 +202,13 @@ class AssistedCandidateGenerator(CandidateGenerator):
             self.assistant_kwargs["past_key_values"] = _crop_past_key_values(
                 self.assistant_model, self.assistant_kwargs["past_key_values"], new_cache_size - 1, n_matches=n_matches
             )  # the assistant does not have the token after the last match, hence the -1
-                
-            # self.assistant_kwargs['position_ids'] = position_ids[:, new_cache_size : new_cur_len + self.num_assistant_tokens]
-            # self.assistant_kwargs['attention_mask'] = attention_mask[:,:new_cur_len + self.num_assistant_tokens]
-            self.assistant_kwargs = _prepare_attention_mask(
-                self.assistant_kwargs, new_cur_len, self.assistant_model.config.is_encoder_decoder
-            )
+
+            if attention_mask is not None: 
+                self.assistant_kwargs['attention_mask'] = attention_mask[:,:new_cur_len + self.num_assistant_tokens]
+            else:  
+                self.assistant_kwargs = _prepare_attention_mask(
+                    self.assistant_kwargs, new_cur_len, self.assistant_model.config.is_encoder_decoder,
+                )
             self.assistant_kwargs = _prepare_token_type_ids(self.assistant_kwargs, new_cur_len)
 
         # 2. Forecast next N tokens using the assistant model.
@@ -218,6 +219,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
             "generation_config": self.generation_config,
             "logits_processor": self.logits_processor,
         }
+
 
         assistant_output = self.assistant_model.generate(**assistant_generation_kwargs, **self.assistant_kwargs)
 
