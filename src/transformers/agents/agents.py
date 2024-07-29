@@ -17,7 +17,7 @@
 import json
 import logging
 import re
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union, Literal
 
 from .. import is_torch_available
 from ..utils import logging as transformers_logging
@@ -37,6 +37,12 @@ from .prompts import (
     USER_PROMPT_FACTS_UPDATE,
     USER_PROMPT_PLAN,
     USER_PROMPT_PLAN_UPDATE,
+    SYSTEM_PROMPT_PLAN_STRUCTURED,
+    SYSTEM_PROMPT_PLAN_UPDATE_STRUCTURED,
+    USER_PROMPT_PLAN_STRUCTURED,
+    USER_PROMPT_PLAN_UPDATE_STRUCTURED,
+    plan_type_to_prompt_first,
+    plan_type_to_prompt_other
 )
 from .python_interpreter import LIST_SAFE_MODULES, evaluate_python_code
 from .tools import (
@@ -653,6 +659,7 @@ class ReactAgent(Agent):
         llm_engine: Callable = HfEngine(),
         system_prompt: str = DEFAULT_REACT_CODE_SYSTEM_PROMPT,
         tool_description_template: str = DEFAULT_TOOL_DESCRIPTION_TEMPLATE,
+        plan_type: Literal["default", "structured"] = "default",
         planning_interval: Optional[int] = None,
         **kwargs,
     ):
@@ -664,6 +671,7 @@ class ReactAgent(Agent):
             **kwargs,
         )
         self.planning_interval = planning_interval
+        self.plan_type = plan_type
 
     def provide_final_answer(self, task) -> str:
         """
@@ -794,10 +802,13 @@ Now begin!""",
 
             answer_facts = self.llm_engine([message_prompt_facts, message_prompt_task])
 
-            message_system_prompt_plan = {"role": MessageRole.SYSTEM, "content": SYSTEM_PROMPT_PLAN}
+            message_system_prompt_plan = {
+                "role": MessageRole.SYSTEM,
+                "content": plan_type_to_prompt_first[self.plan_type]["system"]
+            }
             message_user_prompt_plan = {
                 "role": MessageRole.USER,
-                "content": USER_PROMPT_PLAN.format(
+                "content": plan_type_to_prompt_first[self.plan_type]["user"].format(
                     task=task,
                     tool_descriptions=self._toolbox.show_tool_descriptions(self.tool_description_template),
                     answer_facts=answer_facts,
@@ -837,11 +848,13 @@ Now begin!""",
             # Redact updated plan
             plan_update_message = {
                 "role": MessageRole.SYSTEM,
-                "content": SYSTEM_PROMPT_PLAN_UPDATE.format(task=task),
+                "content": plan_type_to_prompt_other[self.plan_type]["system"].format(
+                    task=task
+                )
             }
             plan_update_message_user = {
                 "role": MessageRole.USER,
-                "content": USER_PROMPT_PLAN_UPDATE.format(
+                "content": plan_type_to_prompt_other[self.plan_type]["user"].format(
                     task=task,
                     tool_descriptions=self._toolbox.show_tool_descriptions(self.tool_description_template),
                     facts_update=facts_update,
