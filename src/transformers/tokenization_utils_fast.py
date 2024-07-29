@@ -882,7 +882,9 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         """
         Updates the underlying post processor with the current `bos_token` and `eos_token`.
         """
-        if not isinstance(self._tokenizer.post_processor, processors.TemplateProcessing) and not isinstance(self._tokenizer.post_processor, processors.Sequence):
+        if not isinstance(self._tokenizer.post_processor, processors.TemplateProcessing) and not isinstance(
+            self._tokenizer.post_processor, processors.Sequence
+        ):
             return
 
         bos = self.bos_token
@@ -903,9 +905,10 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             special_tokens.append((bos, bos_token_id))
         if self.add_eos_token:
             special_tokens.append((eos, eos_token_id))
-        self._tokenizer.post_processor = processors.TemplateProcessing(
-            single=single, pair=pair, special_tokens=special_tokens
-        )
+        if special_tokens:
+            self._tokenizer.post_processor = processors.TemplateProcessing(
+                single=single, pair=pair, special_tokens=special_tokens
+            )
 
     @property
     def add_eos_token(self):
