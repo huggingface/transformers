@@ -188,7 +188,7 @@ class GroundingDinoConfig(PretrainedConfig):
         class_loss_coefficient=2.0,
         bbox_loss_coefficient=5.0,
         giou_loss_coefficient=2.0,
-        class_loss_reduction="mean",
+        class_loss_reduction="sum",
         focal_alpha=0.25,
         disable_custom_kernels=False,
         # other parameters
