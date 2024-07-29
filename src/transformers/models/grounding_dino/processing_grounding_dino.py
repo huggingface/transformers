@@ -16,13 +16,14 @@
 Processor class for Grounding DINO.
 """
 
+import pathlib
 import sys
-from typing import List, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import center_to_corners_format
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin
 
 
 if sys.version_info >= (3, 11):
@@ -31,11 +32,19 @@ else:
     from typing_extensions import Unpack
 
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
-from ...utils import TensorType, is_torch_available
+from ...utils import ExplicitEnum, TensorType, is_torch_available
 
 
 if is_torch_available():
     import torch
+
+
+AnnotationType = Dict[str, Union[int, str, List[Dict]]]
+
+
+class AnnotationFormat(ExplicitEnum):
+    COCO_DETECTION = "coco_detection"
+    COCO_PANOPTIC = "coco_panoptic"
 
 
 def get_phrases_from_posmap(posmaps, input_ids):
@@ -64,7 +73,16 @@ def get_phrases_from_posmap(posmaps, input_ids):
     return token_ids
 
 
+class GroundingDinoImagesKwargs(ImagesKwargs, total=False):
+    annotations: Optional[Union[AnnotationType, List[AnnotationType]]]
+    return_segmentation_masks: Optional[bool]
+    masks_path: Optional[Union[str, pathlib.Path]]
+    do_convert_annotations: Optional[bool]
+    format: Optional[Union[str, AnnotationFormat]]
+
+
 class GroundingDinoProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: GroundingDinoImagesKwargs
     _defaults = {
         "text_kwargs": {
             "add_special_tokens": True,
@@ -76,8 +94,7 @@ class GroundingDinoProcessorKwargs(ProcessingKwargs, total=False):
             "return_token_type_ids": True,
             "return_length": False,
             "verbose": True,
-        },
-        "images_kwargs": {},
+        }
     }
 
 
