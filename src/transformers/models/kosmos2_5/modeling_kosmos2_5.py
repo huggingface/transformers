@@ -329,7 +329,7 @@ class Kosmos2_5ModelOutput(ModelOutput):
 @dataclass
 class Kosmos2_5ForConditionalGenerationModelOutput(ModelOutput):
     """
-    Model output class for `Kosmos2ForConditionalGeneration`.
+    Model output class for `Kosmos2_5ForConditionalGeneration`.
 
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
