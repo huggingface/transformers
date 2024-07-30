@@ -34,7 +34,7 @@ from ...utils import (
 )
 from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available
 from .configuration_mamba2 import Mamba2Config
-import time
+
 
 logger = logging.get_logger(__name__)
 
@@ -49,9 +49,7 @@ if is_causal_conv1d_available():
 else:
     causal_conv1d_update, causal_conv1d_fn = None, None
 
-is_fast_path_available = all(
-    (selective_state_update, causal_conv1d_fn, causal_conv1d_update)
-)
+is_fast_path_available = all((selective_state_update, causal_conv1d_fn, causal_conv1d_update))
 
 
 _CHECKPOINT_FOR_DOC = "mistralai/mamba-codestral-7B-v0.1"
@@ -296,7 +294,6 @@ class Mamba2Mixer(nn.Module):
             if not self.rms_norm:
                 gate = gate.view(batch_size, self.intermediate_size, self.head_dim)
                 # gate = rearrange(gate, "b (h p) -> b h p", p=self.head_dim)
-            t_select = time.time()
             hidden_states = selective_state_update(
                 cache_params.ssm_states[self.layer_idx],
                 hidden_states_reshaped,
@@ -309,11 +306,7 @@ class Mamba2Mixer(nn.Module):
                 dt_bias=dt_bias,
                 dt_softplus=True,
             )
-            if self.layer_idx ==0 or self.layer_idx == 10:
-                print(f"layer {self.layer_idx}, selective state update time: {time.time() - t_select:.3f} s")
-            hidden_states = hidden_states.view(
-                batch_size, self.num_heads * self.head_dim
-            )
+            hidden_states = hidden_states.view(batch_size, self.num_heads * self.head_dim)
             if self.rms_norm:
                 hidden_states = self.norm(hidden_states, gate)
             if d_mlp > 0:
@@ -396,7 +389,6 @@ class Mamba2Mixer(nn.Module):
             out = self.out_proj(scan_output)
         return out
 
-
     # fmt: off
     def slow_forward(self, input_states, cache_params: Optional[Mamba2Cache]=None):
         batch_size, seq_len, _ = input_states.shape
@@ -448,7 +440,7 @@ class Mamba2Mixer(nn.Module):
             dt = dt.transpose(1, 2).expand(dt.shape[0], dt.shape[-1], self.head_dim)
             # [num_heads] -> [num_heads, head_dim]
             dt_bias = self.dt_bias.unsqueeze(-1).expand(self.dt_bias.shape[0], self.head_dim)
-        
+
             dt = torch.nn.functional.softplus(dt + dt_bias.to(dt.dtype))
             dt = torch.clamp(dt, self.time_step_min, self.time_step_max)
 
@@ -481,13 +473,13 @@ class Mamba2Mixer(nn.Module):
             C = C.expand(C.shape[0], C.shape[1], self.num_heads // self.n_groups, C.shape[-1]).contiguous()
             C = C.reshape(C.shape[0], -1, C.shape[-1])
             # [bsz, num_heads, head_dim]
-            
+
             ssm_states = cache_params.ssm_states[self.layer_idx].to(C.dtype)  # Shape: [b, h, d, n]
             # Reshape ssm_states to merge the first two dimensions
             ssm_states_reshaped = ssm_states.view(batch_size * self.num_heads, self.head_dim, self.ssm_state_size)  # Shape: [b*h, d, n]
             C_reshaped = C.view(batch_size * self.num_heads, self.ssm_state_size, 1)  # Shape: [b*h, n, 1]
             y = torch.bmm(ssm_states_reshaped, C_reshaped)
-            y = y.view(batch_size, self.num_heads, self.head_dim) 
+            y = y.view(batch_size, self.num_heads, self.head_dim)
 
             # D skip connection
             # [num_heads] -> [num_heads, head_dim]
@@ -501,9 +493,9 @@ class Mamba2Mixer(nn.Module):
             # einsum-free - but some tensors have to be upcasted to avoid error propagation (we downcast after)
             dt = nn.functional.softplus(dt + self.dt_bias)
             dt = torch.clamp(dt, self.time_step_min, self.time_step_max)
-            hidden_states = hidden_states.reshape(hidden_states.shape[0], hidden_states.shape[1], -1, self.head_dim).float()
-            B = B.reshape(batch_size, seq_len,  -1, self.ssm_state_size).float()
-            C = C.reshape(batch_size, seq_len, -1, self.ssm_state_size).float()
+            hidden_states = hidden_states.reshape(hidden_states.shape[0], hidden_states.shape[1], -1, self.head_dim)#.float()
+            B = B.reshape(batch_size, seq_len,  -1, self.ssm_state_size)#.float()
+            C = C.reshape(batch_size, seq_len, -1, self.ssm_state_size)#.float()
             B = B.repeat(1, 1, self.num_heads // self.n_groups, 1)  # (batch, self.num_heads, ssm_state_size)
             C = C.repeat(1, 1, self.num_heads // self.n_groups, 1)   # (batch, self.num_heads, ssm_state_size)
 
@@ -522,17 +514,11 @@ class Mamba2Mixer(nn.Module):
 
             # [bsz, -1, chunk_size, num_heads] -> [bsz, num_heads, -1, chunk_size]
             A = A.permute(0, 3, 1, 2)
-            A = A.double()
             A_cumsum = torch.cumsum(A, dim=-1)
 
             # 1. Compute the output for each intra-chunk (diagonal blocks)
             # This is the analog of a causal mask
             L = torch.exp(segsum(A))
-            L = L.double() # pass to float64 to avoid cumulative errors, downcast after
-            C = C.double()
-            B = B.double()
-            A_cumsum = A_cumsum.double()
-            hidden_states = hidden_states.double()
 
             # First, contraction of C and B to get G (attention-weights like)
             G_intermediate = C[:, :, :, None, :, :] * B[:, :, None, :, : ,:]  # shape: (b, c, l, s, h, n)
@@ -540,52 +526,44 @@ class Mamba2Mixer(nn.Module):
 
 
             # Step 2: Compute M, equivalent to applying attention mask to weights
-            L_permuted = L.permute(0, 2, 3, 4, 1)  # shape: (b, c, l, s, h)
-
-            # Expand dimensions for elementwise multiplication
-            G_expanded = G.unsqueeze(-1)  # shape: (b, c, l, s, h, 1)
-            L_expanded = L_permuted.unsqueeze(-1)  # shape: (b, c, l, s, h, 1)
-            M_intermediate = G_expanded * L_expanded  # shape: (b, c, l, s, h, h)
-            M = M_intermediate.sum(dim=-1)  # shape: (b, c, l, s, h)
+            M_intermediate = G[..., None] * L.permute(0, 2, 3, 4, 1)[..., None]
+            M = M_intermediate.sum(dim=-1)
 
             # Step 3: Compute Y_diag (apply to values)
-            M_expanded = M.unsqueeze(-1)  # shape: (b, c, l, s, h, 1)
-            hidden_states_expanded = hidden_states.unsqueeze(3)  # shape: (b, c, l, 1, h, p)
-            Y_diag_intermediate = M_expanded * hidden_states_expanded  # shape: (b, c, l, s, h, p)
-
-            # Sum over s
-            Y_diag = Y_diag_intermediate.sum(dim=3)  # shape: (b, c, l, h, p)
-            Y_diag_einsum = torch.einsum("bclhn,bcshn,bhcls,bcshp->bclhp", C, B, L, hidden_states)
-            # equivalent to Y_diag = torch.einsum("bclhn,bcshn,bhcls,bcshp->bclhp", C, B, L, hidden_states)
-            # however due to numerical fluctuation there's a significant difference hence the up/down cast
-
-            # 2. Compute the state for each intra-chunk
-
+            Y_diag_intermediate = M[..., None] * hidden_states[:, None, ...]
+            # Reduce over s
+            Y_diag = Y_diag_intermediate.sum(dim=3)
             # (right term of low-rank factorization of off-diagonal blocks; B terms)
-            decay_states = torch.exp((A_cumsum[:, :, :, -1:] - A_cumsum))
-            states = torch.einsum("bclhn,bhcl,bclhp->bchpn", B, decay_states, hidden_states)
 
+            decay_states = torch.exp((A_cumsum[:, :, :, -1:] - A_cumsum))
+            B_decay_contraction = B * decay_states.permute(0, 2, 3, 1)[..., None]
+            # permute back B * decay states
+            states = (B_decay_contraction.permute(0, 1, 3, 2, 4)[..., None]  * hidden_states.permute(0, 1, 3, 2, 4)[..., None, :]).sum(dim=3).permute(0, 1, 2, 4, 3)
             if cache_params is not None and cache_params.seqlen_offset > 0:
                 previous_states = cache_params.ssm_states[self.layer_idx].unsqueeze(1)
             else:
                 previous_states = torch.zeros_like(states[:, :1])
             states = torch.cat([previous_states, states], dim=1)
             decay_chunk = torch.exp(segsum(nn.functional.pad(A_cumsum[:, :, :, -1], (1, 0))))
-            new_states = torch.einsum("bhzc,bchpn->bzhpn", decay_chunk, states)
+
+            states_permuted = states.permute(0, 2, 1, 3, 4)
+            result = (decay_chunk[..., None, None] * states_permuted[:, :, None, ...]).sum(dim=2)
+            new_states = result.permute(0, 2, 1, 3, 4)
             states, ssm_state = new_states[:, :-1], new_states[:, -1]
 
-            # 4. Compute state -> output conversion per chunk
+            # Compute state -> output conversion per chunk
             # (left term of low-rank factorization of off-diagonal blocks; C terms)
             state_decay_out = torch.exp(A_cumsum)
-            Y_off = torch.einsum("bclhn,bchpn,bhcl->bclhp", C, states, state_decay_out)
-
+            # compute Yoff
+            C_times_states = (C[..., None, :] * states[:, :, None, ...])
+            state_decay_out_permuted = state_decay_out.permute(0, 2, 3, 1)
+            Y_off = (C_times_states.sum(-1) * state_decay_out_permuted[..., None])
             # Add output of intra-chunk and inter-chunk terms (diagonal and off-diagonal blocks)
-            
+
             y = Y_diag + Y_off
             # [bsz, -1, self.chunk_size, num_heads, head_dim] -> [bsz, (padded) seq_len, num_heads, head_dim]
             y = y.reshape(y.shape[0], -1, y.shape[-2], y.shape[-1])
 
-            # Add D residual to final output
             y = y + D_residual
             # Cutting off padded chunks
             if pad_size > 0:
@@ -610,7 +588,7 @@ class Mamba2Mixer(nn.Module):
     # fmt: on
 
     def forward(self, hidden_states, cache_params: Optional[Mamba2Cache] = None):
-        if False: #is_fast_path_available and "cuda" in self.in_proj.weight.device.type:
+        if is_fast_path_available and "cuda" in self.in_proj.weight.device.type:
             return self.cuda_kernels_forward(hidden_states, cache_params)
         return self.slow_forward(hidden_states, cache_params)
 
