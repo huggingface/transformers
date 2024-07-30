@@ -1174,7 +1174,22 @@ def _find_longest_common_sequence(sequences, token_timestamp_sequences=None):
                     "There is a bug within whisper `decode_asr` function, please report it. Dropping to prevent bad inference."
                 )
 
-            matches = np.sum(left == right)
+            if token_timestamp_sequences:
+                # Get length of longest subsequence of tokens that match
+                # and have timestamps that are in order
+                matches = sum(
+                    1
+                    for idx, elem in enumerate(left)
+                    if (
+                        elem == right[idx]
+                        and left_token_timestamp_sequence[left_start + idx]
+                        <= token_timestamp_sequences[seq_idx + 1][right_start + idx]
+                    )
+                )
+
+            else:
+                matches = np.sum(left == right)
+
             matching = matches / i + eps
             if matches > 1 and matching > max_:
                 max_ = matching
