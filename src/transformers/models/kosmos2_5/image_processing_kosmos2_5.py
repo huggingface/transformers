@@ -308,7 +308,7 @@ class Kosmos2_5ImageProcessor(BaseImageProcessor):
             images = [self.normalize(image=image, input_data_format=input_data_format) for image in images]
 
         # convert to torch tensor and permute
-        images, width, height, rows, cols = [
+        images, width, height, rows, cols = zip(*[
             self.extract_flattened_patches(
                 image=image,
                 max_patches=max_patches,
@@ -316,7 +316,7 @@ class Kosmos2_5ImageProcessor(BaseImageProcessor):
                 input_data_format=input_data_format,
             )
             for image in images
-        ]
+        ])
 
         # create attention mask in numpy
         attention_masks = [(image.sum(axis=-1) != 0).astype(np.float32) for image in images]
