@@ -474,7 +474,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         # Always raise an error if string because users should define the behavior
         for index, token in value.items():
             if not isinstance(token, (str, AddedToken)) or not isinstance(index, int):
-                raise ValueError(
+                raise TypeError(
                     f"The provided `added_tokens_decoder` has an element of type {index.__class__, token.__class__}, should be a dict of {int, Union[AddedToken, str]}"
                 )
 
