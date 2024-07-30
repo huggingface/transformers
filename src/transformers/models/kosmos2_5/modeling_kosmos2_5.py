@@ -424,7 +424,8 @@ except Exception:
     pass
 
 
-# Copied from transformers.models.pix2struct.modeling_pix2struct.Pix2StructVisionEmbeddings with Pix2Struct -> Kosmos2_5
+# similar to transformers.models.pix2struct.modeling_pix2struct.Pix2StructVisionEmbeddings but with `inplace=False`
+# TODO: check with krip
 class Kosmos2_5VisionEmbeddings(nn.Module):
     def __init__(self, config: Kosmos2_5VisionConfig) -> None:
         super().__init__()
@@ -456,11 +457,10 @@ class Kosmos2_5VisionEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.pix2struct.modeling_pix2struct.Pix2StructVisionMlp with Pix2Struct -> Kosmos2_5
+# Copied from transformers.models.t5.modeling_t5.T5DenseGatedActDense with T5DenseGatedActDense->Pix2StructVisionMlp,T5Config->Pix2StructVisionConfig,config.d_model->config.hidden_size,dropout_rate->dropout_rate
 class Kosmos2_5VisionMlp(nn.Module):
     def __init__(self, config: Kosmos2_5VisionConfig):
         super().__init__()
-        self.config = config
         self.wi_0 = nn.Linear(config.hidden_size, config.d_ff, bias=False)
         self.wi_1 = nn.Linear(config.hidden_size, config.d_ff, bias=False)
         self.wo = nn.Linear(config.d_ff, config.hidden_size, bias=False)
@@ -707,7 +707,7 @@ KOSMOS2_5_VISION_ATTENTION_CLASSES = {
 }
 
 
-# Copied from transformers.models.pix2struct.modeling_pix2struct.Pix2StructVisionLayer with Pix2Struct -> Kosmos2_5
+# Copied from transformers.models.pix2struct.modeling_pix2struct.Pix2StructVisionLayer with Pix2StructVisionAttention->KOSMOS2_5_VISION_ATTENTION_CLASSES[config._attn_implementation],Pix2Struct -> Kosmos2_5
 class Kosmos2_5VisionLayer(nn.Module):
     def __init__(self, config: Kosmos2_5VisionConfig) -> None:
         super().__init__()
