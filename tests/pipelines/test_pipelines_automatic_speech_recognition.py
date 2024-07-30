@@ -1496,7 +1496,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
     def test_whisper_prompted(self):
         processor = AutoProcessor.from_pretrained("openai/whisper-tiny")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
-        model = model.to("cuda")
+        model = model.to(torch_device)
 
         pipe = pipeline(
             "automatic-speech-recognition",
@@ -1506,7 +1506,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             max_new_tokens=128,
             chunk_length_s=30,
             batch_size=16,
-            device="cuda:0",
         )
 
         dataset = load_dataset("distil-whisper/librispeech_long", "clean", split="validation")
