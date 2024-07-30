@@ -236,9 +236,12 @@ class DepthAnythingModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
 
 
 # We will verify our results on an image of cute cats
-def prepare_img():
-    image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-    return image
+def predict_depth(image_processor, model):
+    image = image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+    inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
+    with torch.no_grad():
+        outputs = model(**inputs)
+    return outputs.predicted_depth
 
 
 @require_torch
@@ -246,16 +249,11 @@ def prepare_img():
 @slow
 class DepthAnythingModelIntegrationTest(unittest.TestCase):
     def test_inference(self):
+        # -- `relative` depth model
         image_processor = DPTImageProcessor.from_pretrained("LiheYoung/depth-anything-small-hf")
         model = DepthAnythingForDepthEstimation.from_pretrained("LiheYoung/depth-anything-small-hf").to(torch_device)
 
-        image = prepare_img()
-        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
-
-        # forward pass
-        with torch.no_grad():
-            outputs = model(**inputs)
-            predicted_depth = outputs.predicted_depth
+        predicted_depth = predict_depth(model, image_processor)
 
         # verify the predicted depth
         expected_shape = torch.Size([1, 518, 686])
@@ -265,4 +263,23 @@ class DepthAnythingModelIntegrationTest(unittest.TestCase):
             [[8.8204, 8.6468, 8.6195], [8.3313, 8.6027, 8.7526], [8.6526, 8.6866, 8.7453]],
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.predicted_depth[0, :3, :3], expected_slice, atol=1e-6))
+        self.assertTrue(torch.allclose(predicted_depth[0, :3, :3], expected_slice, atol=1e-6))
+
+        # -- `metric` depth model
+        # TODO: change path to `depth-anything/depth-anything-V2-metric-indoor-small-hf` once it's available
+        image_processor = DPTImageProcessor.from_pretrained("bthia97/Depth-Anything-V2-Metric-Indoor-Small-hf")
+        model = DepthAnythingForDepthEstimation.from_pretrained("bthia97/Depth-Anything-V2-Metric-Indoor-Small-hf").to(
+            torch_device
+        )
+
+        predicted_depth = predict_depth(model, image_processor)
+
+        # verify the predicted depth
+        expected_shape = torch.Size([1, 518, 686])
+        self.assertEqual(predicted_depth.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [[1.3349, 1.2946, 1.2801], [1.2793, 1.2337, 1.2899], [1.2629, 1.2218, 1.2476]],
+        ).to(torch_device)
+
+        self.assertTrue(torch.allclose(predicted_depth[0, :3, :3], expected_slice, atol=1e-4))
