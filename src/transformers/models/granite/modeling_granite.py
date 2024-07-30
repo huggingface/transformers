@@ -839,6 +839,7 @@ class GraniteModel(GranitePreTrainedModel):
             [GraniteDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = GraniteRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = GraniteRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
 
         self.embedding_multiplier = config.embedding_multiplier
