@@ -532,6 +532,7 @@ class DebertaConverter(Converter):
 class SpmConverter(Converter):
     handle_byte_fallback = False
     SpmExtractor = SentencePieceExtractor
+    special_tokens = {}
 
     def __init__(self, *args):
         requires_backends(self, "protobuf")
@@ -596,7 +597,11 @@ class SpmConverter(Converter):
         # user defined symbols are not
         # both user and control tokens are AddedTokens
         # Add user defined symbols (type == 4) from sentencepiece (https://github.com/google/sentencepiece/blob/6225e08edb2577757163b3f5dbba4c0b670ef445/src/sentencepiece_model.proto#L299C29-L299C33)
-        spm_added_tokens = [(id, p.piece, p.type == 3) for id, p in enumerate(proto.pieces) if p.type in [3, 4]]
+        spm_added_tokens = [
+            (id, p.piece, p.type == 3 or p.piece in self.special_tokens)
+            for id, p in enumerate(proto.pieces)
+            if p.type in [3, 4]
+        ]
         tokens_to_add = [
             AddedToken(token, normalized=False, special=special)
             for id, token, special in sorted(spm_added_tokens, key=lambda x: x[0])
@@ -1280,6 +1285,8 @@ class XGLMConverter(SpmConverter):
 class GemmaConvert(SpmConverter):
     handle_byte_fallback = True
     SpmExtractor = GemmaSentencePieceExtractor
+    # start and end of turn tokens must be marked as special
+    special_tokens = {"<start_of_turn>", "<end_of_turn>"}
 
     """"
     split_by_unicode_script: true
