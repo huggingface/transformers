@@ -156,4 +156,4 @@ class MambaConfig(PretrainedConfig):
         self.use_mambapy = use_mambapy
         self.ignore_keys_for_inference = ignore_keys_for_inference
 
-        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, pad_token_id=pad_token_id, **kwargs)
+        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, pad_token_id=pad_token_id, ignore_keys_for_inference=ignore_keys_for_inference, **kwargs)
