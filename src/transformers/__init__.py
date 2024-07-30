@@ -5385,6 +5385,13 @@ if TYPE_CHECKING:
         SamPromptEncoderConfig,
         SamVisionConfig,
     )
+    from .models.sam2 import (
+        Sam2Config,
+        Sam2MaskDecoderConfig,
+        Sam2Processor,
+        Sam2PromptEncoderConfig,
+        Sam2VisionConfig,
+    )
     from .models.seamless_m4t import (
         SeamlessM4TConfig,
         SeamlessM4TFeatureExtractor,
