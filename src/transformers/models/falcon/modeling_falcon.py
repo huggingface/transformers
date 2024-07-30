@@ -978,7 +978,7 @@ class FalconModel(FalconPreTrainedModel):
             )
 
         alibi = None
-        past_key_values_length = past_key_values.get_seq_length() if use_cache else 0
+        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
         batch_size, seq_length, _ = inputs_embeds.shape
         if self.use_alibi:
             mask = (
