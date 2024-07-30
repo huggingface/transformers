@@ -67,7 +67,7 @@ def generate_merges(vocab, vocab_scores):
         local = sorted(local, key=lambda x: (vocab[x[0]], vocab[x[1]]))
         merges.extend(local)
 
-    merges = sorted(merges, key=lambda val: val[2], reverse=reverse)
+    merges = sorted(merges, key=lambda val: (val[2], len(val[0]), len(val[1])), reverse=reverse)
     merges = [(val[0], val[1]) for val in merges]
     return merges
 
