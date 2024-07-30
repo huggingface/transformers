@@ -112,6 +112,7 @@ class CacheConfig:
         Args:
             config_dict (Dict[str, Any]): Dictionary containing configuration parameters.
             **kwargs: Additional keyword arguments to override dictionary values.
+
         Returns:
             CacheConfig: Instance of CacheConfig constructed from the dictionary.
         """
