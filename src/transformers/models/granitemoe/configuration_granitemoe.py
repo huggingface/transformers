@@ -89,8 +89,6 @@ class GraniteMoeConfig(PretrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        mlp_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
         embedding_multiplier (`float`, *optional*, defaults to 1.0): embedding multiplier
         logits_scaling (`float`, *optional*, defaults to 1.0): divisor for output logits
         residual_multiplier (`float`, *optional*, defaults to 1.0): residual multiplier
@@ -133,7 +131,6 @@ class GraniteMoeConfig(PretrainedConfig):
         rope_scaling=None,
         attention_bias=False,
         attention_dropout=0.0,
-        mlp_bias=False,
         embedding_multiplier=1.0,
         logits_scaling=1.0,
         residual_multiplier=1.0,
@@ -166,7 +163,6 @@ class GraniteMoeConfig(PretrainedConfig):
         self._rope_scaling_validation()
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        self.mlp_bias = mlp_bias
 
         self.embedding_multiplier = embedding_multiplier
         self.logits_scaling = logits_scaling
