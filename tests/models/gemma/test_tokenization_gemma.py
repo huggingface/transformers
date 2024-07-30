@@ -222,6 +222,17 @@ class GemmaIntegrationTest(unittest.TestCase):
         self.tokenizer.add_eos_token = False
         self.rust_tokenizer.add_eos_token = False
 
+    def test_fast_merge_priority(self):
+        slow_tokenizer = self.tokenizer
+        fast_tokenizer = self.rust_tokenizer
+        text = "                                               "
+        target = [168, 153]
+        slow = slow_tokenizer.encode(text, add_special_tokens=False)
+        assert slow == target
+
+        fast = fast_tokenizer.encode(text, add_special_tokens=False)
+        assert fast == target
+
     @unittest.skip(reason="Not super important and always failing. Let's skip it")
     @slow
     def test_conversion(self):
