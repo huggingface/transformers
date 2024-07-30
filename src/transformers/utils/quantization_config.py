@@ -1056,11 +1056,13 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
     This is a wrapper class that handles compressed-tensors quantization config options.
     It is a wrapper around `compressed_tensors.QuantizationConfig`
     Args:
-        weights (`str`, *optional*, defaults to `"int8"`):
-            The target dtype for the weights. Supported value is only "int8"
-        modules_to_not_convert (`list`, *optional*, default to `None`):
-            The list of modules to not quantize, useful for quantizing models that explicitly require to have
-            some modules left in their original precision.
+        config_groups (`typing.Dict[str, typing.Union[ForwardRef('QuantizationScheme'), typing.List[str]]]`, *optional*): <fill_docstring>
+        quant_method (`str`, *optional*, defaults to `"compressed-tensors"`): <fill_docstring>
+        format (`str`, *optional*, defaults to `"dense"`): <fill_docstring>
+        quantization_status (`QuantizationStatus`, *optional*, defaults to `"initialized"`): <fill_docstring>
+        global_compression_ratio (`typing.Union[float, NoneType]`, *optional*): <fill_docstring>
+        ignore (`typing.Union[typing.List[str], NoneType]`, *optional*): <fill_docstring>
+        sparsity_config (`typing.Dict[str, typing.Any]`, *optional*): <fill_docstring>
     """
 
     def __init__(
