@@ -64,6 +64,7 @@ class Kosmos2_5Processor(ProcessorMixin):
         truncation: Union[bool, str, TruncationStrategy] = True,
         max_length: Optional[int] = None,
         max_patches: Optional[int] = 4096,
+        num_image_tokens: Optional[int] = 2048,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
         return_attention_mask: Optional[bool] = None,
@@ -109,17 +110,17 @@ class Kosmos2_5Processor(ProcessorMixin):
 
             batch_size, seq_len = input.input_ids.shape
 
-            additional_tokens = [self.bos, self.boi] + [self.bos] * 2048 + [self.eoi]
+            additional_tokens = [self.bos, self.boi] + [self.bos] * num_image_tokens + [self.eoi]
             additional_tokens_tensor = torch.tensor(additional_tokens).unsqueeze(0).repeat(batch_size, 1)
             input_ids = torch.cat([additional_tokens_tensor, input.input_ids], dim=1)
 
             # 1 is image
-            image_embeds_position_mask = [0, -1] + [1] * 2048 + [-1] + [0] * seq_len
+            image_embeds_position_mask = [0, -1] + [1] * num_image_tokens + [-1] + [0] * seq_len
             image_embeds_position_mask = (
                 torch.LongTensor(image_embeds_position_mask).unsqueeze(0).repeat(batch_size, 1)
             )
 
-            added_attention_mask = [1, 1] + [1] * 2048 + [1]
+            added_attention_mask = [1, 1] + [1] * num_image_tokens + [1]
             added_attention_mask_tensor = torch.tensor(added_attention_mask).unsqueeze(0).repeat(batch_size, 1)
             attention_mask = torch.cat([added_attention_mask_tensor, input.attention_mask], dim=1)
             encoding.update(
