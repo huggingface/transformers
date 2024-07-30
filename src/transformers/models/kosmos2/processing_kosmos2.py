@@ -54,10 +54,11 @@ class Kosmos2Processor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
+    valid_kwargs = ["num_patch_index_tokens"]
     image_processor_class = "CLIPImageProcessor"
     tokenizer_class = ("XLMRobertaTokenizer", "XLMRobertaTokenizerFast")
 
-    def __init__(self, image_processor, tokenizer, num_patch_index_tokens=1024):
+    def __init__(self, image_processor, tokenizer, num_patch_index_tokens=1024, *kwargs):
         tokenizer.return_token_type_ids = False
 
         self.eod_token = "</doc>"

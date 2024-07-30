@@ -1,6 +1,17 @@
 name: "\U0001F41B Bug Report"
 description: Submit a bug report to help us improve transformers
+labels: [ "bug" ]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report! 🤗
+
+        Before you submit your bug report:
+
+          - If it is your first time submitting, be sure to check our [bug report guidelines](https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md#did-you-find-a-bug)
+          - Try our [docs bot](https://huggingface.co/spaces/huggingchat/hf-docs-chat) -- it might be able to help you with your issue
+
   - type: textarea
     id: system-info
     attributes:
@@ -25,7 +36,7 @@ body:
 
         Models:
 
-          - text models: @ArthurZucker 
+          - text models: @ArthurZucker
           - vision models: @amyeroberts
           - speech models: @sanchit-gandhi
           - graph models: @clefourrier
@@ -38,9 +49,9 @@ body:
           - tensorflow: @gante and @Rocketknight1
           - tokenizers: @ArthurZucker
           - trainer: @muellerzr @SunMarc
-        
+
         Integrations:
-        
+
           - deepspeed: HF Trainer/Accelerate: @muellerzr
           - ray/raytune: @richardliaw, @amogkam
           - Big Model Inference: @SunMarc
