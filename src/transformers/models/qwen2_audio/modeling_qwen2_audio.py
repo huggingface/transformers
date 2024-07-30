@@ -593,7 +593,7 @@ class Qwen2AudioEncoder(Qwen2AudioPreTrainedModel):
     # Ignore copy
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
-    [`WhisperEncoderLayer`].
+    [`Qwen2AudioEncoderLayer`].
 
     Args:
         config: Qwen2AudioEncoderConfig
