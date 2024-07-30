@@ -4095,7 +4095,6 @@ class Trainer:
             return (loss, None, None)
 
         logits = nested_detach(logits)
-
         if len(logits) == 1:
             logits = logits[0]
 
