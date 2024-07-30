@@ -504,7 +504,7 @@ class Kosmos2_5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     @require_torch_gpu
     @pytest.mark.flash_attn_test
     @slow
-    @unittest.skipTest(reason="kosmos-2.5 flash attention does not support right padding")
+    @unittest.skip(reason="kosmos-2.5 flash attention does not support right padding")
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
 
@@ -512,7 +512,7 @@ class Kosmos2_5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     @require_torch_gpu
     @pytest.mark.flash_attn_test
     @slow
-    @unittest.skipTest(reason="kosmos-2.5 test : the dummy inputs should be tweaked: dummy_input = inputs_dict")
+    @unittest.skip(reason="kosmos-2.5 test : the dummy inputs should be tweaked: dummy_input = inputs_dict")
     def test_flash_attn_2_inference_equivalence(self):
         pass
 
@@ -520,12 +520,12 @@ class Kosmos2_5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     @require_torch_sdpa
     @require_torch_gpu
     @slow
-    @unittest.skipTest(reason="_update_causal_mask is not implemented yet which fails this test")
+    @unittest.skip(reason="_update_causal_mask is not implemented yet which fails this test")
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
     # TODO: ydshieh
-    @unittest.skipTest(reason="doesn't support padding yet")
+    @unittest.skip(reason="doesn't support padding yet")
     def test_eager_matches_sdpa_inference_1_bfloat16(self):
         pass
 
