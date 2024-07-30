@@ -632,7 +632,6 @@ class Mamba2Block(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.mamba.modeling_mamba.MambaPreTrainedModel with Mamba->Mamba2
 class Mamba2PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
