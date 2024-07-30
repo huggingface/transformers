@@ -1085,6 +1085,16 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
             elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
                 input_ids = input_ids[:, cache_position]
 
+            # If we are about to go beyond the maximum cache length, we need to crop the input attention mask.
+            cache_length = cache_position[0]
+            max_cache_length = past_key_values.get_max_length()
+            if (
+                max_cache_length is not None
+                and attention_mask is not None
+                and cache_length + input_ids.shape[1] > max_cache_length
+            ):
+                attention_mask = attention_mask[:, -max_cache_length:]
+
         if attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
