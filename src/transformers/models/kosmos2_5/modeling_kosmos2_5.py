@@ -553,8 +553,17 @@ class Kosmos2_5VisionAttention(nn.Module):
 
 
 class Kosmos2_5VisionFlashAttention2(Kosmos2_5VisionAttention):
+    """
+    Kosmos-2.5 vision encoder flash attention module. This module inherits from `Kosmos2_5VisionAttention` as the
+    weights of the module stays untouched. The only required change would be on the forward pass where it needs to
+    correctly call the public API of flash attention and deal with padding tokens in case the input contains any of
+    them.
+    """
+
+    # copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
         # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
         # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
@@ -626,8 +635,11 @@ class Kosmos2_5VisionFlashAttention2(Kosmos2_5VisionAttention):
 
 
 class Kosmos2_5VisionSdpaAttention(Kosmos2_5VisionAttention):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    """
+    Kosmos-2.5 vision encoder attention module using torch.nn.functional.scaled_dot_product_attention. This module
+    inherits from` Kosmos2_5VisionAttention` as the weights of the module stays untouched. The only changes are on the
+    forward pass to adapt to SDPA API.
+    """
 
     def forward(
         self,
