@@ -39,6 +39,7 @@ import enum
 import inspect
 import operator as op
 import re
+import subprocess
 from pathlib import Path
 from typing import Any, Optional, Tuple, Union
 
@@ -943,14 +944,22 @@ def fix_docstring(obj: Any, old_doc_args: str, new_doc_args: str):
         f.write("\n".join(lines))
 
 
-def check_docstrings(overwrite: bool = False):
+def check_docstrings(overwrite: bool = False, check_all: bool = False):
     """
     Check docstrings of all public objects that are callables and are documented.
 
     Args:
         overwrite (`bool`, *optional*, defaults to `False`):
             Whether to fix inconsistencies or not.
+        check_all (`bool`, *optional*, defaults to `False`):
+            Whether to check all files. By default, only checks the diff.
     """
+    if not check_all:
+        # Check only the diff
+        diff = subprocess.check_output(["git", "diff", "--name-only", "HEAD"]).decode("utf-8")
+        files = [Path(file) for file in diff.split("\n") if file.startswith("src/transformers")]
+        breakpoint()
+
     failures = []
     hard_failures = []
     to_clean = []
@@ -1013,6 +1022,11 @@ def check_docstrings(overwrite: bool = False):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--fix_and_overwrite", action="store_true", help="Whether to fix inconsistencies.")
+    parser.add_argument(
+        "--check_all",
+        action="store_true",
+        help="Whether to check all files. By default, only checks the diff"
+    )
     args = parser.parse_args()
 
-    check_docstrings(overwrite=args.fix_and_overwrite)
+    check_docstrings(overwrite=args.fix_and_overwrite, check_all=args.check_all)
