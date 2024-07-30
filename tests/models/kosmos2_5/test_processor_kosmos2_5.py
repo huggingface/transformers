@@ -104,8 +104,13 @@ class Kosmos2_5ProcessorTest(unittest.TestCase):
         )
         self.assertIsInstance(processor.image_processor, Kosmos2_5ImageProcessor)
 
+    @unittest.skip(reason="kosmos-2.5 must have both image and text")
+    def test_image_processor(self):
+        pass
+
+    @unittest.skip(reason="kosmos-2.5 must have both image and text")
     def test_tokenizer(self):
-        self.skipTest(reason="kosmos-2.5 must have both image and text")
+        pass
 
     def test_tokenizer_decode(self):
         image_processor = self.get_image_processor()
