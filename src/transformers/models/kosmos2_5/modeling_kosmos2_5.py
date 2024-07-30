@@ -384,7 +384,7 @@ class Kosmos2_5ForConditionalGenerationModelOutput(ModelOutput):
         )
 
 
-# Copied from transformers.models.pix2struct.modeling_pix2struct.Pix2StructLayerNorm with Pix2Struct -> Kosmos2_5
+# Copied from transformers.models.pix2struct.modeling_pix2struct.Pix2StructLayerNorm with Pix2Struct->Kosmos2_5
 class Kosmos2_5LayerNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
@@ -487,7 +487,7 @@ class Kosmos2_5VisionMlp(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.pix2struct.modeling_pix2struct.Pix2StructVisionAttention with Pix2Struct -> Kosmos2_5
+# Copied from transformers.models.pix2struct.modeling_pix2struct.Pix2StructVisionAttention with Pix2Struct->Kosmos2_5
 class Kosmos2_5VisionAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -707,7 +707,7 @@ KOSMOS2_5_VISION_ATTENTION_CLASSES = {
 }
 
 
-# Copied from transformers.models.pix2struct.modeling_pix2struct.Pix2StructVisionLayer with Pix2StructVisionAttention->KOSMOS2_5_VISION_ATTENTION_CLASSES[config._attn_implementation],Pix2Struct -> Kosmos2_5
+# Copied from transformers.models.pix2struct.modeling_pix2struct.Pix2StructVisionLayer with Pix2StructVisionAttention->KOSMOS2_5_VISION_ATTENTION_CLASSES[config._attn_implementation],Pix2Struct->Kosmos2_5
 class Kosmos2_5VisionLayer(nn.Module):
     def __init__(self, config: Kosmos2_5VisionConfig) -> None:
         super().__init__()
@@ -761,7 +761,7 @@ class Kosmos2_5VisionLayer(nn.Module):
         return layer_output, outputs
 
 
-# Copied from transformers.models.pix2struct.modeling_pix2struct.Pix2StructVisionEncoder with Pix2Struct -> Kosmos2_5
+# Copied from transformers.models.pix2struct.modeling_pix2struct.Pix2StructVisionEncoder with Pix2Struct->Kosmos2_5
 class Kosmos2_5VisionEncoder(nn.Module):
     def __init__(self, config: Kosmos2_5VisionConfig) -> None:
         super().__init__()
@@ -892,7 +892,7 @@ class Kosmos2_5VisionModel(PreTrainedModel):
         )
 
 
-# Copied from transformers.models.kosmos2.modeling_kosmos2.Kosmos2TextSinusoidalPositionalEmbedding with Kosmos2 -> Kosmos2_5
+# Copied from transformers.models.kosmos2.modeling_kosmos2.Kosmos2TextSinusoidalPositionalEmbedding with Kosmos2->Kosmos2_5
 class Kosmos2_5TextSinusoidalPositionalEmbedding(nn.Module):
     """This module produces sinusoidal positional embeddings of any length."""
 
@@ -976,15 +976,12 @@ class Kosmos2_5TextSinusoidalPositionalEmbedding(nn.Module):
         sequence_length = input_shape[1]
 
         position_ids = torch.arange(
-            self.padding_idx + 1,
-            sequence_length + self.padding_idx + 1,
-            dtype=torch.long,
-            device=inputs_embeds.device,
+            self.padding_idx + 1, sequence_length + self.padding_idx + 1, dtype=torch.long, device=inputs_embeds.device
         )
         return position_ids.unsqueeze(0).expand(input_shape).contiguous() + past_key_values_length
 
 
-# Copied from transformers.models.kosmos2.modeling_kosmos2.Kosmos2TextFFN with Kosmos2 -> Kosmos2_5
+# Copied from transformers.models.kosmos2.modeling_kosmos2.Kosmos2TextFFN with Kosmos2->Kosmos2_5
 class Kosmos2_5TextFFN(nn.Module):
     def __init__(self, config: Kosmos2_5TextConfig):
         super().__init__()

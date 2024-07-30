@@ -295,7 +295,7 @@ class Pix2StructVisionLayer(nn.Module):
 
 
 class Pix2StructVisionEncoder(nn.Module):
-    def __init__(self, config: Pix2StructConfig) -> None:
+    def __init__(self, config: Pix2StructVisionConfig) -> None:
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([Pix2StructVisionLayer(config) for _ in range(config.num_hidden_layers)])
