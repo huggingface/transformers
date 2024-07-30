@@ -1625,7 +1625,7 @@ class WhisperGenerationMixin:
 
             kwargs["decoder_attention_mask"] = decoder_input_ids != generation_config.pad_token_id
         elif prompt_ids is not None:
-            prev_tokens = prompt_ids[None].repeat(decoder_input_ids.shape[0], 1)
+            prev_tokens = prompt_ids[None].repeat(decoder_input_ids.shape[0], 1).to(decoder_input_ids.device)
             decoder_input_ids = torch.cat([prev_tokens, decoder_input_ids], dim=-1)
             # make sure `"decoder_attention_mask"` is not passed to forward
             kwargs.pop("decoder_attention_mask", None)
