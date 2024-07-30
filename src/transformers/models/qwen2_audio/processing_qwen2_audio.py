@@ -122,8 +122,7 @@ class Qwen2AudioProcessor(ProcessorMixin):
             ]},
         ]
 
-        result_with_id = template.render(messages=messages, add_generation_prompt=True, add_audio_id=True)
-        result_without_id = template.render(messages=messages, add_generation_prompt=True, add_audio_id=False)
+        result = template.render(messages=messages, add_generation_prompt=True)
         ```
         """
         # fmt: off
@@ -140,10 +139,7 @@ class Qwen2AudioProcessor(ProcessorMixin):
                     "{% for content in message['content'] %}"
                         "{% if 'audio' in content or 'audio_url' in content %}"
                             "{% set audio_count.value = audio_count.value + 1 %}"
-                            "{% if add_audio_id %}"
-                                "Audio {{ audio_count.value }}: "
-                            "{% endif %}"
-                            "<|audio_bos|><|AUDIO|><|audio_eos|>\n"
+                            "Audio {{ audio_count.value }}: <|audio_bos|><|AUDIO|><|audio_eos|>\n"
                         "{% elif 'text' in content %}"
                             "{{ content['text'] }}"
                         "{% endif %}"

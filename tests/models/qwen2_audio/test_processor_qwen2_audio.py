@@ -14,7 +14,7 @@
 import tempfile
 import unittest
 
-from transformers import AutoTokenizer, Qwen2AudioProcessor, WhisperFeatureExtractor
+from transformers import AutoProcessor, AutoTokenizer, Qwen2AudioProcessor, WhisperFeatureExtractor
 from transformers.testing_utils import require_torch, require_torchaudio
 
 
@@ -43,3 +43,72 @@ class Qwen2AudioProcessorTest(unittest.TestCase):
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
         self.assertIsInstance(processor.feature_extractor, WhisperFeatureExtractor)
+
+    def test_tokenizer_integration(self):
+        slow_tokenizer = AutoTokenizer.from_pretrained(self.checkpoint, use_fast=False)
+        fast_tokenizer = AutoTokenizer.from_pretrained(self.checkpoint, from_slow=True, legacy=False)
+
+        prompt = "<|im_start|>system\nAnswer the questions.<|im_end|><|im_start|>user\n<|audio_bos|><|AUDIO|><|audio_eos|>\nWhat is it in this audio?<|im_end|><|im_start|>assistant\n"
+        EXPECTED_OUTPUT = [
+            "<|im_start|>",
+            "system",
+            "Ċ",
+            "Answer",
+            "Ġthe",
+            "Ġquestions",
+            ".",
+            "<|im_end|>",
+            "<|im_start|>",
+            "user",
+            "Ċ",
+            "<|audio_bos|>",
+            "<|AUDIO|>",
+            "<|audio_eos|>",
+            "Ċ",
+            "What",
+            "Ġis",
+            "Ġit",
+            "Ġin",
+            "Ġthis",
+            "Ġaudio",
+            "?",
+            "<|im_end|>",
+            "<|im_start|>",
+            "assistant",
+            "Ċ",
+        ]
+        print(slow_tokenizer.tokenize(prompt))
+        self.assertEqual(slow_tokenizer.tokenize(prompt), EXPECTED_OUTPUT)
+        self.assertEqual(fast_tokenizer.tokenize(prompt), EXPECTED_OUTPUT)
+
+    def test_chat_template(self):
+        processor = AutoProcessor.from_pretrained(self.checkpoint)
+        expected_prompt = "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\nAudio 1: <|audio_bos|><|AUDIO|><|audio_eos|>\nWhat's that sound?<|im_end|>\n<|im_start|>assistant\nIt is the sound of glass shattering.<|im_end|>\n<|im_start|>user\nAudio 2: <|audio_bos|><|AUDIO|><|audio_eos|>\nHow about this one?<|im_end|>\n<|im_start|>assistant\n"
+
+        messages = [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "audio",
+                        "audio_url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3",
+                    },
+                    {"type": "text", "text": "What's that sound?"},
+                ],
+            },
+            {"role": "assistant", "content": "It is the sound of glass shattering."},
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "audio",
+                        "audio_url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/f2641_0_throatclearing.wav",
+                    },
+                    {"type": "text", "text": "How about this one?"},
+                ],
+            },
+        ]
+
+        formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
+        self.assertEqual(expected_prompt, formatted_prompt)

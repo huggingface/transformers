@@ -56,7 +56,7 @@ conversation = [
                 {"type": "audio", "audio_url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/translate_to_chinese.wav"},
             ]},
         ]
-text = processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=False, add_audio_id = True)
+text = processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=False)
 audios = []
 for message in conversation:
     if isinstance(message["content"], list):
@@ -99,7 +99,7 @@ conversation = [
                 {"type": "text", "text": "What does the person say?"},
             ]},
         ]
-text = processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=False, add_audio_id = True)
+text = processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=False)
 audios = []
 for message in conversation:
     if isinstance(message["content"], list):
@@ -150,7 +150,7 @@ conversation2 = [
 
 conversations = [conversation1, conversation2]
 
-text = [processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=False, add_audio_id = True) for conversation in conversations]
+text = [processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=False) for conversation in conversations]
 
 audios = []
 for conversation in conversations:

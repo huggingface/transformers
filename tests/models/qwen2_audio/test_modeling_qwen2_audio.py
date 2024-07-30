@@ -21,7 +21,6 @@ import requests
 
 from transformers import (
     AutoProcessor,
-    AutoTokenizer,
     Qwen2AudioConfig,
     Qwen2AudioForConditionalGeneration,
     is_torch_available,
@@ -243,7 +242,6 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
         inputs = self.processor(text=prompts, audios=[audio1, audio2, audio3], return_tensors="pt", padding=True)
 
         output = model.generate(**inputs, max_new_tokens=32)
-        print(self.processor.batch_decode(output, skip_special_tokens=True))
 
         EXPECTED_DECODED_TEXT = [
             "Detect the language and recognize the speech:mister quilter is the apostle of the middle classes and we are glad to welcome his gospel",
@@ -255,43 +253,58 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
             EXPECTED_DECODED_TEXT,
         )
 
-    def test_tokenizer_integration(self):
-        slow_tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-Audio-7B", use_fast=False)
-        fast_tokenizer = AutoTokenizer.from_pretrained(
-            "Qwen/Qwen2-Audio-7B",
-            from_slow=True,
-            legacy=False,
-        )
+    @slow
+    def test_small_model_integration_test_multiturn(self):
+        # Let' s make sure we test the preprocessing to replace what is used
+        model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct")
 
-        prompt = "<|im_start|>system\nAnswer the questions.<|im_end|><|im_start|>user\n<|audio_bos|><|AUDIO|><|audio_eos|>\nWhat is it in this audio?<|im_end|><|im_start|>assistant\n"
-        EXPECTED_OUTPUT = [
-            "<|im_start|>",
-            "system",
-            "Ċ",
-            "Answer",
-            "Ġthe",
-            "Ġquestions",
-            ".",
-            "<|im_end|>",
-            "<|im_start|>",
-            "user",
-            "Ċ",
-            "<|audio_bos|>",
-            "<|AUDIO|>",
-            "<|audio_eos|>",
-            "Ċ",
-            "What",
-            "Ġis",
-            "Ġit",
-            "Ġin",
-            "Ġthis",
-            "Ġaudio",
-            "?",
-            "<|im_end|>",
-            "<|im_start|>",
-            "assistant",
-            "Ċ",
+        messages = [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "audio",
+                        "audio_url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3",
+                    },
+                    {"type": "text", "text": "What's that sound?"},
+                ],
+            },
+            {"role": "assistant", "content": "It is the sound of glass shattering."},
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "audio",
+                        "audio_url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/f2641_0_throatclearing.wav",
+                    },
+                    {"type": "text", "text": "How about this one?"},
+                ],
+            },
         ]
-        print(slow_tokenizer.tokenize(prompt))
-        self.assertEqual(slow_tokenizer.tokenize(prompt), EXPECTED_OUTPUT)
-        self.assertEqual(fast_tokenizer.tokenize(prompt), EXPECTED_OUTPUT)
+
+        formatted_prompt = self.processor.apply_chat_template(messages, add_generation_prompt=True)
+
+        audios = []
+        for message in messages:
+            if isinstance(message["content"], list):
+                for ele in message["content"]:
+                    if ele["type"] == "audio":
+                        audios.append(
+                            ffmpeg_read(
+                                requests.get(ele["audio_url"]).content,
+                                sampling_rate=self.processor.feature_extractor.sampling_rate,
+                            )
+                        )
+
+        inputs = self.processor(text=formatted_prompt, audios=audios, return_tensors="pt", padding=True)
+
+        output = model.generate(**inputs, max_new_tokens=32, top_k=1)
+
+        EXPECTED_DECODED_TEXT = [
+            "system\nYou are a helpful assistant.\nuser\nAudio 1: \nWhat's that sound?\nassistant\nIt is the sound of glass shattering.\nuser\nAudio 2: \nHow about this one?\nassistant\nThroat clearing.",
+        ]
+        self.assertEqual(
+            self.processor.batch_decode(output, skip_special_tokens=True),
+            EXPECTED_DECODED_TEXT,
+        )
