@@ -946,19 +946,24 @@ def fix_docstring(obj: Any, old_doc_args: str, new_doc_args: str):
 
 def check_docstrings(overwrite: bool = False, check_all: bool = False):
     """
-    Check docstrings of all public objects that are callables and are documented.
+    Check docstrings of all public objects that are callables and are documented. By default, only checks the diff.
 
     Args:
         overwrite (`bool`, *optional*, defaults to `False`):
             Whether to fix inconsistencies or not.
         check_all (`bool`, *optional*, defaults to `False`):
-            Whether to check all files. By default, only checks the diff.
+            Whether to check all files.
     """
+    module_diff_files = None
     if not check_all:
-        # Check only the diff
-        diff = subprocess.check_output(["git", "diff", "--name-only", "HEAD"]).decode("utf-8")
-        files = [Path(file) for file in diff.split("\n") if file.startswith("src/transformers")]
-        breakpoint()
+        module_diff_files = subprocess.run(
+            ["git", "diff", "--name-only", "origin/main"], capture_output=True, text=True
+        )
+        module_diff_files = module_diff_files.stdout.split("\n")
+        module_diff_files = {file for file in module_diff_files if file.startswith("src/transformers")}
+        # quick escape route: if there are no module files in the diff, skip this check
+        if len(module_diff_files) == 0:
+            return
 
     failures = []
     hard_failures = []
@@ -971,6 +976,13 @@ def check_docstrings(overwrite: bool = False, check_all: bool = False):
         obj = getattr(transformers, name)
         if not callable(obj) or not isinstance(obj, type) or getattr(obj, "__doc__", None) is None:
             continue
+
+        # If we are checking against the diff, we skip objects that are not part of the diff.
+        if module_diff_files is not None:
+            object_file = find_source_file(getattr(transformers, name))
+            object_file_relative_path = "src/" + str(object_file).split("/src/")[1]
+            if object_file_relative_path not in module_diff_files:
+                continue
 
         # Check docstring
         try:
@@ -1023,9 +1035,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--fix_and_overwrite", action="store_true", help="Whether to fix inconsistencies.")
     parser.add_argument(
-        "--check_all",
-        action="store_true",
-        help="Whether to check all files. By default, only checks the diff"
+        "--check_all", action="store_true", help="Whether to check all files. By default, only checks the diff"
     )
     args = parser.parse_args()
 
