@@ -42,9 +42,9 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase):
             config: model for config, model in tf_model_mapping.items() if config.__name__ not in _TO_SKIP
         }
 
-    def get_test_pipeline(self, model, tokenizer, processor):
+    def get_test_pipeline(self, model, tokenizer, processor, torch_dtype="float32"):
         classifier = ZeroShotClassificationPipeline(
-            model=model, tokenizer=tokenizer, candidate_labels=["polics", "health"]
+            model=model, tokenizer=tokenizer, candidate_labels=["polics", "health"], torch_dtype=torch_dtype
         )
         return classifier, ["Who are you voting for in 2020?", "My stomach hurts."]
 

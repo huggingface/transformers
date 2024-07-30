@@ -16,11 +16,11 @@ rendered properly in your Markdown viewer.
 
 # DeepSpeed
 
-[DeepSpeed](https://www.deepspeed.ai/) is a PyTorch optimization library that makes distributed training memory-efficient and fast. At it's core is the [Zero Redundancy Optimizer (ZeRO)](https://hf.co/papers/1910.02054) which enables training large models at scale. ZeRO works in several stages:
+[DeepSpeed](https://www.deepspeed.ai/) is a PyTorch optimization library that makes distributed training memory-efficient and fast. At its core is the [Zero Redundancy Optimizer (ZeRO)](https://hf.co/papers/1910.02054) which enables training large models at scale. ZeRO works in several stages:
 
-* ZeRO-1, optimizer state partioning across GPUs
+* ZeRO-1, optimizer state partitioning across GPUs
 * ZeRO-2, gradient partitioning across GPUs
-* ZeRO-3, parameteter partitioning across GPUs
+* ZeRO-3, parameter partitioning across GPUs
 
 In GPU-limited environments, ZeRO also enables offloading optimizer memory and computation from the GPU to the CPU to fit and train really large models on a single GPU. DeepSpeed is integrated with the Transformers [`Trainer`] class for all ZeRO stages and offloading. All you need to do is provide a config file or you can use a provided template. For inference, Transformers support ZeRO-3 and offloading since it allows loading huge models.
 
@@ -159,7 +159,7 @@ There are three types of configuration parameters:
 
 You could also modify the DeepSpeed configuration and edit [`TrainingArguments`] from it:
 
-1. Create or load a DeepSpeed configuration to used as the main configuration
+1. Create or load a DeepSpeed configuration to use as the main configuration
 2. Create a [`TrainingArguments`] object based on these DeepSpeed configuration values
 
 Some values, such as `scheduler.params.total_num_steps` are calculated by the [`Trainer`] during training.
@@ -191,7 +191,7 @@ ZeRO-1 shards the optimizer states across GPUs, and you can expect a tiny speed 
 </hfoption>
 <hfoption id="ZeRO-2">
 
-ZeRO-2 shards the optimizer and gradients across GPUs. This stage is primarily used for training since it's features are not relevant to inference. Some important parameters to configure for better performance include:
+ZeRO-2 shards the optimizer and gradients across GPUs. This stage is primarily used for training since its features are not relevant to inference. Some important parameters to configure for better performance include:
 
 * `offload_optimizer` should be enabled to reduce GPU memory usage.
 * `overlap_comm` when set to `true` trades off increased GPU memory usage to lower allreduce latency. This feature uses 4.5x the `allgather_bucket_size` and `reduce_bucket_size` values. In this example, they're set to `5e8` which means it requires 9GB of GPU memory. If your GPU memory is 8GB or less, you should reduce `overlap_comm` to lower the memory requirements and prevent an out-of-memory (OOM) error.
@@ -226,7 +226,7 @@ ZeRO-3 shards the optimizer, gradient, and parameters across GPUs. Unlike ZeRO-2
 * `pin_memory: true` can improve throughput, but less memory becomes available for other processes because the pinned memory is reserved for the specific process that requested it and it's typically accessed much faster than normal CPU memory.
 * `stage3_max_live_parameters` is the upper limit on how many full parameters you want to keep on the GPU at any given time. Reduce this value if you encounter an OOM error.
 * `stage3_max_reuse_distance` is a value for determining when a parameter is used again in the future, and it helps decide whether to throw the parameter away or to keep it. If the parameter is going to be reused (if the value is less than `stage3_max_reuse_distance`), then it is kept to reduce communication overhead. This is super helpful when activation checkpointing is enabled and you want to keep the parameter in the forward recompute until the backward pass. But reduce this value if you encounter an OOM error.
-* `stage3_gather_16bit_weights_on_model_save` consolidates fp16 weights when a model is saved. For large models and multiple GPUs, this is an expensive in terms of memory and speed. You should enable it if you're planning on resuming training.
+* `stage3_gather_16bit_weights_on_model_save` consolidates fp16 weights when a model is saved. For large models and multiple GPUs, this is expensive in terms of memory and speed. You should enable it if you're planning on resuming training.
 * `sub_group_size` controls which parameters are updated during the optimizer step. Parameters are grouped into buckets of `sub_group_size` and each bucket is updated one at a time. When used with NVMe offload, `sub_group_size` determines when model states are moved in and out of CPU memory from during the optimization step. This prevents running out of CPU memory for extremely large models. `sub_group_size` can be left to its default value if you aren't using NVMe offload, but you may want to change it if you:
 
     1. Run into an OOM error during the optimizer step. In this case, reduce `sub_group_size` to reduce memory usage of the temporary buffers.

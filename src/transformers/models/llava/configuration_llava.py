@@ -13,8 +13,6 @@
 # limitations under the License.
 """Llava model configuration"""
 
-import warnings
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING
@@ -94,12 +92,6 @@ class LlavaConfig(PretrainedConfig):
             raise ValueError(
                 "vision_feature_select_strategy should be one of 'default', 'full'."
                 f"Got: {vision_feature_select_strategy}"
-            )
-
-        if "vocab_size" in kwargs:
-            warnings.warn(
-                "The `vocab_size` argument is deprecated and will be removed in v4.42, since it can be inferred from the `text_config`. Passing this argument has no effect",
-                FutureWarning,
             )
 
         self.vision_feature_select_strategy = vision_feature_select_strategy

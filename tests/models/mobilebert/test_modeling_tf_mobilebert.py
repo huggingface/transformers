@@ -84,7 +84,7 @@ class TFMobileBertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Te
 
         return inputs_dict
 
-    class TFMobileBertModelTester(object):
+    class TFMobileBertModelTester:
         def __init__(
             self,
             parent,

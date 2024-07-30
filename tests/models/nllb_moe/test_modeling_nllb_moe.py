@@ -346,6 +346,12 @@ class NllbMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         self.assertIsNotNone(model(**input_dict)["encoder_router_logits"][1])
         self.assertIsNotNone(model(**input_dict)["decoder_router_logits"][0])
 
+    @unittest.skip(
+        reason="This architecure has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
+    )
+    def test_load_save_without_tied_weights(self):
+        pass
+
 
 @require_torch
 @require_sentencepiece

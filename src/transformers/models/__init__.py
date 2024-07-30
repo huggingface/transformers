@@ -42,6 +42,7 @@ from . import (
     byt5,
     camembert,
     canine,
+    chameleon,
     chinese_clip,
     clap,
     clip,
@@ -105,6 +106,7 @@ from . import (
     grounding_dino,
     groupvit,
     herbert,
+    hiera,
     hubert,
     ibert,
     idefics,
@@ -264,4 +266,5 @@ from . import (
     xmod,
     yolos,
     yoso,
+    zoedepth,
 )

@@ -157,7 +157,7 @@ class ImageFeatureExtractionPipelineTests(unittest.TestCase):
         outputs = feature_extractor(img, return_tensors=True)
         self.assertTrue(tf.is_tensor(outputs))
 
-    def get_test_pipeline(self, model, tokenizer, processor):
+    def get_test_pipeline(self, model, tokenizer, processor, torch_dtype="float32"):
         if processor is None:
             self.skipTest(reason="No image processor")
 
@@ -175,7 +175,9 @@ class ImageFeatureExtractionPipelineTests(unittest.TestCase):
                 """
             )
 
-        feature_extractor = ImageFeatureExtractionPipeline(model=model, image_processor=processor)
+        feature_extractor = ImageFeatureExtractionPipeline(
+            model=model, image_processor=processor, torch_dtype=torch_dtype
+        )
         img = prepare_img()
         return feature_extractor, [img, img]
 

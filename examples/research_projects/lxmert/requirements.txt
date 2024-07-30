@@ -4,7 +4,7 @@ async-generator==1.10
 attrs==20.2.0
 backcall==0.2.0
 CacheControl==0.12.6
-certifi==2023.7.22
+certifi==2024.7.4
 cffi==1.14.2
 chardet==3.0.4
 click==7.1.2

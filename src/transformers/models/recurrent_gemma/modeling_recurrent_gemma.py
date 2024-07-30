@@ -59,6 +59,9 @@ class RecurrentGemmaRMSNorm(nn.Module):
         output = output * (1.0 + self.weight.float())
         return output.type_as(x)
 
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.eps}"
+
 
 ALL_LAYERNORM_LAYERS.append(RecurrentGemmaRMSNorm)
 
@@ -684,7 +687,6 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         use_cache: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        **kwargs,
     ) -> Union[Tuple, BaseModelOutputWithNoAttention]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -823,7 +825,6 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         use_cache: Optional[bool] = None,
-        **kwargs,  # for now we need this for generation
     ) -> Union[Tuple, CausalLMOutput]:
         r"""
         Args:
