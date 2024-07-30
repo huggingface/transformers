@@ -1219,7 +1219,8 @@ class Kosmos2_5TextFlashAttention2(Kosmos2_5TextAttention):
             dropout=self.dropout,
             sliding_window=getattr(self, "sliding_window", None),
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
-            is_causal=self.is_causal,)
+            is_causal=self.is_causal,
+        )
 
         attn_output = attn_output.view(bsz, -1, self.embed_dim)
 
@@ -1231,7 +1232,6 @@ class Kosmos2_5TextFlashAttention2(Kosmos2_5TextAttention):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
-
 
 
 class Kosmos2_5TextSdpaAttention(Kosmos2_5TextAttention):

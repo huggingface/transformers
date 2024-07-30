@@ -531,6 +531,7 @@ class Kosmos2_5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     # TODO: ydshieh
     unittest.skip(reason=" the model hasn't been added to auto class")
+
     def test_flash_attn_2_from_config(self):
         pass
 
