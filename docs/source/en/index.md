@@ -88,6 +88,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                          [ByT5](model_doc/byt5)                          |       ✅        |         ✅         |      ✅      |
 |                     [CamemBERT](model_doc/camembert)                     |       ✅        |         ✅         |      ❌      |
 |                        [CANINE](model_doc/canine)                        |       ✅        |         ❌         |      ❌      |
+|                     [Chameleon](model_doc/chameleon)                     |       ✅        |         ❌         |      ❌      |
 |                  [Chinese-CLIP](model_doc/chinese_clip)                  |       ✅        |         ❌         |      ❌      |
 |                          [CLAP](model_doc/clap)                          |       ✅        |         ❌         |      ❌      |
 |                          [CLIP](model_doc/clip)                          |       ✅        |         ✅         |      ✅      |
@@ -160,6 +161,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                [Grounding DINO](model_doc/grounding-dino)                |       ✅        |         ❌         |      ❌      |
 |                      [GroupViT](model_doc/groupvit)                      |       ✅        |         ✅         |      ❌      |
 |                       [HerBERT](model_doc/herbert)                       |       ✅        |         ✅         |      ✅      |
+|                         [Hiera](model_doc/hiera)                         |       ✅        |         ❌         |      ❌      |
 |                        [Hubert](model_doc/hubert)                        |       ✅        |         ✅         |      ❌      |
 |                        [I-BERT](model_doc/ibert)                         |       ✅        |         ❌         |      ❌      |
 |                       [IDEFICS](model_doc/idefics)                       |       ✅        |         ✅         |      ❌      |

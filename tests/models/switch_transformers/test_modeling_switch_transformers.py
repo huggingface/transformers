@@ -720,6 +720,12 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
             attn_weights = out[attn_name] if attn_name == attention_names[0] else out[attn_name][-1]
             self.assertEqual(sum([w.sum().item() for w in attn_weights]), 0.0)
 
+    @unittest.skip(
+        reason="This architecure has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
+    )
+    def test_load_save_without_tied_weights(self):
+        pass
+
 
 class SwitchTransformersEncoderOnlyModelTester:
     def __init__(
@@ -842,6 +848,12 @@ class SwitchTransformersEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase
     def test_model_fp16_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
+
+    @unittest.skip(
+        reason="This architecure has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
+    )
+    def test_load_save_without_tied_weights(self):
+        pass
 
 
 def use_task_specific_params(model, task):
