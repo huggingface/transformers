@@ -254,8 +254,6 @@ class GPTJAttention(nn.Module):
         key = key.permute(0, 2, 1, 3)
         query = query.permute(0, 2, 1, 3)
 
-        # Note that this cast is quite ugly, but is not implemented before ROPE as the original codebase keeps the key in float32 all along the computation.
-        # Reference: https://github.com/kingoflolz/mesh-transformer-jax/blob/f8315e3003033b23f21d78361b288953064e0e76/mesh_transformer/layers.py#L128
         if layer_past is not None:
             cache_kwargs = {
                 "sin": sin,
@@ -263,7 +261,7 @@ class GPTJAttention(nn.Module):
                 "partial_rotation_size": self.rotary_dim,
                 "cache_position": cache_position,
             }
-            key, value = layer_past.update(key.to(hidden_states.dtype), value, self.layer_idx, cache_kwargs)
+            key, value = layer_past.update(key, value, self.layer_idx, cache_kwargs)
 
         # compute self-attention: V x Softmax(QK^T)
         attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
@@ -351,8 +349,6 @@ class GPTJFlashAttention2(GPTJAttention):
         query = query.permute(0, 2, 1, 3)
         # value: batch_size x num_attention_heads x seq_length x head_dim
 
-        # Note that this cast is quite ugly, but is not implemented before ROPE as the original codebase keeps the key in float32 all along the computation.
-        # Reference: https://github.com/kingoflolz/mesh-transformer-jax/blob/f8315e3003033b23f21d78361b288953064e0e76/mesh_transformer/layers.py#L128
         if layer_past is not None:
             cache_kwargs = {
                 "sin": sin,
@@ -360,7 +356,7 @@ class GPTJFlashAttention2(GPTJAttention):
                 "partial_rotation_size": self.rotary_dim,
                 "cache_position": cache_position,
             }
-            key, value = layer_past.update(key.to(hidden_states.dtype), value, self.layer_idx, cache_kwargs)
+            key, value = layer_past.update(key, value, self.layer_idx, cache_kwargs)
 
         # The Flash attention requires the input to have the shape
         # batch_size x seq_length x head_dim x hidden_dim
@@ -780,7 +776,6 @@ class GPTJModel(GPTJPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.wte(input_ids)
 
-        # Compute alibi tensor: check build_alibi_tensor documentation
         use_legacy_cache = False
         if use_cache and not isinstance(past_key_values, Cache) and not self.training:
             use_legacy_cache = True
@@ -792,7 +787,7 @@ class GPTJModel(GPTJPreTrainedModel):
 
         seq_length = inputs_embeds.shape[1]
         if cache_position is None:
-            past_key_values_length = past_key_values.get_seq_length() if use_cache else 0
+            past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(
                 past_key_values_length, past_key_values_length + seq_length, device=inputs_embeds.device
             )

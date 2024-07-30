@@ -652,7 +652,7 @@ class IdeficsAttention(nn.Module):
 
         kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
-            kv_seq_len += cache_position[-1]
+            kv_seq_len += cache_position[0]  # past_key_value.get_seq_length(self.layer_idx)
 
         if not is_cross_attention:
             cos, sin = self.rotary_emb(value_states, seq_len=max(kv_seq_len, q_len))
