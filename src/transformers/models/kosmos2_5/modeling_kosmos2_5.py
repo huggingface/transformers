@@ -1529,6 +1529,7 @@ class Kosmos2_5TextTransformer(nn.Module):
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         return hidden_states
 
+    # Copied from transformers.models.kosmos2.modeling_kosmos2.Kosmos2TextTransformer.forward
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1581,9 +1582,7 @@ class Kosmos2_5TextTransformer(nn.Module):
             position_ids=position_ids,
         )
 
-        # print(hidden_states.shape)
-        # print(hidden_states)
-        causal_mask = self._prepare_decoder_attention_mask(
+        attention_mask = self._prepare_decoder_attention_mask(
             attention_mask, input_shape, hidden_states, past_key_values_length
         )
 
@@ -1631,11 +1630,11 @@ class Kosmos2_5TextTransformer(nn.Module):
                 layer_outputs = self._gradient_checkpointing_func(
                     decoder_layer.__call__,
                     hidden_states,
-                    causal_mask,
+                    attention_mask,
                     encoder_hidden_states,
                     encoder_attention_mask,
                     head_mask[idx] if head_mask is not None else None,
-                    (cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None),
+                    cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
                     None,
                     output_attentions,
                     use_cache,
@@ -1643,7 +1642,7 @@ class Kosmos2_5TextTransformer(nn.Module):
             else:
                 layer_outputs = decoder_layer(
                     hidden_states,
-                    attention_mask=causal_mask,
+                    attention_mask=attention_mask,
                     encoder_hidden_states=encoder_hidden_states,
                     encoder_attention_mask=encoder_attention_mask,
                     layer_head_mask=(head_mask[idx] if head_mask is not None else None),
@@ -1655,6 +1654,7 @@ class Kosmos2_5TextTransformer(nn.Module):
                     use_cache=use_cache,
                 )
             hidden_states = layer_outputs[0]
+
             if use_cache:
                 present_key_value_states += (layer_outputs[3 if output_attentions else 1],)
 
@@ -1683,7 +1683,6 @@ class Kosmos2_5TextTransformer(nn.Module):
                 ]
                 if v is not None
             )
-
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
             past_key_values=present_key_value_states,
