@@ -39,15 +39,16 @@ import enum
 import inspect
 import operator as op
 import re
-import subprocess
 from pathlib import Path
 from typing import Any, Optional, Tuple, Union
 
 from check_repo import ignore_undocumented
+from git import Repo
 
 from transformers.utils import direct_transformers_import
 
 
+PATH_TO_REPO = Path(__file__).parent.parent.resolve()
 PATH_TO_TRANSFORMERS = Path("src").resolve() / "transformers"
 
 # This is to make sure the transformers module imported is the one in the repo.
@@ -956,14 +957,15 @@ def check_docstrings(overwrite: bool = False, check_all: bool = False):
     """
     module_diff_files = None
     if not check_all:
-        module_diff_files = subprocess.run(
-            ["git", "diff", "--name-only", "origin/main"], capture_output=True, text=True
-        )
-        module_diff_files = module_diff_files.stdout.split("\n")
-        module_diff_files = {file for file in module_diff_files if file.startswith("src/transformers")}
+        module_diff_files = []
+        repo = Repo(PATH_TO_REPO)
+        for modified_file_diff in repo.index.diff(None):
+            if modified_file_diff.a_path.startswith("src/transformers"):
+                module_diff_files += [modified_file_diff.a_path]
         # quick escape route: if there are no module files in the diff, skip this check
         if len(module_diff_files) == 0:
             return
+        print("    Checking docstrings in the following files:" + "\n    - " + "\n    - ".join(module_diff_files))
 
     failures = []
     hard_failures = []
