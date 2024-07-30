@@ -957,11 +957,16 @@ def check_docstrings(overwrite: bool = False, check_all: bool = False):
     """
     module_diff_files = None
     if not check_all:
-        module_diff_files = []
+        module_diff_files = set()
         repo = Repo(PATH_TO_REPO)
+        # Diff from index to unstaged files
         for modified_file_diff in repo.index.diff(None):
             if modified_file_diff.a_path.startswith("src/transformers"):
-                module_diff_files += [modified_file_diff.a_path]
+                module_diff_files.add(modified_file_diff.a_path)
+        # Diff from index to `main`
+        for modified_file_diff in repo.index.diff("origin/main"):
+            if modified_file_diff.a_path.startswith("src/transformers"):
+                module_diff_files.add(modified_file_diff.a_path)
         # quick escape route: if there are no module files in the diff, skip this check
         if len(module_diff_files) == 0:
             return
