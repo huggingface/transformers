@@ -1048,6 +1048,7 @@ class Kosmos2_5TextAttention(nn.Module):
         if add_inner_attn_layernorm:
             self.inner_attn_ln = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
+    # Copied from transformers.models.kosmos2.modeling_kosmos2.KosmosTextAttention._shape
     def _shape(self, projection: torch.Tensor) -> torch.Tensor:
         new_projection_shape = projection.size()[:-1] + (self.num_heads, self.head_dim)
         # move heads to 2nd position (B, T, H * D) -> (B, T, H, D) -> (B, H, T, D)
@@ -1109,11 +1110,7 @@ class Kosmos2_5TextAttention(nn.Module):
         attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
         attn_output = torch.matmul(attn_weights, value_states)
 
-        if attn_output.size() != (
-            batch_size,
-            self.num_heads,
-            seq_length,
-            self.head_dim,
+        if attn_output.size() != (batch_size, self.num_heads, seq_length, self.head_dim
         ):
             raise ValueError(
                 f"`attn_output` should be of size {(batch_size, self.num_heads, seq_length, self.head_dim)}, but is"
@@ -1135,11 +1132,12 @@ class Kosmos2_5TextAttention(nn.Module):
 
 class Kosmos2_5TextFlashAttention2(Kosmos2_5TextAttention):
     """
-    Kosmos2_5 text flash attention module. This module inherits from `Kosmos2_5TextAttention` as the weights of the module stays
-    untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
-    flash attention and deal with padding tokens in case the input contains any of them.
+    Kosmos-2.5 text flash attention module. This module inherits from `Kosmos2_5TextAttention` as the weights of the
+    module stays untouched. The only required change would be on the forward pass where it needs to correctly call the
+    public API of flash attention and deal with padding tokens in case the input contains any of them.
     """
 
+    # copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -1228,13 +1226,10 @@ class Kosmos2_5TextFlashAttention2(Kosmos2_5TextAttention):
 
 class Kosmos2_5TextSdpaAttention(Kosmos2_5TextAttention):
     """
-    Llama attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
-    `LlamaAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
-    SDPA API.
+    Kosmos-2.5 text decoder attention module using torch.nn.functional.scaled_dot_product_attention. This module
+    inherits from `Kosmos2_5TextAttention` as the weights of the module stays untouched. The only changes are on the
+    forward pass to adapt to SDPA API.
     """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
 
     # Adapted from LlamaAttention.forward
     def forward(
@@ -1248,7 +1243,7 @@ class Kosmos2_5TextSdpaAttention(Kosmos2_5TextAttention):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         if output_attentions:
             logger.warning_once(
-                "LlamaModel is using LlamaSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
+                "Kosmos2_5TextModel is using Kosmos2_5TextSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
                 'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
             )
             return super().forward(
@@ -1355,6 +1350,7 @@ class Kosmos2_5TextBlock(nn.Module):
         self.ffn = Kosmos2_5TextFFN(config)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
+    # Copied from transformers.models.kosmos2.modeling_kosmos2.Kosmos2TextBlock.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
