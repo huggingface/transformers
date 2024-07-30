@@ -50,7 +50,7 @@ We implement two versions of ReactJsonAgent:
 
 ![Framework of a React Agent](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/blog/open-source-llms-as-agents/ReAct.png)
 
-For example, here is how a ReAct agent would work its way through the following question.
+For example, here is how a ReAct Code agent would work its way through the following question.
 
 ```py3
 >>> agent.run(
@@ -188,7 +188,7 @@ You can still authorize additional imports by passing the authorized modules as 
 >>> from transformers import ReactCodeAgent
 
 >>> agent = ReactCodeAgent(tools=[], additional_authorized_imports=['requests', 'bs4'])
->>>agent.run("Could you get me the title of the page at url 'https://huggingface.co/blog'?")
+>>> agent.run("Could you get me the title of the page at url 'https://huggingface.co/blog'?")
 
 (...)
 'Hugging Face – Blog'
@@ -255,6 +255,13 @@ agent = ReactJsonAgent(tools=[PythonInterpreterTool()], system_prompt="{your_cus
 > [!WARNING]
 > Please make sure to define the `<<tool_descriptions>>` string somewhere in the `template` so the agent is aware 
 of the available tools.
+
+
+### Inspecting an agent run
+
+Here are a few useful attributes to inspect what happened after a run:
+- `agent.logs` stores the fine-grained logs of the agent. At every step of the agent's run, everything gets stored in a dictionary that then is appended to `agent.logs`.
+- Running `agent.write_inner_memory_from_logs()` creates an inner memory of the agent's logs for the LLM to view, as a list of chat messages. This method goes over each step of the log and only stores what it's interested in as a message: for instance, it will save the system prompt and task in separate messages, then for each step it will store the LLM output as a message, and the tool call output as another message. Use this if you want a higher-level view of what has happened - but not every log will be transcripted by this method.
 
 ## Tools
 
@@ -379,7 +386,7 @@ And the output:
 `"The most downloaded model for the 'text-to-video' task is ByteDance/AnimateDiff-Lightning."`
 
 
-### Manage agent toolbox
+### Manage your agent's toolbox
 
 If you have already initialized an agent, it is inconvenient to reinitialize it from scratch with a tool you want to use. With Transformers, you can manage an agent's toolbox by adding or replacing a tool.
 
@@ -501,4 +508,55 @@ search_tool = Tool.from_langchain(load_tools(["serpapi"])[0])
 agent = ReactCodeAgent(tools=[search_tool])
 
 agent.run("How many more blocks (also denoted as layers) in BERT base encoder than the encoder from the architecture proposed in Attention is All You Need?")
+```
+
+## Gradio interface
+
+You can leverage `gradio.Chatbot`to display your agent's thoughts using `stream_to_gradio`, here is an example:
+
+```py
+import gradio as gr
+from transformers import (
+    load_tool,
+    ReactCodeAgent,
+    HfEngine,
+    stream_to_gradio,
+)
+
+# Import tool from Hub
+image_generation_tool = load_tool("m-ric/text-to-image")
+
+llm_engine = HfEngine("meta-llama/Meta-Llama-3-70B-Instruct")
+
+# Initialize the agent with the image generation tool
+agent = ReactCodeAgent(tools=[image_generation_tool], llm_engine=llm_engine)
+
+
+def interact_with_agent(task):
+    messages = []
+    messages.append(gr.ChatMessage(role="user", content=task))
+    yield messages
+    for msg in stream_to_gradio(agent, task):
+        messages.append(msg)
+        yield messages + [
+            gr.ChatMessage(role="assistant", content="⏳ Task not finished yet!")
+        ]
+    yield messages
+
+
+with gr.Blocks() as demo:
+    text_input = gr.Textbox(lines=1, label="Chat Message", value="Make me a picture of the Statue of Liberty.")
+    submit = gr.Button("Run illustrator agent!")
+    chatbot = gr.Chatbot(
+        label="Agent",
+        type="messages",
+        avatar_images=(
+            None,
+            "https://em-content.zobj.net/source/twitter/53/robot-face_1f916.png",
+        ),
+    )
+    submit.click(interact_with_agent, [text_input], [chatbot])
+
+if __name__ == "__main__":
+    demo.launch()
 ```

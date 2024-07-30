@@ -185,6 +185,14 @@ class VipLlavaForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestC
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
+    @unittest.skip(reason="Compile not yet supported because it is not yet supported in LLava")
+    def test_sdpa_can_compile_dynamic(self):
+        pass
+
+    @unittest.skip(reason="Compile not yet supported because in LLava models")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
 
 @require_torch
 class VipLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):

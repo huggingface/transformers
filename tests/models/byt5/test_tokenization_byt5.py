@@ -300,15 +300,15 @@ class ByT5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 self.assertTrue(tokenizer.decode([255]) == "")
 
-    # tokenizer does not have vocabulary
+    @unittest.skip(reason="ByT5Tokenizer does not have a vocabulary")
     def test_get_vocab(self):
         pass
 
-    # inputs cannot be pretokenized since ids depend on whole input string and not just on single characters
+    @unittest.skip(reason="inputs cannot be pretokenized as ids depend on whole input string")
     def test_pretokenized_inputs(self):
         pass
 
-    # tests all ids in vocab => vocab doesn't exist so unnecessary to test
+    @unittest.skip(reason="ByT5Tokenizer does not have a vocabulary")
     def test_conversion_reversible(self):
         pass
 

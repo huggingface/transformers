@@ -39,6 +39,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
     replace_return_docstrings,
+    torch_int,
 )
 from .configuration_mobilevit import MobileViTConfig
 
@@ -437,8 +438,16 @@ class MobileViTLayer(nn.Module):
 
         batch_size, channels, orig_height, orig_width = features.shape
 
-        new_height = int(math.ceil(orig_height / patch_height) * patch_height)
-        new_width = int(math.ceil(orig_width / patch_width) * patch_width)
+        new_height = (
+            torch_int(torch.ceil(orig_height / patch_height) * patch_height)
+            if torch.jit.is_tracing()
+            else int(math.ceil(orig_height / patch_height) * patch_height)
+        )
+        new_width = (
+            torch_int(torch.ceil(orig_width / patch_width) * patch_width)
+            if torch.jit.is_tracing()
+            else int(math.ceil(orig_width / patch_width) * patch_width)
+        )
 
         interpolate = False
         if new_width != orig_width or new_height != orig_height:

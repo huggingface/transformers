@@ -417,7 +417,7 @@ class TokenizerTesterMixin:
     def test_sentencepiece_tokenize_and_convert_tokens_to_string(self):
         """Test ``_tokenize`` and ``convert_tokens_to_string``."""
         if not self.test_sentencepiece:
-            return
+            self.skipTest(reason="test_sentencepiece is set to False")
 
         tokenizer = self.get_tokenizer()
         text = "This is text to test the tokenizer."
@@ -449,7 +449,7 @@ class TokenizerTesterMixin:
 
     def test_sentencepiece_tokenize_and_decode(self):
         if not self.test_sentencepiece:
-            return
+            self.skipTest(reason="test_sentencepiece is set to False")
 
         text = "This is text to test the tokenizer."
         if self.test_rust_tokenizer:
@@ -466,7 +466,7 @@ class TokenizerTesterMixin:
 
     def test_subword_regularization_tokenizer(self) -> None:
         if not self.test_sentencepiece:
-            return
+            self.skipTest(reason="test_sentencepiece is set to False")
 
         # Subword regularization is only available for the slow tokenizer.
         sp_model_kwargs = {"enable_sampling": True, "alpha": 0.1, "nbest_size": -1}
@@ -484,7 +484,7 @@ class TokenizerTesterMixin:
 
     def test_pickle_subword_regularization_tokenizer(self) -> None:
         if not self.test_sentencepiece:
-            return
+            self.skipTest(reason="test_sentencepiece is set to False")
 
         """Google pickle __getstate__ __setstate__ if you are struggling with this."""
         # Subword regularization is only available for the slow tokenizer.
@@ -506,7 +506,7 @@ class TokenizerTesterMixin:
 
     def test_save_sentencepiece_tokenizer(self) -> None:
         if not self.test_sentencepiece or not self.test_slow_tokenizer:
-            return
+            self.skipTest(reason="test_sentencepiece or test_slow_tokenizer is set to False")
         # We want to verify that we will be able to save the tokenizer even if the original files that were used to
         # build the tokenizer have been deleted in the meantime.
         text = "This is text to test the tokenizer."
@@ -545,7 +545,7 @@ class TokenizerTesterMixin:
 
     def test_rust_tokenizer_signature(self):
         if not self.test_rust_tokenizer:
-            return
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         signature = inspect.signature(self.rust_tokenizer_class.__init__)
 
@@ -554,7 +554,7 @@ class TokenizerTesterMixin:
 
     def test_tokenizer_slow_store_full_signature(self):
         if not self.test_slow_tokenizer:
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         signature = inspect.signature(self.tokenizer_class.__init__)
         tokenizer = self.get_tokenizer()
@@ -565,7 +565,7 @@ class TokenizerTesterMixin:
 
     def test_tokenizer_fast_store_full_signature(self):
         if not self.test_rust_tokenizer:
-            return
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         signature = inspect.signature(self.rust_tokenizer_class.__init__)
         tokenizer = self.get_rust_tokenizer()
@@ -580,11 +580,11 @@ class TokenizerTesterMixin:
 
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
-            return
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         tokenizer = self.get_tokenizer()
         rust_tokenizer = self.get_rust_tokenizer()
@@ -1152,6 +1152,135 @@ class TokenizerTesterMixin:
                 tokenizer.apply_chat_template(
                     dummy_conversations, chat_template=dummy_template, tokenize=True
                 )  # Check that no error raised
+
+    @require_jinja
+    def test_chat_template_return_assistant_tokens_mask(self):
+        dummy_template = (
+            "{% for message in messages %}"
+            "{% if (message['role'] != 'assistant') %}"
+            "{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}"
+            "{% elif (message['role'] == 'assistant')%}"
+            "{{'<|im_start|>' + message['role'] + '\n'}}"
+            "{% generation %}"
+            "{{message['content'] + '<|im_end|>'}}"
+            "{% endgeneration %}"
+            "{{'\n'}}"
+            "{% endif %}"
+            "{% endfor %}"
+        )
+        conversations = [
+            [
+                {"role": "system", "content": "system message"},
+                {"role": "user", "content": "user message"},
+                {"role": "assistant", "content": "start turn 1 assistant message. end turn 1"},
+                {"role": "user", "content": "user message 2"},
+                {"role": "assistant", "content": "start turn 2 assistant message. end turn 2"},
+            ],
+            [
+                {"role": "system", "content": "system message 3"},
+                {"role": "user", "content": "user message 3"},
+                {"role": "assistant", "content": "start turn 3 assistant message. end turn 3"},
+                {"role": "user", "content": "user message 4"},
+                {"role": "assistant", "content": "start turn 4 assistant message. end turn 4"},
+            ],
+        ]
+
+        # These are the prefix and suffix strings of all the assistant messages. Used to find the assistant substring
+        # in the entire chat string, and then find the corresponding tokens in the tokenized output.
+        assistant_prefix_suffix = [
+            [("start turn 1", "end turn 1<|im_end|>"), ("start turn 2", "end turn 2<|im_end|>")],
+            [("start turn 3", "end turn 3<|im_end|>"), ("start turn 4", "end turn 4<|im_end|>")],
+        ]
+        for tokenizer, pretrained_name, _ in self.tokenizers_list:
+            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+                if not self.test_rust_tokenizer:
+                    self.skipTest(reason="No fast tokenizer defined")
+
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name)
+
+                # check batched
+                output = tokenizer_r.apply_chat_template(
+                    conversations,
+                    chat_template=dummy_template,
+                    tokenize=True,
+                    return_assistant_tokens_mask=True,
+                    return_dict=True,
+                )
+                for i, conv in enumerate(conversations):
+                    chat_string = tokenizer_r.apply_chat_template(
+                        conversations[i], tokenize=False, chat_template=dummy_template
+                    )
+                    assistant_start = output.char_to_token(i, chat_string.index(assistant_prefix_suffix[i][0][0]))
+                    assistant_end = output.char_to_token(
+                        i,
+                        chat_string.index(assistant_prefix_suffix[i][0][1])
+                        + len(assistant_prefix_suffix[i][0][1])
+                        - 1,
+                    )
+
+                    assistant_start2 = output.char_to_token(i, chat_string.index(assistant_prefix_suffix[i][1][0]))
+                    assistant_end2 = output.char_to_token(
+                        i,
+                        chat_string.index(assistant_prefix_suffix[i][1][1])
+                        + len(assistant_prefix_suffix[i][1][1])
+                        - 1,
+                    )
+
+                    # assert 1 in first assistant message
+                    self.assertEqual(
+                        output["assistant_masks"][i][assistant_start : assistant_end + 1],
+                        [1] * (assistant_end - assistant_start + 1),
+                    )
+                    # assert 1 second assistant message
+                    self.assertEqual(
+                        output["assistant_masks"][i][assistant_start2 : assistant_end2 + 1],
+                        [1] * (assistant_end2 - assistant_start2 + 1),
+                    )
+
+                    # assert 0 in user/system indices
+                    self.assertEqual(output["assistant_masks"][i][:assistant_start], [0] * assistant_start)
+                    self.assertEqual(
+                        output["assistant_masks"][i][assistant_end + 1 : assistant_start2],
+                        [0] * (assistant_start2 - assistant_end - 1),
+                    )
+
+                # check not batched
+                output = tokenizer_r.apply_chat_template(
+                    conversations[0],
+                    chat_template=dummy_template,
+                    tokenize=True,
+                    return_assistant_tokens_mask=True,
+                    return_dict=True,
+                )
+
+                chat_string = tokenizer_r.apply_chat_template(
+                    conversations[0], tokenize=False, chat_template=dummy_template
+                )
+                assistant_start = output.char_to_token(0, chat_string.index(assistant_prefix_suffix[0][0][0]))
+                assistant_end = output.char_to_token(
+                    0, chat_string.index(assistant_prefix_suffix[0][0][1]) + len(assistant_prefix_suffix[0][0][1]) - 1
+                )
+                assistant_start2 = output.char_to_token(0, chat_string.index(assistant_prefix_suffix[0][1][0]))
+                assistant_end2 = output.char_to_token(
+                    0, chat_string.index(assistant_prefix_suffix[0][1][1]) + len(assistant_prefix_suffix[0][1][1]) - 1
+                )
+
+                # assert 1 in assistant indices
+                self.assertEqual(
+                    output["assistant_masks"][assistant_start : assistant_end + 1],
+                    [1] * (assistant_end - assistant_start + 1),
+                )
+                self.assertEqual(
+                    output["assistant_masks"][assistant_start2 : assistant_end2 + 1],
+                    [1] * (assistant_end2 - assistant_start2 + 1),
+                )
+
+                # assert 0 in user/system indices
+                self.assertEqual(output["assistant_masks"][:assistant_start], [0] * assistant_start)
+                self.assertEqual(
+                    output["assistant_masks"][assistant_end + 1 : assistant_start2],
+                    [0] * (assistant_start2 - assistant_end - 1),
+                )
 
     @require_jinja
     def test_chat_template_dict(self):
@@ -1973,7 +2102,7 @@ class TokenizerTesterMixin:
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 if tokenizer.pad_token is None:
-                    self.skipTest("No padding token.")
+                    self.skipTest(reason="No padding token.")
                 else:
                     empty_tokens = tokenizer("", padding=True, pad_to_multiple_of=8)
                     normal_tokens = tokenizer("This is a sample input", padding=True, pad_to_multiple_of=8)
@@ -2007,9 +2136,9 @@ class TokenizerTesterMixin:
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 if tokenizer.pad_token is None:
-                    self.skipTest("No padding token.")
+                    self.skipTest(reason="No padding token.")
                 if "attention_mask" not in tokenizer.model_input_names:
-                    self.skipTest("This model does not use attention mask.")
+                    self.skipTest(reason="This model does not use attention mask.")
 
                 features = [
                     {"input_ids": [1, 2, 3, 4, 5, 6], "attention_mask": [1, 1, 1, 1, 1, 0]},
@@ -2126,7 +2255,7 @@ class TokenizerTesterMixin:
 
     def test_padding_warning_message_fast_tokenizer(self):
         if not self.test_rust_tokenizer:
-            return
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         sequence = "This is a text"
 
@@ -2146,7 +2275,7 @@ class TokenizerTesterMixin:
         )
 
         if not self.test_slow_tokenizer:
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         tokenizer_slow = self.get_tokenizer()
         # check correct behaviour if no pad_token_id exists and add it eventually
@@ -2295,8 +2424,8 @@ class TokenizerTesterMixin:
     @require_tokenizers
     def test_added_token_are_matched_longest_first(self):
         if not self.test_slow_tokenizer:
-            self.skipTest("This test is only for slow tokenizers")
-            return
+            self.skipTest(reason="This test is only for slow tokenizers")
+
         tokenizers = self.get_tokenizers(fast=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
@@ -2305,7 +2434,7 @@ class TokenizerTesterMixin:
                     tokenizer.add_tokens([AddedToken("extra_id_100")])
                 except Exception:
                     # Canine cannot add tokens which are not codepoints
-                    self.skipTest("Cannot add those Added tokens")
+                    self.skipTest(reason="Cannot add those Added tokens")
 
                 # XXX: This used to split on `extra_id_1` first we're matching
                 # longest first now.
@@ -2588,13 +2717,13 @@ class TokenizerTesterMixin:
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 if tokenizer.__class__ not in MODEL_TOKENIZER_MAPPING:
-                    return
+                    self.skipTest(f"{tokenizer.__class__.__name__} is not in the MODEL_TOKENIZER")
 
                 config_class, model_class = MODEL_TOKENIZER_MAPPING[tokenizer.__class__]
                 config = config_class()
 
                 if config.is_encoder_decoder or config.pad_token_id is None:
-                    return
+                    self.skipTest(reason="Model is not an encoder-decoder model or has no set pad token id")
 
                 model = model_class(config)
 
@@ -2637,13 +2766,13 @@ class TokenizerTesterMixin:
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 if tokenizer.__class__ not in MODEL_TOKENIZER_MAPPING:
-                    return
+                    self.skipTest(f"{tokenizer.__class__.__name__} is not in the MODEL_TOKENIZER_MAPPING")
 
                 config_class, model_class = MODEL_TOKENIZER_MAPPING[tokenizer.__class__]
                 config = config_class()
 
                 if config.is_encoder_decoder or config.pad_token_id is None:
-                    return
+                    self.skipTest(reason="Model is not an encoder-decoder model or has no set pad token id")
 
                 model = model_class(config)
 
@@ -2672,13 +2801,13 @@ class TokenizerTesterMixin:
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 if tokenizer.__class__ not in MODEL_TOKENIZER_MAPPING:
-                    return
+                    self.skipTest(f"{tokenizer.__class__.__name__} is not in the MODEL_TOKENIZER_MAPPING")
 
                 config_class, model_class = MODEL_TOKENIZER_MAPPING[tokenizer.__class__]
                 config = config_class()
 
                 if config.is_encoder_decoder or config.pad_token_id is None:
-                    return
+                    self.skipTest("Model is not an encoder-decoder model or has no set pad token id")
 
                 # Build sequence
                 first_ten_tokens = list(tokenizer.get_vocab().keys())[:10]
@@ -2712,7 +2841,7 @@ class TokenizerTesterMixin:
     @require_torch
     def test_prepare_seq2seq_batch(self):
         if not self.test_seq2seq:
-            return
+            self.skipTest(reason="test_seq2seq is set to False")
 
         tokenizers = self.get_tokenizers()
         for tokenizer in tokenizers:
@@ -2740,7 +2869,7 @@ class TokenizerTesterMixin:
                         src_lang="en_XX",  # this should be ignored (for all but mbart) but not cause an error
                     )
                 except NotImplementedError:
-                    return
+                    self.skipTest(reason="Encountered NotImplementedError calling prepare_seq2seq_batch")
                 self.assertEqual(batch.input_ids.shape[1], 3)
                 self.assertEqual(batch.labels.shape[1], 10)
                 # max_target_length will default to max_length if not specified
@@ -3008,7 +3137,7 @@ class TokenizerTesterMixin:
     def test_tokenization_python_rust_equals(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
@@ -3049,7 +3178,7 @@ class TokenizerTesterMixin:
     def test_num_special_tokens_to_add_equal(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
@@ -3067,7 +3196,7 @@ class TokenizerTesterMixin:
     def test_max_length_equal(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
@@ -3081,7 +3210,7 @@ class TokenizerTesterMixin:
     def test_special_tokens_map_equal(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
@@ -3177,10 +3306,10 @@ class TokenizerTesterMixin:
                 elif is_flax_available():
                     returned_tensor = "jax"
                 else:
-                    return
+                    self.skipTest(reason="No expected framework from PT, TF or JAX found")
 
                 if not tokenizer.pad_token or tokenizer.pad_token_id < 0:
-                    return
+                    self.skipTest(reason="This tokenizer has no padding token set, or pad_token_id < 0")
 
                 tokens = tokenizer.encode_plus(
                     "HuggingFace is solving NLP one commit at a time",
@@ -3225,7 +3354,7 @@ class TokenizerTesterMixin:
     def test_compare_pretokenized_inputs(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
@@ -3307,7 +3436,7 @@ class TokenizerTesterMixin:
     def test_create_token_type_ids(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
@@ -3329,7 +3458,7 @@ class TokenizerTesterMixin:
     def test_build_inputs_with_special_tokens(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
@@ -3374,7 +3503,7 @@ class TokenizerTesterMixin:
     def test_padding(self, max_length=50):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
@@ -3600,7 +3729,7 @@ class TokenizerTesterMixin:
     def test_padding_different_model_input_name(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
@@ -3638,7 +3767,7 @@ class TokenizerTesterMixin:
     def test_save_pretrained(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
@@ -3713,7 +3842,7 @@ class TokenizerTesterMixin:
     def test_embeded_special_tokens(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
@@ -3781,7 +3910,7 @@ class TokenizerTesterMixin:
     def test_compare_prepare_for_model(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
@@ -3884,7 +4013,7 @@ class TokenizerTesterMixin:
     def test_training_new_tokenizer(self):
         # This feature only exists for fast tokenizers
         if not self.test_rust_tokenizer:
-            return
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         tokenizer = self.get_rust_tokenizer()
         new_tokenizer = tokenizer.train_new_from_iterator(SMALL_TRAINING_CORPUS, 100)
@@ -3919,7 +4048,7 @@ class TokenizerTesterMixin:
     def test_training_new_tokenizer_with_special_tokens_change(self):
         # This feature only exists for fast tokenizers
         if not self.test_rust_tokenizer:
-            return
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         tokenizer = self.get_rust_tokenizer()
         # Test with a special tokens map
@@ -4092,7 +4221,7 @@ class TokenizerTesterMixin:
     def test_save_slow_from_fast_and_reload_fast(self):
         if not self.test_slow_tokenizer or not self.test_rust_tokenizer:
             # we need both slow and fast versions
-            return
+            self.skipTest(reason="test_rust_tokenizer or test_slow_tokenizer is set to False")
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
@@ -4166,7 +4295,7 @@ class TokenizerTesterMixin:
 
     def test_split_special_tokens(self):
         if not self.test_slow_tokenizer:
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
         # Tests the expected appearance (or absence) of special token in encoded output,
         # explicit values are not tested because tokenization is model dependent and can change
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
@@ -4228,7 +4357,7 @@ class TokenizerTesterMixin:
             self.assertTrue(str(expected_eos) not in tokenizer.additional_special_tokens)
             self.assertIn(new_eos, tokenizer.added_tokens_decoder.values())
             self.assertEqual(tokenizer.added_tokens_decoder[tokenizer.eos_token_id], new_eos)
-            self.assertDictEqual(expected, tokenizer.added_tokens_decoder)
+            self.assertTrue(all(item in tokenizer.added_tokens_decoder.items() for item in expected.items()))
             return tokenizer
 
         new_eos = AddedToken("[NEW_EOS]", rstrip=False, lstrip=True, normalized=False, special=True)
@@ -4280,7 +4409,13 @@ class TokenizerTesterMixin:
                         self.assertIn(new_eos, list(tokenizer_fast.added_tokens_decoder.values()))
                         # We can't test the following because for BC we kept the default rstrip lstrip in slow not fast. Will comment once normalization is alright
                         with self.subTest("Hub -> Fast == Hub -> Slow: make sure slow and fast tokenizer match"):
-                            self.assertDictEqual(EXPECTED_ADDED_TOKENS_DECODER, tokenizer_fast.added_tokens_decoder)
+                            # Fast tokenizer may have user_defined_symbols and control_symbols added, unlike slow
+                            self.assertTrue(
+                                all(
+                                    item in tokenizer.added_tokens_decoder.items()
+                                    for item in EXPECTED_ADDED_TOKENS_DECODER.items()
+                                )
+                            )
 
                         EXPECTED_ADDED_TOKENS_DECODER = tokenizer_fast.added_tokens_decoder
                         with tempfile.TemporaryDirectory() as tmp_dir_4:

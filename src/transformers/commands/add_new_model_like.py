@@ -1628,7 +1628,7 @@ def get_user_input():
     )
 
     old_processing_classes = [
-        c
+        c if not isinstance(c, tuple) else c[0]
         for c in [old_image_processor_class, old_feature_extractor_class, old_tokenizer_class, old_processor_class]
         if c is not None
     ]

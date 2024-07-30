@@ -60,12 +60,12 @@ def get_anyres_image_grid_shape(image_size, grid_pinpoints, patch_size):
         tuple: The shape of the image patch grid in the format (width, height).
     """
     if not isinstance(grid_pinpoints, list):
-        raise ValueError("grid_pinpoints should be a list of tuples or lists")
+        raise TypeError("grid_pinpoints should be a list of tuples or lists")
 
     # ! VERY IMPORTANT if image_size is tensor, must convert to into tuple, otherwise it will cause wrong calculate
     if not isinstance(image_size, (list, tuple)):
         if not isinstance(image_size, (torch.Tensor, np.ndarray)):
-            raise ValueError(
+            raise TypeError(
                 f"image_size invalid type: {type(image_size)} not valid, should be either list, tuple, np.ndarray or tensor"
             )
         image_size = image_size.tolist()
@@ -91,12 +91,12 @@ def image_size_to_num_patches(image_size, grid_pinpoints, patch_size: int):
         int: the number of patches
     """
     if not isinstance(grid_pinpoints, list):
-        raise ValueError("grid_pinpoints should be a list of tuples or lists")
+        raise TypeError("grid_pinpoints should be a list of tuples or lists")
 
     # ! VERY IMPORTANT if image_size is tensor, must convert to into tuple, otherwise it will cause wrong calculate
     if not isinstance(image_size, (list, tuple)):
         if not isinstance(image_size, (torch.Tensor, np.ndarray)):
-            raise ValueError(f"image_size invalid type {type(image_size)} with value {image_size}")
+            raise TypeError(f"image_size invalid type {type(image_size)} with value {image_size}")
         image_size = image_size.tolist()
 
     best_resolution = select_best_resolution(image_size, grid_pinpoints)
@@ -518,8 +518,8 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
             _left_padding = torch.any(attention_mask[:, 0] == 0)
             _right_padding = torch.any(attention_mask[:, -1] == 0)
 
-            left_padding = True
-            if batch_size > 1:
+            left_padding = True if not self.training else False
+            if batch_size > 1 and not self.training:
                 if _left_padding and not _right_padding:
                     left_padding = True
                 elif not _left_padding and _right_padding:
@@ -545,8 +545,9 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                 )
             # Compute the maximum embed dimension
             # max_image_feature_lens is max_feature_lens per batch
+            feature_lens = feature_lens.to(input_ids.device)
             feature_lens_batch = feature_lens.split(num_special_image_tokens.tolist(), dim=0)
-            feature_lens_batch_sum = torch.tensor([x.sum() for x in feature_lens_batch], device=feature_lens.device)
+            feature_lens_batch_sum = torch.tensor([x.sum() for x in feature_lens_batch], device=input_ids.device)
             embed_sequence_lengths = (
                 (attention_mask == 1).long().sum(-1) - num_special_image_tokens + feature_lens_batch_sum
             )
@@ -577,9 +578,9 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         final_attention_mask = torch.zeros(
             batch_size, max_embed_dim, dtype=attention_mask.dtype, device=inputs_embeds.device
         )
-        final_labels = None
-        if labels is not None:
-            final_labels = torch.full_like(final_attention_mask, ignore_index).to(torch.long)
+        final_input_ids = torch.full(
+            (batch_size, max_embed_dim), self.pad_token_id, dtype=input_ids.dtype, device=inputs_embeds.device
+        )
         # In case the Vision model or the Language model has been offloaded to CPU, we need to manually
         # set the corresponding tensors into their correct target device.
         target_device = inputs_embeds.device
@@ -589,12 +590,17 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
             text_to_overwrite.to(target_device),
         )
         attention_mask = attention_mask.to(target_device)
+        input_ids = input_ids.to(target_device)
 
         # 4. Fill the embeddings based on the mask. If we have ["hey" "<image>", "how", "are"]
         # we need to index copy on [0, 577, 578, 579] for the text and [1:576] for the image features
         final_embedding[batch_indices, text_to_overwrite] = inputs_embeds[batch_indices, non_image_indices]
         final_attention_mask[batch_indices, text_to_overwrite] = attention_mask[batch_indices, non_image_indices]
+        final_input_ids[batch_indices, text_to_overwrite] = input_ids[batch_indices, non_image_indices]
+        final_labels = None
         if labels is not None:
+            labels = labels.to(target_device)
+            final_labels = torch.full_like(final_attention_mask, ignore_index).to(torch.long)
             final_labels[batch_indices, text_to_overwrite] = labels[batch_indices, non_image_indices]
 
         # 5. Fill the embeddings corresponding to the images. Anything that is not `text_positions` needs filling (#29835)
@@ -609,6 +615,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
 
             if left_padding:
                 # exclude padding on the left
+                max_embed_dim = max_embed_dim.to(target_device)
                 val = (max_embed_dim - embed_indices) <= embed_seq_lens
             else:
                 # exclude padding on the right
@@ -626,7 +633,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         final_attention_mask |= image_to_overwrite
         position_ids = (final_attention_mask.cumsum(-1) - 1).masked_fill_((final_attention_mask == 0), 1)
 
-        return final_embedding, final_attention_mask, position_ids, final_labels
+        return final_embedding, final_attention_mask, position_ids, final_labels, final_input_ids
 
     def pack_image_features(self, image_features, image_sizes, image_newline=None):
         """
@@ -796,7 +803,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                 )
 
                 inputs_embeds = inputs_embeds.to(image_features.dtype)
-                inputs_embeds, attention_mask, position_ids, labels = self._merge_input_ids_with_image_features(
+                inputs_embeds, attention_mask, position_ids, labels, _ = self._merge_input_ids_with_image_features(
                     image_features,
                     feature_lens,
                     inputs_embeds,

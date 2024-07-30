@@ -441,8 +441,8 @@ def compile_jinja_template(template):
     except ImportError:
         raise ImportError("template requires jinja2 to be installed.")
 
-    if version.parse(jinja2.__version__) <= version.parse("3.0.0"):
-        raise ImportError("template requires jinja2>=3.0.0 to be installed. Your version is " f"{jinja2.__version__}.")
+    if version.parse(jinja2.__version__) < version.parse("3.1.0"):
+        raise ImportError("template requires jinja2>=3.1.0 to be installed. Your version is " f"{jinja2.__version__}.")
 
     def raise_exception(message):
         raise TemplateError(message)
@@ -650,7 +650,6 @@ TASK_MAPPING = {
     "text-to-speech": "TextToSpeechTool",
     "translation": "TranslationTool",
     "python_interpreter": "PythonInterpreterTool",
-    "final_answer": "FinalAnswerTool",
 }
 
 

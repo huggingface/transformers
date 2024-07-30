@@ -16,6 +16,8 @@
 
 import unittest
 
+import numpy as np
+
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_vision_available
 
@@ -78,6 +80,8 @@ class ViltImageProcessingTester(unittest.TestCase):
             image = image_inputs[0]
             if isinstance(image, Image.Image):
                 w, h = image.size
+            elif isinstance(image, np.ndarray):
+                h, w = image.shape[0], image.shape[1]
             else:
                 h, w = image.shape[1], image.shape[2]
             scale = size / min(w, h)

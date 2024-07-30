@@ -26,10 +26,12 @@ import unittest
 import numpy as np
 import pytest
 from huggingface_hub import hf_hub_download
+from parameterized import parameterized
 
 import transformers
 from transformers import WhisperConfig
 from transformers.testing_utils import (
+    is_flaky,
     is_pt_flax_cross_test,
     require_flash_attn,
     require_torch,
@@ -64,6 +66,16 @@ if is_torch_available():
         WhisperModel,
         WhisperProcessor,
         set_seed,
+    )
+    from transformers.generation import (
+        BeamSampleDecoderOnlyOutput,
+        BeamSampleEncoderDecoderOutput,
+        BeamSearchDecoderOnlyOutput,
+        BeamSearchEncoderDecoderOutput,
+        GenerateBeamDecoderOnlyOutput,
+        GenerateBeamEncoderDecoderOutput,
+        GenerateEncoderDecoderOutput,
+        PhrasalConstraint,
     )
     from transformers.generation.logits_process import LogitsProcessor
     from transformers.models.whisper.modeling_whisper import WhisperDecoder, WhisperEncoder, sinusoids
@@ -504,9 +516,11 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 model(**inputs)[0]
 
     # training is not supported yet
+    @unittest.skip(reason="Training is not supported yet")
     def test_training(self):
         pass
 
+    @unittest.skip(reason="Training is not supported yet")
     def test_training_gradient_checkpointing(self):
         pass
 
@@ -522,6 +536,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
+    @unittest.skip
     def test_generate_with_head_masking(self):
         pass
 
@@ -736,7 +751,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             inputs_dict,
         ) = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.test_resize_embeddings:
-            return
+            self.skipTest(reason="test_resize_embeddings is False")
 
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
@@ -784,13 +799,13 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             inputs_dict,
         ) = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.test_resize_embeddings:
-            return
+            self.skipTest(reason="test_resize_embeddings is False")
 
         original_config.tie_word_embeddings = False
 
         # if model cannot untied embeddings -> leave test
         if original_config.tie_word_embeddings:
-            return
+            self.skipTest(reason="Model cannot untie embeddings")
 
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
@@ -827,6 +842,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             model(**self._prepare_for_class(inputs_dict, model_class))
 
+    @unittest.skip
     def test_generate_without_input_ids(self):
         pass
 
@@ -901,7 +917,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn_2:
-                return
+                self.skipTest(reason="Model does not support Flash Attention 2")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
@@ -947,7 +963,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn_2:
-                return
+                self.skipTest(reason="Model does not support flash_attention_2")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
@@ -996,7 +1012,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
-            return
+            self.skipTest(reason="test_torchscript is set to False")
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.torchscript = True
@@ -1096,8 +1112,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 fx_model_class_name = "Flax" + model_class.__name__
 
                 if not hasattr(transformers, fx_model_class_name):
-                    # no flax model exists for this class
-                    return
+                    self.skipTest(reason="No Flax model exists for this class")
 
                 # Output all for aggressive testing
                 config.output_hidden_states = True
@@ -1169,8 +1184,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 fx_model_class_name = "Flax" + model_class.__name__
 
                 if not hasattr(transformers, fx_model_class_name):
-                    # no flax model exists for this class
-                    return
+                    self.skipTest(reason="No Flax model exists for this class")
 
                 # Output all for aggressive testing
                 config.output_hidden_states = True
@@ -1537,6 +1551,299 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_longform_generate_multi_batch_cond_prev(self):
         self._check_longform_generate_multi_batch(condition_on_prev_tokens=True)
 
+    def test_beam_sample_generate_dict_output(self):
+        # We overwrite test_beam_sample_generate_dict_output in test_utils as
+        # we can only perform beam search if the temperature is set to 0 in Whisper.
+        config, input_ids, attention_mask = self._get_input_ids_and_config()
+
+        # disable cache
+        config.use_cache = False
+
+        model = WhisperForConditionalGeneration(config).to(torch_device).eval()
+        _, logits_warper_kwargs = self._get_logits_processor_and_warper_kwargs(input_ids.shape[-1])
+        beam_kwargs = self._get_beam_kwargs()
+
+        # With Whisper, we can only perform a beam search if the temperature is set to 0.
+        logits_warper_kwargs["temperature"] = 0
+        # We will return num_beams sequences per input only if num_return_sequences == num_beams:
+        beam_kwargs["num_return_sequences"] = beam_kwargs["num_beams"]
+
+        output_generate = self._beam_sample_generate(
+            model=model,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            beam_kwargs=beam_kwargs,
+            logits_warper_kwargs=logits_warper_kwargs,
+            output_scores=True,
+            output_logits=True,
+            output_hidden_states=True,
+            output_attentions=True,
+            return_dict_in_generate=True,
+        )
+        if model.config.is_encoder_decoder:
+            self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
+            self.assertIsInstance(output_generate, GenerateBeamEncoderDecoderOutput)
+            # Retrocompatibility check
+            self.assertIsInstance(output_generate, BeamSampleEncoderDecoderOutput)
+        else:
+            self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + input_ids.shape[-1])
+            self.assertIsInstance(output_generate, GenerateBeamDecoderOnlyOutput)
+            # Retrocompatibility check
+            self.assertIsInstance(output_generate, BeamSampleDecoderOnlyOutput)
+
+        self._check_outputs(output_generate, input_ids, model.config, num_return_sequences=beam_kwargs["num_beams"])
+
+    def test_beam_search_generate_dict_output(self):
+        # We overwrite test_beam_search_generate_dict_output in test_utils as
+        # we can only perform beam search if the temperature is set to 0 in Whisper.
+        for model_class in self.all_generative_model_classes:
+            config, input_ids, attention_mask = self._get_input_ids_and_config()
+
+            # disable cache
+            config.use_cache = False
+
+            model = model_class(config).to(torch_device).eval()
+            logits_process_kwargs, _ = self._get_logits_processor_and_warper_kwargs(
+                input_ids.shape[-1],
+                config.forced_bos_token_id,
+                config.forced_eos_token_id,
+            )
+            beam_kwargs = self._get_beam_kwargs()
+
+            # With Whisper, we can only perform a beam search if the temperature is set to 0.
+            logits_process_kwargs["temperature"] = 0
+            # We will return num_beams sequences per input only if num_return_sequences == num_beams:
+            beam_kwargs["num_return_sequences"] = beam_kwargs["num_beams"]
+
+            output_generate = self._beam_search_generate(
+                model=model,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                beam_kwargs=beam_kwargs,
+                logits_process_kwargs=logits_process_kwargs,
+                output_scores=True,
+                output_logits=True,
+                output_hidden_states=True,
+                output_attentions=True,
+                return_dict_in_generate=True,
+            )
+            if model.config.is_encoder_decoder:
+                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
+                self.assertIsInstance(output_generate, GenerateBeamEncoderDecoderOutput)
+                # Retrocompatibility check
+                self.assertIsInstance(output_generate, BeamSearchEncoderDecoderOutput)
+            else:
+                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + input_ids.shape[-1])
+                self.assertIsInstance(output_generate, GenerateBeamDecoderOnlyOutput)
+                # Retrocompatibility check
+                self.assertIsInstance(output_generate, BeamSearchDecoderOnlyOutput)
+
+            self._check_outputs(
+                output_generate, input_ids, model.config, num_return_sequences=beam_kwargs["num_beams"]
+            )
+
+    def test_beam_search_generate_dict_outputs_use_cache(self):
+        # We overwrite test_beam_search_generate_dict_outputs_use_cache in test_utils as
+        # we can only perform beam search if the temperature is set to 0 in Whisper.
+        for model_class in self.all_generative_model_classes:
+            # enable cache
+            config, input_ids, attention_mask = self._get_input_ids_and_config()
+
+            if not hasattr(config, "use_cache"):
+                self.skipTest("This model doesn't support caching")
+
+            model = model_class(config).to(torch_device).eval()
+            logits_process_kwargs, _ = self._get_logits_processor_and_warper_kwargs(
+                input_ids.shape[-1],
+                config.forced_bos_token_id,
+                config.forced_eos_token_id,
+            )
+
+            beam_kwargs = self._get_beam_kwargs()
+
+            # We will return num_beams sequences per input only if num_return_sequences == num_beams:
+            beam_kwargs["num_return_sequences"] = beam_kwargs["num_beams"]
+
+            config.use_cache = True
+            config.is_decoder = True
+            model = model_class(config).to(torch_device).eval()
+            output_generate = self._beam_search_generate(
+                model=model,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                beam_kwargs=beam_kwargs,
+                logits_process_kwargs=logits_process_kwargs,
+                output_scores=True,
+                output_logits=True,
+                output_hidden_states=True,
+                output_attentions=True,
+                return_dict_in_generate=True,
+            )
+
+            if model.config.is_encoder_decoder:
+                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
+            else:
+                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + input_ids.shape[-1])
+            self._check_outputs(
+                output_generate, input_ids, model.config, use_cache=True, num_return_sequences=beam_kwargs["num_beams"]
+            )
+
+    def test_group_beam_search_generate_dict_output(self):
+        # We overwrite test_group_beam_search_generate_dict_output in test_utils as
+        # we can only perform beam search if the temperature is set to 0 in Whisper.
+        for model_class in self.all_generative_model_classes:
+            config, input_ids, attention_mask = self._get_input_ids_and_config()
+            config.use_cache = False
+
+            model = model_class(config).to(torch_device).eval()
+            logits_process_kwargs, _ = self._get_logits_processor_and_warper_kwargs(
+                input_ids.shape[-1],
+                config.forced_bos_token_id,
+                config.forced_eos_token_id,
+            )
+
+            beam_kwargs = self._get_diverse_beam_kwargs()
+
+            # We will return num_beams sequences per input only if num_return_sequences == num_beams:
+            beam_kwargs["num_return_sequences"] = beam_kwargs["num_beams"]
+
+            output_generate = self._group_beam_search_generate(
+                model=model,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                beam_kwargs=beam_kwargs,
+                logits_process_kwargs=logits_process_kwargs,
+                output_scores=True,
+                output_logits=True,
+                output_hidden_states=True,
+                output_attentions=True,
+                return_dict_in_generate=True,
+            )
+            if model.config.is_encoder_decoder:
+                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
+                self.assertIsInstance(output_generate, GenerateBeamEncoderDecoderOutput)
+                # Retrocompatibility check
+                self.assertIsInstance(output_generate, BeamSearchEncoderDecoderOutput)
+            else:
+                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + input_ids.shape[-1])
+                self.assertIsInstance(output_generate, GenerateBeamDecoderOnlyOutput)
+                # Retrocompatibility check
+                self.assertIsInstance(output_generate, BeamSearchDecoderOnlyOutput)
+
+            self._check_outputs(
+                output_generate, input_ids, model.config, num_return_sequences=beam_kwargs["num_beams"]
+            )
+
+    def test_constrained_beam_search_generate_dict_output(self):
+        for model_class in self.all_generative_model_classes:
+            config, input_ids, attention_mask = self._get_input_ids_and_config()
+
+            # disable cache
+            config.use_cache = False
+
+            model = model_class(config).to(torch_device).eval()
+            logits_process_kwargs, _ = self._get_logits_processor_and_warper_kwargs(
+                input_ids.shape[-1],
+                config.forced_bos_token_id,
+                config.forced_eos_token_id,
+            )
+
+            # Sample constraints
+            min_id = 3
+            max_id = model.config.vocab_size
+            force_tokens = torch.randint(min_id, max_id, (1, 2)).tolist()[0]
+            constraints = [
+                PhrasalConstraint(force_tokens),
+            ]
+
+            beam_kwargs = self._get_constrained_beam_kwargs()
+            output_generate = self._constrained_beam_search_generate(
+                model=model,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                constraints=constraints,
+                beam_kwargs=beam_kwargs,
+                logits_process_kwargs=logits_process_kwargs,
+                output_scores=True,
+                output_logits=True,
+                output_hidden_states=True,
+                output_attentions=True,
+                return_dict_in_generate=True,
+            )
+
+            if model.config.is_encoder_decoder:
+                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
+                self.assertIsInstance(output_generate, GenerateBeamEncoderDecoderOutput)
+                # Retrocompatibility check
+                self.assertIsInstance(output_generate, BeamSearchEncoderDecoderOutput)
+            else:
+                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + input_ids.shape[-1])
+                self.assertIsInstance(output_generate, GenerateBeamDecoderOnlyOutput)
+                # Retrocompatibility check
+                self.assertIsInstance(output_generate, BeamSearchDecoderOnlyOutput)
+
+            self._check_outputs(
+                output_generate, input_ids, model.config, num_return_sequences=beam_kwargs["num_return_sequences"]
+            )
+
+    @is_flaky()  # TODO (joao, sanchit): fails ~9% of the times. Does the original test have the same issue?
+    def test_custom_4d_attention_mask(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = WhisperForConditionalGeneration(config).to(device=torch_device, dtype=torch.float32)
+        model.eval()
+
+        (
+            input_ids,
+            position_ids,
+            input_ids_shared_prefix,
+            mask_shared_prefix,
+            position_ids_shared_prefix,
+        ) = self._get_custom_4d_mask_test_data()
+
+        with torch.no_grad():
+            logits = model.forward(
+                decoder_input_ids=input_ids,
+                input_features=input_dict["input_features"],
+                decoder_position_ids=position_ids,
+            ).logits
+            # logits.shape == torch.Size([3, 4, ...])
+
+            logits_shared_prefix = model(
+                decoder_input_ids=input_ids_shared_prefix,
+                input_features=input_dict["input_features"],
+                decoder_attention_mask=mask_shared_prefix,
+                decoder_position_ids=position_ids_shared_prefix,
+            )[0]
+            # logits_shared_prefix.shape == torch.Size([1, 6, ...])
+
+        out_last_tokens = logits[:, -1, :]  # last tokens in each batch line
+        out_shared_prefix_last_tokens = logits_shared_prefix[0, -3:, :]  # last three tokens
+
+        # comparing softmax-normalized logits:
+        normalized_0 = torch.nn.functional.softmax(out_last_tokens)
+        normalized_1 = torch.nn.functional.softmax(out_shared_prefix_last_tokens)
+        torch.testing.assert_close(normalized_0, normalized_1, rtol=1e-3, atol=1e-4)
+
+    @parameterized.expand([(True,), (False,)])
+    def test_generate_output_type(self, return_dict_in_generate):
+        expected_output_type = GenerateEncoderDecoderOutput if return_dict_in_generate else torch.Tensor
+        for model_class in self.all_generative_model_classes:
+            config, inputs = self.model_tester.prepare_config_and_inputs()
+            model = model_class(config).to(torch_device).eval()
+
+            # short-form generation without fallback
+            pred_ids = model.generate(**inputs, return_dict_in_generate=return_dict_in_generate)
+            assert isinstance(pred_ids, expected_output_type)
+
+            # short-form generation with fallback
+            pred_ids = model.generate(
+                **inputs,
+                logprob_threshold=-1.0,
+                temperature=[0.0, 0.1],
+                return_dict_in_generate=return_dict_in_generate,
+            )
+            assert isinstance(pred_ids, expected_output_type)
+
 
 @require_torch
 @require_torchaudio
@@ -1552,9 +1859,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         return WhisperProcessor.from_pretrained("openai/whisper-base")
 
     def _load_datasamples(self, num_samples):
-        ds = load_dataset(
-            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
-        )
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
         speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
 
@@ -2369,9 +2674,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         )
         assistant_model.to(torch_device)
 
-        dataset = load_dataset(
-            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
-        )
+        dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         sample = dataset[0]["audio"]
 
         input_features = processor(sample["array"], return_tensors="pt", sampling_rate=16_000).input_features
@@ -2420,9 +2723,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         )
         assistant_model.to(torch_device)
 
-        dataset = load_dataset(
-            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
-        )
+        dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         sample = dataset[0]["audio"]
 
         input_features = processor(sample["array"], return_tensors="pt", sampling_rate=16_000).input_features
@@ -2463,7 +2764,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
         model = model.to(torch_device)
 
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", trust_remote_code=True)
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean")
         one_audio = np.concatenate([x["array"] for x in ds["validation"]["audio"]], dtype=np.float32)
 
         input_features = processor(
@@ -2499,9 +2800,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         prompt = "Mr. Kilter, Brionno."  # let's force Quilter -> Kilter, Brion -> Brionno
         prompt_ids = processor.get_prompt_ids(prompt, return_tensors="pt").to(torch_device)
 
-        ds = load_dataset(
-            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:-1]", trust_remote_code=True
-        )
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:-1]")
         one_audio = np.concatenate([x["array"] for x in ds["audio"]], dtype=np.float32)
 
         first_text = ds[0]["text"].lower()
@@ -2552,7 +2851,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
         model = model.to(torch_device)
 
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", trust_remote_code=True)
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean")
         one_audio = np.concatenate([x["array"] for x in ds["validation"]["audio"]], dtype=np.float32)
 
         input_features = processor(
@@ -2576,6 +2875,55 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         assert decoded == EXPECTED_TEXT
 
     @slow
+    def test_whisper_shortform_single_batch_prev_cond(self):
+        # fmt: off
+        EXPECTED_TEXT = [" Folks, I spend a lot of time right over there, night after night, actually. Carefully selecting for you the day's newsiest, most aerodynamic headlines, stress testing and the most topical antilock breaks and power steering pain, Stakingly stitching, leather seating so soft, it would make JD power and her associate blush. If you were to create the luxury sedan that is my nightly model, but sometimes— you're sometimes, folks— I lurched the consciousness and the back of an abandoned school bus"]
+        EXPECTED_TEXT1 = [" Folks, I spend a lot of time right over there night after night after, actually. Carefully selecting for you the day's noisiest, most aerodynamic headlines, stress testing, and the most topical, anti-lock breaks and power steering, painstakingly stitching, leather seating, so soft, it would make JD power and her associates blush to create the luxury sedan that is my nightly monologue. But sometimes, you sometimes, folks. I lurched a consciousness in the back of an abandoned school"]
+        # fmt: on
+
+        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
+        model = model.to(torch_device)
+
+        ds = load_dataset("distil-whisper/meanwhile", "default")["test"]
+        dataset = ds.cast_column("audio", Audio(sampling_rate=16000))
+
+        one_audio = dataset[1]["audio"]["array"]
+
+        input_features = processor(one_audio, return_tensors="pt", sampling_rate=16_000)["input_features"]
+        input_features = input_features.to(device=torch_device)
+
+        gen_kwargs = {
+            "return_timestamps": True,
+            "no_speech_threshold": 0.6,
+            "temperature": (0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
+            "compression_ratio_threshold": 1.35,
+            "condition_on_prev_tokens": True,
+            "logprob_threshold": -1.0,
+        }
+
+        torch.manual_seed(0)
+        result = model.generate(input_features, **gen_kwargs)
+        decoded = processor.batch_decode(result.sequences, skip_special_tokens=True)
+
+        assert decoded == EXPECTED_TEXT
+
+        gen_kwargs = {
+            "return_timestamps": True,
+            "no_speech_threshold": 0.3,
+            "temperature": (0.0, 0.2),
+            "compression_ratio_threshold": 1,
+            "condition_on_prev_tokens": False,
+            "logprob_threshold": -1.0,
+        }
+
+        torch.manual_seed(0)
+        result = model.generate(input_features, **gen_kwargs)
+        decoded = processor.batch_decode(result.sequences, skip_special_tokens=True)
+
+        assert decoded == EXPECTED_TEXT1
+
+    @slow
     def test_whisper_longform_single_batch_beam(self):
         # fmt: off
         EXPECTED_TEXT = [" Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel. Nor is Mr. Quilter's manner less interesting than his matter. He tells us that at this festive season of the year, with Christmas and roast beef looming before us, similes drawn from eating and its results occur most readily to the mind. He has grave doubts whether Sir Frederick Layton's work is really Greek after all, and can discover in it but little of rocky Ithaca. Linnell's pictures are a sort of up-gards and atom paintings, and Mason's exquisite idles are as national as a jingo poem. Mr. Burkett Foster's landscapes smile at one much in the same way that Mr. Carker used to flash his teeth. When Mr. John Collier gives his sitter a cheerful slap in the back, before he says, like a shampooer and a Turkish bath, next man, it is obviously unnecessary for us to point out how luminous these criticisms are, how delicate an expression. On the general principles of art, Mr. Quilter writes with equal lucidity. He tells us is of a different quality to mathematics, and finish in art is adding more effect. As for etchings, there are two kinds, British and foreign. He laments most bitterly the divorce that has been made between decorative art and what we usually call pictures. Mix a customary appeal to the last judgment and reminds us that in the great days of art with Michelangelo was the furnishing upholsterer. Near the fire, any ornaments Fred brought home from India on the mental board. In fact, he is quite severe on Mr. Ruskin for not recognizing that a picture should denote the frailty of man, and remarks was pleasing courtesy in felicitous grace that many faces are feeling. Only, unfortunately, his own work never does get good. Mr. Quilter has missed his chance, for he has failed even to make himself the topper of painting. By Harry Quilter, M.A., because he was sleeping instead of conquering, the lovely rose princess has become a fiddle without a bow, while poor Shaggy sits there, accooing dove. He has gone and gone for good, answered polychrome, who had managed to squeeze into the room beside the dragon, and had witnessed the occurrences with much interest. I have remained a prisoner only because I wished to be one. And with this, he stepped forward and burst the stout chains as easily as if they had been threads. The little girl had been asleep, but she heard the wraps and opened the door. The king has flooded this grace, and your friends are asking for you. I begged Ruggado long ago to send him away, but he would not do so. I also offered to help your brother to escape, but he would not go. He eats and sleeps very steadily, replied the new king. I hope he doesn't work too hard, since Shaggy. He doesn't work at all. In fact, there's nothing he can do in these dominions, as well as our gnomes, whose numbers are so great that it worries us to keep them all busy. Not exactly, we've turned Calico. Where is my brother now, inquired Shaggy. In the metal forest. Where is that? The metal forest is in the great domed cavern, the largest in all our dominions, replied Calico. Calico hesitated. However, if we look sharp, we may be able to discover one of these secret ways. Oh no, I'm quite sure he didn't. That's funny, remarked Betsy thoughtfully. I don't believe and knew any magic, or she'd have worked it before. I do not know, confessed Shaggy. True, a great Calico. Calico went to the big gong and pounded on it, just as Ruggado used to do, but no one answered the summons. Having returned to the Royal Cavern, Calico first pounded the gong and then sat in the throne, wearing Ruggado's discarded ruby crown, and holding in his hand to scepter which Ruggado had so often thrown at his head. A man said to the universe, Sir, I exist. Sweat covered Breon's body, trickling into the tight-laying cloth that was the only german who wore. The cut on his chest was still dripping blood. The ache of his overstrained eyes, even the soaring arena around him with thousands of spectators, retrovealities not worth thinking about. His instant panic was followed by a small, sharp, blow high on his chest. One minute, a voice said, and a time buzzer sounded, a minute is not a very large measure of time, and his body needed every fraction of it. The buzzers were, triggered his muscles into complete relaxation. Oli's heart and lungs worked on at a strong, measured rate. He was in reverie, sliding along the borders of consciousness. The contestants in the twenties needed undisturbed rest. Therefore, nights in the dormitories were as quiet as death. Particularly so, on this last night, when only two of the little cubicles were occupied, the thousands of others standing with dark empty doors. The other voice snapped with a harsh urgency clearly used to command. I'm here because the matter is of utmost importance, and brand is the one I must see. Now stand aside. The twenties, he must have drawn his gun because the intruder said quickly, but that away you're being a fool. Out there was silence then, and still wondering, Breon was once more asleep. Ten seconds, he asked the handler who was needing his aching muscles. A red-haired mountain of a man with an apparently inexhaustible store of energy. There could be little art in this last and final round of fencing. Just thrust and parry and victory to the stronger. Every man who entered the twenties had his own training tricks. There appeared to be an immediate association with the death trauma, as if the two were inextricably linked into one. The strength that enables someone in a trance to hold his body stiff and unsupported except at two points, the head and heels. This is physically impossible when conscious. Breon's head died before during the twenties and death during the last round was, in some ways, easier than defeat. Breeding deeply, Breon's softly spoke the auto-hypnotic phrases that triggered the process. When the buzzer sounded, he pulled his foil from his second startled grasp and ran forward. Our role looked amazed at the sudden fury of the attack, then smiled. He thought it was the last burst of energy. He knew how close they both were to exhaustion. Breon saw something close to panic on his opponent's face when the man finally recognized his error. A wave of despair rolled out from our rogue. Breon sensed it and knew the fifth point was his. In the powerful twist that's rest of the side, in and under the guard."]
@@ -2585,7 +2933,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
         model = model.to(torch_device)
 
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", trust_remote_code=True)
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean")
         one_audio = np.concatenate([x["array"] for x in ds["validation"]["audio"]], dtype=np.float32)
 
         input_features = processor(
@@ -2627,7 +2975,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
         model = model.to(torch_device)
 
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", trust_remote_code=True)
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean")
         one_audio = np.concatenate([x["array"] for x in ds["validation"]["audio"]], dtype=np.float32)
         audios = []
         audios.append(one_audio[110000:])
@@ -2681,7 +3029,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
         model = model.to(torch_device)
 
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", trust_remote_code=True)
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean")
         one_audio = np.concatenate([x["array"] for x in ds["validation"]["audio"]], dtype=np.float32)
         audios = []
         audios.append(one_audio[110000:])
@@ -2827,6 +3175,57 @@ class WhisperModelIntegrationTests(unittest.TestCase):
                 assert decoded_all[i] in EXPECTED_TEXT[i]
 
     @slow
+    def test_whisper_shortform_multi_batch_hard_prev_cond(self):
+        # Without this set here, this test may fail if it is run with other tests (say, `test_tiny_*`). It's unclear
+        # why other tests may affect this tests: it seems some random operations are beyond the scene.
+        set_seed(0)
+        # fmt: off
+        EXPECTED_TEXT = [
+            ' Mr. Kfilter is the apostle of the Middle Classes and we are glad to welcome his gospel.',
+            " Nor is Mr. Qilter's manner less interesting than his matter.",
+            ' He tells us that at this festive season of the year, with Christmas and roce beef, looming before us, similarly drawn from eating and its results occur most readily to the mind.',
+            ' He has grabbed those with her surfered trigger late and his work is really a great after all, and can discover it in it but little of Rocky Ithaka.',
+            " L'Neile's pictures are a sort of upguards and add-um paintings, and Maessin's exquisite Itals are a national as a jingo poem. Mr. Birkett Foster's landscapes smiled at one much in the same way that Mr. Carcher used to flash his teeth. And Mr. John Collier gives his sitter a cheerful slapper in the back, before he says,",
+            ' It is obviously unnecessary for us, to point out how luminous these criticisms are, how delicate and expression.',
+            ' On the general principles of art and Mr. Kriltor rights with equal lucidity.',
+            ' Painting, he tells us is of a different quality to mathematics and finish in art is adding more effect.',
+        ]
+        # fmt: on
+
+        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
+        model = model.to(torch_device)
+
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        num_samples = 8
+
+        audio = ds[:num_samples]["audio"]
+        audios = [x["array"] for x in audio]
+
+        inputs = processor(
+            audios,
+            return_tensors="pt",
+            sampling_rate=16_000,
+        )
+        inputs = inputs.to(device=torch_device)
+
+        gen_kwargs = {
+            "return_timestamps": True,
+            "no_speech_threshold": 0.6,
+            "temperature": (0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
+            "compression_ratio_threshold": 1.35,
+            "condition_on_prev_tokens": True,
+            "logprob_threshold": -1.0,
+        }
+
+        result = model.generate(**inputs, **gen_kwargs)
+        decoded_all = processor.batch_decode(result.sequences, skip_special_tokens=True)
+
+        for i in range(num_samples):
+            if isinstance(EXPECTED_TEXT[i], str):
+                assert decoded_all[i] == EXPECTED_TEXT[i]
+
+    @slow
     def test_whisper_longform_no_speech_detection(self):
         # fmt: off
         EXPECTED_TEXT = [
@@ -2958,6 +3357,34 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         torch.manual_seed(0)
         model.generate(**inputs, **gen_kwargs)
+
+    @slow
+    def test_tiny_static_generation(self):
+        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
+        model.to(torch_device)
+
+        input_speech = self._load_datasamples(4)
+        input_features = processor(input_speech, return_tensors="pt", sampling_rate=16_000).input_features
+        input_features = input_features.to(torch_device)
+        eager_generated_ids = model.generate(input_features, max_new_tokens=64)
+
+        model.generation_config.cache_implementation = "static"
+        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
+
+        # compile the forward pass and assert equivalence
+        static_generated_ids = model.generate(input_features, max_new_tokens=64)
+        assert (eager_generated_ids == static_generated_ids).all()
+
+        # check the compiled graph can be re-used and that the cache is correctly reset
+        # reverse the ordering of the input features
+        permutation_idx = (
+            torch.arange(input_features.shape[0], 0, step=-1, dtype=torch.long, device=input_features.device) - 1
+        )
+        input_features = input_features[permutation_idx, ...]
+        static_generated_ids = model.generate(input_features, max_new_tokens=64)
+        # assert re-ordered generations match those from eager
+        assert (eager_generated_ids[permutation_idx, :] == static_generated_ids).all()
 
 
 def prepare_whisper_encoder_inputs_dict(config, input_features, head_mask=None):
@@ -3133,8 +3560,9 @@ class WhisperEncoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
     def test_model_parallelism(self):
         pass
 
-    # input embeds is meaningless for an encoder-only acoustic model
+    @unittest.skip(reason="Not applicable for an encoder-only acoustic model")
     def test_inputs_embeds(self):
+        # input embeds is meaningless for an encoder-only acoustic model
         pass
 
     # the equivalent test is passing the encoder outputs directly to the model
@@ -3181,6 +3609,7 @@ class WhisperEncoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
             self.assertTrue(x is None or isinstance(x, torch.nn.Conv1d))
 
     # WhisperEncoder cannot resize token embeddings since it has no tokens embeddings
+    @unittest.skip(reason="Model has no tokens embeds")
     def test_resize_tokens_embeddings(self):
         pass
 
@@ -3194,8 +3623,7 @@ class WhisperEncoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
                 fx_model_class_name = "Flax" + model_class.__name__
 
                 if not hasattr(transformers, fx_model_class_name):
-                    # no flax model exists for this class
-                    return
+                    self.skipTest(reason="Flax model does not exist")
 
                 # Output all for aggressive testing
                 config.output_hidden_states = True
@@ -3267,8 +3695,7 @@ class WhisperEncoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
                 fx_model_class_name = "Flax" + model_class.__name__
 
                 if not hasattr(transformers, fx_model_class_name):
-                    # no flax model exists for this class
-                    return
+                    self.skipTest("Flax model does not exist")
 
                 # Output all for aggressive testing
                 config.output_hidden_states = True
@@ -3562,17 +3989,20 @@ class WhisperStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin,
             config=config, input_ids=inputs_dict["input_ids"]
         )
 
-    @unittest.skip("Generate needs input ids")
+    @unittest.skip(reason="Tested implicitly through the encoder-decoder tests")
+    def test_custom_4d_attention_mask(self):
+        pass
+
+    @unittest.skip(reason="Generate needs input ids")
     def test_generate_without_input_ids(self):
         # generate only works with input ids for whisper
         pass
 
-    @unittest.skip("Decoder can't keep attention grads")
+    @unittest.skip(reason="Decoder can't keep attention grads")
     def test_retain_grad_hidden_states_attentions(self):
-        # decoder cannot keep gradients
         return
 
-    @unittest.skip("The model doesn't support fast init from base")
+    @unittest.skip(reason="The model doesn't support fast init from base")
     def test_save_load_fast_init_from_base(self):
         pass
 

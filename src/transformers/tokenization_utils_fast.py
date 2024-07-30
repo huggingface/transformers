@@ -121,7 +121,11 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             gguf_param = load_gguf_checkpoint(kwargs.get("vocab_file"))
             architecture = gguf_param["config"]["model_type"]
             tokenizer_dict = gguf_param["tokenizer"]
-            fast_tokenizer = convert_gguf_tokenizer(architecture, tokenizer_dict)
+            fast_tokenizer, additional_kwargs = convert_gguf_tokenizer(architecture, tokenizer_dict)
+
+            if len(additional_kwargs) > 0:
+                kwargs.update(additional_kwargs)
+
         elif self.slow_tokenizer_class is not None:
             # We need to create and convert a slow tokenizer to build the backend
             slow_tokenizer = self.slow_tokenizer_class(*args, **kwargs)
@@ -172,16 +176,19 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         # allows converting a slow -> fast, non-legacy: if the `tokenizer.json` does not have all the added tokens
         # uses the information stored in `added_tokens_decoder`.
         # this is costly for fast tokenizers as we re-compute the regex again. But not all tokens are added tokens
+        # Use hash to speed up the very slow operation `token not in added_tokens_decoder`.
+        added_tokens_decoder_hash = {hash(repr(token)) for token in self.added_tokens_decoder}
         tokens_to_add = [
             token
             for index, token in sorted(added_tokens_decoder.items(), key=lambda x: x[0])
-            if token not in self.added_tokens_decoder
+            if hash(repr(token)) not in added_tokens_decoder_hash
         ]
         encoder = list(self.added_tokens_encoder.keys()) + [str(token) for token in tokens_to_add]
         # if some of the special tokens are strings, we check if we don't already have a token
         tokens_to_add += [
             token for token in self.all_special_tokens_extended if token not in encoder and token not in tokens_to_add
         ]
+
         if len(tokens_to_add) > 0:
             # super hack: if a token.special is set, tokenizer ignores it for now so FIXME @ArthurZ
             # Accumulate added tokens into batches of special/non-special tokens, because calling add_tokens() for

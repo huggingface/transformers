@@ -162,15 +162,16 @@ class CvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = CvtModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=CvtConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self,
+            config_class=CvtConfig,
+            has_text_modality=False,
+            hidden_size=37,
+            common_properties=["hidden_size", "num_channels"],
+        )
 
     def test_config(self):
-        self.config_tester.create_and_test_config_to_json_string()
-        self.config_tester.create_and_test_config_to_json_file()
-        self.config_tester.create_and_test_config_from_and_save_pretrained()
-        self.config_tester.create_and_test_config_with_num_labels()
-        self.config_tester.check_config_can_be_init_without_params()
-        self.config_tester.check_config_arguments_init()
+        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="Cvt does not output attentions")
     def test_attention_outputs(self):

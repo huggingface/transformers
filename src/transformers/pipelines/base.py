@@ -90,6 +90,9 @@ def _pad(items, key, padding_value, padding_side):
         # Others include `attention_mask` etc...
         shape = items[0][key].shape
         dim = len(shape)
+        if dim == 1:
+            # We have a list of 1-dim torch tensors, which can be stacked without padding
+            return torch.cat([item[key] for item in items], dim=0)
         if key in ["pixel_values", "image"]:
             # This is probable image so padding shouldn't be necessary
             # B, C, H, W
@@ -843,6 +846,17 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
                 device = next(iter(hf_device_map.values()))
             else:
                 device = -1
+                if (
+                    is_torch_mlu_available()
+                    or is_torch_cuda_available()
+                    or is_torch_npu_available()
+                    or is_torch_xpu_available(check_device=True)
+                    or is_torch_mps_available()
+                ):
+                    logger.warning(
+                        "Hardware accelerator e.g. GPU is available in the environment, but no `device` argument"
+                        " is passed to the `Pipeline` object. Model will be on CPU."
+                    )
 
         if is_torch_available() and self.framework == "pt":
             if device == -1 and self.model.device is not None:

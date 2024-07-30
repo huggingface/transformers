@@ -168,6 +168,6 @@ class Owlv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 f"Batch image bounding boxes fail. Expected {expected_boxes}, got {boxes}",
             )
 
-    @unittest.skip("OWLv2 doesn't treat 4 channel PIL and numpy consistently yet")  # FIXME Amy
+    @unittest.skip(reason="OWLv2 doesn't treat 4 channel PIL and numpy consistently yet")  # FIXME Amy
     def test_call_numpy_4_channels(self):
         pass
