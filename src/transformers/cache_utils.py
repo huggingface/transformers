@@ -542,7 +542,7 @@ class QuantoQuantizedCache(QuantizedCache):
     Quantized Cache class that uses `quanto` as a backend to perform quantization. Current implementation supports `int2` and `int4` dtypes only.
 
     Parameters:
-        cache_config (`QuantizedCacheConfig`,):
+        cache_config (`QuantizedCacheConfig`):
             A configuration containing all the arguments to be used by the quantizer, including axis, qtype and group size.
     """
 
@@ -583,7 +583,7 @@ class HQQQuantizedCache(QuantizedCache):
     Quantized Cache class that uses `HQQ` as a backend to perform quantization. Current implementation supports `int2`, `int4`, `int8` dtypes.
 
     Parameters:
-        cache_config (`QuantizedCacheConfig`,):
+        cache_config (`QuantizedCacheConfig`):
             A configuration containing all the arguments to be used by the quantizer, including axis, qtype and group size.
     """
 
@@ -794,7 +794,7 @@ class StaticCache(Cache):
     Static Cache class to be used with `torch.compile(model)` and `torch.export()`.
 
     Parameters:
-        config (`PretrainedConfig):
+        config (`PretrainedConfig`):
             The configuration file defining the shape-related attributes required to initialize the static cache.
         max_batch_size (`int`):
             The maximum batch size with which the model will be used.
@@ -924,7 +924,7 @@ class SlidingWindowCache(StaticCache):
     We overwrite the cache using these, then we always write at cache_position (clamped to `sliding_window`)
 
     Parameters:
-        config (`PretrainedConfig):
+        config (`PretrainedConfig`):
             The configuration file defining the shape-related attributes required to initialize the static cache.
         max_batch_size (`int`):
             The maximum batch size with which the model will be used.
