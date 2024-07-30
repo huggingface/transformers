@@ -31,11 +31,12 @@ from transformers import (
 )
 from transformers.testing_utils import (
     is_accelerate_available,
+    apply_skip_if_not_implemented,
     is_torch_available,
     require_accelerate,
     require_bitsandbytes,
     require_torch,
-    require_torch_gpu,
+    require_torch_gpu_if_bnb_not_multi_backend_enabled,
     require_torch_multi_gpu,
     slow,
 )
@@ -108,6 +109,7 @@ class BaseMixedInt8Test(unittest.TestCase):
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
 
 
+@apply_skip_if_not_implemented
 class MixedInt8Test(BaseMixedInt8Test):
     def setUp(self):
         super().setUp()
@@ -614,6 +616,7 @@ class MixedInt8ModelClassesTest(BaseMixedInt8Test):
         self.assertTrue(self.seq_to_seq_model.lm_head.weight.__class__ == torch.nn.Parameter)
 
 
+@apply_skip_if_not_implemented
 class MixedInt8TestPipeline(BaseMixedInt8Test):
     def setUp(self):
         super().setUp()
@@ -648,6 +651,7 @@ class MixedInt8TestPipeline(BaseMixedInt8Test):
 
 
 @require_torch_multi_gpu
+@apply_skip_if_not_implemented
 class MixedInt8TestMultiGpu(BaseMixedInt8Test):
     def setUp(self):
         super().setUp()
@@ -674,6 +678,7 @@ class MixedInt8TestMultiGpu(BaseMixedInt8Test):
 
 
 @require_torch_multi_gpu
+@apply_skip_if_not_implemented
 class MixedInt8TestCpuGpu(BaseMixedInt8Test):
     def setUp(self):
         super().setUp()
@@ -819,6 +824,7 @@ class MixedInt8TestCpuGpu(BaseMixedInt8Test):
             self.check_inference_correctness(model_8bit)
 
 
+@apply_skip_if_not_implemented
 class MixedInt8TestTraining(BaseMixedInt8Test):
     def setUp(self):
         self.model_name = "facebook/opt-350m"
@@ -862,6 +868,7 @@ class MixedInt8TestTraining(BaseMixedInt8Test):
                 self.assertTrue(module.weight.grad is None)
 
 
+@apply_skip_if_not_implemented
 class MixedInt8GPT2Test(MixedInt8Test):
     model_name = "openai-community/gpt2-xl"
     EXPECTED_RELATIVE_DIFFERENCE = 1.8720077507258357

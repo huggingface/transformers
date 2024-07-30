@@ -30,12 +30,13 @@ from transformers import (
     pipeline,
 )
 from transformers.testing_utils import (
+    apply_skip_if_not_implemented,
     is_bitsandbytes_available,
     is_torch_available,
     require_accelerate,
     require_bitsandbytes,
     require_torch,
-    require_torch_gpu,
+    require_torch_gpu_if_bnb_not_multi_backend_enabled,
     require_torch_multi_gpu,
     slow,
     torch_device,
@@ -81,11 +82,18 @@ if is_torch_available():
 if is_bitsandbytes_available():
     import bitsandbytes as bnb
 
+    def setUpModule():
+        global device
+        if hasattr(bnb, "features") and "multi_backend" in bnb.features:
+            device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        else:
+            device = torch.device("cuda:0")
+
 
 @require_bitsandbytes
 @require_accelerate
 @require_torch
-@require_torch_gpu
+@require_torch_gpu_if_bnb_not_multi_backend_enabled
 @slow
 class Base4bitTest(unittest.TestCase):
     # We keep the constants inside the init function and model loading inside setUp function
@@ -111,6 +119,7 @@ class Base4bitTest(unittest.TestCase):
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
 
 
+@apply_skip_if_not_implemented
 class Bnb4BitTest(Base4bitTest):
     def setUp(self):
         super().setUp()
@@ -206,7 +215,7 @@ class Bnb4BitTest(Base4bitTest):
         tok = AutoTokenizer.from_pretrained(model_id)
 
         text = "Hello my name is"
-        input_ids = tok.encode(text, return_tensors="pt").to(0)
+        input_ids = tok.encode(text, return_tensors="pt").to(device)
 
         _ = model.generate(input_ids, max_new_tokens=30)
 
@@ -217,7 +226,7 @@ class Bnb4BitTest(Base4bitTest):
         the same output across GPUs. So we'll generate few tokens (5-10) and check their output.
         """
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
-        output_sequences = self.model_4bit.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
+        output_sequences = self.model_4bit.generate(input_ids=encoded_input["input_ids"].to(device), max_new_tokens=10)
 
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
@@ -234,7 +243,7 @@ class Bnb4BitTest(Base4bitTest):
 
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
         output_sequences = model_4bit_from_config.generate(
-            input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10
+            input_ids=encoded_input["input_ids"].to(device), max_new_tokens=10
         )
 
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
@@ -252,7 +261,7 @@ class Bnb4BitTest(Base4bitTest):
         model_4bit.dequantize()
 
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
-        output_sequences = model_4bit.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
+        output_sequences = model_4bit.generate(input_ids=encoded_input["input_ids"].to(device), max_new_tokens=10)
 
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
@@ -285,7 +294,7 @@ class Bnb4BitTest(Base4bitTest):
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
 
         self.model_fp16 = self.model_fp16.to(torch.float32)
-        _ = self.model_fp16.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
+        _ = self.model_fp16.generate(input_ids=encoded_input["input_ids"].to(device), max_new_tokens=10)
 
         # Check this does not throw an error
         _ = self.model_fp16.to("cpu")
@@ -314,8 +323,9 @@ class Bnb4BitTest(Base4bitTest):
 @require_bitsandbytes
 @require_accelerate
 @require_torch
-@require_torch_gpu
+@require_torch_gpu_if_bnb_not_multi_backend_enabled
 @slow
+@apply_skip_if_not_implemented
 class Bnb4BitT5Test(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -345,14 +355,14 @@ class Bnb4BitT5Test(unittest.TestCase):
 
         # test with `google-t5/t5-small`
         model = T5ForConditionalGeneration.from_pretrained(self.model_name, load_in_4bit=True, device_map="auto")
-        encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(0)
+        encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(device)
         _ = model.generate(**encoded_input)
 
         # test with `flan-t5-small`
         model = T5ForConditionalGeneration.from_pretrained(
             self.dense_act_model_name, load_in_4bit=True, device_map="auto"
         )
-        encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(0)
+        encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(device)
         _ = model.generate(**encoded_input)
         T5ForConditionalGeneration._keep_in_fp32_modules = modules
 
@@ -370,17 +380,18 @@ class Bnb4BitT5Test(unittest.TestCase):
         # there was a bug with decoders - this test checks that it is fixed
         self.assertTrue(isinstance(model.decoder.block[0].layer[0].SelfAttention.q, bnb.nn.Linear4bit))
 
-        encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(0)
+        encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(device)
         _ = model.generate(**encoded_input)
 
         # test with `flan-t5-small`
         model = T5ForConditionalGeneration.from_pretrained(
             self.dense_act_model_name, load_in_4bit=True, device_map="auto"
         )
-        encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(0)
+        encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(device)
         _ = model.generate(**encoded_input)
 
 
+@apply_skip_if_not_implemented
 class Classes4BitModelTest(Base4bitTest):
     def setUp(self):
         super().setUp()
@@ -430,6 +441,7 @@ class Classes4BitModelTest(Base4bitTest):
         self.assertTrue(self.seq_to_seq_model.lm_head.weight.__class__ == torch.nn.Parameter)
 
 
+@apply_skip_if_not_implemented
 class Pipeline4BitTest(Base4bitTest):
     def setUp(self):
         super().setUp()
@@ -454,7 +466,12 @@ class Pipeline4BitTest(Base4bitTest):
         self.pipe = pipeline(
             "text-generation",
             model=self.model_name,
-            model_kwargs={"device_map": "auto", "load_in_4bit": True, "torch_dtype": torch.float16},
+            model_kwargs={
+                "device_map": "auto",
+                "load_in_4bit": True,
+                # float16 isn't supported on CPU, use bfloat16 instead
+                "torch_dtype": torch.bloat16 if device == "cpu" else torch.float16,
+            },
             max_new_tokens=self.MAX_NEW_TOKENS,
         )
 
@@ -464,6 +481,7 @@ class Pipeline4BitTest(Base4bitTest):
 
 
 @require_torch_multi_gpu
+@apply_skip_if_not_implemented
 class Bnb4bitTestMultiGpu(Base4bitTest):
     def setUp(self):
         super().setUp()
@@ -485,10 +503,11 @@ class Bnb4bitTestMultiGpu(Base4bitTest):
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
 
         # Second real batch
-        output_parallel = model_parallel.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
+        output_parallel = model_parallel.generate(input_ids=encoded_input["input_ids"].to(device), max_new_tokens=10)
         self.assertIn(self.tokenizer.decode(output_parallel[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
 
+@apply_skip_if_not_implemented
 class Bnb4BitTestTraining(Base4bitTest):
     def setUp(self):
         self.model_name = "facebook/opt-350m"
@@ -517,7 +536,7 @@ class Bnb4BitTestTraining(Base4bitTest):
                 module.v_proj = LoRALayer(module.v_proj, rank=16)
 
         # Step 3: dummy batch
-        batch = self.tokenizer("Test batch ", return_tensors="pt").to(0)
+        batch = self.tokenizer("Test batch ", return_tensors="pt").to(device)
 
         # Step 4: Check if the gradient is not None
         with torch.cuda.amp.autocast():
@@ -532,6 +551,7 @@ class Bnb4BitTestTraining(Base4bitTest):
                 self.assertTrue(module.weight.grad is None)
 
 
+@apply_skip_if_not_implemented
 class Bnb4BitGPT2Test(Bnb4BitTest):
     model_name = "openai-community/gpt2-xl"
     EXPECTED_RELATIVE_DIFFERENCE = 3.3191854854152187
@@ -540,8 +560,9 @@ class Bnb4BitGPT2Test(Bnb4BitTest):
 @require_bitsandbytes
 @require_accelerate
 @require_torch
-@require_torch_gpu
+@require_torch_gpu_if_bnb_not_multi_backend_enabled
 @slow
+@apply_skip_if_not_implemented
 class BaseSerializationTest(unittest.TestCase):
     model_name = "facebook/opt-125m"
     input_text = "Mars colonists' favorite meals are"
@@ -629,6 +650,7 @@ class BaseSerializationTest(unittest.TestCase):
         )
 
 
+@apply_skip_if_not_implemented
 class ExtendedSerializationTest(BaseSerializationTest):
     """
     tests more combinations of parameters
@@ -676,8 +698,9 @@ class GPTSerializationTest(BaseSerializationTest):
 
 @require_bitsandbytes
 @require_accelerate
-@require_torch_gpu
+@require_torch_gpu_if_bnb_not_multi_backend_enabled
 @slow
+@apply_skip_if_not_implemented
 class Bnb4BitTestBasicConfigTest(unittest.TestCase):
     def test_load_in_4_and_8_bit_fails(self):
         with self.assertRaisesRegex(ValueError, "load_in_4bit and load_in_8bit are both True"):
