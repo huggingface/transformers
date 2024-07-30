@@ -4095,6 +4095,8 @@ class Trainer:
             return (loss, None, None)
 
         logits = nested_detach(logits)
+        # filter the logits tuple of non tensors
+        logits = tuple(v for v in logits if isinstance(v, torch.Tensor))
         if len(logits) == 1:
             logits = logits[0]
 
