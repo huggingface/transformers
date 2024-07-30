@@ -747,13 +747,10 @@ class Gemma2Model(Gemma2PreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if cache_position is None:
-            if past_key_values is not None and not past_key_values.empty:
-                logger.warning(
-                    "You are calling the model with non-empty `past_key_values` but didn't pass `cache_position`. ",
-                    "This will results in incorrect logits. Please pass `cache_position` that indicates indicates "
-                    "input's positions in the sequence.",
-                )
-            cache_position = torch.arange(0, inputs_embeds.shape[1], device=inputs_embeds.device)
+            if past_key_values is None:
+                cache_position = torch.arange(0, inputs_embeds.shape[1], device=inputs_embeds.device)
+            else:
+                raise ValueError("When `past_key_values` is passed, `cache_position` must be too")
 
         # Probably a forward call with caching, so we set up cache for one call only
         if use_cache and past_key_values is None:
