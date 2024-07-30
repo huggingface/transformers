@@ -1173,7 +1173,7 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel):
             feature_attention_mask = feature_attention_mask.to(target_device)
 
         if inputs_embeds is None:
-            # 1. Extra the input embeddings
+            # 1. Extract the input embeddings
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
             # 2. Merge text and audios
