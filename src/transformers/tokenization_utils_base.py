@@ -1569,9 +1569,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
     def __init__(self, **kwargs):
         # inputs and kwargs for saving and re-loading (see ``from_pretrained`` and ``save_pretrained``)
         self.init_inputs = ()
-        if "add_special_tokens" in kwargs:
-            kwargs["_add_special_tokens"] = kwargs.pop("add_special_tokens")
-
         for key in kwargs:
             if hasattr(self, key) and callable(getattr(self, key)):
                 raise AttributeError(f"{key} conflicts with the method {key} in {self.__class__.__name__}")
