@@ -5669,6 +5669,7 @@ if TYPE_CHECKING:
         AqlmConfig,
         AwqConfig,
         BitsAndBytesConfig,
+        CompressedTensorsConfig,
         EetqConfig,
         FbgemmFp8Config,
         GPTQConfig,
