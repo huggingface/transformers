@@ -776,12 +776,12 @@ Here is my new/updated plan of action to solve the task:
 
 SUPPORTED_PLAN_TYPES = ["default", "structured"]
 
-plan_type_to_prompt_first = {
+PROMPTS_FOR_INITIAL_PLAN = {
     "default": {"system": SYSTEM_PROMPT_PLAN, "user": USER_PROMPT_PLAN},
     "structured": {"system": SYSTEM_PROMPT_PLAN_STRUCTURED, "user": USER_PROMPT_PLAN_STRUCTURED},
 }
 
-plan_type_to_prompt_other = {
+PROMPTS_FOR_PLAN_UPDATE = {
     "default": {"system": SYSTEM_PROMPT_PLAN_UPDATE, "user": USER_PROMPT_PLAN_UPDATE},
     "structured": {"system": SYSTEM_PROMPT_PLAN_UPDATE_STRUCTURED, "user": USER_PROMPT_PLAN_UPDATE_STRUCTURED},
 }

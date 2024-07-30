@@ -34,8 +34,8 @@ from .prompts import (
     SYSTEM_PROMPT_FACTS,
     SYSTEM_PROMPT_FACTS_UPDATE,
     USER_PROMPT_FACTS_UPDATE,
-    plan_type_to_prompt_first,
-    plan_type_to_prompt_other,
+    PROMPTS_FOR_INITIAL_PLAN,
+    PROMPTS_FOR_PLAN_UPDATE,
 )
 from .python_interpreter import LIST_SAFE_MODULES, evaluate_python_code
 from .tools import (
@@ -798,11 +798,11 @@ Now begin!""",
 
             message_system_prompt_plan = {
                 "role": MessageRole.SYSTEM,
-                "content": plan_type_to_prompt_first[self.plan_type]["system"],
+                "content": PROMPTS_FOR_INITIAL_PLAN[self.plan_type]["system"],
             }
             message_user_prompt_plan = {
                 "role": MessageRole.USER,
-                "content": plan_type_to_prompt_first[self.plan_type]["user"].format(
+                "content": PROMPTS_FOR_INITIAL_PLAN[self.plan_type]["user"].format(
                     task=task,
                     tool_descriptions=self._toolbox.show_tool_descriptions(self.tool_description_template),
                     answer_facts=answer_facts,
@@ -842,11 +842,11 @@ Now begin!""",
             # Redact updated plan
             plan_update_message = {
                 "role": MessageRole.SYSTEM,
-                "content": plan_type_to_prompt_other[self.plan_type]["system"].format(task=task),
+                "content": PROMPTS_FOR_PLAN_UPDATE[self.plan_type]["system"].format(task=task),
             }
             plan_update_message_user = {
                 "role": MessageRole.USER,
-                "content": plan_type_to_prompt_other[self.plan_type]["user"].format(
+                "content": PROMPTS_FOR_PLAN_UPDATE[self.plan_type]["user"].format(
                     task=task,
                     tool_descriptions=self._toolbox.show_tool_descriptions(self.tool_description_template),
                     facts_update=facts_update,
