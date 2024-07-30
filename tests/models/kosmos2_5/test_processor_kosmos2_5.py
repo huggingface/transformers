@@ -131,6 +131,7 @@ class Kosmos2_5ProcessorTest(unittest.TestCase):
             tokenizer = AutoTokenizer.from_pretrained(checkpoint)
             self.assertEqual(processor.tokenizer.__class__, tokenizer.__class__)
 
+    @require_torch
     def test_model_input_names(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
