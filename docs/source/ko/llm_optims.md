@@ -11,7 +11,7 @@ rendered properly in your Markdown viewer.
 
 # LLM 추론 최적화 [[llm-inference-optimization]]
 
-대형 언어 모델(LLM)은 채팅 및 코드 완성 모델과 같은 텍스트 생성 응용 프로그램을 다음 단계로 발전시키며, 높은 수준의 이해력과 유창함을 보여주는 텍스트를 생성합니다. 그러나 LLM을 강력하게 만드는 요소인 그들의 크기는 추론에 도전 과제를 안겨줍니다.
+대규모 언어 모델(LLM)은 채팅 및 코드 완성 모델과 같은 텍스트 생성 응용 프로그램을 한 단계 끌어올리며, 높은 수준의 이해력과 유창함을 보여주는 텍스트를 생성합니다. 그러나 LLM을 강력하게 만드는 요소인 그들의 크기는 동시에 추론 과정에서 도전 과제가 되기도 합니다.
 
 기본적인 추론은 느립니다. LLM이 다음 토큰을 생성하기 위해 반복적으로 호출되어야 하기 때문입니다. 생성이 진행됨에 따라 입력 시퀀스가 길어져 처리 시간이 점점 길어집니다. 또한, LLM은 수십억 개의 매개변수를 가지고 있어 모든 가중치를 메모리에 저장하고 처리하는 데 어려움이 있습니다.
 
@@ -22,9 +22,9 @@ rendered properly in your Markdown viewer.
 
 ## 정적 kv-cache와 torch.compile [[static-kv-cache-and-torchcompile]]
 
-디코딩 중에 LLM은 각 입력 토큰에 대한 key-value(kv) 값을 계산합니다. LLM은 자기회귀(autoregressive)이기 때문에 생성된 출력이 현재 입력의 일부가 되어 매번 동일한 kv 값을 계산합니다. 이는 효율적이지 않습니다. 매번 동일한 kv 값을 다시 계산하기 때문입니다.
+디코딩 중에 LLM은 각 입력 토큰에 대한 key-value(kv) 값을 계산합니다. LLM은 자기회귀(autoregressive)이기 때문에 생성된 출력이 현재 입력의 일부가 되어 매번 동일한 kv 값을 계산합니다. 이는 매번 동일한 kv 값을 다시 계산하기 때문에 효율적이지 않습니다.
 
-이를 최적화하기 위해, 이전 키와 값을 재계산하지 않고 저장하는 kv-cache를 사용할 수 있습니다. 그러나 kv-cache는 각 생성 단계에서 증가하며 동적이기 때문에 강력한 최적화 도구인 [torch.compile](./perf_torch_compile)을 사용하는 데 제약이 있습니다. torch.compile은 PyTorch 코드를 빠르고 최적화된 커널로 통합합니다.
+이를 최적화하기 위해, 이전 키(key)와 값(value)을 재계산하지 않고 저장하는 kv-cache를 사용할 수 있습니다. 그러나 kv-cache는 각 생성 단계에서 증가하며 동적이기 때문에 PyTorch 코드를 빠르고 최적화된 커널로 통합하는 강력한 최적화 도구인 [torch.compile](./perf_torch_compile)을 사용하는 데 제약이 있습니다.
 
 *정적 kv-cache*는 최대 값을 미리 할당하여 이 문제를 해결하여 torch.compile과 결합할 수 있게 합니다. 이를 통해 최대 4배의 속도 향상이 가능합니다.
 
@@ -42,7 +42,7 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-두 가지 방법으로 모델을 정적 kv-cache를 사용하도록 설정할 수 있습니다. A100에서 7B 모델의 경우 두 방법 모두 전방 패스에서 4배 속도 향상이 가능합니다. 속도 향상은 모델 크기(더 큰 모델의 경우 속도 향상이 적음)와 하드웨어에 따라 다를 수 있습니다. [~GenerationMixin.generate] 메서드를 사용하는 경우 속도 향상은 약 3배입니다. 전방 패스(여전히 4배 속도 향상)가 전체 [~GenerationMixin.generate] 코드의 일부일 뿐입니다.
+두 가지 방법으로 모델을 정적 kv-cache를 사용하도록 설정할 수 있습니다. A100에서 7B 모델의 경우 두 방법 모두 순전파에서 4배 속도 향상이 가능합니다. 속도 향상은 모델 크기(더 큰 모델의 경우 속도 향상이 적음)와 하드웨어에 따라 다를 수 있습니다. [~GenerationMixin.generate] 메서드를 사용하는 경우 속도 향상은 약 3배입니다. 순전파(여전히 4배 속도 향상)는 전체 [~GenerationMixin.generate] 코드의 일부일 뿐입니다.
 
 <hfoptions id="static-kv">
 <hfoption id="generation_config">
@@ -53,7 +53,7 @@ model = AutoModelForCausalLM.from_pretrained(
 model.generation_config.cache_implementation = "static"
 ```
 
-정적 kv-cache와 함께 전방 패스를 컴파일하기 위해 torch.compile을 호출합니다.
+정적 kv-cache와 함께 순전파를 컴파일하기 위해 torch.compile을 호출합니다.
 
 ```py
 compiled_model = torch.compile(model, mode="reduce-overhead", fullgraph=True)
@@ -65,12 +65,12 @@ tokenizer.batch_decode(outputs, skip_special_tokens=True)
 ['The theory of special relativity states 1. The speed of light is constant in all inertial reference']
 ```
 
-내부적으로, generate는 동일한 캐시 객체를 재사용하려고 시도하여 각 호출에서 다시 컴파일할 필요를 제거합니다. 그러나 배치 크기 또는 최대 출력 길이가 호출 간에 증가하면 캐시를 다시 초기화해야 하므로 새로 컴파일이 트리거됩니다.
+내부적으로, 'generate'는 동일한 캐시 객체를 재사용하려고 시도하여 각 호출에서 다시 컴파일할 필요가 없도록 합니다. 그러나 배치 크기 또는 최대 출력 길이가 호출 간에 증가하면 캐시를 다시 초기화해야 하므로 새로 컴파일 해야합니다.
 
 </hfoption>
 <hfoption id="Static Cache">
 
-[`StaticCache`] 객체를 `past_key_values` 인수로 모델의 전방 패스에 전달하여 정적 kv-cache로 사용할 수 있습니다. 이 전략을 사용하여 현재 토큰과 위치, 이전에 생성된 토큰의 캐시 위치를 기준으로 다음 토큰을 디코딩하는 함수를 작성할 수 있습니다. 또한 [`StaticCache`] 객체를 [`~GenerationMixin.generate`]에 전달하여 동적 캐시처럼 호출 간에 사용할 수 있습니다.
+[`StaticCache`] 객체를 `past_key_values` 인수로 모델의 순전파에 전달하여 정적 kv-cache로 사용할 수 있습니다. 이 전략을 사용하여 현재 토큰과 위치, 이전에 생성된 토큰의 캐시 위치를 기준으로 다음 토큰을 디코딩하는 함수를 작성할 수 있습니다. 또한 [`StaticCache`] 객체를 [`~GenerationMixin.generate`]에 전달하여 동적 캐시처럼 호출 간에 사용할 수 있습니다.
 
 ```py
 from transformers import LlamaTokenizer, LlamaForCausalLM, StaticCache, logging
@@ -102,13 +102,13 @@ def decode_one_tokens(model, cur_token, input_pos, cache_position, past_key_valu
     return new_token
 ```
 
-There are a few important things you must do to enable static kv-cache and torch.compile with the `StaticCache` method:
+`StaticCache` 메서드를 사용하여 정적 kv-cache와 torch.compile을 활성화하려면 몇 가지 중요한 작업을 수행해야 합니다:
 
 1. 추론에 모델을 사용하기 전에 [`StaticCache`] 인스턴스를 초기화합니다. 여기서 최대 배치 크기와 시퀀스 길이와 같은 매개변수를 설정할 수 있습니다.
 
-2. 정적 kv-cache와 함께 전방 패스를 컴파일하기 위해 모델에 torch.compile을 호출합니다.
+2. 정적 kv-cache와 함께 순전파를 컴파일하기 위해 모델에 torch.compile을 호출합니다.
 
-3. [torch.backends.cuda.sdp_kernel](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html) 컨텍스트 관리자에서 `enable_math=True`를 설정하여 네이티브 PyTorch C++ 구현 스케일된 dot product attention를 활성화하여 추론 속도를 더욱 높입니다.
+3. [torch.backends.cuda.sdp_kernel](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html) 컨텍스트 관리자에서 `enable_math=True`를 설정하여 네이티브 PyTorch C++ 구현된 스케일된 dot product attention를 활성화하여 추론 속도를 더욱 높입니다.
 
 ```py
 batch_size, seq_length = inputs["input_ids"].shape
@@ -153,7 +153,7 @@ text
 > [!TIP]
 > 보다 심층적인 설명을 원한다면, [Assisted Generation: a new direction toward low-latency text generation](https://hf.co/blog/assisted-generation) 블로그 게시물을 확인하십시오!
 
-오토레그레션의 또 다른 문제는 각 입력 토큰에 대해 전방 패스 중에 모델 가중치를 매번 로드해야 한다는 점입니다. 이는 수십억 개의 매개변수를 가진 LLM에는 느리고 번거롭습니다. 추정 디코딩은 더 작고 빠른 보조 모델을 사용하여 후보 토큰을 생성하고, 이를 큰 LLM이 단일 전방 패스에서 검증하여 이 속도 저하를 완화합니다. 검증된 토큰이 정확하다면, LLM은 본래 자체적으로 생성하는 것처럼 토큰을 얻을 수 있습니다. 전방 패스가 동일한 출력을 보장하기 때문에 정확도 저하가 없습니다.
+자기 회귀의 또 다른 문제는 각 입력 토큰에 대해 순전파 중에 모델 가중치를 매번 로드해야 한다는 점입니다. 이는 수십억 개의 매개변수를 가진 LLM에는 느리고 번거롭습니다. 추정 디코딩은 더 작고 빠른 보조 모델을 사용하여 후보 토큰을 생성하고, 이를 큰 LLM이 단일 순전파에서 검증하여 이 속도 저하를 완화합니다. 검증된 토큰이 정확하다면, LLM은 본래 자체적으로 생성하는 것처럼 토큰을 얻을 수 있습니다. 전방 패스가 동일한 출력을 보장하기 때문에 정확도 저하가 없습니다.
 
 가장 큰 속도 향상을 얻기 위해, 보조 모델은 빠르게 토큰을 생성할 수 있도록 LLM보다 훨씬 작아야 합니다. 보조 모델과 LLM 모델은 토큰을 다시 인코딩하고 디코딩하지 않도록 동일한 토크나이저를 공유해야 합니다.
 
@@ -253,13 +253,13 @@ print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
 </hfoption>
 </hfoptions>
 
-## Attention 최적화 [[attention-optimizations]]
+## 어텐션 최적화 [[attention-optimizations]]
 
-트랜스포머 모델의 알려진 문제는 자기 주의 메커니즘이 입력 토큰 수와 함께 계산 및 메모리가 제곱으로 증가한다는 것입니다. 이 제한은 훨씬 더 긴 시퀀스를 처리하는 LLM에서는 더욱 커집니다. 이를 해결하기 위해 FlashAttention2 또는 PyTorch의 스케일된 점곱 주의를 사용해 보십시오. 이들은 더 메모리 효율적인 주의 구현으로 추론을 가속화할 수 있습니다.
+트랜스포머 모델의 알려진 문제는 셀프 어텐션 메커니즘이 입력 토큰 수와 함께 계산 및 메모리가 제곱으로 증가한다는 것입니다. 이 제한은 훨씬 더 긴 시퀀스를 처리하는 LLM에서는 더욱 커집니다. 이를 해결하기 위해 FlashAttention2 또는 PyTorch의 스케일된 점곱 어텐션를 사용해 보십시오. 이들은 더 메모리 효율적인 어텐션 구현으로 추론을 가속화할 수 있습니다.
 
 ### FlashAttention-2 [[flashattention-2]]
 
-FlashAttention과 [FlashAttention-2](./perf_infer_gpu_one#flashattention-2)는 주의 계산을 더 작은 청크로 나누고 중간 읽기/쓰기 작업을 줄여 추론 속도를 높입니다. FlashAttention-2는 원래 FlashAttention 알고리즘을 개선하여 시퀀스 길이 차원에서도 병렬 처리를 수행하고 하드웨어에서 작업을 더 잘 분할하여 동기화 및 통신 오버헤드를 줄입니다.
+FlashAttention과 [FlashAttention-2](./perf_infer_gpu_one#flashattention-2)는 어텐션 계산을 더 작은 청크로 나누고 중간 읽기/쓰기 작업을 줄여 추론 속도를 높입니다. FlashAttention-2는 원래 FlashAttention 알고리즘을 개선하여 시퀀스 길이 차원에서도 병렬 처리를 수행하고 하드웨어에서 작업을 더 잘 분할하여 동기화 및 통신 오버헤드를 줄입니다.
 
 FlashAttention-2를 사용하려면 [`~PreTrainedModel.from_pretrained`] 메서드에서 `attn_implementation="flash_attention_2"`를 설정하십시오.
 
@@ -275,14 +275,14 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-### PyTorch 스케일된 점곱 주의 [[pytorch-scaled-dot-product-attention]]
+### PyTorch 스케일된 점곱 어텐션 [[pytorch-scaled-dot-product-attention]]
 
-스케일된 점곱 주의(SDPA)는 PyTorch 2.0에서 자동으로 활성화되며, FlashAttention, xFormers, PyTorch의 C++ 구현을 지원합니다. SDPA는 CUDA 백엔드를 사용하는 경우 가장 성능이 좋은 주의 알고리즘을 선택합니다. 다른 백엔드에서는 SDPA가 PyTorch C++ 구현으로 기본 설정됩니다.
+스케일된 점곱 어텐션(SDPA)는 PyTorch 2.0에서 자동으로 활성화되며, FlashAttention, xFormers, PyTorch의 C++ 구현을 지원합니다. SDPA는 CUDA 백엔드를 사용하는 경우 가장 성능이 좋은 어텐션 알고리즘을 선택합니다. 다른 백엔드에서는 SDPA가 PyTorch C++ 구현으로 기본 설정됩니다.
 
 > [!TIP]
 > SDPA는 최신 PyTorch 버전이 설치되어 있으면 FlashAttention-2도 지원합니다.
 
-세 가지 주의 알고리즘 중 하나를 명시적으로 활성화하거나 비활성화하려면 [torch.backends.cuda.sdp_kernel](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html) 컨텍스트 관리자를 사용하십시오. 예를 들어 FlashAttention을 활성화하려면 `enable_flash=True`로 설정하십시오.
+세 가지 어텐션 알고리즘 중 하나를 명시적으로 활성화하거나 비활성화하려면 [torch.backends.cuda.sdp_kernel](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html) 컨텍스트 관리자를 사용하십시오. 예를 들어 FlashAttention을 활성화하려면 `enable_flash=True`로 설정하십시오.
 
 ```py
 import torch
@@ -299,7 +299,7 @@ with torch.backends.cuda.sdp_kernel(enable_flash=True, enable_math=False, enable
 
 ## 양자화 [[quantization]]
 
-양자화는 LLM 가중치를 더 낮은 정밀도로 저장하여 크기를 줄입니다. 이는 메모리 사용량을 줄이며 GPU 메모리에 제약이 있는 경우 추론을 위해 LLM을 로드하는 것을 더 용이하게 합니다. GPU가 충분하다면, 모델을 양자화할 필요는 없습니다. 양자화 및 디양자화하는 추가 단계로 인해 약간의 지연이 발생할 수 있기 때문입니다(AWQ 및 융합 AWQ 모듈 제외).
+양자화는 LLM 가중치를 더 낮은 정밀도로 저장하여 크기를 줄입니다. 이는 메모리 사용량을 줄이며 GPU 메모리에 제약이 있는 경우 추론을 위해 LLM을 로드하는 것을 더 용이하게 합니다. GPU가 충분하다면, 모델을 양자화할 필요는 없습니다. 추가적인 양자화 및 양자화 해제 단계로 인해 약간의 지연이 발생할 수 있기 때문입니다(AWQ 및 융합 AWQ 모듈 제외).
 
 > [!TIP]
 > 다양한 양자화 라이브러리(자세한 내용은 [Quantization](./quantization) 가이드를 참조하십시오)가 있습니다. 여기에는 Quanto, AQLM, AWQ 및 AutoGPTQ가 포함됩니다. 사용 사례에 가장 잘 맞는 라이브러리를 사용해 보십시오. 또한 AutoGPTQ와 bitsandbytes를 비교하는 [Overview of natively supported quantization schemes in 🤗 Transformers](https://hf.co/blog/overview-quantization-transformers) 블로그 게시물을 읽어보는 것을 추천합니다.
