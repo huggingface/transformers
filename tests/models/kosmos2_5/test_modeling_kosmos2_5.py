@@ -98,9 +98,7 @@ class Kosmos2_5VisionModelTester:
         self.seq_length = num_patches + 1
 
     def prepare_config_and_inputs(self):
-        flattened_patches = floats_tensor(
-            [self.batch_size, self.seq_length, self.patch_embed_hidden_size + 2]
-        )
+        flattened_patches = floats_tensor([self.batch_size, self.seq_length, self.patch_embed_hidden_size + 2])
         config = self.get_config()
 
         return config, flattened_patches
@@ -215,19 +213,13 @@ class Kosmos2_5ModelTester:
         self.parent = parent
         self.text_model_tester = Kosmos2_5TextModelTester(parent, **text_kwargs)
         self.vision_model_tester = Kosmos2_5VisionModelTester(parent, **vision_kwargs)
-        self.batch_size = (
-            self.text_model_tester.batch_size
-        )  # need bs for batching_equivalence test
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.latent_query_num = latent_query_num
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
-        text_config, input_ids, attention_mask = (
-            self.text_model_tester.prepare_config_and_inputs()
-        )
-        vision_config, flattened_patches = (
-            self.vision_model_tester.prepare_config_and_inputs()
-        )
+        text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
+        vision_config, flattened_patches = self.vision_model_tester.prepare_config_and_inputs()
 
         # build `image_embeds_position_mask`
         image_embeds_position_mask = torch.zeros_like(input_ids)
@@ -260,9 +252,7 @@ class Kosmos2_5ModelTester:
     ):
         model = Kosmos2_5Model(config).to(torch_device).eval()
         with torch.no_grad():
-            result = model(
-                flattened_patches, input_ids, image_embeds_position_mask, attention_mask
-            )
+            result = model(flattened_patches, input_ids, image_embeds_position_mask, attention_mask)
         self.parent.assertEqual(
             result.last_hidden_state.shape,
             (
@@ -300,14 +290,8 @@ class Kosmos2_5ModelTester:
 
 @require_torch
 class Kosmos2_5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (Kosmos2_5Model, Kosmos2_5ForConditionalGeneration)
-        if is_torch_available()
-        else ()
-    )
-    all_generative_model_classes = (
-        (Kosmos2_5ForConditionalGeneration,) if is_torch_available() else ()
-    )
+    all_model_classes = (Kosmos2_5Model, Kosmos2_5ForConditionalGeneration) if is_torch_available() else ()
+    all_generative_model_classes = (Kosmos2_5ForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": Kosmos2_5Model,
@@ -353,31 +337,16 @@ class Kosmos2_5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         ]:
             bs, _, _ = inputs_dict["flattened_patches"].shape
             seqlen = self.model_tester.text_model_tester.seq_length
-            inputs_dict["input_ids"] = (
-                torch.arange(seqlen, device=torch_device)
-                .unsqueeze(0)
-                .expand(bs, seqlen)
-            )
-            inputs_dict["input_ids"] = (
-                inputs_dict["input_ids"]
-                % self.model_tester.text_model_tester.vocab_size
-            )
-            inputs_dict["attention_mask"] = torch.ones(
-                (bs, seqlen), device=torch_device
-            )
-            inputs_dict["image_embeds_position_mask"] = torch.zeros(
-                (bs, seqlen), device=torch_device
-            )
-            inputs_dict["image_embeds_position_mask"][
-                :, : self.model_tester.latent_query_num
-            ] = 1
+            inputs_dict["input_ids"] = torch.arange(seqlen, device=torch_device).unsqueeze(0).expand(bs, seqlen)
+            inputs_dict["input_ids"] = inputs_dict["input_ids"] % self.model_tester.text_model_tester.vocab_size
+            inputs_dict["attention_mask"] = torch.ones((bs, seqlen), device=torch_device)
+            inputs_dict["image_embeds_position_mask"] = torch.zeros((bs, seqlen), device=torch_device)
+            inputs_dict["image_embeds_position_mask"][:, : self.model_tester.latent_query_num] = 1
         return inputs_dict
 
     def setUp(self):
         self.model_tester = Kosmos2_5ModelTester(self)
-        self.config_tester = ConfigTester(
-            self, config_class=Kosmos2_5Config, hidden_size=37
-        )
+        self.config_tester = ConfigTester(self, config_class=Kosmos2_5Config, hidden_size=37)
 
     # overwrite from common to skip `image_to_text_projection.latent_query`
     def test_initialization(self):
@@ -421,15 +390,11 @@ class Kosmos2_5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
             with tempfile.TemporaryDirectory() as d:
                 model.save_pretrained(d)
 
-                model_reloaded, infos = model_class.from_pretrained(
-                    d, output_loading_info=True
-                )
+                model_reloaded, infos = model_class.from_pretrained(d, output_loading_info=True)
                 # Checking the state dicts are correct
                 reloaded_state = model_reloaded.state_dict()
                 for k, v in model.state_dict().items():
-                    self.assertIn(
-                        k, reloaded_state, f"Key {k} is missing from reloaded"
-                    )
+                    self.assertIn(k, reloaded_state, f"Key {k} is missing from reloaded")
                     torch.testing.assert_close(
                         v,
                         reloaded_state[k],
@@ -531,9 +496,7 @@ class Kosmos2_5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         model = Kosmos2_5Model.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
-    @unittest.skip(
-        reason="Does not work on the tiny model as we keep hitting edge cases."
-    )
+    @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
     def test_model_parallelism(self):
         super().test_model_parallelism()
 
@@ -542,27 +505,21 @@ class Kosmos2_5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest(
-            reason="kosmos-2.5 flash attention does not support right padding"
-        )
+        self.skipTest(reason="kosmos-2.5 flash attention does not support right padding")
 
     # TODO: ydshieh
     @require_torch_gpu
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference_equivalence(self):
-        self.skipTest(
-            reason="kosmos-2.5 test : the dummy inputs should be tweaked: dummy_input = inputs_dict"
-        )
+        self.skipTest(reason="kosmos-2.5 test : the dummy inputs should be tweaked: dummy_input = inputs_dict")
 
     # TODO: ydshieh
     @require_torch_sdpa
     @require_torch_gpu
     @slow
     def test_sdpa_can_dispatch_on_flash(self):
-        self.skipTest(
-            reason="_update_causal_mask is not implemented yet which fails this test"
-        )
+        self.skipTest(reason="_update_causal_mask is not implemented yet which fails this test")
 
     def test_eager_matches_sdpa_inference_1_bfloat16(self):
         self.skipTest(reason="doesn't support padding yet")
@@ -631,14 +588,10 @@ class Kosmos2_5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
                     non_persistent_buffers[key] = loaded_model_state_dict[key]
 
             loaded_model_state_dict = {
-                key: value
-                for key, value in loaded_model_state_dict.items()
-                if key not in non_persistent_buffers
+                key: value for key, value in loaded_model_state_dict.items() if key not in non_persistent_buffers
             }
 
-            self.assertEqual(
-                set(model_state_dict.keys()), set(loaded_model_state_dict.keys())
-            )
+            self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
 
             model_buffers = list(model.buffers())
             for non_persistent_buffer in non_persistent_buffers.values():
@@ -682,9 +635,7 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
     def run_example(self, prompt, image, model, processor):
         inputs = processor(text=prompt, images=image, return_tensors="pt")
         _, _ = inputs.pop("height"), inputs.pop("width")
-        inputs = {
-            k: v.to(torch_device) if v is not None else None for k, v in inputs.items()
-        }
+        inputs = {k: v.to(torch_device) if v is not None else None for k, v in inputs.items()}
         inputs["flattened_patches"] = inputs["flattened_patches"].to(model.dtype)
 
         generation_outputs = model.generate(
@@ -698,9 +649,7 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
 
     @unittest.skip(reason="GPU OOM on T4 and A10")
     def test_eager(self):
-        url = (
-            "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
-        )
+        url = "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
         url = "https://huggingface.co/kirp/kosmos2_5/resolve/main/receipt_00008.png"
         image = Image.open(requests.get(url, stream=True).raw)
 
@@ -711,9 +660,7 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
         )
         processor = AutoProcessor.from_pretrained(repo)
         prompt = "<ocr>"
-        generated_ids, generated_text = self.run_example(
-            prompt, image, model, processor
-        )
+        generated_ids, generated_text = self.run_example(prompt, image, model, processor)
         EXPECTED_TEXT = [
             "<ocr><bbox><x_53><y_573><x_69><y_606></bbox>1\n<bbox><x_79><y_573><x_464><y_611></bbox>[REG] BLACK SAKURA\n<bbox><x_690><y_569><x_810><y_606></bbox>45,455\n<bbox><x_53><y_614><x_69><y_648></bbox>1\n<bbox><x_79><y_614><x_468><y_651></bbox>COOKIE DOH SAUCES\n<bbox><x_788><y_609><x_812><y_642></bbox>0\n<bbox><x_50><y_658><x_69><y_693></bbox>1\n<bbox><x_79><y_658><x_358><y_693></bbox>NATA DE COCO\n<bbox><x_790><y_652><x_814><y_683></bbox>0\n<bbox><x_31><y_742><x_820><y_781></bbox>Sub Total 45,455\n<bbox><x_27><y_781><x_822><y_827></bbox>PB1 (10%) 4,545\n<bbox><x_27><y_826><x_824><y_872></bbox>Rounding 0\n<bbox><x_24><y_872><x_827><y_921></bbox>Total 50,000\n<bbox><x_17><y_1056><x_836><y_1108></bbox>Card Payment 50,000\n",
         ]
@@ -721,9 +668,7 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(generated_text, EXPECTED_TEXT)
 
         prompt = "<md>"
-        generated_ids, generated_text = self.run_example(
-            prompt, image, model, processor
-        )
+        generated_ids, generated_text = self.run_example(prompt, image, model, processor)
 
         EXPECTED_TEXT = [
             "<md>- **1 \\[REG\\] BLACK SAKURA** 45,455\n- **1 COOKIE DOH SAUCES** 0\n- **1 NATA DE COCO** 0\n- **Sub Total** 45,455\n- **PB1 (10%)** 4,545\n- **Rounding** 0\n- **Total** **50,000**\n\nCard Payment 50,000"
@@ -734,9 +679,7 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
         if self.cuda_compute_capability_major_version < 8:
             self.skipTest("GPU OOM on T4")
 
-        url = (
-            "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
-        )
+        url = "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
         url = "https://huggingface.co/kirp/kosmos2_5/resolve/main/receipt_00008.png"
         image = Image.open(requests.get(url, stream=True).raw)
 
@@ -747,9 +690,7 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
         )
         processor = AutoProcessor.from_pretrained(repo)
         prompt = "<ocr>"
-        generated_ids, generated_text = self.run_example(
-            prompt, image, model, processor
-        )
+        generated_ids, generated_text = self.run_example(prompt, image, model, processor)
 
         EXPECTED_TEXT = [
             "<ocr><bbox><x_53><y_573><x_69><y_606></bbox>1\n<bbox><x_79><y_573><x_464><y_611></bbox>[REG] BLACK SAKURA\n<bbox><x_690><y_569><x_810><y_606></bbox>45,455\n<bbox><x_53><y_614><x_69><y_648></bbox>1\n<bbox><x_79><y_614><x_468><y_650></bbox>COOKIE DOH SAUCES\n<bbox><x_788><y_609><x_812><y_644></bbox>0\n<bbox><x_50><y_658><x_69><y_693></bbox>1\n<bbox><x_79><y_658><x_358><y_693></bbox>NATA DE COCO\n<bbox><x_790><y_652><x_814><y_687></bbox>0\n<bbox><x_31><y_742><x_820><y_781></bbox>Sub Total 45,455\n<bbox><x_27><y_781><x_822><y_827></bbox>PB1 (10%) 4,545\n<bbox><x_27><y_826><x_824><y_872></bbox>Rounding 0\n<bbox><x_24><y_872><x_827><y_921></bbox>Total 50,000\n<bbox><x_17><y_1056><x_836><y_1108></bbox>Card Payment 50,000\n"
@@ -758,9 +699,7 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(generated_text, EXPECTED_TEXT)
 
         prompt = "<md>"
-        generated_ids, generated_text = self.run_example(
-            prompt, image, model, processor
-        )
+        generated_ids, generated_text = self.run_example(prompt, image, model, processor)
         EXPECTED_TEXT = [
             "<md>- **1 \\[REG\\] BLACK SAKURA** 45,455\n- **1 COOKIE DOH SAUCES** 0\n- **1 NATA DE COCO** 0\n- **Sub Total** 45,455\n- **PB1 (10%)** 4,545\n- **Rounding** 0\n- **Total** **50,000**\n\nCard Payment 50,000"
         ]
@@ -774,9 +713,7 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
         if self.cuda_compute_capability_major_version < 8:
             self.skipTest("GPU OOM on T4")
 
-        url = (
-            "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
-        )
+        url = "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
         url = "https://huggingface.co/kirp/kosmos2_5/resolve/main/receipt_00008.png"
         image = Image.open(requests.get(url, stream=True).raw)
 
@@ -790,9 +727,7 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
         )
         processor = AutoProcessor.from_pretrained(repo)
         prompt = "<ocr>"
-        generated_ids, generated_text = self.run_example(
-            prompt, image, model, processor
-        )
+        generated_ids, generated_text = self.run_example(prompt, image, model, processor)
         EXPECTED_TEXT = [
             "<ocr><bbox><x_53><y_573><x_69><y_606></bbox>1\n<bbox><x_79><y_573><x_464><y_612></bbox>[REG] BLACK SAKURA\n<bbox><x_690><y_569><x_812><y_606></bbox>45,455\n<bbox><x_53><y_614><x_69><y_650></bbox>1\n<bbox><x_79><y_614><x_468><y_650></bbox>COOKIE DOH SAUCES\n<bbox><x_788><y_610><x_813><y_644></bbox>0\n<bbox><x_50><y_658><x_65><y_693></bbox>1\n<bbox><x_76><y_658><x_358><y_693></bbox>NATA DE COCO\n<bbox><x_790><y_652><x_815><y_687></bbox>0\n<bbox><x_31><y_742><x_822><y_781></bbox>Sub Total 45,455\n<bbox><x_27><y_780><x_822><y_827></bbox>PB1 (10%) 4,545\n<bbox><x_27><y_826><x_824><y_874></bbox>Rounding 0\n<bbox><x_24><y_872><x_827><y_921></bbox>Total 50,000\n<bbox><x_17><y_1056><x_835><y_1108></bbox>Card Payment 50,000\n"
         ]
@@ -800,9 +735,7 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(generated_text, EXPECTED_TEXT)
 
         prompt = "<md>"
-        generated_ids, generated_text = self.run_example(
-            prompt, image, model, processor
-        )
+        generated_ids, generated_text = self.run_example(prompt, image, model, processor)
         # A10 gives the 1st one, but A100 gives the 2nd one
         EXPECTED_TEXT = [
             "<md>- **1 \\[REG\\] BLACK SAKURA** 45,455\n- **1 COOKIE DOH SAUCES** 0\n- **1 NATA DE COCO** 0\n\n<table>\n<thead>\n<tr>\n<th>\nSub Total\n</th>\n<th>\n45,455\n</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td>\nPB1 (10%)\n</td>\n<td>\n4,545\n</td>\n</tr>\n<tr>\n<td>\nRounding\n</td>\n<td>\n0\n</td>\n</tr>\n<tr>\n<td>\n<strong>\nTotal\n</strong>\n</td>\n<td>\n<strong>\n50,000\n</strong>\n</td>\n</tr>\n</tbody>\n</table>\n\nCard Payment 50,000",

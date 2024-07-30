@@ -73,7 +73,7 @@ class Kosmos2_5ProcessorTest(unittest.TestCase):
 
     def test_image_procesor_load_save_reload(self):
         # make sure load from Hub repo. -> save -> reload locally work
-        image_processor = Kosmos2_5ImageProcessor.from_pretrained("microsoft/kosmos-2-patch14-224")
+        image_processor = Kosmos2_5ImageProcessor.from_pretrained("microsoft/kosmos-2.5")
         with TemporaryDirectory() as tmp_dir:
             image_processor.save_pretrained(tmp_dir)
             reloaded_image_processor = Kosmos2_5ImageProcessor.from_pretrained(tmp_dir)
@@ -88,13 +88,20 @@ class Kosmos2_5ProcessorTest(unittest.TestCase):
         image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
 
         processor = Kosmos2_5Processor.from_pretrained(
-            self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
+            self.tmpdirname,
+            bos_token="(BOS)",
+            eos_token="(EOS)",
+            do_normalize=False,
+            padding_value=1.0,
         )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
         self.assertIsInstance(processor.tokenizer, PreTrainedTokenizerFast)
 
-        self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
+        self.assertEqual(
+            processor.image_processor.to_json_string(),
+            image_processor_add_kwargs.to_json_string(),
+        )
         self.assertIsInstance(processor.image_processor, Kosmos2_5ImageProcessor)
 
     def test_tokenizer(self):
