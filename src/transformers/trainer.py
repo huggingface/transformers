@@ -2977,7 +2977,7 @@ class Trainer:
                 xm.save(
                     optm,
                     os.path.join(output_dir, f"rank{self.args.process_index}_{OPTIMIZER_NAME}"),
-                    master_only=False
+                    master_only=False,
                 )
             else:
                 xm.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
@@ -3068,8 +3068,9 @@ class Trainer:
             if is_torch_xla_available():
                 # On TPU we have to take some extra precautions to properly load the states on the right device.
                 if self.is_fsdp_xla_enabled and not self.is_fsdp_xla_v2_enabled:
-                    optimizer_state = torch.load(os.path.join(
-                        checkpoint, f"rank{self.args.process_index}_{OPTIMIZER_NAME}"), map_location="cpu")
+                    optimizer_state = torch.load(
+                        os.path.join(checkpoint, f"rank{self.args.process_index}_{OPTIMIZER_NAME}"), map_location="cpu"
+                    )
                     # We only need `optimizer` when resuming from checkpoint
                     optimizer_state = optimizer_state["optimizer"]
                 else:
@@ -3500,8 +3501,7 @@ class Trainer:
                 "shard_metadata": model.get_shard_metadata(),
             }
             ckpt_path = os.path.join(
-                output_dir,
-                f"rank{self.args.process_index}_of_{self.args.world_size}_{WEIGHTS_NAME}.pth"
+                output_dir, f"rank{self.args.process_index}_of_{self.args.world_size}_{WEIGHTS_NAME}.pth"
             )
             # All ranks save sharded checkpoint
             xm.save(ckpt, ckpt_path, master_only=False)
@@ -3509,12 +3509,14 @@ class Trainer:
             xm.rendezvous("save_full_checkpoints")
             # Master save full checkpoint
             if self.args.should_save:
-                from torch_xla.distributed.fsdp import consolidate_sharded_model_checkpoints
                 from torch_xla.distributed.fsdp import XlaFullyShardedDataParallel as FSDP
+                from torch_xla.distributed.fsdp import consolidate_sharded_model_checkpoints
+
                 full_state_dict, _ = consolidate_sharded_model_checkpoints(
                     ckpt_prefix=os.path.join(output_dir, ""),
                     ckpt_suffix=f"rank*_of_*_{WEIGHTS_NAME}.pth",
-                    save_model=False)
+                    save_model=False,
+                )
                 assert isinstance(model, FSDP)
                 model = model.module.module
                 if isinstance(self.accelerator.unwrap_model(model), supported_classes):
