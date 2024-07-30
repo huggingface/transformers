@@ -15,12 +15,14 @@
 
 import unittest
 
+from packaging import version
 from parameterized import parameterized
 
 from transformers import set_seed
 from transformers.testing_utils import (
     is_torch_available,
     require_auto_gptq,
+    require_read_token,
     require_torch,
     require_torch_gpu,
     slow,
@@ -32,6 +34,7 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        AutoConfig,
         AutoModelForCausalLM,
         AutoTokenizer,
         DynamicCache,
@@ -143,7 +146,7 @@ class CacheTest(unittest.TestCase):
         mha_config = LlamaConfig(num_attention_heads=32)
         mha_static_cache = StaticCache(config=mha_config, max_batch_size=1, max_cache_len=10, device=torch_device)
         cached_keys, cached_values = mha_static_cache.update(
-            *_random_kvs(mha_config), 0, cache_kwargs={"cache_position": torch.arange(1)}
+            *_random_kvs(mha_config), 0, cache_kwargs={"cache_position": torch.arange(1).to(torch_device)}
         )
         self.assertTrue(cached_keys.shape == (1, 32, 10, 128))
         self.assertTrue(cached_values.shape == (1, 32, 10, 128))
@@ -151,7 +154,7 @@ class CacheTest(unittest.TestCase):
         gqa_config = LlamaConfig(num_attention_heads=32, num_key_value_heads=4)
         gqa_static_cache = StaticCache(config=gqa_config, max_batch_size=1, max_cache_len=10, device=torch_device)
         cached_keys, cached_values = gqa_static_cache.update(
-            *_random_kvs(gqa_config), 0, cache_kwargs={"cache_position": torch.arange(1)}
+            *_random_kvs(gqa_config), 0, cache_kwargs={"cache_position": torch.arange(1).to(torch_device)}
         )
         self.assertTrue(cached_keys.shape == (1, 4, 10, 128))
         self.assertTrue(cached_values.shape == (1, 4, 10, 128))
@@ -159,10 +162,65 @@ class CacheTest(unittest.TestCase):
         mqa_config = LlamaConfig(num_attention_heads=32, num_key_value_heads=1)
         mqa_static_cache = StaticCache(config=mqa_config, max_batch_size=1, max_cache_len=10, device=torch_device)
         cached_keys, cached_values = mqa_static_cache.update(
-            *_random_kvs(mqa_config), 0, cache_kwargs={"cache_position": torch.arange(1)}
+            *_random_kvs(mqa_config), 0, cache_kwargs={"cache_position": torch.arange(1).to(torch_device)}
         )
         self.assertTrue(cached_keys.shape == (1, 1, 10, 128))
         self.assertTrue(cached_values.shape == (1, 1, 10, 128))
+
+    @slow
+    @require_read_token
+    def test_static_cache_exportability(self):
+        """
+        Tests that static cache works with `torch.export()`
+        """
+        if version.parse(torch.__version__) < version.parse("2.3"):
+            self.skipTest(reason="This test requires torch >= 2.3 to run.")
+
+        device = "cpu"
+        dtype = torch.float32
+        max_batch_size = 1
+
+        config = AutoConfig.from_pretrained(
+            "google/gemma-2b",
+            torch_dtype=dtype,
+            use_cache=True,
+        )
+        m = AutoModelForCausalLM.from_pretrained(
+            "google/gemma-2b",
+            config=config,
+            torch_dtype=dtype,
+            attn_implementation="sdpa",  # Export and ExecuTorch only works for SdpaAttention
+        ).to(device)
+        tokenizer = AutoTokenizer.from_pretrained("google/gemma-2b")
+        inputs = tokenizer(["The best color is"], return_tensors="pt").to(device)["input_ids"]
+
+        class ExportatibleModelWithStaticCache(torch.nn.Module):
+            def __init__(self, config, model):
+                super().__init__()
+                self.config = config
+                self.model = model
+                self.static_cache = StaticCache(
+                    config=config, max_batch_size=max_batch_size, max_cache_len=config.max_length, device=device
+                )
+
+            def forward(self, tokens: torch.Tensor, input_pos: torch.Tensor):
+                outs = self.model(
+                    input_ids=tokens,
+                    attention_mask=None,
+                    position_ids=input_pos.unsqueeze(0),
+                    cache_position=input_pos,
+                    past_key_values=self.static_cache,
+                    use_cache=True,
+                )
+                return outs.logits
+
+        set_seed(0)
+        with torch.no_grad():
+            from torch.export import ExportedProgram, export
+
+            model = ExportatibleModelWithStaticCache(config, m)
+            exported_program = export(model, args=(inputs,), kwargs={"input_pos": torch.arange(1)})
+            self.assertTrue(isinstance(exported_program, ExportedProgram))
 
 
 @require_torch_gpu
