@@ -1100,7 +1100,7 @@ def check_public_method_exists(documented_methods_map):
             if not hasattr(obj_class, method):
                 failures.append(
                     "The following public method is explicitly documented but not defined in the corresponding "
-                    f"class: {obj}, method: {method}"
+                    f"class. class: {obj}, method: {method}"
                 )
 
     if len(failures) > 0:
