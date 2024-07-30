@@ -9,7 +9,7 @@ import torch
 from packaging import version
 
 from .configuration_utils import PretrainedConfig
-from .utils import is_hqq_available, is_quanto_available, logging
+from .utils import is_hqq_available, is_quanto_available, is_torchdynamo_compiling, logging
 
 
 if is_quanto_available():
@@ -23,11 +23,13 @@ if is_hqq_available():
 logger = logging.get_logger(__name__)
 
 
-@dataclass
-class Cache:
+class Cache(torch.nn.Module):
     """
     Base, abstract class for all caches. The actual data structure is specific to each subclass.
     """
+
+    def __init__(self):
+        super().__init__()
 
     def update(
         self,
@@ -299,6 +301,7 @@ class DynamicCache(Cache):
     """
 
     def __init__(self) -> None:
+        super().__init__()
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
         self._seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
@@ -398,7 +401,6 @@ class DynamicCache(Cache):
     def crop(self, max_length: int):
         """Crop the past key values up to a new `max_length` in terms of tokens. `max_length` can also be
         negative to remove `max_length` tokens. This is used in assisted decoding and contrastive search."""
-
         # In case it is negative
         if max_length < 0:
             max_length = self.get_seq_length() - abs(max_length)
@@ -462,6 +464,7 @@ class QuantizedCache(DynamicCache):
     """
 
     def __init__(self, cache_config: QuantizedCacheConfig) -> None:
+        super().__init__()
         self._quantized_key_cache: List[torch.Tensor] = []
         self._quantized_value_cache: List[torch.Tensor] = []
 
@@ -539,7 +542,7 @@ class QuantoQuantizedCache(QuantizedCache):
     Quantized Cache class that uses `quanto` as a backend to perform quantization. Current implementation supports `int2` and `int4` dtypes only.
 
     Parameters:
-        cache_config (`QuantizedCacheConfig`,):
+        cache_config (`QuantizedCacheConfig`):
             A configuration containing all the arguments to be used by the quantizer, including axis, qtype and group size.
     """
 
@@ -580,7 +583,7 @@ class HQQQuantizedCache(QuantizedCache):
     Quantized Cache class that uses `HQQ` as a backend to perform quantization. Current implementation supports `int2`, `int4`, `int8` dtypes.
 
     Parameters:
-        cache_config (`QuantizedCacheConfig`,):
+        cache_config (`QuantizedCacheConfig`):
             A configuration containing all the arguments to be used by the quantizer, including axis, qtype and group size.
     """
 
@@ -635,6 +638,7 @@ class SinkCache(Cache):
     """
 
     def __init__(self, window_length: int, num_sink_tokens: int) -> None:
+        super().__init__()
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
         self.window_length = window_length
@@ -787,10 +791,10 @@ class SinkCache(Cache):
 
 class StaticCache(Cache):
     """
-    Static Cache class to be used with `torch.compile(model)`.
+    Static Cache class to be used with `torch.compile(model)` and `torch.export()`.
 
     Parameters:
-        config (`PretrainedConfig):
+        config (`PretrainedConfig`):
             The configuration file defining the shape-related attributes required to initialize the static cache.
         max_batch_size (`int`):
             The maximum batch size with which the model will be used.
@@ -818,16 +822,22 @@ class StaticCache(Cache):
 
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
+        # Note: There will be significant perf decrease if switching to use 5D tensors instead.
         cache_shape = (max_batch_size, self.num_key_value_heads, self.max_cache_len, self.head_dim)
-        for _ in range(config.num_hidden_layers):
+        for idx in range(config.num_hidden_layers):
+            # Note: `torch.export()`` requires mutations to be registered as buffers.
+            self.register_buffer(f"key_cache_{idx}", torch.zeros(cache_shape, dtype=dtype, device=device))
+            self.register_buffer(f"value_cache_{idx}", torch.zeros(cache_shape, dtype=dtype, device=device))
+            key_cache = getattr(self, f"key_cache_{idx}")
+            value_cache = getattr(self, f"value_cache_{idx}")
             # Note: `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
-            # breaks when updating the cache.
-            new_layer_key_cache = torch.zeros(cache_shape, dtype=self.dtype, device=device)
-            new_layer_value_cache = torch.zeros(cache_shape, dtype=self.dtype, device=device)
-            torch._dynamo.mark_static_address(new_layer_key_cache)
-            torch._dynamo.mark_static_address(new_layer_value_cache)
-            self.key_cache.append(new_layer_key_cache)
-            self.value_cache.append(new_layer_value_cache)
+            # breaks when updating the cache. It can't be used if the cache code is being compiled (but in that case
+            # it is not needed anyway)
+            if not is_torchdynamo_compiling():
+                torch._dynamo.mark_static_address(key_cache)
+                torch._dynamo.mark_static_address(value_cache)
+            self.key_cache.append(key_cache)
+            self.value_cache.append(value_cache)
 
     def update(
         self,
@@ -862,8 +872,18 @@ class StaticCache(Cache):
             k_out.copy_(key_states)
             v_out.copy_(value_states)
         else:
-            k_out[:, :, cache_position] = key_states
-            v_out[:, :, cache_position] = value_states
+            # Note: here we use `tensor.index_copy_(dim, index, tensor)` that is equivalent to
+            # `tensor[:, :, index] = tensor`, but the first one is compile-friendly and it does explicitly an in-place
+            # operation, that avoids copies and uses less memory.
+            try:
+                # If using several devices (e.g.: multiple GPUs), we need to ensure everything is on the same one
+                cache_position.to(device=k_out.device)
+                k_out.index_copy_(2, cache_position, key_states)
+                v_out.index_copy_(2, cache_position, value_states)
+            except NotImplementedError:
+                # The operator 'aten::index_copy.out' is not currently implemented for the MPS device.
+                k_out[:, :, cache_position] = key_states
+                v_out[:, :, cache_position] = value_states
 
         return k_out, v_out
 
@@ -904,7 +924,7 @@ class SlidingWindowCache(StaticCache):
     We overwrite the cache using these, then we always write at cache_position (clamped to `sliding_window`)
 
     Parameters:
-        config (`PretrainedConfig):
+        config (`PretrainedConfig`):
             The configuration file defining the shape-related attributes required to initialize the static cache.
         max_batch_size (`int`):
             The maximum batch size with which the model will be used.
@@ -917,6 +937,7 @@ class SlidingWindowCache(StaticCache):
     """
 
     def __init__(self, config: PretrainedConfig, max_batch_size: int, max_cache_len: int, device, dtype=None) -> None:
+        super().__init__()
         if not hasattr(config, "sliding_window") or config.sliding_window is None:
             raise ValueError(
                 "Setting `cache_implementation` to 'sliding_window' requires the model config supporting "
@@ -958,8 +979,14 @@ class SlidingWindowCache(StaticCache):
         k_out = k_out[:, :, indices]
         v_out = v_out[:, :, indices]
 
-        k_out[:, :, cache_position] = key_states
-        v_out[:, :, cache_position] = value_states
+        try:
+            cache_position.to(device=k_out.device)
+            k_out.index_copy_(2, cache_position, key_states)
+            v_out.index_copy_(2, cache_position, value_states)
+        except NotImplementedError:
+            # The operator 'aten::index_copy.out' is not currently implemented for the MPS device.
+            k_out[:, :, cache_position] = key_states
+            v_out[:, :, cache_position] = value_states
 
         # `_.zero()` followed by `+=` is equivalent `=`, but compile-friendly (without graph breaks due to assignment)
         self.key_cache[layer_idx].zero_()
@@ -988,6 +1015,7 @@ class EncoderDecoderCache(Cache):
     """
 
     def __init__(self, self_attention_cache: Cache, cross_attention_cache: Cache):
+        super().__init__()
         self.self_attention_cache = self_attention_cache
         self.cross_attention_cache = cross_attention_cache
 
@@ -1131,6 +1159,7 @@ class EncoderDecoderCache(Cache):
 
 class HybridCache(Cache):
     def __init__(self, config: PretrainedConfig, max_batch_size, max_cache_len, device="cpu", dtype=None) -> None:
+        super().__init__()
         if not hasattr(config, "sliding_window") or config.sliding_window is None:
             raise ValueError(
                 "Setting `cache_implementation` to 'sliding_window' requires the model config supporting "
@@ -1249,3 +1278,77 @@ class HybridCache(Cache):
             # In-place ops prevent breaking the static address
             self.key_cache[layer_idx].zero_()
             self.value_cache[layer_idx].zero_()
+
+
+class MambaCache:
+    """
+    Cache for mamba model which does not have attention mechanism and key value states.
+
+    Arguments:
+        config: MambaConfig
+        max_batch_size: int
+        dtype: torch.dtype
+        device: torch.device
+
+    Attributes:
+        dtype: torch.dtype
+        intermediate_size: int
+        ssm_state_size: int
+        conv_kernel_size: int
+        conv_states: torch.Tensor [layer_idx, batch_size, intermediate_size, conv_kernel_size]
+        ssm_states: torch.Tensor [layer_idx, batch_size, intermediate_size, ssm_state_size]
+    """
+
+    def __init__(
+        self,
+        config: PretrainedConfig,
+        max_batch_size: int,
+        dtype: torch.dtype = torch.float16,
+        device: Optional[str] = None,
+        **kwargs,
+    ):
+        self.dtype = dtype
+        self.max_batch_size = max_batch_size
+        self.intermediate_size = config.intermediate_size
+        self.ssm_state_size = config.state_size
+        self.conv_kernel_size = config.conv_kernel
+
+        self.conv_states: torch.Tensor = torch.zeros(
+            config.num_hidden_layers,
+            self.max_batch_size,
+            self.intermediate_size,
+            self.conv_kernel_size,
+            device=device,
+            dtype=dtype,
+        )
+        self.ssm_states: torch.Tensor = torch.zeros(
+            config.num_hidden_layers,
+            self.max_batch_size,
+            self.intermediate_size,
+            self.ssm_state_size,
+            device=device,
+            dtype=dtype,
+        )
+
+        torch._dynamo.mark_static_address(self.conv_states)
+        torch._dynamo.mark_static_address(self.ssm_states)
+
+    def update_conv_state(
+        self, layer_idx: int, new_conv_state: torch.Tensor, cache_position: torch.LongTensor
+    ) -> torch.Tensor:
+        conv_state = self.conv_states[layer_idx]
+        cache_position = cache_position.clamp(0, self.conv_kernel_size - 1)
+
+        conv_state = conv_state.roll(shifts=-1, dims=-1)
+        conv_state[:, :, cache_position] = new_conv_state.to(conv_state.device)
+        self.conv_states[layer_idx].zero_()
+        self.conv_states[layer_idx] += conv_state
+        return self.conv_states[layer_idx]
+
+    def update_ssm_state(self, layer_idx: int, new_ssm_state: torch.Tensor):
+        self.ssm_states[layer_idx] = new_ssm_state.to(self.ssm_states.device)
+        return self.ssm_states[layer_idx]
+
+    def reset(self):
+        self.conv_states.zero_()
+        self.ssm_states.zero_()
