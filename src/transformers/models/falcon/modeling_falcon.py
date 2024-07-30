@@ -229,13 +229,13 @@ def dropout_add(x: torch.Tensor, residual: torch.Tensor, prob: float, training: 
     Dropout add function
 
     Args:
-        x (`torch.tensor`, *required*):
+        x (`torch.tensor`):
             input tensor
-        residual (`torch.tensor`, *required*):
+        residual (`torch.tensor`):
             residual tensor
-        prob (`float`, *required*):
+        prob (`float`):
             dropout probability
-        training (`bool`, *required*):
+        training (`bool`):
             training mode
     """
     out = F.dropout(x, p=prob, training=training)
@@ -315,7 +315,7 @@ class FalconAttention(nn.Module):
         Split the last dimension into (num_heads, head_dim), results share same memory storage as `fused_qkv`
 
         Args:
-            fused_qkv (`torch.tensor`, *required*): [batch_size, seq_length, num_heads * 3 * head_dim]
+            fused_qkv (`torch.tensor`): [batch_size, seq_length, num_heads * 3 * head_dim]
 
         Returns:
             query: [batch_size, seq_length, num_heads, head_dim] key: [batch_size, seq_length, num_heads, head_dim]
@@ -347,7 +347,7 @@ class FalconAttention(nn.Module):
         Merge heads together over the last dimension
 
         Args:
-            x (`torch.tensor`, *required*): [batch_size * num_heads, seq_length, head_dim]
+            x (`torch.tensor`): [batch_size * num_heads, seq_length, head_dim]
 
         Returns:
             torch.tensor: [batch_size, seq_length, num_heads * head_dim]

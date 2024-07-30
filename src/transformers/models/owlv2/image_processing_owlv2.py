@@ -117,7 +117,7 @@ def _preprocess_resize_output_shape(image, output_shape):
             channels is preserved.
 
     Returns
-        image (`np.ndarray):
+        image (`np.ndarray`):
             The input image, but with additional singleton dimensions appended in the case where `len(output_shape) >
             input.ndim`.
         output_shape (`Tuple`):

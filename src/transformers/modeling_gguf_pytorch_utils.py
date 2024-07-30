@@ -145,7 +145,9 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
             shape = tensor.shape
             name = tensor.name
 
-            weights = load_dequant_gguf_tensor(shape=shape, ggml_type=tensor.tensor_type, data=tensor.data)
+            weights = load_dequant_gguf_tensor(
+                shape=shape, ggml_type=tensor.tensor_type, data=tensor.data, n_bytes=int(tensor.n_bytes)
+            )
 
             if architecture == "llama" and (".attn_k." in name or ".attn_q." in name):
                 num_heads = parsed_parameters["config"]["num_attention_heads"]
