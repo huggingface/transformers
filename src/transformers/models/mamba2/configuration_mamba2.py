@@ -35,24 +35,30 @@ class Mamba2Config(PretrainedConfig):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 50280):
+        num_heads (`int`, *optional*, defaults to 128):
+            Number of heads for the evolution matrices of mamba 2.
+        head_dim (`int`, *optional*, defaults to 64):
+            Dimension of each head.
+        vocab_size (`int`, *optional*, defaults to 32768):
             Vocabulary size of the MAMBA2 model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`Mamba2Model`].
-        hidden_size (`int`, *optional*, defaults to 768):
+        hidden_size (`int`, *optional*, defaults to 4096):
             Dimensionality of the embeddings and hidden states.
-        state_size (`int`, *optional*, defaults to 16): shape of the state space latents.
-        num_hidden_layers (`int`, *optional*, defaults to 32):
+        state_size (`int`, *optional*, defaults to 128): shape of the state space latents.
+        num_hidden_layers (`int`, *optional*, defaults to 64):
             Number of hidden layers in the model.
         layer_norm_epsilon (`float`, *optional*, defaults to 1e-05):
             The epsilon to use in the layer normalization layers.
-        pad_token_id (`int`, *optional*, defaults to 0):
+        pad_token_id (`int`, *optional*, defaults to 1):
             Padding token id.
         bos_token_id (`int`, *optional*, defaults to 0):
             The id of the beginning of sentence token in the vocabulary.
-        eos_token_id (`int`, *optional*, defaults to 0):
+        eos_token_id (`int`, *optional*, defaults to 2):
             The id of the end of sentence token in the vocabulary.
         expand (`int`, *optional*, defaults to 2): Expanding factor used to determine the intermediate size.
         conv_kernel (`int`, *optional*, defaults to 4): Size of the convolution kernel.
+        n_groups (`int`, *optional*, defaults to 8): 
+            Number of groups for the evolution matrices of mamba 2.
         use_bias (`bool`, *optional*, defaults to `False`):
             Whether or not to use bias in ["in_proj", "out_proj"] of the mixer block
         use_conv_bias (`bool`, *optional*, defaults to `True`):
@@ -75,10 +81,20 @@ class Mamba2Config(PretrainedConfig):
             Init scheme used for `dt_proj.weight`. Should be one of `["random","uniform"]`
         time_step_floor (`float`, *optional*, defaults to 0.0001):
             Minimum clamping value of the `dt_proj.bias` layer initialization.
+        time_step_limit (`tuple`, *optional*, defaults to `(0.0, inf)`):
+            Accepted range of time step values.
         rescale_prenorm_residual (`bool`, *optional*, defaults to `False`):
             Whether or not to rescale `out_proj` weights when initializing.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the cache should be used.
+        norm_before_gate (`bool`, *optional*, defaults to `True`):
+            Option of cuda kernels -whether to normalize before the gate or not.
+        rms_norm (`bool`, *optional*, defaults to `True`):
+            Whether to use RMS norm or not.
+        chunk_size (`int`, *optional*, defaults to 256):
+            Size of the chunks that will comprise the sequence.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to tie word embeddings or not.
 
 
     Example:
