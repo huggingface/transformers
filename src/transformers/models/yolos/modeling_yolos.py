@@ -647,8 +647,9 @@ class YolosModel(YolosPreTrainedModel):
         Prunes heads of the model.
 
         Args:
-            heads_to_prune (`dict` of {layer_num: list of heads to prune in this layer}):
-                See base class `PreTrainedModel`.
+            heads_to_prune (`dict`):
+                See base class `PreTrainedModel`. The input dictionary must have the following format: {layer_num:
+                list of heads to prune in this layer}
         """
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)

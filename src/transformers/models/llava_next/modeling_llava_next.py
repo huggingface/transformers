@@ -79,7 +79,7 @@ def image_size_to_num_patches(image_size, grid_pinpoints, patch_size: int):
     Calculate the number of patches after the preprocessing for images of any resolution.
 
     Args:
-        image_size (`Union[torch.LongTensor, np.ndarray, Tuple[int, int]):
+        image_size (`torch.LongTensor` or `np.ndarray` or `Tuple[int, int]`):
             The size of the input image in the format (height, width). ?
         grid_pinpoints (`List`):
             A list containing possible resolutions. Each item in the list should be a tuple or list

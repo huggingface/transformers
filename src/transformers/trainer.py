@@ -745,7 +745,7 @@ class Trainer:
         Add a callback to the current list of [`~transformers.TrainerCallback`].
 
         Args:
-           callback (`type` or [`~transformers.TrainerCallback`]):
+           callback (`type` or [`~transformers.TrainerCallback]`):
                A [`~transformers.TrainerCallback`] class or an instance of a [`~transformers.TrainerCallback`]. In the
                first case, will instantiate a member of that class.
         """
@@ -758,7 +758,7 @@ class Trainer:
         If the callback is not found, returns `None` (and no error is raised).
 
         Args:
-           callback (`type` or [`~transformers.TrainerCallback`]):
+           callback (`type` or [`~transformers.TrainerCallback]`):
                A [`~transformers.TrainerCallback`] class or an instance of a [`~transformers.TrainerCallback`]. In the
                first case, will pop the first member of that class found in the list of callbacks.
 
@@ -772,7 +772,7 @@ class Trainer:
         Remove a callback from the current list of [`~transformers.TrainerCallback`].
 
         Args:
-           callback (`type` or [`~transformers.TrainerCallback`]):
+           callback (`type` or [`~transformers.TrainerCallback]`):
                A [`~transformers.TrainerCallback`] class or an instance of a [`~transformers.TrainerCallback`]. In the
                first case, will remove the first member of that class found in the list of callbacks.
         """
