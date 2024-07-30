@@ -28,6 +28,7 @@ from huggingface_hub import get_full_repo_name
 from packaging import version
 
 from .debug_utils import DebugOption
+from .generation import GenerationConfig
 from .trainer_utils import (
     EvaluationStrategy,
     FSDPOption,
@@ -789,6 +790,12 @@ class TrainingArguments:
 
         eval_use_gather_object (`bool`, *optional*, defaults to `False`):
             Whether to run recursively gather object in a nested list/tuple/dictionary of objects from all devices. This should only be enabled if users are not just returning tensors, and this is actively discouraged by PyTorch.
+        predict_with_generate (`bool`, *optional*, defaults to `False`):
+            Whether to use generate to calculate generative metrics (ROUGE, BLEU).
+        generation_config ([`~generation.GenerationConfig`], *optional*):
+            The [`~generation.GenerationConfig`] object that will be used during generation if `predict_with_generate` is set to `True`.
+            Arguments passed in GenerationConfig will have higher priority than model's generation config. Anything not set by this config
+            will fallback to `model.generation_config` by default.
     """
 
     framework = "pt"
@@ -1493,6 +1500,20 @@ class TrainingArguments:
         default=False,
         metadata={
             "help": "Whether to run recursively gather object in a nested list/tuple/dictionary of objects from all devices."
+        },
+    )
+
+    predict_with_generate: bool = field(
+        default=False, metadata={"help": "Whether to use generate to calculate generative metrics (ROUGE, BLEU)."}
+    )
+    generation_config: Optional[GenerationConfig] = field(
+        default=None,
+        metadata={
+            "help": (
+                "The GenerationConfig that will be used during prediction. Args from this config ",
+                "will have higher priority than model's generation config. Anything not set by this config ",
+                "will fallback to `model.generation_config`.",
+            )
         },
     )
 

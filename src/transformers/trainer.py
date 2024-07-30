@@ -61,7 +61,12 @@ from .data.data_collator import DataCollator, DataCollatorWithPadding, default_d
 from .debug_utils import DebugOption, DebugUnderflowOverflow
 from .feature_extraction_sequence_utils import SequenceFeatureExtractor
 from .hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS, default_hp_search_backend
-from .integrations.deepspeed import deepspeed_init, deepspeed_load_checkpoint, is_deepspeed_available
+from .integrations.deepspeed import (
+    deepspeed_init,
+    deepspeed_load_checkpoint,
+    is_deepspeed_available,
+    is_deepspeed_zero3_enabled,
+)
 from .integrations.tpu import tpu_spmd_dataloader
 from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, load_sharded_checkpoint
@@ -305,9 +310,12 @@ class Trainer:
             The arguments to tweak for training. Will default to a basic instance of [`TrainingArguments`] with the
             `output_dir` set to a directory named *tmp_trainer* in the current directory if not provided.
         data_collator (`DataCollator`, *optional*):
-            The function to use to form a batch from a list of elements of `train_dataset` or `eval_dataset`. Will
+            The function to use to form a batch from a list of elements of `train_dataset`. Will
             default to [`default_data_collator`] if no `tokenizer` is provided, an instance of
             [`DataCollatorWithPadding`] otherwise.
+        eval_data_collator (`typing.Union[DataCollator, NoneType]`, *optional*):
+            The function to use to form a batch from a list of elements of `eval_dataset` and `train_dataset`. Will
+            default to `data_collator` if no `eval_data_collator` is provided.
         train_dataset (Union[`torch.utils.data.Dataset`, `torch.utils.data.IterableDataset`, `datasets.Dataset`], *optional*):
             The dataset to use for training. If it is a [`~datasets.Dataset`], columns not accepted by the
             `model.forward()` method are automatically removed.
@@ -379,6 +387,7 @@ class Trainer:
         model: Union[PreTrainedModel, nn.Module] = None,
         args: TrainingArguments = None,
         data_collator: Optional[DataCollator] = None,
+        eval_data_collator: Optional[DataCollator] = None,
         train_dataset: Optional[Union[Dataset, IterableDataset, "datasets.Dataset"]] = None,
         eval_dataset: Optional[Union[Dataset, Dict[str, Dataset], "datasets.Dataset"]] = None,
         tokenizer: Optional[PreTrainedTokenizerBase] = None,
@@ -523,6 +532,7 @@ class Trainer:
             else default_data_collator
         )
         self.data_collator = data_collator if data_collator is not None else default_collator
+        self.eval_data_collator = eval_data_collator if eval_data_collator is not None else data_collator
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
         self.tokenizer = tokenizer
@@ -961,7 +971,7 @@ class Trainer:
             if eval_dataset is not None
             else self.eval_dataset
         )
-        data_collator = self.data_collator
+        data_collator = self.eval_data_collator if self.eval_data_collator is not None else self.data_collator
 
         if is_datasets_available() and isinstance(eval_dataset, datasets.Dataset):
             eval_dataset = self._remove_unused_columns(eval_dataset, description="evaluation")
@@ -1003,7 +1013,7 @@ class Trainer:
                 The test dataset to use. If it is a [`~datasets.Dataset`], columns not accepted by the
                 `model.forward()` method are automatically removed. It must implement `__len__`.
         """
-        data_collator = self.data_collator
+        data_collator = self.eval_data_collator if self.eval_data_collator is not None else self.data_collator
 
         if is_datasets_available() and isinstance(test_dataset, datasets.Dataset):
             test_dataset = self._remove_unused_columns(test_dataset, description="test")
@@ -3600,6 +3610,7 @@ class Trainer:
         eval_dataset: Optional[Union[Dataset, Dict[str, Dataset]]] = None,
         ignore_keys: Optional[List[str]] = None,
         metric_key_prefix: str = "eval",
+        **gen_kwargs,
     ) -> Dict[str, float]:
         """
         Run evaluation and returns metrics.
@@ -3634,6 +3645,8 @@ class Trainer:
             metric_key_prefix (`str`, *optional*, defaults to `"eval"`):
                 An optional prefix to be used as the metrics key prefix. For example the metrics "bleu" will be named
                 "eval_bleu" if the prefix is "eval" (default)
+            gen_kwargs:
+                Additional `generate` specific kwargs.
 
         Returns:
             A dictionary containing the evaluation loss and the potential metrics computed from the predictions. The
@@ -3649,9 +3662,21 @@ class Trainer:
                     eval_dataset=_eval_dataset if override else eval_dataset_name,
                     ignore_keys=ignore_keys,
                     metric_key_prefix=f"{metric_key_prefix}_{eval_dataset_name}",
+                    **gen_kwargs,
                 )
                 metrics.update(dataset_metrics)
             return metrics
+
+        # Set generation-related kwargs
+        if self.args.generation_config is not None:
+            gen_config = self.args.generation_config
+            self.gen_config = copy.deepcopy(gen_config)  # copy so we don't modify args.gen_config in-place
+            unused_kwargs = self.gen_config.update(**gen_kwargs)
+            if unused_kwargs:
+                logger.warning_once(
+                    f"Following generation related kwargs were passed to `evaluate` but not used by `generate()`: {' '.join(unused_kwargs.keys())} .",
+                    "Make sure there are no typos in the passed kwargs or do not pass unused kwargs.",
+                )
 
         # memory metrics - must set up as early as possible
         self._memory_tracker.start()
@@ -3700,7 +3725,11 @@ class Trainer:
         return output.metrics
 
     def predict(
-        self, test_dataset: Dataset, ignore_keys: Optional[List[str]] = None, metric_key_prefix: str = "test"
+        self,
+        test_dataset: Dataset,
+        ignore_keys: Optional[List[str]] = None,
+        metric_key_prefix: str = "test",
+        **gen_kwargs,
     ) -> PredictionOutput:
         """
         Run prediction and returns predictions and potential metrics.
@@ -3718,6 +3747,8 @@ class Trainer:
             metric_key_prefix (`str`, *optional*, defaults to `"test"`):
                 An optional prefix to be used as the metrics key prefix. For example the metrics "bleu" will be named
                 "test_bleu" if the prefix is "test" (default)
+            gen_kwargs:
+                Additional `generate` specific kwargs.
 
         <Tip>
 
@@ -3734,6 +3765,17 @@ class Trainer:
             - metrics (`Dict[str, float]`, *optional*): The potential dictionary of metrics (if the dataset contained
               labels).
         """
+        # Set generation-related kwargs
+        if self.args.generation_config is not None:
+            gen_config = self.args.generation_config
+            self.gen_config = copy.deepcopy(gen_config)  # copy so we don't modify args.gen_config in-place
+            unused_kwargs = self.gen_config.update(**gen_kwargs)
+            if unused_kwargs:
+                logger.warning_once(
+                    f"Following generation related kwargs were passed to `evaluate` but not used by `generate()`: {' '.join(unused_kwargs.keys())} .",
+                    "Make sure there are no typos in the passed kwargs or do not pass unused kwargs.",
+                )
+
         # memory metrics - must set up as early as possible
         self._memory_tracker.start()
 
@@ -4001,6 +4043,7 @@ class Trainer:
         inputs: Dict[str, Union[torch.Tensor, Any]],
         prediction_loss_only: bool,
         ignore_keys: Optional[List[str]] = None,
+        **gen_kwargs,
     ) -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor], Optional[torch.Tensor]]:
         """
         Perform an evaluation step on `model` using `inputs`.
@@ -4020,12 +4063,27 @@ class Trainer:
             ignore_keys (`List[str]`, *optional*):
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
                 gathering predictions.
+            gen_kwargs:
+                Additional `generate` specific kwargs.
 
         Return:
             Tuple[Optional[torch.Tensor], Optional[torch.Tensor], Optional[torch.Tensor]]: A tuple with the loss,
             logits and labels (each being optional).
         """
         has_labels = False if len(self.label_names) == 0 else all(inputs.get(k) is not None for k in self.label_names)
+
+        # Prioroty: gen_kwargs > args.gen_config > model.generation_config > default GenerationConfig()
+        gen_config = self.gen_config
+        default_synced_gpus = True if is_deepspeed_zero3_enabled() else False
+        synced_gpus = gen_kwargs.get("synced_gpus", default_synced_gpus)
+        if len(gen_kwargs) > 0:
+            unused_kwargs = gen_config.update(**gen_kwargs)
+            if unused_kwargs:
+                logger.warning_once(
+                    f"Following generation related kwargs were passed to `prediction_step` but not used by `generate()`: {' '.join(unused_kwargs.keys())} .",
+                    "Make sure there are no typos in the passed kwargs or do not pass unused kwargs.",
+                )
+
         # For CLIP-like models capable of returning loss values.
         # If `return_loss` is not specified or being `None` in `inputs`, we check if the default value of `return_loss`
         # is `True` in `model.forward`.
@@ -4049,6 +4107,38 @@ class Trainer:
         else:
             labels = None
 
+        # If the `generation_input_ids` was passed in inputs, the model can generate and we need to modify
+        # input keys. Otherwise, we don't know the `prompt` to generate from
+        if self.args.predict_with_generate and not prediction_loss_only:
+            generation_inputs = inputs.copy()
+            if "generation_input_ids" in generation_inputs:
+                # get inputs that are related to text and contain only generation prompt
+                generation_only_inputs = {
+                    k.replace("generation_", ""): v for k, v in generation_inputs.items() if "generation_" in k
+                }
+
+                # get common inputs that are not related to text, e.g. pixel-values
+                gen_keys = generation_only_inputs.keys()
+                generation_inputs_common = {
+                    k: v
+                    for k, v in generation_inputs.items()
+                    if k.replace("generation_", "") not in gen_keys and "generation" not in k
+                }
+                generated_tokens = self.model.generate(
+                    **generation_inputs_common,
+                    **generation_only_inputs,
+                    generation_config=gen_config,
+                    synced_gpus=synced_gpus,
+                )
+            else:
+                logger.warning_once(
+                    "`predict_with_generate` is set to `True` but no inputs are passed for generation. ",
+                    "Make sure you have `generation_input_ids` and `generation_attention_mask`.",
+                )
+                generated_tokens = None
+
+        # clean up inputs for loss from generation related input tensors if there are any before doing `forward`
+        inputs = {k: v for k, v in inputs.items() if "generation_" not in k}
         with torch.no_grad():
             if is_sagemaker_mp_enabled():
                 raw_outputs = smp_forward_only(model, inputs)
@@ -4093,6 +4183,9 @@ class Trainer:
 
         if prediction_loss_only:
             return (loss, None, None)
+
+        if self.args.predict_with_generate and not prediction_loss_only:
+            return (loss, generated_tokens, labels)
 
         logits = nested_detach(logits)
         if len(logits) == 1:
