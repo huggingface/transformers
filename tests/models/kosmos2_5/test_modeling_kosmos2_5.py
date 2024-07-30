@@ -504,29 +504,43 @@ class Kosmos2_5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     @require_torch_gpu
     @pytest.mark.flash_attn_test
     @slow
+    @unittest.skipTest(reason="kosmos-2.5 flash attention does not support right padding")
     def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest(reason="kosmos-2.5 flash attention does not support right padding")
+        pass
 
     # TODO: ydshieh
     @require_torch_gpu
     @pytest.mark.flash_attn_test
     @slow
+    @unittest.skipTest(reason="kosmos-2.5 test : the dummy inputs should be tweaked: dummy_input = inputs_dict")
     def test_flash_attn_2_inference_equivalence(self):
-        self.skipTest(reason="kosmos-2.5 test : the dummy inputs should be tweaked: dummy_input = inputs_dict")
+        pass
 
     # TODO: ydshieh
     @require_torch_sdpa
     @require_torch_gpu
     @slow
+    @unittest.skipTest(reason="_update_causal_mask is not implemented yet which fails this test")
     def test_sdpa_can_dispatch_on_flash(self):
-        self.skipTest(reason="_update_causal_mask is not implemented yet which fails this test")
-
-    def test_eager_matches_sdpa_inference_1_bfloat16(self):
-        self.skipTest(reason="doesn't support padding yet")
+        pass
 
     # TODO: ydshieh
+    @unittest.skipTest(reason="doesn't support padding yet")
+    def test_eager_matches_sdpa_inference_1_bfloat16(self):
+        pass
+
+    # TODO: ydshieh
+    unittest.skip(reason=" the model hasn't been added to auto class")
     def test_flash_attn_2_from_config(self):
-        self.skipTest(reason=" the model hasn't been added to auto class")
+        pass
+
+    @unittest.skip("This test is currently not well designed for multimodal model (float type as an input).")
+    def test_flash_attn_2_fp32_ln(self):
+        pass
+
+    @unittest.skip("This test is currently not well designed for multimodal model (float type as an input).")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        pass
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
