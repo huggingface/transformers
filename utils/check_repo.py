@@ -31,7 +31,6 @@ python utils/check_repo.py
 It has no auto-fix mode.
 """
 
-import inspect
 import os
 import re
 import sys
@@ -1100,8 +1099,8 @@ def check_public_method_exists(documented_methods_map):
                 continue
             if not hasattr(obj_class, method):
                 failures.append(
-                    "The following public methods are explicitly documented but not defined in the corresponding "
-                    f"class: {obj}.{method}"
+                    "The following public method is explicitly documented but not defined in the corresponding "
+                    f"class: {obj}, method: {method}"
                 )
 
     if len(failures) > 0:
@@ -1166,6 +1165,7 @@ def check_deprecated_constant_is_up_to_date():
 
 def check_repo_quality():
     """Check all models are tested and documented."""
+    print("Repository-wide checks:")
     print("    - checking all models are included.")
     check_model_list()
     print("    - checking all models are public.")
