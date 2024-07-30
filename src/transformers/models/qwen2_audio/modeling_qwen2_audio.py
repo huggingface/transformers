@@ -590,7 +590,6 @@ QWEN2AUDIOENCODER_START_DOCSTRING = r"""
 )
 # Copied from transformers.models.whisper.modeling_whisper.WhisperEncoder with Whisper->Qwen2Audio
 class Qwen2AudioEncoder(Qwen2AudioPreTrainedModel):
-    # Ignore copy
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
     [`Qwen2AudioEncoderLayer`].
