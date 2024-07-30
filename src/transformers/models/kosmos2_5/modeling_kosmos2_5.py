@@ -636,7 +636,7 @@ class Kosmos2_5VisionFlashAttention2(Kosmos2_5VisionAttention):
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
             is_causal=self.is_causal,
         )
-        
+
         attn_output = attn_output.view(batch_size, -1, self.inner_dim)
         attn_output = self.output(attn_output)
 
