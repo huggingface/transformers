@@ -1876,142 +1876,168 @@ class ModelPushToHubTester(unittest.TestCase):
         cls._token = TOKEN
         HfFolder.save_token(TOKEN)
 
-    @classmethod
-    def tearDownClass(cls):
+    @staticmethod
+    def _try_delete_repo(repo_id, token):
         try:
-            delete_repo(token=cls._token, repo_id="test-model")
-        except HTTPError:
-            pass
-
-        try:
-            delete_repo(token=cls._token, repo_id="valid_org/test-model-org")
-        except HTTPError:
-            pass
-
-        try:
-            delete_repo(token=cls._token, repo_id="test-dynamic-model")
-        except HTTPError:
-            pass
-
-        try:
-            delete_repo(token=cls._token, repo_id="test-dynamic-model-with-tags")
-        except HTTPError:
+            # Reset repo
+            delete_repo(repo_id=repo_id, token=token)
+        except:  # noqa E722
             pass
 
     @unittest.skip(reason="This test is flaky")
     def test_push_to_hub(self):
-        config = BertConfig(
-            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
-        )
-        model = BertModel(config)
-        model.push_to_hub("test-model", token=self._token)
-
-        new_model = BertModel.from_pretrained(f"{USER}/test-model")
-        for p1, p2 in zip(model.parameters(), new_model.parameters()):
-            self.assertTrue(torch.equal(p1, p2))
-
-        try:
-            # Reset repo
-            delete_repo(token=self._token, repo_id="test-model")
-        except:  # noqa E722
-            pass
-
-        # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir, repo_id="test-model", push_to_hub=True, token=self._token)
+            try:
+                tmp_repo = f"{USER}/test-model-{Path(tmp_dir).name}"
+                config = BertConfig(
+                    vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+                )
+                model = BertModel(config)
+                model.push_to_hub(tmp_repo, token=self._token)
 
-        new_model = BertModel.from_pretrained(f"{USER}/test-model")
-        for p1, p2 in zip(model.parameters(), new_model.parameters()):
-            self.assertTrue(torch.equal(p1, p2))
+                new_model = BertModel.from_pretrained(tmp_repo)
+                for p1, p2 in zip(model.parameters(), new_model.parameters()):
+                    self.assertTrue(torch.equal(p1, p2))
+            finally:
+                # Always (try to) delete the repo.
+                self._try_delete_repo(repo_id=tmp_repo, token=self._token)
+
+    @unittest.skip(reason="This test is flaky")
+    def test_push_to_hub_via_save_pretrained(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            try:
+                tmp_repo = f"{USER}/test-model-{Path(tmp_dir).name}"
+                config = BertConfig(
+                    vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+                )
+                model = BertModel(config)
+                # Push to hub via save_pretrained
+                model.save_pretrained(tmp_dir, repo_id=tmp_repo, push_to_hub=True, token=self._token)
+
+                new_model = BertModel.from_pretrained(tmp_repo)
+                for p1, p2 in zip(model.parameters(), new_model.parameters()):
+                    self.assertTrue(torch.equal(p1, p2))
+            finally:
+                # Always (try to) delete the repo.
+                self._try_delete_repo(repo_id=tmp_repo, token=self._token)
 
     def test_push_to_hub_with_description(self):
-        config = BertConfig(
-            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
-        )
-        model = BertModel(config)
-        COMMIT_DESCRIPTION = """
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            try:
+                tmp_repo = f"{USER}/test-model-{Path(tmp_dir).name}"
+                config = BertConfig(
+                    vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+                )
+                model = BertModel(config)
+                COMMIT_DESCRIPTION = """
 The commit description supports markdown synthax see:
 ```python
 >>> form transformers import AutoConfig
 >>> config = AutoConfig.from_pretrained("google-bert/bert-base-uncased")
 ```
 """
-        commit_details = model.push_to_hub(
-            "test-model", use_auth_token=self._token, create_pr=True, commit_description=COMMIT_DESCRIPTION
-        )
-        self.assertEqual(commit_details.commit_description, COMMIT_DESCRIPTION)
+                commit_details = model.push_to_hub(
+                    tmp_repo, use_auth_token=self._token, create_pr=True, commit_description=COMMIT_DESCRIPTION
+                )
+                self.assertEqual(commit_details.commit_description, COMMIT_DESCRIPTION)
+            finally:
+                # Always (try to) delete the repo.
+                self._try_delete_repo(repo_id=tmp_repo, token=self._token)
 
     @unittest.skip(reason="This test is flaky")
     def test_push_to_hub_in_organization(self):
-        config = BertConfig(
-            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
-        )
-        model = BertModel(config)
-        model.push_to_hub("valid_org/test-model-org", token=self._token)
-
-        new_model = BertModel.from_pretrained("valid_org/test-model-org")
-        for p1, p2 in zip(model.parameters(), new_model.parameters()):
-            self.assertTrue(torch.equal(p1, p2))
-
-        try:
-            # Reset repo
-            delete_repo(token=self._token, repo_id="valid_org/test-model-org")
-        except:  # noqa E722
-            pass
-
-        # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir, push_to_hub=True, token=self._token, repo_id="valid_org/test-model-org")
+            try:
+                tmp_repo = f"valid_org/test-model-org-{Path(tmp_dir).name}"
+                config = BertConfig(
+                    vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+                )
+                model = BertModel(config)
+                model.push_to_hub(tmp_repo, token=self._token)
 
-        new_model = BertModel.from_pretrained("valid_org/test-model-org")
-        for p1, p2 in zip(model.parameters(), new_model.parameters()):
-            self.assertTrue(torch.equal(p1, p2))
+                new_model = BertModel.from_pretrained(tmp_repo)
+                for p1, p2 in zip(model.parameters(), new_model.parameters()):
+                    self.assertTrue(torch.equal(p1, p2))
+            finally:
+                # Always (try to) delete the repo.
+                self._try_delete_repo(repo_id=tmp_repo, token=self._token)
+
+    @unittest.skip(reason="This test is flaky")
+    def test_push_to_hub_in_organization_via_save_pretrained(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            try:
+                tmp_repo = f"valid_org/test-model-org-{Path(tmp_dir).name}"
+                config = BertConfig(
+                    vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+                )
+                model = BertModel(config)
+                # Push to hub via save_pretrained
+                model.save_pretrained(tmp_dir, push_to_hub=True, token=self._token, repo_id=tmp_repo)
+
+                new_model = BertModel.from_pretrained(tmp_repo)
+                for p1, p2 in zip(model.parameters(), new_model.parameters()):
+                    self.assertTrue(torch.equal(p1, p2))
+            finally:
+                # Always (try to) delete the repo.
+                self._try_delete_repo(repo_id=tmp_repo, token=self._token)
 
     def test_push_to_hub_dynamic_model(self):
-        CustomConfig.register_for_auto_class()
-        CustomModel.register_for_auto_class()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            try:
+                tmp_repo = f"{USER}/test-dynamic-model-{Path(tmp_dir).name}"
+                CustomConfig.register_for_auto_class()
+                CustomModel.register_for_auto_class()
 
-        config = CustomConfig(hidden_size=32)
-        model = CustomModel(config)
+                config = CustomConfig(hidden_size=32)
+                model = CustomModel(config)
 
-        model.push_to_hub("test-dynamic-model", token=self._token)
-        # checks
-        self.assertDictEqual(
-            config.auto_map,
-            {"AutoConfig": "custom_configuration.CustomConfig", "AutoModel": "custom_modeling.CustomModel"},
-        )
+                model.push_to_hub(tmp_repo, token=self._token)
+                # checks
+                self.assertDictEqual(
+                    config.auto_map,
+                    {"AutoConfig": "custom_configuration.CustomConfig", "AutoModel": "custom_modeling.CustomModel"},
+                )
 
-        new_model = AutoModel.from_pretrained(f"{USER}/test-dynamic-model", trust_remote_code=True)
-        # Can't make an isinstance check because the new_model is from the CustomModel class of a dynamic module
-        self.assertEqual(new_model.__class__.__name__, "CustomModel")
-        for p1, p2 in zip(model.parameters(), new_model.parameters()):
-            self.assertTrue(torch.equal(p1, p2))
+                new_model = AutoModel.from_pretrained(tmp_repo, trust_remote_code=True)
+                # Can't make an isinstance check because the new_model is from the CustomModel class of a dynamic module
+                self.assertEqual(new_model.__class__.__name__, "CustomModel")
+                for p1, p2 in zip(model.parameters(), new_model.parameters()):
+                    self.assertTrue(torch.equal(p1, p2))
 
-        config = AutoConfig.from_pretrained(f"{USER}/test-dynamic-model", trust_remote_code=True)
-        new_model = AutoModel.from_config(config, trust_remote_code=True)
-        self.assertEqual(new_model.__class__.__name__, "CustomModel")
+                config = AutoConfig.from_pretrained(tmp_repo, trust_remote_code=True)
+                new_model = AutoModel.from_config(config, trust_remote_code=True)
+                self.assertEqual(new_model.__class__.__name__, "CustomModel")
+            finally:
+                # Always (try to) delete the repo.
+                self._try_delete_repo(repo_id=tmp_repo, token=self._token)
 
     def test_push_to_hub_with_tags(self):
-        from huggingface_hub import ModelCard
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            try:
+                tmp_repo = f"{USER}/test-dynamic-model-with-tags-{Path(tmp_dir).name}"
+                from huggingface_hub import ModelCard
 
-        new_tags = ["tag-1", "tag-2"]
+                new_tags = ["tag-1", "tag-2"]
 
-        CustomConfig.register_for_auto_class()
-        CustomModel.register_for_auto_class()
+                CustomConfig.register_for_auto_class()
+                CustomModel.register_for_auto_class()
 
-        config = CustomConfig(hidden_size=32)
-        model = CustomModel(config)
+                config = CustomConfig(hidden_size=32)
+                model = CustomModel(config)
 
-        self.assertTrue(model.model_tags is None)
+                self.assertTrue(model.model_tags is None)
 
-        model.add_model_tags(new_tags)
+                model.add_model_tags(new_tags)
 
-        self.assertTrue(model.model_tags == new_tags)
+                self.assertTrue(model.model_tags == new_tags)
 
-        model.push_to_hub("test-dynamic-model-with-tags", token=self._token)
+                model.push_to_hub(tmp_repo, token=self._token)
 
-        loaded_model_card = ModelCard.load(f"{USER}/test-dynamic-model-with-tags")
-        self.assertEqual(loaded_model_card.data.tags, new_tags)
+                loaded_model_card = ModelCard.load(tmp_repo)
+                self.assertEqual(loaded_model_card.data.tags, new_tags)
+            finally:
+                # Always (try to) delete the repo.
+                self._try_delete_repo(repo_id=tmp_repo, token=self._token)
 
 
 @require_torch
