@@ -1555,7 +1555,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
         ...   "In which city is that bridge located?<image>",
         ... ]
         >>> images = [[image1, image2], [image3]]
-        >>> inputs = processor(text=prompts, padding=True, return_tensors="pt").to("cuda")
+        >>> inputs = processor(text=prompts, images=images, padding=True, return_tensors="pt").to("cuda")
 
         >>> # Generate
         >>> generated_ids = model.generate(**inputs, bad_words_ids=BAD_WORDS_IDS, max_new_tokens=20)
