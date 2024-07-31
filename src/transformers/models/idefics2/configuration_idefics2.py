@@ -213,6 +213,7 @@ class Idefics2Config(PretrainedConfig):
 
     model_type = "idefics2"
     is_composition = True
+    keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
         self,

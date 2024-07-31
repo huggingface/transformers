@@ -3677,6 +3677,8 @@ class Trainer:
                     f"Following generation related kwargs were passed to `evaluate` but not used by `generate()`: {' '.join(unused_kwargs.keys())} .",
                     "Make sure there are no typos in the passed kwargs or do not pass unused kwargs.",
                 )
+        else:
+            self.gen_config = self.model.generation_config
 
         # memory metrics - must set up as early as possible
         self._memory_tracker.start()
@@ -4131,11 +4133,10 @@ class Trainer:
                     synced_gpus=synced_gpus,
                 )
             else:
-                logger.warning_once(
+                raise ValueError(
                     "`predict_with_generate` is set to `True` but no inputs are passed for generation. ",
                     "Make sure you have `generation_input_ids` and `generation_attention_mask`.",
                 )
-                generated_tokens = None
 
         # clean up inputs for loss from generation related input tensors if there are any before doing `forward`
         inputs = {k: v for k, v in inputs.items() if "generation_" not in k}
