@@ -1596,7 +1596,6 @@ def convert_slow_tokenizer(transformer_tokenizer, tiktoken=False) -> Tokenizer:
     """
 
     tokenizer_class_name = transformer_tokenizer.__class__.__name__
-    tiktoken = True
     if tokenizer_class_name in SLOW_TO_FAST_CONVERTERS and not tiktoken:
         converter_class = SLOW_TO_FAST_CONVERTERS[tokenizer_class_name]
         return converter_class(transformer_tokenizer).converted()
