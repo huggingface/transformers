@@ -828,13 +828,13 @@ class CommonSpmIntegrationTests(unittest.TestCase):
     @require_read_token
     def test_bos_eos_tokens(self):
         tokenizer = AutoTokenizer.from_pretrained("huggyllama/llama-7b", add_bos_token=False, add_eos_token=True)
-        assert tokenizer("hello")["input_ids"][0] != tokenizer.bos_token_id  # no bos token
-        assert tokenizer("hello")["input_ids"][-1] == tokenizer.eos_token_id  # eos token
+        self.assertNotEqual(tokenizer("hello")["input_ids"][0], tokenizer.bos_token_id) # no bos token
+        self.assertEqual(tokenizer("hello")["input_ids"][-1], tokenizer.eos_token_id)  # eos token
 
         tokenizer.add_special_tokens({"eos_token": "<new_eos>"})  # update new eos token
         tokens = tokenizer.tokenize("hello", add_special_tokens=True)
-        assert tokens[-1] == "<new_eos>"
+        self.assertEqual(tokens[-1], "<new_eos>")
 
         tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-Llama-3-8B", add_bos_token=True, add_eos_token=True)
-        assert tokenizer("hello")["input_ids"][0] == tokenizer.bos_token_id  # bos token
-        assert tokenizer("hello")["input_ids"][-1] == tokenizer.eos_token_id  # eos token
+        self.assertEqual(tokenizer("hello")["input_ids"][0], tokenizer.bos_token_id)  # bos token
+        self.assertEqual(tokenizer("hello")["input_ids"][-1], tokenizer.eos_token_id)  # eos token
