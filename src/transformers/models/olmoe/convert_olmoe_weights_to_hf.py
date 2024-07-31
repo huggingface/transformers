@@ -11,16 +11,20 @@
 # limitations under the License.
 """
 Example for running:
+0. Cp ckpts to local
+aws s3 cp --recursive s3://ai2-llm/checkpoints/OLMoE/olmoe-8x1b-newhp-newds-final-annealFrom1200000/step23842 /data/niklas/llm/checkpoints/olmoe-8x1b-newhp-newds-final-annealFrom1200000_step23842
 1. Unshard your OLMo checkpoint
 python OLMo/scripts/unshard.py /data/niklas/llm/checkpoints/23485/step954000 /data/niklas/llm/checkpoints/1b-954000-unsharded --model-only
+python OLMo/scripts/unshard.py /data/niklas/llm/checkpoints/23485/step954000 /data/niklas/llm/checkpoints/1b-954000-unsharded --model-only
+python OLMo/scripts/unshard.py /data/niklas/llm/checkpoints/olmoe-8x1b-newhp-newds-final-annealFrom1200000_step23842 /data/niklas/llm/checkpoints/olmoe-8x1b-newhp-newds-final-annealFrom1200000_step23842-unsharded --model-only
 2. Convert to transformers:
-rm -rf olmoe; mkdir olmoe; python transformers/src/transformers/models/olmoe/convert_olmoe_weights_to_hf.py --input_dir /data/niklas/llm/checkpoints/olmoe-step1200000-unsharded-pt --tokenizer_json_path /data/niklas/llm/checkpoints/olmoe-step1200000-unsharded/tokenizer.json --output_dir olmoe
-rm -rf olmoe; mkdir olmoe; python /home/niklas/transformers/src/transformers/models/olmoe/convert_olmoe_weights_to_hf.py --input_dir /data/niklas/llm/checkpoints/olmoe-step1200000-unsharded-pt --tokenizer_json_path /data/niklas/llm/checkpoints/olmoe-step1200000-unsharded/tokenizer.json --output_dir olmoe
+rm -rf olmoe; mkdir olmoe; python /data/niklas/transformers/src/transformers/models/olmoe/convert_olmoe_weights_to_hf.py --input_dir /data/niklas/llm/checkpoints/olmoe-8x1b-newhp-newds-final-annealFrom1200000_step23842-unsharded --tokenizer_json_path /data/niklas/llm/checkpoints/olmoe-step1200000-unsharded/tokenizer.json --output_dir olmoe
 3. Load model via:
 ```
 from transformers import OlmoeForCausalLM, AutoTokenizer
 import torch
 model = OlmoeForCausalLM.from_pretrained("../transformers/olmoe", torch_dtype=torch.bfloat16).cuda()
+model = OlmoeForCausalLM.from_pretrained("../transformers/olmoe").cuda()
 tokenizer = AutoTokenizer.from_pretrained("../transformers/olmoe")
 inputs = tokenizer("Bitcoin is", return_tensors="pt")
 inputs = {k: v.cuda() for k, v in inputs.items()}
@@ -29,6 +33,8 @@ print(tokenizer.decode(out[0]))
 # > # Bitcoin is a digital currency that is created and held electronically. No one controls it. Bitcoins aren’t printed, like dollars or euros – they’re produced by people and businesses running computers all around the world, using software that solves mathematical
 # Or manually:
 o = model(torch.tensor([[0, 1]]).cuda())
+# In FP32
+# > # Bitcoin is a digital currency that is not controlled by any central authority. It is a peer-to-peer payment system that allows users to send and receive payments from anywhere in the world. Bitcoin is also known as a cryptocurrency because it uses cryptography to secure transactions and prevent fraud.
 ```
 
 Note: you need to be able to host the whole model in RAM to execute this script (even if the biggest versions
@@ -40,7 +46,7 @@ from olmo.model import OLMo
 import torch
 model = OLMo.from_checkpoint("/data/niklas/llm/checkpoints/olmoe-step1200000-unsharded-pt")
 model = model.cuda()
-model = model.to(torch.bfloat16)
+#model = model.to(torch.bfloat16)
 from transformers import AutoTokenizer
 tokenizer = AutoTokenizer.from_pretrained("../transformers/olmoe")
 inputs = tokenizer("Bitcoin is", return_tensors="pt")
@@ -89,6 +95,9 @@ def write_model(model_path, input_base_path, tokenizer_path=None, safe_serializa
     config_path = Path(input_base_path) / "config.yaml"
     olmoe_config = yaml.safe_load(config_path.read_text())["model"]
 
+    if fix_eos_token_id:
+        olmoe_config["eos_token_id"] = 50279
+
     n_layers = olmoe_config["n_layers"]
     n_heads = olmoe_config["n_heads"]
     dim = olmoe_config["d_model"]
@@ -133,17 +142,14 @@ def write_model(model_path, input_base_path, tokenizer_path=None, safe_serializa
 
         num_experts = loaded[f"transformer.blocks.{layer_i}.ffn.router.layer.weight"].shape[0]
         dim_per_expert = loaded[f"transformer.blocks.{layer_i}.ffn.experts.mlp.w1"].shape[0] // num_experts
-        print(f"Layer {layer_i} has {num_experts} experts with {dim_per_expert} dimensions each.")
         for expert_i in range(num_experts):
             state_dict[f"model.layers.{layer_i}.mlp.experts.{expert_i}.gate_proj.weight"] = loaded[f"transformer.blocks.{layer_i}.ffn.experts.mlp.w1"][dim_per_expert*expert_i:dim_per_expert*(expert_i+1), :]
             state_dict[f"model.layers.{layer_i}.mlp.experts.{expert_i}.up_proj.weight"] = loaded[f"transformer.blocks.{layer_i}.ffn.experts.mlp.v1"][dim_per_expert*expert_i:dim_per_expert*(expert_i+1), :]
             state_dict[f"model.layers.{layer_i}.mlp.experts.{expert_i}.down_proj.weight"] = loaded[f"transformer.blocks.{layer_i}.ffn.experts.mlp.w2"][dim_per_expert*expert_i:dim_per_expert*(expert_i+1), :].T.contiguous()
-            #state_dict[f"model.layers.{layer_i}.mlp.experts.{expert_i}.down_proj.weight"] = loaded[f"transformer.blocks.{layer_i}.ffn.experts.mlp.w2"][dim_per_expert*expert_i:dim_per_expert*(expert_i+1), :].reshape(-1, dim_per_expert).contiguous()
 
         state_dict[f"model.layers.{layer_i}.self_attn.rotary_emb.inv_freq"] = inv_freq
 
         for k, v in state_dict.items():
-            print(f"Counting {k}.")
             index_dict["weight_map"][k] = filename
             param_count += v.numel()
         torch.save(state_dict, os.path.join(tmp_model_path, filename))
