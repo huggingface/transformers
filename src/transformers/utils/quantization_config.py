@@ -42,6 +42,7 @@ class QuantizationMethod(str, Enum):
     QUANTO = "quanto"
     EETQ = "eetq"
     HQQ = "hqq"
+    FBGEMM_FP8 = "fbgemm_fp8"
 
 
 class AWQLinearVersion(str, Enum):
@@ -1047,3 +1048,34 @@ class EetqConfig(QuantizationConfigMixin):
         accepted_weights = ["int8"]
         if self.weights not in accepted_weights:
             raise ValueError(f"Only support weights in {accepted_weights} but found {self.weights}")
+
+
+@dataclass
+class FbgemmFp8Config(QuantizationConfigMixin):
+    """
+    This is a wrapper class about all possible attributes and features that you can play with a model that has been
+    loaded using fbgemm fp8 quantization.
+
+    Args:
+        activation_scale_ub (`float`, *optional*, defaults to 1200.0):
+            The activation scale upper bound. This is used when quantizing the input activation.
+        modules_to_not_convert (`list`, *optional*, default to `None`):
+            The list of modules to not quantize, useful for quantizing models that explicitly require to have
+            some modules left in their original precision.
+    """
+
+    def __init__(
+        self,
+        activation_scale_ub: float = 1200.0,
+        modules_to_not_convert: Optional[List] = None,
+        **kwargs,
+    ):
+        self.quant_method = QuantizationMethod.FBGEMM_FP8
+        self.activation_scale_ub = activation_scale_ub
+        self.modules_to_not_convert = modules_to_not_convert
+
+    def get_loading_attributes(self):
+        attibutes_dict = copy.deepcopy(self.__dict__)
+        loading_attibutes = ["activation_scale_ub"]
+        loading_attibutes_dict = {i: j for i, j in attibutes_dict.items() if i in loading_attibutes}
+        return loading_attibutes_dict

@@ -39,7 +39,7 @@ if is_torch_available():
     from transformers.models.flaubert.modeling_flaubert import create_sinusoidal_embeddings
 
 
-class FlaubertModelTester(object):
+class FlaubertModelTester:
     def __init__(
         self,
         parent,

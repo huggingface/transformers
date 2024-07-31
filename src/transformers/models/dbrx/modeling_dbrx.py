@@ -144,7 +144,7 @@ def load_balancing_loss_func(
             Number of experts.
         top_k (`int`):
             The number of experts each token is routed to.
-        attention_mask (`torch.Tensor`, None):
+        attention_mask (`torch.Tensor`, *optional*):
             The attention_mask used in forward function
             shape [batch_size X sequence_length] if not None.
 
@@ -415,6 +415,7 @@ class DbrxFlashAttention2(DbrxAttention):
             value_states,
             attention_mask,
             q_len,
+            position_ids=position_ids,
             dropout=dropout_rate,
             is_causal=self.is_causal,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
@@ -756,16 +757,16 @@ class DbrxBlock(nn.Module):
         Args:
             hidden_states (`torch.Tensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
             position_ids (`torch.LongTensor`): position ids of shape `(batch, seq_len)`
-            attention_mask (`torch.Tensor`, optional): attention mask of size (batch_size, sequence_length)
+            attention_mask (`torch.Tensor`, *optional*): attention mask of size (batch_size, sequence_length)
                 if flash attention is used or (batch_size, 1, query_sequence_length, key_sequence_length)
                 if default attention is used.
-            past_key_value (`Tuple(torch.Tensor)`, optional): cached past key and value projection states
-            output_attentions (`bool`, optional): Whether or not to return the attentions tensors of all
+            past_key_value (`Tuple(torch.Tensor)`, *optional*): cached past key and value projection states
+            output_attentions (`bool`, *optional*): Whether or not to return the attentions tensors of all
                 attention layers. See `attentions` under returned tensors for more detail.
-            output_router_logits (`bool`, optional): Whether or not to return the router logits.
-            use_cache (`bool`, optional): If set to `True`, `past_key_values` key value states are
+            output_router_logits (`bool`, *optional*): Whether or not to return the router logits.
+            use_cache (`bool`, *optional*): If set to `True`, `past_key_values` key value states are
                 returned and can be used to speed up decoding (see `past_key_values`).
-            cache_position (`torch.LongTensor`, optional): position ids of the cache
+            cache_position (`torch.LongTensor`, *optional*): position ids of the cache
         """
 
         # Norm + Attention + Norm
@@ -1004,7 +1005,9 @@ class DbrxModel(DbrxPreTrainedModel):
         inputs_embeds = nn.functional.dropout(inputs_embeds, p=self.emb_pdrop, training=self.training)
 
         return_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache):  # kept for BC (non `Cache` `past_key_values` inputs)
+        if (
+            use_cache and not isinstance(past_key_values, Cache) and not self.training
+        ):  # kept for BC (non `Cache` `past_key_values` inputs)
             return_legacy_cache = True
             past_key_values = DynamicCache.from_legacy_cache(past_key_values)
             logger.warning_once(

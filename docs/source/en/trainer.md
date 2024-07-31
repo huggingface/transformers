@@ -278,7 +278,7 @@ args = TrainingArguments(
     max_steps=100,
     per_device_train_batch_size=2,
     optim="galore_adamw",
-    optim_target_modules=["attn", "mlp"]
+    optim_target_modules=[r".*.attn.*", r".*.mlp.*"]
 )
 
 model_id = "google/gemma-2b"
@@ -315,7 +315,7 @@ args = TrainingArguments(
     max_steps=100,
     per_device_train_batch_size=2,
     optim="galore_adamw",
-    optim_target_modules=["attn", "mlp"],
+    optim_target_modules=[r".*.attn.*", r".*.mlp.*"],
     optim_args="rank=64, update_proj_gap=100, scale=0.10",
 )
 
@@ -359,7 +359,7 @@ args = TrainingArguments(
     max_steps=100,
     per_device_train_batch_size=2,
     optim="galore_adamw_layerwise",
-    optim_target_modules=["attn", "mlp"]
+    optim_target_modules=[r".*.attn.*", r".*.mlp.*"]
 )
 
 model_id = "google/gemma-2b"

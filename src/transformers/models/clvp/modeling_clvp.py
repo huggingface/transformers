@@ -239,6 +239,9 @@ class ClvpRMSNorm(nn.Module):
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
         return self.weight * hidden_states.to(input_dtype)
 
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
 
 class ClvpRotaryPositionalEmbedding(nn.Module):
     """
@@ -1681,7 +1684,7 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
 
         >>> # Define the Text and Load the Audio (We are taking an audio example from HuggingFace Hub using `datasets` library)
         >>> text = "This is an example text."
-        >>> ds = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True)
+        >>> ds = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.cast_column("audio", datasets.Audio(sampling_rate=22050))
         >>> _, audio, sr = ds.sort("id").select(range(1))[:1]["audio"][0].values()
 
@@ -1754,7 +1757,7 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
         >>> # Define the Text and Load the Audio (We are taking an audio example from HuggingFace Hub using `datasets` library)
         >>> text = "This is an example text."
 
-        >>> ds = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True)
+        >>> ds = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.cast_column("audio", datasets.Audio(sampling_rate=22050))
         >>> _, audio, sr = ds.sort("id").select(range(1))[:1]["audio"][0].values()
 
