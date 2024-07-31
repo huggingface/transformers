@@ -838,7 +838,7 @@ class TikTokenIntegrationTests(unittest.TestCase):
     def test_tiktoken_llama(self):
         model_path = "hf-internal-testing/Llama3-Instruct-Internal"
         test_text = "This is a test sentence."
-        test_tokens = [2028, 374, 264, 1296, 11914, 13]
+        test_tokens = [128000, 2028, 374, 264, 1296, 11914, 13, 128001]
         num_reserved_special_tokens = 256
         special_tokens = [
             "<|begin_of_text|>",
@@ -864,11 +864,11 @@ class TikTokenIntegrationTests(unittest.TestCase):
         self.assertEqual(tokens[0], "<|begin_of_text|>")
 
         tiktoken_tokenizer = AutoTokenizer.from_pretrained(
-            model_path, legacy=False, additional_special_tokens=special_tokens
+            model_path, legacy=False, additional_special_tokens=special_tokens, add_bos_token=True, add_eos_token=True
         )
         self.assertTrue(isinstance(tiktoken_tokenizer, PreTrainedTokenizerFast))
 
-        tokens = tiktoken_tokenizer.encode(test_text)
+        tokens = tiktoken_tokenizer.encode(test_text, add_special_tokens=True)
         self.assertEqual(tokens, test_tokens)
 
         tmpdirname = tempfile.mkdtemp()
@@ -876,12 +876,16 @@ class TikTokenIntegrationTests(unittest.TestCase):
         tokenizer_reload = AutoTokenizer.from_pretrained(tmpdirname)
 
         self.assertTrue(isinstance(tokenizer_reload, PreTrainedTokenizerFast))
-        tokens = tokenizer_reload.encode(test_text)
+        tokens = tokenizer_reload.encode(test_text, add_special_tokens=True)
         self.assertEqual(tokens, test_tokens)
         shutil.rmtree(tmpdirname)
 
         tiktoken_tokenizer = AutoTokenizer.from_pretrained(
-            model_path, additional_special_tokens=special_tokens, from_slow=True
+            model_path,
+            additional_special_tokens=special_tokens,
+            from_slow=True,
+            add_bos_token=True,
+            add_eos_token=True,
         )
-        tokens = tiktoken_tokenizer.encode(test_text)
+        tokens = tiktoken_tokenizer.encode(test_text, add_special_tokens=True)
         self.assertEqual(tokens, test_tokens)
