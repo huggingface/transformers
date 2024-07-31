@@ -753,7 +753,7 @@ class Gemma2Model(Gemma2PreTrainedModel):
                 raise ValueError("When `past_key_values` is passed, `cache_position` must be too")
 
         # Probably a forward call with caching, so we set up cache for one call only
-        if use_cache and past_key_values is None:
+        if use_cache and past_key_values is None and not self.training:
             past_key_values = DynamicCache()
             logger.warning(
                 "You are calling the model with `use_cache=True` but didn't pass `past_key_values`. ",
