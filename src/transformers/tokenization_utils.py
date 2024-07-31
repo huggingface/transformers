@@ -480,6 +480,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
             self._added_tokens_decoder[index] = AddedToken(token) if isinstance(token, str) else token
             self._added_tokens_encoder[str(token)] = index
+        self._update_total_vocab_size()
 
     def get_added_vocab(self) -> Dict[str, int]:
         """
