@@ -248,7 +248,7 @@ class ViTSdpaSelfAttention(ViTSelfAttention):
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         if output_attentions or head_mask is not None:
             logger.warning_once(
-                "`VITdpaAttention` is used but `torch.nn.functional.scaled_dot_product_attention` does not support "
+                "`ViTSdpaAttention` is used but `torch.nn.functional.scaled_dot_product_attention` does not support "
                 "`output_attentions=True` or `head_mask`. Falling back to the manual attention implementation, but "
                 "specifying the manual implementation will be required from Transformers version v5.0.0 onwards. "
                 'This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'

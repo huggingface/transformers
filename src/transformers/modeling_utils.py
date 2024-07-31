@@ -1533,6 +1533,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     else:
                         sub_config._attn_implementation = requested_attn_implementation
 
+                    print(type(sub_config), requested_attn_implementation)
                     sub_model_cls._autoset_attn_implementation(
                         sub_config,
                         use_flash_attention_2=use_flash_attention_2,

@@ -243,6 +243,7 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
             config.text_config, attn_implementation=config.text_config._attn_implementation
         )
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
+        print(config.vision_config._attn_implementation, config.text_config._attn_implementation)
         self.post_init()
 
     def get_input_embeddings(self):
