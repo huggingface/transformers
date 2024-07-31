@@ -408,7 +408,7 @@ class FastSpeech2ConformerModelIntegrationTest(unittest.TestCase):
         batch_size, max_text_len = input_ids.shape
         pitch_labels = torch.rand((batch_size, max_text_len, 1), dtype=torch.float, device=torch_device)
         energy_labels = torch.rand((batch_size, max_text_len, 1), dtype=torch.float, device=torch_device)
-        duration_labels = torch.normal(10, 2, size=(batch_size, max_text_len), device=torch.device).clamp(1, 20).int()
+        duration_labels = torch.normal(10, 2, size=(batch_size, max_text_len), device=torch_device).clamp(1, 20).int()
         max_target_len, _ = duration_labels.sum(dim=1).max(dim=0)
         max_target_len = max_target_len.item()
         spectrogram_labels = torch.rand(
