@@ -1406,11 +1406,11 @@ class MPLUGDocOwlLanguageModel(MPLUGDocOwlPreTrainedLanguageModel):
             attentions=all_self_attns,
         )
 
+
 @add_start_docstrings(
     """The MPLUGDOCOWL model which consists of a vision backbone and a language model.""",
     MPLUGDocOwl_START_DOCSTRING,
 )
-
 class MPLUGDocOwlForCausalLM(MPLUGDocOwlPreTrainedLanguageModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1644,7 +1644,9 @@ class MPLUGDocOwlHReducer(MPLUGDocOwlPreTrainedModel):
         """
 
         # Remove the first cls token
-        encoder_hidden_states = encoder_hidden_states[:, 1:, :]  # Shape: (batch_size, sequence_length - 1, hidden_size)
+        encoder_hidden_states = encoder_hidden_states[
+            :, 1:, :
+        ]  # Shape: (batch_size, sequence_length - 1, hidden_size)
 
         # B - batch_size, L - sequence_length, C - hidden_size
         batch_size, seq_len, hidden_size = encoder_hidden_states.shape
@@ -1653,11 +1655,17 @@ class MPLUGDocOwlHReducer(MPLUGDocOwlPreTrainedModel):
         height = int(torch.sqrt(torch.tensor(seq_len)))
 
         # Transpose and reshape encoder hidden states
-        encoder_hidden_states = encoder_hidden_states.transpose(2, 1)  # Shape: (batch_size, hidden_size, sequence_length)
-        encoder_hidden_states = encoder_hidden_states.view(batch_size, hidden_size, height, height)  # Shape: (batch_size, hidden_size, height, height)
+        encoder_hidden_states = encoder_hidden_states.transpose(
+            2, 1
+        )  # Shape: (batch_size, hidden_size, sequence_length)
+        encoder_hidden_states = encoder_hidden_states.view(
+            batch_size, hidden_size, height, height
+        )  # Shape: (batch_size, hidden_size, height, height)
 
         # Apply reducer (e.g., a convolution)
-        reduced_states = self.reducer_before(encoder_hidden_states)  # Shape: (batch_size, reduced_depth, height, width_reduced)
+        reduced_states = self.reducer_before(
+            encoder_hidden_states
+        )  # Shape: (batch_size, reduced_depth, height, width_reduced)
 
         # B - batch_size, reduced_depth - reduced depth dimension, height - height, width_reduced - reduced width
         batch_size, reduced_depth, height, width_reduced = reduced_states.shape
@@ -1669,23 +1677,37 @@ class MPLUGDocOwlHReducer(MPLUGDocOwlPreTrainedModel):
         depth = reduced_depth // num_patches
 
         # Reshape reduced states
-        reduced_states = reduced_states.view(batch_size, num_patches, depth, height, width_reduced)  # Shape: (batch_size, num_patches, depth, height, width_reduced)
-        reduced_states = reduced_states.permute(0, 2, 3, 4, 1)  # Shape: (batch_size, depth, height, width_reduced, num_patches)
-        reduced_states = reduced_states.reshape(batch_size, depth, height, width_reduced * num_patches)  # Shape: (batch_size, depth, height, width)
+        reduced_states = reduced_states.view(
+            batch_size, num_patches, depth, height, width_reduced
+        )  # Shape: (batch_size, num_patches, depth, height, width_reduced)
+        reduced_states = reduced_states.permute(
+            0, 2, 3, 4, 1
+        )  # Shape: (batch_size, depth, height, width_reduced, num_patches)
+        reduced_states = reduced_states.reshape(
+            batch_size, depth, height, width_reduced * num_patches
+        )  # Shape: (batch_size, depth, height, width)
 
         # Apply final reducer (e.g., a convolution)
         sequence_output = self.reducer(reduced_states)  # Shape: (batch_size, final_depth, final_height, final_width)
 
         # Flatten and transpose to (batch_size, seq_length_reduced, final_depth)
-        sequence_output = sequence_output.flatten(2).transpose(1, 2)  # Shape: (batch_size, seq_length_reduced, final_depth)
-        sequence_output = sequence_output.transpose(0, 1).contiguous()  # Shape: (seq_length_reduced, batch_size, final_depth)
+        sequence_output = sequence_output.flatten(2).transpose(
+            1, 2
+        )  # Shape: (batch_size, seq_length_reduced, final_depth)
+        sequence_output = sequence_output.transpose(
+            0, 1
+        ).contiguous()  # Shape: (seq_length_reduced, batch_size, final_depth)
 
         # Apply final fully connected layer
         sequence_output = self.visual_fc(sequence_output)  # Shape: (seq_length_reduced, batch_size, final_hidden_size)
-        sequence_output = sequence_output.transpose(0, 1).contiguous()  # Shape: (batch_size, seq_length_reduced, final_hidden_size)
+        sequence_output = sequence_output.transpose(
+            0, 1
+        ).contiguous()  # Shape: (batch_size, seq_length_reduced, final_hidden_size)
 
         # Concatenate end-of-sequence token
-        sequence_output = torch.cat([sequence_output, self.vit_eos.repeat(batch_size, 1, 1)], dim=1)  # Shape: (batch_size, seq_length_reduced + 1, final_hidden_size)
+        sequence_output = torch.cat(
+            [sequence_output, self.vit_eos.repeat(batch_size, 1, 1)], dim=1
+        )  # Shape: (batch_size, seq_length_reduced + 1, final_hidden_size)
 
         return sequence_output
 
