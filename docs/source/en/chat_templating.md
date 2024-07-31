@@ -240,7 +240,7 @@ By default, some tokenizers add special tokens like `<bos>` and `<eos>` to text 
 already include all the special tokens they need, and so additional special tokens will often be incorrect or 
 duplicated, which will hurt model performance.
 
-Therefore, if you format text with `apply_chat_template(tokenize=False)` , you should set the argument
+Therefore, if you format text with `apply_chat_template(tokenize=False)`, you should set the argument
 `add_special_tokens=False` when you tokenize that text later. If you use `apply_chat_template(tokenize=True)`, you don't need to worry about this!
 
 </Tip>
