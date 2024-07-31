@@ -15,8 +15,6 @@ rendered properly in your Markdown viewer.
 -->
 
 # Tiktoken and interaction with Transformers
-[Tiktoken](https://github.com/openai/tiktoken) is an efficient tokenizer developed by OpenAI. It is optimized for speed 
-and minimal memory usage.
 
 Support for tiktoken model files is seamlessly integrated in 🤗 transformers when loading models 
 `from_pretrained` with a `tokenizer.model` tiktoken file on the Hub, which automatically converted into our 
