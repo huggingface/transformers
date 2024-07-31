@@ -56,7 +56,7 @@ on the Hub.
 - IQ2_XXS
 
 We take example from the excellent [99991/pygguf](https://github.com/99991/pygguf) Python parser to dequantize the 
-weights.
+weights in k-quants.
 
 ### Supported model architectures
 
