@@ -27,7 +27,6 @@ _import_structure = {
 }
 
 
-
 try:
     if not is_torch_available():
         raise OptionalDependencyNotAvailable()

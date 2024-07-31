@@ -61,9 +61,17 @@ def _cast_if_autocast_enabled(*args):
 
 
 class NemotronLayerNorm1P(nn.LayerNorm):
-    def __init__(self, normalized_shape: Union[int, List[int], Size], eps: float = 1e-5, elementwise_affine: bool = True,
-                 bias: bool = True, device=None, dtype=None):
+    def __init__(
+        self,
+        normalized_shape: Union[int, List[int], Size],
+        eps: float = 1e-5,
+        elementwise_affine: bool = True,
+        bias: bool = True,
+        device=None,
+        dtype=None,
+    ):
         super().__init__(normalized_shape, eps, elementwise_affine, bias, device, dtype)
+
     def forward(self, input: Tensor) -> Tensor:
         args = _cast_if_autocast_enabled(input, self.normalized_shape, self.weight + 1, self.bias, self.eps)
         with torch.cuda.amp.autocast(enabled=False):
@@ -171,6 +179,7 @@ def rotate_half(x):
     x2 = x[..., x.shape[-1] // 2 :]
     return torch.cat((-x2, x1), dim=-1)
 
+
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -217,6 +226,7 @@ class NemotronMLP(nn.Module):
     def forward(self, x):
         return self.down_proj(self.act_fn(self.up_proj(x)))
 
+
 # Copied from transformers.models.llama.modeling_llama.repeat_kv
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
@@ -228,6 +238,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
         return hidden_states
     hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
 
 # Copied from transformers.models.llama.modeling_llama.LlamaAttention with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
 class NemotronAttention(nn.Module):
@@ -274,7 +285,6 @@ class NemotronAttention(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
-
 
         query_states = self.q_proj(hidden_states)
         key_states = self.k_proj(hidden_states)
@@ -443,6 +453,7 @@ class NemotronFlashAttention2(NemotronAttention):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
+
 
 # Copied from transformers.models.llama.modeling_llama.LlamaSdpaAttention with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
 class NemotronSdpaAttention(NemotronAttention):

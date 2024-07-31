@@ -101,7 +101,9 @@ class NemotronModelTest(GemmaModelTest):
 
     @require_torch_sdpa
     @slow
-    @unittest.skip(reason="Due to custom causal mask, there is a slightly too big difference between eager and sdpa in bfloat16.")
+    @unittest.skip(
+        reason="Due to custom causal mask, there is a slightly too big difference between eager and sdpa in bfloat16."
+    )
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     def test_eager_matches_sdpa_inference(self, torch_dtype: str):
         pass
@@ -176,6 +178,7 @@ class NemotronModelTest(GemmaModelTest):
                 # nemotron flash attention 2 needs a high tolerance
                 assert torch.allclose(logits_fa, logits, atol=1e-2)
 
+
 @require_torch_gpu
 class NemotronIntegrationTest(unittest.TestCase):
     # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
@@ -241,4 +244,3 @@ class NemotronIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT, output_text)
-
