@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 pip install --no-cache-dir https://github.com/NetEase-FuXi/EETQ/releases/download/v1.0.0/EETQ-1.0.0+cu121+torch2.1.2-cp310-cp310-linux_x86_64.whl
 ```
 
-또는 소스 코드 https://github.com/NetEase-FuXi/EETQ에서 설치할 수 있습니다. EETQ는 CUDA 기능이 8.9 이하이고 7.0 이상이어야 합니다.
+또는 소스 코드 https://github.com/NetEase-FuXi/EETQ 에서 설치할 수 있습니다. EETQ는 CUDA 기능이 8.9 이하이고 7.0 이상이어야 합니다.
 
 ```
 git clone https://github.com/NetEase-FuXi/EETQ.git
@@ -37,7 +37,7 @@ pip install .
 
 ```py
 from transformers import AutoModelForCausalLM, EetqConfig
-path = "/path/to/model"
+path = "/path/to/model".
 quantization_config = EetqConfig("int8")
 model = AutoModelForCausalLM.from_pretrained(path, device_map="auto", quantization_config=quantization_config)
 ```
