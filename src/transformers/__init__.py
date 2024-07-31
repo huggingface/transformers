@@ -2741,7 +2741,6 @@ else:
     _import_structure["models.nemotron"].extend(
         [
             "NemotronForCausalLM",
-            "NemotronForPreTraining",
             "NemotronForQuestionAnswering",
             "NemotronForSequenceClassification",
             "NemotronForTokenClassification",
