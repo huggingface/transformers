@@ -22,8 +22,7 @@ Support for tiktoken model files is seamlessly integrated in 🤗 transformers w
 `from_pretrained` with a `tokenizer.model` tiktoken file on the Hub, which automatically converted into our 
 [fast tokenizer](https://huggingface.co/docs/transformers/main/en/main_classes/tokenizer#transformers.PreTrainedTokenizerFast). 
 All necessary components, including model weights, tokenizer settings, and configuration metadata, are 
-encapsulated within a single file, simplifying model distribution and deployment. This means there is no need for 
-separate files for the model, tokenizer, and configuration settings.
+encapsulated within a single file. This means there is no need for separate files for the model, tokenizer, and configuration settings.
 
 ### Supported model architectures
 
