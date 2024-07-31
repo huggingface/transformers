@@ -3668,17 +3668,21 @@ class Trainer:
             return metrics
 
         # Set generation-related kwargs
-        if self.args.generation_config is not None:
-            gen_config = self.args.generation_config
-            self.gen_config = copy.deepcopy(gen_config)  # copy so we don't modify args.gen_config in-place
-            unused_kwargs = self.gen_config.update(**gen_kwargs)
-            if unused_kwargs:
-                logger.warning_once(
-                    f"Following generation related kwargs were passed to `evaluate` but not used by `generate()`: {' '.join(unused_kwargs.keys())} .",
-                    "Make sure there are no typos in the passed kwargs or do not pass unused kwargs.",
-                )
-        else:
-            self.gen_config = self.model.generation_config
+        if self.args.predict_with_generate:
+            if self.args.generation_config is not None:
+                gen_config = self.args.generation_config
+                self.gen_config = copy.deepcopy(gen_config)  # copy so we don't modify args.gen_config in-place
+                unused_kwargs = self.gen_config.update(**gen_kwargs)
+                if unused_kwargs:
+                    logger.warning_once(
+                        f"Following generation related kwargs were passed to `evaluate` but not used by `generate()`: "
+                        f"{' '.join(unused_kwargs.keys())} .",
+                        "Make sure there are no typos in the passed kwargs or do not pass unused kwargs.",
+                    )
+            else:
+                # We assume the model can generate if predict-with-generate is True
+                # Therefore, generation_config should be available
+                self.gen_config = self.model.generation_config
 
         # memory metrics - must set up as early as possible
         self._memory_tracker.start()
@@ -3768,15 +3772,21 @@ class Trainer:
               labels).
         """
         # Set generation-related kwargs
-        if self.args.generation_config is not None:
-            gen_config = self.args.generation_config
-            self.gen_config = copy.deepcopy(gen_config)  # copy so we don't modify args.gen_config in-place
-            unused_kwargs = self.gen_config.update(**gen_kwargs)
-            if unused_kwargs:
-                logger.warning_once(
-                    f"Following generation related kwargs were passed to `evaluate` but not used by `generate()`: {' '.join(unused_kwargs.keys())} .",
-                    "Make sure there are no typos in the passed kwargs or do not pass unused kwargs.",
-                )
+        if self.args.predict_with_generate:
+            if self.args.generation_config is not None:
+                gen_config = self.args.generation_config
+                self.gen_config = copy.deepcopy(gen_config)  # copy so we don't modify args.gen_config in-place
+                unused_kwargs = self.gen_config.update(**gen_kwargs)
+                if unused_kwargs:
+                    logger.warning_once(
+                        f"Following generation related kwargs were passed to `evaluate` but not used by `generate()`: "
+                        f"{' '.join(unused_kwargs.keys())} .",
+                        "Make sure there are no typos in the passed kwargs or do not pass unused kwargs.",
+                    )
+            else:
+                # We assume the model can generate if predict-with-generate is True
+                # Therefore, generation_config should be available
+                self.gen_config = self.model.generation_config
 
         # memory metrics - must set up as early as possible
         self._memory_tracker.start()
@@ -4075,16 +4085,18 @@ class Trainer:
         has_labels = False if len(self.label_names) == 0 else all(inputs.get(k) is not None for k in self.label_names)
 
         # Prioroty: gen_kwargs > args.gen_config > model.generation_config > default GenerationConfig()
-        gen_config = self.gen_config
-        default_synced_gpus = True if is_deepspeed_zero3_enabled() else False
-        synced_gpus = gen_kwargs.get("synced_gpus", default_synced_gpus)
-        if len(gen_kwargs) > 0:
-            unused_kwargs = gen_config.update(**gen_kwargs)
-            if unused_kwargs:
-                logger.warning_once(
-                    f"Following generation related kwargs were passed to `prediction_step` but not used by `generate()`: {' '.join(unused_kwargs.keys())} .",
-                    "Make sure there are no typos in the passed kwargs or do not pass unused kwargs.",
-                )
+        if self.args.predict_with_generate:
+            gen_config = self.gen_config
+            default_synced_gpus = True if is_deepspeed_zero3_enabled() else False
+            synced_gpus = gen_kwargs.get("synced_gpus", default_synced_gpus)
+            if len(gen_kwargs) > 0:
+                unused_kwargs = gen_config.update(**gen_kwargs)
+                if unused_kwargs:
+                    logger.warning_once(
+                        "Following generation related kwargs were passed to `prediction_step` but not "
+                        f"used by `generate()`: {' '.join(unused_kwargs.keys())} .",
+                        "Make sure there are no typos in the passed kwargs or do not pass unused kwargs.",
+                    )
 
         # For CLIP-like models capable of returning loss values.
         # If `return_loss` is not specified or being `None` in `inputs`, we check if the default value of `return_loss`
