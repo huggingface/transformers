@@ -1066,7 +1066,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
             0-1 float percentage of model compression
         ignore (`typing.Union[typing.List[str], NoneType]`, *optional*):
             layer names or types to not quantize, supports regex prefixed by 're:'
-        sparsity_config (`typing.Dict[str, typing.Any]`, *optional*): <fill_docstring>:
+        sparsity_config (`typing.Dict[str, typing.Any]`, *optional*):
             configuration for sparsity compression
         quant_method (`str`, *optional*, defaults to `"compressed-tensors"`):
             do not override, should be compressed-tensors
