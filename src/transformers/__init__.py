@@ -654,7 +654,11 @@ _import_structure = {
         "Qwen2Tokenizer",
     ],
     "models.qwen2_moe": ["Qwen2MoeConfig"],
-    "models.qwen2_vl": ["Qwen2VLConfig"],
+    "models.qwen2_vl": [
+        "Qwen2VLConfig",
+        "Qwen2VLImageProcessor",
+        "Qwen2VLProcessor",
+    ],
     "models.rag": ["RagConfig", "RagRetriever", "RagTokenizer"],
     "models.recurrent_gemma": ["RecurrentGemmaConfig"],
     "models.reformer": ["ReformerConfig"],
@@ -5362,7 +5366,11 @@ if TYPE_CHECKING:
     from .models.pvt_v2 import PvtV2Config
     from .models.qwen2 import Qwen2Config, Qwen2Tokenizer
     from .models.qwen2_moe import Qwen2MoeConfig
-    from .models.qwen2_vl import Qwen2VLConfig
+    from .models.qwen2_vl import (
+        Qwen2VLConfig,
+        Qwen2VLImageProcessor,
+        Qwen2VLProcessor,
+    )
     from .models.rag import RagConfig, RagRetriever, RagTokenizer
     from .models.recurrent_gemma import RecurrentGemmaConfig
     from .models.reformer import ReformerConfig
