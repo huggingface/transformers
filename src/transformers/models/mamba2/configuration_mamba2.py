@@ -57,7 +57,7 @@ class Mamba2Config(PretrainedConfig):
             The id of the end of sentence token in the vocabulary.
         expand (`int`, *optional*, defaults to 2): Expanding factor used to determine the intermediate size.
         conv_kernel (`int`, *optional*, defaults to 4): Size of the convolution kernel.
-        n_groups (`int`, *optional*, defaults to 8): 
+        n_groups (`int`, *optional*, defaults to 8):
             Number of groups for the evolution matrices of mamba 2.
         use_bias (`bool`, *optional*, defaults to `False`):
             Whether or not to use bias in ["in_proj", "out_proj"] of the mixer block
@@ -71,14 +71,10 @@ class Mamba2Config(PretrainedConfig):
             Whether or not residuals should be in `float32`. If set to `False` residuals will keep the same `dtype` as the rest of the model
         time_step_rank (`Union[int,str]`, *optional*, defaults to `"auto"`):
             Rank of the discretization projection matrix. `"auto"` means that it will default to `math.ceil(self.hidden_size / 16)`
-        time_step_scale (`float`, *optional*, defaults to 1.0):
-            Scale used used to scale `dt_proj.bias`.
         time_step_min (`float`, *optional*, defaults to 0.001):
             Minimum `time_step` used to bound `dt_proj.bias`.
         time_step_max (`float`, *optional*, defaults to 0.1):
             Maximum `time_step` used to bound `dt_proj.bias`.
-        time_step_init_scheme (`float`, *optional*, defaults to `"random"`):
-            Init scheme used for `dt_proj.weight`. Should be one of `["random","uniform"]`
         time_step_floor (`float`, *optional*, defaults to 0.0001):
             Minimum clamping value of the `dt_proj.bias` layer initialization.
         time_step_limit (`tuple`, *optional*, defaults to `(0.0, inf)`):
@@ -135,10 +131,8 @@ class Mamba2Config(PretrainedConfig):
         initializer_range=0.1,
         residual_in_fp32=True,
         time_step_rank="auto",
-        time_step_scale=1.0,
         time_step_min=0.001,
         time_step_max=0.1,
-        time_step_init_scheme="random",
         time_step_floor=1e-4,
         time_step_limit=(0.0, float("inf")),
         rescale_prenorm_residual=False,
@@ -156,7 +150,7 @@ class Mamba2Config(PretrainedConfig):
         self.layer_norm_epsilon = layer_norm_epsilon
         self.conv_kernel = conv_kernel
         self.expand = expand
-        self.intermediate_size = int(expand * self.hidden_size)
+
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
@@ -165,10 +159,8 @@ class Mamba2Config(PretrainedConfig):
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.time_step_rank = math.ceil(self.hidden_size / 16) if time_step_rank == "auto" else time_step_rank
-        self.time_step_scale = time_step_scale
         self.time_step_min = time_step_min
         self.time_step_max = time_step_max
-        self.time_step_init_scheme = time_step_init_scheme
         self.time_step_floor = time_step_floor
         self.rescale_prenorm_residual = rescale_prenorm_residual
         self.residual_in_fp32 = residual_in_fp32

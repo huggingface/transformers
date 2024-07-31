@@ -51,7 +51,6 @@ else:
 
 is_fast_path_available = all((selective_state_update, causal_conv1d_fn, causal_conv1d_update))
 
-
 _CHECKPOINT_FOR_DOC = "mistralai/mamba-codestral-7B-v0.1"
 _CONFIG_FOR_DOC = "Mamba2Config"
 
@@ -170,9 +169,9 @@ class MambaRMSNormGated(torch.nn.Module):
 class Mamba2Mixer(nn.Module):
     """
     Compute ∆, A, B, C, and D the state space parameters and compute the `contextualized_states`.
-    A, D are input independent (see Mamba2 paper [1] Section 3.5.2 "Interpretation of A" for why A isn't selective)
-    ∆, B, C are input-dependent (this is a key difference between Mamba2 and the linear time invariant S4,
-    and is why Mamba2 is called **selective** state spaces)
+    A, D are input independent (see Mamba paper [1] Section 3.5.2 "Interpretation of A" for why A isn't selective)
+    ∆, B, C are input-dependent (this is a key difference between Mamba and the linear time invariant S4,
+    and is why Mamba is called **selective** state spaces)
     """
 
     def __init__(self, config: Mamba2Config, layer_idx: int):
@@ -181,7 +180,7 @@ class Mamba2Mixer(nn.Module):
         self.hidden_size = config.hidden_size
         self.ssm_state_size = config.state_size
         self.conv_kernel_size = config.conv_kernel
-        self.intermediate_size = config.intermediate_size
+        self.intermediate_size = int(config.expand * self.hidden_size)
         self.time_step_rank = int(config.time_step_rank)
         self.layer_idx = layer_idx
         self.use_conv_bias = config.use_conv_bias
@@ -220,11 +219,11 @@ class Mamba2Mixer(nn.Module):
 
         # time step projection (discretization)
         # instantiate once and copy inv_dt in init_weights of PretrainedModel
-        self.dt_bias = nn.Parameter(torch.ones(self.num_heads))  # could also be nn.Parameter(self.inv_dt)
+        self.dt_bias = nn.Parameter(torch.ones(self.num_heads))
 
         # S4D real initialization. These are not discretized!
         # The core is to load them, compute the discrete states, then write the updated state. Keeps the memory bounded
-        A = torch.empty(self.num_heads)
+        A = torch.arange(self.num_heads)
         self.A_log = nn.Parameter(torch.log(A))
         self.A_log._no_weight_decay = True
         self.norm = MambaRMSNormGated(self.intermediate_size, eps=self.layer_norm_epsilon)
@@ -245,7 +244,6 @@ class Mamba2Mixer(nn.Module):
 
     def cuda_kernels_forward(self, hidden_states: torch.Tensor, cache_params: Optional[Mamba2Cache] = None):
         seq_len = hidden_states.shape[1]
-        seqlen_og = seq_len
 
         # getting projected states from cache if it exists
         if cache_params is not None and cache_params.seqlen_offset > 0:
@@ -313,7 +311,6 @@ class Mamba2Mixer(nn.Module):
                 hidden_states = torch.cat([torch.nn.functional.silu(z0) * x0, hidden_states], dim=-1)
 
             out = self.out_proj(hidden_states).unsqueeze(1)
-            return out
         # if no cache is found, calling the kernel
         else:
             # 1. Gated MLP's linear projection
@@ -342,8 +339,7 @@ class Mamba2Mixer(nn.Module):
                     return_final_states=True,
                     **dt_limit_kwargs,
                 )
-                if seqlen_og is not None:
-                    out = out.view(-1, out.shape[2])
+
             else:
                 gate, xBC, time_step = torch.split(
                     projected_states,
@@ -383,14 +379,14 @@ class Mamba2Mixer(nn.Module):
                 )
                 if ssm_state is not None and cache_params is not None:
                     cache_params.ssm_states[self.layer_idx].copy_(ssm_state)
-            scan_output = scan_output.view(scan_output.shape[0], scan_output.shape[1], -1)
-            # Multiply "gate" branch and apply extra normalization layer
-            scan_output = self.norm(scan_output, gate)
-            out = self.out_proj(scan_output)
+                scan_output = scan_output.view(scan_output.shape[0], scan_output.shape[1], -1)
+                # Multiply "gate" branch and apply extra normalization layer
+                scan_output = self.norm(scan_output, gate)
+                out = self.out_proj(scan_output)
         return out
 
     # fmt: off
-    def slow_forward(self, input_states, cache_params: Optional[Mamba2Cache]=None):
+    def torch_forward(self, input_states, cache_params: Optional[Mamba2Cache]=None):
         batch_size, seq_len, _ = input_states.shape
         dtype = input_states.dtype
         # Gated MLP's linear projection
@@ -407,8 +403,7 @@ class Mamba2Mixer(nn.Module):
             if cache_params.seqlen_offset > 0:
                 conv_state = cache_params.conv_states[self.layer_idx]                   # [batch, intermediate_size, conv_kernel_size]
                 conv_state = torch.roll(conv_state, shifts=-1, dims=-1)
-                # handle batched generation (states are copied through)
-                #conv_state[:, :, -1] = hidden_states
+                # handle batched generation - states are copied through
                 conv_state[:, :, -1] = hidden_states[:, 0, :] if hidden_states.ndim == 3 else hidden_states
                 cache_params.conv_states[self.layer_idx].copy_(conv_state)
                 hidden_states = torch.sum(conv_state.to(projected_states.device) * self.conv1d.weight[:, 0, :], dim=-1)
@@ -443,8 +438,7 @@ class Mamba2Mixer(nn.Module):
 
             dt = torch.nn.functional.softplus(dt + dt_bias.to(dt.dtype))
             dt = torch.clamp(dt, self.time_step_min, self.time_step_max)
-
-            A = A.unsqueeze(-1).unsqueeze(-1).expand(A.shape[0], self.head_dim, self.ssm_state_size).to(dtype=torch.float32)
+            A = A[..., None, None].expand(A.shape[0], self.head_dim, self.ssm_state_size).to(dtype=torch.float32)
             # [bsz, num_heads, head_dim, state_size]
             dA = torch.exp(dt.unsqueeze(-1) * A)
 
@@ -493,12 +487,11 @@ class Mamba2Mixer(nn.Module):
             # einsum-free - but some tensors have to be upcasted to avoid error propagation (we downcast after)
             dt = nn.functional.softplus(dt + self.dt_bias)
             dt = torch.clamp(dt, self.time_step_min, self.time_step_max)
-            hidden_states = hidden_states.reshape(hidden_states.shape[0], hidden_states.shape[1], -1, self.head_dim)#.float()
-            B = B.reshape(batch_size, seq_len,  -1, self.ssm_state_size)#.float()
-            C = C.reshape(batch_size, seq_len, -1, self.ssm_state_size)#.float()
-            B = B.repeat(1, 1, self.num_heads // self.n_groups, 1)  # (batch, self.num_heads, ssm_state_size)
-            C = C.repeat(1, 1, self.num_heads // self.n_groups, 1)   # (batch, self.num_heads, ssm_state_size)
-
+            hidden_states = hidden_states.reshape(hidden_states.shape[0], hidden_states.shape[1], -1, self.head_dim).float()
+            B = B.reshape(batch_size, seq_len,  -1, self.ssm_state_size).float()
+            C = C.reshape(batch_size, seq_len, -1, self.ssm_state_size).float()
+            B = B.repeat(1, 1, self.num_heads // self.n_groups, 1)
+            C = C.repeat(1, 1, self.num_heads // self.n_groups, 1)
             seq_len = hidden_states.shape[1]
             pad_size = self.chunk_size - (seq_len % self.chunk_size)
 
@@ -574,7 +567,6 @@ class Mamba2Mixer(nn.Module):
             if ssm_state is not None and cache_params is not None:
                 cache_params.ssm_states[self.layer_idx].copy_(ssm_state)
 
-
         scan_output = self.norm(y, gate)
 
         # end ssd naive
@@ -588,9 +580,9 @@ class Mamba2Mixer(nn.Module):
     # fmt: on
 
     def forward(self, hidden_states, cache_params: Optional[Mamba2Cache] = None):
-        if is_fast_path_available and "cuda" in self.in_proj.weight.device.type:
+        if (is_fast_path_available and "cuda" in self.in_proj.weight.device.type):
             return self.cuda_kernels_forward(hidden_states, cache_params)
-        return self.slow_forward(hidden_states, cache_params)
+        return self.torch_forward(hidden_states, cache_params)
 
 
 # Copied from transformers.models.mamba.modeling_mamba.MambaRMSNorm with Mamba->Mamba2
@@ -885,12 +877,14 @@ class Mamba2Model(Mamba2PreTrainedModel):
 
 @add_start_docstrings(
     """
-    The MAMBA2 Model transformer with a language modeling head on top (linear layer with weights tied to the input
+    The MAMBA2 Model transformer with a language modeling head on top (linear layer with weights not tied to the input
     embeddings).
     """,
     MAMBA2_START_DOCSTRING,
 )
 class Mamba2ForCausalLM(Mamba2PreTrainedModel):
+    _tied_weights_keys = []
+
     def __init__(self, config):
         super().__init__(config)
         self.backbone = Mamba2Model(config)
