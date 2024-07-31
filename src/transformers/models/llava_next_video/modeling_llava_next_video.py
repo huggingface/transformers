@@ -704,7 +704,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel):
                 height = width = self.config.vision_config.image_size // self.config.vision_config.patch_size
                 if height * width != base_image_feature.shape[0]:
                     raise ValueError("The number of patches is not consistent with the image size.")
-                num_patch_width, num_patch_height = get_anyres_image_grid_shape(
+                num_patch_height, num_patch_width = get_anyres_image_grid_shape(
                     image_sizes[image_idx],
                     self.config.image_grid_pinpoints,
                     self.config.vision_config.image_size,
