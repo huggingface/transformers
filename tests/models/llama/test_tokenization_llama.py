@@ -34,6 +34,7 @@ from transformers.testing_utils import (
     get_tests_dir,
     nested_simplify,
     require_jinja,
+    require_read_token,
     require_sentencepiece,
     require_tiktoken,
     require_tokenizers,
@@ -828,6 +829,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
 
 
 @require_tiktoken
+@require_read_token
 class TikTokenIntegrationTests(unittest.TestCase):
     """
     A class that regroups important test to make sure that we properly handle the special tokens.
@@ -835,8 +837,8 @@ class TikTokenIntegrationTests(unittest.TestCase):
 
     def test_tiktoken_llama(self):
         model_path = "hf-internal-testing/Llama3-Instruct-Internal"
-        test_text = "Hey there"
-        test_tokens = [128000, 19182, 1070]
+        test_text = "This is a test sentence."
+        test_tokens = [2028, 374, 264, 1296, 11914, 13]
         num_reserved_special_tokens = 256
         special_tokens = [
             "<|begin_of_text|>",

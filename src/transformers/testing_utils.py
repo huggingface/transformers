@@ -60,7 +60,6 @@ from .utils import (
     is_auto_gptq_available,
     is_av_available,
     is_bitsandbytes_available,
-    is_blobfile_available,
     is_bs4_available,
     is_cv2_available,
     is_cython_available,
@@ -1224,13 +1223,6 @@ def require_tiktoken(test_case):
     Decorator marking a test that requires TikToken. These tests are skipped when TikToken isn't installed.
     """
     return unittest.skipUnless(is_tiktoken_available(), "test requires TikToken")(test_case)
-
-
-def require_blobfile(test_case):
-    """
-    Decorator marking a test that requires Blobfile. These tests are skipped when Blobfile isn't installed.
-    """
-    return unittest.skipUnless(is_blobfile_available(), "test requires Blobfile")(test_case)
 
 
 def get_gpu_count():
