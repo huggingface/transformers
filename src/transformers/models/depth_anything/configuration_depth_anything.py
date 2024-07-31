@@ -146,6 +146,10 @@ class DepthAnythingConfig(PretrainedConfig):
         self.fusion_hidden_size = fusion_hidden_size
         self.head_in_index = head_in_index
         self.head_hidden_size = head_hidden_size
+        assert depth_estimation_type in [
+            "relative",
+            "metric",
+        ], "depth_estimation_type must be one of ['relative', 'metric']"
         self.depth_estimation_type = depth_estimation_type
         self.max_depth = max_depth if max_depth else 1
 
