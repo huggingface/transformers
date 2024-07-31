@@ -1788,8 +1788,8 @@ class GenerationMixin:
             and self._supports_default_dynamic_cache()
         ):
             logger.warning_once(
-                "An assistant model is provided, using a dynamic cache instead of a(n)"
-                f"'{generation_config.cache_implementation}' cache."
+                "An assistant model is provided, using a dynamic cache instead of a cache of type="
+                f"'{generation_config.cache_implementation}'."
             )
             generation_config.cache_implementation = None
 
