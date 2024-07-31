@@ -1299,7 +1299,7 @@ class GemmaConvert(SpmConverter):
     """
 
     def normalizer(self, proto):
-        return normalizers.Replace(" ", "▁")
+        return None
 
     def vocab(self, proto):
         vocab = [
@@ -1316,7 +1316,7 @@ class GemmaConvert(SpmConverter):
         return vocab
 
     def pre_tokenizer(self, replacement, add_prefix_space):
-        return pre_tokenizers.Split(" ", "merged_with_previous")
+        return pre_tokenizers.Sequence([pre_tokenizers.Split("▁","contiguous"),pre_tokenizers.Metaspace(replacement = "▁", prepend_scheme="never",split=False)])
 
     def unk_id(self, proto):
         unk_id = 3
