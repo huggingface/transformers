@@ -188,6 +188,15 @@ class GemmaIntegrationTest(unittest.TestCase):
             },
         )
 
+    def test_word_ids(self):
+        input_text = "                        rust                       . x.             .   .       "
+        EXPECTED_WORD_IDS = [None, 0, 0, 1, 2, 3, 3, 4, 5, 6, 7, 8]
+        EXPECTED_INPUT_IDS = [     2,    168,    153, 235265, 235248, 235297, 235265,    150, 235265,
+            140, 235265,    144]
+        output = self.rust_tokenizer(input_text)
+        self.assertEqual(output["input_ids"], EXPECTED_INPUT_IDS)
+        self.assertEqual(output.word_ids(), EXPECTED_WORD_IDS)
+    
     def test_user_added_tokens(self):
         # Ensure that user added tokens are not split in the fast tokenizer
         slow_tokenizer = self.tokenizer
