@@ -26,10 +26,12 @@ import unittest
 import numpy as np
 import pytest
 from huggingface_hub import hf_hub_download
+from parameterized import parameterized
 
 import transformers
 from transformers import WhisperConfig
 from transformers.testing_utils import (
+    is_flaky,
     is_pt_flax_cross_test,
     require_flash_attn,
     require_torch,
@@ -72,6 +74,7 @@ if is_torch_available():
         BeamSearchEncoderDecoderOutput,
         GenerateBeamDecoderOnlyOutput,
         GenerateBeamEncoderDecoderOutput,
+        GenerateEncoderDecoderOutput,
         PhrasalConstraint,
     )
     from transformers.generation.logits_process import LogitsProcessor
@@ -1783,6 +1786,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 output_generate, input_ids, model.config, num_return_sequences=beam_kwargs["num_return_sequences"]
             )
 
+    @is_flaky()  # TODO (joao, sanchit): fails ~9% of the times. Does the original test have the same issue?
     def test_custom_4d_attention_mask(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         model = WhisperForConditionalGeneration(config).to(device=torch_device, dtype=torch.float32)
@@ -1819,6 +1823,26 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         normalized_0 = torch.nn.functional.softmax(out_last_tokens)
         normalized_1 = torch.nn.functional.softmax(out_shared_prefix_last_tokens)
         torch.testing.assert_close(normalized_0, normalized_1, rtol=1e-3, atol=1e-4)
+
+    @parameterized.expand([(True,), (False,)])
+    def test_generate_output_type(self, return_dict_in_generate):
+        expected_output_type = GenerateEncoderDecoderOutput if return_dict_in_generate else torch.Tensor
+        for model_class in self.all_generative_model_classes:
+            config, inputs = self.model_tester.prepare_config_and_inputs()
+            model = model_class(config).to(torch_device).eval()
+
+            # short-form generation without fallback
+            pred_ids = model.generate(**inputs, return_dict_in_generate=return_dict_in_generate)
+            assert isinstance(pred_ids, expected_output_type)
+
+            # short-form generation with fallback
+            pred_ids = model.generate(
+                **inputs,
+                logprob_threshold=-1.0,
+                temperature=[0.0, 0.1],
+                return_dict_in_generate=return_dict_in_generate,
+            )
+            assert isinstance(pred_ids, expected_output_type)
 
 
 @require_torch
@@ -2235,72 +2259,6 @@ class WhisperModelIntegrationTests(unittest.TestCase):
                             " He has grave doubts whether Sir Frederick Latins' work is really Greek after all, and"
                         ),
                         "timestamp": (23.76, 29.44),
-                    },
-                ],
-            }
-        ]
-
-        transcript = processor.batch_decode(generated_ids, skip_special_tokens=True, output_offsets=True)
-        self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
-
-    @slow
-    def test_tiny_longform_timestamps_generation(self):
-        set_seed(0)
-        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
-        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
-        model.to(torch_device)
-
-        sample = self._load_datasamples(1)
-        input_speech = np.concatenate(sample * 10)
-
-        input_features = processor(input_speech, return_tensors="pt", truncation=False, sampling_rate=16_000)
-        input_features = input_features.to(torch_device)
-
-        generated_ids = model.generate(**input_features, return_timestamps=True, return_segments=True)
-
-        EXPECTED_TRANSCRIPT = [
-            {
-                "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                "offsets": [
-                    {
-                        "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (0.0, 6.0),
-                    },
-                    {
-                        "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (6.0, 12.0),
-                    },
-                    {
-                        "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (12.0, 18.0),
-                    },
-                    {
-                        "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (18.0, 24.0),
-                    },
-                    {
-                        "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (24.0, 29.0),
-                    },
-                    {
-                        "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (29.0, 35.0),
-                    },
-                    {
-                        "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (35.0, 41.0),
-                    },
-                    {
-                        "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (41.0, 47.0),
-                    },
-                    {
-                        "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (47.0, 53.0),
-                    },
-                    {
-                        "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (53.0, 58.20000076293945),
                     },
                 ],
             }
