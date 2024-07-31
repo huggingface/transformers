@@ -633,7 +633,7 @@ def is_torch_npu_available(check_device=False):
 @lru_cache()
 def is_torch_mlu_available(check_device=False):
     "Checks if `torch_mlu` is installed and potentially if a MLU is in the environment"
-    if importlib.util.find_spec("torch_mlu") is None:
+    if not _torch_available or importlib.util.find_spec("torch_mlu") is None:
         return False
 
     import torch
@@ -751,7 +751,7 @@ def is_ipex_available():
 
     if not is_torch_available() or not _ipex_available:
         return False
-    
+
     torch_major_and_minor = get_major_and_minor_from_version(_torch_version)
     ipex_major_and_minor = get_major_and_minor_from_version(_ipex_version)
     if torch_major_and_minor != ipex_major_and_minor:
@@ -771,7 +771,7 @@ def is_torch_xpu_available(check_device=False):
     """
     if not is_torch_available():
         return False
-    
+
     torch_version = version.parse(_torch_version)
     if is_ipex_available():
         import intel_extension_for_pytorch  # noqa: F401
