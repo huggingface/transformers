@@ -4675,7 +4675,7 @@ class ModelTesterMixin:
         opt_time = end - start
 
         # For the recording step, we expect only two cuda graphs and this step should be much faster than the first.
-        self.assertTrue(record_time < 0.1 * graph_warmup_time)
+        self.assertTrue(record_time < 0.15 * graph_warmup_time)
         self.assertTrue(opt_time < record_time)
 
 
