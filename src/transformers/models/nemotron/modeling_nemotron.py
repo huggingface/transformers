@@ -163,15 +163,6 @@ class NemotronRotaryEmbedding(nn.Module):
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
-# Copied from transformers.models.llama.modeling_llama.LlamaLinearScalingRotaryEmbedding with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
-class NemotronLinearScalingRotaryEmbedding(NemotronRotaryEmbedding):
-    """NemotronRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
-
-    def forward(self, x, position_ids):
-        # difference to the original RoPE: a scaling factor is aplied to the position ids
-        position_ids = position_ids.float() / self.scaling_factor
-        cos, sin = super().forward(x, position_ids)
-        return cos, sin
 
 # Copied from transformers.models.llama.modeling_llama.rotate_half
 def rotate_half(x):
