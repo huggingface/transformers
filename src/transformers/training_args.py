@@ -2208,9 +2208,14 @@ class TrainingArguments:
                 # trigger an error that a device index is missing. Index 0 takes into account the
                 # GPUs available in the environment, so `CUDA_VISIBLE_DEVICES=1,2` with `cuda:0`
                 # will use the first GPU in that env, i.e. GPU#1
-                device = torch.device(
-                    "cuda:0" if torch.cuda.is_available() else os.environ.get("ACCELERATE_TORCH_DEVICE", "cpu")
-                )
+                # If MPS is available, we'll use it. This is due to no mordern Mac's have nvidia GPUs.
+                # If not, we'll use the first GPU available.
+                # If no GPU is available, we'll use the CPU.
+                if torch.backends.mps.is_available():
+                    device = torch.device("mps:0")
+                else:
+                    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+                print("Trying to run on GPU:", device)
                 # Sometimes the line in the postinit has not been run before we end up here, so just checking we're not at
                 # the default value.
                 self._n_gpu = torch.cuda.device_count()
