@@ -432,7 +432,8 @@ class EncoderDecoderMixin:
             # In this case we get SDPA by default if it `_supports_Sdpa` else fallback to "eager"
             encoder_attn = "sdpa" if model.encoder._supports_sdpa else "eager"
             decoder_attn = "sdpa" if model.decoder._supports_sdpa else "eager"
-            general_attn = "sdpa" # we didn't skip test, so this model supports sdpa for sure
+
+            # We didn't skip test, so this model supports sdpa for sure in general config
             self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
             self.assertTrue(model_sdpa.config.encoder._attn_implementation == encoder_attn)
             self.assertTrue(model_sdpa.config.decoder._attn_implementation == decoder_attn)
@@ -441,9 +442,11 @@ class EncoderDecoderMixin:
             # Of the model supports sdpa (i.e. one of sub-models supports it) we'll dispatch safely whenever possible
             # Otherwise we should raise error that SDPA is not supported, as none of the sub-models support SDPA
             # Checking error is out-of-scope of this test
-            model_sdpa_explicit = VisionEncoderDecoderModel.from_pretrained(tmpdirname, torch_dtype=torch_dtype, attn_implementation="sdpa")
+            model_sdpa_explicit = VisionEncoderDecoderModel.from_pretrained(
+                tmpdirname, torch_dtype=torch_dtype, attn_implementation="sdpa"
+            )
             model_sdpa_explicit = model_sdpa_explicit.eval().to(torch_device)
-        
+
             self.assertTrue(model_sdpa_explicit.config._attn_implementation == "sdpa")
             self.assertTrue(model_sdpa_explicit.config.encoder._attn_implementation == encoder_attn)
             self.assertTrue(model_sdpa_explicit.config.decoder._attn_implementation == decoder_attn)
@@ -597,7 +600,7 @@ class DeiT2RobertaModelTest(EncoderDecoderMixin, unittest.TestCase):
 @require_torch
 class ViT2BertModelTest(EncoderDecoderMixin, unittest.TestCase):
     has_attentions = True
-    supports_sdpa = True # one submodel support SDPA
+    supports_sdpa = True  # one submodel support SDPA
 
     def get_pretrained_model_and_inputs(self):
         model = VisionEncoderDecoderModel.from_encoder_decoder_pretrained(
@@ -752,7 +755,7 @@ class Swin2BartModelTest(EncoderDecoderMixin, unittest.TestCase):
 @require_torch
 class ViT2TrOCR(EncoderDecoderMixin, unittest.TestCase):
     has_attentions = True
-    supports_sdpa = True # one submodel support SDPA
+    supports_sdpa = True  # one submodel support SDPA
 
     def get_encoder_decoder_model(self, config, decoder_config):
         encoder_model = ViTModel(config).eval()
@@ -908,10 +911,11 @@ class LayoutLMv32TrOCR(EncoderDecoderMixin, unittest.TestCase):
     def test_real_model_save_load_from_pretrained(self):
         pass
 
+
 @require_torch
 class VIT2GPT2Test(EncoderDecoderMixin, unittest.TestCase):
     has_attentions = True
-    supports_sdpa = True # both submodels support SDPA
+    supports_sdpa = True  # both submodels support SDPA
 
     def get_encoder_decoder_model(self, config, decoder_config):
         encoder_model = ViTModel(config).eval()
@@ -1020,7 +1024,7 @@ class VIT2GPT2Test(EncoderDecoderMixin, unittest.TestCase):
             **kwargs,
         )
         self.assertEqual(generated_output.shape, (pixel_values.shape[0],) + (decoder_config.max_length,))
-    
+
     @unittest.skip(reason="VIT2GPT2 also has an integration test for testinf save-load")
     def test_real_model_save_load_from_pretrained(self):
         pass
@@ -1029,7 +1033,7 @@ class VIT2GPT2Test(EncoderDecoderMixin, unittest.TestCase):
 @require_torch
 class Donut2GPT2Test(EncoderDecoderMixin, unittest.TestCase):
     has_attentions = True
-    supports_sdpa = True # one submodel (GPT2) support SDPA
+    supports_sdpa = True  # one submodel (GPT2) support SDPA
 
     def get_encoder_decoder_model(self, config, decoder_config):
         encoder_model = DonutSwinModel(config).eval()
