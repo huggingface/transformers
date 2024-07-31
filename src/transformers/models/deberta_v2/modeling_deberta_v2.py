@@ -98,20 +98,20 @@ class XSoftmax(torch.autograd.Function):
     ```"""
 
     @staticmethod
-    def forward(self, input, mask, dim):
-        self.dim = dim
+    def forward(ctx, input, mask, dim):
+        ctx.dim = dim
         rmask = ~(mask.to(torch.bool))
 
         output = input.masked_fill(rmask, torch.tensor(torch.finfo(input.dtype).min))
-        output = torch.softmax(output, self.dim)
+        output = torch.softmax(output, ctx.dim)
         output.masked_fill_(rmask, 0)
-        self.save_for_backward(output)
+        ctx.save_for_backward(output)
         return output
 
     @staticmethod
-    def backward(self, grad_output):
-        (output,) = self.saved_tensors
-        inputGrad = softmax_backward_data(self, grad_output, output, self.dim, output)
+    def backward(ctx, grad_output):
+        (output,) = ctx.saved_tensors
+        inputGrad = softmax_backward_data(ctx, grad_output, output, ctx.dim, output)
         return inputGrad, None, None
 
     @staticmethod
