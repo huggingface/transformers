@@ -188,11 +188,13 @@ class GemmaIntegrationTest(unittest.TestCase):
             },
         )
 
+    @require_read_token
     def test_word_ids(self):
+        fast_tokenizer = GemmaTokenizerFast.from_pretrained("google/gemma-2b-it", from_slow=True)
         input_text = "                        rust                       . x.             .   .       "
         EXPECTED_WORD_IDS = [None, 0, 0, 1, 2, 3, 3, 4, 5, 6, 7, 8]
         EXPECTED_INPUT_IDS = [2, 161, 14783, 160, 235265, 1141, 235265, 150, 235265, 140, 235265, 144]
-        output = self.rust_tokenizer(input_text)
+        output = fast_tokenizer(input_text)
         self.assertEqual(output["input_ids"], EXPECTED_INPUT_IDS)
         self.assertEqual(output.word_ids(), EXPECTED_WORD_IDS)
 
