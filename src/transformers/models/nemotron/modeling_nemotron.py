@@ -47,6 +47,7 @@ from ...utils import (
 )
 from .configuration_nemotron import NemotronConfig
 
+
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "NemotronConfig"
@@ -258,7 +259,7 @@ class NemotronAttention(nn.Module):
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.o_proj = nn.Linear(self.head_dim * self.num_heads, self.hidden_size, bias=config.attention_bias)
-        
+
         # TODO (joao): remove in v4.45 (RoPE is computed in the model, not in the decoder layers)
         self.rotary_emb = NemotronRotaryEmbedding(config=self.config)
 

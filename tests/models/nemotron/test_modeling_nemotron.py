@@ -15,9 +15,10 @@
 # limitations under the License.
 """Testing suite for the PyTorch Nemotron model."""
 
-import pytest
 import tempfile
 import unittest
+
+import pytest
 from parameterized import parameterized
 
 from transformers import NemotronConfig, is_torch_available
@@ -35,16 +36,17 @@ from transformers.testing_utils import (
 from ...models.gemma.test_modeling_gemma import GemmaModelTest, GemmaModelTester
 from ...test_configuration_common import ConfigTester
 
+
 if is_torch_available():
     import torch
 
     from transformers import (
+        AutoTokenizer,
         NemotronForCausalLM,
         NemotronForQuestionAnswering,
         NemotronForSequenceClassification,
         NemotronForTokenClassification,
         NemotronModel,
-        AutoTokenizer,
     )
 
 

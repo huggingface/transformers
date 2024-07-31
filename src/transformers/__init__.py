@@ -7195,7 +7195,7 @@ if TYPE_CHECKING:
             NemotronForSequenceClassification,
             NemotronForTokenClassification,
             NemotronModel,
-            NemotronPreTrainedModel,           
+            NemotronPreTrainedModel,
         )
         from .models.nllb_moe import (
             NllbMoeForConditionalGeneration,
