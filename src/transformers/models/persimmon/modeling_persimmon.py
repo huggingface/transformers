@@ -67,7 +67,7 @@ def _prepare_4d_causal_attention_mask_with_cache_position(
         sequence_length (`int`):
             The sequence length being processed.
         target_length (`int`):
-            The target length.
+            The target length: when generating with static cache, the mask should be as long as the static cache, to account for the 0 padding, the part of the cache that is not filled yet.
         dtype (`torch.dtype`):
             The dtype to use for the 4D attention mask.
         device (`torch.device`):
