@@ -1135,9 +1135,9 @@ class Idefics2PreTrainedModel(PreTrainedModel):
         )
         # autoset-attn calls recursively all sub-configs (text-config, vision-config)
         # and sets attn implementation if the config can be mapped bu auto-model
-        # Idefics2 vision config can't be mapped automcatically so we set it manually here
-        # We cant set vision attn same as general attn, because the general one can be sdpa if at
-        # least one sub-module (in this case LLM) supports sdpa
+        # Idefics2 vision config can't be mapped automatically so we set it manually here
+        # We can't set vision attn same as general attn, because the general attr will be sdpa if at
+        # least one sub-module (in this case LLM) supports sdpa, and we know vision/perceiver doesn't support yet
         if hasattr(config, "vision_config"):
             config.vision_config._attn_implementation = (
                 config._attn_implementation if config._attn_implementation != "sdpa" else "eager"
