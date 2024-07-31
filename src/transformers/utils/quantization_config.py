@@ -1056,24 +1056,31 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
     This is a wrapper class that handles compressed-tensors quantization config options.
     It is a wrapper around `compressed_tensors.QuantizationConfig`
     Args:
-        config_groups (`typing.Dict[str, typing.Union[ForwardRef('QuantizationScheme'), typing.List[str]]]`, *optional*): <fill_docstring>
-        quant_method (`str`, *optional*, defaults to `"compressed-tensors"`): <fill_docstring>
-        format (`str`, *optional*, defaults to `"dense"`): <fill_docstring>
-        quantization_status (`QuantizationStatus`, *optional*, defaults to `"initialized"`): <fill_docstring>
-        global_compression_ratio (`typing.Union[float, NoneType]`, *optional*): <fill_docstring>
-        ignore (`typing.Union[typing.List[str], NoneType]`, *optional*): <fill_docstring>
-        sparsity_config (`typing.Dict[str, typing.Any]`, *optional*): <fill_docstring>
+        config_groups (`typing.Dict[str, typing.Union[ForwardRef('QuantizationScheme'), typing.List[str]]]`, *optional*):
+            dictionary mapping group name to a quantization scheme definition
+        format (`str`, *optional*, defaults to `"dense"`):
+            format the model is represented as
+        quantization_status (`QuantizationStatus`, *optional*, defaults to `"initialized"`):
+            status of model in the quantization lifecycle, ie 'initialized', 'calibration', 'frozen'
+        global_compression_ratio (`typing.Union[float, NoneType]`, *optional*):
+            0-1 float percentage of model compression
+        ignore (`typing.Union[typing.List[str], NoneType]`, *optional*):
+            layer names or types to not quantize, supports regex prefixed by 're:'
+        sparsity_config (`typing.Dict[str, typing.Any]`, *optional*): <fill_docstring>:
+            configuration for sparsity compression
+        quant_method (`str`, *optional*, defaults to `"compressed-tensors"`):
+            do not override, should be compressed-tensors
     """
 
     def __init__(
         self,
         config_groups: Dict[str, Union["QuantizationScheme", List[str]]] = None,  # noqa: F821
-        quant_method: str = "compressed-tensors",
         format: str = "dense",
         quantization_status: "QuantizationStatus" = "initialized",  # noqa: F821
         global_compression_ratio: Optional[float] = None,
         ignore: Optional[List[str]] = None,
         sparsity_config: Dict[str, Any] = None,
+        quant_method: str = "compressed-tensors",
         **kwargs,
     ):
         from compressed_tensors import QuantizationConfig
