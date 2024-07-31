@@ -34,6 +34,7 @@ class GgufIntegrationTests(unittest.TestCase):
     qwen2_model_id = "Qwen/Qwen1.5-0.5B-Chat-GGUF"
     llama3_model_id = "NousResearch/Meta-Llama-3-8B-GGUF"
     tinyllama_model_id = "PenutChen/TinyLlama-1.1B-Chat-v1.0-GGUF"
+    imatrix_model_id = "duyntnet/TinyLlama-1.1B-Chat-v1.0-imatrix-GGUF"
 
     q4_0_gguf_model_id = "tinyllama-1.1b-chat-v1.0.Q4_0.gguf"
     q4_k_gguf_model_id = "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
@@ -42,6 +43,7 @@ class GgufIntegrationTests(unittest.TestCase):
     q5_k_gguf_model_id = "tinyllama-1.1b-chat-v1.0.Q5_K_M.gguf"
     q6_k_gguf_model_id = "tinyllama-1.1b-chat-v1.0.Q6_K.gguf"
     q8_0_gguf_model_id = "tinyllama-1.1b-chat-v1.0.Q8_0.gguf"
+    iq2_xxs_gguf_model_id = "TinyLlama-1.1B-Chat-v1.0-IQ2_XXS.gguf"
 
     q4_0_mistral_model_id = "mistral-7b-instruct-v0.2.Q4_0.gguf"
     q4_0_qwen2_model_id = "qwen1_5-0_5b-chat-q4_0.gguf"
@@ -161,6 +163,18 @@ class GgufIntegrationTests(unittest.TestCase):
         out = model.generate(**text, max_new_tokens=10)
 
         EXPECTED_TEXT = "Hello, World!\n\n5. Node.js"
+        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
+
+    def test_iq2_xxs(self):
+        tokenizer = AutoTokenizer.from_pretrained(self.imatrix_model_id, gguf_file=self.iq2_xxs_gguf_model_id)
+        model = AutoModelForCausalLM.from_pretrained(
+            self.imatrix_model_id, gguf_file=self.iq2_xxs_gguf_model_id
+        ).to(torch_device)
+
+        text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
+        out = model.generate(**text, max_new_tokens=10)
+
+        EXPECTED_TEXT = "Hello, I'm a software engineer. I'"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_mistral_q4_0(self):
