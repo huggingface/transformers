@@ -473,7 +473,7 @@ class EncoderDecoderMixin:
                 if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
                     has_sdpa = True
                     break
-            if not has_sdpa and model_sdpa.config.model_type != "falcon":
+            if not has_sdpa:
                 raise ValueError("The SDPA model should have SDPA attention layers")
 
 
