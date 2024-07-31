@@ -1406,6 +1406,10 @@ class MPLUGDocOwlLanguageModel(MPLUGDocOwlPreTrainedLanguageModel):
             attentions=all_self_attns,
         )
 
+@add_start_docstrings(
+    """The MPLUGDOCOWL model which consists of a vision backbone and a language model.""",
+    MPLUGDocOwl_START_DOCSTRING,
+)
 
 class MPLUGDocOwlForCausalLM(MPLUGDocOwlPreTrainedLanguageModel):
     _tied_weights_keys = ["lm_head.weight"]
@@ -1561,10 +1565,10 @@ class MPLUGDocOwlForCausalLM(MPLUGDocOwlPreTrainedLanguageModel):
 
 class MPLUGDocOwlHReducer(MPLUGDocOwlPreTrainedModel):
     r"""
-     MPLUGDocOwlHReducer is a spatial-aware vision-to-text module designed for Visual Document Understanding.
-     This component processes high-resolution text-rich images by reducing the visual sequence length while
-     preserving spatial information. It uses a convolutional layer followed by a fully connected layer to align
-     visual features with language embeddings.
+    MPLUGDocOwlHReducer is a spatial-aware vision-to-text module designed for Visual Document Understanding.
+    This component processes high-resolution text-rich images by reducing the visual sequence length while
+    preserving spatial information. It uses a convolutional layer followed by a fully connected layer to align
+    visual features with language embeddings.
 
     Unlike other popular vision-to-text modules such as MLPs or cross-attention modules with learnable queries,
     the H-Reducer is specifically designed to handle high-resolution images efficiently without losing spatial
@@ -1586,7 +1590,6 @@ class MPLUGDocOwlHReducer(MPLUGDocOwlPreTrainedModel):
 
         Args:
             config (Config): Model configuration containing various hyperparameters.
-
         """
 
         super().__init__(config)
@@ -1632,55 +1635,57 @@ class MPLUGDocOwlHReducer(MPLUGDocOwlPreTrainedModel):
 
         Returns:
             torch.FloatTensor: The processed sequence output with reduced visual feature length and aligned with language embeddings.
+
+        Example:
+            >>> config = Config()  # Assuming Config is already defined
+            >>> model = MPLUGDocOwlHReducer(config)
+            >>> encoder_hidden_states = torch.randn(batch_size, sequence_length, hidden_size)  # Example tensor
+            >>> output = model.forward(encoder_hidden_states)
         """
 
-        # B-batch_size, C-hidden_size, H-height, W-Width, W_div_X - width/conv_patch
-        encoder_hidden_states = encoder_hidden_states[:, 1:, :]  # remove the first cls token
-        # Shape: (batch_size, sequence_length - 1, hidden_size)
+        # Remove the first cls token
+        encoder_hidden_states = encoder_hidden_states[:, 1:, :]  # Shape: (batch_size, sequence_length - 1, hidden_size)
 
-        B, L, C = encoder_hidden_states.shape  # B = batch_size, L = 1024=(448/14)^2, C = hidden_size
-        # Shape: (B, 1024, C)
+        # B - batch_size, L - sequence_length, C - hidden_size
+        batch_size, seq_len, hidden_size = encoder_hidden_states.shape
 
-        H = int(torch.sqrt(torch.tensor(L)))  # H = 32, derived from the assumption that L is a square
-        encoder_hidden_states = encoder_hidden_states.transpose(2, 1)
-        # Transpose shape to: (B, C, 1024)
+        # Calculate height assuming seq_len is a square number
+        height = int(torch.sqrt(torch.tensor(seq_len)))
 
-        encoder_hidden_states = encoder_hidden_states.view(B, C, H, H)  # Reshape to (batch_size, hidden_size, 32, 32)
-        # Shape: (B, C, 32, 32)
+        # Transpose and reshape encoder hidden states
+        encoder_hidden_states = encoder_hidden_states.transpose(2, 1)  # Shape: (batch_size, hidden_size, sequence_length)
+        encoder_hidden_states = encoder_hidden_states.view(batch_size, hidden_size, height, height)  # Shape: (batch_size, hidden_size, height, height)
 
-        hidden_states = self.reducer_before(encoder_hidden_states)  # Apply reducer (e.g., a convolution)
-        # Shape: (B, XD, H, W/D) where XD depends on the convolution output channels and W/D is the reduced width
+        # Apply reducer (e.g., a convolution)
+        reduced_states = self.reducer_before(encoder_hidden_states)  # Shape: (batch_size, reduced_depth, height, width_reduced)
 
-        B, XD, H, W_div_X = hidden_states.shape  # Extract new dimensions after reduction
-        X = self.conv_patch  # Number of patches in width
-        D = XD // X  # D - New depth dimension
+        # B - batch_size, reduced_depth - reduced depth dimension, height - height, width_reduced - reduced width
+        batch_size, reduced_depth, height, width_reduced = reduced_states.shape
 
-        hidden_states = hidden_states.view(B, X, D, H, W_div_X)  # Reshape to (batch_size, X, D, H, W_div_X)
-        # Shape: (B, X, D, H, W_div_X)
+        # Number of patches in width
+        num_patches = self.conv_patch
 
-        hidden_states = hidden_states.permute(0, 2, 3, 4, 1)
-        # Permute shape to: (B, D, H, W_div_X, X)
+        # New depth dimension
+        depth = reduced_depth // num_patches
 
-        hidden_states = hidden_states.reshape(B, D, H, W_div_X * X)
-        # Reshape to: (B, D, H, W)
+        # Reshape reduced states
+        reduced_states = reduced_states.view(batch_size, num_patches, depth, height, width_reduced)  # Shape: (batch_size, num_patches, depth, height, width_reduced)
+        reduced_states = reduced_states.permute(0, 2, 3, 4, 1)  # Shape: (batch_size, depth, height, width_reduced, num_patches)
+        reduced_states = reduced_states.reshape(batch_size, depth, height, width_reduced * num_patches)  # Shape: (batch_size, depth, height, width)
 
-        sequence_output = self.reducer(hidden_states)
-        # Shape: (B, C, H/conv_shape[0], W/(conv_shape[1]))
+        # Apply final reducer (e.g., a convolution)
+        sequence_output = self.reducer(reduced_states)  # Shape: (batch_size, final_depth, final_height, final_width)
 
-        sequence_output = sequence_output.flatten(2).transpose(1, 2)
-        # Flatten and transpose to shape: (B, L/X, C)
+        # Flatten and transpose to (batch_size, seq_length_reduced, final_depth)
+        sequence_output = sequence_output.flatten(2).transpose(1, 2)  # Shape: (batch_size, seq_length_reduced, final_depth)
+        sequence_output = sequence_output.transpose(0, 1).contiguous()  # Shape: (seq_length_reduced, batch_size, final_depth)
 
-        sequence_output = sequence_output.transpose(0, 1).contiguous()
-        # Transpose to shape: (L/X, B, C)
+        # Apply final fully connected layer
+        sequence_output = self.visual_fc(sequence_output)  # Shape: (seq_length_reduced, batch_size, final_hidden_size)
+        sequence_output = sequence_output.transpose(0, 1).contiguous()  # Shape: (batch_size, seq_length_reduced, final_hidden_size)
 
-        sequence_output = self.visual_fc(sequence_output)  # Apply final fully connected layer
-        # Shape: (L/X, B, H)
-
-        sequence_output = sequence_output.transpose(0, 1).contiguous()
-        # Transpose to shape: (B, L/X, H)
-
-        sequence_output = torch.cat([sequence_output, self.vit_eos.repeat(B, 1, 1)], dim=1)
-        # Concatenate end-of-sequence token, resulting shape: (B, L/4X + 1, H)
+        # Concatenate end-of-sequence token
+        sequence_output = torch.cat([sequence_output, self.vit_eos.repeat(batch_size, 1, 1)], dim=1)  # Shape: (batch_size, seq_length_reduced + 1, final_hidden_size)
 
         return sequence_output
 

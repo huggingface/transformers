@@ -116,36 +116,52 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
         of the above two methods for more information.
 
         Args:
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]], optional): 
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
+                (pretokenized string).
+            images (ImageInput, optional): 
+                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array, or PyTorch
                 tensor. Both channels-first and channels-last formats are supported.
-            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
-                Select a strategy to pad the returned sequences (according to the model's padding side and padding
-                index) among:
+            add_textual_crop_indicator (bool, optional): 
+                Whether to add a textual crop indicator to the images. Defaults to True.
+            padding (Union[bool, str, PaddingStrategy], optional): 
+                Select a strategy to pad the returned sequences. Defaults to True.
                 - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
-                  sequence if provided).
+                sequence is provided).
                 - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
-                  acceptable input length for the model if that argument is not provided.
+                acceptable input length for the model if that argument is not provided.
                 - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
-                  lengths).
-            max_length (`int`, *optional*):
-                Maximum length of the returned list and optionally padding length (see above).
-            truncation (`bool`, *optional*):
+                lengths).
+            truncation (Union[bool, str, TruncationStrategy], optional): 
                 Activates truncation to cut input sequences longer than `max_length` to `max_length`.
-            do_shape_adaptive_cropping (`bool`, *optional*, defaults to `True`): Whether to do a shape adaptive cropping of the input image. Should be only called if the do_anchor_resize is called.
-            do_anchor_resize (`bool`, *optional*, defaults to `True`): Whether to resize the image based on the specified anchor. Should be called before do_shape_adaptive_cropping.
-            do_add_global_image (`bool`, *optional*, defaults to `True`): Whether to add the global image to the image input.
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
+            max_length (int, optional): 
+                Maximum length of the returned list and optionally padding length.
+            do_rescale (bool, optional): 
+                Whether to rescale the image. Defaults to True.
+            do_convert_rgb (bool, optional): 
+                Whether to convert the image to RGB. Defaults to True.
+            do_resize (bool, optional): 
+                Whether to resize the image. Defaults to True.
+            do_normalize (bool, optional): 
+                Whether to normalize the image. Defaults to None.
+            image_mean (Optional[Union[float, List[float]]], optional): 
+                The mean values for image normalization. Defaults to (0.48145466, 0.4578275, 0.40821073).
+            image_std (Optional[Union[float, List[float]]], optional): 
+                The standard deviation values for image normalization. Defaults to (0.26862954, 0.26130258, 0.27577711).
+            size (Dict[str, int], optional): 
+                A dictionary specifying the desired width and height for resizing. Defaults to {"width": 448, "height": 448}.
+            do_anchor_resize (bool, optional): 
+                Whether to resize the image based on the specified anchor. Defaults to True.
+            do_shape_adaptive_cropping (bool, optional): 
+                Whether to do a shape adaptive cropping of the input image. Should be only called if the `do_anchor_resize` is True. Defaults to True.
+            do_add_global_image (bool, optional): 
+                Whether to add the global image to the image input. Defaults to True.
+            return_tensors (Optional[Union[str, TensorType]], optional): 
                 If set, will return tensors of a particular framework. Acceptable values are:
-
                 - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
+                - `'jax'`: Return JAX `jnp.ndarray` objects. Defaults to TensorType.PYTORCH.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:

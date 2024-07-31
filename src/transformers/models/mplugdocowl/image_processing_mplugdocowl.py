@@ -471,6 +471,17 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
     def anchor_resize(
         self, image: ImageInput, size: Dict[str, int] = None, resample: PILImageResampling = PILImageResampling.BICUBIC
     ):
+        r"""
+        Resizes an image using the specified anchor point and resampling method.
+
+        Args:
+        image (ImageInput): The image to be resized.
+        size (Dict[str, int], optional): A dictionary specifying the desired width and height. Default is None.
+        resample (PILImageResampling, optional): The resampling method to use. Default is PILImageResampling.BICUBIC.
+
+        Returns:
+        Image: The resized image.
+        """
         return anchor_resize(image=image, size=size, resample=resample)
 
     def adaptive_crop(
@@ -479,6 +490,17 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
         size: Dict[str, int] = None,
         selected_anchor: int = None,
     ):
+        r"""
+        Performs adaptive cropping on image patches based on a selected anchor point.
+
+        Args:
+        image_patches (ImageInput): The image patches to be cropped.
+        size (Dict[str, int], optional): A dictionary specifying the desired width and height. Default is None.
+        selected_anchor (int, optional): The index of the selected anchor point. Default is None.
+
+        Returns:
+        Image: The cropped image patches.
+        """
         return shape_adaptive_cropping(image_patches=image_patches, size=size, selected_anchor=selected_anchor)
 
     def add_global_image(
@@ -486,6 +508,16 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
         images: List,
         patch_images: List,
     ):
+        r"""
+        Adds global image data to a list of patch images.
+
+        Args:
+        images (List): The list of images to which global image data will be added.
+        patch_images (List): The list of patch images to be combined with the global image data.
+
+        Returns:
+        List: The combined list of images with global image data.
+        """
         return add_global_image(images=images, patch_images=patch_images)
 
     def resize(
