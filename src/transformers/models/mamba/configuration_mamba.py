@@ -126,7 +126,6 @@ class MambaConfig(PretrainedConfig):
         rescale_prenorm_residual=False,
         use_cache=True,
         use_mambapy=False,
-        ignore_keys_for_inference=["cache_params"],
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -154,6 +153,12 @@ class MambaConfig(PretrainedConfig):
         self.residual_in_fp32 = residual_in_fp32
         self.use_cache = use_cache
         self.use_mambapy = use_mambapy
-        self.ignore_keys_for_inference = ignore_keys_for_inference
+        self.ignore_keys_for_inference = ["cache_params"]
 
-        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, pad_token_id=pad_token_id, ignore_keys_for_inference=ignore_keys_for_inference, **kwargs)
+        super().__init__(
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            pad_token_id=pad_token_id,
+            ignore_keys_for_inference=self.ignore_keys_for_inference,
+            **kwargs,
+        )
