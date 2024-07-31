@@ -97,7 +97,6 @@ class XSoftmax(torch.autograd.Function):
     >>> y = XSoftmax.apply(x, mask, dim)
     ```"""
 
-    @staticmethod
     def forward(self, input, mask, dim):
         self.dim = dim
         rmask = ~(mask.to(torch.bool))
@@ -108,7 +107,6 @@ class XSoftmax(torch.autograd.Function):
         self.save_for_backward(output)
         return output
 
-    @staticmethod
     def backward(self, grad_output):
         (output,) = self.saved_tensors
         inputGrad = softmax_backward_data(self, grad_output, output, self.dim, output)
