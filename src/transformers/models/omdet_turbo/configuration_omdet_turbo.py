@@ -24,9 +24,9 @@ logger = logging.get_logger(__name__)
 
 class OmDetTurboConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`OmDetTurboModel`]. It is used to instantiate a
-    OmDet-Turbo model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the OmDet-Turbo
+    This is the configuration class to store the configuration of a [`OmDetTurboForObjectDetection`].
+    It is used to instantiate a OmDet-Turbo model according to the specified arguments, defining the model architecture
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the OmDet-Turbo
     [omlab/omdet-turbo-tiny](https://huggingface.co/omlab/omdet-turbo-tiny) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -43,15 +43,15 @@ class OmDetTurboConfig(PretrainedConfig):
             The name of the timm vision backbone to use.
         backbone_kwargs (`dict`, *optional*):
             Additional kwargs for the timm vision backbone.
-        backbone_out_indices (`list(int)`, *optional*, defaults to `[1, 2, 3]`):
+        backbone_out_indices (`List(int)`, *optional*, defaults to `[1, 2, 3]`):
             The output indices of the vision backbone.
         backbone_embed_dim (`int`, *optional*, defaults to 96):
             The embedding dimension of the vision backbone.
         backbone_qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to use bias for the attention int the vision backbone.
-        backbone_depths (`list(int)`, *optional*, defaults to `[2, 2, 6, 2]`):
+        backbone_depths (`List(int)`, *optional*, defaults to `[2, 2, 6, 2]`):
             The depths of the vision backbone layers.
-        backbone_num_heads (`list(int)`, *optional*, defaults to `[3, 6, 12, 24]`):
+        backbone_num_heads (`List(int)`, *optional*, defaults to `[3, 6, 12, 24]`):
             The number of heads for the vision backbone.
         backbone_window_size (`int`, *optional*, defaults to 7):
             The window size for the vision backbone.
@@ -71,10 +71,10 @@ class OmDetTurboConfig(PretrainedConfig):
             The number of feature levels for the multi-scale deformable attention module of the decoder.
         disable_custom_kernels (`bool`, *optional*, defaults to `False`):
             Whether to disable custom kernels.
-        text_projection_in_features (`int`, *optional*, defaults to 512):
-            The input features for the text projection.
-        text_projection_out_features (`int`, *optional*, defaults to 512):
-            The output features for the text projection.
+        text_projection_in_dim (`int`, *optional*, defaults to 512):
+            The input dimension for the text projection.
+        text_projection_out_dim (`int`, *optional*, defaults to 512):
+            The output dimension for the text projection.
         num_queries (`int`, *optional*, defaults to 900):
             The number of queries.
         layer_norm_eps (`float`, *optional*, defaults to 1e-05):
@@ -93,16 +93,17 @@ class OmDetTurboConfig(PretrainedConfig):
             The dropout rate of the encoder.
         activation_dropout (`float`, *optional*, defaults to 0.0):
             The activation dropout rate of the encoder ffn.
-        encoder_in_channels (`list(int)`, *optional*, defaults to `[192, 384, 768]`):
+        encoder_in_channels (`List(int)`, *optional*, defaults to `[192, 384, 768]`):
             The input channels for the encoder.
-        encoder_feat_strides (`list(int)`, *optional*, defaults to `[8, 16, 32]`):
+        encoder_feat_strides (`List(int)`, *optional*, defaults to `[8, 16, 32]`):
             The feature strides for the encoder.
-        encode_proj_layers (`list(int)`, *optional*, defaults to `[2]`):
-            The projection layers for the encoder.
+        encoder_projection_indices (`List(int)`, *optional*, defaults to `[2]`):
+            The indices of the input features projected by each layers.
         encoder_attention_heads (`int`, *optional*, defaults to 8):
             The number of attention heads for the encoder.
-        normalize_before (`bool`, *optional*, defaults to `False`):
-            Whether to normalize before in the encoder.
+        encoder_normalize_before (`bool`, *optional*, defaults to `False`):
+            Determine whether to apply layer normalization in the transformer encoder layer before self-attention and
+            feed-forward modules.
         eval_size (`Tuple[int, int]`, *optional*):
             Height and width used to computes the effective height and width of the position embeddings after taking
             into account the stride (see RTDetr).
@@ -116,28 +117,24 @@ class OmDetTurboConfig(PretrainedConfig):
             The number of heads for the decoder.
         decoder_num_layers (`int`, *optional*, defaults to 6):
             The number of layers for the decoder.
-        label_dim (`int`, *optional*, defaults to 512):
-            The dimension of the labels embeddings.
+        class_dim (`int`, *optional*, defaults to 512):
+            The dimension of the classes embeddings.
         class_distance_type (`str`, *optional*, defaults to `"cosine"`):
-            The type of of distance to compare predicted classes to projected labels embeddings.
+            The type of of distance to compare predicted classes to projected classes embeddings.
         decoder_activation (`str`, *optional*, defaults to `"relu"`):
             The activation function for the decoder.
-        decoder_encoder_dim_feedforward (`int`, *optional*, defaults to 1024):
-            The feedforward dimension for the task encoder in the decoder.
+        task_encoder_feedforward_dim (`int`, *optional*, defaults to 1024):
+            The feedforward dimension for the task encoder.
         decoder_dim_feedforward (`int`, *optional*, defaults to 2048):
             The feedforward dimension for the decoder.
         decoder_num_points (`int`, *optional*, defaults to 4):
             The number of points sampled in the decoder multi-scale deformable attention module.
         decoder_dropout (`float`, *optional*, defaults to 0.0):
             The dropout rate for the decoder.
-        decoder_eval_idx (`int`, *optional*, defaults to -1):
-            Debugging tool to stop the decoder at a certain layer index during evaluation.
         learn_init_query (`bool`, *optional*, defaults to `False`):
             Whether to learn the initial query.
-        fuse_type (`str`, *optional*, defaults to `"merged_attn"`):
-            The type of fusion between task and vision embeddings in the decoder.
         cache_size (`int`, *optional*, defaults to 100):
-            The cache size for the labels and prompts caches.
+            The cache size for the classes and prompts caches.
         is_encoder_decoder (`bool`, *optional*, defaults to `True`):
             Whether the model is used as an encoder-decoder model or not.
         kwargs (`Dict[str, Any]`, *optional*):
@@ -147,13 +144,13 @@ class OmDetTurboConfig(PretrainedConfig):
     Examples:
 
     ```python
-    >>> from transformers import OmDetTurboConfig, OmDetTurboModel
+    >>> from transformers import OmDetTurboConfig, OmDetTurboForObjectDetection
 
     >>> # Initializing a OmDet-Turbo omlab/omdet-turbo-tiny style configuration
     >>> configuration = OmDetTurboConfig()
 
     >>> # Initializing a model (with random weights) from the omlab/omdet-turbo-tiny style configuration
-    >>> model = OmDetTurboModel(configuration)
+    >>> model = OmDetTurboForObjectDetection(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -187,8 +184,8 @@ class OmDetTurboConfig(PretrainedConfig):
         backbone_feat_channels=[256, 256, 256],
         num_feature_levels=3,
         disable_custom_kernels=False,
-        text_projection_in_features=512,
-        text_projection_out_features=512,
+        text_projection_in_dim=512,
+        text_projection_out_dim=512,
         num_queries=900,
         layer_norm_eps=1e-5,
         batch_norm_eps=1e-5,
@@ -200,35 +197,37 @@ class OmDetTurboConfig(PretrainedConfig):
         activation_dropout=0.0,
         encoder_in_channels=[192, 384, 768],
         encoder_feat_strides=[8, 16, 32],
-        encode_proj_layers=[2],
+        encoder_projection_indices=[2],
         encoder_attention_heads=8,
-        normalize_before=False,
+        encoder_normalize_before=False,
         eval_size=None,
         encoder_layers=1,
         positional_encoding_temperature=10000,
         encoder_dim_feedforward=2048,
         decoder_num_heads=8,
         decoder_num_layers=6,
-        label_dim=512,
+        class_dim=512,
         class_distance_type="cosine",
         decoder_activation="relu",
-        decoder_encoder_dim_feedforward=1024,
+        task_encoder_feedforward_dim=1024,
         decoder_dim_feedforward=2048,
         decoder_num_points=4,
         decoder_dropout=0.0,
-        decoder_eval_idx=-1,
         learn_init_query=False,
-        fuse_type="merged_attn",
         cache_size=100,
         is_encoder_decoder=True,
         **kwargs,
     ):
         if use_timm_backbone and backbone_kwargs is None:
             backbone_kwargs = {
+                "window_size": backbone_window_size,
                 "features_only": backbone_features_only,
                 "out_indices": backbone_out_indices,
                 "qkv_bias": backbone_qkv_bias,
                 "img_size": backbone_image_size,
+                "embed_dim": backbone_embed_dim,
+                "depths": backbone_depths,
+                "num_heads": backbone_num_heads,
             }
         elif vision_config is None:
             logger.info("`vision_config` is `None`. Initializing the config with the default `swin` vision config.")
@@ -240,7 +239,7 @@ class OmDetTurboConfig(PretrainedConfig):
                 num_heads=backbone_num_heads,
                 qkv_bias=backbone_qkv_bias,
                 output_hidden_states=True,
-                out_indices=[],
+                out_indices=[2, 3, 4],
             )
         elif isinstance(vision_config, dict):
             backbone_model_type = vision_config.pop("model_type")
@@ -274,8 +273,8 @@ class OmDetTurboConfig(PretrainedConfig):
         self.backbone_feat_channels = backbone_feat_channels
         self.num_feature_levels = num_feature_levels
         self.disable_custom_kernels = disable_custom_kernels
-        self.text_projection_in_features = text_projection_in_features
-        self.text_projection_out_features = text_projection_out_features
+        self.text_projection_in_dim = text_projection_in_dim
+        self.text_projection_out_dim = text_projection_out_dim
         self.num_queries = num_queries
         self.layer_norm_eps = layer_norm_eps
         self.batch_norm_eps = batch_norm_eps
@@ -287,25 +286,23 @@ class OmDetTurboConfig(PretrainedConfig):
         self.activation_dropout = activation_dropout
         self.encoder_in_channels = encoder_in_channels
         self.encoder_feat_strides = encoder_feat_strides
-        self.encode_proj_layers = encode_proj_layers
+        self.encoder_projection_indices = encoder_projection_indices
         self.encoder_attention_heads = encoder_attention_heads
-        self.normalize_before = normalize_before
+        self.encoder_normalize_before = encoder_normalize_before
         self.eval_size = eval_size
         self.encoder_layers = encoder_layers
         self.positional_encoding_temperature = positional_encoding_temperature
         self.encoder_dim_feedforward = encoder_dim_feedforward
         self.decoder_num_heads = decoder_num_heads
         self.decoder_num_layers = decoder_num_layers
-        self.label_dim = label_dim
+        self.class_dim = class_dim
         self.class_distance_type = class_distance_type
         self.decoder_activation = decoder_activation
-        self.decoder_encoder_dim_feedforward = decoder_encoder_dim_feedforward
+        self.task_encoder_feedforward_dim = task_encoder_feedforward_dim
         self.decoder_dim_feedforward = decoder_dim_feedforward
         self.decoder_num_points = decoder_num_points
         self.decoder_dropout = decoder_dropout
-        self.decoder_eval_idx = decoder_eval_idx
         self.learn_init_query = learn_init_query
-        self.fuse_type = fuse_type
         self.cache_size = cache_size
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)

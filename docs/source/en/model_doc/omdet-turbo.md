@@ -37,10 +37,6 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 [[autodoc]] OmDetTurboConfig
 
-## OmDetTurboModel
-
-[[autodoc]] OmDetTurboModel
-    - forward
 
 ## OmDetTurboForObjectDetection
 

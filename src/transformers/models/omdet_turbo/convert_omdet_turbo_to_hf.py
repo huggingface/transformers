@@ -14,7 +14,7 @@
 # limitations under the License.
 """Convert OmDet-Turbo checkpoints from the original repository.
 
-URL: https://github.com/IDEA-Research/GroundingDINO"""
+URL: https://github.com/om-ai-lab/OmDet"""
 
 import argparse
 
@@ -26,7 +26,7 @@ from transformers import (
     AutoTokenizer,
     DetrImageProcessor,
     OmDetTurboConfig,
-    OmDetTurboModel,
+    OmDetTurboForObjectDetection,
     OmDetTurboProcessor,
 )
 
@@ -68,14 +68,14 @@ def create_rename_keys_vision(state_dict, config):
     for layer_name in state_dict.keys():
         if layer_name.startswith("backbone") and not layer_name.startswith("backbone.norm"):
             if config.use_timm_backbone:
-                layer_name_replace = layer_name.replace("backbone", "backbone.vision_backbone")
+                layer_name_replace = layer_name.replace("backbone", "vision_backbone.vision_backbone")
                 layer_name_replace = layer_name_replace.replace(".layers.", ".layers_")
                 if "downsample" in layer_name:
                     # get layer number
                     layer_num = int(layer_name.split(".")[2])
                     layer_name_replace = layer_name_replace.replace(f"{layer_num}.downsample", f"{layer_num+1}.downsample")
             else:
-                layer_name_replace = layer_name.replace("backbone", "backbone.vision_backbone")
+                layer_name_replace = layer_name.replace("backbone", "vision_backbone.vision_backbone")
                 layer_name_replace = layer_name_replace.replace("patch_embed.proj", "embeddings.patch_embeddings.projection")
                 layer_name_replace = layer_name_replace.replace("patch_embed.norm", "embeddings.norm")
                 if layer_name.startswith("backbone.layers"):
@@ -87,8 +87,9 @@ def create_rename_keys_vision(state_dict, config):
                     layer_name_replace = layer_name_replace.replace(".layers.", ".encoder.layers.")
                     layer_name_replace = layer_name_replace.replace(".attn.", ".attention.self.")
         elif layer_name.startswith("backbone.norm"):
+            layer_name_replace = layer_name.replace("backbone", "vision_backbone")
             layer_num = int(layer_name.split("norm")[1].split(".")[0])
-            layer_name_replace = layer_name.replace(f"norm{layer_num}", f"layer_norms.{layer_num-1}")
+            layer_name_replace = layer_name_replace.replace(f"norm{layer_num}", f"layer_norms.{layer_num-1}")
         else:
             continue
         rename_keys.append((layer_name, layer_name_replace))
@@ -98,6 +99,7 @@ def create_rename_keys_vision(state_dict, config):
     for layer_name, params in state_dict.items():
         if "neck" in layer_name:
             layer_name_replace = layer_name.replace("neck", "encoder")
+            layer_name_replace = layer_name_replace.replace("input_proj", "channel_projection_layers")
             if "fpn_blocks" in layer_name or "pan_blocks" in layer_name or "lateral_convs" in layer_name or "downsample_convs" in layer_name:
                 layer_name_replace = layer_name_replace.replace(".m.", ".bottlenecks.")
                 layer_name_replace = layer_name_replace.replace(".cv", ".conv")
@@ -108,8 +110,20 @@ def create_rename_keys_vision(state_dict, config):
                 layer_name_replace = layer_name_replace.replace("norm1", "self_attn_layer_norm")
                 layer_name_replace = layer_name_replace.replace("norm2", "final_layer_norm")
             rename_keys.append((layer_name, layer_name_replace))
-
     ########################################## ENCODER - END
+
+    ########################################## DECODER - START
+    for layer_name, params in state_dict.items():
+        if layer_name.startswith("decoder"):
+            layer_name_replace = layer_name.replace("input_proj", "channel_projection_layers")
+            layer_name_replace = layer_name_replace.replace("query_pos_head", "query_position_head")
+            layer_name_replace = layer_name_replace.replace("enc_bbox_head", "encoder_bbox_head")
+            layer_name_replace = layer_name_replace.replace("enc_output", "encoder_vision_features")
+            layer_name_replace = layer_name_replace.replace("dec_score_head", "decoder_class_head")
+            layer_name_replace = layer_name_replace.replace("dec_bbox_head", "decoder_bbox_head")
+            layer_name_replace = layer_name_replace.replace("enc_score_head", "encoder_class_head")
+            rename_keys.append((layer_name, layer_name_replace))
+    ########################################## DECODER - END
     # fmt: on
     return rename_keys
 
@@ -142,7 +156,7 @@ def rename_key(dct, old, new):
 def read_in_q_k_v_vision(state_dict, config):
     state_dict_keys = list(state_dict.keys())
     for layer_name_vision in state_dict_keys:
-        if layer_name_vision.startswith("backbone") and "qkv" in layer_name_vision:
+        if layer_name_vision.startswith("vision_backbone") and "qkv" in layer_name_vision:
             layer_num = int(layer_name_vision.split(".")[4])
             hidden_size = config.vision_config.embed_dim * 2**layer_num
             if "weight" in layer_name_vision:
@@ -222,9 +236,9 @@ def run_test(model, processor):
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 
-    labels = ["cat", "remote"]
-    task = "Detect {}.".format(",".join(labels))
-    inputs = processor(image, text=task, labels=labels, return_tensors="pt")
+    classes = ["cat", "remote"]
+    task = "Detect {}.".format(",".join(classes))
+    inputs = processor(image, text=task, classes=classes, return_tensors="pt")
 
     # Running forward
     with torch.no_grad():
@@ -232,7 +246,7 @@ def run_test(model, processor):
 
     predicted_slice = outputs[1][0, :3, :3]
     print(predicted_slice)
-    expected_slice = torch.tensor([[[0.9624, -3.5492], [0.5973, -2.4723], [-3.0351, 1.1316]]])
+    expected_slice = torch.tensor([[0.9427, -2.5958], [0.2105, -3.4569], [-2.6364, -4.1610]])
 
     assert torch.allclose(predicted_slice, expected_slice, atol=1e-4)
     print("Looks ok!")
@@ -277,14 +291,14 @@ def convert_omdet_turbo_checkpoint(args):
     read_in_q_k_v_encoder(new_state_dict, config)
     read_in_q_k_v_decoder(new_state_dict, config)
     # Load HF model
-    model = OmDetTurboModel(config)
+    model = OmDetTurboForObjectDetection(config)
     model.eval()
     missing_keys, unexpected_keys = model.load_state_dict(new_state_dict, strict=False)
     print("Missing keys:", missing_keys)
     print("Unexpected keys:", unexpected_keys)
 
     image_processor = DetrImageProcessor(
-        size=[config.backbone_image_size, config.backbone_image_size],
+        size={"height": config.backbone_image_size, "width": config.backbone_image_size},
         do_rescale=False,
         image_mean=IMAGE_MEAN,
         image_std=IMAGE_STD,

@@ -24,6 +24,7 @@ try:
 except ImportError:
     from typing_extensions import Unpack
 
+
 from ...image_transforms import center_to_corners_format
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
@@ -49,10 +50,10 @@ def clip_boxes(box, box_size: Tuple[int, int]):
 
     Args:
         box (Tensor): The box to be clipped.
-        box_size (width, height): The clipping box's size.
+        box_size (height, width): The clipping box's size.
     """
     assert torch.isfinite(box).all(), "Box tensor contains infinite or NaN!"
-    width, height = box_size
+    height, width = box_size
     x1 = box[:, 0].clamp(min=0, max=width)
     y1 = box[:, 1].clamp(min=0, max=height)
     x2 = box[:, 2].clamp(min=0, max=width)
@@ -60,6 +61,14 @@ def clip_boxes(box, box_size: Tuple[int, int]):
     box = torch.stack((x1, y1, x2, y2), dim=-1)
 
     return box
+
+
+def compute_score(boxes):
+    num_classes = boxes.shape[2]
+    proposal_num = boxes.shape[1]
+    scores = torch.sigmoid(boxes)
+    classes = torch.arange(num_classes, device=boxes.device).unsqueeze(0).repeat(proposal_num, 1).flatten(0, 1)
+    return scores, classes
 
 
 class OmDetTurboProcessorKwargs(ProcessingKwargs, total=False):
@@ -108,7 +117,7 @@ class OmDetTurboProcessor(ProcessorMixin):
         self,
         images: ImageInput = None,
         text: Union[str, List[str], TextInput, PreTokenizedInput] = None,
-        labels: Union[List[str], List[List[str]]] = None,
+        classes: Union[List[str], List[List[str]]] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[OmDetTurboProcessorKwargs],
@@ -119,13 +128,13 @@ class OmDetTurboProcessor(ProcessorMixin):
 
         Please refer to the docstring of the above two methods for more information.
         """
-        if images is None or text is None or labels is None:
-            raise ValueError("You have to specify `images`, `text` and `labels`.")
+        if images is None or text is None or classes is None:
+            raise ValueError("You have to specify `images`, `text` and `classes`.")
 
         if isinstance(text, str):
             text = [text]
-        if isinstance(labels[0], str):
-            labels = [labels]
+        if isinstance(classes[0], str):
+            classes = [classes]
 
         # error when using `tokenizer_init_kwargs=self.tokenizer.init_kwargs` in _merge_kwargs` as
         # some init_kwargs are not defined in the forward method of the tokenizer e.g "padding_side"
@@ -139,14 +148,16 @@ class OmDetTurboProcessor(ProcessorMixin):
         encoding_image_processor = self.image_processor(images, **output_kwargs["images_kwargs"])
         tasks_encoding = self.tokenizer(text=text, **output_kwargs["text_kwargs"])
 
-        labels_encoding = []
-        for label in labels:
-            label_encoding = self.tokenizer(text=label, **output_kwargs["text_kwargs"])
-            labels_encoding.append(label_encoding)
-        # workaround to group the labels encoding by task in a BatchEncoding
-        labels_encoding = BatchEncoding({str(i): label_encoding for i, label_encoding in enumerate(labels_encoding)})
+        classes_encoding_batched = []
+        for class_single in classes:
+            classes_encoding = self.tokenizer(text=class_single, **output_kwargs["text_kwargs"])
+            classes_encoding_batched.append(classes_encoding)
+        # workaround to group the classes encoding by task in a BatchEncoding
+        classes_encoding_batched = BatchEncoding(
+            {str(i): class_encoding for i, class_encoding in enumerate(classes_encoding_batched)}
+        )
 
-        encoding = BatchEncoding({"tasks": tasks_encoding, "labels": labels_encoding})
+        encoding = BatchEncoding({"tasks": tasks_encoding, "classes": classes_encoding_batched})
         encoding.update(encoding_image_processor)
 
         return encoding
@@ -167,16 +178,16 @@ class OmDetTurboProcessor(ProcessorMixin):
         """
         return self.tokenizer.decode(*args, **kwargs)
 
-    def process_single_image(
+    def post_process_boxes_for_image(
         self,
         boxes,
         scores,
-        labels,
-        label_names: List[str],
+        predicted_classes,
+        classes: List[str],
         image_size: Tuple[int, int],
         num_classes: int,
-        score_thresh: float,
-        nms_thresh: float,
+        score_threshold: float,
+        nms_threshold: float,
         max_num_det: int = None,
     ) -> dict:
         """
@@ -190,71 +201,65 @@ class OmDetTurboProcessor(ProcessorMixin):
             scores (Tensor): A Tensor of predicted class scores for the image.
                 Shape : (R, K + 1), where R is the number of predicted objects for the image.
                 This is compatible with the output of :meth:`FastRCNNOutputLayers.predict_probs`.
-            labels (Tensor): A Tensor of predicted class labels for the image.
+            predicted_classes (Tensor): A Tensor of predicted classes for the image.
                 Shape : (R,), where R is the number of predicted objects for the image.
-            labels_name (list[str]): A list of class labels for each class.
-            image_size (tuple): A tuple of (width, height) for the image.
+            classes (list[str]): The input classes names.
+            image_size (tuple): A tuple of (height, width) for the image.
             num_classes (int): The number of classes given for this image.
-            score_thresh (float): Only return detections with a confidence score exceeding this
+            score_threshold (float): Only return detections with a confidence score exceeding this
                 threshold.
-            nms_thresh (float):  The threshold to use for box non-maximum suppression. Value in [0, 1].
+            nms_threshold (float):  The threshold to use for box non-maximum suppression. Value in [0, 1].
             max_num_det (int, optional): The maximum number of detections to return. Default is None.
         Returns:
-            dict: A dictionnary the following keys:
+            dict: A dictionary the following keys:
                 "boxes" (Tensor): A tensor of shape (N, 4), containing the predicted boxes in (x1, y1, x2, y2) format,
                 where N is the number of predicted objects after filtering.
                 "scores" (Tensor): A tensor of shape (N,), containing the predicted confidence scores for each detection.
-                "labels" (list[str]): A list of strings, where each string is the predicted label for the
+                "classes" (list[str]): A list of strings, where each string is the predicted class for the
                     corresponding detection
         """
         proposal_num = len(boxes) if max_num_det is None else max_num_det
         scores_per_image, topk_indices = scores.flatten(0, 1).topk(proposal_num, sorted=False)
-        labels_per_image = labels[topk_indices]
+        classes_per_image = predicted_classes[topk_indices]
         box_pred_per_image = boxes.view(-1, 1, 4).repeat(1, num_classes, 1).view(-1, 4)
         box_pred_per_image = box_pred_per_image[topk_indices]
 
         # Score filtering
         box_pred_per_image = center_to_corners_format(box_pred_per_image)
-        box_pred_per_image = box_pred_per_image * torch.tensor(image_size).repeat(2).to(box_pred_per_image.device)
-        filter_mask = scores_per_image > score_thresh  # R x K
+        box_pred_per_image = box_pred_per_image * torch.tensor(image_size[::-1]).repeat(2).to(
+            box_pred_per_image.device
+        )
+        filter_mask = scores_per_image > score_threshold  # R x K
         score_keep = filter_mask.nonzero(as_tuple=False).view(-1)
         box_pred_per_image = box_pred_per_image[score_keep]
         scores_per_image = scores_per_image[score_keep]
-        labels_per_image = labels_per_image[score_keep]
+        classes_per_image = classes_per_image[score_keep]
 
-        filter_labels_mask = labels_per_image < len(label_names)
-        labels_keep = filter_labels_mask.nonzero(as_tuple=False).view(-1)
-        box_pred_per_image = box_pred_per_image[labels_keep]
-        scores_per_image = scores_per_image[labels_keep]
-        labels_per_image = labels_per_image[labels_keep]
+        filter_classes_mask = classes_per_image < len(classes)
+        classes_keep = filter_classes_mask.nonzero(as_tuple=False).view(-1)
+        box_pred_per_image = box_pred_per_image[classes_keep]
+        scores_per_image = scores_per_image[classes_keep]
+        classes_per_image = classes_per_image[classes_keep]
 
         # NMS
-        keep = batched_nms(box_pred_per_image, scores_per_image, labels_per_image, nms_thresh)
+        keep = batched_nms(box_pred_per_image, scores_per_image, classes_per_image, nms_threshold)
         box_pred_per_image = box_pred_per_image[keep]
         scores_per_image = scores_per_image[keep]
-        labels_per_image = labels_per_image[keep]
-        labels_per_image = [label_names[i] for i in labels_per_image]
+        classes_per_image = classes_per_image[keep]
+        classes_per_image = [classes[i] for i in classes_per_image]
 
         # create an instance
         result = {}
         result["boxes"] = clip_boxes(box_pred_per_image, image_size)
         result["scores"] = scores_per_image
-        result["labels"] = labels_per_image
+        result["classes"] = classes_per_image
 
         return result
-
-    def compute_score(self, boxes):
-        # TODO modify for training
-        num_classes = boxes.shape[2]
-        proposal_num = boxes.shape[1]
-        scores = torch.sigmoid(boxes)
-        labels = torch.arange(num_classes, device=boxes.device).unsqueeze(0).repeat(proposal_num, 1).flatten(0, 1)
-        return scores, labels
 
     def post_process_grounded_object_detection(
         self,
         outputs,
-        labels_names: List[str],
+        classes: List[str],
         score_threshold: float = 0.3,
         nms_threshold: float = 0.5,
         target_sizes: Union[TensorType, List[Tuple]] = None,
@@ -262,38 +267,38 @@ class OmDetTurboProcessor(ProcessorMixin):
     ):
         """
         Converts the raw output of [`OmDetTurboForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
-        bottom_right_x, bottom_right_y) format and get the associated text label.
+        bottom_right_x, bottom_right_y) format and get the associated text class.
 
         Args:
             outputs ([`OmDetTurboObjectDetectionOutput`]):
                 Raw outputs of the model.
-            labels_name (list[str]): A list of class labels for each class.
-            score_thresh (float): Only return detections with a confidence score exceeding this
+            classes (list[str]): The input classes names.
+            score_threshold (float): Only return detections with a confidence score exceeding this
                 threshold.
-            nms_thresh (float):  The threshold to use for box non-maximum suppression. Value in [0, 1].
+            nms_threshold (float):  The threshold to use for box non-maximum suppression. Value in [0, 1].
             target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
                 `(width, height)` of each image in the batch. If unset, predictions will not be resized.
         Returns:
-            `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
+            `List[Dict]`: A list of dictionaries, each dictionary containing the scores, classes and boxes for an image
             in the batch as predicted by the model.
         """
         boxes_logits = outputs.decoder_coord_logits
         scores_logits = outputs.decoder_class_logits
-        scores, labels = self.compute_score(scores_logits)
+        scores, predicted_classes = compute_score(scores_logits)
         num_classes = scores_logits.shape[2]
         results = []
-        for scores_img, box_per_img, image_size, label_names in zip(scores, boxes_logits, target_sizes, labels_names):
+        for scores_img, box_per_img, image_size, class_names in zip(scores, boxes_logits, target_sizes, classes):
             results.append(
-                self.process_single_image(
+                self.post_process_boxes_for_image(
                     box_per_img,
                     scores_img,
-                    labels,
-                    label_names,
+                    predicted_classes,
+                    class_names,
                     image_size,
                     num_classes,
-                    score_thresh=score_threshold,
-                    nms_thresh=nms_threshold,
+                    score_threshold=score_threshold,
+                    nms_threshold=nms_threshold,
                     max_num_det=max_num_det,
                 )
             )

@@ -314,7 +314,6 @@ def load_backbone(config):
     backbone_checkpoint = getattr(config, "backbone", None)
     backbone_kwargs = getattr(config, "backbone_kwargs", None)
     backbone_kwargs = {} if backbone_kwargs is None else backbone_kwargs
-
     if backbone_kwargs and backbone_config is not None:
         raise ValueError("You can't specify both `backbone_kwargs` and `backbone_config`.")
 
