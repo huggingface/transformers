@@ -47,8 +47,14 @@ from .tools import (
 )
 
 
-DEFAULT_JSON_GRAMMAR = 'Thought: .+?\\nAction:\\n\\{\\n\\s{4}"action":\\s"[^"\\n]+",\\n\\s{4}"action_input":\\s"[^"\\n]+"\\n\\}\\n<end_action>'
-DEFAULT_CODE_GRAMMAR = "Thought: .+?\\nCode:\\n```(?:py|python)?\\n(?:.|\\s)+?\\n```<end_action>"
+DEFAULT_JSON_GRAMMAR = {
+    "type": "regex",
+    "value": 'Thought: .+?\\nAction:\\n\\{\\n\\s{4}"action":\\s"[^"\\n]+",\\n\\s{4}"action_input":\\s"[^"\\n]+"\\n\\}\\n<end_action>'
+}
+DEFAULT_CODE_GRAMMAR = {
+    "type": "regex",
+    "value": "Thought: .+?\\nCode:\\n```(?:py|python)?\\n(?:.|\\s)+?\\n```<end_action>"
+}
 
 
 if is_pygments_available():
@@ -93,9 +99,6 @@ logger.addHandler(ch)
 
 def parse_json_blob(json_blob: str) -> Dict[str, str]:
     try:
-        print("JSON_BLOB")
-        print(json_blob)
-        print("END")
         first_accolade_index = json_blob.find("{")
         last_accolade_index = [a.start() for a in list(re.finditer("}", json_blob))][-1]
         json_blob = json_blob[first_accolade_index : last_accolade_index + 1].replace('\\"', "'")

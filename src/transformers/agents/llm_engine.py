@@ -78,7 +78,7 @@ class HfEngine:
 
         # Get LLM output
         response = self.client.chat_completion(
-            messages, stop=stop_sequences, max_tokens=1500, response_format={"type": "regex", "value": grammar}
+            messages, stop=stop_sequences, max_tokens=1500, response_format=grammar
         )
         response = response.choices[0].message.content
 
