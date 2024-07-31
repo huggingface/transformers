@@ -1071,7 +1071,8 @@ class Gemma2ForCausalLM(Gemma2PreTrainedModel):
         if inputs_embeds is not None and cache_position[0] == 0:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
-            model_inputs = {"input_ids": input_ids}
+            # The clone here is for the same reason as for `position_ids`.
+            model_inputs = {"input_ids": input_ids.clone(memory_format=torch.contiguous_format)}
 
         if isinstance(past_key_values, HybridCache) and attention_mask.ndim == 2:
             if inputs_embeds is not None:
