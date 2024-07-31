@@ -97,7 +97,7 @@ class XSoftmax(torch.autograd.Function):
     >>> y = XSoftmax.apply(x, mask, dim)
     ```"""
 
-    @staticmethod 
+    @staticmethod
     def forward(ctx, input, mask, dim):
         ctx.dim = dim
         rmask = ~(mask.to(torch.bool))
