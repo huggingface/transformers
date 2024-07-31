@@ -172,7 +172,6 @@ class Gemma2IntegrationTest(unittest.TestCase):
     @slow
     def test_model_9b_flash_attn(self):
         # See https://github.com/huggingface/transformers/issues/31953 --- flash attn was generating garbage for gemma2, especially in long context
-        # NOTE: the quality is a lot better whan fp16 is used, and worse for bf16
         model_id = "google/gemma-2-9b"
         EXPECTED_TEXTS = [
             '<bos>Hello I am doing a project on the 1918 flu pandemic and I am trying to find out how many people died in the United States. I have found a few sites that say 500,000 but I am not sure if that is correct. I have also found a site that says 675,000 but I am not sure if that is correct either. I am trying to find out how many people died in the United States. I have found a few',
