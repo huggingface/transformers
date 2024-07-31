@@ -44,6 +44,7 @@ GGML_TYPES = {
     "Q4_K": 12,
     "Q5_K": 13,
     "Q6_K": 14,
+    "IQ2_XXS": 16,
 }
 
 # The Blocksizes are reported in bytes
@@ -58,6 +59,7 @@ GGML_BLOCK_SIZES = {
     "Q2_K": 256 // 16 + 256 // 4 + 2 + 2,
     "Q3_K": 256 // 8 + 256 // 4 + 12 + 2,
     "Q5_K": 2 + 2 + 12 + 256 // 8 + 256 // 2,
+    "IQ2_XXS": 2 + 256 // 8 * 2,
 }
 
 # Listed here: https://github.com/ggerganov/ggml/blob/master/docs/gguf.md
@@ -487,6 +489,48 @@ def dequantize_q5_k(data, n_bytes: int):
     )
 
 
+def dequantize_iq2_xxs(data, n_bytes):
+    # C implementation
+    # https://github.com/ggerganov/ggml/blob/3f5a4bbe59285c0f679b376f6259187d5514ff9c/src/ggml-quants.c#L3311
+    # C struct definition
+    # https://github.com/ggerganov/ggml/blob/3f5a4bbe59285c0f679b376f6259187d5514ff9c/src/ggml-common.h#L314-L321
+    def _dequantize_iq2xxs_column(qs_block, d):
+        """
+        The qs matrix could be splitted into 8 sub_blocks (4 x int16 bytes each block) for each row:
+        | Block_11 | Block_12 | Block_13 | Block_14 | Block_15 | Block_16 | Block_17 | Block_18 |
+        | Block_21 | Block_22 | Block_23 | Block_24 | Block_25 | Block_26 | Block_27 | Block_28 |
+        ...
+        | Block_n1 | Block_n2 | Block_n3 | Block_n4 | Block_n5 | Block_n6 | Block_n7 | Block_n8 |
+
+        This function process n rows at a time (Block_11 to Block_n1, Block_12 to Block_n2 etc).
+        """
+        from .ggml_utils import IQ2XXS_GRID, KMASK_IQ2XS, KSIGNS_IQ2XS
+
+        aux32 = np.frombuffer(qs_block, dtype=np.uint32).reshape(num_blocks, 2)
+        aux8 = np.frombuffer(qs_block, dtype=np.uint8).reshape(num_blocks, 8)
+
+        l = np.arange(4)
+        db = d * (0.5 + (aux32[:, [1]] >> 28)) * 0.25
+
+        grid = np.frombuffer(np.ascontiguousarray(IQ2XXS_GRID[aux8[:, l]]), dtype=np.uint8).reshape(num_blocks, 32)
+        signs = KSIGNS_IQ2XS[(aux32[:, [1]] >> 7 * l) & 127]
+
+        y = db * grid * np.where(signs.repeat(8, axis=1) & np.tile(KMASK_IQ2XS, 4), -1, 1)
+        return y
+
+    num_blocks = n_bytes // GGML_BLOCK_SIZES["IQ2_XXS"]
+
+    data_f16 = np.frombuffer(data, dtype=np.float16).reshape(num_blocks, GGML_BLOCK_SIZES["IQ2_XXS"] // 2)
+    data_i16 = np.frombuffer(data, dtype=np.int16).reshape(num_blocks, GGML_BLOCK_SIZES["IQ2_XXS"] // 2)
+
+    d = data_f16[:, 0].reshape(num_blocks, 1).astype(np.float32)
+    qs = data_i16[:, 1:].reshape(num_blocks, 32)
+
+    y = [_dequantize_iq2xxs_column(np.ascontiguousarray(qs[:, 4 * i : 4 * (i + 1)]), d) for i in range(8)]
+    y = np.concatenate(y, axis=1)
+    return y
+
+
 def load_dequant_gguf_tensor(shape, ggml_type, data, n_bytes):
     if ggml_type == GGML_TYPES["F32"]:
         values = data
@@ -506,6 +550,8 @@ def load_dequant_gguf_tensor(shape, ggml_type, data, n_bytes):
         values = dequantize_q3_k(data, n_bytes)
     elif ggml_type == GGML_TYPES["Q5_K"]:
         values = dequantize_q5_k(data, n_bytes)
+    elif ggml_type == GGML_TYPES["IQ2_XXS"]:
+        values = dequantize_iq2_xxs(data, n_bytes)
     else:
         raise NotImplementedError(
             f"ggml_type {ggml_type} not implemented - please raise an issue on huggingface transformers: https://github.com/huggingface/transformers/issues/new/choose"
