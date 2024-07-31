@@ -327,6 +327,11 @@ class Gemma2FlashAttention2(Gemma2Attention):
             }
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
+        if attention_mask is not None:
+            seq_len = attention_mask.shape[1]
+            key_states = key_states[:, :, :seq_len]
+            value_states = value_states[:, :, :seq_len]
+
         # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
         # to be able to avoid many of these transpose/reshape/view.
         query_states = query_states.transpose(1, 2)
@@ -510,16 +515,18 @@ class Gemma2DecoderLayer(nn.Module):
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        if (
-            self.config._attn_implementation != "flash_attention_2" and self.is_sliding and attention_mask is not None
-        ):  # efficient SDPA and no padding
-            min_dtype = torch.finfo(hidden_states.dtype).min
-            sliding_window_mask = torch.tril(
-                torch.ones_like(attention_mask, dtype=torch.bool), diagonal=-self.sliding_window
-            )
-            attention_mask = torch.where(sliding_window_mask, min_dtype, attention_mask)
-            if attention_mask.shape[-1] <= 1:  # when decoding
-                attention_mask = attention_mask[:, :, :, -self.sliding_window :]
+        if self.is_sliding and attention_mask is not None:  # efficient SDPA and no padding
+            # Flash-attn is a 2D tensor
+            if self.config._attn_implementation == "flash_attention_2":
+                attention_mask = attention_mask[:, -self.sliding_window :]
+            else:
+                min_dtype = torch.finfo(hidden_states.dtype).min
+                sliding_window_mask = torch.tril(
+                    torch.ones_like(attention_mask, dtype=torch.bool), diagonal=-self.sliding_window
+                )
+                attention_mask = torch.where(sliding_window_mask, min_dtype, attention_mask)
+                if attention_mask.shape[-1] <= 1:  # when decoding
+                    attention_mask = attention_mask[:, :, :, -self.sliding_window :]
 
         residual = hidden_states
 
@@ -824,10 +831,12 @@ class Gemma2Model(Gemma2PreTrainedModel):
         past_key_values: Cache,
         output_attentions: bool,
     ):
+        # Flash Attention currently doesn't support static cache but Gemma2 work only with static cache.
+        # So we will pass in attention mask as is in any case, not only when ther's padding. Then we'll use its shape
+        # to cut out keys/values trailing 0 used in static cache. This workaround should be compile compatible
+        # as it doesn't cause dynamic control issues.
         if self.config._attn_implementation == "flash_attention_2":
-            if attention_mask is not None and 0.0 in attention_mask:
-                return attention_mask
-            return None
+            return attention_mask
 
         dtype, device = input_tensor.dtype, input_tensor.device
         min_dtype = torch.finfo(dtype).min
