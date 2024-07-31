@@ -138,7 +138,7 @@ class XSoftmax(torch.autograd.Function):
         return masked_fill(g, output, r_mask, g.op("Constant", value_t=torch.tensor(0, dtype=torch.bool)))
 
 
-class DropoutContext(object):
+class DropoutContext:
     def __init__(self):
         self.dropout = 0
         self.mask = None
@@ -602,10 +602,10 @@ class DisentangledSelfAttention(nn.Module):
                 sequence length in which element [i,j] = *1* means the *i* th token in the input can attend to the *j*
                 th token.
 
-            output_attentions (`bool`, optional):
+            output_attentions (`bool`, *optional*):
                 Whether return the attention matrix.
 
-            query_states (`torch.FloatTensor`, optional):
+            query_states (`torch.FloatTensor`, *optional*):
                 The *Q* state in *Attention(Q,K,V)*.
 
             relative_pos (`torch.LongTensor`):
