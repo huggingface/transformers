@@ -23,8 +23,6 @@ import math
 from typing import Dict, List, Optional, Union
 
 import numpy as np
-import torch
-from PIL import Image
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import (
@@ -47,7 +45,7 @@ from ...image_utils import (
     to_numpy_array,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, is_vision_available, logging
+from ...utils import TensorType, is_torch_available, is_vision_available, logging
 
 
 logger = logging.get_logger(__name__)
@@ -55,6 +53,10 @@ logger = logging.get_logger(__name__)
 
 if is_vision_available():
     from PIL import Image
+
+
+if is_torch_available():
+    import torch
 
 
 def round_by_factor(number: int, factor: int) -> int:

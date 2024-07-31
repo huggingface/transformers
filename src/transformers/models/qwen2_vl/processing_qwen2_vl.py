@@ -26,7 +26,6 @@ from io import BytesIO
 from typing import Dict, List, Optional, Union
 
 import requests
-import torch
 from PIL import Image
 from torchvision import io
 
@@ -38,7 +37,11 @@ from ...tokenization_utils_base import (
     TextInput,
     TruncationStrategy,
 )
-from ...utils import TensorType
+from ...utils import TensorType, is_torch_available
+
+
+if is_torch_available():
+    import torch
 
 
 class Qwen2VLProcessor(ProcessorMixin):
