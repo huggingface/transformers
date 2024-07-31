@@ -15,26 +15,26 @@ rendered properly in your Markdown viewer.
 -->
 
 
-# HQQ 
+# HQQ [[hqq]]
 
-Half-Quadratic Quantization (HQQ)는 빠르고 견고한 최적화를 통해 실시간 양자화를 구현합니다. 이 방법은 교정 데이터가 필요 없으며, 어떤 모델에도 양자화를 적용할 수 있습니다.  
+Half-Quadratic Quantization (HQQ)는 빠르고 견고한 최적화를 통해 실시간으로 양자화를 구현합니다. 이 방법은 교정 데이터가 필요 없으며, 어떤 모델이든 양자화를 적용할 수 있습니다.  
 자세한 내용은 <a href="https://github.com/mobiusml/hqq/">공식 패키지</a>를 참조하세요.
 
-설치를 위해, 최신 버전과 해당하는 CUDA 커널을 빌드하려면 다음 접근 방식을 사용하는 것을 권장합니다:
+설치를 위해, 최신 버전과 그에 해당하는 CUDA 커널을 빌드하기 위해서 아래와 같은 방법을 사용하는 것을 권장합니다:
 ```
 pip install hqq
 ```
 
-모델을 양자화하려면 [`HqqConfig`]를 생성해야 합니다. 다음 두 가지 방법이 있습니다:
+모델을 양자화하려면 먼저 [`HqqConfig`]를 생성해야 합니다. 다음과 같이 두 가지 방법이 있습니다:
 ``` Python
 from transformers import AutoModelForCausalLM, AutoTokenizer, HqqConfig
 
-# 방법 1: 모든 선형 레이어가 동일한 양자화 설정을 사용
+# 방법 1: 모든 선형 레이어가 동일한 양자화 구성을 사용
 quant_config  = HqqConfig(nbits=8, group_size=64, quant_zero=False, quant_scale=False, axis=0) # axis=0은 기본값
 ```
 
 ``` Python
-# 방법 2: 동일한 태그를 가진 각 선형 레이어가 전용 양자화 설정을 사용
+# 방법 2: 동일한 태그를 가진 각 선형 레이어가 전용 양자화 구성을 사용
 q4_config = {'nbits':4, 'group_size':64, 'quant_zero':False, 'quant_scale':False}
 q3_config = {'nbits':3, 'group_size':32, 'quant_zero':False, 'quant_scale':False}
 quant_config  = HqqConfig(dynamic_config={
@@ -49,10 +49,10 @@ quant_config  = HqqConfig(dynamic_config={
 })
 ```
 
-두 번째 접근 방식은 Mixture-of-Experts (MoEs) 양자화에 특히 흥미로운데, 전문가들이 낮은 양자화 설정의 영향을 덜 받기 때문입니다.
+Mixture-of-Experts (MoEs) 모델을 양자화할 때 두 번째 방법은 특히 흥미로운데, 각각의 Expert가 양자화 설정의 영향을 덜 받기 때문입니다.
 
 
-그런 다음 다음과 같이 모델을 양자화합니다:
+그 후, 다음과 같이 모델을 양자화합니다:
 ``` Python
 model = transformers.AutoModelForCausalLM.from_pretrained(
     model_id, 
@@ -62,8 +62,8 @@ model = transformers.AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-## 최적화된 런타임
+## 최적화된 런타임 [[optimized-runtime]]
 
-HQQ는 순수 Pytorch 및 맞춤형 디양자화 CUDA 커널을 포함한 다양한 백엔드를 지원합니다. 이러한 백엔드는 오래된 GPU 및 peft/QLoRA 훈련에 적합합니다.
-더 빠른 추론을 위해, HQQ는 4비트 융합 커널(TorchAO 및 Marlin)을 지원하여 단일 4090에서 최대 200 토큰/초에 도달합니다.
+HQQ는 순수 Pytorch 및 맞춤형 역양자화(Dequantization) CUDA 커널을 포함한 다양한 백엔드를 지원합니다. 이러한 백엔드는 오래된 GPU 및 peft/QLoRA 훈련에 적합합니다.
+더 빠른 추론을 위해, HQQ는 4비트 융합 커널(TorchAO 및 Marlin)을 지원하여 단일 4090 GPU에서 최대 200 토큰/초의 속도에 달합니다.
 백엔드 사용에 대한 자세한 내용은 https://github.com/mobiusml/hqq/?tab=readme-ov-file#backend를 참조하세요.
