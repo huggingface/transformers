@@ -176,6 +176,7 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, unittest.Test
     """
 
     all_model_classes = (PaliGemmaForConditionalGeneration,) if is_torch_available() else ()
+    all_generative_model_classes = (PaliGemmaForConditionalGeneration,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
     test_torchscript = False
