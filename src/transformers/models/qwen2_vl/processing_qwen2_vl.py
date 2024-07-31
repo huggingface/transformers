@@ -26,8 +26,6 @@ from io import BytesIO
 from typing import Dict, List, Optional, Union
 
 import requests
-from PIL import Image
-from torchvision import io
 
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
@@ -37,11 +35,19 @@ from ...tokenization_utils_base import (
     TextInput,
     TruncationStrategy,
 )
-from ...utils import TensorType, is_torch_available
+from ...utils import TensorType, is_torch_available, is_torchvision_available, is_vision_available
+
+
+if is_vision_available():
+    from PIL import Image
 
 
 if is_torch_available():
     import torch
+
+
+if is_torchvision_available():
+    from torchvision import io
 
 
 class Qwen2VLProcessor(ProcessorMixin):
