@@ -1605,7 +1605,7 @@ def direct_transformers_import(path: str, file="__init__.py") -> ModuleType:
 
     Args:
         path (`str`): The path to the source file
-        file (`str`, optional): The file to join with the path. Defaults to "__init__.py".
+        file (`str`, *optional*): The file to join with the path. Defaults to "__init__.py".
 
     Returns:
         `ModuleType`: The resulting imported module
