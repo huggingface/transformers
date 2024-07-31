@@ -328,14 +328,14 @@ def _compute_llama3_parameters(
     wavelen = 2 * math.pi / inv_freq
     # wavelen < high_freq_wavelen: do nothing
     # wavelen > low_freq_wavelen: divide by factor
-    inv_freq_new = torch.where(wavelen > low_freq_wavelen, inv_freq / factor, inv_freq)
+    inv_freq_llama = torch.where(wavelen > low_freq_wavelen, inv_freq / factor, inv_freq)
     # otherwise: interpolate between the two, using a smooth factor
     smooth_factor = (old_context_len / wavelen - low_freq_factor) / (high_freq_factor - low_freq_factor)
-    smoothed_inv_freq = (1 - smooth_factor) * inv_freq_new / factor + smooth_factor * inv_freq_new
+    smoothed_inv_freq = (1 - smooth_factor) * inv_freq_llama / factor + smooth_factor * inv_freq_llama
     is_medium_freq = ~(wavelen < high_freq_wavelen) * ~(wavelen > low_freq_wavelen)
-    inv_freq_new = torch.where(is_medium_freq, smoothed_inv_freq, inv_freq_new)
+    inv_freq_llama = torch.where(is_medium_freq, smoothed_inv_freq, inv_freq_llama)
 
-    return inv_freq, attention_factor
+    return inv_freq_llama, attention_factor
 
 
 # This maps the "rope_type" string field in rope config to the corresponding function to compute the RoPE parameters
