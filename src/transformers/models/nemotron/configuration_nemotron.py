@@ -19,7 +19,6 @@ from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 
-
 logger = logging.get_logger(__name__)
 
 
@@ -148,7 +147,7 @@ class NemotronConfig(PretrainedConfig):
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
         self.partial_rotary_factor = partial_rotary_factor
-        
+
         # Validate the correctness of rotary position embeddings parameters
         # BC: if there is a 'type' field, move it to 'rope_type'.
         if self.rope_scaling is not None and "type" in self.rope_scaling:

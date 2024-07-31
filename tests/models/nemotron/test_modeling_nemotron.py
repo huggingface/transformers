@@ -15,18 +15,14 @@
 # limitations under the License.
 """Testing suite for the PyTorch Nemotron model."""
 
-import gc
+import pytest
 import tempfile
 import unittest
-
-import pytest
-from packaging import version
 from parameterized import parameterized
 
-from transformers import NemotronConfig, StaticCache, is_torch_available, set_seed
+from transformers import NemotronConfig, is_torch_available
 from transformers.testing_utils import (
     is_flaky,
-    require_bitsandbytes,
     require_flash_attn,
     require_read_token,
     require_torch,
@@ -36,12 +32,8 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...generation.test_utils import GenerationTesterMixin
-from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
-from ...test_pipeline_mixin import PipelineTesterMixin
-
 from ...models.gemma.test_modeling_gemma import GemmaModelTest, GemmaModelTester
+from ...test_configuration_common import ConfigTester
 
 if is_torch_available():
     import torch
@@ -53,10 +45,6 @@ if is_torch_available():
         NemotronForTokenClassification,
         NemotronModel,
         AutoTokenizer,
-    )
-    from transformers.models.nemotron.modeling_nemotron import (
-        NemotronLinearScalingRotaryEmbedding,
-        NemotronRotaryEmbedding,
     )
 
 
@@ -119,7 +107,7 @@ class NemotronModelTest(GemmaModelTest):
     @unittest.skip("Eager and SDPA do not produce the same outputs, thus this test fails")
     def test_model_outputs_equivalence(self, **kwargs):
         pass
-    
+
     @require_torch_sdpa
     @require_torch_gpu
     @slow
@@ -211,7 +199,7 @@ class NemotronIntegrationTest(unittest.TestCase):
         )
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(text, return_tensors="pt").to(torch_device)
-        
+
         output = model.generate(**inputs, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT, output_text)
@@ -229,7 +217,7 @@ class NemotronIntegrationTest(unittest.TestCase):
         )
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(text, return_tensors="pt").to(torch_device)
-        
+
         output = model.generate(**inputs, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT, output_text)
@@ -247,7 +235,7 @@ class NemotronIntegrationTest(unittest.TestCase):
         )
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(text, return_tensors="pt").to(torch_device)
-        
+
         output = model.generate(**inputs, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT, output_text)

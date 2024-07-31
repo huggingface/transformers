@@ -12,21 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
 import os
+import shutil
 from argparse import ArgumentParser
 from collections import OrderedDict
-import json
-import shutil
 
 import torch
-from omegaconf import open_dict
-from pytorch_lightning import Trainer
-from transformers import AutoModelForCausalLM, LlamaTokenizer
-
-from nemo.collections.nlp.models.language_modeling.megatron_gpt_model import MegatronGPTModel
 from nemo.collections.common.tokenizers.huggingface.auto_tokenizer import AutoTokenizer
+from nemo.collections.nlp.models.language_modeling.megatron_gpt_model import MegatronGPTModel
 from nemo.collections.nlp.parts.nlp_overrides import NLPDDPStrategy
 from nemo.utils import logging
+from pytorch_lightning import Trainer
+
+from transformers import LlamaTokenizer
 
 """
 Script to convert a nemotron checkpoint in nemo (mcore path) into a HuggingFace checkpoint.
@@ -39,7 +38,7 @@ This script can be used to 1) generate only the HF weights, or 2) generate an en
     python convert_nemotron_nemo_to_hf.py \
     --input_name_or_path /path/to/file.nemo or /path/to/extracted_folder \
     --output_path /path/to/pytorch_model.bin
-    
+
 2) Generate the full HF model folder
 
     python convert_nemotron_nemo_to_hf.py \
@@ -47,7 +46,7 @@ This script can be used to 1) generate only the HF weights, or 2) generate an en
     --hf_input_path /path/to/input_hf_folder \
     --hf_output_path /path/to/output_hf_folder \
 
-    Use the --cpu-only flag if the model cannot fit in the GPU (e.g. Nemotron4 340b). 
+    Use the --cpu-only flag if the model cannot fit in the GPU (e.g. Nemotron4 340b).
     However this option makes the conversion script significantly slower.
 """
 
@@ -135,7 +134,7 @@ def convert_hf_config(nemo_config, tokenizer, vocab_size, dtype, hf_output_path,
     if nemo_config.activation == 'fast-swiglu':
         hf_config['gated_mlp'] = True
     json.dump(hf_config, open(f'{hf_output_path}/config.json', 'w'), indent=2)
-    
+
 
 def convert(input_nemo_file, output_hf_file, precision=None, cpu_only=False) -> None:
     """
@@ -156,7 +155,7 @@ def convert(input_nemo_file, output_hf_file, precision=None, cpu_only=False) -> 
 
     if cpu_only:
         logging.info("******** Loading model on CPU. This will take a significant amount of time.")
-    
+
     model = MegatronGPTModel.restore_from(
         input_nemo_file, trainer=dummy_trainer, override_config_path=model_config, map_location=map_location
     )
@@ -236,14 +235,14 @@ def convert(input_nemo_file, output_hf_file, precision=None, cpu_only=False) -> 
         # mlp
         mlp_weights = model.state_dict()[f'model.decoder.layers.{l}.mlp.linear_fc1.weight']
         mlp_up_proj_weight = model.state_dict()[f'model.decoder.layers.{l}.mlp.linear_fc2.weight']
-        
+
         if mlp_weights.shape[0] != mlp_up_proj_weight.shape[1]:
             # Has projection (used for swi-glu)
             assert mlp_weights.shape[0] == 2 * mlp_up_proj_weight.shape[1]
-            
+
             mlp_down_proj_weight = mlp_weights[:ffn_hidden_size, :]
             mlp_gate_proj_weight = mlp_weights[ffn_hidden_size:, :]
-            
+
             mlp_down_proj_base_name = f'model.layers.{l}.mlp.gate_proj.weight'
             mlp_gate_proj_base_name = f'model.layers.{l}.mlp.up_proj.weight'
 
@@ -253,7 +252,7 @@ def convert(input_nemo_file, output_hf_file, precision=None, cpu_only=False) -> 
             mlp_down_proj_weight = mlp_weights
             mlp_down_proj_base_name = f'model.layers.{l}.mlp.up_proj.weight'
             checkpoint[mlp_down_proj_base_name] = param_to_weights(mlp_down_proj_weight)
-        
+
         mlp_up_proj_base_name = f'model.layers.{l}.mlp.down_proj.weight'
         checkpoint[mlp_up_proj_base_name] = param_to_weights(mlp_up_proj_weight)
 
@@ -333,7 +332,7 @@ if __name__ == '__main__':
     else:
         args.output_path = f'{args.hf_output_path}/pytorch_model.bin'
         logging.info(f'weight will be saved to {args.output_path}')
-    
+
     nemo_config, nemo_tokenizer, dtype, vocab_size = convert(args.input_name_or_path, args.output_path, precision=args.precision, cpu_only=args.cpu_only)
     if args.hf_input_path and args.hf_output_path:
         convert_hf_config(nemo_config, nemo_tokenizer, vocab_size, dtype, args.hf_output_path, args.hf_input_path)
