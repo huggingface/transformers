@@ -654,6 +654,7 @@ _import_structure = {
         "Qwen2Tokenizer",
     ],
     "models.qwen2_moe": ["Qwen2MoeConfig"],
+    "models.qwen2_vl": ["Qwen2VLConfig"],
     "models.rag": ["RagConfig", "RagRetriever", "RagTokenizer"],
     "models.recurrent_gemma": ["RecurrentGemmaConfig"],
     "models.reformer": ["ReformerConfig"],
@@ -2964,6 +2965,13 @@ else:
             "Qwen2MoeForTokenClassification",
             "Qwen2MoeModel",
             "Qwen2MoePreTrainedModel",
+        ]
+    )
+    _import_structure["models.qwen2_vl"].extend(
+        [
+            "Qwen2VLForConditionalGeneration",
+            "Qwen2VLModel",
+            "Qwen2VLPreTrainedModel",
         ]
     )
     _import_structure["models.rag"].extend(
@@ -5354,6 +5362,7 @@ if TYPE_CHECKING:
     from .models.pvt_v2 import PvtV2Config
     from .models.qwen2 import Qwen2Config, Qwen2Tokenizer
     from .models.qwen2_moe import Qwen2MoeConfig
+    from .models.qwen2_vl import Qwen2VLConfig
     from .models.rag import RagConfig, RagRetriever, RagTokenizer
     from .models.recurrent_gemma import RecurrentGemmaConfig
     from .models.reformer import ReformerConfig
@@ -7354,6 +7363,11 @@ if TYPE_CHECKING:
             Qwen2MoeForTokenClassification,
             Qwen2MoeModel,
             Qwen2MoePreTrainedModel,
+        )
+        from .models.qwen2_vl import (
+            Qwen2VLForConditionalGeneration,
+            Qwen2VLModel,
+            Qwen2VLPreTrainedModel,
         )
         from .models.rag import (
             RagModel,

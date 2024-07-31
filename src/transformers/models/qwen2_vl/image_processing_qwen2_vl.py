@@ -23,7 +23,6 @@ import math
 from typing import Dict, List, Optional, Union
 
 import numpy as np
-
 import torch
 from PIL import Image
 
@@ -39,13 +38,13 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
-    get_image_size,
     VideoInput,
+    get_image_size,
     infer_channel_dimension_format,
-    make_list_of_images,
-    to_numpy_array,
     is_scaled_image,
     is_valid_image,
+    make_list_of_images,
+    to_numpy_array,
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, is_vision_available, logging
@@ -140,6 +139,16 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
             Standard deviation to use if normalizing the image. This is a float or list of floats for each channel in the image.
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Whether to convert the image to RGB.
+        min_pixels (`int`, *optional*, defaults to `56 * 56`):
+            The min pixels of the image to resize the image.
+        max_pixels (`int`, *optional*, defaults to `28 * 28 * 1280`):
+            The max pixels of the image to resize the image.
+        patch_size (`int`, *optional*, defaults to `14`):
+            The spacial patch size of the vision encoder.
+        temporal_patch_size (`int`, *optional*, defaults to `2`):
+            The temporal patch size of the vision encoder.
+        merge_size (`int`, *optional*, defaults to `2`):
+            The merge size of the vision encoder to llm encoder.
     """
 
     model_input_names = ["pixel_values", "vision_grid_thw"]

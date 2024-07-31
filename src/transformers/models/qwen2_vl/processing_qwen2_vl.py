@@ -21,13 +21,14 @@
 Processor class for Qwen2-VL.
 """
 
-from io import BytesIO
-from PIL import Image
-from torchvision import io
-from typing import Dict, List, Optional, Union
 import base64
+from io import BytesIO
+from typing import Dict, List, Optional, Union
+
 import requests
 import torch
+from PIL import Image
+from torchvision import io
 
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
@@ -48,7 +49,7 @@ class Qwen2VLProcessor(ProcessorMixin):
     [`~Qwen2VLProcessor.__call__`] and [`~Qwen2VLProcessor.decode`] for more information.
 
     Args:
-        image_processor ([`LlavaNextImageProcessor`], *optional*):
+        image_processor ([`Qwen2VLImageProcessor`], *optional*):
             The image processor is a required input.
         tokenizer ([`Qwen2TokenizerFast`], *optional*):
             The tokenizer is a required input.
@@ -76,23 +77,16 @@ class Qwen2VLProcessor(ProcessorMixin):
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to Qwen2TokenizerFast's [`~Qwen2TokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
-        Qwen2VLImageProcessor's [`~Qwen2VLImageProcessor.__call__`] if `images` is not `None`. To prepare the video(s),
-        this method forwards the `videos` and `kwrags` arguments to LlavaNextVideoImageProcessor's
-        [`~Qwen2VLVideoImageProcessor.__call__`] if `videos` is not `None`. Please refer to the doctsring
-        of the above two methods for more information.
+        the text. To prepare the vision inputs, this method forwards the `vision_infos` and `kwrags` arguments to
+        Qwen2VLImageProcessor's [`~Qwen2VLImageProcessor.__call__`] if `vision_infos` is not `None`.
 
         Args:
             text (`str`, `List[str]`, `List[List[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            videos (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`):
-                The image or batch of videos to be prepared. Each video can be a 4D NumPy array or PyTorch
-                tensor, or a nested list of 3D frames. Both channels-first and channels-last formats are supported.
+            vision_infos (`List[Dict]`):
+                The list of vision info dict. Each vision info dict has the path of the image or the video. support url, local path, base64.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
                 index) among:
@@ -104,8 +98,6 @@ class Qwen2VLProcessor(ProcessorMixin):
                   lengths).
             max_length (`int`, *optional*):
                 Maximum length of the returned list and optionally padding length (see above).
-            truncation (`bool`, *optional*):
-                Activates truncation to cut input sequences longer than `max_length` to `max_length`.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
@@ -121,7 +113,8 @@ class Qwen2VLProcessor(ProcessorMixin):
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
               `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
               `None`).
-            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
+            - **pixel_values** -- Pixel values to be fed to a model. Returned when `vision_infos` is not `None`.
+            - **vision_grid_thw** -- List of 3D temporal grid in vision encoder. Returned when `imagvision_infoses` is not `None`.
         """
         if len(vision_infos) > 0:
             merge_vision_infos = []
@@ -222,14 +215,14 @@ class Qwen2VLProcessor(ProcessorMixin):
 
     def batch_decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
+        This method forwards all its arguments to Qwen2TokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
         refer to the docstring of this method for more information.
         """
         return self.tokenizer.batch_decode(*args, **kwargs)
 
     def decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
+        This method forwards all its arguments to Qwen2TokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
         the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)

@@ -188,6 +188,7 @@ from . import (
     pvt_v2,
     qwen2,
     qwen2_moe,
+    qwen2_vl,
     rag,
     recurrent_gemma,
     reformer,

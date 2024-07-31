@@ -149,7 +149,12 @@ print(output_texts)
 
 [[autodoc]] Qwen2VLProcessor
 
+## Qwen2VLModel
+
+[[autodoc]] Qwen2VLModel
+    - forward
+
 ## Qwen2VLForConditionalGeneration
 
-[[autodoc]] Qwen2VLForCausalLM
+[[autodoc]] Qwen2VLForConditionalGeneration
     - forward

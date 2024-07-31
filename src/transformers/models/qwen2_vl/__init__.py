@@ -30,6 +30,7 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_qwen2_vl"] = [
         "Qwen2VLForConditionalGeneration",
+        "Qwen2VLModel",
         "Qwen2VLPreTrainedModel",
     ]
 
@@ -54,6 +55,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_qwen2_vl import (
             Qwen2VLForConditionalGeneration,
+            Qwen2VLModel,
             Qwen2VLPreTrainedModel,
         )
 
