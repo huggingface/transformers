@@ -127,11 +127,13 @@ class Mamba2Cache:
         self.seqlen_offset = 0
         self.dtype = dtype
         conv_kernel_size = config.conv_kernel
+        self.intermediate_size = int(config.expand * config.hidden_size)
+
 
         self.conv_states = {
             i: torch.zeros(
                 batch_size,
-                config.intermediate_size + 2 * config.n_groups * config.state_size,
+                self.intermediate_size + 2 * config.n_groups * config.state_size,
                 conv_kernel_size,
                 device=device,
                 dtype=dtype,
@@ -223,7 +225,7 @@ class Mamba2Mixer(nn.Module):
 
         # S4D real initialization. These are not discretized!
         # The core is to load them, compute the discrete states, then write the updated state. Keeps the memory bounded
-        A = torch.arange(self.num_heads)
+        A = torch.arange(1, self.num_heads + 1)
         self.A_log = nn.Parameter(torch.log(A))
         self.A_log._no_weight_decay = True
         self.norm = MambaRMSNormGated(self.intermediate_size, eps=self.layer_norm_epsilon)

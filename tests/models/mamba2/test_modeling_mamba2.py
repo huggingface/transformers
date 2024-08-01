@@ -215,6 +215,7 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
 
 @require_torch
+@slow
 class Mamba2IntegrationTest(unittest.TestCase):
     def setUp(self):
         self.model_id = "Molbap/code2"
@@ -222,10 +223,11 @@ class Mamba2IntegrationTest(unittest.TestCase):
         # FIXME currently batched generation seems off, as is in the original repo
         self.prompt = ("[INST]Write a hello world program in C++.",)
 
-    @slow
-    @require_torch_gpu
-    @parameterized.expand([(torch_device,), ("cpu",)])
-    def test_simple_generate(self, device):
+    @parameterized.expand([
+        (torch_device, """<s>[INST] Write a hello world program in C++.[/INST] Sure, here is a simple "Hello, World!" program in C++:\n\n```cpp\n#include <iostream>\n\n"""),
+        ("cpu", """<s>[INST] Write a hello world program in C++.[/INST] #include <iostream>\n\nint main() {\n    std::cout << "Hello, World!";\n    return 0;""")
+    ])
+    def test_simple_generate(self, device, ground_truth_sentence):
         tokenizer = self.tokenizer
         tokenizer.pad_token_id = tokenizer.eos_token_id
 
@@ -236,6 +238,5 @@ class Mamba2IntegrationTest(unittest.TestCase):
         )
 
         out = model.generate(input_ids, do_sample=False, use_cache=True, max_new_tokens=30)
-        output_sentence = tokenizer.decode(out[0, :])
-        ground_truth_sentence = """Here is a simple function in Rust that computes the nth Fibonacci number:\n\n```rust\nfn fibonacci(n: u32) -> u32 {\n    match n {\n        0 | 1 => n,\n        _ => fibonacci(n - 1) + fibonacci(n - 2),\n    }\n}\n```\n\nThis function takes an unsigned 32-bit integer `n` and returns the nth Fibonacci number.\n\nThe match expression is a control flow construct that is similar to an if expression. It allows you to compare a value against a set of patterns and execute code based on which one matches.\n\nThe `fibonacci` function is defined as a recursive function. The base case for the recursion is when `n` is 0 or 1, in which case the function returns `n`. For all other values of `n`, the function returns the sum of the previous two Fibonacci numbers, which are computed by recursively calling `fibonacci(n - 1)` and `fibonacci(n -'"""
+        output_sentence = tokenizer.decode(out[0])        
         self.assertEqual(output_sentence, ground_truth_sentence)
