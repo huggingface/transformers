@@ -200,12 +200,25 @@ class Sam2MemoryEncoderConfig(PretrainedConfig):
     """
     def __init__(
         self,
-        # TO DO
+        out_dim=64,
+        positional_encoding_config=None,
+        mask_downsmapler_config=None,
+        fuser_config=None,
+        in_dim=256,
         **kwargs,
     ):
         super().__init__(**kwargs)
+        if positional_encoding_config is None:
+            positional_encoding_config = {'num_pos_feats':64, 'normalize':True, 'scale': None, 'temperature': 1000}
+        if mask_downsmapler_config is None:
+            mask_downsmapler_config = {'kernel_size': 3, 'stride': 2, 'padding':1}
+        if fuser_config is None:
+            fuser_config = {'layer':{'dim': 256, 'kernel_size': 7, 'padding':3, 'layer_scale_init_value': 1e-6, 'use_dwconv': True}, 'num_layers':2}
 
-        # TO DO
+        self.out_dim = out_dim
+        self.positional_encoding_config = positional_encoding_config
+        self.mask_downsmapler_config = mask_downsmapler_config
+        self.fuser_config = fuser_config
 
 
 # TO DO
