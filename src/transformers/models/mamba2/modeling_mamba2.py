@@ -601,7 +601,6 @@ class Mamba2RMSNorm(nn.Module):
         return self.weight * hidden_states.to(input_dtype)
 
 
-# Copied from transformers.models.mamba.modeling_mamba.MambaBlock with Mamba->Mamba2
 class Mamba2Block(nn.Module):
     def __init__(self, config, layer_idx):
         super().__init__()
@@ -613,7 +612,6 @@ class Mamba2Block(nn.Module):
 
     def forward(self, hidden_states, cache_params: Optional[Mamba2Cache] = None):
         residual = hidden_states
-        # hidden_states = hidden_states.to(self.mixer.in_proj.weight.dtype)
         hidden_states = self.norm(hidden_states.to(dtype=self.norm.weight.dtype))
         if self.residual_in_fp32:
             residual = residual.to(torch.float32)
